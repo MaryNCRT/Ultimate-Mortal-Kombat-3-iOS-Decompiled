@@ -125,6 +125,19 @@ void plat_quit(void)
     g_quit = true;
 }
 
+/* No typed text in the SDL backend yet: profile names come from the
+ * launcher there. */
+int plat_text_take(char *out, int n)
+{
+    if (n > 0)
+        out[0] = 0;
+    return 0;
+}
+
+void plat_text_clear(void)
+{
+}
+
 void *plat_gl_proc(const char *name)
 {
     return SDL_GL_GetProcAddress(name);

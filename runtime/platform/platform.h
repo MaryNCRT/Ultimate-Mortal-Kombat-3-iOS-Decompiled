@@ -39,6 +39,13 @@ void plat_fullscreen_exclusive(void);
 void plat_display(int mode, int w, int h);
 void plat_quit(void);
 
+/* Typed text, for a player's name (settings_menu.c, port): the next
+ * character typed as UTF-8 in `out` (n >= 5 bytes), its length, 0 for none;
+ * Backspace, Enter and Esc come as 8, 13 and 27. plat_text_clear drops
+ * what was typed before the field opened. */
+int  plat_text_take(char *out, int n);
+void plat_text_clear(void);
+
 /* A GL entry point beyond 1.1 (the framebuffer objects the render
  * resolution draws into), or NULL. Same calling convention as GL's own. */
 void *plat_gl_proc(const char *name);

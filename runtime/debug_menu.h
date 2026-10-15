@@ -42,6 +42,9 @@ void dbg_menu_draw(void);
  * and bx + bw. */
 struct ui_geo { float bx, bw, title0, top, rowh, ow; };
 void ui_grab(int vx, int vy, int vw, int vh);
+/* a picture beside the box: uploaded once, drawn at (x, y), size points */
+void ui_icon_set(const unsigned char *rgba, int w, int h);
+void ui_icon_draw(float x, float y, float size);
 void ui_menu_show(const char *title, const char *const *tabs, int ntabs,
                   int page, const char *const *label,
                   const char *const *value, const int *enabled, int rows,

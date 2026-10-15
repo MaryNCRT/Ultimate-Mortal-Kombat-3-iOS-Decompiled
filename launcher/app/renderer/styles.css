@@ -225,6 +225,26 @@ h3 { margin: 0 0 calc(var(--u) * .8); font-size: calc(var(--u) * 1.6); color: va
 }
 .field { display: flex; flex-direction: column; gap: calc(var(--u) * .6); min-width: 0; }
 .field.wide { grid-column: 1 / -1; }
+/* PERFIL: the icon on the left, the fields beside it */
+.prof { display: flex; gap: calc(var(--u) * 2.5); align-items: flex-start; }
+.prof .fields { flex: 1; }
+.proficon { width: calc(var(--u) * 16); height: calc(var(--u) * 16); flex: none; }
+.idcode {
+    height: calc(var(--u) * 3.5); line-height: calc(var(--u) * 3.5);
+    font-family: Consolas, monospace; font-size: calc(var(--u) * 1.8);
+    letter-spacing: .12em; color: #9fd0ff;
+}
+.swatches { display: flex; flex-wrap: wrap; gap: calc(var(--u) * .6); }
+.swatch {
+    width: calc(var(--u) * 3); height: calc(var(--u) * 3); border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, .35); cursor: pointer; padding: 0;
+}
+.swatch.on { border-color: #fff; box-shadow: 0 0 calc(var(--u) * .8) #fff; }
+.colorpick { width: calc(var(--u) * 5); height: calc(var(--u) * 3.5); padding: 0; border: 0; background: none; cursor: pointer; }
+.icongrid { display: grid; grid-template-columns: repeat(12, 1fr); gap: calc(var(--u) * .5); }
+.icongrid canvas { width: 100%; cursor: pointer; border-radius: 18%; outline: 2px solid transparent; }
+.icongrid canvas.on { outline-color: #fff; }
+.hidden { display: none !important; }
 .field .row { margin: 0; }
 .fields .chk { font-size: calc(var(--u) * 1.8); }
 .edt, .sel {

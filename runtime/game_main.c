@@ -92,6 +92,7 @@
 #include "platform/gl.h"
 #include "debug_menu.h"
 #include "settings_menu.h"
+#include "profiles.h"
 
 /* A scripted run (UMK3_SHOT) ignores the real keyboard, as it ignores the
  * mouse: a test window takes the focus when it opens, and whoever is typing
@@ -102,7 +103,7 @@ static long g_tick;                     /* the tick count, for UMK3_KEYS */
 /* UMK3_KEYS="tick:keys:hold;..." -- player one's keys pressed by script, so a
  * test can type a move: keys joined with '+' from up down left right hp lp
  * bl hk lk run s (the special button), or p b k r for five buttons, esc
- * (the settings menu) and ok (Enter); held
+ * (the settings menu), ok (Enter) and tab (the next tab); held
  * for `hold` ticks (default 4).
  * Example, Scorpion's spear: "1000:left:4;1005:left:4;1010:lp:4". */
 static int scripted_key(int code)
@@ -114,6 +115,7 @@ static int scripted_key(int code)
         { "run", PK_RUN }, { "s", PK_SPECIAL },
         { "p", PK_5_P }, { "b", PK_5_B }, { "k", PK_5_K }, { "r", PK_5_R },
         { "esc", PK_SETTINGS }, { "ok", PK_OK },
+        { "tab", PK_DBG_PAGE_NEXT },
     };
     const char *q = getenv("UMK3_KEYS");
 
@@ -1425,6 +1427,7 @@ int dbg_finishing(void)
  * finishing window open, so it takes the same gated path (the distance walk,
  * the mercy and friendship conditions). */
 void DoASpecial(void *obj, unsigned int which);
+void stop_him(void *obj);
 
 /* ------------------------------------------------- debug tools (port only)
  *
@@ -1738,6 +1741,13 @@ static void debug_request(const struct dbg_request *rq)
         printf("debug: finisher %d (DoASpecial 0x%x), G+0x45c %d G+0x450 %d\n",
                rq->a, 0xd + rq->a, *(short *)((char *)G + 0x45c),
                *(short *)((char *)G + 0x450));
+        /* Forced the moment FINISH HIM comes up, the loser can still be
+         * running from before the KO, and the run went on into the
+         * finisher (Mary: Sonya slid towards Reptile). A player cannot
+         * type a finisher that fast. Stop them first, with the game's
+         * own stop_him (0x55c20: stop_me_player on the opponent, which
+         * zeroes the x velocity), then the finisher. Port, debug only. */
+        stop_him(Plyr);
         DoASpecial(Plyr, 0xd + (unsigned int)rq->a);
         break;
     case DBG_FIGHT:
@@ -2221,6 +2231,9 @@ int main(int argc, char **argv)
     use_surface(0);
 
     start_app();
+    /* the player's profile: made, with this installation's id, the first
+     * time (profiles.c, port) */
+    prof_load(g_ini_path, Language[0] == 'E' && Language[1] == 'S' ? "JUGADOR" : "PLAYER");
     /* Before GameCodeInit: the front end and the fight engine have to share
      * one G, H, MKEventQueue and RoundParam -- the storage the fight's tables
      * point into -- before anything is written through them. */

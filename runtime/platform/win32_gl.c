@@ -31,6 +31,9 @@ static unsigned char g_key[256];
 /* A key pressed since the game last ticked: a tap shorter than one tick
  * (down and up in the same frame) still reaches the game once. */
 static unsigned char g_tap[256];
+/* Typed characters, UTF-16 as WM_CHAR gives them, for plat_text_take. */
+static wchar_t g_text[64];
+static int     g_text_n;
 
 static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -41,6 +44,10 @@ static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_KEYDOWN:
         if (wp < 256) g_key[wp] = g_tap[wp] = 1;
+        return 0;
+    case WM_CHAR:                       /* typed text: plat_text_take */
+        if (g_text_n < (int)(sizeof g_text / sizeof g_text[0]))
+            g_text[g_text_n++] = (wchar_t)wp;
         return 0;
     case WM_KEYUP:
         if (wp < 256) g_key[wp] = 0;
@@ -236,6 +243,32 @@ void plat_display(int mode, int w, int h)
 void plat_quit(void)
 {
     g_quit = true;
+}
+
+int plat_text_take(char *out, int n)
+{
+    wchar_t w[2];
+    int k = 1, len;
+
+    if (g_text_n == 0 || n < 5)
+        return 0;
+    w[0] = g_text[0];
+    if (w[0] >= 0xd800 && w[0] < 0xdc00 && g_text_n > 1) {
+        w[1] = g_text[1];               /* a surrogate pair */
+        k = 2;
+    }
+    g_text_n -= k;
+    memmove(g_text, g_text + k, (size_t)g_text_n * sizeof g_text[0]);
+    len = WideCharToMultiByte(CP_UTF8, 0, w, k, out, n - 1, NULL, NULL);
+    if (len < 0)
+        len = 0;
+    out[len] = 0;
+    return len;
+}
+
+void plat_text_clear(void)
+{
+    g_text_n = 0;
 }
 
 void *plat_gl_proc(const char *name)
@@ -1069,8 +1102,14 @@ static unsigned char *al_line(const char *s8, int fontpx, int bold,
     SIZE sz;
     int i, n;
 
-    for (n = 0; s8[n] && n < 255; n++)
-        ws[n] = (unsigned char)s8[n];
+    /* UTF-8 (a player's name, settings_menu.c); anything that is not
+     * valid UTF-8 is read as Latin-1, as before */
+    n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, s8, -1, ws, 255);
+    if (n > 0)
+        n--;
+    else
+        for (n = 0; s8[n] && n < 255; n++)
+            ws[n] = (unsigned char)s8[n];
     ws[n] = 0;
     GetTextMetricsW(dc, &tm);
     GetTextExtentPoint32W(dc, ws, n, &sz);

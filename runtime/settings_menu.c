@@ -23,6 +23,11 @@
  *     GAMEPAD    PLAYER 1 / 2, the pad (AUTO, OFF, XINPUT, or the one the
  *                ini named), then each action's button: Enter on it and
  *                press the button on that player's pad (Esc cancels).
+ *     PROFILE    the player's profile (profiles.c, shared with the
+ *                launcher): the name (Enter, then type; Enter keeps it, Esc
+ *                cancels), the icon (a fighter's bio art) and its colour,
+ *                the installation's id, and RESET DATA (twice: the id
+ *                stays). The icon shows above the box.
  *     Every tab ends in RESET (on KEYBOARD and GAMEPAD), CLOSE and
  *     QUIT GAME.
  */
@@ -35,6 +40,7 @@
 #include "platform/platform.h"
 #include "debug_menu.h"
 #include "settings_menu.h"
+#include "profiles.h"
 
 extern char Language[10];
 
@@ -59,13 +65,42 @@ static const char *const k_pb[PB_COUNT] = {
     "SELECT", "START", "L3", "R3", "HOME",
 };
 
-enum { PAGE_GFX, PAGE_KEYS, PAGE_PAD, N_PAGES };
+enum { PAGE_GFX, PAGE_KEYS, PAGE_PAD, PAGE_PROF, N_PAGES };
 
 enum {
     R_DISPLAY, R_RES, R_APPLY, R_RRES, R_AA, R_TEXQ, R_ASPECT, R_UI, R_HIDE,
     R_PLAYER, R_LAYOUT, R_KEY, R_KRESET, R_DEVICE, R_PADB, R_PRESET,
+    R_PNAME, R_PICON, R_PCOLOR, R_PID, R_PRESET2,
     R_CLOSE, R_QUIT
 };
+
+/* The profile icons' names, in CharacterNames order. */
+static const char *const k_fighter_es[PROF_ICONS] = {
+    "KANO", "SONYA", "JAX", "NIGHTWOLF", "SUB-ZERO (SIN MASCARA)", "STRYKER",
+    "SINDEL", "SEKTOR", "CYRAX", "KUNG LAO", "KABAL", "SHEEVA", "SHANG TSUNG",
+    "LIU KANG", "SMOKE", "KITANA", "JADE", "MILEENA", "SCORPION", "REPTILE",
+    "ERMAC", "SUB-ZERO", "SMOKE (HUMANO)", "NOOB SAIBOT",
+};
+static const char *const k_fighter_en[PROF_ICONS] = {
+    "KANO", "SONYA", "JAX", "NIGHTWOLF", "SUB-ZERO (UNMASKED)", "STRYKER",
+    "SINDEL", "SEKTOR", "CYRAX", "KUNG LAO", "KABAL", "SHEEVA", "SHANG TSUNG",
+    "LIU KANG", "SMOKE", "KITANA", "JADE", "MILEENA", "SCORPION", "REPTILE",
+    "ERMAC", "SUB-ZERO", "SMOKE (HUMAN)", "NOOB SAIBOT",
+};
+/* The launcher's swatches (renderer.js PROF_COLORS), with their names. */
+static const struct { unsigned rgb; const char *es, *en; } k_pcol[] = {
+    { 0x3A8EE6, "AZUL CIELO", "SKY BLUE" }, { 0x1FB5C9, "AGUAMARINA", "AQUA" },
+    { 0x3DBE5B, "VERDE", "GREEN" }, { 0x8CCB2E, "LIMA", "LIME" },
+    { 0xF2C230, "AMARILLO", "YELLOW" }, { 0xF28A2E, "NARANJA", "ORANGE" },
+    { 0xE2423B, "ROJO", "RED" }, { 0xE2509B, "ROSA", "PINK" },
+    { 0x8A55D8, "MORADO", "PURPLE" }, { 0x8A97A8, "PLATA", "SILVER" },
+    { 0x2A2F38, "GRAFITO", "GRAPHITE" },
+};
+#define N_PCOL (int)(sizeof k_pcol / sizeof k_pcol[0])
+
+static char g_edit[PROF_NAME_MAX * 4 + 1];     /* the name being typed */
+static int  g_del_armed;
+static int  g_icon_key = -1;                    /* icon and colour shown */
 
 #define MAX_ROWS 24
 #define VIS_ROWS 13
@@ -123,6 +158,9 @@ void set_menu_after_frame(int vx, int vy, int vw, int vh)
     g_disp_mode = g_gfx.mode;
     g_disp_w = g_gfx.w;
     g_disp_h = g_gfx.h;
+    prof_load(port_ini_path(), tx("JUGADOR", "PLAYER"));    /* the launcher may have changed it */
+    g_icon_key = -1;
+    g_del_armed = 0;
     g_open = 1;
     g_mouse_was = 1;
     g_esc_was = 1;                      /* the press that opened it */
@@ -394,6 +432,31 @@ static void build(void)
         add(R_PRESET, 0, tx("RESTABLECER MANDO", "RESET GAMEPAD"), "");
         break;
     }
+    case PAGE_PROF: {
+        struct profile *p = prof_get();
+
+        if (p) {
+            if (g_capture == 3)
+                add(R_PNAME, 0, tx("NOMBRE", "NAME"), "%s_", g_edit);
+            else
+                add(R_PNAME, 0, tx("NOMBRE", "NAME"), "%s", p->name[0] ? p->name : "-");
+            add(R_PICON, 0, tx("ICONO", "ICON"), "< %s >",
+                tx(k_fighter_es[p->icon], k_fighter_en[p->icon]));
+            for (i = 0; i < N_PCOL && k_pcol[i].rgb != p->color; i++)
+                ;
+            if (i < N_PCOL)
+                add(R_PCOLOR, 0, tx("COLOR DE FONDO", "BACKGROUND COLOUR"), "< %s >",
+                    tx(k_pcol[i].es, k_pcol[i].en));
+            else
+                add(R_PCOLOR, 0, tx("COLOR DE FONDO", "BACKGROUND COLOUR"), "< #%06X >",
+                    p->color);
+            add(R_PID, 0, tx("ID DE JUGADOR", "PLAYER ID"), "%s", p->id);
+            g_rows[g_n - 1].en = 0;     /* shown, not chosen */
+            add(R_PRESET2, 0, tx("REINICIAR DATOS", "RESET DATA"), "%s",
+                g_del_armed ? tx("PULSA OTRA VEZ", "PRESS AGAIN") : "");
+        }
+        break;
+    }
     }
     add(R_CLOSE, 0, tx("VOLVER AL JUEGO", "BACK TO THE GAME"), "");
     add(R_QUIT, 0, tx("SALIR DEL JUEGO", "QUIT THE GAME"), "");
@@ -404,7 +467,7 @@ static int has_value(int kind)
     switch (kind) {
     case R_DISPLAY: case R_RES: case R_RRES: case R_AA: case R_TEXQ:
     case R_ASPECT: case R_UI: case R_HIDE: case R_PLAYER: case R_LAYOUT:
-    case R_DEVICE:
+    case R_DEVICE: case R_PICON: case R_PCOLOR:
         return 1;
     }
     return 0;
@@ -448,6 +511,24 @@ static void change(int kind, int d)
         i = wrap(i + d, n);
         port_pad_device_set(g_player, i < 3 ? k_dev[i] : other[g_player]);
         g_dirty = 1;
+        return;
+    }
+    case R_PICON:
+        if (prof_get()) {
+            prof_get()->icon = wrap(prof_get()->icon + d, PROF_ICONS);
+            prof_save();
+        }
+        return;
+    case R_PCOLOR: {
+        struct profile *p = prof_get();
+
+        if (!p)
+            return;
+        for (i = 0; i < N_PCOL && k_pcol[i].rgb != p->color; i++)
+            ;
+        i = i < N_PCOL ? wrap(i + d, N_PCOL) : (d > 0 ? 0 : N_PCOL - 1);
+        p->color = k_pcol[i].rgb;
+        prof_save();
         return;
     }
     case R_RRES:
@@ -504,6 +585,21 @@ static void pick(int kind)
         reset_pad(g_player);
         g_dirty = 1;
         break;
+    case R_PNAME:
+        if (prof_get()) {
+            snprintf(g_edit, sizeof g_edit, "%s", prof_get()->name);
+            plat_text_clear();
+            g_capture = 3;
+        }
+        break;
+    case R_PRESET2:
+        if (!g_del_armed) {
+            g_del_armed = 1;
+            break;
+        }
+        g_del_armed = 0;
+        prof_reset(tx("JUGADOR", "PLAYER"));
+        break;
     case R_CLOSE:
         close_menu();
         break;
@@ -534,9 +630,46 @@ static int edge(int k, int *was)
  * then take the first one pressed. The settings key cancels. */
 static void capture(void)
 {
-    int row = g_rows[g_sel].kind == (g_capture == 1 ? R_KEY : R_PADB);
+    int row = g_rows[g_sel].kind == (g_capture == 1 ? R_KEY
+                                     : g_capture == 2 ? R_PADB : R_PNAME);
     int esc = plat_key(PK_SETTINGS);
 
+    if (g_capture == 3) {                /* typing the profile's name */
+        char ch[8];
+        struct profile *p = prof_get();
+
+        while (p && plat_text_take(ch, sizeof ch) > 0) {
+            unsigned char c = (unsigned char)ch[0];
+            size_t n = strlen(g_edit);
+
+            if (c == 13) {              /* Enter: keep it (empty: the default) */
+                snprintf(p->name, sizeof p->name, "%s",
+                         strspn(g_edit, " ") == n ? tx("JUGADOR", "PLAYER") : g_edit);
+                prof_save();
+                g_capture = 0;
+                g_esc_was = 1;
+                return;
+            }
+            if (c == 27) {              /* Esc: as it was */
+                g_capture = 0;
+                g_esc_was = 1;
+                return;
+            }
+            if (c == 8) {               /* Backspace: one character */
+                while (n > 0 && ((unsigned char)g_edit[n - 1] & 0xc0) == 0x80)
+                    n--;
+                if (n > 0)
+                    n--;
+                g_edit[n] = 0;
+            } else if (c >= 32 && c != '|' && c != 127
+                       && prof_name_len(g_edit) < PROF_NAME_MAX
+                       && n + strlen(ch) < sizeof g_edit)
+                strcat(g_edit, ch);
+        }
+        if (!p)
+            g_capture = 0;
+        return;
+    }
     if (!row) {
         g_capture = 0;
         return;
@@ -693,13 +826,18 @@ void set_menu_draw(void)
     tabs[PAGE_GFX] = tx("GRAFICOS", "GRAPHICS");
     tabs[PAGE_KEYS] = tx("TECLADO", "KEYBOARD");
     tabs[PAGE_PAD] = tx("MANDO", "GAMEPAD");
+    tabs[PAGE_PROF] = tx("PERFIL", "PROFILE");
     for (i = 0; i < rows; i++) {
         lp[i] = g_rows[g_first + i].label;
         vp[i] = g_rows[g_first + i].value;
         en[i] = g_rows[g_first + i].en;
     }
     plat_key_label(PK_SETTINGS, k, sizeof k);
-    if (g_capture)
+    if (g_capture == 3)
+        snprintf(footer, sizeof footer, "%s",
+                 tx("ESCRIBE EL NOMBRE   ENTER GUARDA   ESC CANCELA",
+                    "TYPE THE NAME   ENTER KEEPS IT   ESC CANCELS"));
+    else if (g_capture)
         snprintf(footer, sizeof footer, "%s",
                  tx("ESC CANCELA", "ESC CANCELS"));
     else if (g_n > VIS_ROWS)
@@ -711,6 +849,22 @@ void set_menu_draw(void)
                  tx("CIERRA", "CLOSES"));
     ui_menu_show(tx("AJUSTES", "SETTINGS"), tabs, N_PAGES, g_page, lp, vp,
                  en, rows, g_sel - g_first, footer, &g_geo);
+    if (g_page == PAGE_PROF && prof_get()) {
+        /* the profile's icon, above the box (profiles.c draws it) */
+        const struct profile *p = prof_get();
+        int key = p->icon << 24 | (int)(p->color & 0xffffff);
+        float size = 56, top = g_geo.title0 - 28, y = top - size - 4;
+
+        if (key != g_icon_key) {
+            unsigned char *px = prof_icon_rgba(p->icon, p->color, 128);
+            ui_icon_set(px, 128, 128);
+            free(px);
+            g_icon_key = key;
+        }
+        if (y < 2)
+            y = 2;
+        ui_icon_draw((g_geo.ow - size) * 0.5f, y, size);
+    }
 }
 
 /* ---------------------------------------------------------------- save

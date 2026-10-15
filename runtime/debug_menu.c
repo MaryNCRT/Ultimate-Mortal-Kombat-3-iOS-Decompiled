@@ -822,6 +822,49 @@ void ui_menu_show(const char *title, const char *const *tabs, int ntabs,
 
 void ui_grab(int vx, int vy, int vw, int vh) { grab(vx, vy, vw, vh); }
 
+/* A picture beside the box (the settings menu's profile icon): uploaded
+ * once by ui_icon_set, drawn each frame by ui_icon_draw in the menu's
+ * space. Straight alpha. */
+static GLuint g_icon;
+
+void ui_icon_set(const unsigned char *rgba, int w, int h)
+{
+    GLint old;
+
+    if (!rgba)
+        return;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &old);
+    if (!g_icon)
+        glGenTextures(1, &g_icon);
+    glBindTexture(GL_TEXTURE_2D, g_icon);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
+                 GL_UNSIGNED_BYTE, rgba);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)old);
+}
+
+void ui_icon_draw(float x, float y, float size)
+{
+    if (!g_icon)
+        return;
+    begin_2d();
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, g_icon);
+    glColor4f(1, 1, 1, 1);
+    glBegin(GL_QUADS);
+    glTexCoord2f(0, 0); glVertex2f(x, y);
+    glTexCoord2f(1, 0); glVertex2f(x + size, y);
+    glTexCoord2f(1, 1); glVertex2f(x + size, y + size);
+    glTexCoord2f(0, 1); glVertex2f(x, y + size);
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+    end_2d();
+}
+
 void dbg_menu_draw(void)
 {
     char vals[MAX_PAGE_ROWS][64], title[96], footer[128];

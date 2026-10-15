@@ -14,7 +14,11 @@ const T = {
     ES: {
         ui: 'ENGLISH', ttlSub: 'PORT DE PC',
         mBuild: 'COMPILAR TU .IPA', mVideo: 'GRÁFICOS', mControls: 'CONTROLES',
-        mPlay: 'JUGAR', mQuit: 'SALIR',
+        mPlay: 'JUGAR', mQuit: 'SALIR', mProfile: 'PERFIL',
+        dProfile: 'Tu perfil de jugador: nombre, icono e ID de esta instalación. El juego lo edita también (Esc > PERFIL).',
+        hProfile: 'PERFIL DE JUGADOR',
+        profName: 'NOMBRE DE JUGADOR', profId: 'ID DE JUGADOR', profColor: 'COLOR DE FONDO', profIconLbl: 'ICONO',
+        profDefault: 'JUGADOR', profReset: 'REINICIAR DATOS', profResetAsk: '¿SEGURO? PULSA OTRA VEZ',
         dBuild: 'El juego se compila en tu PC a partir de tu propio .ipa de UMK3 para iPhone (1.2.59).',
         dVideo: 'Resolución de ventana, resolución 3D, modo de pantalla y el marco de las barras.',
         dControls: 'Teclado y mando de los jugadores 1 y 2 (Xbox, PlayStation, Switch y otros), para 5 y 6 botones, y las teclas del modo debug.',
@@ -64,7 +68,11 @@ const T = {
     EN: {
         ui: 'ESPAÑOL', ttlSub: 'PC PORT',
         mBuild: 'COMPILE YOUR .IPA', mVideo: 'GRAPHICS', mControls: 'CONTROLS',
-        mPlay: 'PLAY', mQuit: 'QUIT',
+        mPlay: 'PLAY', mQuit: 'QUIT', mProfile: 'PROFILE',
+        dProfile: 'Your player profile: name, icon and the ID of this installation. The game edits it too (Esc > PROFILE).',
+        hProfile: 'PLAYER PROFILE',
+        profName: 'PLAYER NAME', profId: 'PLAYER ID', profColor: 'BACKGROUND COLOUR', profIconLbl: 'ICON',
+        profDefault: 'PLAYER', profReset: 'RESET DATA', profResetAsk: 'SURE? PRESS AGAIN',
         dBuild: 'The game is compiled on your PC from your own UMK3 iPhone .ipa (1.2.59).',
         dVideo: 'Window resolution, 3D resolution, display mode and the bars frame.',
         dControls: 'Players 1 and 2 keyboard and gamepad (Xbox, PlayStation, Switch and others), for 5 and 6 buttons, and debug mode\'s keys.',
@@ -325,8 +333,8 @@ const KEY_DEFAULT = {
     dbg_ko_p2: 120, dbg_ko_p1: 121, dbg_win: 122, dbg_lose: 123,
     dbg_scr_prev: 117, dbg_scr_next: 118, dbg_scr_menu: 119,
 };
-const SECTIONS = ['build', 'video', 'controls', 'play', 'quit'];
-const DESC = { build: 'dBuild', video: 'dVideo', controls: 'dControls', play: 'dPlay', quit: 'dQuit' };
+const SECTIONS = ['build', 'video', 'controls', 'profile', 'play', 'quit'];
+const DESC = { build: 'dBuild', video: 'dVideo', controls: 'dControls', profile: 'dProfile', play: 'dPlay', quit: 'dQuit' };
 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => {
@@ -727,6 +735,144 @@ async function doPlay() {
     setStatus('playing', T[ui].statusPlaying);
 }
 
+/* ------------------------------------------------------------ profiles -- */
+
+/* profiles.ini (lib/profiles.js), shared with the game's settings menu. The
+ * icon: a fighter's bio and endings art (the game's own <NAME>_VERSUS.PNG,
+ * read from res\Textures, nothing imported) over a glossy Frutiger Aero
+ * gradient of the profile's colour. runtime/profiles.c draws the same icon
+ * with the same numbers. */
+const PROF_COLORS = ['3A8EE6', '1FB5C9', '3DBE5B', '8CCB2E', 'F2C230', 'F28A2E',
+                     'E2423B', 'E2509B', '8A55D8', '8A97A8', '2A2F38'];
+let profArt = [];
+
+function hexRgb(h) {
+    const n = parseInt(h, 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+const css = (c, a) => 'rgba(' + c.join(',') + ',' + (a === undefined ? 1 : a) + ')';
+
+function roundRect(g, x, y, w, h, r) {
+    g.beginPath();
+    g.moveTo(x + r, y);
+    g.arcTo(x + w, y, x + w, y + h, r);
+    g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r);
+    g.arcTo(x, y, x + w, y, r);
+    g.closePath();
+}
+
+function drawIcon(cv, icon, color) {
+    const g = cv.getContext('2d'), S = cv.width, c = hexRgb(color);
+    const white = [255, 255, 255], black = [0, 0, 0];
+
+    g.clearRect(0, 0, S, S);
+    g.save();
+    roundRect(g, 0, 0, S, S, S * 0.18);
+    g.clip();
+    /* the sky: light at the top, the colour, deeper at the bottom */
+    let gr = g.createLinearGradient(0, 0, 0, S);
+    gr.addColorStop(0, css(mix(c, white, 0.55)));
+    gr.addColorStop(0.5, css(c));
+    gr.addColorStop(1, css(mix(c, black, 0.3)));
+    g.fillStyle = gr;
+    g.fillRect(0, 0, S, S);
+    /* the glow rising from the bottom */
+    gr = g.createRadialGradient(S / 2, S * 1.05, 0, S / 2, S * 1.05, S * 0.6);
+    gr.addColorStop(0, css(mix(c, white, 0.6), 0.75));
+    gr.addColorStop(1, css(mix(c, white, 0.6), 0));
+    g.fillStyle = gr;
+    g.fillRect(0, 0, S, S);
+    /* the fighter */
+    if (profArt[icon])
+        g.drawImage(profArt[icon], 0, 0, S, S);
+    /* the gloss: a white bubble over the top half */
+    gr = g.createLinearGradient(0, 0, 0, S * 0.5);
+    gr.addColorStop(0, 'rgba(255,255,255,0.55)');
+    gr.addColorStop(1, 'rgba(255,255,255,0.04)');
+    g.fillStyle = gr;
+    g.beginPath();
+    g.ellipse(S / 2, 0, S * 0.72, S * 0.5, 0, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+    /* the rim */
+    roundRect(g, S * 0.0125, S * 0.0125, S * 0.975, S * 0.975, S * 0.17);
+    g.lineWidth = S * 0.025;
+    g.strokeStyle = 'rgba(255,255,255,0.7)';
+    g.stroke();
+}
+
+async function loadProfArt() {
+    for (let i = 0; i < 24; i++) {
+        if (profArt[i]) continue;
+        const url = await window.umk3.profileIcon(i);
+        if (!url) continue;
+        const im = new Image();
+        im.src = url;
+        await im.decode().catch(() => {});
+        profArt[i] = im;
+    }
+}
+
+let prof = null, profResetArmed = false;
+
+async function updateProf(fields) {
+    prof = await window.umk3.updateProfile(fields);
+    paintProfile();
+}
+
+function paintProfile() {
+    const p = prof;
+    if (!p) return;
+    if (document.activeElement !== $('profName')) $('profName').value = p.name;
+    $('profId').textContent = p.id;
+    $('profReset').textContent = tx(profResetArmed ? 'profResetAsk' : 'profReset');
+    $('profColor').value = '#' + p.color.toLowerCase();
+    drawIcon($('profIcon'), p.icon, p.color);
+    const sw = $('profSwatches');
+    sw.innerHTML = '';
+    PROF_COLORS.forEach(c => {
+        const b = el('button', 'swatch' + (c === p.color ? ' on' : ''));
+        b.style.background = '#' + c;               /* CSSOM: allowed by the CSP */
+        b.addEventListener('click', () => { selectBlip(); updateProf({ color: c }); });
+        sw.appendChild(b);
+    });
+    const grid = $('profIcons');
+    grid.innerHTML = '';
+    for (let i = 0; i < 24; i++) {
+        const cv = el('canvas', i === p.icon ? 'on' : '');
+        cv.width = cv.height = 64;
+        drawIcon(cv, i, p.color);
+        cv.addEventListener('click', () => { selectBlip(); updateProf({ icon: i }); });
+        grid.appendChild(cv);
+    }
+}
+
+async function refreshProfile() {
+    prof = await window.umk3.loadProfile(tx('profDefault'));
+    await loadProfArt();
+    paintProfile();
+}
+
+function initProfile() {
+    $('profName').addEventListener('input', () =>
+        updateProf({ name: $('profName').value.replace(/[|\r\n\t]/g, ' ') }));
+    $('profName').addEventListener('change', () => {
+        if (!$('profName').value.trim())
+            updateProf({ name: tx('profDefault') });
+    });
+    $('profColor').addEventListener('input', () =>
+        updateProf({ color: $('profColor').value.replace('#', '').toUpperCase() }));
+    $('profReset').addEventListener('click', async () => {
+        if (!profResetArmed) { profResetArmed = true; paintProfile(); return; }
+        profResetArmed = false;
+        failChord();
+        prof = await window.umk3.resetProfile(tx('profDefault'));
+        paintProfile();
+    });
+}
+
 /* ------------------------------------------------------------ keyboard -- */
 
 function onKey(e) {
@@ -773,8 +919,10 @@ async function init() {
     ui = cfg.ui === 'EN' ? 'EN' : 'ES';
     await refreshRoot();
     applyTexts();
-    /* The game's settings menu (Esc) writes umk3.ini too: read it again
-     * whenever the launcher comes back to the front. */
+    initProfile();
+    refreshProfile();
+    /* The game's settings menu (Esc) writes umk3.ini and profiles.ini too:
+     * read them again whenever the launcher comes back to the front. */
     window.addEventListener('focus', async () => {
         if (waitingKey || building)
             return;
@@ -782,6 +930,8 @@ async function init() {
         applyConfig();
         paintKeys();
         fillPads();
+        if (document.activeElement !== $('profName'))
+            refreshProfile();
     });
 
     $('closeBtn').addEventListener('click', () => window.umk3.close());

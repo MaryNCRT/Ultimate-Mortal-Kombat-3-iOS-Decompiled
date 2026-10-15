@@ -147,6 +147,19 @@ int plat_audio_play_at(const unsigned char *pcm, int frames, int rate, float gai
     if (step == 0)
         step = 1;
 
+    /* One sound, one voice, as on the device: -[Sound play] (0xada08) asks
+     * [self playing] and, if so, [self stop] before alSourcePlay -- a sound
+     * played again while it still sounds starts over, it never doubles
+     * over itself. Mixed as a second voice, a scream the engine plays on
+     * consecutive ticks echoed (Mary, fatalities). */
+    for (i = 0; i < VOICES; i++)
+        if (g_voice[i].active && g_voice[i].pcm == pcm) {
+            g_voice[i].pos  = 0;
+            g_voice[i].step = step;
+            g_voice[i].gain = gain;
+            return 1;
+        }
+
     for (i = 0; i < VOICES; i++) {
         if (!g_voice[i].active) {
             g_voice[i].pcm    = pcm;
