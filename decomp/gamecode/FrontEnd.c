@@ -84,8 +84,30 @@ float FE_H(float v);
  * `_CreatePerspectiveMatrix` is the corresponding hook for the game itself.
  * This is the other half of it.
  */
+/* Port, not in the binary: on a surface wider than 3:2 (launcher aspect=
+ * 16:9 or 21:9, PortWideMenus) SetupFEScale scales the menus by their
+ * height -- nothing is zoomed -- and leaves PortFEExtraX, the width left
+ * over, here. Every screen keeps its layout centred in it (the select
+ * screen's grid must stay whole), except the main menu's buttons (front-
+ * end task 0: the slabs at x 0 and their texts up to x 218 -- everything
+ * left of the logo, which starts at 220): they stay on the left edge, the
+ * logo stays centred. 0 on 3:2 and 4:3. */
+int   PortWideMenus;
+float PortFEExtraX;
+/* the centring offset for the sites that scale a position by
+ * FE_WidthScale themselves instead of calling FE_X */
+#define FE_XC (PortFEExtraX * 0.5f)
+extern int FE_CurrentTask;
+
 float FE_X(float v)
 {
+    if (PortFEExtraX > 0.0f) {
+        float off = PortFEExtraX * 0.5f;
+
+        if (FE_CurrentTask == 0 && v < 220.0f)
+            off = 0.0f;
+        return v * FE_WidthScale + off;
+    }
     return v * FE_WidthScale;
 }
 
@@ -1614,6 +1636,8 @@ extern float FE_Fade;                   /* 0x00100898 */
 void Task_LoadingScreen_DRAWSCREEN(long a, long percent);
 void DeleteLoadingScreenTexture(void);
 int  FEInit_LoadABit(long step);
+int  lime_port_load_more(int first);    /* runtime/draw_gl.c, port only */
+void lime_port_load_done(const char *what);
 
 
 /* --------------------------------------------------------------- Task_FEInit
@@ -1661,11 +1685,19 @@ void Task_FEInit(void)
 
         case 1:
             Task_LoadingScreen_DRAWSCREEN(0, FE_LoadCount * 100 / FE_INIT_STEPS);
-            if (FEInit_LoadABit(FE_LoadCount)) {
+            /* Port, not in the binary: as many steps as fit in the frame
+             * (lime_port_load_more, draw_gl.c); the device ran one. */
+            lime_port_load_more(1);
+            for (;;) {
+                if (FEInit_LoadABit(FE_LoadCount)) {
+                    FE_LoadCount++;
+                    FEInitState = 2;
+                    lime_port_load_done("menus");
+                    break;
+                }
                 FE_LoadCount++;
-                FEInitState = 2;
-            } else {
-                FE_LoadCount++;
+                if (!lime_port_load_more(0))
+                    break;
             }
             break;
 
@@ -1750,6 +1782,7 @@ extern float HUD_Scale;                 /* 0x000ff9c4 */
 /* The symbol is `_UseLOWAssets`; the Ptr suffix was invented here and
  * made one variable look like two. */
 extern long UseLOWAssets;               /* 0x0010df10 */
+extern int  PortTextureQuality;         /* runtime/draw_gl.c, port only */
 
 
 /* --------------------------------------------------------------- SetupFEScale
@@ -1798,6 +1831,26 @@ void SetupFEScale(void)
     HUD_Scale = (FE_WidthScale >= 2.0f) ? 1.75f : 1.0f;
 
     UseLOWAssets = (w == 480) ? 1 : 0;           /* exactly 480, not <= */
+
+    /* Port, not in the binary: the port always runs at 480 wide, so the
+     * launcher's texture quality (umk3.ini texture_quality=, draw_gl.c)
+     * decides instead -- IPHONE keeps the _LOW sheets, IPAD and MAX load
+     * the full ones a wider screen gets. */
+    if (PortTextureQuality > 0)
+        UseLOWAssets = 0;
+
+    /* Port: wide menus, see FE_X. */
+    PortFEExtraX = 0.0f;
+    if (PortWideMenus && aspect > 1.51f) {
+        float k = (float)h / 320.0f;
+
+        FE_AspectRatioAdjust = 1.0f;
+        FE_WidthScale  = k;
+        FE_HeightScale = k;
+        FE_YOffset     = 0.0f;
+        HUD_Scale = (k >= 2.0f) ? 1.75f : 1.0f;
+        PortFEExtraX = (float)w - 480.0f * k;
+    }
 }
 
 
@@ -6666,7 +6719,12 @@ void FE_Task_Button_Config(void)
         && DrawButtonNew(&BUTTON_BOXRB, 0x145, 0xe0, 1) && FE_FadeAdd == 0.0f)
         sel = 4;
 
-    DrawControlsPreview(-36, (long)(-40.0f - FE_YOffset / FE_HeightScale));
+    /* Port: the fight's buttons sit against the right edge (ButtonsPos), so
+     * on a wide surface they carry all of PortFEExtraX where the box is
+     * centred by half of it; the preview, drawn at half size, moves back by
+     * that half. 0 on 3:2 and 4:3. */
+    DrawControlsPreview(-36 - (long)(FE_XC / FE_WidthScale),
+                        (long)(-40.0f - FE_YOffset / FE_HeightScale));
 
     limeDrawFONT(&GameFont, GameText(0xe5),
                  FE_X(322.0f), FE_Y(72.0f), 1, FE_WidthScale, fontcol);
@@ -10417,8 +10475,8 @@ void FE_Task_Treasure(void)
             if (limeLastTouchScreenX[0] == -1.0f
                 && limeTouchScreenY[0] >= FE_HeightScale * TREASURE_BAND_TOP
                 && limeTouchScreenY[0] <= FE_HeightScale * TREASURE_BAND_BOT
-                && limeTouchScreenX[0] >= FE_WidthScale * (float)x
-                && limeTouchScreenX[0] <= FE_WidthScale
+                && limeTouchScreenX[0] >= FE_XC + FE_WidthScale * (float)x
+                && limeTouchScreenX[0] <= FE_XC + FE_WidthScale
                                         * (float)(x + TREASURE_CELL)) {
                 selected = i + 1;                   /* one-based */
                 KodeSelectorParticle[i] = TREASURE_PART_ON;
@@ -10447,7 +10505,7 @@ void FE_Task_Treasure(void)
             colour = (gained == 1) ? col : darkcol;
 
         limeDrawSprite((TEXTURE *)KodesTexture,
-                       FE_WidthScale * (float)x,
+                       FE_XC + FE_WidthScale * (float)x,
                        FE_HeightScale * TREASURE_ROW_Y,
                        FE_WidthScale * (float)TREASURE_CELL,
                        FE_HeightScale * (float)TREASURE_CELL,
@@ -10462,7 +10520,7 @@ void FE_Task_Treasure(void)
             part[3] = 1.0f - t;
 
             limeDrawSprite((TEXTURE *)KodesTexture,
-                           ((float)x - TREASURE_PART_MOVE * t) * FE_WidthScale,
+                           FE_XC + ((float)x - TREASURE_PART_MOVE * t) * FE_WidthScale,
                            (TREASURE_ROW_Y - TREASURE_PART_MOVE * t)
                            * FE_HeightScale,
                            FE_WidthScale
@@ -10629,8 +10687,8 @@ void FE_Task_Enter_Kode(void)
             && limeLastTouchScreenX[0] == -1.0f
             && limeTouchScreenY[0] >= FE_HeightScale * KODE_BAND_TOP
             && limeTouchScreenY[0] <= FE_HeightScale * KODE_BAND_BOT
-            && limeTouchScreenX[0] >= FE_WidthScale * (float)x
-            && limeTouchScreenX[0] <= FE_WidthScale * (float)(x + KODE_CELL)) {
+            && limeTouchScreenX[0] >= FE_XC + FE_WidthScale * (float)x
+            && limeTouchScreenX[0] <= FE_XC + FE_WidthScale * (float)(x + KODE_CELL)) {
             KodeSelector[i] = (KodeSelector[i] + 1) % KODE_DIGITS;
             KodeSelectorParticle[i] = KODE_PART_ON;
         }
@@ -10650,7 +10708,7 @@ void FE_Task_Enter_Kode(void)
         v = (float)((double)((n / KODE_ATLAS_COL) * KODE_CELL) * 0.0078125);
 
         limeDrawSprite((TEXTURE *)KodesTexture,
-                       FE_WidthScale * (float)x,
+                       FE_XC + FE_WidthScale * (float)x,
                        FE_HeightScale * KODE_ROW_Y,
                        FE_WidthScale * (float)KODE_CELL,
                        FE_HeightScale * (float)KODE_CELL,
@@ -10664,7 +10722,7 @@ void FE_Task_Enter_Kode(void)
             part[3] = 1.0f - t;
 
             limeDrawSprite((TEXTURE *)KodesTexture,
-                           ((float)x - KODE_PART_MOVE * t) * FE_WidthScale,
+                           FE_XC + ((float)x - KODE_PART_MOVE * t) * FE_WidthScale,
                            (KODE_ROW_Y - KODE_PART_MOVE * t) * FE_HeightScale,
                            FE_WidthScale * ((t + 1.0f) * (float)KODE_CELL),
                            FE_HeightScale * ((t + 1.0f) * (float)KODE_CELL),
@@ -12044,12 +12102,12 @@ void FE_Task_Select_Treasure(void)
     limeEnableAlphaBlending_Basic();
 
     /* the red component is FE_WidthScale, not 1.0f -- see the header */
-    limeFillRect(FE_WidthScale * 212.0f, FE_HeightScale * 54.0f,
+    limeFillRect(FE_XC + FE_WidthScale * 212.0f, FE_HeightScale * 54.0f,
                  FE_WidthScale * 52.0f, FE_HeightScale * 63.0f,
                  FE_WidthScale, 0.0f, 0.0f, 1.0f);
 
     limeDrawSprite((TEXTURE *)TowerPortraitTexture[Character1],
-                   FE_WidthScale * 214.0f, FE_HeightScale * 56.0f,
+                   FE_XC + FE_WidthScale * 214.0f, FE_HeightScale * 56.0f,
                    FE_WidthScale * 64.0f, FE_HeightScale * 64.0f,
                    0.0f, 0.0f, 1.0f, 1.0f, col);
 
@@ -12070,8 +12128,8 @@ void FE_Task_Select_Treasure(void)
                 && limeLastTouchScreenX[0] == -1.0f
                 && limeTouchScreenY[0] >= FE_HeightScale * ST_BAND_TOP
                 && limeTouchScreenY[0] <= FE_HeightScale * ST_BAND_BOT
-                && limeTouchScreenX[0] >= FE_WidthScale * (float)x
-                && limeTouchScreenX[0] <= FE_WidthScale
+                && limeTouchScreenX[0] >= FE_XC + FE_WidthScale * (float)x
+                && limeTouchScreenX[0] <= FE_XC + FE_WidthScale
                                         * (float)(x + ST_CELL)) {
                 long k;
 
@@ -12121,7 +12179,7 @@ void FE_Task_Select_Treasure(void)
 
         if (colour != 0)
             limeDrawSprite((TEXTURE *)KodesTexture,
-                           FE_WidthScale * (float)x,
+                           FE_XC + FE_WidthScale * (float)x,
                            FE_HeightScale * ST_ROW_Y,
                            FE_WidthScale * (float)ST_CELL,
                            FE_HeightScale * (float)ST_CELL,
@@ -12135,7 +12193,7 @@ void FE_Task_Select_Treasure(void)
             part[3] = 1.0f - t;
 
             limeDrawSprite((TEXTURE *)KodesTexture,
-                           ((float)x - ST_PART_MOVE * t) * FE_WidthScale,
+                           FE_XC + ((float)x - ST_PART_MOVE * t) * FE_WidthScale,
                            (ST_ROW_Y - ST_PART_MOVE * t) * FE_HeightScale,
                            FE_WidthScale * ((t + 1.0f) * (float)ST_CELL),
                            FE_HeightScale * ((t + 1.0f) * (float)ST_CELL),
@@ -12909,7 +12967,13 @@ int FEInit_LoadABit(long step)
 
     /* ---- 71..84: the meshes, and the burning logo ---- */
     case 71:
-        ButtonsTPage = limeLoadTexture("BUTTONS_TPAGE.PNG", 0, 0);
+        /* Port, not in the binary: from texture quality IPAD up, the iPad
+         * build's sheet at twice the size -- that build's own FEInit_LoadABit
+         * keeps BUTTONS_TPAGE here. Its even cells are a pressed glow, so
+         * drawSingleButton takes the odd one (GameCode.c). */
+        ButtonsTPage = limeLoadTexture(PortTextureQuality >= 1
+                                       ? "BUTTONS_TPAGE_IPAD.PNG"
+                                       : "BUTTONS_TPAGE.PNG", 0, 0);
         OrangeTexture = limeLoadTexture("ORANGEPORTAL.PNG", 0, 0);
         return 0;
     case 72:

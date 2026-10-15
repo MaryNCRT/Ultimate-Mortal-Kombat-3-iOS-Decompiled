@@ -47,8 +47,10 @@
 #include <string.h>
 
 #include "platform/gl.h"
+#include "platform/platform.h"
 #include "lime/png.h"
 #include "lime/pvr.h"
+#include "lime/par.h"
 
 #include "../decomp/lime/lime.h"
 
@@ -100,6 +102,19 @@ typedef struct TexEntry {
 
 static TexEntry *g_textures;
 
+/* The launcher's texture quality (umk3.ini texture_quality=), port only:
+ *
+ *      0  IPHONE  the device's own: at 480 wide the game loads the _LOW
+ *                 sheets (SetupFEScale's UseLOWAssets)
+ *      1  IPAD    the full sheets a wider screen gets (FrontEnd.c)
+ *      2  MAX     the full sheets, a sheet's lossless .png before its PVRTC
+ *                 .pvr when the bundle has both, mipmaps and the card's
+ *                 largest anisotropic filtering
+ *
+ * The .pvr data is compressed in the .ipa itself; nothing here can undo that,
+ * MAX is the best those files give. */
+int PortTextureQuality;
+
 static TexEntry *tex_find(const char *path)
 {
     TexEntry *e;
@@ -125,6 +140,8 @@ static int try_one(const char *full, LimeImage *out)
     return 0;
 }
 
+static int fit_twin(LimeImage *img, int cw, int ch, int dw, int dh);
+
 static int load_rgba(const char *path, LimeImage *out)
 {
     /* Where the bundle keeps sheets, in the order that finds them soonest:
@@ -135,6 +152,18 @@ static int load_rgba(const char *path, LimeImage *out)
      * data says ".PNG" for files that are .pvr on disk -- the exporter wrote
      * one extension and the device supplied another. */
     static const char *const exts[] = { ".pvr", ".PVR", NULL, ".png", ".PNG" };
+    static const char *const exts_max[] = { ".png", ".PNG", NULL, ".pvr", ".PVR" };
+    /* Port, not in the binary: from IPAD up, a sheet the bundle also ships
+     * as uncompressed PNG with the SAME layout is taken from the PNG, not
+     * the PVRTC: FE_MAINLOGO_*, LIGHTNING, VORTEX1/2 (mean difference under
+     * 2/255 against the decoded PVR). The other twins are different art:
+     * FE_METAL_BG's PNG is the 480x320 picture padded with white where the
+     * PVR is stretched over the sheet, the *_VERSUS PNGs are laid out
+     * differently, and MYBLOOD1/2 differ too -- the PNG drew a half-white
+     * Lost Treasure screen and stats page. */
+    static const char *const twins[] = {
+        "FE_MAINLOGO_", "LIGHTNING", "VORTEX1", "VORTEX2", NULL };
+    const char *const *ext = exts;
 
     const char *root = lime_platform_asset_root();
     char full[1200];
@@ -150,18 +179,272 @@ static int load_rgba(const char *path, LimeImage *out)
     memcpy(stem, path, n);
     stem[n] = 0;
 
+    if (PortTextureQuality >= 1) {
+        const char *base = strrchr(stem, '/') ? strrchr(stem, '/') + 1 : stem;
+        int t;
+
+        for (t = 0; twins[t]; t++)
+            if (twins[t][strlen(twins[t]) - 1] == '_'
+                    ? _strnicmp(base, twins[t], strlen(twins[t])) == 0
+                    : _stricmp(base, twins[t]) == 0)
+                ext = exts_max;
+    }
+
+    /* Port, not in the binary: from IPAD up, a sheet the bundle also has
+     * at twice the size under an _IPAD name is taken from there -- the game
+     * font (MKFONT_0/1 -> MKFONT_IPAD_0/1, 2048 square, the grid its
+     * mkfont_ipad.ft2 is laid out on). The iPhone binary does not load it;
+     * the iPad build's Task_LoadGeneralData does. BUTTONS_TPAGE_IPAD is not
+     * swapped in here: the iPad build loads it for the fight only
+     * (GameInit_LoadABit) and keeps BUTTONS_TPAGE in the menus
+     * (FEInit_LoadABit), whose sample button draws the pressed cell --
+     * a glow on the iPad sheet. See GameInit_LoadABit, case 26. */
+    /* Port, not in the binary: FE_METAL_BG's PNG twin is the same picture
+     * uncompressed but laid out differently -- 480x320 at the top left of
+     * the sheet, white below and right -- where the PVR is that picture
+     * stretched over all 512x512. From IPAD up the PNG is taken, cropped to
+     * its 480x320 and stretched the same way, so the menus' coordinates land
+     * where they do on the PVR. (The *_VERSUS PNG twins are not this: they
+     * are other, smaller pictures -- 256 square, an orange backdrop -- and
+     * the PVR's 512 art is kept.) */
+    if (PortTextureQuality >= 1) {
+        const char *base = strrchr(stem, '/') ? strrchr(stem, '/') + 1 : stem;
+
+        if (_stricmp(base, "FE_METAL_BG") == 0) {
+            for (e = 0; e < 2; e++) {
+                snprintf(full, sizeof(full), "%s/Textures/%s%s", root, base,
+                         e ? ".PNG" : ".png");
+                if (try_one(full, out)) {
+                    if (out->width >= 480 && out->height >= 320
+                        && fit_twin(out, 480, 320, 512, 512))
+                        return 1;
+                    free(out->rgba);
+                    memset(out, 0, sizeof(*out));
+                }
+            }
+        }
+    }
+
+    if (PortTextureQuality >= 1 && strncmp(stem, "MKFONT_", 7) == 0) {
+        char big[300];
+        size_t k = strlen(stem);
+
+        if (k >= 2 && stem[k - 2] == '_' && stem[k - 1] >= '0' && stem[k - 1] <= '9')
+            snprintf(big, sizeof(big), "%.*s_IPAD%s", (int)(k - 2), stem, stem + k - 2);
+        else
+            snprintf(big, sizeof(big), "%s_IPAD", stem);
+        for (e = 0; e < 2; e++) {
+            snprintf(full, sizeof(full), "%s/Textures/%s%s", root, big,
+                     e ? ".png" : ".PNG");
+            if (try_one(full, out))
+                return 1;
+        }
+    }
+
     for (e = 0; e < (int)(sizeof(exts) / sizeof(exts[0])); e++) {
         for (d = 0; d < (int)(sizeof(dirs) / sizeof(dirs[0])); d++) {
-            if (exts[e] == NULL)
+            if (ext[e] == NULL)
                 snprintf(full, sizeof(full), "%s/%s%s", root, dirs[d], path);
             else
                 snprintf(full, sizeof(full), "%s/%s%s%s",
-                         root, dirs[d], stem, exts[e]);
+                         root, dirs[d], stem, ext[e]);
             if (try_one(full, out))
                 return 1;
         }
     }
     return 0;
+}
+
+/* Port, not in the binary: SIN LIMITE's upscale of the small sheets.
+ *
+ * The HUD is drawn from tiny sheets -- DANGER.PNG is 64x16, the timer's
+ * COUNTDOWNFONT 128 square, NAMES_FONT and HUD_TPAGE (the bars, the round
+ * medallion) 256 -- uncompressed, with nothing bigger in either bundle (the
+ * iPad .ipa's textures are byte-for-byte the iPhone's). Magnified by the
+ * card's bilinear filter they go soft and blocky. So a sheet of at most 256
+ * on its longer side is enlarged four times here, once, at load: Catmull-Rom
+ * bicubic on premultiplied colour, and where the alpha is mostly hard
+ * (text, bars, icons -- not smoke or glows) the edge is tightened back to
+ * the width of a source pixel. The coordinates are 0..1, so nothing else
+ * changes. */
+static float cubic_w(float t)
+{
+    t = t < 0.0f ? -t : t;
+    if (t < 1.0f) return 1.5f * t * t * t - 2.5f * t * t + 1.0f;
+    if (t < 2.0f) return -0.5f * t * t * t + 2.5f * t * t - 4.0f * t + 2.0f;
+    return 0.0f;
+}
+
+static int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+/* The top-left cw x ch of img, resampled to dw x dh (Catmull-Rom, edges
+ * clamped, straight colour: the sheets this serves are opaque). 0 on no
+ * memory, img untouched. */
+static int fit_twin(LimeImage *img, int cw, int ch, int dw, int dh)
+{
+    float *tmp = (float *)malloc((size_t)dw * ch * 4 * sizeof(float));
+    uint8_t *out = (uint8_t *)malloc((size_t)dw * dh * 4);
+    const int sw = img->width;
+    int x, y, c, k;
+
+    if (!tmp || !out) { free(tmp); free(out); return 0; }
+    for (y = 0; y < ch; y++)
+        for (x = 0; x < dw; x++) {
+            float sx = (x + 0.5f) * cw / dw - 0.5f, acc[4] = { 0, 0, 0, 0 };
+            int x0 = (int)(sx < 0 ? sx - 1 : sx);
+            for (k = -1; k <= 2; k++) {
+                float wt = cubic_w(sx - (float)(x0 + k));
+                const uint8_t *q = img->rgba + ((size_t)y * sw + clampi(x0 + k, 0, cw - 1)) * 4;
+                for (c = 0; c < 4; c++) acc[c] += q[c] * wt;
+            }
+            for (c = 0; c < 4; c++) tmp[((size_t)y * dw + x) * 4 + c] = acc[c];
+        }
+    for (y = 0; y < dh; y++) {
+        float sy = (y + 0.5f) * ch / dh - 0.5f;
+        int y0 = (int)(sy < 0 ? sy - 1 : sy);
+        for (x = 0; x < dw; x++) {
+            float acc[4] = { 0, 0, 0, 0 };
+            for (k = -1; k <= 2; k++) {
+                float wt = cubic_w(sy - (float)(y0 + k));
+                const float *q = tmp + ((size_t)clampi(y0 + k, 0, ch - 1) * dw + x) * 4;
+                for (c = 0; c < 4; c++) acc[c] += q[c] * wt;
+            }
+            for (c = 0; c < 4; c++)
+                out[((size_t)y * dw + x) * 4 + c] = (uint8_t)(acc[c] < 0.0f ? 0.0f
+                    : (acc[c] > 255.0f ? 255.0f : acc[c] + 0.5f));
+        }
+    }
+    free(tmp);
+    free(img->rgba);
+    img->rgba = out;
+    img->width = dw;
+    img->height = dh;
+    return 1;
+}
+
+/* The two passes work on rows, each writing only its own, so they go to
+ * every core (runtime/lime/par.c) with the same result as one thread. */
+typedef struct {
+    const float *pm;
+    float *tmp;
+    uint8_t *out;
+    int w, h, W, S, sharpen;
+} Upscale;
+
+static void upscale_across(void *vctx, int lo, int hi)
+{
+    const Upscale *U = (const Upscale *)vctx;
+    int x, y, c, k;
+
+    for (y = lo; y < hi; y++)
+        for (x = 0; x < U->W; x++) {
+            float sx = (x + 0.5f) / U->S - 0.5f, acc[4] = { 0, 0, 0, 0 };
+            int x0 = (int)(sx < 0 ? sx - 1 : sx);
+            for (k = -1; k <= 2; k++) {
+                float wt = cubic_w(sx - (float)(x0 + k));
+                const float *q = U->pm + ((size_t)y * U->w + clampi(x0 + k, 0, U->w - 1)) * 4;
+                for (c = 0; c < 4; c++) acc[c] += q[c] * wt;
+            }
+            for (c = 0; c < 4; c++) U->tmp[((size_t)y * U->W + x) * 4 + c] = acc[c];
+        }
+}
+
+static void upscale_down(void *vctx, int lo, int hi)
+{
+    const Upscale *U = (const Upscale *)vctx;
+    int x, y, c, k;
+
+    for (y = lo; y < hi; y++) {
+        float sy = (y + 0.5f) / U->S - 0.5f;
+        int y0 = (int)(sy < 0 ? sy - 1 : sy);
+        for (x = 0; x < U->W; x++) {
+            float acc[4] = { 0, 0, 0, 0 }, a;
+            uint8_t *o = U->out + ((size_t)y * U->W + x) * 4;
+            for (k = -1; k <= 2; k++) {
+                float wt = cubic_w(sy - (float)(y0 + k));
+                const float *q = U->tmp + ((size_t)clampi(y0 + k, 0, U->h - 1) * U->W + x) * 4;
+                for (c = 0; c < 4; c++) acc[c] += q[c] * wt;
+            }
+            a = acc[3];
+            if (U->sharpen) {            /* a source pixel's ramp -> a quarter of it */
+                a = (a - 127.5f) * 2.5f + 127.5f;
+            }
+            a = a < 0.0f ? 0.0f : (a > 255.0f ? 255.0f : a);
+            for (c = 0; c < 3; c++) {
+                float v = acc[3] > 0.5f ? acc[c] / (acc[3] / 255.0f) : 0.0f;
+                o[c] = (uint8_t)(v < 0.0f ? 0.0f : (v > 255.0f ? 255.0f : v + 0.5f));
+            }
+            o[3] = (uint8_t)(a + 0.5f);
+        }
+    }
+}
+
+static void upscale_small(LimeImage *img)
+{
+    const int S = 4, w = img->width, h = img->height;
+    const int W = w * S, H = h * S;
+    float *pm, *tmp;
+    uint8_t *out;
+    long hard = 0, n = (long)w * h;
+    int c, k, sharpen;
+    Upscale U;
+
+    if (w <= 0 || h <= 0 || (w > 256 || h > 256) || (w < 8 && h < 8))
+        return;
+    for (k = 0; k < n; k++) {
+        uint8_t a = img->rgba[k * 4 + 3];
+        hard += (a < 24 || a > 231);
+    }
+    sharpen = hard * 10 >= n * 9;        /* 90% of the pixels hard */
+
+    pm  = (float *)malloc((size_t)n * 4 * sizeof(float));
+    tmp = (float *)malloc((size_t)W * h * 4 * sizeof(float));
+    out = (uint8_t *)malloc((size_t)W * H * 4);
+    if (!pm || !tmp || !out) { free(pm); free(tmp); free(out); return; }
+
+    for (k = 0; k < n; k++) {
+        float a = img->rgba[k * 4 + 3] / 255.0f;
+        for (c = 0; c < 3; c++) pm[k * 4 + c] = img->rgba[k * 4 + c] * a;
+        pm[k * 4 + 3] = img->rgba[k * 4 + 3];
+    }
+    /* across, then down; samples at pixel centres, edges clamped */
+    U.pm = pm; U.tmp = tmp; U.out = out;
+    U.w = w; U.h = h; U.W = W; U.S = S; U.sharpen = sharpen;
+    lime_par_for(h, upscale_across, &U);
+    lime_par_for(H, upscale_down, &U);
+    free(pm); free(tmp); free(img->rgba);
+    img->rgba = out;
+    img->width = W;
+    img->height = H;
+}
+
+/* Port, not in the binary: the loading screens' budget. The device ran one
+ * step of FEInit_LoadABit / GameInit_LoadABit a frame (52 for a fight), so a
+ * load took at least 52 frames however fast the steps were. The port runs
+ * steps until 50 ms of the frame are spent -- the screen still moves, at
+ * 20 frames a second or better -- and then draws. lime_port_load_more(1)
+ * starts the frame's clock; (0) says whether another step fits. */
+static double g_load_start;              /* 0 = no load running */
+
+int lime_port_load_more(int first)
+{
+    static double t0;
+
+    if (first) {
+        t0 = plat_time();
+        if (g_load_start == 0.0)
+            g_load_start = t0;
+        return 1;
+    }
+    return plat_time() - t0 < 0.050;
+}
+
+/* The end of a load: its time goes to the log ("loading: fight 1.23 s"). */
+void lime_port_load_done(const char *what)
+{
+    if (g_load_start != 0.0)
+        printf("loading: %s %.2f s\n", what, plat_time() - g_load_start);
+    g_load_start = 0.0;
 }
 
 /* armv7 0x000670a0 keeps the texture's own name in its first 0x40 bytes:
@@ -188,8 +471,15 @@ static void tex_set_name(TEXTURE *t, const char *path)
     t->field50 = IsTextureFullBrightPath((const char *)t->_pad00);
 }
 
+#ifdef _WIN32
+#define MIP_API __stdcall
+#else
+#define MIP_API
+#endif
 TEXTURE *limeLoadTexture(const char *path, int a, int b)
 {
+    static int mip_tried;
+    static void (MIP_API *gen_mip)(GLenum);
     TexEntry *e;
     LimeImage img;
     GLuint name = 0;
@@ -208,6 +498,8 @@ TEXTURE *limeLoadTexture(const char *path, int a, int b)
             fprintf(stderr, "[tex] %s MISSING\n", path);
         return NULL;                    /* the failure branch the engine has */
     }
+    if (PortTextureQuality >= 2)
+        upscale_small(&img);
     if (getenv("LIME_TRACE_TEX"))
         fprintf(stderr, "[tex] %s %dx%d\n", path, img.width, img.height);
 
@@ -222,8 +514,35 @@ TEXTURE *limeLoadTexture(const char *path, int a, int b)
      * glyph on the second atlas page has a V past 1.0 (J is at 2504 of 2048),
      * which REPEAT folds onto the second sheet. This used to set GL_CLAMP,
      * and J, Á and Ñ drew as nothing: "UGAR" for JUGAR. */
+    if (PortTextureQuality >= 2) {
+        /* MAX: mipmaps (GL_GENERATE_MIPMAP, GL 1.4) and the largest
+         * anisotropy the card offers (EXT_texture_filter_anisotropic) */
+        static float aniso = -1.0f;
+
+        if (aniso < 0.0f) {
+            const char *x = (const char *)glGetString(GL_EXTENSIONS);
+            aniso = 0.0f;
+            if (x && strstr(x, "GL_EXT_texture_filter_anisotropic"))
+                glGetFloatv(0x84FF, &aniso);   /* MAX_TEXTURE_MAX_ANISOTROPY */
+        }
+        /* the card builds them (glGenerateMipmap, GL 3.0, after the
+         * upload, below); without it the driver's GENERATE_MIPMAP, which
+         * some drivers do on the CPU -- a second of every SIN LIMITE load */
+        if (!mip_tried) {
+            mip_tried = 1;
+            gen_mip = (void (MIP_API *)(GLenum))plat_gl_proc("glGenerateMipmap");
+        }
+        if (!gen_mip)
+            glTexParameteri(GL_TEXTURE_2D, 0x8191, GL_TRUE);  /* GENERATE_MIPMAP */
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                        GL_LINEAR_MIPMAP_LINEAR);
+        if (aniso > 1.0f)
+            glTexParameterf(GL_TEXTURE_2D, 0x84FE, aniso);  /* MAX_ANISOTROPY */
+    }
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.width, img.height, 0,
                  GL_RGBA, GL_UNSIGNED_BYTE, img.rgba);
+    if (PortTextureQuality >= 2 && gen_mip)
+        gen_mip(GL_TEXTURE_2D);
     free(img.rgba);
 
     /* The TEXTURE handed back is stored in 32-bit words of the binary's
@@ -368,6 +687,58 @@ void limeSetColourMask(long r, long g, long b, long a)
 
 /* --------------------------------------------------------------- sprites */
 
+/* Port, not in the binary: the edge clamp.
+ *
+ * Every texture keeps GL_REPEAT, as in the binary (see limeLoadTexture), and
+ * with linear filtering a draw that reaches a texture's edge then blends in
+ * the OPPOSITE edge. Art with a transparent or black margin -- a select-screen
+ * portrait is u 0..1 with its right part empty -- shows that as a 1-pixel
+ * light line along the edge at PC resolutions. A draw whose texture
+ * coordinates all stay inside 0..1 never needs REPEAT, so it is drawn with
+ * CLAMP_TO_EDGE and REPEAT is put back after; a draw that runs past 1.0 (the
+ * font's second sheet, a tiled stage floor) keeps REPEAT untouched.
+ *
+ * `uv` is the first U, `stride` the distance between vertices in floats;
+ * `idx` the indices drawn, or NULL for vertices 0..n-1. Returns whether it
+ * clamped, for lime_port_edge_restore. */
+#define EDGE_EPS 0.0001f
+
+static int edge_clamp_if_inside(float u0, float u1, float v0, float v1)
+{
+    if (u0 < -EDGE_EPS || u1 > 1.0f + EDGE_EPS ||
+        v0 < -EDGE_EPS || v1 > 1.0f + EDGE_EPS)
+        return 0;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, 0x812F);  /* CLAMP_TO_EDGE */
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F);
+    return 1;
+}
+
+int lime_port_edge_clamp(const float *uv, int stride,
+                         const unsigned short *idx, int n)
+{
+    float u0 = 1e30f, u1 = -1e30f, v0 = 1e30f, v1 = -1e30f;
+    int i;
+
+    if (uv == NULL || n <= 0)
+        return 0;
+    for (i = 0; i < n; i++) {
+        const float *t = uv + (size_t)(idx ? idx[i] : i) * (size_t)stride;
+        if (t[0] < u0) u0 = t[0];
+        if (t[0] > u1) u1 = t[0];
+        if (t[1] < v0) v0 = t[1];
+        if (t[1] > v1) v1 = t[1];
+    }
+    return edge_clamp_if_inside(u0, u1, v0, v1);
+}
+
+void lime_port_edge_restore(int clamped)
+{
+    if (!clamped)
+        return;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+}
+
 static void quad(TEXTURE *page, float x, float y, float w, float h,
                  float u, float v, float du, float dv,
                  const float *colour, float angle)
@@ -397,12 +768,19 @@ static void quad(TEXTURE *page, float x, float y, float w, float h,
     /* `du`/`dv` are extents, and a negative one mirrors -- the front end flips
      * a sprite that way rather than carrying a second texture. Adding the
      * extent to the origin handles both signs without a branch. */
+    /* edge clamp, see lime_port_edge_clamp */
+    const int clamp = edge_clamp_if_inside(du < 0.0f ? u + du : u,
+                                           du < 0.0f ? u : u + du,
+                                           dv < 0.0f ? v + dv : v,
+                                           dv < 0.0f ? v : v + dv);
     glBegin(GL_QUADS);
         glTexCoord2f(u,      v);       glVertex2f(x,     y);
         glTexCoord2f(u + du, v);       glVertex2f(x + w, y);
         glTexCoord2f(u + du, v + dv);  glVertex2f(x + w, y + h);
         glTexCoord2f(u,      v + dv);  glVertex2f(x,     y + h);
     glEnd();
+
+    lime_port_edge_restore(clamp);
 
     if (angle != 0.0f)
         glPopMatrix();
@@ -522,7 +900,11 @@ static void face_draw(TEXTURE *tex, const float *xyz, const float *uv,
     glEnableClientState(GL_VERTEX_ARRAY);
     glTexCoordPointer(2, GL_FLOAT, 0, uv);
     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    {
+        const int clamp = lime_port_edge_clamp(uv, 2, NULL, 4);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        lime_port_edge_restore(clamp);
+    }
     glDisable(GL_TEXTURE_2D);
 }
 

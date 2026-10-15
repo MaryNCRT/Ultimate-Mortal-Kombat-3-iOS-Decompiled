@@ -18,6 +18,10 @@ contextBridge.exposeInMainWorld('umk3', {
     maximize: () => ipcRenderer.invoke('window:maximize'),
     fullscreen: () => ipcRenderer.invoke('window:fullscreen'),
     onBuildData: cb => ipcRenderer.on('build:data', (_e, d) => cb(d)),
+    checkUpdate: () => ipcRenderer.invoke('update:check'),
+    installUpdate: () => ipcRenderer.invoke('update:install'),
+    updateResult: () => ipcRenderer.invoke('update:result'),
+    onUpdateProgress: cb => ipcRenderer.on('update:progress', (_e, d) => cb(d)),
     shot: () => ipcRenderer.invoke('shot:capture'),
     debugLayout: payload => ipcRenderer.invoke('debug:layout', payload),
 });

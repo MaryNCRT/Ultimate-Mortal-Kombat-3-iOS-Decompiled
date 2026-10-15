@@ -11,6 +11,10 @@
 #include "lime_glapi.h"   /* the GL calls' calling convention */
 #include <string.h>   /* memset, for clearSpriteListsAndEvents */
 
+extern int PortTextureQuality;          /* runtime/draw_gl.c, port only */
+int  lime_port_load_more(int first);    /* runtime/draw_gl.c, port only */
+void lime_port_load_done(const char *what);
+
 /* TEXTURETOLOAD is the engine's {name, destination} pair — see decomp/lime,
  * where LIME_SetSceneTextures walks the same shape. Declared rather than
  * included: gamecode has no header of its own yet and one file should not
@@ -1580,10 +1584,14 @@ void drawSingleButton(int x, int y, float alpha)
     colour[3].f = 1.0f;
     colour[4].f = alpha;
 
+    /* Port, not in the binary: on the iPad sheet (texture quality IPAD and
+     * up, FEInit_LoadABit) the even cell is a pressed glow; the odd one is
+     * the button as the iPhone sheet's even cell shows it. */
     limeDrawSprite(ButtonsTPage,
                    FE_X((float)x), FE_Y((float)y),
                    FE_W(64.0f),    FE_H(64.0f),
-                   0.0f, 0.5f, 0.125f, 0.25f, (const float *)&colour[0]);
+                   PortTextureQuality >= 1 ? 0.125f : 0.0f,
+                   0.5f, 0.125f, 0.25f, (const float *)&colour[0]);
 }
 
 
@@ -2652,6 +2660,8 @@ void Task_LoadingScreen(void);
  * `{1, 1, 1, 1}` and then filled with four more explicit 1.0 stores before the
  * alpha is overwritten. Transcribed once; the duplication does nothing.
  */
+extern float PortFEExtraX;             /* FrontEnd.c, port only */
+
 void Task_LoadSplashScreen(void)
 {
     float colour[4];
@@ -2702,7 +2712,9 @@ void Task_LoadSplashScreen(void)
         tex = SplashTexture1;
     }
 
-    limeDrawSprite(tex, 0.0f, FE_YOffset,
+    /* Port: centred on a surface wider than 3:2 (FrontEnd.c FE_X);
+     * PortFEExtraX is 0 otherwise, so x stays 0 as in the binary. */
+    limeDrawSprite(tex, PortFEExtraX * 0.5f, FE_YOffset,
                    480.0f * FE_WidthScale,
                    320.0f * FE_HeightScale,
                    0.03125f, 0.1875f, 0.9375f, 0.625f,
@@ -5878,10 +5890,17 @@ void Task_GameInit(void)
         long done;
 
         Task_LoadingScreen_DRAWSCREEN(1, GI_LoadCount * 100 / 52);
-        done = GameInit_LoadABit(GI_LoadCount);
-        GI_LoadCount++;
-        if (done)
+        /* Port, not in the binary: as many steps as fit in the frame
+         * (lime_port_load_more, draw_gl.c); the device ran one. */
+        lime_port_load_more(1);
+        do {
+            done = GameInit_LoadABit(GI_LoadCount);
+            GI_LoadCount++;
+        } while (!done && lime_port_load_more(0));
+        if (done) {
+            lime_port_load_done("fight");
             GameInitState = 2;
+        }
         return;
     }
 
@@ -7100,7 +7119,12 @@ long GameInit_LoadABit(long step)
 
     case 26:
         PauseBGTexture = limeLoadTexture("PAUSEBG.PNG", 0, 0);
-        ButtonsTPage   = (TEXTURE *)limeLoadTexture("BUTTONS_TPAGE.PNG", 0, 0);
+        /* Port, not in the binary: from texture quality IPAD up, the iPad
+         * build's sheet, which its own GameInit_LoadABit loads here (the
+         * menus keep BUTTONS_TPAGE, as in that build's FEInit_LoadABit). */
+        ButtonsTPage   = (TEXTURE *)limeLoadTexture(PortTextureQuality >= 1
+                                                    ? "BUTTONS_TPAGE_IPAD.PNG"
+                                                    : "BUTTONS_TPAGE.PNG", 0, 0);
         return 0;
 
     case 27: {

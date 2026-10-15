@@ -163,6 +163,29 @@ animation, the font, matrices. Formats are documented in `docs/*-FORMAT.md`.
 mixing, MP3 music; Win32 and SDL2 backends), `gamecode_globals.c` (generated
 storage for every global the decompiled code declares, see 4.2).
 
+Texture quality (`texture_quality=` / `UMK3_TEXQ`, all Port, not in the
+binary): `iphone` loads what the iPhone build loads; `ipad` adds the iPad
+build's `MKFONT_IPAD` font sheets and `BUTTONS_TPAGE_IPAD` (in the menus too, where the opacity sample then draws the sheet's normal cell), FE_METAL_BG from its PNG cropped and stretched to the PVR's layout (`fit_twin`), prefers a `.png` twin over a `.pvr`,
+and gives the select screen the 1024 fight skins (`port_load_lite`,
+Players.c); `max` also upscales sheets of 256 or less 4x at load
+(`upscale_small`). Every texture keeps GL_REPEAT as on the device; a draw
+whose uv stays inside [0,1] is clamped to edge for that draw only, which is
+what removed the white seams (`lime_port_edge_clamp`).
+
+UI size (`ui_size=` / `UMK3_UI`, Port, not in the binary): `ipad` hands the
+game a 960x640 surface instead of 480x320 (`lime_menu_set_screen`,
+`lime_gl_set_screen`), so `SetupFEScale` takes the binary's own big-screen
+branch -- FE_WidthScale 2, HUD_Scale 1.75 -- and the HUD is drawn at 7/8 of
+the menus' scale. game_main.c maps the mouse onto that surface and scales
+the 480x320 coordinates of scripted and pad taps by `g_ui_k`.
+
+Aspect (`aspect=` / `UMK3_ASPECT`, Port): game_main.c shapes the surface
+(4:3 = 480x360, 16:9 = 568x320, times the UI size). `LIMEDS_Set3dMode`
+keeps the iPhone's projection at 3:2, uses the iPad build's at 4:3 and
+widens the horizontal view beyond 3:2. On wide surfaces SetupFEScale
+scales the front end by height and `FE_X` centres it (`PortFEExtraX`),
+except the main menu's buttons, which stay on the left edge.
+
 ---
 
 ## 3. Where things are
@@ -354,7 +377,7 @@ second exe for tests by changing the `-o` line of a copy of `link.rsp`.
 
 **From source on Linux/macOS:** CMake, target `umk3-game` (see the README).
 
-**A release:** `python launcher/make_release.py <launcher.exe> <out dir> --zip`,
+**A release:** `npm run dist` in `launcher/app`, then `python launcher/make_release.py launcher/app/dist/win-unpacked <out dir> --zip` (the launcher goes unpacked to `launcher\bin\`, and a 19 KB stub becomes `UMK3-Launcher.exe`),
 then build that zip once from an `.ipa` to check it before publishing.
 
 ---

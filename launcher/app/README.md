@@ -48,27 +48,37 @@ expects (width/height/fullscreen/widescreen/language/debug_keys,
 > `LIMEDS_Set3dMode` is not widened yet, so a rebuilt game with
 > `widescreen=1` stretches the 3D. See the top of `docs/PROGRESS.md`.
 
-## Package the single .exe
+## Package it
 
 ```sh
 cd launcher/app
-npm run portable          # -> dist/UMK3-Launcher.exe (one file, ~70 MB)
+npm run dist              # -> dist/win-unpacked/ (the app, unpacked)
 ```
 
-`electron-builder` builds the NSIS portable target; the resulting
-`dist/UMK3-Launcher.exe` is one self-contained file with no install step.
-Place it in the game folder (computed as above).  `make_release.py` ships this
-app's sources under `launcher/app/`; the exe itself is copied from `dist/`,
-i.e. build it before making a release.
+`make_release.py <dist/win-unpacked> <out>` puts that folder in the release
+as `launcher\bin\` and compiles `launcher/stub/umk3_launcher_stub.c` into the
+`UMK3-Launcher.exe` at the top of the game folder. The stub sets `UMK3_ROOT`
+and the working folder to the game folder, starts `launcher\bin\UMK3-Launcher.exe`
+and exits.
 
-Two launch blockers to know about:
+**Why not the single portable .exe any more:** it unpacked ~270 MB to `%TEMP%`
+at every start, 9.3 s before the window showed (measured 2026-10-15); unpacked,
+the window shows in 0.7 s (about 5 s the very first time, cold). `npm run
+portable` still builds the old single file.
 
-- The portable wrapper is extracted to `%TEMP%`, so "beside the exe" is not a
-  stable place to look; that is why root detection walks the working
-  directory (a double-click in the game folder sets it) and remembers the
-  choice.
+One launch blocker to know about:
 - `signAndEditExecutable` is off (winCodeSign needs admin rights to unpack);
   the window icon is supplied at runtime by the app itself.
+
+## Updates
+
+`lib/update.js`: the newest GitHub release of the repository (pre-releases
+count) against `app.getVersion()`, i.e. `package.json`'s `version` -- **bump
+it for every release**, or players are never told. The release needs its
+`UMK3-PC-<version>.zip` asset (make_release.py `--zip`). Installing writes
+`update\apply.ps1`, started through WMI so it outlives the launcher; it
+mirrors decomp, runtime, tools and launcher, keeps umk3.ini and res, reopens
+the launcher, and the page then recompiles (`update/installed.json`).
 
 ## Design notes (the iOS-style brief, since 2026-10-09)
 

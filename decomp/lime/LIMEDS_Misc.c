@@ -385,11 +385,35 @@ void LIMEDS_Set3dMode(void)
     glLoadIdentity();
     limePortDisplayRotation();          /* port only -- not in the binary */
 
-    ratio = 0.6f;
-    CreatePerspectiveMatrix(m, 0.436331958f, 0.6f, 1.0f, 400.0f);
+    {
+        /* Port: the launcher's aspect= (runtime/game_main.c). The iPhone
+         * build's 0.6 is drawn for 3:2 and stretches anything wider; 3:2
+         * keeps it untouched. 4:3 is the iPad build's own (UMK3 for iPad
+         * 1.2.56, _LIMEDS_Set3dMode at 0x5d99c): aspect 0x3f3f7cee and,
+         * after the panel scale, a second limeScaleMatrix by 0x3f9f928e --
+         * the iPhone's vertical view at true proportions, the sides
+         * narrower. Wider than 3:2 is the same rule, not in either binary:
+         * k = (h / w) / 0.6, aspect 0.6k, then scale k -- the vertical view
+         * unchanged and the extra width shows more of the stage. */
+        float wide = limeScreenHeight > 0
+                   ? (float)limeScreenWidth / (float)limeScreenHeight : 1.5f;
+        float asp = 0.6f, k = 0.0f;
 
-    s = limeDeviceSideways ? limeScreenWidth : limeScreenHeight;
-    limeScaleMatrix(m, (float)s / (float)limeDeviceHeight);
+        if (wide > 1.32f && wide < 1.35f) {
+            asp = 0.748000026f;                         /* 0x3f3f7cee */
+            k   = 1.24665999f;                          /* 0x3f9f928e */
+        } else if (wide < 1.49f || wide > 1.51f) {
+            k   = (1.0f / wide) / 0.6f;
+            asp = 0.6f * k;
+        }
+        ratio = asp;
+        CreatePerspectiveMatrix(m, 0.436331958f, asp, 1.0f, 400.0f);
+
+        s = limeDeviceSideways ? limeScreenWidth : limeScreenHeight;
+        limeScaleMatrix(m, (float)s / (float)limeDeviceHeight);
+        if (k != 0.0f)
+            limeScaleMatrix(m, k);
+    }
 
     glMultMatrixf(limePerspectiveMatrix);
     glMultMatrixf(limeSidewaysMat);

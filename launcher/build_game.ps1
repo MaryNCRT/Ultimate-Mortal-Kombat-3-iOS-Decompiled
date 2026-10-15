@@ -175,8 +175,11 @@ if ($bad) { Fail "fallo la compilacion de $(@($bad).Count) archivo(s); mira los 
 
 $exe = Join-Path $Root 'umk3-game.exe'
 $rsp = Join-Path $Work 'link.rsp'
+# --large-address-aware: a 32-bit exe may use 4 GB instead of 2 on 64-bit
+# Windows. The heap fills from the bottom, so addresses above 2 GB only come
+# when the lower 2 GB are full -- the case that would otherwise run out.
 (($objs | ForEach-Object { Quote $_ }) + @('-o', (Quote $exe), '-mwindows',
-    '-lopengl32', '-lgdi32', '-lwinmm', '-lmsacm32', '-lm')) -join "`n" |
+    '-Wl,--large-address-aware', '-lopengl32', '-lgdi32', '-lwinmm', '-lmsacm32', '-lm')) -join "`n" |
     Set-Content -Encoding ascii $rsp
 if (Test-Path $exe) { Remove-Item $exe -Force }
 & $cc "@$rsp"

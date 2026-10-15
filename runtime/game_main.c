@@ -45,6 +45,7 @@
  *   UMK3_LOG_P1=1              player one frame and buttons, every change
  *   UMK3_LOG_PACE=1            the frame pacing (input lag), once a second
  *   UMK3_LOG_PAD=1             the pad's buttons, every change (pad= in umk3.ini)
+ *   UMK3_TEXQ=0|1|2          texture quality iphone / ipad / max (texture_quality=)
  *   UMK3_PAD=<auto|off|xinput|vvvv:pppp>  the pad, over umk3.ini's pad=
  *   UMK3_FRAME_DELAY=0         no late key read before a 60 Hz refresh
  *   UMK3_PACE_HZ=<hz>          pace as if the screen ran at <hz>
@@ -151,8 +152,56 @@ static int scripted_key(int code)
 #define VIRT_H 320
 #define SCALE    2
 
+/* The surface the game lays itself out on. Port, not in the binary: the
+ * launcher's UI size (umk3.ini ui_size=) picks it. IPHONE is the retail
+ * 480x320. IPAD is 960x640, the same 3:2 at twice the size: SetupFEScale
+ * then gives FE_WidthScale 2 and HUD_Scale 1.75 -- the binary's own path for
+ * a big screen -- so the menus fill the window as before and the fight's
+ * buttons and bars come out at 1.75/2 of their iPhone size. Touches,
+ * scripted taps and the pad's HUD taps are given in 480x320 and scaled by
+ * g_ui_k. */
+static int   g_virt_w = VIRT_W, g_virt_h = VIRT_H;
+static float g_ui_k = 1.0f;
+/* aspect= (launcher): the surface's shape, w/h. 3:2 is the device's. */
+static float g_aspect = 1.5f;
+
+/* The front end lays itself out by its width and, on a surface wider than
+ * 3:2, would crop its own top and bottom (SetupFEScale's FE_YOffset goes
+ * negative). So from 16:9 up the menus keep 3:2 -- centred, the bars black
+ * or the marco= picture -- and only the fight (CurrentTask 6) gets the wide
+ * surface: its HUD is anchored to limeScreenWidth's edges at the menus'
+ * FE and HUD scales, and LIMEDS_Set3dMode widens the view. 4:3 is one
+ * surface for both, as the iPad build has it. Port, not in the binary. */
+static int g_menu_w = VIRT_W, g_menu_h = VIRT_H;
+static int g_fight_w = VIRT_W, g_fight_h = VIRT_H;
+static int g_surface = -1;              /* 0 menus, 1 fight */
+
+void lime_gl_set_screen(int w, int h);
+void lime_menu_set_screen(int w, int h);
+
+static void use_surface(int fight)
+{
+    if (fight == g_surface)
+        return;
+    g_surface = fight;
+    g_virt_w = fight ? g_fight_w : g_menu_w;
+    g_virt_h = fight ? g_fight_h : g_menu_h;
+    lime_menu_set_screen(g_virt_w, g_virt_h);
+    lime_gl_set_screen(g_virt_w, g_virt_h);
+}
+
+static float parse_aspect(const char *v)
+{
+    float a = 0.0f, b = 0.0f;
+
+    if (sscanf(v, "%f:%f", &a, &b) == 2 && a > 0.0f && b > 0.0f && a / b >= 1.0f && a / b <= 4.0f)
+        return a / b;
+    return 1.5f;
+}
+
 void  lime_platform_set_asset_root(const char *path);
 void  lime_gl_set_screen(int w, int h);
+void  lime_menu_set_screen(int w, int h);
 
 void  limeGetLanguage(char *dst, int len);
 const char *limeGetPropertyString(const char *key);
@@ -711,6 +760,16 @@ static void read_config(const char *dir)
             g_cfg_debug_keys = atoi(v) != 0;
         else if (strcmp(line, "skip_intro") == 0)
             g_cfg_skip_intro = atoi(v) != 0;
+        else if (strcmp(line, "aspect") == 0)
+            g_aspect = parse_aspect(v);
+        else if (strcmp(line, "ui_size") == 0)        /* iphone or ipad */
+            g_ui_k = _stricmp(v, "ipad") == 0 ? 2.0f : 1.0f;
+        else if (strcmp(line, "texture_quality") == 0) {
+            /* iphone, ipad or max: see draw_gl.c */
+            extern int PortTextureQuality;
+            PortTextureQuality = _stricmp(v, "max") == 0 ? 2
+                               : _stricmp(v, "ipad") == 0 ? 1 : 0;
+        }
         else if (strcmp(line, "pad_dbg_menu") == 0)
             g_pad_dbg_mask = pad_combo(v);
         else if (strcmp(line, "pad") == 0)    /* auto, off, xinput, vvvv:pppp */
@@ -810,10 +869,10 @@ static void hud_keys(void)
         }
         if (x < 0.0f)
             continue;
-        g_ktap_x = x;
-        g_ktap_y = y;
+        g_ktap_x = x * g_ui_k;
+        g_ktap_y = y * g_ui_k;
         g_ktap_left = 3;
-        lime_touch_began(x, y);
+        lime_touch_began(g_ktap_x, g_ktap_y);
     }
 }
 
@@ -1576,12 +1635,12 @@ static void debug_request(const struct dbg_request *rq)
  * 480x320 screen, so a fullscreen 16:9 monitor gets bars, not a stretch. */
 static void fit_view(int ww, int wh, int *vx, int *vy, int *vw, int *vh)
 {
-    if ((long)ww * VIRT_H > (long)wh * VIRT_W) {
+    if ((long)ww * g_virt_h > (long)wh * g_virt_w) {
         *vh = wh;
-        *vw = (int)((long)wh * VIRT_W / VIRT_H);
+        *vw = (int)((long)wh * g_virt_w / g_virt_h);
     } else {
         *vw = ww;
-        *vh = (int)((long)ww * VIRT_H / VIRT_W);
+        *vh = (int)((long)ww * g_virt_h / g_virt_w);
     }
     *vx = (ww - *vw) / 2;
     *vy = (wh - *vh) / 2;
@@ -1722,6 +1781,14 @@ int main(int argc, char **argv)
         g_cfg_debug_keys = 1;
     if (getenv("UMK3_SKIP_INTRO"))
         g_cfg_skip_intro = 1;
+    if (getenv("UMK3_ASPECT"))          /* 4:3 16:9 21:9, over aspect= */
+        g_aspect = parse_aspect(getenv("UMK3_ASPECT"));
+    if (getenv("UMK3_UI"))              /* 0 1, over ui_size= */
+        g_ui_k = atoi(getenv("UMK3_UI")) ? 2.0f : 1.0f;
+    if (getenv("UMK3_TEXQ")) {          /* 0 1 2, over texture_quality= */
+        extern int PortTextureQuality;
+        PortTextureQuality = atoi(getenv("UMK3_TEXQ"));
+    }
     if (getenv("UMK3_PAD"))             /* over umk3.ini's pad= */
         plat_pad_select(getenv("UMK3_PAD"));
     if (getenv("UMK3_BUTTONS"))         /* 5 or 6, over umk3.ini's buttons= */
@@ -1782,7 +1849,24 @@ int main(int argc, char **argv)
         }
     }
     lime_platform_set_asset_root(root);
-    lime_gl_set_screen(VIRT_W, VIRT_H);
+    /* Narrower than 3:2 keeps the width and grows the height (4:3 at 480
+     * wide is 480x360, the iPad's shape); wider keeps the height (16:9 at
+     * 320 high is 568x320, the iPhone 5's). Even sizes. */
+    if (g_aspect <= 1.5f) {
+        g_fight_w = (int)(VIRT_W * g_ui_k);
+        g_fight_h = ((int)(g_fight_w / g_aspect + 0.5f)) & ~1;
+        g_menu_w = g_fight_w;
+        g_menu_h = g_fight_h;
+    } else {
+        g_fight_h = (int)(VIRT_H * g_ui_k);
+        g_fight_w = ((int)(g_fight_h * g_aspect + 0.5f)) & ~1;
+        /* the menus wide too, their buttons out to the corners (FE_X) */
+        extern int PortWideMenus;
+        PortWideMenus = 1;
+        g_menu_w = g_fight_w;
+        g_menu_h = g_fight_h;
+    }
+    use_surface(0);
 
     start_app();
     /* Before GameCodeInit: the front end and the fight engine have to share
@@ -1845,6 +1929,7 @@ int main(int argc, char **argv)
             continue;
         pace_work_start();
 
+        use_surface(CurrentTask == 6);
         plat_size(&ww, &wh);
         fit_view(ww, wh, &vx, &vy, &vw, &vh);
 
@@ -1854,11 +1939,12 @@ int main(int argc, char **argv)
         down = plat_mouse(&mx, &my) && g_ntaps == 0 && !dbg_menu_is_open();
         {
             static float prev_tx = -1.0f, prev_ty = -1.0f;
-            float tx = (float)(mx - vx) * VIRT_W / (vw ? vw : 1);
-            float ty = (float)(my - vy) * VIRT_H / (vh ? vh : 1);
+            float tx = (float)(mx - vx) * g_virt_w / (vw ? vw : 1);
+            float ty = (float)(my - vy) * g_virt_h / (vh ? vh : 1);
 
-            if (dbg_menu_is_open())     /* the debug menu takes the mouse */
-                dbg_menu_mouse(tx, ty, plat_mouse(&mx, &my) && g_ntaps == 0);
+            if (dbg_menu_is_open())     /* the debug menu takes the mouse, 480x320 */
+                dbg_menu_mouse(tx / g_ui_k, ty / g_ui_k,
+                               plat_mouse(&mx, &my) && g_ntaps == 0);
 
             if (down && !was_down)
                 lime_touch_began(tx, ty);
@@ -2006,11 +2092,12 @@ int main(int argc, char **argv)
 
             /* Scripted taps: press on the tick, release three later. */
             for (i = 0; i < g_ntaps; i++) {
+                float x = g_taps[i].x * g_ui_k, y = g_taps[i].y * g_ui_k;
+
                 if (g_taps[i].tick == ticks)
-                    lime_touch_began(g_taps[i].x, g_taps[i].y);
+                    lime_touch_began(x, y);
                 if (g_taps[i].tick + g_taps[i].hold == ticks)
-                    lime_touch_ended(g_taps[i].x, g_taps[i].y,
-                                     g_taps[i].x, g_taps[i].y);
+                    lime_touch_ended(x, y, x, y);
             }
 
             clear_frame(ww, wh, vx, vy, vw, vh);

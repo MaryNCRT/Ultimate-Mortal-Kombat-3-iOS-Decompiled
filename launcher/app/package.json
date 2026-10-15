@@ -1,12 +1,13 @@
 {
   "name": "umk3-launcher",
-  "version": "0.0.9-alpha",
+  "version": "0.1.0-alpha",
   "description": "UMK3 PC port launcher - arcade shell (Electron)",
   "main": "main.js",
   "author": "UMK3 Recomp",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
+    "dist": "electron-builder --win dir --x64",
     "portable": "electron-builder --win portable --x64",
     "test": "node --test test/*.js"
   },
@@ -29,7 +30,7 @@
     },
     "win": {
       "target": [
-        "portable"
+        "dir"
       ],
       "icon": "build/icon.ico",
       "signAndEditExecutable": false

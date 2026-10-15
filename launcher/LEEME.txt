@@ -1,4 +1,4 @@
-ULTIMATE MORTAL KOMBAT 3 - PORT DE PC - 0.0.9 ALPHA
+ULTIMATE MORTAL KOMBAT 3 - PORT DE PC - 0.1.0 ALPHA
 ====================================================
 
 Port nativo para Windows de la version de iOS (1.2.59), hecho por
@@ -32,7 +32,10 @@ COMO JUGAR
    relacion de aspecto (3:2, la original), el antialiasing (hasta x16),
    si quieres ocultar el joystick y los botones en pantalla y, si
    quieres, un marco (una imagen tuya) para los lados en pantalla
-   completa. Se guardan solos en umk3.ini.
+   completa, y la calidad de texturas: IPHONE (la original), IPAD
+   (letras y botones del iPad, texturas sin comprimir donde existen y
+   luchadores a 1024 en la seleccion) o SIN LIMITE (ademas agranda 4x
+   el HUD pequeno). Se guardan solos en umk3.ini.
    En "CONTROLES", categoria JUGADOR 1, eliges el esquema de 6 o de 5
    botones (el juego empieza con el que elijas) y cambias las teclas de
    cada uno por separado: haz clic en una accion y pulsa la tecla nueva
@@ -108,6 +111,26 @@ NUEVO EN 0.0.9
   memoria). Una pelea del debug ya no deja sus luchadores, escenario ni
   paletas para los demas modos.
 - Launcher: botones mas pequenos.
+
+NUEVO EN 0.1.0
+- El launcher abre en menos de un segundo: ahora vive descomprimido en
+  launcher\bin\ y UMK3-Launcher.exe solo lo abre. No borres esa carpeta.
+- Las pantallas de carga son mucho mas rapidas (usa todos los nucleos).
+- Calidad de texturas IPHONE / IPAD / SIN LIMITE.
+- GRAFICOS > RELACION DE ASPECTO: 3:2 (iPhone), 4:3 (la vista del iPad),
+  16:9 y 21:9. En 16:9 y 21:9 la pelea ocupa toda la pantalla y se ve
+  mas escenario a los lados, sin estirar ni hacer zoom; el HUD va a las
+  esquinas. Los menus usan todo el ancho: los botones del menu principal
+  se van a la izquierda y las demas pantallas quedan centradas.
+- Nuevas resoluciones de ventana 4:3 (1024x768...) y 21:9 (2560x1080,
+  3440x1440).
+- GRAFICOS > TAMANO DE LA INTERFAZ: IPAD deja el HUD de la pelea mas
+  pequeno, como en el iPad (los menus se ven igual).
+- COMPILAR TU .IPA > BUSCAR ACTUALIZACIONES: el launcher mira si hay una
+  version nueva en GitHub (tambien al abrirse, y te avisa con una
+  notificacion) y muestra sus novedades. DESCARGAR E INSTALAR la baja,
+  cierra el launcher, copia los archivos nuevos (tu umk3.ini y res\ se
+  quedan), lo vuelve a abrir y recompila el juego con tu .ipa.
 
 NUEVO EN 0.0.8
 - El juego ya es 100% jugable. Puede tener fallos; se iran arreglando.
@@ -219,7 +242,7 @@ ARREGLADO EN 0.0.2
 - La melena de Sindel aparece, con su textura.
 - El joystick en pantalla se mueve.
 
-ERRORES CONOCIDOS EN 0.0.9
+ERRORES CONOCIDOS EN 0.1.0
 - Algunos objetos aparte de los luchadores aun pueden no verse.
 - Faltan animaciones en algunos fatalities (el de Sonya no se ve bien).
 - Siguen apareciendo errores de texturas en algunos escenarios y
