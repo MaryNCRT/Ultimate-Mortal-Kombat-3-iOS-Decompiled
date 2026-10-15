@@ -140,6 +140,8 @@ static int try_one(const char *full, LimeImage *out)
     return 0;
 }
 
+static int fit_twin(LimeImage *img, int cw, int ch, int dw, int dh);
+
 static int load_rgba(const char *path, LimeImage *out)
 {
     /* Where the bundle keeps sheets, in the order that finds them soonest:
@@ -197,6 +199,32 @@ static int load_rgba(const char *path, LimeImage *out)
      * (GameInit_LoadABit) and keeps BUTTONS_TPAGE in the menus
      * (FEInit_LoadABit), whose sample button draws the pressed cell --
      * a glow on the iPad sheet. See GameInit_LoadABit, case 26. */
+    /* Port, not in the binary: FE_METAL_BG's PNG twin is the same picture
+     * uncompressed but laid out differently -- 480x320 at the top left of
+     * the sheet, white below and right -- where the PVR is that picture
+     * stretched over all 512x512. From IPAD up the PNG is taken, cropped to
+     * its 480x320 and stretched the same way, so the menus' coordinates land
+     * where they do on the PVR. (The *_VERSUS PNG twins are not this: they
+     * are other, smaller pictures -- 256 square, an orange backdrop -- and
+     * the PVR's 512 art is kept.) */
+    if (PortTextureQuality >= 1) {
+        const char *base = strrchr(stem, '/') ? strrchr(stem, '/') + 1 : stem;
+
+        if (_stricmp(base, "FE_METAL_BG") == 0) {
+            for (e = 0; e < 2; e++) {
+                snprintf(full, sizeof(full), "%s/Textures/%s%s", root, base,
+                         e ? ".PNG" : ".png");
+                if (try_one(full, out)) {
+                    if (out->width >= 480 && out->height >= 320
+                        && fit_twin(out, 480, 320, 512, 512))
+                        return 1;
+                    free(out->rgba);
+                    memset(out, 0, sizeof(*out));
+                }
+            }
+        }
+    }
+
     if (PortTextureQuality >= 1 && strncmp(stem, "MKFONT_", 7) == 0) {
         char big[300];
         size_t k = strlen(stem);
@@ -248,6 +276,51 @@ static float cubic_w(float t)
 }
 
 static int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+/* The top-left cw x ch of img, resampled to dw x dh (Catmull-Rom, edges
+ * clamped, straight colour: the sheets this serves are opaque). 0 on no
+ * memory, img untouched. */
+static int fit_twin(LimeImage *img, int cw, int ch, int dw, int dh)
+{
+    float *tmp = (float *)malloc((size_t)dw * ch * 4 * sizeof(float));
+    uint8_t *out = (uint8_t *)malloc((size_t)dw * dh * 4);
+    const int sw = img->width;
+    int x, y, c, k;
+
+    if (!tmp || !out) { free(tmp); free(out); return 0; }
+    for (y = 0; y < ch; y++)
+        for (x = 0; x < dw; x++) {
+            float sx = (x + 0.5f) * cw / dw - 0.5f, acc[4] = { 0, 0, 0, 0 };
+            int x0 = (int)(sx < 0 ? sx - 1 : sx);
+            for (k = -1; k <= 2; k++) {
+                float wt = cubic_w(sx - (float)(x0 + k));
+                const uint8_t *q = img->rgba + ((size_t)y * sw + clampi(x0 + k, 0, cw - 1)) * 4;
+                for (c = 0; c < 4; c++) acc[c] += q[c] * wt;
+            }
+            for (c = 0; c < 4; c++) tmp[((size_t)y * dw + x) * 4 + c] = acc[c];
+        }
+    for (y = 0; y < dh; y++) {
+        float sy = (y + 0.5f) * ch / dh - 0.5f;
+        int y0 = (int)(sy < 0 ? sy - 1 : sy);
+        for (x = 0; x < dw; x++) {
+            float acc[4] = { 0, 0, 0, 0 };
+            for (k = -1; k <= 2; k++) {
+                float wt = cubic_w(sy - (float)(y0 + k));
+                const float *q = tmp + ((size_t)clampi(y0 + k, 0, ch - 1) * dw + x) * 4;
+                for (c = 0; c < 4; c++) acc[c] += q[c] * wt;
+            }
+            for (c = 0; c < 4; c++)
+                out[((size_t)y * dw + x) * 4 + c] = (uint8_t)(acc[c] < 0.0f ? 0.0f
+                    : (acc[c] > 255.0f ? 255.0f : acc[c] + 0.5f));
+        }
+    }
+    free(tmp);
+    free(img->rgba);
+    img->rgba = out;
+    img->width = dw;
+    img->height = dh;
+    return 1;
+}
 
 /* The two passes work on rows, each writing only its own, so they go to
  * every core (runtime/lime/par.c) with the same result as one thread. */

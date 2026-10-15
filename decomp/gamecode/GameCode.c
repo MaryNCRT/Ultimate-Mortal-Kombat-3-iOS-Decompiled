@@ -1584,10 +1584,14 @@ void drawSingleButton(int x, int y, float alpha)
     colour[3].f = 1.0f;
     colour[4].f = alpha;
 
+    /* Port, not in the binary: on the iPad sheet (texture quality IPAD and
+     * up, FEInit_LoadABit) the even cell is a pressed glow; the odd one is
+     * the button as the iPhone sheet's even cell shows it. */
     limeDrawSprite(ButtonsTPage,
                    FE_X((float)x), FE_Y((float)y),
                    FE_W(64.0f),    FE_H(64.0f),
-                   0.0f, 0.5f, 0.125f, 0.25f, (const float *)&colour[0]);
+                   PortTextureQuality >= 1 ? 0.125f : 0.0f,
+                   0.5f, 0.125f, 0.25f, (const float *)&colour[0]);
 }
 
 

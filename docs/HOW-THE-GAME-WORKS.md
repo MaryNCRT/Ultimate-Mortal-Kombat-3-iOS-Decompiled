@@ -165,7 +165,7 @@ storage for every global the decompiled code declares, see 4.2).
 
 Texture quality (`texture_quality=` / `UMK3_TEXQ`, all Port, not in the
 binary): `iphone` loads what the iPhone build loads; `ipad` adds the iPad
-build's `MKFONT_IPAD` font sheets and, in the fight only, `BUTTONS_TPAGE_IPAD`, prefers a `.png` twin over a `.pvr`,
+build's `MKFONT_IPAD` font sheets and `BUTTONS_TPAGE_IPAD` (in the menus too, where the opacity sample then draws the sheet's normal cell), FE_METAL_BG from its PNG cropped and stretched to the PVR's layout (`fit_twin`), prefers a `.png` twin over a `.pvr`,
 and gives the select screen the 1024 fight skins (`port_load_lite`,
 Players.c); `max` also upscales sheets of 256 or less 4x at load
 (`upscale_small`). Every texture keeps GL_REPEAT as on the device; a draw

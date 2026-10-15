@@ -12927,7 +12927,13 @@ int FEInit_LoadABit(long step)
 
     /* ---- 71..84: the meshes, and the burning logo ---- */
     case 71:
-        ButtonsTPage = limeLoadTexture("BUTTONS_TPAGE.PNG", 0, 0);
+        /* Port, not in the binary: from texture quality IPAD up, the iPad
+         * build's sheet at twice the size -- that build's own FEInit_LoadABit
+         * keeps BUTTONS_TPAGE here. Its even cells are a pressed glow, so
+         * drawSingleButton takes the odd one (GameCode.c). */
+        ButtonsTPage = limeLoadTexture(PortTextureQuality >= 1
+                                       ? "BUTTONS_TPAGE_IPAD.PNG"
+                                       : "BUTTONS_TPAGE.PNG", 0, 0);
         OrangeTexture = limeLoadTexture("ORANGEPORTAL.PNG", 0, 0);
         return 0;
     case 72:
