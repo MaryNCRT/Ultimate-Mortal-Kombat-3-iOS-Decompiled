@@ -47,8 +47,10 @@
 #include <string.h>
 
 #include "platform/gl.h"
+#include "platform/platform.h"
 #include "lime/png.h"
 #include "lime/pvr.h"
+#include "lime/par.h"
 
 #include "../decomp/lime/lime.h"
 
@@ -149,10 +151,17 @@ static int load_rgba(const char *path, LimeImage *out)
      * one extension and the device supplied another. */
     static const char *const exts[] = { ".pvr", ".PVR", NULL, ".png", ".PNG" };
     static const char *const exts_max[] = { ".png", ".PNG", NULL, ".pvr", ".PVR" };
-    /* Port, not in the binary: from IPAD up, the 38 sheets the bundle also
-     * ships as uncompressed PNG (the VS portraits, the logos, FE_METAL_BG,
-     * the lightning and vortex) are taken from the PNG, not the PVRTC. */
-    const char *const *ext = PortTextureQuality >= 1 ? exts_max : exts;
+    /* Port, not in the binary: from IPAD up, a sheet the bundle also ships
+     * as uncompressed PNG with the SAME layout is taken from the PNG, not
+     * the PVRTC: FE_MAINLOGO_*, LIGHTNING, VORTEX1/2 (mean difference under
+     * 2/255 against the decoded PVR). The other twins are different art:
+     * FE_METAL_BG's PNG is the 480x320 picture padded with white where the
+     * PVR is stretched over the sheet, the *_VERSUS PNGs are laid out
+     * differently, and MYBLOOD1/2 differ too -- the PNG drew a half-white
+     * Lost Treasure screen and stats page. */
+    static const char *const twins[] = {
+        "FE_MAINLOGO_", "LIGHTNING", "VORTEX1", "VORTEX2", NULL };
+    const char *const *ext = exts;
 
     const char *root = lime_platform_asset_root();
     char full[1200];
@@ -167,6 +176,17 @@ static int load_rgba(const char *path, LimeImage *out)
         return 0;
     memcpy(stem, path, n);
     stem[n] = 0;
+
+    if (PortTextureQuality >= 1) {
+        const char *base = strrchr(stem, '/') ? strrchr(stem, '/') + 1 : stem;
+        int t;
+
+        for (t = 0; twins[t]; t++)
+            if (twins[t][strlen(twins[t]) - 1] == '_'
+                    ? _strnicmp(base, twins[t], strlen(twins[t])) == 0
+                    : _stricmp(base, twins[t]) == 0)
+                ext = exts_max;
+    }
 
     /* Port, not in the binary: from IPAD up, a sheet the bundle also has
      * at twice the size under an _IPAD name is taken from there -- the game
@@ -229,6 +249,63 @@ static float cubic_w(float t)
 
 static int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
+/* The two passes work on rows, each writing only its own, so they go to
+ * every core (runtime/lime/par.c) with the same result as one thread. */
+typedef struct {
+    const float *pm;
+    float *tmp;
+    uint8_t *out;
+    int w, h, W, S, sharpen;
+} Upscale;
+
+static void upscale_across(void *vctx, int lo, int hi)
+{
+    const Upscale *U = (const Upscale *)vctx;
+    int x, y, c, k;
+
+    for (y = lo; y < hi; y++)
+        for (x = 0; x < U->W; x++) {
+            float sx = (x + 0.5f) / U->S - 0.5f, acc[4] = { 0, 0, 0, 0 };
+            int x0 = (int)(sx < 0 ? sx - 1 : sx);
+            for (k = -1; k <= 2; k++) {
+                float wt = cubic_w(sx - (float)(x0 + k));
+                const float *q = U->pm + ((size_t)y * U->w + clampi(x0 + k, 0, U->w - 1)) * 4;
+                for (c = 0; c < 4; c++) acc[c] += q[c] * wt;
+            }
+            for (c = 0; c < 4; c++) U->tmp[((size_t)y * U->W + x) * 4 + c] = acc[c];
+        }
+}
+
+static void upscale_down(void *vctx, int lo, int hi)
+{
+    const Upscale *U = (const Upscale *)vctx;
+    int x, y, c, k;
+
+    for (y = lo; y < hi; y++) {
+        float sy = (y + 0.5f) / U->S - 0.5f;
+        int y0 = (int)(sy < 0 ? sy - 1 : sy);
+        for (x = 0; x < U->W; x++) {
+            float acc[4] = { 0, 0, 0, 0 }, a;
+            uint8_t *o = U->out + ((size_t)y * U->W + x) * 4;
+            for (k = -1; k <= 2; k++) {
+                float wt = cubic_w(sy - (float)(y0 + k));
+                const float *q = U->tmp + ((size_t)clampi(y0 + k, 0, U->h - 1) * U->W + x) * 4;
+                for (c = 0; c < 4; c++) acc[c] += q[c] * wt;
+            }
+            a = acc[3];
+            if (U->sharpen) {            /* a source pixel's ramp -> a quarter of it */
+                a = (a - 127.5f) * 2.5f + 127.5f;
+            }
+            a = a < 0.0f ? 0.0f : (a > 255.0f ? 255.0f : a);
+            for (c = 0; c < 3; c++) {
+                float v = acc[3] > 0.5f ? acc[c] / (acc[3] / 255.0f) : 0.0f;
+                o[c] = (uint8_t)(v < 0.0f ? 0.0f : (v > 255.0f ? 255.0f : v + 0.5f));
+            }
+            o[3] = (uint8_t)(a + 0.5f);
+        }
+    }
+}
+
 static void upscale_small(LimeImage *img)
 {
     const int S = 4, w = img->width, h = img->height;
@@ -236,7 +313,8 @@ static void upscale_small(LimeImage *img)
     float *pm, *tmp;
     uint8_t *out;
     long hard = 0, n = (long)w * h;
-    int x, y, c, k, sharpen;
+    int c, k, sharpen;
+    Upscale U;
 
     if (w <= 0 || h <= 0 || (w > 256 || h > 256) || (w < 8 && h < 8))
         return;
@@ -257,44 +335,43 @@ static void upscale_small(LimeImage *img)
         pm[k * 4 + 3] = img->rgba[k * 4 + 3];
     }
     /* across, then down; samples at pixel centres, edges clamped */
-    for (y = 0; y < h; y++)
-        for (x = 0; x < W; x++) {
-            float sx = (x + 0.5f) / S - 0.5f, acc[4] = { 0, 0, 0, 0 };
-            int x0 = (int)(sx < 0 ? sx - 1 : sx);
-            for (k = -1; k <= 2; k++) {
-                float wt = cubic_w(sx - (float)(x0 + k));
-                const float *q = pm + ((size_t)y * w + clampi(x0 + k, 0, w - 1)) * 4;
-                for (c = 0; c < 4; c++) acc[c] += q[c] * wt;
-            }
-            for (c = 0; c < 4; c++) tmp[((size_t)y * W + x) * 4 + c] = acc[c];
-        }
-    for (y = 0; y < H; y++) {
-        float sy = (y + 0.5f) / S - 0.5f;
-        int y0 = (int)(sy < 0 ? sy - 1 : sy);
-        for (x = 0; x < W; x++) {
-            float acc[4] = { 0, 0, 0, 0 }, a;
-            uint8_t *o = out + ((size_t)y * W + x) * 4;
-            for (k = -1; k <= 2; k++) {
-                float wt = cubic_w(sy - (float)(y0 + k));
-                const float *q = tmp + ((size_t)clampi(y0 + k, 0, h - 1) * W + x) * 4;
-                for (c = 0; c < 4; c++) acc[c] += q[c] * wt;
-            }
-            a = acc[3];
-            if (sharpen) {               /* a source pixel's ramp -> a quarter of it */
-                a = (a - 127.5f) * 2.5f + 127.5f;
-            }
-            a = a < 0.0f ? 0.0f : (a > 255.0f ? 255.0f : a);
-            for (c = 0; c < 3; c++) {
-                float v = acc[3] > 0.5f ? acc[c] / (acc[3] / 255.0f) : 0.0f;
-                o[c] = (uint8_t)(v < 0.0f ? 0.0f : (v > 255.0f ? 255.0f : v + 0.5f));
-            }
-            o[3] = (uint8_t)(a + 0.5f);
-        }
-    }
+    U.pm = pm; U.tmp = tmp; U.out = out;
+    U.w = w; U.h = h; U.W = W; U.S = S; U.sharpen = sharpen;
+    lime_par_for(h, upscale_across, &U);
+    lime_par_for(H, upscale_down, &U);
     free(pm); free(tmp); free(img->rgba);
     img->rgba = out;
     img->width = W;
     img->height = H;
+}
+
+/* Port, not in the binary: the loading screens' budget. The device ran one
+ * step of FEInit_LoadABit / GameInit_LoadABit a frame (52 for a fight), so a
+ * load took at least 52 frames however fast the steps were. The port runs
+ * steps until 50 ms of the frame are spent -- the screen still moves, at
+ * 20 frames a second or better -- and then draws. lime_port_load_more(1)
+ * starts the frame's clock; (0) says whether another step fits. */
+static double g_load_start;              /* 0 = no load running */
+
+int lime_port_load_more(int first)
+{
+    static double t0;
+
+    if (first) {
+        t0 = plat_time();
+        if (g_load_start == 0.0)
+            g_load_start = t0;
+        return 1;
+    }
+    return plat_time() - t0 < 0.050;
+}
+
+/* The end of a load: its time goes to the log ("loading: fight 1.23 s"). */
+void lime_port_load_done(const char *what)
+{
+    if (g_load_start != 0.0)
+        printf("loading: %s %.2f s\n", what, plat_time() - g_load_start);
+    g_load_start = 0.0;
 }
 
 /* armv7 0x000670a0 keeps the texture's own name in its first 0x40 bytes:
@@ -321,8 +398,15 @@ static void tex_set_name(TEXTURE *t, const char *path)
     t->field50 = IsTextureFullBrightPath((const char *)t->_pad00);
 }
 
+#ifdef _WIN32
+#define MIP_API __stdcall
+#else
+#define MIP_API
+#endif
 TEXTURE *limeLoadTexture(const char *path, int a, int b)
 {
+    static int mip_tried;
+    static void (MIP_API *gen_mip)(GLenum);
     TexEntry *e;
     LimeImage img;
     GLuint name = 0;
@@ -368,7 +452,15 @@ TEXTURE *limeLoadTexture(const char *path, int a, int b)
             if (x && strstr(x, "GL_EXT_texture_filter_anisotropic"))
                 glGetFloatv(0x84FF, &aniso);   /* MAX_TEXTURE_MAX_ANISOTROPY */
         }
-        glTexParameteri(GL_TEXTURE_2D, 0x8191, GL_TRUE);  /* GENERATE_MIPMAP */
+        /* the card builds them (glGenerateMipmap, GL 3.0, after the
+         * upload, below); without it the driver's GENERATE_MIPMAP, which
+         * some drivers do on the CPU -- a second of every SIN LIMITE load */
+        if (!mip_tried) {
+            mip_tried = 1;
+            gen_mip = (void (MIP_API *)(GLenum))plat_gl_proc("glGenerateMipmap");
+        }
+        if (!gen_mip)
+            glTexParameteri(GL_TEXTURE_2D, 0x8191, GL_TRUE);  /* GENERATE_MIPMAP */
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
                         GL_LINEAR_MIPMAP_LINEAR);
         if (aniso > 1.0f)
@@ -376,6 +468,8 @@ TEXTURE *limeLoadTexture(const char *path, int a, int b)
     }
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.width, img.height, 0,
                  GL_RGBA, GL_UNSIGNED_BYTE, img.rgba);
+    if (PortTextureQuality >= 2 && gen_mip)
+        gen_mip(GL_TEXTURE_2D);
     free(img.rgba);
 
     /* The TEXTURE handed back is stored in 32-bit words of the binary's

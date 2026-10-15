@@ -560,6 +560,9 @@ int  lime_port_edge_clamp(const float *uv, int stride,
                           const unsigned short *idx, int n)
 { (void)uv; (void)stride; (void)idx; (void)n; return 0; }
 void lime_port_edge_restore(int clamped) { (void)clamped; }
+/* draw_gl.c's loading budget: headless, one step a frame as on the device */
+int  lime_port_load_more(int first) { (void)first; return 0; }
+void lime_port_load_done(const char *what) { (void)what; }
 
 void limeDrawSprite(TEXTURE *page, float x, float y, float w, float h,
                     float u, float v, float du, float dv,

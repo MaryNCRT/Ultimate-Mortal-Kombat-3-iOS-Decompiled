@@ -5,47 +5,60 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ------------------------------------------------------------------ inflate */
+/* ------------------------------------------------------------------ inflate
+ *
+ * Port, a loader only (the device used its own PNG reader). Table driven:
+ * a 64-bit bit buffer refilled a byte at a time, Huffman codes of up to 9
+ * bits resolved in one look-up, longer ones walked canonically. The first
+ * version read one bit per call and grew the output one byte at a time;
+ * MKFONT_0 took 193 ms, a second of every fight load. */
 
 typedef struct {
     const uint8_t *d;
     size_t         n, pos;
-    uint32_t       bitbuf;
-    int            bitcnt;
+    uint64_t       bb;                  /* bits not yet used, LSB first */
+    int            bc;                  /* how many */
+    int            pad;                 /* zero bytes fed past the end */
     int            err;
 } BitIn;
 
+#define FAST_BITS 9
+
 typedef struct {
-    short counts[16];
-    short symbols[288];
+    uint32_t fast[1 << FAST_BITS];      /* sym | len << 16, 0 = longer code */
+    short    counts[16];
+    short    symbols[288];
 } Huff;
 
-static int getbit(BitIn *s)
+static void refill(BitIn *s)
 {
-    int b;
+    while (s->bc <= 56) {
+        uint64_t b = 0;
 
-    if (s->bitcnt == 0) {
-        if (s->pos >= s->n) { s->err = 1; return 0; }
-        s->bitbuf = s->d[s->pos++];
-        s->bitcnt = 8;
+        if (s->pos < s->n)
+            b = s->d[s->pos++];
+        else if (++s->pad > 8)
+            s->err = 1;
+        s->bb |= b << s->bc;
+        s->bc += 8;
     }
-    b = (int)(s->bitbuf & 1u);
-    s->bitbuf >>= 1;
-    s->bitcnt--;
-    return b;
 }
 
 static int getbits(BitIn *s, int need)
 {
-    int v = 0, i;
+    int v;
 
-    for (i = 0; i < need; i++) v |= getbit(s) << i;
+    if (need == 0) return 0;
+    if (s->bc < need) refill(s);
+    v = (int)(s->bb & ((1u << need) - 1u));
+    s->bb >>= need;
+    s->bc -= need;
     return v;
 }
 
 static void huff_build(Huff *h, const uint8_t *lengths, int n)
 {
-    int i, sum = 0, offs[16];
+    int i, sum = 0, offs[16], code = 0, next[16];
 
     for (i = 0; i < 16; i++) h->counts[i] = 0;
     for (i = 0; i < n; i++) h->counts[lengths[i]]++;
@@ -53,15 +66,42 @@ static void huff_build(Huff *h, const uint8_t *lengths, int n)
     for (i = 0; i < 16; i++) { offs[i] = sum; sum += h->counts[i]; }
     for (i = 0; i < n; i++)
         if (lengths[i]) h->symbols[offs[lengths[i]]++] = (short)i;
+
+    /* canonical codes, MSB first, then bit-reversed into the fast table */
+    memset(h->fast, 0, sizeof(h->fast));
+    for (i = 1; i < 16; i++) {
+        code = (code + h->counts[i - 1]) << 1;
+        next[i] = code;
+    }
+    for (i = 0; i < n; i++) {
+        int len = lengths[i], c, r = 0, k;
+
+        if (len == 0) continue;
+        c = next[len]++;
+        if (len > FAST_BITS) continue;
+        for (k = 0; k < len; k++)
+            r |= ((c >> k) & 1) << (len - 1 - k);
+        for (k = r; k < (1 << FAST_BITS); k += 1 << len)
+            h->fast[k] = (uint32_t)i | ((uint32_t)len << 16);
+    }
 }
 
-/* Canonical Huffman decode, one bit at a time -- the puff formulation. */
 static int huff_decode(BitIn *s, const Huff *h)
 {
     int len, code = 0, first = 0, index = 0, count;
+    uint32_t e;
 
+    if (s->bc < 16) refill(s);
+    e = h->fast[s->bb & ((1u << FAST_BITS) - 1u)];
+    if (e) {
+        int l = (int)(e >> 16);
+        s->bb >>= l;
+        s->bc -= l;
+        return (int)(e & 0xffffu);
+    }
+    /* longer than FAST_BITS: the canonical walk, the puff formulation */
     for (len = 1; len <= 15; len++) {
-        code |= getbit(s);
+        code |= getbits(s, 1);
         count = h->counts[len];
         if (code - count < first) return h->symbols[index + (code - first)];
         index += count;
@@ -88,16 +128,20 @@ static const short DEXT[30] = {
 
 typedef struct { uint8_t *d; size_t n, cap; } Out;
 
-static int out_byte(Out *o, uint8_t b)
+/* Room for `more` bytes. The caller sizes the buffer from the image, so this
+ * almost never grows. */
+static int out_room(Out *o, size_t more)
 {
-    if (o->n >= o->cap) {
-        size_t cap = o->cap ? o->cap * 2 : 65536;
-        uint8_t *p = (uint8_t *)realloc(o->d, cap);
+    if (o->n + more > o->cap) {
+        size_t cap = o->cap ? o->cap : 65536;
+        uint8_t *p;
+
+        while (cap < o->n + more) cap *= 2;
+        p = (uint8_t *)realloc(o->d, cap);
         if (!p) return 0;
         o->d = p;
         o->cap = cap;
     }
-    o->d[o->n++] = b;
     return 1;
 }
 
@@ -108,11 +152,14 @@ static int inflate_block(BitIn *s, Out *o, const Huff *lc, const Huff *dc)
 
         if (s->err) return 0;
         if (sym < 256) {
-            if (!out_byte(o, (uint8_t)sym)) return 0;
+            if (o->n >= o->cap && !out_room(o, 1)) return 0;
+            o->d[o->n++] = (uint8_t)sym;
         } else if (sym == 256) {
             return 1;
         } else {
-            int i, len, dist, dsym;
+            int len, dist, dsym;
+            uint8_t *dst;
+            const uint8_t *src;
 
             sym -= 257;
             if (sym >= 29) return 0;
@@ -121,21 +168,30 @@ static int inflate_block(BitIn *s, Out *o, const Huff *lc, const Huff *dc)
             if (dsym < 0 || dsym >= 30) return 0;
             dist = DBASE[dsym] + getbits(s, DEXT[dsym]);
             if ((size_t)dist > o->n) return 0;
-            for (i = 0; i < len; i++)
-                if (!out_byte(o, o->d[o->n - (size_t)dist])) return 0;
+            if (!out_room(o, (size_t)len)) return 0;
+            dst = o->d + o->n;
+            src = dst - dist;
+            o->n += (size_t)len;
+            if (dist >= len) {
+                memcpy(dst, src, (size_t)len);
+            } else {
+                while (len-- > 0)       /* overlapping: byte by byte */
+                    *dst++ = *src++;
+            }
         }
     }
 }
 
-static uint8_t *zinflate(const uint8_t *src, size_t n, size_t *out_len)
+static uint8_t *zinflate(const uint8_t *src, size_t n, size_t *out_len,
+                         size_t hint)
 {
     static const uint8_t ORDER[19] = {
         16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 };
     BitIn s;
     Out   o;
-    Huff  fixed_l, fixed_d;
+    Huff *fixed = NULL, *dyn = NULL;      /* [0] lit/len, [1] distance, [2] code lengths */
     uint8_t lengths[320];
-    int i, built = 0;
+    int i;
 
     memset(&s, 0, sizeof(s));
     memset(&o, 0, sizeof(o));
@@ -145,53 +201,62 @@ static uint8_t *zinflate(const uint8_t *src, size_t n, size_t *out_len)
     /* zlib wrapper: two header bytes, and a trailing adler32 we do not check. */
     if (n < 2) return NULL;
     s.pos = 2;
+    if (hint && !out_room(&o, hint)) return NULL;
 
+#define FAIL() do { free(o.d); free(fixed); free(dyn); return NULL; } while (0)
     for (;;) {
-        int final = getbit(&s);
+        int final = getbits(&s, 1);
         int type  = getbits(&s, 2);
 
-        if (s.err) { free(o.d); return NULL; }
+        if (s.err) FAIL();
 
         if (type == 0) {                        /* stored */
             unsigned len;
 
-            s.bitcnt = 0;
-            if (s.pos + 4 > s.n) { free(o.d); return NULL; }
+            /* back to a byte boundary, and give back the whole bytes the
+             * bit buffer had read ahead */
+            getbits(&s, s.bc & 7);
+            s.pos -= (size_t)(s.bc >> 3) - (size_t)(s.pad > 0 ? s.pad : 0);
+            s.bb = 0; s.bc = 0; s.pad = 0;
+            if (s.pos + 4 > s.n) FAIL();
             len = (unsigned)s.d[s.pos] | ((unsigned)s.d[s.pos + 1] << 8);
             s.pos += 4;
-            if (s.pos + len > s.n) { free(o.d); return NULL; }
-            for (i = 0; i < (int)len; i++)
-                if (!out_byte(&o, s.d[s.pos++])) { free(o.d); return NULL; }
+            if (s.pos + len > s.n) FAIL();
+            if (!out_room(&o, len)) FAIL();
+            memcpy(o.d + o.n, s.d + s.pos, len);
+            o.n += len;
+            s.pos += len;
         } else if (type == 1) {                 /* fixed Huffman */
-            if (!built) {
+            if (!fixed) {
+                fixed = (Huff *)malloc(2 * sizeof(Huff));
+                if (!fixed) FAIL();
                 for (i = 0;   i < 144; i++) lengths[i] = 8;
                 for (i = 144; i < 256; i++) lengths[i] = 9;
                 for (i = 256; i < 280; i++) lengths[i] = 7;
                 for (i = 280; i < 288; i++) lengths[i] = 8;
-                huff_build(&fixed_l, lengths, 288);
+                huff_build(&fixed[0], lengths, 288);
                 for (i = 0; i < 30; i++) lengths[i] = 5;
-                huff_build(&fixed_d, lengths, 30);
-                built = 1;
+                huff_build(&fixed[1], lengths, 30);
             }
-            if (!inflate_block(&s, &o, &fixed_l, &fixed_d)) { free(o.d); return NULL; }
+            if (!inflate_block(&s, &o, &fixed[0], &fixed[1])) FAIL();
         } else if (type == 2) {                 /* dynamic Huffman */
-            Huff cl, lit, dst;
             uint8_t cl_len[19];
             int hlit  = getbits(&s, 5) + 257;
             int hdist = getbits(&s, 5) + 1;
             int hclen = getbits(&s, 4) + 4;
             int k = 0;
 
-            if (hlit > 286 || hdist > 30) { free(o.d); return NULL; }
+            if (!dyn && !(dyn = (Huff *)malloc(3 * sizeof(Huff)))) FAIL();
+            if (hlit > 286 || hdist > 30) FAIL();
             memset(cl_len, 0, sizeof(cl_len));
             for (i = 0; i < hclen; i++) cl_len[ORDER[i]] = (uint8_t)getbits(&s, 3);
-            huff_build(&cl, cl_len, 19);
+            huff_build(&dyn[2], cl_len, 19);
 
             memset(lengths, 0, sizeof(lengths));
             while (k < hlit + hdist) {
-                int sym = huff_decode(&s, &cl);
+                int sym = huff_decode(&s, &dyn[2]);
 
-                if (sym < 0) { free(o.d); return NULL; }
+                if (sym < 0 || s.err) FAIL();
                 if (sym < 16) {
                     lengths[k++] = (uint8_t)sym;
                 } else if (sym == 16) {
@@ -206,18 +271,20 @@ static uint8_t *zinflate(const uint8_t *src, size_t n, size_t *out_len)
                     while (rep-- > 0 && k < hlit + hdist) lengths[k++] = 0;
                 }
             }
-            huff_build(&lit, lengths, hlit);
-            huff_build(&dst, lengths + hlit, hdist);
-            if (!inflate_block(&s, &o, &lit, &dst)) { free(o.d); return NULL; }
+            huff_build(&dyn[0], lengths, hlit);
+            huff_build(&dyn[1], lengths + hlit, hdist);
+            if (!inflate_block(&s, &o, &dyn[0], &dyn[1])) FAIL();
         } else {
-            free(o.d);
-            return NULL;
+            FAIL();
         }
 
         if (final) break;
-        if (s.err) { free(o.d); return NULL; }
+        if (s.err) FAIL();
     }
+#undef FAIL
 
+    free(fixed);
+    free(dyn);
     *out_len = o.n;
     return o.d;
 }
@@ -326,7 +393,8 @@ bool lime_png_load(const char *path, uint8_t **out, int *width, int *height)
     }
     if (colour == 3 && npal == 0) { free(idat); return false; }
 
-    raw = zinflate(idat, idat_len, &raw_len);
+    raw = zinflate(idat, idat_len, &raw_len,
+                   (size_t)h * (size_t)(w * channels + 1));
     free(idat);
     if (!raw) return false;
 
@@ -338,26 +406,44 @@ bool lime_png_load(const char *path, uint8_t **out, int *width, int *height)
      * which is why this runs top to bottom and writes back as it goes. */
     for (y = 0; y < h; y++) {
         uint8_t *row  = raw + (size_t)y * (size_t)(stride + 1) + 1;
-        uint8_t *prev = (y > 0)
+        const uint8_t *prev = (y > 0)
                       ? raw + (size_t)(y - 1) * (size_t)(stride + 1) + 1
                       : NULL;
         int ft = raw[(size_t)y * (size_t)(stride + 1)];
+        int c = channels;
 
-        for (x = 0; x < stride; x++) {
-            int a = (x >= channels) ? row[x - channels] : 0;
-            int b = prev ? prev[x] : 0;
-            int c = (prev && x >= channels) ? prev[x - channels] : 0;
-            int v = row[x];
-
-            switch (ft) {
-                case 0: break;
-                case 1: v += a; break;
-                case 2: v += b; break;
-                case 3: v += (a + b) / 2; break;
-                case 4: v += paeth(a, b, c); break;
-                default: free(raw); return false;
+        /* one loop per filter, not a switch per byte */
+        switch (ft) {
+        case 0:
+            break;
+        case 1:
+            for (x = c; x < stride; x++) row[x] = (uint8_t)(row[x] + row[x - c]);
+            break;
+        case 2:
+            if (prev)
+                for (x = 0; x < stride; x++) row[x] = (uint8_t)(row[x] + prev[x]);
+            break;
+        case 3:
+            if (prev) {
+                for (x = 0; x < c; x++) row[x] = (uint8_t)(row[x] + prev[x] / 2);
+                for (; x < stride; x++)
+                    row[x] = (uint8_t)(row[x] + ((int)row[x - c] + (int)prev[x]) / 2);
+            } else {
+                for (x = c; x < stride; x++) row[x] = (uint8_t)(row[x] + row[x - c] / 2);
             }
-            row[x] = (uint8_t)v;
+            break;
+        case 4:
+            if (prev) {
+                for (x = 0; x < c; x++) row[x] = (uint8_t)(row[x] + prev[x]);
+                for (; x < stride; x++)
+                    row[x] = (uint8_t)(row[x] + paeth(row[x - c], prev[x], prev[x - c]));
+            } else {
+                for (x = c; x < stride; x++) row[x] = (uint8_t)(row[x] + row[x - c]);
+            }
+            break;
+        default:
+            free(raw);
+            return false;
         }
     }
 

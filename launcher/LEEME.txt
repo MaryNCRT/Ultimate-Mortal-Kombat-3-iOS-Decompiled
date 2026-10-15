@@ -112,6 +112,12 @@ NUEVO EN 0.0.9
   paletas para los demas modos.
 - Launcher: botones mas pequenos.
 
+NUEVO DESPUES DE 0.0.9
+- El launcher abre en menos de un segundo: ahora vive descomprimido en
+  launcher\bin\ y UMK3-Launcher.exe solo lo abre. No borres esa carpeta.
+- Las pantallas de carga son mucho mas rapidas (usa todos los nucleos).
+- Calidad de texturas IPHONE / IPAD / SIN LIMITE.
+
 NUEVO EN 0.0.8
 - El juego ya es 100% jugable. Puede tener fallos; se iran arreglando.
 - Mercy completo, con su letrero y su musica; despues, el animality

@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """make_release.py -- the folder a player downloads: only what the build needs.
 
-    python launcher/make_release.py <UMK3-Launcher.exe> <out dir> [--zip]
+    python launcher/make_release.py <win-unpacked dir> <out dir> [--zip]
+
+<win-unpacked dir> is the Electron launcher built unpacked
+(`npm run dist` in launcher/app -> dist/win-unpacked). It goes to
+launcher/bin/, and launcher/stub/umk3_launcher_stub.c is compiled into the
+UMK3-Launcher.exe the player double-clicks: the portable single .exe took
+9.3 s to open (it unpacked itself at every start), this takes 0.7 s.
 
 Copies the sources launcher/build_game.ps1 compiles (it globs the same
 directories), the three table generators and their helpers, the launcher and
@@ -40,8 +46,35 @@ TOOLS = ["tools/logic_tables.py", "tools/logic_tables.map", "tools/macho.py",
          "tools/level_info.py", "tools/seq_data.py"]
 LAUNCHER = ["launcher/build_game.ps1", "launcher/setup_res.ps1",
             "launcher/check_binary.py", "launcher/launcher.c",
-            "launcher/LEEME.txt"]
+            "launcher/LEEME.txt", "launcher/stub/umk3_launcher_stub.c",
+            "launcher/stub/umk3_launcher_stub.rc"]
 TOP = ["LICENSE", "AI-DISCLOSURE.md"]
+
+
+def find_mingw():
+    """x86_64-w64-mingw32-clang and -windres: the game's own toolchain
+    (toolchain/llvm-mingw-*/bin, which build_game.ps1 downloads) or PATH."""
+    import glob
+    for d in sorted(glob.glob(os.path.join(ROOT, "toolchain", "llvm-mingw-*", "bin"))):
+        cc = os.path.join(d, "x86_64-w64-mingw32-clang.exe")
+        if os.path.exists(cc):
+            return cc, os.path.join(d, "x86_64-w64-mingw32-windres.exe")
+    cc = shutil.which("x86_64-w64-mingw32-clang")
+    if cc:
+        return cc, shutil.which("x86_64-w64-mingw32-windres")
+    raise SystemExit("no x86_64-w64-mingw32-clang: run build_game.ps1 once, or put llvm-mingw on PATH")
+
+
+def build_stub(dst):
+    import subprocess
+    import tempfile
+    cc, rc = find_mingw()
+    stub = os.path.join(ROOT, "launcher", "stub")
+    with tempfile.TemporaryDirectory(dir=os.path.dirname(dst)) as tmp:
+        res = os.path.join(tmp, "stub.res")
+        subprocess.check_call([rc, "umk3_launcher_stub.rc", "-O", "coff", "-o", res], cwd=stub)
+        subprocess.check_call([cc, "-O2", "-municode", "-mwindows", "-s",
+                               "umk3_launcher_stub.c", res, "-o", dst], cwd=stub)
 
 
 def main(argv):
@@ -63,7 +96,8 @@ def main(argv):
         shutil.copy2(os.path.join(ROOT, rel), dst)
     shutil.copy2(os.path.join(ROOT, "launcher", "LEEME.txt"),
                  os.path.join(out, "LEEME.txt"))
-    shutil.copy2(launcher_exe, os.path.join(out, "UMK3-Launcher.exe"))
+    shutil.copytree(launcher_exe, os.path.join(out, "launcher", "bin"))
+    build_stub(os.path.join(out, "UMK3-Launcher.exe"))
 
     # Every quoted include of every copied source has to resolve in the copy.
     inc_dirs = ["runtime", "decomp/lime", "decomp/gamecode/logic"]

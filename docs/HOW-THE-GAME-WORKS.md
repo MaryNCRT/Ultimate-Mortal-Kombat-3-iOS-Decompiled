@@ -363,7 +363,7 @@ second exe for tests by changing the `-o` line of a copy of `link.rsp`.
 
 **From source on Linux/macOS:** CMake, target `umk3-game` (see the README).
 
-**A release:** `python launcher/make_release.py <launcher.exe> <out dir> --zip`,
+**A release:** `npm run dist` in `launcher/app`, then `python launcher/make_release.py launcher/app/dist/win-unpacked <out dir> --zip` (the launcher goes unpacked to `launcher\bin\`, and a 19 KB stub becomes `UMK3-Launcher.exe`),
 then build that zip once from an `.ipa` to check it before publishing.
 
 ---

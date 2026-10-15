@@ -1614,6 +1614,8 @@ extern float FE_Fade;                   /* 0x00100898 */
 void Task_LoadingScreen_DRAWSCREEN(long a, long percent);
 void DeleteLoadingScreenTexture(void);
 int  FEInit_LoadABit(long step);
+int  lime_port_load_more(int first);    /* runtime/draw_gl.c, port only */
+void lime_port_load_done(const char *what);
 
 
 /* --------------------------------------------------------------- Task_FEInit
@@ -1661,11 +1663,19 @@ void Task_FEInit(void)
 
         case 1:
             Task_LoadingScreen_DRAWSCREEN(0, FE_LoadCount * 100 / FE_INIT_STEPS);
-            if (FEInit_LoadABit(FE_LoadCount)) {
+            /* Port, not in the binary: as many steps as fit in the frame
+             * (lime_port_load_more, draw_gl.c); the device ran one. */
+            lime_port_load_more(1);
+            for (;;) {
+                if (FEInit_LoadABit(FE_LoadCount)) {
+                    FE_LoadCount++;
+                    FEInitState = 2;
+                    lime_port_load_done("menus");
+                    break;
+                }
                 FE_LoadCount++;
-                FEInitState = 2;
-            } else {
-                FE_LoadCount++;
+                if (!lime_port_load_more(0))
+                    break;
             }
             break;
 

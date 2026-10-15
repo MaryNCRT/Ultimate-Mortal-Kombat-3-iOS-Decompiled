@@ -12,6 +12,8 @@
 #include <string.h>   /* memset, for clearSpriteListsAndEvents */
 
 extern int PortTextureQuality;          /* runtime/draw_gl.c, port only */
+int  lime_port_load_more(int first);    /* runtime/draw_gl.c, port only */
+void lime_port_load_done(const char *what);
 
 /* TEXTURETOLOAD is the engine's {name, destination} pair — see decomp/lime,
  * where LIME_SetSceneTextures walks the same shape. Declared rather than
@@ -5880,10 +5882,17 @@ void Task_GameInit(void)
         long done;
 
         Task_LoadingScreen_DRAWSCREEN(1, GI_LoadCount * 100 / 52);
-        done = GameInit_LoadABit(GI_LoadCount);
-        GI_LoadCount++;
-        if (done)
+        /* Port, not in the binary: as many steps as fit in the frame
+         * (lime_port_load_more, draw_gl.c); the device ran one. */
+        lime_port_load_more(1);
+        do {
+            done = GameInit_LoadABit(GI_LoadCount);
+            GI_LoadCount++;
+        } while (!done && lime_port_load_more(0));
+        if (done) {
+            lime_port_load_done("fight");
             GameInitState = 2;
+        }
         return;
     }
 

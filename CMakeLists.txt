@@ -9,6 +9,7 @@ add_executable(umk3
     runtime/lime/meshset.c
     runtime/lime/limemath.c
     runtime/lime/pvr.c
+    runtime/lime/par.c
     runtime/lime/png.c
     runtime/lime/light.c
 )
@@ -65,6 +66,7 @@ add_executable(umk3-fight
     runtime/lime/light.c
     runtime/lime/limemath.c
     runtime/lime/pvr.c
+    runtime/lime/par.c
     runtime/lime/png.c
     decomp/gamecode/logic/mk3.c
 )
@@ -98,6 +100,7 @@ add_executable(umk3-test
     runtime/lime/light.c
     runtime/lime/limemath.c
     runtime/lime/pvr.c
+    runtime/lime/par.c
     runtime/lime/png.c
     decomp/gamecode/logic/mk3.c
     ${UMK3_MENU_GAMECODE}
@@ -374,6 +377,11 @@ if(UMK3_BINARY)
                 PROPERTIES COMPILE_DEFINITIONS UMK3_STATE_FILE)
         endif()
         if(WIN32)
+            # 4 GB instead of 2 for the 32-bit exe on 64-bit Windows (see
+            # launcher/build_game.ps1)
+            if(CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT MSVC)
+                target_link_options(umk3-game PRIVATE -Wl,--large-address-aware)
+            endif()
             target_sources(umk3-game PRIVATE
                 runtime/platform/win32_gl.c
                 runtime/platform/win32_gl_cdecl.c

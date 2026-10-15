@@ -1,5 +1,6 @@
 #include "pvr.h"
 #include "png.h"
+#include "par.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -91,6 +92,58 @@ static int floor_div(float f)
 static const uint8_t MOD_DIRECT[4] = { 0, 3, 5, 8 };
 static const uint8_t MOD_PUNCHT[4] = { 0, 4, 4 | MOD_PUNCH, 8 };
 
+/* Pass 3 for rows [lo, hi): reads the endpoints and the modulation grid,
+ * writes only its own rows of rgba -- so the rows can go to every core
+ * (par.c) and the picture is the same as one thread's. */
+typedef struct {
+    const int *ca, *cb;
+    const uint8_t *mod;
+    uint8_t *rgba;
+    int width, bw, bh, bx, by, gw;
+} Pass3;
+
+static void pass3_rows(void *vctx, int lo, int hi)
+{
+    const Pass3 *P = (const Pass3 *)vctx;
+    const int *ca = P->ca, *cb = P->cb;
+    const uint8_t *mod = P->mod;
+    uint8_t *rgba = P->rgba;
+    const int width = P->width, bw = P->bw, bh = P->bh;
+    const int bx = P->bx, by = P->by, gw = P->gw;
+
+    for (int py = lo; py < hi; py++) {
+        for (int px = 0; px < width; px++) {
+            float fx = (float)(px - bw / 2) / (float)bw;
+            float fy = (float)(py - bh / 2) / (float)bh;
+            int i0 = floor_div(fx), j0 = floor_div(fy);
+            float u = fx - (float)i0, v = fy - (float)j0;
+            i0 = wrapi(i0, bx); j0 = wrapi(j0, by);
+            int i1 = wrapi(i0 + 1, bx), j1 = wrapi(j0 + 1, by);
+
+            int k00 = j0 * bx + i0, k10 = j0 * bx + i1;
+            int k01 = j1 * bx + i0, k11 = j1 * bx + i1;
+            float w00 = (1.0f - u) * (1.0f - v), w10 = u * (1.0f - v);
+            float w01 = (1.0f - u) * v,          w11 = u * v;
+
+            int mv = mod[(size_t)py * gw + px];
+            float w = (float)(mv & 0xf) / 8.0f;
+
+            uint8_t *o = rgba + ((size_t)py * (size_t)width + (size_t)px) * 4;
+            for (int ch = 0; ch < 4; ch++) {
+                float A = (float)ca[k00*4+ch]*w00 + (float)ca[k10*4+ch]*w10 +
+                          (float)ca[k01*4+ch]*w01 + (float)ca[k11*4+ch]*w11;
+                float B = (float)cb[k00*4+ch]*w00 + (float)cb[k10*4+ch]*w10 +
+                          (float)cb[k01*4+ch]*w01 + (float)cb[k11*4+ch]*w11;
+                float val = (A * (1.0f - w) + B * w)
+                          * (ch < 3 ? 255.0f / 31.0f : 255.0f / 15.0f) + 0.5f;
+                o[ch] = (uint8_t)(val < 0.0f ? 0.0f : (val > 255.0f ? 255.0f : val));
+            }
+            if (mv & MOD_PUNCH)
+                o[3] = 0;
+        }
+    }
+}
+
 static bool decode_pvrtc(const uint8_t *raw, long raw_len, int width, int height,
                          int two_bpp, LimeImage *out)
 {
@@ -179,37 +232,12 @@ static bool decode_pvrtc(const uint8_t *raw, long raw_len, int width, int height
     }
 
     /* 3. the endpoints of the four blocks whose centres surround the pixel
-     *    (the grid sits half a block off), bilinearly, mixed by modulation */
-    for (int py = 0; py < height; py++) {
-        for (int px = 0; px < width; px++) {
-            float fx = (float)(px - bw / 2) / (float)bw;
-            float fy = (float)(py - bh / 2) / (float)bh;
-            int i0 = floor_div(fx), j0 = floor_div(fy);
-            float u = fx - (float)i0, v = fy - (float)j0;
-            i0 = wrapi(i0, bx); j0 = wrapi(j0, by);
-            int i1 = wrapi(i0 + 1, bx), j1 = wrapi(j0 + 1, by);
+     *    (the grid sits half a block off), bilinearly, mixed by modulation;
+     *    see pass3_rows */
+    {
+        Pass3 P = { ca, cb, mod, rgba, width, bw, bh, bx, by, gw };
 
-            int k00 = j0 * bx + i0, k10 = j0 * bx + i1;
-            int k01 = j1 * bx + i0, k11 = j1 * bx + i1;
-            float w00 = (1.0f - u) * (1.0f - v), w10 = u * (1.0f - v);
-            float w01 = (1.0f - u) * v,          w11 = u * v;
-
-            int mv = mod[(size_t)py * gw + px];
-            float w = (float)(mv & 0xf) / 8.0f;
-
-            uint8_t *o = rgba + ((size_t)py * (size_t)width + (size_t)px) * 4;
-            for (int ch = 0; ch < 4; ch++) {
-                float A = (float)ca[k00*4+ch]*w00 + (float)ca[k10*4+ch]*w10 +
-                          (float)ca[k01*4+ch]*w01 + (float)ca[k11*4+ch]*w11;
-                float B = (float)cb[k00*4+ch]*w00 + (float)cb[k10*4+ch]*w10 +
-                          (float)cb[k01*4+ch]*w01 + (float)cb[k11*4+ch]*w11;
-                float val = (A * (1.0f - w) + B * w)
-                          * (ch < 3 ? 255.0f / 31.0f : 255.0f / 15.0f) + 0.5f;
-                o[ch] = (uint8_t)(val < 0.0f ? 0.0f : (val > 255.0f ? 255.0f : val));
-            }
-            if (mv & MOD_PUNCH)
-                o[3] = 0;
-        }
+        lime_par_for(height, pass3_rows, &P);
     }
 
     free(ca); free(cb); free(mod);
