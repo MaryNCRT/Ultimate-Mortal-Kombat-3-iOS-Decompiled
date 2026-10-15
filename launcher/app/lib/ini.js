@@ -3,6 +3,7 @@
  *
  *     width=960      height=640      fullscreen=0   borderless=0
  *     hide_controls=1   (no on-screen stick and buttons)
+ *     texture_quality=iphone|ipad|max
  *     antialiasing=0|2|4|8|16   aspect=3:2 (the game's 3:2, the only one so far)
  *     render_width=1920  render_height=1280   (the 3D resolution; absent =
  *       the window's size)
@@ -96,6 +97,7 @@ function defaultConfig() {
         fullscreen: false,
         borderless: false,           /* fullscreen without a border, at the desktop's mode */
         antialiasing: 0,             /* 0, 2, 4, 8 or 16 samples */
+        textureQuality: 'iphone',    /* texture_quality=: iphone (the _LOW sheets), ipad (full sheets) or max (full sheets, PNG first, mipmaps) */
         widescreen: false,           /* native: widen the 3D view, no stretch */
         debug: false,
         skipIntro: false,            /* skip_intro=1: no publisher logos */
@@ -163,6 +165,8 @@ function load(p) {
         } else if (key === 'pad') {
             cfg.pad = /^(auto|off|xinput|[0-9a-f]{4}:[0-9a-f]{4})$/i.test(val)
                 ? val.toLowerCase() : 'auto';
+        } else if (key === 'texture_quality') {
+            cfg.textureQuality = /^(iphone|ipad|max)$/i.test(val) ? val.toLowerCase() : 'iphone';
         } else if (key === 'pad_dbg_menu') {
             cfg.padDbgMenu = /^([A-Z0-9]+(\+[A-Z0-9]+)*)?$/i.test(val) ? val.toUpperCase() : 'L3+R3';
         } else if (key === 'pad_name') {
@@ -206,6 +210,7 @@ function save(p, cfg) {
         'hide_controls=' + (cfg.hideControls ? 1 : 0),
         'buttons=' + (cfg.buttons === 6 ? 6 : 5),
         'pad=' + (cfg.pad || 'auto'),
+        'texture_quality=' + (cfg.textureQuality || 'iphone'),
         'pad_dbg_menu=' + (cfg.padDbgMenu === undefined ? 'L3+R3' : cfg.padDbgMenu),
     ];
     if (cfg.padName)

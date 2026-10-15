@@ -25,7 +25,7 @@ const T = {
         builtAt: 'JUEGO COMPILADO', notBuilt: 'TODAVÍA NO ESTÁ COMPILADO: ELIGE TU .IPA Y PULSA COMPILAR.',
         hVideo: 'GRÁFICOS', res: 'RESOLUCIÓN DE VENTANA', rres: 'RESOLUCIÓN 3D', mode: 'MODO DE PANTALLA',
         modes: ['VENTANA', 'PANTALLA COMPLETA', 'PANTALLA COMPLETA SIN BORDES'], sameRes: 'IGUAL QUE LA VENTANA', tabDbg: 'DEBUG', tabKb: 'TECLADO', tabPad: 'MANDO',
-        aspect: 'RELACIÓN DE ASPECTO', aspects: ['3:2 (ORIGINAL)'], aa: 'ANTIALIASING', aaOff: 'DESACTIVADO', hidectl: 'OCULTAR LOS CONTROLES EN PANTALLA (JOYSTICK Y BOTONES)',
+        aspect: 'RELACIÓN DE ASPECTO', aspects: ['3:2 (ORIGINAL)'], aa: 'ANTIALIASING', aaOff: 'DESACTIVADO', texq: 'CALIDAD DE TEXTURAS', texqs: ['IPHONE (ACTUAL)', 'IPAD', 'SIN LÍMITE'], hidectl: 'OCULTAR LOS CONTROLES EN PANTALLA (JOYSTICK Y BOTONES)',
         lang: 'IDIOMA DEL JUEGO', frame: 'MARCO (PANTALLA COMPLETA)',
         dbg: 'MODO DEBUG (MENÚ Y ATAJOS, VER CONTROLES)', hDbgKeys: 'TECLAS Y ATAJOS DEL MODO DEBUG', gDbgMenu: 'MENÚ DEBUG', gDbgFight: 'PELEA', gDbgScreens: 'PANTALLAS', dbgKeysNote: 'SOLO ACTÚAN CON EL MODO DEBUG ACTIVADO (SECCIÓN JUGAR).', wsNote: 'PANTALLA ANCHA (16:9): EN DESARROLLO. EN PANTALLA COMPLETA, EL MARCO RELLENA LAS BARRAS.',
         hControls: 'TECLADO DEL JUGADOR 1', hPad: 'MANDO DEL JUGADOR 1', gMove: 'MOVIMIENTO', gButtons: 'BOTONES', gSystem: 'SISTEMA',
@@ -69,7 +69,7 @@ const T = {
         builtAt: 'GAME COMPILED', notBuilt: 'NOT COMPILED YET: CHOOSE YOUR .IPA AND PRESS COMPILE.',
         hVideo: 'GRAPHICS', res: 'WINDOW RESOLUTION', rres: '3D RESOLUTION', mode: 'DISPLAY MODE',
         modes: ['WINDOW', 'FULLSCREEN', 'BORDERLESS FULLSCREEN'], sameRes: 'SAME AS THE WINDOW', tabDbg: 'DEBUG', tabKb: 'KEYBOARD', tabPad: 'GAMEPAD',
-        aspect: 'ASPECT RATIO', aspects: ['3:2 (ORIGINAL)'], aa: 'ANTIALIASING', aaOff: 'OFF', hidectl: 'HIDE THE ON-SCREEN CONTROLS (STICK AND BUTTONS)',
+        aspect: 'ASPECT RATIO', aspects: ['3:2 (ORIGINAL)'], aa: 'ANTIALIASING', aaOff: 'OFF', texq: 'TEXTURE QUALITY', texqs: ['IPHONE (CURRENT)', 'IPAD', 'NO LIMIT'], hidectl: 'HIDE THE ON-SCREEN CONTROLS (STICK AND BUTTONS)',
         lang: 'GAME LANGUAGE', frame: 'FRAME (FULLSCREEN)',
         dbg: 'DEBUG MODE (MENU AND SHORTCUTS, SEE CONTROLS)', hDbgKeys: 'DEBUG MODE KEYS AND SHORTCUTS', gDbgMenu: 'DEBUG MENU', gDbgFight: 'FIGHT', gDbgScreens: 'SCREENS', dbgKeysNote: 'THEY ONLY ACT WITH DEBUG MODE ON (PLAY SECTION).', wsNote: 'WIDESCREEN (16:9): IN DEVELOPMENT. IN FULLSCREEN THE FRAME FILLS THE BARS.',
         hControls: 'PLAYER 1 KEYBOARD', hPad: 'PLAYER 1 GAMEPAD', gMove: 'MOVEMENT', gButtons: 'BUTTONS', gSystem: 'SYSTEM',
@@ -203,6 +203,10 @@ const RES = [
     { w: 1280, h: 720 }, { w: 1600, h: 900 }, { w: 1920, h: 1080 },
     { w: 2560, h: 1440 }, { w: 3840, h: 2160 },
 ];
+/* texture_quality= in umk3.ini: IPHONE = the _LOW sheets the 480-wide phone loads, IPAD = the full
+ * sheets, NO LIMIT = full sheets, PNG before PVRTC, mipmaps and anisotropic filtering */
+const TEXQ = ['iphone', 'ipad', 'max'];
+
 /* antialiasing= in umk3.ini: the multisampling the game asks the card for */
 const AA = [0, 2, 4, 8, 16];
 const LANGS = [null, 'English', 'Español', 'Français', 'Deutsch', 'Italiano', '한국어', '中文'];
@@ -397,6 +401,8 @@ function fillSelects() {
     T[ui].aspects.forEach(a => $('aspect').appendChild(el('option', null, a)));
     $('aa').innerHTML = '';
     AA.forEach(n => $('aa').appendChild(el('option', null, n ? 'x' + n : T[ui].aaOff)));
+    $('texq').innerHTML = '';
+    T[ui].texqs.forEach(n => $('texq').appendChild(el('option', null, n)));
     lang.innerHTML = '';
     LANGS.forEach(n => lang.appendChild(el('option', null, n || T[ui].auto)));
 }
@@ -410,6 +416,7 @@ function applyConfig() {
     $('mode').selectedIndex = cfg.fullscreen ? 1 : cfg.borderless ? 2 : 0;
     $('aspect').selectedIndex = 0;
     $('aa').selectedIndex = Math.max(0, AA.indexOf(cfg.antialiasing || 0));
+    $('texq').selectedIndex = Math.max(0, TEXQ.indexOf(cfg.textureQuality || 'iphone'));
     $('dbg').checked = !!cfg.debug;
     $('skip').checked = !!cfg.skipIntro;
     $('hidectl').checked = !!cfg.hideControls;
@@ -591,6 +598,7 @@ async function init() {
     $('lang').addEventListener('change', () => save({ language: $('lang').selectedIndex }));
     $('rres').addEventListener('change', () => save({ rres: $('rres').selectedIndex }));
     $('aa').addEventListener('change', () => save({ antialiasing: AA[$('aa').selectedIndex] }));
+    $('texq').addEventListener('change', () => save({ textureQuality: TEXQ[$('texq').selectedIndex] }));
     $('mode').addEventListener('change', () => {
         const m = $('mode').selectedIndex;
         save({ fullscreen: m === 1, borderless: m === 2 });

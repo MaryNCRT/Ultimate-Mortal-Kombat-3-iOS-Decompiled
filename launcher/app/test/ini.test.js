@@ -118,3 +118,15 @@ test('pad= round-trips and rejects junk', () => {
     fs.writeFileSync(p, 'pad=evil;rm\n');
     assert.equal(ini.load(p).pad, 'auto');
 });
+test('texture_quality= round-trips and rejects junk', () => {
+    const p = tmpIni();
+    const c = ini.defaultConfig();
+    assert.equal(c.textureQuality, 'iphone');
+    c.textureQuality = 'max';
+    ini.save(p, c);
+    assert.equal(ini.load(p).textureQuality, 'max');
+    fs.writeFileSync(p, 'texture_quality=IPAD\n');
+    assert.equal(ini.load(p).textureQuality, 'ipad');
+    fs.writeFileSync(p, 'texture_quality=ultra\n');
+    assert.equal(ini.load(p).textureQuality, 'iphone');
+});
