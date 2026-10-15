@@ -46,7 +46,7 @@
   <img id="logoImg" class="hidden" alt="Ultimate Mortal Kombat 3">
   <div class="l-ultimate">ULTIMATE</div>
   <div class="l-mk">MORTAL <span class="l-3">3</span> KOMBAT</div>
-  <div class="l-sub"><span data-t="ttlSub">PORT DE PC</span> &middot; <span id="ttl-ver">0.0.8 alpha</span></div>
+  <div class="l-sub"><span data-t="ttlSub">PORT DE PC</span> &middot; <span id="ttl-ver">0.0.9 alpha</span></div>
 </div>
 
 <nav id="menu">
@@ -119,10 +119,12 @@
   <!-- 3. Controls -->
   <section class="sec" data-sec="controls">
     <div class="tabs">
-      <button class="tab" data-c="p" data-t="tabP1">JUGADOR 1</button>
+      <button class="tab" data-c="p" data-t="tabKb">TECLADO</button>
+      <button class="tab" data-c="pad" data-t="tabPad">MANDO</button>
       <button class="tab" data-c="dbg" data-t="tabDbg">DEBUG</button>
     </div>
-    <h2 id="hCtlP" data-t="hControls">CONTROLES DEL JUGADOR 1</h2>
+    <h2 id="hCtlP" data-t="hControls">TECLADO DEL JUGADOR 1</h2>
+    <h2 id="hCtlM" class="hidden" data-t="hPad">MANDO DEL JUGADOR 1</h2>
     <h2 id="hCtlD" class="hidden" data-t="hDbgKeys">TECLAS Y ATAJOS DEL MODO DEBUG</h2>
     <div class="tabs">
       <span id="ctlLayouts" class="tabs sub">
@@ -140,11 +142,30 @@
     </div>
     <p class="note" data-t="schemes"></p>
     </div>
+    <div id="ctlM" class="hidden">
+    <div class="field devfield">
+      <label class="lbl" for="pad" data-t="padLbl">MANDO A USAR</label>
+      <div class="row">
+        <select id="pad" class="sel"></select>
+        <span id="padSeen" class="hint"></span>
+      </div>
+    </div>
+    <div id="padMap" class="kg hidden"><h3 data-t="gPad">BOTONES DEL MANDO</h3><div id="k-pad" class="keys padkeys"></div></div>
+    <p class="note" data-t="padNote"></p>
+    </div>
     <div id="ctlD" class="hidden">
     <div class="kgroups">
       <div class="kg"><h3 data-t="gDbgMenu">MENÚ DEBUG</h3><div id="k-dbgmenu" class="keys"></div></div>
       <div class="kg"><h3 data-t="gDbgFight">PELEA</h3><div id="k-dbgfight" class="keys"></div></div>
       <div class="kg"><h3 data-t="gDbgScreens">PANTALLAS</h3><div id="k-dbgscr" class="keys"></div></div>
+    </div>
+    <div class="field devfield">
+      <label class="lbl" data-t="padDbgLbl">MANDO: ABRIR EL MENÚ DEBUG (PULSAR A LA VEZ)</label>
+      <div class="row">
+        <select id="padDbgA" class="sel"></select>
+        <span>+</span>
+        <select id="padDbgB" class="sel"></select>
+      </div>
     </div>
     <p class="note" data-t="dbgKeysNote"></p>
     </div>

@@ -4671,6 +4671,7 @@ void LIME_GLAPI glMatrixMode(unsigned mode);
 void LIME_GLAPI glLoadIdentity(void);
 void LIME_GLAPI glRotatef(float angle, float x, float y, float z);
 long RenderPlayer(void *player, long a, long b);
+int  PortPaletteOf(int side, long c1, long c2);  /* port: the colour picker */
 
 void RenderFECharacters(long slot0, long slot1)
 {
@@ -4769,6 +4770,10 @@ void RenderFECharacters(long slot0, long slot1)
         } else {
             if (i != 0 && slot0 == slot1)
                 *(void **)(ch + 0x528) = anim[0x24 / 4];
+            /* Port, not in the binary: the select screen's colour picker.
+             * With nothing picked it gives the same answer as above. */
+            *(void **)(ch + 0x528) =
+                anim[PortPaletteOf(i, slot0, slot1) == 2 ? 0x24 / 4 : 0x14 / 4];
         }
 
         RenderPlayer(ch, 1, 0);
@@ -10126,7 +10131,10 @@ void FE_Task_VS_Screen(void)
     limeEnableAlphaBlending_Basic();
 
     /* ---- player one, sliding in from the left ---- */
-    limeDrawSprite((TEXTURE *)CharacterVSTexture[Character1],
+    /* (port: the colour picker can give player one the second palette) */
+    limeDrawSprite((TEXTURE *)(PortPaletteOf(0, Character1, Character2) == 2
+                               ? CharacterVSTexture2[Character1]
+                               : CharacterVSTexture[Character1]),
                    0.0f - FE_WidthScale * VSScroll,
                    (float)limeScreenHeight + FE_HeightScale * -VS_PORTRAIT,
                    FE_WidthScale * VS_PORTRAIT,
@@ -10143,6 +10151,12 @@ void FE_Task_VS_Screen(void)
         void *portrait = (Character2 == Character1)
                          ? CharacterVSTexture2[Character2]   /* mirror match */
                          : CharacterVSTexture[Character2];
+
+        /* Port, not in the binary: the colour picker's choice. With
+         * nothing picked it is the rule above. */
+        portrait = PortPaletteOf(1, Character1, Character2) == 2
+                   ? CharacterVSTexture2[Character2]
+                   : CharacterVSTexture[Character2];
 
         limeDrawSprite((TEXTURE *)portrait,
                        (float)limeScreenWidth
@@ -11282,6 +11296,105 @@ extern float FrameCompensationFE;           /* 0x000ff82c */
 void AnimateFECharacters(float step);
 void sendCharacterPacket(long which);
 
+/* ------------------------------------------------ the colour picker (port)
+ *
+ * Port only, not in the binary. Under each fighter on the select screen a
+ * "< COLOR 1 >" box; a click on it switches that player between the
+ * character's two palettes -- anim+0x14 and anim+0x24, the two skins
+ * RenderFECharacters already chooses between -- and the 3D model, the
+ * versus portrait and the fight (LoadLevelCharacters) all follow it.
+ *
+ * PortPalette[side] is 0 until the player clicks: then the binary's own
+ * rule stands (player two takes the second palette in a mirror match). A
+ * pick stays until the player changes it, and runtime/game_main.c keeps it
+ * in save/palette.txt across sessions. Local modes only -- a network match
+ * keeps the binary's rule on both machines. */
+int PortPalette[2];
+
+/* The palette player one confirmed an Arcade ladder with (0 = none yet).
+ * Every Arcade fight uses it -- also a ladder continued after a restart,
+ * which never passes the select screen -- and game_main.c keeps it in
+ * save/palette.txt with the picks. */
+int PortArcadePalette;
+
+/* 1 or 2: the palette `side` gets with characters c1 against c2. */
+int PortPaletteOf(int side, long c1, long c2)
+{
+    int p0 = PortPalette[0] ? PortPalette[0] : 1;
+
+    if (GameMode == 1)
+        return (side == 1 && c1 == c2) ? 2 : 1;
+    if (side == 0)
+        return p0;
+    if (PortPalette[1])
+        return PortPalette[1];
+    return c1 == c2 ? (p0 == 2 ? 1 : 2) : 1;
+}
+
+/* The same for a fight: in Arcade, the palette its ladder began with. */
+int PortFightPalette(int side, long c1, long c2)
+{
+    int p0;
+
+    if (GameMode != 0 || PortArcadePalette == 0)
+        return PortPaletteOf(side, c1, c2);
+    p0 = PortArcadePalette;
+    if (side == 0)
+        return p0;
+    return c1 == c2 ? (p0 == 2 ? 1 : 2) : 1;
+}
+
+#define PP_W  92                        /* the box, in 480x320 units */
+#define PP_H  22
+
+/* One box, centred on cx with its top at y; returns 1 when clicked. */
+static int palette_box(int side, int cx, int y, long c1, long c2)
+{
+    char buf[32];
+    int x = cx - PP_W / 2;
+    int hit;
+
+    limeFillRect(FE_X((float)x), FE_Y((float)y),
+                 FE_W((float)PP_W), FE_H((float)PP_H),
+                 0.0f, 0.0f, 0.0f, 0.6f);
+    DrawRedHighlight(x, y, PP_W, PP_H, 2);
+
+    snprintf(buf, sizeof buf, "COLOR %d", PortPaletteOf(side, c1, c2));
+    limeDrawFONT(&GameFont, "<", FE_X((float)(x + 8)), FE_Y((float)(y + 3)),
+                 1, FE_WidthScale, fontcol);
+    limeDrawFONT(&GameFont, buf, FE_X((float)cx), FE_Y((float)(y + 3)),
+                 1, FE_WidthScale, fontcol);
+    limeDrawFONT(&GameFont, ">", FE_X((float)(x + PP_W - 8)),
+                 FE_Y((float)(y + 3)), 1, FE_WidthScale, fontcol);
+
+    hit = FE_FadeAdd == 0.0f && limeLastTouchScreenX[0] == -1.0f
+          && limeTouchScreenX[0] >= FE_X((float)x)
+          && limeTouchScreenX[0] <= FE_X((float)(x + PP_W))
+          && limeTouchScreenY[0] >= FE_Y((float)y)
+          && limeTouchScreenY[0] <= FE_Y((float)(y + PP_H));
+    if (hit) {
+        PortPalette[side] = PortPaletteOf(side, c1, c2) == 2 ? 1 : 2;
+        limeLastTouchScreenX[0] = limeTouchScreenX[0];  /* one switch a tap */
+    }
+    return hit;
+}
+
+static void palette_picker(void)
+{
+    long p1 = (CharacterConfirmed != -1) ? CharacterConfirmed
+                                         : CharacterSelected;
+    long p2 = opponentCharacter;
+
+    if (GameMode == 1)
+        return;
+    if (GameMode == 0 && CharacterConfirmed != -1)    /* a new ladder */
+        PortArcadePalette = PortPaletteOf(0, CharacterConfirmed, -1);
+    if (p1 != -1)
+        palette_box(0, 56, 290, p1, p2);
+    if (GameMode == 6 && p2 != -1)
+        palette_box(1, 424, 262, p1, p2);
+}
+
 long drawCharacterSelection(long sel)
 {
     long row, cx;
@@ -11510,6 +11623,8 @@ long drawCharacterSelection(long sel)
 
     limeSet2DDrawing();
     limeEnableAlphaBlending_Basic();
+
+    palette_picker();                   /* port, not in the binary */
 
     return CharacterConfirmed;
 }

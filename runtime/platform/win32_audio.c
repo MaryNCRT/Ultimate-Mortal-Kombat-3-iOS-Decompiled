@@ -191,6 +191,16 @@ void plat_audio_stop_pcm(const unsigned char *pcm)
             g_voice[i].active = 0;
 }
 
+/* Every voice off at once: a save state loaded (savestate.c) puts back the
+ * sounds the voices were reading. */
+void plat_audio_stop_all(void)
+{
+    int i;
+
+    for (i = 0; i < VOICES; i++)
+        g_voice[i].active = 0;
+}
+
 /* The old spelling, for callers whose source really is the device rate. */
 int plat_audio_play(const unsigned char *pcm, int frames, float gain)
 {

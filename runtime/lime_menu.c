@@ -789,6 +789,23 @@ void limeLog(const char *fmt, ...)
     va_end(ap);
 }
 
+static void save_dir(char *out, size_t n);
+
+/* save/<file> beside the exe (or UMK3_SAVE_DIR): for the port's own small
+ * files, such as the colour picker's choice. */
+void port_save_path(char *out, size_t n, const char *file)
+{
+    char dir[1024];
+
+    save_dir(dir, sizeof dir);
+    lime_mkdir(dir);
+#ifdef _WIN32
+    snprintf(out, n, "%s\\%s", dir, file);
+#else
+    snprintf(out, n, "%s/%s", dir, file);
+#endif
+}
+
 static void save_dir(char *out, size_t n)
 {
     const char *e = getenv("UMK3_SAVE_DIR");

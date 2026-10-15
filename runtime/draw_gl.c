@@ -226,10 +226,12 @@ TEXTURE *limeLoadTexture(const char *path, int a, int b)
                  GL_RGBA, GL_UNSIGNED_BYTE, img.rgba);
     free(img.rgba);
 
-    /* From limeMalloc, so below 4 GB: the TEXTURE handed back is stored in
-     * 32-bit words of the binary's layout -- a fighter's skin at +0x528. Never
+    /* The TEXTURE handed back is stored in 32-bit words of the binary's
+     * layout -- a fighter's skin at +0x528 -- so it must be below 4 GB, as
+     * any i686 block is. From the C library's heap, not limeMalloc's arena:
+     * a save state loaded must not take the cache back (savestate.h). Never
      * freed; see limeDeleteTexture. */
-    e = (TexEntry *)limeMalloc("texentry", sizeof(*e));
+    e = (TexEntry *)malloc(sizeof(*e));
     if (e == NULL)
         return NULL;
     memset(e, 0, sizeof(*e));

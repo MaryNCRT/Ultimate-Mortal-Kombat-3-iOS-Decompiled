@@ -17,18 +17,18 @@ const T = {
         mPlay: 'JUGAR', mQuit: 'SALIR',
         dBuild: 'El juego se compila en tu PC a partir de tu propio .ipa de UMK3 para iPhone (1.2.59).',
         dVideo: 'Resolución de ventana, resolución 3D, modo de pantalla y el marco de las barras.',
-        dControls: 'Las teclas del jugador 1, para los esquemas de 5 y de 6 botones, y las del modo debug.',
+        dControls: 'Teclado y mando del jugador 1 (Xbox, PlayStation, Switch y otros), para 5 y 6 botones, y las teclas del modo debug.',
         dPlay: 'Arranca Ultimate Mortal Kombat 3: idioma del juego, intros y modo debug.',
         dQuit: 'Cierra el launcher.',
         hBuild: 'COMPILAR TU .IPA', ipaLbl: 'TU .IPA DE UMK3 (IPHONE 1.2.59)',
         browse: 'BUSCAR…', build: 'COMPILAR', rebuild: 'RECOMPILAR', cancel: 'CANCELAR', clear: 'QUITAR',
         builtAt: 'JUEGO COMPILADO', notBuilt: 'TODAVÍA NO ESTÁ COMPILADO: ELIGE TU .IPA Y PULSA COMPILAR.',
         hVideo: 'GRÁFICOS', res: 'RESOLUCIÓN DE VENTANA', rres: 'RESOLUCIÓN 3D', mode: 'MODO DE PANTALLA',
-        modes: ['VENTANA', 'PANTALLA COMPLETA', 'PANTALLA COMPLETA SIN BORDES'], sameRes: 'IGUAL QUE LA VENTANA', tabDbg: 'DEBUG', tabP1: 'JUGADOR 1',
+        modes: ['VENTANA', 'PANTALLA COMPLETA', 'PANTALLA COMPLETA SIN BORDES'], sameRes: 'IGUAL QUE LA VENTANA', tabDbg: 'DEBUG', tabKb: 'TECLADO', tabPad: 'MANDO',
         aspect: 'RELACIÓN DE ASPECTO', aspects: ['3:2 (ORIGINAL)'], aa: 'ANTIALIASING', aaOff: 'DESACTIVADO', hidectl: 'OCULTAR LOS CONTROLES EN PANTALLA (JOYSTICK Y BOTONES)',
         lang: 'IDIOMA DEL JUEGO', frame: 'MARCO (PANTALLA COMPLETA)',
         dbg: 'MODO DEBUG (MENÚ Y ATAJOS, VER CONTROLES)', hDbgKeys: 'TECLAS Y ATAJOS DEL MODO DEBUG', gDbgMenu: 'MENÚ DEBUG', gDbgFight: 'PELEA', gDbgScreens: 'PANTALLAS', dbgKeysNote: 'SOLO ACTÚAN CON EL MODO DEBUG ACTIVADO (SECCIÓN JUGAR).', wsNote: 'PANTALLA ANCHA (16:9): EN DESARROLLO. EN PANTALLA COMPLETA, EL MARCO RELLENA LAS BARRAS.',
-        hControls: 'CONTROLES DEL JUGADOR 1', gMove: 'MOVIMIENTO', gButtons: 'BOTONES', gSystem: 'SISTEMA',
+        hControls: 'TECLADO DEL JUGADOR 1', hPad: 'MANDO DEL JUGADOR 1', gMove: 'MOVIMIENTO', gButtons: 'BOTONES', gSystem: 'SISTEMA',
         schemes: 'EL JUEGO EMPIEZA CON EL ESQUEMA ELEGIDO; CADA UNO GUARDA SUS TECLAS. EN PAUSA SE PUEDE CAMBIAR DURANTE LA PARTIDA.',
         tab6: '6 BOTONES', tab5: '5 BOTONES', tabNote: 'EL JUEGO EMPIEZA CON ESTE ESQUEMA',
         reskey: 'RESTABLECER', press: 'PULSA UNA TECLA…  (ESC CANCELA)',
@@ -49,6 +49,11 @@ const T = {
         needIpa: 'Primero elige tu archivo .ipa de UMK3.', playFail: 'No se pudo iniciar umk3-game.exe.',
         buildDone: 'JUEGO COMPILADO. YA PUEDES JUGAR.', buildFail: 'FALLÓ LA COMPILACIÓN: MIRA EL REGISTRO.',
         notIpa: 'El archivo elegido no existe.',
+        padDbgLbl: 'MANDO: ABRIR EL MENÚ DEBUG (PULSAR A LA VEZ)', padLbl: 'MANDO A USAR', gPad: 'BOTONES DEL MANDO',
+        padOff: 'Ninguno (solo teclado)', padAuto: 'Mando: el primero que se conecte', padX: 'Mando de Xbox (XInput)',
+        padSeen: 'NINGÚN MANDO CONECTADO EN WINDOWS', padLook: 'BUSCANDO MANDOS…', padNow: 'CONECTADO', padGone: '(no conectado)',
+        padNote: 'EL TECLADO SIGUE FUNCIONANDO CON EL MANDO. LOS MENÚS SE USAN CON EL RATÓN.',
+        pads: { dir: 'Moverse', start: 'Pausa', select: 'Combos' },
     },
     EN: {
         ui: 'ESPAÑOL', ttlSub: 'PC PORT',
@@ -56,18 +61,18 @@ const T = {
         mPlay: 'PLAY', mQuit: 'QUIT',
         dBuild: 'The game is compiled on your PC from your own UMK3 iPhone .ipa (1.2.59).',
         dVideo: 'Window resolution, 3D resolution, display mode and the bars frame.',
-        dControls: 'Player 1 keys, for the 5- and 6-button layouts, and debug mode\'s keys.',
+        dControls: 'Player 1 keyboard and gamepad (Xbox, PlayStation, Switch and others), for 5 and 6 buttons, and debug mode\'s keys.',
         dPlay: 'Starts Ultimate Mortal Kombat 3: game language, intros and debug mode.',
         dQuit: 'Closes the launcher.',
         hBuild: 'COMPILE YOUR .IPA', ipaLbl: 'YOUR UMK3 .IPA (IPHONE 1.2.59)',
         browse: 'BROWSE…', build: 'COMPILE', rebuild: 'REBUILD', cancel: 'CANCEL', clear: 'CLEAR',
         builtAt: 'GAME COMPILED', notBuilt: 'NOT COMPILED YET: CHOOSE YOUR .IPA AND PRESS COMPILE.',
         hVideo: 'GRAPHICS', res: 'WINDOW RESOLUTION', rres: '3D RESOLUTION', mode: 'DISPLAY MODE',
-        modes: ['WINDOW', 'FULLSCREEN', 'BORDERLESS FULLSCREEN'], sameRes: 'SAME AS THE WINDOW', tabDbg: 'DEBUG', tabP1: 'PLAYER 1',
+        modes: ['WINDOW', 'FULLSCREEN', 'BORDERLESS FULLSCREEN'], sameRes: 'SAME AS THE WINDOW', tabDbg: 'DEBUG', tabKb: 'KEYBOARD', tabPad: 'GAMEPAD',
         aspect: 'ASPECT RATIO', aspects: ['3:2 (ORIGINAL)'], aa: 'ANTIALIASING', aaOff: 'OFF', hidectl: 'HIDE THE ON-SCREEN CONTROLS (STICK AND BUTTONS)',
         lang: 'GAME LANGUAGE', frame: 'FRAME (FULLSCREEN)',
         dbg: 'DEBUG MODE (MENU AND SHORTCUTS, SEE CONTROLS)', hDbgKeys: 'DEBUG MODE KEYS AND SHORTCUTS', gDbgMenu: 'DEBUG MENU', gDbgFight: 'FIGHT', gDbgScreens: 'SCREENS', dbgKeysNote: 'THEY ONLY ACT WITH DEBUG MODE ON (PLAY SECTION).', wsNote: 'WIDESCREEN (16:9): IN DEVELOPMENT. IN FULLSCREEN THE FRAME FILLS THE BARS.',
-        hControls: 'PLAYER 1 CONTROLS', gMove: 'MOVEMENT', gButtons: 'BUTTONS', gSystem: 'SYSTEM',
+        hControls: 'PLAYER 1 KEYBOARD', hPad: 'PLAYER 1 GAMEPAD', gMove: 'MOVEMENT', gButtons: 'BUTTONS', gSystem: 'SYSTEM',
         schemes: 'THE GAME STARTS WITH THE CHOSEN LAYOUT; EACH KEEPS ITS OWN KEYS. THE PAUSE MENU CAN SWITCH IT DURING A GAME.',
         tab6: '6 BUTTONS', tab5: '5 BUTTONS', tabNote: 'THE GAME STARTS WITH THIS LAYOUT',
         reskey: 'RESET', press: 'PRESS A KEY…  (ESC CANCELS)',
@@ -88,8 +93,107 @@ const T = {
         needIpa: 'Choose your UMK3 .ipa file first.', playFail: 'Could not start umk3-game.exe.',
         buildDone: 'GAME COMPILED. YOU CAN PLAY NOW.', buildFail: 'BUILD FAILED: SEE THE LOG.',
         notIpa: 'The chosen file does not exist.',
+        padDbgLbl: 'GAMEPAD: OPEN THE DEBUG MENU (HOLD TOGETHER)', padLbl: 'GAMEPAD TO USE', gPad: 'GAMEPAD BUTTONS',
+        padOff: 'None (keyboard only)', padAuto: 'Gamepad: the first one connected', padX: 'Xbox pad (XInput)',
+        padSeen: 'NO GAMEPAD CONNECTED TO WINDOWS', padLook: 'LOOKING FOR GAMEPADS…', padNow: 'CONNECTED', padGone: '(not connected)',
+        padNote: 'THE KEYBOARD STILL WORKS WITH A PAD. THE MENUS ARE USED WITH THE MOUSE.',
+        pads: { dir: 'Move', start: 'Pause', select: 'Moves' },
     },
 };
+
+/* The pad, by position (runtime/game_main.c keyboard_buttons): what each
+ * button does in either layout. [PlayStation / Xbox label, action key]. */
+const PAD_ROWS = {
+    6: [['D-PAD / L-STICK', 'dir'], ['□ / X', 'hp'], ['✕ / A', 'lp'], ['△ / Y', 'hk'],
+        ['○ / B', 'lk'], ['R1 / RB', 'block'], ['L1 L2 / LB LT', 'run'], ['R2 / RT', 'special'],
+        ['OPTIONS / START', 'start'], ['SHARE / BACK', 'select']],
+    5: [['D-PAD / L-STICK', 'dir'], ['□ △ / X Y', '5:p'], ['✕ ○ / A B', '5:k'],
+        ['R1 / RB', '5:b'], ['L1 L2 / LB LT', '5:r'], ['R2 / RT', 'special'],
+        ['OPTIONS / START', 'start'], ['SHARE / BACK', 'select']],
+};
+
+/* The pads Windows has attached, by the name it gives them, as pad= values:
+ * "xinput" or the USB "vendor:product". They come from the game itself
+ * (`umk3-game --list-pads`, the same search it plays with), asked again
+ * every few seconds while the GAMEPAD tab is open. */
+let seenPads = {}, padScanBusy = false;
+async function scanPads() {
+    if (padScanBusy || sec !== 'controls' || ctlTab !== 'pad') return;
+    padScanBusy = true;
+    try {
+        const now = {};
+        for (const p of await window.umk3.listPads())
+            if (!now[p.value]) now[p.value] = p.name;
+        if (JSON.stringify(now) !== JSON.stringify(seenPads)) {
+            seenPads = now;
+            fillPads();
+        }
+    } finally {
+        padScanBusy = false;
+    }
+}
+/* The debug menu's pad combination (pad_dbg_menu=): two buttons held
+ * together, the game's PB_* names. */
+const PAD_BTNS = [['L3', 'L3'], ['R3', 'R3'], ['L1', 'L1 / LB'], ['R1', 'R1 / RB'],
+    ['L2', 'L2 / LT'], ['R2', 'R2 / RT'], ['SELECT', 'SHARE / BACK'], ['START', 'OPTIONS / START'],
+    ['SOUTH', '✕ / A'], ['EAST', '○ / B'], ['WEST', '□ / X'], ['NORTH', '△ / Y'], ['HOME', 'PS / HOME']];
+function fillPadDbg() {
+    const parts = (cfg.padDbgMenu || '').split('+');
+    [['padDbgA', parts[0] || ''], ['padDbgB', parts[1] || '']].forEach(([id, v]) => {
+        const s = $(id);
+        s.innerHTML = '';
+        const none = el('option', null, '—');
+        none.value = '';
+        s.appendChild(none);
+        for (const [n, label] of PAD_BTNS) {
+            const o = el('option', null, label);
+            o.value = n;
+            s.appendChild(o);
+        }
+        s.value = v;
+    });
+}
+function savePadDbg() {
+    const v = [$('padDbgA').value, $('padDbgB').value].filter(Boolean)
+        .filter((x, i, a) => a.indexOf(x) === i).join('+');
+    cfg.padDbgMenu = v;
+    selectBlip();
+    save({ padDbgMenu: v });
+}
+
+function fillPads() {
+    fillPadDbg();
+    const s = $('pad');
+    if (!s || !cfg) return;
+    const opts = [['off', T[ui].padOff], ['auto', T[ui].padAuto],
+                  ['xinput', seenPads.xinput ? T[ui].padX + ': ' + seenPads.xinput : T[ui].padX]];
+    for (const [v, n] of Object.entries(seenPads))
+        if (v !== 'xinput') opts.push([v, n + '  (' + v.toUpperCase() + ')']);
+    if (!opts.some(o => o[0] === cfg.pad))
+        opts.push([cfg.pad, (cfg.padName || cfg.pad.toUpperCase()) + '  ' + T[ui].padGone]);
+    s.innerHTML = '';
+    for (const [v, n] of opts) {
+        const o = el('option', null, (seenPads[v] ? '● ' : '') + n);   /* ● = connected */
+        o.value = v;
+        s.appendChild(o);
+    }
+    s.value = cfg.pad || 'auto';
+    const any = Object.keys(seenPads).length;
+    $('padSeen').textContent = any ? T[ui].padNow + ': ' + Object.values(seenPads).join(', ') : T[ui].padSeen;
+    paintPadMap();
+}
+function paintPadMap() {
+    const on = cfg.pad !== 'off';
+    $('padMap').classList.toggle('hidden', !on);
+    const b = $('k-pad');
+    b.innerHTML = '';
+    for (const [label, act] of PAD_ROWS[cfg.buttons === 6 ? 6 : 5]) {
+        const k = el('div', 'keybtn ro');
+        k.appendChild(el('span', 'kname', T[ui].pads[act] || T[ui].keys[act]));
+        k.appendChild(el('span', 'kkey', label));
+        b.appendChild(k);
+    }
+}
 
 /* index = res in umk3.ini (lib/ini.js): the game's own 3:2 sizes and 16:9 ones */
 const RES = [
@@ -185,6 +289,7 @@ function applyTexts() {
     fillSelects();
     applyConfig();
     paintKeys();
+    fillPads();
     paintState();
     $('desc').textContent = tx(DESC[sec]);
 }
@@ -242,18 +347,20 @@ function vkLabel(vk) {
     return SPECIAL[vk] || '#' + vk;
 }
 
-/* CONTROLS has two categories: PLAYER 1 -- with the 6- and 5-button layouts
- * (each its keys, and the one the game starts with) -- and DEBUG (the debug
- * mode's keys). */
+/* CONTROLS has three categories: KEYBOARD and GAMEPAD -- player one, with
+ * the 6- and 5-button layouts (each its keys, and the one the game starts
+ * with) -- and DEBUG (the debug mode's keys). */
 let ctlTab = 'p';
 
 function paintKeys() {
     document.querySelectorAll('.tab').forEach(t =>
         t.classList.toggle('active', t.dataset.c ? t.dataset.c === ctlTab
             : Number(t.dataset.b) === (cfg.buttons === 6 ? 6 : 5)));
-    for (const [id, on] of [['hCtlP', 'p'], ['ctlP', 'p'], ['reskeys', 'p'], ['ctlLayouts', 'p'],
+    for (const [id, on] of [['hCtlP', 'p'], ['ctlP', 'p'], ['reskeys', 'p'],
+                            ['hCtlM', 'pad'], ['ctlM', 'pad'],
                             ['hCtlD', 'dbg'], ['ctlD', 'dbg'], ['resdbg', 'dbg']])
         $(id).classList.toggle('hidden', ctlTab !== on);
+    $('ctlLayouts').classList.toggle('hidden', ctlTab === 'dbg');
     for (const [box, names] of Object.entries(KGROUPS)) {
         const b = $(box);
         b.innerHTML = '';
@@ -491,6 +598,18 @@ async function init() {
     $('dbg').addEventListener('change', () => save({ debug: $('dbg').checked }));
     $('skip').addEventListener('change', () => save({ skipIntro: $('skip').checked }));
     $('hidectl').addEventListener('change', () => save({ hideControls: $('hidectl').checked }));
+    $('pad').addEventListener('change', () => {
+        const v = $('pad').value;
+        cfg.pad = v;
+        cfg.padName = seenPads[v] || '';
+        selectBlip();
+        save({ pad: v, padName: seenPads[v] || '' });
+        paintPadMap();
+    });
+    $('padDbgA').addEventListener('change', savePadDbg);
+    $('padDbgB').addEventListener('change', savePadDbg);
+    /* pads come and go: asked again every three seconds on the GAMEPAD tab */
+    setInterval(scanPads, 3000);
 
     window.umk3.onBuildData(handleBuildData);
     $('build').addEventListener('click', startBuild);
@@ -524,12 +643,17 @@ async function init() {
             selectBlip();
             if (t.dataset.c) {
                 ctlTab = t.dataset.c;
+                if (ctlTab === 'pad') {
+                    $('padSeen').textContent = T[ui].padLook;
+                    setTimeout(scanPads, 0);
+                }
             } else {
                 cfg.buttons = Number(t.dataset.b);
                 save({ buttons: cfg.buttons });
             }
             waitingKey = null;
             paintKeys();
+            paintPadMap();
             t.blur();
         });
     });

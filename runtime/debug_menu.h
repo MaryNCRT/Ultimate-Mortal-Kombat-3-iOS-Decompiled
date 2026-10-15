@@ -4,7 +4,10 @@
 
 #define DBG_SCREENS 51                  /* FETaskFunctionList's screens */
 
-enum { DBG_NONE, DBG_FIGHT, DBG_SCREEN, DBG_FIGHT_KEY, DBG_BOSS, DBG_FINISHER };
+enum { DBG_NONE, DBG_FIGHT, DBG_SCREEN, DBG_FIGHT_KEY, DBG_BOSS, DBG_FINISHER,
+       DBG_SAVE_STATE, DBG_LOAD_STATE };
+
+#define DBG_STATE_SLOTS 4               /* savestate.h's ST_SLOTS */
 
 struct dbg_request {
     int what;                           /* DBG_* */
@@ -12,7 +15,7 @@ struct dbg_request {
                                            fight key: 0..3 as F9..F12;
                                            boss: 24 Motaro, 25 Shao Kahn;
                                            finisher: 0..6, DoASpecial's
-                                           0xd..0x13 */
+                                           0xd..0x13; state: the slot */
 };
 
 int  dbg_menu_is_open(void);
@@ -25,6 +28,8 @@ int  dbg_menu_tick(struct dbg_request *rq);
 /* The pointer in the 480x320 space and whether a button is down, each
  * frame the menu is open. */
 void dbg_menu_mouse(float x, float y, int down);
+/* the pad, each frame the menu is open (include platform/platform.h first) */
+void dbg_menu_pad(const PLAT_PAD *p);
 /* Each fighter's palette for the fights loaded next: 0 the game's rule,
  * 1 the first, 2 the alternate (LoadLevelCharacters, port only). */
 extern int DbgPalette[2];
@@ -40,6 +45,11 @@ int  dbg_finishing(void);
 int  dbg_frame_load(const char *path);
 void dbg_frame_draw(int ww, int wh);
 int  dbg_keys_on(void);                /* the menu's DIRECT KEYS row */
+int  dbg_hitboxes_on(void);            /* TOOLS: HITBOXES */
+int  dbg_speed_percent(void);          /* TOOLS: FIGHT SPEED, 10..400 */
+/* game_main.c answers: a state can be saved now / slot n holds one */
+int  dbg_state_can_save(void);
+int  dbg_state_has(int slot);
 int  dbg_info_on(void);
 void dbg_info_toggle(void);
 void dbg_info_draw(const char *line);

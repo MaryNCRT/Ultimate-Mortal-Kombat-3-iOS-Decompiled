@@ -1,4 +1,4 @@
-ULTIMATE MORTAL KOMBAT 3 - PORT DE PC - 0.0.8 ALPHA
+ULTIMATE MORTAL KOMBAT 3 - PORT DE PC - 0.0.9 ALPHA
 ====================================================
 
 Port nativo para Windows de la version de iOS (1.2.59), hecho por
@@ -83,6 +83,31 @@ CONTROLES
     F9 / F10   terminar el round (KO jugador 2 / jugador 1)
     F11 / F12  ganar / perder la pelea entera (F11 la salta)
   F3 y F6-F12 son las teclas directas; el menu F2 las apaga.
+
+NUEVO EN 0.0.9
+- Mando: Xbox (XInput), PlayStation 4 y 5, Switch Pro y otros mandos USB
+  (DirectInput). En CONTROLES > JUGADOR 1 se elige el dispositivo de
+  entrada: solo teclado, el primer mando que se conecte, el de Xbox o un
+  mando concreto (aparece en la lista al pulsar uno de sus botones). El
+  teclado sigue funcionando. Botones por posicion: izquierda puno alto,
+  abajo puno bajo, arriba patada alta, derecha patada baja (con 5 botones:
+  los dos de la izquierda puno y los dos de la derecha patada), R1
+  bloqueo, L1 y L2 correr, R2 especial, OPTIONS/START pausa, SHARE/BACK
+  combos. Los menus se siguen usando con el raton.
+- Seleccion de personaje: "< COLOR 1 >" bajo cada luchador para elegir la
+  paleta 1 o 2; el modelo 3D, el retrato del VS y la pelea la siguen. Se
+  guarda (save\palette.txt), y un Arcade continuado mas tarde usa la
+  paleta con la que empezo.
+- Sin retraso en los controles; los movimientos de mantener y soltar
+  (el sai de Mileena, la patada bicicleta de Liu Kang) funcionan.
+- Si el juego falla, guarda logs\crash-*.log y lo muestra en un aviso.
+- Pantalla de carga: los iconos del Kombat Kode en una sola fila, con el
+  nombre del kode.
+- Menu debug, pagina TOOLS: hitboxes, velocidad de la pelea (10% a 400%)
+  y save states (guardar y cargar el momento exacto, 4 ranuras en
+  memoria). Una pelea del debug ya no deja sus luchadores, escenario ni
+  paletas para los demas modos.
+- Launcher: botones mas pequenos.
 
 NUEVO EN 0.0.8
 - El juego ya es 100% jugable. Puede tener fallos; se iran arreglando.
@@ -194,18 +219,15 @@ ARREGLADO EN 0.0.2
 - La melena de Sindel aparece, con su textura.
 - El joystick en pantalla se mueve.
 
-ERRORES CONOCIDOS EN 0.0.8
-- Algunos objetos aparte de los luchadores aun pueden no verse (el arpon
-  de Scorpion ya si).
+ERRORES CONOCIDOS EN 0.0.9
+- Algunos objetos aparte de los luchadores aun pueden no verse.
 - Faltan animaciones en algunos fatalities (el de Sonya no se ve bien).
 - Siguen apareciendo errores de texturas en algunos escenarios y
   personajes (partes del sombrero de Kung Lao salen negras).
 - Algunos modos aparte del Arcade pueden cerrarse; el menu no esta
   completo y faltan modos.
-- A veces, en el FINISH HIM, el rival mareado se arrastra hacia ti
-  (visto otra vez, no reproducido; se sigue vigilando).
-- Iconos mal puestos en la pantalla de carga; al pausar a veces la pelea
-  se ve encogida.
+- Al pausar a veces la pelea se ve encogida.
+- Los menus no se manejan con el mando (raton).
 - Algunos ataques especiales (sobre todo proyectiles) no tienen sonido.
 - Solo Windows. Linux y macOS todavia no tienen launcher.
 - Si el juego falla, mira logs\ junto a umk3-game.exe y reportalo
@@ -224,7 +246,11 @@ Fight keys: W A S D or arrows to move (two at once for diagonals);
 U high punch, I low punch, O block, J high kick, K low kick, L run
 (or numpad 7 8 9 / 4 5 6). P pause, M moves list; Esc no longer quits.
 Player 1 keys can be changed in the launcher (CONTROLS), for the 6- and
-the 5-button layout separately. New in 0.0.7: BABALITY banner and tune (and animality, mercy, friendship
+the 5-button layout separately. New in 0.0.9: gamepads (Xbox, PlayStation 4/5,
+Switch Pro, other USB pads; pick the input device in CONTROLS), a palette
+picker on the select screen ("< COLOR 1 >", saved), no input lag, crash
+reports, the Kombat Kode loading tip fixed, debug TOOLS (hitboxes, fight
+speed, save states), smaller launcher buttons. New in 0.0.7: BABALITY banner and tune (and animality, mercy, friendship
 banners), Kung Lao's hat on the select screen, Sub-Zero's ice (frozen
 fighters, ice clone), a paged debug menu with mouse and palettes, skip the
 intros, debug keys in the launcher. New in 0.0.6c: a FINISHER row in the F2 debug menu forces player one's

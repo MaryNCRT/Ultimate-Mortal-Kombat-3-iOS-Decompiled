@@ -44,8 +44,13 @@
  *   UMK3_CRASH_TEST=<tick>     crash on purpose (the crash report)
  *   UMK3_LOG_P1=1              player one frame and buttons, every change
  *   UMK3_LOG_PACE=1            the frame pacing (input lag), once a second
+ *   UMK3_LOG_PAD=1             the pad's buttons, every change (pad= in umk3.ini)
+ *   UMK3_PAD=<auto|off|xinput|vvvv:pppp>  the pad, over umk3.ini's pad=
  *   UMK3_FRAME_DELAY=0         no late key read before a 60 Hz refresh
  *   UMK3_PACE_HZ=<hz>          pace as if the screen ran at <hz>
+ *   UMK3_DBG_HITBOX=1          the hitboxes on (as the debug menu's TOOLS)
+ *   UMK3_DBG_SPEED=<percent>   the fight's speed (TOOLS: FIGHT SPEED)
+ *   UMK3_DBG_STATE="t:s1;t:l1" save / load a state slot by script
  *   UMK3_SHOTS=<t,t,...>       write umk3-shot-<t>.ppm at each tick, go on
  *   UMK3_ARCADE=<destiny,stage> with --fight: that rung of an Arcade ladder
  *   UMK3_SCREENS=<tick:n;...>  open front-end screen n at that tick, so one
@@ -63,6 +68,7 @@
  *
  * Debug, to skip the menus:
  *   umk3-game --fight <p1> <p2> [stage]     (or UMK3_FIGHT="p1,p2,stage")
+ *   umk3-game --list-pads                   the pads attached (for the launcher)
  * goes straight from the main menu into a fight. A fighter is a name from
  * CharacterNames ("kitana", "kunglao", "sub-zero") or its number 0..25; the
  * stage is a Level_Info row, 0..15 (default 0). It sets what the select
@@ -189,6 +195,34 @@ extern int   Settings[10];
  * key5_p/b/k/r and key_special for five. */
 extern int PortKeyButtons[7], PortKeyDial;
 
+static PLAT_PAD g_pad;                  /* player one's pad, read each tick */
+
+/* The pad combination that opens the debug menu: umk3.ini pad_dbg_menu=,
+ * button names joined by "+" (SOUTH EAST WEST NORTH L1 R1 L2 R2 SELECT START
+ * L3 R3 HOME). L3+R3 unless it says otherwise; empty = none. */
+static unsigned g_pad_dbg_mask = (1u << PB_L3) | (1u << PB_R3);
+
+static unsigned pad_combo(const char *v)
+{
+    static const char *const names[PB_COUNT] = {
+        "SOUTH", "EAST", "WEST", "NORTH", "L1", "R1", "L2", "R2",
+        "SELECT", "START", "L3", "R3", "HOME",
+    };
+    unsigned m = 0;
+    int i;
+
+    while (*v) {
+        size_t n = strcspn(v, "+");
+        for (i = 0; i < PB_COUNT; i++)
+            if (strlen(names[i]) == n && _strnicmp(v, names[i], n) == 0)
+                m |= 1u << i;
+        v += n;
+        if (*v)
+            v++;
+    }
+    return m;
+}
+
 static void keyboard_buttons(void)
 {
     static const int keys6[7][2] = {    /* button index 0..6, two keys each */
@@ -205,23 +239,51 @@ static void keyboard_buttons(void)
     static const int dial[3][3] = {     /* [dy + 1][dx + 1] */
         { 8, 1, 2 }, { 7, 0, 3 }, { 6, 5, 4 },
     };
+    /* The pad (plat_pad_read, umk3.ini pad=), by position: the face
+     * buttons as the arcade's -- punches on the left, kicks on the right,
+     * high on top -- R1 block, L1 / L2 run, R2 the special button. With five
+     * buttons both left ones punch and both right ones kick. */
+    static const unsigned pad6[7] = {
+        1u << PB_WEST, 1u << PB_SOUTH, 1u << PB_R1, 1u << PB_NORTH,
+        1u << PB_EAST, (1u << PB_L1) | (1u << PB_L2), 1u << PB_R2,
+    };
+    static const unsigned pad5[7] = {
+        (1u << PB_WEST) | (1u << PB_NORTH), 0, 1u << PB_R1,
+        (1u << PB_SOUTH) | (1u << PB_EAST), 0,
+        (1u << PB_L1) | (1u << PB_L2), 1u << PB_R2,
+    };
     const int (*keys)[2] = (Player1NumButtons == 6) ? keys6 : keys5;
+    const unsigned *padb = (Player1NumButtons == 6) ? pad6 : pad5;
     int dx, dy, b, live = CurrentTask == 6;
 
-    dx = (plat_key(PK_RIGHT) || plat_key(PK_P2_RIGHT))
-       - (plat_key(PK_LEFT) || plat_key(PK_P2_LEFT));
-    dy = (plat_key(PK_DOWN) || plat_key(PK_P2_DOWN))
-       - (plat_key(PK_UP) || plat_key(PK_P2_UP));
+    dx = (plat_key(PK_RIGHT) || plat_key(PK_P2_RIGHT) || g_pad.right)
+       - (plat_key(PK_LEFT) || plat_key(PK_P2_LEFT) || g_pad.left);
+    dy = (plat_key(PK_DOWN) || plat_key(PK_P2_DOWN) || g_pad.down)
+       - (plat_key(PK_UP) || plat_key(PK_P2_UP) || g_pad.up);
     PortKeyDial = live ? dial[dy + 1][dx + 1] : 0;
 
     for (b = 0; b < 7; b++)
         PortKeyButtons[b] = live && keys[b][0] >= 0
-            && (plat_key(keys[b][0]) || plat_key(keys[b][1]));
+            && (plat_key(keys[b][0]) || plat_key(keys[b][1])
+                || (g_pad.buttons & padb[b]));
 }
 
 /* --fight: -1 until parsed. */
 static long g_fight_p1 = -1, g_fight_p2 = -1, g_fight_stage = 0;
 static int  g_fight_override;           /* Character2Override is ours */
+extern int  DbgPalette[2], DbgFightActive;      /* runtime/debug_menu.c */
+
+/* A debug fight is a visit: what the player had chosen -- fighters, stage,
+ * mode and the Arcade rung -- is saved when it starts and put back once the
+ * game is in the front end again, so neither its fighters nor the ladder
+ * step its win or loss took stay for any mode after it. A port feature, not
+ * in the binary. The boss jump and UMK3_ARCADE climb a ladder on purpose
+ * and keep what the fight did. */
+static struct {
+    int  on, keep, fought;
+    long c1, c2, m1, m2, level, mode, destiny;
+    int  stage;
+} g_dbg_saved;
 
 /* A fighter by number or by name, ignoring case, spaces and hyphens. */
 static long fighter_id(const char *s)
@@ -649,6 +711,10 @@ static void read_config(const char *dir)
             g_cfg_debug_keys = atoi(v) != 0;
         else if (strcmp(line, "skip_intro") == 0)
             g_cfg_skip_intro = atoi(v) != 0;
+        else if (strcmp(line, "pad_dbg_menu") == 0)
+            g_pad_dbg_mask = pad_combo(v);
+        else if (strcmp(line, "pad") == 0)    /* auto, off, xinput, vvvv:pppp */
+            plat_pad_select(v);
         else if (strcmp(line, "hide_controls") == 0)
             PortHideControls = atoi(v) != 0;
         else if (strncmp(line, "key_", 4) == 0) {
@@ -726,7 +792,9 @@ static void hud_keys(void)
         lime_touch_ended(g_ktap_x, g_ktap_y, g_ktap_x, g_ktap_y);
 
     for (k = 0; k < 2; k++) {
-        int down = plat_key(PK_PAUSE + k);
+        /* the pad: start is P, select (Back / Share / Create) is M */
+        int down = plat_key(PK_PAUSE + k)
+                   || (g_pad.buttons & (1u << (k ? PB_SELECT : PB_START)));
         int hit = down && !was[k];
         float x = -1.0f, y = 10.0f;
 
@@ -1150,9 +1218,312 @@ int dbg_finishing(void)
  * the mercy and friendship conditions). */
 void DoASpecial(void *obj, unsigned int which);
 
+/* ------------------------------------------------- debug tools (port only)
+ *
+ * Save states: runtime/savestate.c holds the copies; here is when they are
+ * allowed and what has to follow a load -- the voices were reading sounds
+ * the state put back, and the tune has to be the state's. In the menus and
+ * in a fight, not while something loads. */
+void limeRestartPlayTune(void);
+
+int dbg_state_can_save(void)
+{
+    return st_available() && (CurrentTask == 3 || CurrentTask == 6);
+}
+
+int dbg_state_has(int slot)
+{
+    return st_has(slot);
+}
+
+static void state_save(int slot)
+{
+    const char *why;
+
+    if (!dbg_state_can_save()) {
+        printf("debug: state %d not saved (%s)\n", slot + 1,
+               st_available() ? "only in a fight or the menus"
+                              : "save states are off");
+        return;
+    }
+    if (st_save(slot, &why) == 0)
+        printf("debug: state %d saved, %.1f MB\n", slot + 1,
+               st_size(slot) / 1048576.0);
+    else
+        printf("debug: state %d not saved (%s)\n", slot + 1, why);
+}
+
+static void state_load(int slot)
+{
+    const char *why;
+
+    if (st_load(slot, &why) != 0) {
+        printf("debug: state %d not loaded (%s)\n", slot + 1, why);
+        return;
+    }
+    plat_audio_stop_all();
+    plat_music_stop();
+    limeRestartPlayTune();
+    printf("debug: state %d loaded, task %d\n", slot + 1, CurrentTask);
+}
+
+/* Hitboxes: the boxes the fight engine itself tests, in its own arcade
+ * coordinates (x right, y down, 64 to a world unit), drawn into the 3D
+ * scene at the fighters' depth: x/64 plus or minus the character's
+ * posOffsetX by facing (PlayerDefs, the character at +0x24 of the object),
+ * as ArcadePosTo3dPos does, and up from the engine's floor, (floor - y)/64.
+ *
+ *   - Each fighter's body: the extents of its current frame (+0x34 left,
+ *     +0x3c right, +0x38 top, +0x40 bottom, from x +0x0e and y +0x12,
+ *     mirrored by bit 0x10 of +0x28), what leftmost/rightmost/highest/
+ *     lowest_mpart_ob read for a strike. Player one blue, player two green.
+ *   - Every strike strike_check_regs tests (PortStrikeHook): the attack's
+ *     box red, and the target's box as squeezed for that test (cbox_squeeze)
+ *     yellow; both white when they met. Shown for a third of a second. */
+struct hb_box { int32_t l, t, r, b; };
+struct hb_off { float dx, dz; };        /* arcade -> world, per character */
+static struct {
+    struct hb_box atk, tgt;
+    struct hb_off atk_off, tgt_off;
+    long tick;
+    int hit;
+} g_hb[24];
+static int g_hb_next;
+
+/* PlayerDefs' entry as the host lays it out (GameCode.c's PLAYERDEF). */
+struct hb_def {
+    long id;
+    float scale, posOffsetX, height, renderOffsetX, renderOffsetZ;
+    const char *names[7];
+};
+extern const struct hb_def PlayerDefs[26];
+
+static struct hb_off hb_offset(const char *o)
+{
+    struct hb_off f = { 0.0f, 0.0f };
+    uint32_t c;
+
+    /* the engine's floor (G +0xac, RoundParam[2] + 0xf7 in mk3_update)
+     * is the arena's ground, z 0: the models' own height would put the
+     * boxes a body lower */
+    f.dz = G ? *(const int32_t *)((const char *)G + 0xac) / 64.0f : 0.0f;
+    if (!o)
+        return f;
+    c = *(const uint32_t *)(o + 0x24);
+    if (c >= 26)
+        return f;
+    f.dx = (*(const uint32_t *)(o + 0x28) & 0x10) ? -PlayerDefs[c].posOffsetX
+                                                 : PlayerDefs[c].posOffsetX;
+    return f;
+}
+
+/* A strike's boxes: from the floor, without a character's posOffsetX (at
+ * most 0.24 of a unit, 15 arcade pixels) -- the hook does not say whose. */
+static void hb_strike(const void *attack, const void *target, long hit)
+{
+    g_hb[g_hb_next].atk = *(const struct hb_box *)attack;
+    g_hb[g_hb_next].tgt = *(const struct hb_box *)target;
+    g_hb[g_hb_next].atk_off = hb_offset(NULL);
+    g_hb[g_hb_next].tgt_off = hb_offset(NULL);
+    g_hb[g_hb_next].tick = g_tick;
+    g_hb[g_hb_next].hit = hit != 0;
+    g_hb_next = (g_hb_next + 1) % (int)(sizeof g_hb / sizeof g_hb[0]);
+}
+
+static void hb_draw_box(struct hb_box b, struct hb_off f, float depth,
+                        float r, float g, float bl, int fill)
+{
+    float v[12];
+    float x0 = b.l / 64.0f + f.dx, x1 = b.r / 64.0f + f.dx;
+    float z0 = -b.t / 64.0f + f.dz, z1 = -b.b / 64.0f + f.dz;
+
+    v[0] = x0; v[1] = depth; v[2]  = z0;
+    v[3] = x1; v[4] = depth; v[5]  = z0;
+    v[6] = x1; v[7] = depth; v[8]  = z1;
+    v[9] = x0; v[10] = depth; v[11] = z1;
+    glVertexPointer(3, GL_FLOAT, 0, v);
+    if (fill) {
+        glColor4f(r, g, bl, 0.22f);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+    }
+    glColor4f(r, g, bl, 1.0f);
+    glDrawArrays(GL_LINE_LOOP, 0, 4);
+}
+
+static struct hb_box hb_body(const char *o)
+{
+    struct hb_box b;
+    int32_t x = *(const int16_t *)(o + 0x0e), y = *(const int16_t *)(o + 0x12);
+    int32_t l = *(const int32_t *)(o + 0x34), r = *(const int32_t *)(o + 0x3c);
+
+    if (*(const uint32_t *)(o + 0x28) & 0x10) {     /* facing left */
+        b.l = x - r;
+        b.r = x - l;
+    } else {
+        b.l = x + l;
+        b.r = x + r;
+    }
+    b.t = y + *(const int32_t *)(o + 0x38);
+    b.b = y + *(const int32_t *)(o + 0x40);
+    return b;
+}
+
+static void hb_draw(void)
+{
+    extern unsigned char PlayerZPos[4];
+    static const GLenum arrays[3] = {
+        GL_TEXTURE_COORD_ARRAY, GL_COLOR_ARRAY, GL_NORMAL_ARRAY
+    };
+    GLint was[3], vert;
+    float depth;
+    int i;
+
+    if (CurrentTask != 6 || !G)
+        return;
+    memcpy(&depth, PlayerZPos, 4);
+    depth -= 0.5f;                      /* in front of the fighters */
+
+    glPushAttrib(GL_ALL_ATTRIB_BITS);
+    for (i = 0; i < 3; i++) {
+        glGetIntegerv(arrays[i], &was[i]);
+        glDisableClientState(arrays[i]);
+    }
+    glGetIntegerv(GL_VERTEX_ARRAY, &vert);
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glDisable(GL_TEXTURE_2D);
+    glDisable(GL_LIGHTING);
+    glDisable(GL_FOG);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_ALPHA_TEST);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glLineWidth(2.0f);
+
+    for (i = 0; i < 2; i++) {
+        const char *o = *(const char *const *)((const char *)G
+                                               + (i ? 0x214 : 0xbc));
+        if (o)
+            hb_draw_box(hb_body(o), hb_offset(o), depth, i ? 0.2f : 0.25f,
+                        i ? 1.0f : 0.55f, i ? 0.3f : 1.0f, 1);
+    }
+    for (i = 0; i < (int)(sizeof g_hb / sizeof g_hb[0]); i++) {
+        if (g_hb[i].tick == 0 || g_tick - g_hb[i].tick > 20)
+            continue;
+        if (g_hb[i].hit) {
+            hb_draw_box(g_hb[i].tgt, g_hb[i].tgt_off, depth - 0.1f,
+                        1.0f, 1.0f, 1.0f, 0);
+            hb_draw_box(g_hb[i].atk, g_hb[i].atk_off, depth - 0.2f,
+                        1.0f, 1.0f, 1.0f, 1);
+        } else {
+            hb_draw_box(g_hb[i].tgt, g_hb[i].tgt_off, depth - 0.1f,
+                        1.0f, 0.9f, 0.1f, 0);
+            hb_draw_box(g_hb[i].atk, g_hb[i].atk_off, depth - 0.2f,
+                        1.0f, 0.15f, 0.15f, 1);
+        }
+    }
+
+    for (i = 0; i < 3; i++)
+        if (was[i])
+            glEnableClientState(arrays[i]);
+    if (!vert)
+        glDisableClientState(GL_VERTEX_ARRAY);
+    glPopAttrib();
+}
+
+/* The select screen's colour picker (PortPalette, FrontEnd.c) survives a
+ * restart, and so does the palette an Arcade ladder began with
+ * (PortArcadePalette), for a ladder continued later: "p1 p2 arcade" in
+ * save/palette.txt, read at start, written whenever one changes. A scripted
+ * run neither reads nor writes it, unless UMK3_SAVE_DIR points it
+ * elsewhere. Port only. */
+extern int PortPalette[2], PortArcadePalette;
+void port_save_path(char *out, size_t n, const char *file);
+
+static int palette_scripted(void)
+{
+    return (getenv("UMK3_SHOT") || getenv("UMK3_SHOTS"))
+           && !getenv("UMK3_SAVE_DIR");
+}
+
+static void palette_load(void)
+{
+    char path[1100];
+    FILE *f;
+    int a = 0, b = 0, c = 0;
+
+    if (palette_scripted())
+        return;
+    port_save_path(path, sizeof path, "palette.txt");
+    f = fopen(path, "r");
+    if (!f)
+        return;
+    if (fscanf(f, "%d %d %d", &a, &b, &c) >= 2) {
+        PortPalette[0] = (a == 1 || a == 2) ? a : 0;
+        PortPalette[1] = (b == 1 || b == 2) ? b : 0;
+        PortArcadePalette = (c == 1 || c == 2) ? c : 0;
+    }
+    fclose(f);
+}
+
+static void palette_sync(void)
+{
+    static int last[3], init;
+    char path[1100];
+    FILE *f;
+
+    if (palette_scripted())
+        return;
+    if (init && last[0] == PortPalette[0] && last[1] == PortPalette[1]
+        && last[2] == PortArcadePalette)
+        return;
+    init = 1;
+    last[0] = PortPalette[0];
+    last[1] = PortPalette[1];
+    last[2] = PortArcadePalette;
+    port_save_path(path, sizeof path, "palette.txt");
+    f = fopen(path, "w");
+    if (f) {
+        fprintf(f, "%d %d %d\n", PortPalette[0], PortPalette[1],
+                PortArcadePalette);
+        fclose(f);
+    }
+}
+
+/* On every tick: the hooks on while HITBOXES is (or UMK3_DBG_HITBOX=1). */
+
+static void hb_update(void)
+{
+    extern void (*PortAfterScene)(void);
+    extern void (*PortStrikeHook)(const void *, const void *, long);
+    int on = (g_cfg_debug_keys && dbg_hitboxes_on())
+             || getenv("UMK3_DBG_HITBOX");
+
+    PortAfterScene = on ? hb_draw : NULL;
+    PortStrikeHook = on ? hb_strike : NULL;
+}
+
+/* The fight's speed, from FIGHT SPEED (or UMK3_DBG_SPEED=<percent>): the
+ * clock that feeds the ticks runs that much faster or slower. */
+static double fight_speed(void)
+{
+    int pct = getenv("UMK3_DBG_SPEED") ? atoi(getenv("UMK3_DBG_SPEED"))
+            : g_cfg_debug_keys ? dbg_speed_percent() : 100;
+
+    if (CurrentTask != 6 || dbg_menu_is_open() || pct <= 0)
+        return 1.0;
+    return pct / 100.0;
+}
+
 static void debug_request(const struct dbg_request *rq)
 {
     switch (rq->what) {
+    case DBG_SAVE_STATE:
+        state_save(rq->a);
+        break;
+    case DBG_LOAD_STATE:
+        state_load(rq->a);
+        break;
     case DBG_FINISHER:
         if (!dbg_finishing())
             break;
@@ -1185,6 +1556,7 @@ static void debug_request(const struct dbg_request *rq)
          * its own path. Elsewhere: that rung, and the tower again. */
         if (!dbg_in_arcade())
             break;
+        g_dbg_saved.keep = 1;           /* the climb is the point */
         if (CurrentTask == 6) {
             Stage = Destiny + (rq->a == 24 ? 6 : 7) - 1;
             if (dbg_round_live())
@@ -1298,6 +1670,12 @@ int main(int argc, char **argv)
     double last, acc = 0.0;
 
     setvbuf(stdout, NULL, _IONBF, 0);
+    /* --list-pads: the pads attached, one "pad=value<TAB>name" a line, and
+     * out -- the launcher's CONTROLS > GAMEPAD list comes from here */
+    if (argc > 1 && strcmp(argv[1], "--list-pads") == 0) {
+        plat_pad_list();
+        return 0;
+    }
 #ifdef _WIN32
     /* No argument: `res` beside the exe, wherever it was started from, so a
      * double-click in the game folder just works. */
@@ -1344,12 +1722,15 @@ int main(int argc, char **argv)
         g_cfg_debug_keys = 1;
     if (getenv("UMK3_SKIP_INTRO"))
         g_cfg_skip_intro = 1;
+    if (getenv("UMK3_PAD"))             /* over umk3.ini's pad= */
+        plat_pad_select(getenv("UMK3_PAD"));
     if (getenv("UMK3_BUTTONS"))         /* 5 or 6, over umk3.ini's buttons= */
         g_cfg_buttons = atoi(getenv("UMK3_BUTTONS"));
     g_keys_off = shot_at != 0;
     if (getenv("UMK3_SCREEN"))
         g_screen_jump = parse_screen(getenv("UMK3_SCREEN"));
     parse_taps(getenv("UMK3_TAPS"));
+    palette_load();
     {
         int i;
         for (i = 1; i < argc; i++)
@@ -1455,7 +1836,7 @@ int main(int argc, char **argv)
             double now = plat_time(), dt = now - last;
             if (dt > 1.0 / 60.0 - 0.002 && dt < 1.0 / 60.0 + 0.002)
                 dt = 1.0 / 60.0;
-            acc += dt;
+            acc += dt * fight_speed();  /* the debug menu's FIGHT SPEED */
             last = now;
         }
         if (acc > 0.25)
@@ -1546,6 +1927,22 @@ int main(int argc, char **argv)
                         q++;
                 }
             }
+            if (g_cfg_debug_keys && getenv("UMK3_DBG_STATE")) {
+                /* "tick:s1;tick:l1" -- save / load state slot 1..4 */
+                const char *q = getenv("UMK3_DBG_STATE");
+                while (q && *q) {
+                    const char *c = strchr(q, ':');
+                    if (atol(q) == ticks && c && (c[1] == 's' || c[1] == 'l')) {
+                        if (c[1] == 's')
+                            state_save(atoi(c + 2) - 1);
+                        else
+                            state_load(atoi(c + 2) - 1);
+                    }
+                    q = strchr(q, ';');
+                    if (q)
+                        q++;
+                }
+            }
             if (g_cfg_debug_keys && getenv("UMK3_DBG_KEY")) {
                 /* "tick:k;tick:k" -- F9..F12 (k = 0..3) pressed by script */
                 const char *q = getenv("UMK3_DBG_KEY");
@@ -1557,9 +1954,31 @@ int main(int argc, char **argv)
                         q++;
                 }
             }
+            /* a script ignores the pad too, unless UMK3_LOG_PAD asks to
+             * watch it */
+            if (!g_keys_off || getenv("UMK3_LOG_PAD")) {
+                static int was_on = -1;
+                static unsigned was_b;
+
+                plat_pad_read(&g_pad);
+                if (g_pad.connected != was_on)
+                    printf(g_pad.connected ? "pad: %s\n" : "pad: none\n",
+                           g_pad.name);
+                if (getenv("UMK3_LOG_PAD") && g_pad.buttons != was_b)
+                    printf("pad buttons %04x dirs %d%d%d%d\n", g_pad.buttons,
+                           g_pad.up, g_pad.down, g_pad.left, g_pad.right);
+                was_on = g_pad.connected;
+                was_b = g_pad.buttons;
+            }
             if (g_cfg_debug_keys) {
                 static int was_f2, was_f3;
-                int f2 = plat_key(PK_TEST), f3 = plat_key(PK_BACK);
+                /* the pad's combination (pad_dbg_menu=, L3+R3 unless the
+                 * launcher set another) opens and closes the menu too */
+                int f2 = plat_key(PK_TEST)
+                         || (g_pad_dbg_mask
+                             && (g_pad.buttons & g_pad_dbg_mask)
+                                == g_pad_dbg_mask),
+                    f3 = plat_key(PK_BACK);
                 if (f2 && !was_f2)
                     dbg_menu_toggle();
                 if (f3 && !was_f3 && dbg_keys_on())
@@ -1573,6 +1992,7 @@ int main(int argc, char **argv)
                 /* glClear ignores the viewport: this cleared the whole
                  * window and the frame picture with it */
                 clear_frame(ww, wh, vx, vy, vw, vh);
+                dbg_menu_pad(&g_pad);
                 if (dbg_menu_tick(&rq))
                     debug_request(&rq);
                 dbg_menu_draw();
@@ -1594,6 +2014,8 @@ int main(int argc, char **argv)
             }
 
             clear_frame(ww, wh, vx, vy, vw, vh);
+            hb_update();
+            palette_sync();
             lime_menu_advance_clock(1.0 / 60.0);
             keyboard_buttons();
             hud_keys();
@@ -1654,6 +2076,20 @@ int main(int argc, char **argv)
                     goto no_fight_yet;  /* the front end's first frames */
             }
             if (g_fight_p1 >= 0 && CurrentTask == 3) {
+                if (!g_dbg_saved.on) {
+                    g_dbg_saved.c1 = Character1;
+                    g_dbg_saved.c2 = Character2;
+                    g_dbg_saved.m1 = PLAYER1MODEL;
+                    g_dbg_saved.m2 = PLAYER2MODEL;
+                    g_dbg_saved.level = LevelSelect;
+                    g_dbg_saved.mode = GameMode;
+                    g_dbg_saved.destiny = Destiny;
+                    g_dbg_saved.stage = Stage;
+                    g_dbg_saved.on = 1;
+                    g_dbg_saved.keep = getenv("UMK3_ARCADE") != NULL;
+                }
+                g_dbg_saved.fought = 0;
+                DbgFightActive = 1;
                 PLAYER1MODEL = Character1 = g_fight_p1;
                 PLAYER2MODEL = Character2 = Character2Override = g_fight_p2;
                 LevelSelect = g_fight_stage;
@@ -1680,6 +2116,27 @@ int main(int argc, char **argv)
             if (g_fight_override && CurrentTask == 6) {
                 Character2Override = -1;
                 g_fight_override = 0;
+            }
+            if (g_dbg_saved.on && CurrentTask == 6)
+                g_dbg_saved.fought = 1;
+            if (g_dbg_saved.on && g_dbg_saved.fought && CurrentTask == 3
+                && g_fight_p1 < 0) {
+                if (!g_dbg_saved.keep) {
+                    Character1 = g_dbg_saved.c1;
+                    Character2 = g_dbg_saved.c2;
+                    PLAYER1MODEL = g_dbg_saved.m1;
+                    PLAYER2MODEL = g_dbg_saved.m2;
+                    LevelSelect = g_dbg_saved.level;
+                    GameMode = g_dbg_saved.mode;
+                    Destiny = g_dbg_saved.destiny;
+                    Stage = g_dbg_saved.stage;
+                    printf("debug: fight over, %s vs %s and the mode put back\n",
+                           CharacterNames[Character1 % 26],
+                           CharacterNames[Character2 % 26]);
+                }
+                g_dbg_saved.on = 0;
+                DbgFightActive = 0;
+                DbgPalette[0] = DbgPalette[1] = 0;      /* back to AUTO */
             }
         no_fight_yet:
             if (getenv("UMK3_SCREENS")) {

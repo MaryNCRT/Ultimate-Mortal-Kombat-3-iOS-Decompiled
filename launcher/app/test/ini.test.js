@@ -105,3 +105,16 @@ test('gameReady only when exe and Info.plist exist', () => {
     fs.writeFileSync(path.join(dir, 'res', 'Info.plist'), 'x');
     assert.equal(ini.gameReady(dir), true);
 });
+test('pad= round-trips and rejects junk', () => {
+    const p = tmpIni();
+    const c = ini.defaultConfig();
+    assert.equal(c.pad, 'auto');
+    c.pad = '054c:0ce6';
+    c.padName = 'DualSense Wireless Controller';
+    ini.save(p, c);
+    const back = ini.load(p);
+    assert.equal(back.pad, '054c:0ce6');
+    assert.equal(back.padName, 'DualSense Wireless Controller');
+    fs.writeFileSync(p, 'pad=evil;rm\n');
+    assert.equal(ini.load(p).pad, 'auto');
+});

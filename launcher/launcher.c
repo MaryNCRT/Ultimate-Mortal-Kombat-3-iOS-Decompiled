@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <wchar.h>
 
-#define VERSION L"0.0.8 alpha"
+#define VERSION L"0.0.9 alpha"
 
 enum { ID_IPA = 100, ID_BROWSE, ID_BUILD, ID_RES, ID_FULL, ID_LANG, ID_PLAY,
        ID_STATUS, ID_UILANG, ID_KEYRESET, ID_DEBUG, ID_KEY0 = 200 };

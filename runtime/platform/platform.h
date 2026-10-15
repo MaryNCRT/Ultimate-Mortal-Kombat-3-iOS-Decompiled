@@ -149,6 +149,39 @@ void plat_bind_key(int code, int key);
  * BL, HK, LK, RUN. */
 int plat_pad(int which);
 
+/* The pad player one plays with, in one layout whatever the make: the face
+ * buttons by POSITION (south = Xbox A / PlayStation cross / Switch B), the
+ * shoulders, the triggers, select (Back / Share / Create / minus), start
+ * (Start / Options / plus), the stick clicks and the home button. The d-pad
+ * and the left stick both give the four directions. Port only. */
+enum {
+    PB_SOUTH, PB_EAST, PB_WEST, PB_NORTH,
+    PB_L1, PB_R1, PB_L2, PB_R2,
+    PB_SELECT, PB_START, PB_L3, PB_R3, PB_HOME,
+    PB_COUNT
+};
+
+typedef struct {
+    int      connected;
+    int      up, down, left, right;
+    unsigned buttons;                   /* 1 << PB_* */
+    char     name[64];                  /* as the system names the pad */
+} PLAT_PAD;
+
+/* Which pad: "auto" (the first one found, XInput first), "off", "xinput"
+ * (an Xbox pad or anything shown as one), or "vvvv:pppp", the USB vendor
+ * and product in hex, for one particular pad (PlayStation, Switch, any
+ * DirectInput pad). umk3.ini's pad= line, written by the launcher. */
+void plat_pad_select(const char *which);
+
+/* Player one's pad right now; 0 (and out->connected 0) when there is none. */
+int plat_pad_read(PLAT_PAD *out);
+
+/* Print every pad attached now, one line each: the pad= value, a tab, the
+ * name the system gives it. For `umk3-game --list-pads`, which the launcher
+ * runs to fill its list. */
+void plat_pad_list(void);
+
 
 /* ------------------------------------------------------------------ audio
  *
@@ -187,6 +220,8 @@ int  plat_audio_play_at(const unsigned char *pcm, int frames, int rate,
 
 /* Stop every voice still playing from `pcm`, before the caller frees it. */
 void plat_audio_stop_pcm(const unsigned char *pcm);
+/* Every voice off (a save state was loaded). */
+void plat_audio_stop_all(void);
 
 /* Reclaim finished one-shot sound buffers. Call once a frame. */
 void plat_audio_update(void);

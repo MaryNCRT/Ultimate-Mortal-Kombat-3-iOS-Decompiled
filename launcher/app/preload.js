@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('umk3', {
     startBuild: ipa => ipcRenderer.invoke('build:start', ipa),
     cancelBuild: () => ipcRenderer.invoke('build:cancel'),
     play: () => ipcRenderer.invoke('play'),
+    listPads: () => ipcRenderer.invoke('pads:list'),
     close: () => ipcRenderer.invoke('window:close'),
     minimize: () => ipcRenderer.invoke('window:minimize'),
     maximize: () => ipcRenderer.invoke('window:maximize'),

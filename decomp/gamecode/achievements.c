@@ -336,10 +336,10 @@ int achievementsUnlock(int id)
 
 
 /* `_kodes` -- 0x00176c04, 32 bytes an entry, terminated by -1 in word 0.
- * Six words compared, word 6 unread here, word 7 the payload. */
+ * Six words compared, word 6 the text drawKodeTip shows, word 7 the payload. */
 typedef struct KODE {
     long seq[6];                        /* 0x00 .. 0x14 */
-    long unused;                        /* 0x18, never read by checkIfKode */
+    long text;                          /* 0x18, GameText id: drawKodeTip */
     long value;                         /* 0x1c */
 } KODE;
 
@@ -627,6 +627,7 @@ extern float FE_HeightScale;            /* 0x000ff9bc */
 typedef struct TEXTURE TEXTURE;
 
 void *limeLoadTexture(const char *name, long a, long b);
+void  limeDeleteTexture(TEXTURE *tex);
 void  limeDrawSprite(TEXTURE *tex, float x, float y, float w, float h,
                      float u0, float v0, float u1, float v1, long *colour);
 
@@ -659,23 +660,31 @@ void  limeDrawSprite(TEXTURE *tex, float x, float y, float w, float h,
  * So a kode symbol is a **number 0..9** and the atlas holds ten glyphs. That is
  * the alphabet of the kode screen.
  *
- * The glyphs step 32 apart horizontally, and the second row is offset by
- * `+0x74` -- 116 -- from the first.
+ * The glyphs are **one row of six**, 32 wide and 32 apart, at y = 160: the
+ * loop runs x = 0x86, 0xa6, 0xc6 and draws two glyphs each pass, seq[i] at x
+ * and seq[i + 3] at x + 0x74 (`add.w r3, r4, #0x74` feeds the X register of
+ * the second limeDrawSprite; both calls take the same 160 * FE_HeightScale
+ * as Y). So player one's three sit at 134..230 and player two's at 250..346,
+ * a 20-pixel gap between them, centred on 240 like the text. The earlier
+ * transcription put the +0x74 on Y, and the second three drew a row lower,
+ * over the loading screen's own text.
  *
- * ### It reloads the texture every single call
+ * ### Three lines of text
+ *
+ *      GameText(0x363)            at (240, 116)
+ *      GameText(0x364)            at (240, 132)
+ *      GameText(kodes[i].text)    at (240, 202)   after the glyphs
+ *
+ * all centred (align 1), scaled by FE_WidthScale / FE_HeightScale. The third
+ * is word 6 of the kode's entry -- what the kode does -- and was missing.
+ *
+ * ### The texture is loaded and deleted every call
  *
  *      KodesTexture = limeLoadTexture("KOMBAT_KODES_TPAGE.PNG", 0, 0);
+ *      ...
+ *      limeDeleteTexture(KodesTexture);        ; the last call
  *
- * unconditionally, at the top of every frame this tip is on screen, and the
- * previous handle is overwritten without being freed. `drawLoadingBackground`
- * does a defensive reload too, but only when its handle is NULL; this one does
- * not check. Whether `limeLoadTexture` caches by name is not established here,
- * and if it does not this leaks a texture per frame.
- *
- * That is worth flagging rather than reproducing: a port should load it once.
- *
- * The two labels are `GameText(0x363)` and `GameText(0x364)`, at 240 and 132
- * scaled, with the usual `FE_WidthScale` / `FE_HeightScale` pair.
+ * So nothing leaks; the port's limeDeleteTexture keeps its cache anyway.
  */
 void drawKodeTip(long index)
 {
@@ -700,21 +709,26 @@ void drawKodeTip(long index)
                  240.0f * FE_WidthScale, 132.0f * FE_HeightScale,
                  1, FE_WidthScale, fontcolP);
 
-    /* reloaded every call, and the old handle is dropped -- see above */
+    /* loaded here and deleted at the end, every call -- see above */
     KodesTexture = limeLoadTexture("KOMBAT_KODES_TPAGE.PNG", 0, 0);
 
     for (i = 0; i < 6; i++) {
         long v   = seq[i];
         long col = v % 5;               /* magic 0x66666667, shift 1 */
         long row = v / 5;
-        float x  = (float)(0x86 + (i % 3) * 0x20);
-        float y  = (i < 3) ? 160.0f : 160.0f + 116.0f;
+        float x  = (float)(0x86 + (i % 3) * 0x20 + (i < 3 ? 0 : 0x74));
 
         limeDrawSprite((TEXTURE *)KodesTexture,
-                       x * FE_WidthScale, y * FE_HeightScale,
+                       x * FE_WidthScale, 160.0f * FE_HeightScale,
                        32.0f * FE_WidthScale, 32.0f * FE_HeightScale,
                        (float)((double)(col * 48) * 0.00390625),   /* 1/256 */
                        (float)((double)(row * 48) * 0.0078125),    /* 1/128 */
                        0.1875f, 0.375f, (long *)white);
     }
+
+    limeDrawFONT(GameFont, GameText(kodes[index].text),
+                 240.0f * FE_WidthScale, 202.0f * FE_HeightScale,
+                 1, FE_WidthScale, fontcolP);
+
+    limeDeleteTexture((TEXTURE *)KodesTexture);
 }

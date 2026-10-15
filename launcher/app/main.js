@@ -289,6 +289,26 @@ ipcMain.handle('build:start', async (_ev, ipa) => {
 
 ipcMain.handle('build:cancel', () => bld.cancelBuild());
 
+/* The pads Windows has attached, by name: `umk3-game --list-pads` prints one
+ * "pad=value<TAB>name" a line (the game's own search, WinMM and XInput).
+ * Empty before the game is compiled. */
+ipcMain.handle('pads:list', () => new Promise(resolve => {
+    const exe = path.join(g_root, 'umk3-game.exe');
+    if (!fs.existsSync(exe))
+        return resolve([]);
+    require('child_process').execFile(exe, ['--list-pads'],
+        { cwd: g_root, timeout: 10000, windowsHide: true }, (err, out) => {
+            const pads = [];
+            for (const line of String(out || '').split(/\r?\n/)) {
+                const tab = line.indexOf('\t');
+                const value = line.slice(0, tab).trim().toLowerCase();
+                if (tab > 0 && /^(xinput|[0-9a-f]{4}:[0-9a-f]{4})$/.test(value))
+                    pads.push({ value, name: line.slice(tab + 1).trim() });
+            }
+            resolve(pads);
+        });
+}));
+
 ipcMain.handle('play', () => {
     if (!ini.gameReady(g_root))
         return { ok: false };

@@ -111,6 +111,12 @@ void plat_audio_stop_pcm(const unsigned char *pcm)
     (void)pcm;
 }
 
+void plat_audio_stop_all(void)
+{
+    if (g_open)
+        Mix_HaltChannel(-1);
+}
+
 int plat_audio_play_at(const unsigned char *pcm, int frames, int rate, float gain)
 {
     SDL_AudioCVT cvt;
