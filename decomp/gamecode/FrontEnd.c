@@ -5392,6 +5392,31 @@ extern const char *DestinyNames[];        /* 0x00176760, 108 bytes */
 
 int  sprintf(char *dst, const char *fmt, ...);
 
+
+/* Port, not in the binary: the ULTIMATE strip of the continue and game over
+ * screens (GameOverTopTexture) on 16:9. The device spreads the sheet's top
+ * 0.75 over the whole screen, each texel a little flatter than wide; 16:9
+ * widened it further and the logo came out stretched (Mary). There the
+ * sheet keeps the 3:2 screen's proportions -- the full width, each texel
+ * as tall against its width as on 3:2 -- and the rows that no longer fit
+ * are cut at the bottom, under the lower sheet. Other shapes draw it as the
+ * device did. */
+static void PortDrawGameOverTop(const float *col)
+{
+    float W = (float)limeScreenWidth, H = (float)limeScreenHeight;
+    float a = W / H, dv = 0.75f;
+
+    if (PortWideMenus && a > 1.7f && a < 1.8f) {
+        /* on 3:2 a texel is 480/1024 wide and 320/768 tall: 0.8889 */
+        float row = (W / 1024.0f) * ((320.0f / 768.0f) / (480.0f / 1024.0f));
+        dv = (H / row) / 1024.0f;
+        if (dv > 0.75f)
+            dv = 0.75f;
+    }
+    limeDrawSprite((TEXTURE *)GameOverTopTexture, 0.0f, 0.0f, W, H,
+                   0.0f, 0.0f, 1.0f, dv, col);
+}
+
 /* TWO arguments -- see the note in GameCode.c. Every call site loads r0 with
  * Destiny and r1 with Stage; achievements.c decompiles the callee as
  * getStageName(int tier, int index). */
@@ -5412,9 +5437,7 @@ void FE_Task_Continue_Screen(void)
                  (float)limeScreenWidth, (float)limeScreenHeight,
                  0.0f, 0.0f, 0.0f, 1.0f);
 
-    limeDrawSprite((TEXTURE *)GameOverTopTexture, 0.0f, 0.0f,
-                   (float)limeScreenWidth, (float)limeScreenHeight,
-                   0.0f, 0.0f, 1.0f, 0.75f, col);
+    PortDrawGameOverTop(col);
 
     limeDrawSprite((TEXTURE *)GameOverBottomTexture,
                    0.0f, (float)FE_Y(143.0f),
@@ -7599,9 +7622,7 @@ void FE_Task_Single_Player(void)
                  (float)limeScreenWidth, (float)limeScreenHeight,
                  0.0f, 0.0f, 0.0f, 1.0f);
 
-    limeDrawSprite((TEXTURE *)GameOverTopTexture, 0.0f, 0.0f,
-                   (float)limeScreenWidth, (float)limeScreenHeight,
-                   0.0f, 0.0f, 1.0f, 0.75f, col);
+    PortDrawGameOverTop(col);
     limeDrawSprite((TEXTURE *)GameOverBottomTexture, 0.0f, FE_Y(143.0f),
                    (float)limeScreenWidth, (float)limeScreenHeight,
                    0.0f, 0.0f, 1.0f, 0.75f, col);
