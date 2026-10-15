@@ -125,6 +125,13 @@ void plat_quit(void)
     g_quit = true;
 }
 
+unsigned char *plat_ui_badge(const char *name, const unsigned char *icon,
+                             int icon_px, float s, int *w, int *h)
+{
+    (void)name; (void)icon; (void)icon_px; (void)s; (void)w; (void)h;
+    return NULL;
+}
+
 /* No typed text in the SDL backend yet: profile names come from the
  * launcher there. */
 int plat_text_take(char *out, int n)

@@ -13,6 +13,8 @@ void set_menu_mouse(float x, float y, int down);
 void set_menu_pads(const PLAT_PAD *p1, const PLAT_PAD *p2);
 void set_menu_tick(void);
 void set_menu_draw(void);
+/* the player's badge (name and icon), bottom right of the main menu */
+void set_menu_badge(void);
 /* How the menu reads a key; game_main.c points it at its own reader so a
  * scripted test (UMK3_KEYS) reaches the menu. */
 extern int (*set_menu_key)(int code);

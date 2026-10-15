@@ -5,11 +5,12 @@
  * profiles.ini, beside umk3.ini, is shared with the launcher (its
  * lib/profiles.js reads and writes the same line):
  *
- *     profile=7KQ2-9XMD-4TPA|MARY|18|3A8EE6
+ *     profile=7KQ2-9XMD-4TPA|MARY|18|3A8EE6|L
  *
  * One profile per installation: the id, the name (UTF-8, anything but "|"
  * and line breaks, up to 24 characters), the icon (a fighter 0..23) and the
- * colour (RRGGBB). The id is given once, the first time there is no
+ * colour (RRGGBB), and the gradient behind the fighter: L from white to
+ * the colour, D from black to it (absent: L). The id is given once, the first time there is no
  * profile -- 60 random bits from the system's cryptographic generator
  * (rand_s) as twelve Crockford base-32 digits -- and never changes: RESET
  * puts the name, icon and colour back and keeps it.
@@ -101,8 +102,8 @@ void prof_save(void)
     }
     fprintf(f, "; UMK3 player profile: the launcher and the game both edit this;\n");
     fprintf(f, "; the id belongs to this installation and never changes\n");
-    fprintf(f, "profile=%s|%s|%d|%06X\n", g_prof.id, g_prof.name, g_prof.icon,
-            g_prof.color & 0xffffff);
+    fprintf(f, "profile=%s|%s|%d|%06X|%c\n", g_prof.id, g_prof.name, g_prof.icon,
+            g_prof.color & 0xffffff, g_prof.dark ? 'D' : 'L');
     fclose(f);
 }
 
@@ -147,6 +148,8 @@ void prof_load(const char *ini_path, const char *default_name)
         if (g_prof.icon < 0 || g_prof.icon >= PROF_ICONS)
             g_prof.icon = DEF_ICON;
         g_prof.color = (unsigned)strtoul(fld[3], NULL, 16) & 0xffffff;
+        /* the fifth field, if any: the loop left v on it */
+        g_prof.dark = v && (*v == 'D' || *v == 'd');
         g_have = 1;
     }
     if (f)
@@ -157,6 +160,7 @@ void prof_load(const char *ini_path, const char *default_name)
         clean_name(g_prof.name, sizeof g_prof.name, default_name);
         g_prof.icon = DEF_ICON;
         g_prof.color = DEF_COLOR;
+        g_prof.dark = 0;
         g_have = 1;
         prof_save();
         printf("profiles: new profile %s\n", g_prof.id);
@@ -170,6 +174,7 @@ void prof_reset(const char *default_name)
     clean_name(g_prof.name, sizeof g_prof.name, default_name);
     g_prof.icon = DEF_ICON;
     g_prof.color = DEF_COLOR;
+    g_prof.dark = 0;
     prof_save();
 }
 
@@ -188,7 +193,7 @@ static float sd_round(float x, float y, float c, float h, float r)
     return sqrtf(ox * ox + oy * oy) + (in < 0 ? in : 0) - r;
 }
 
-unsigned char *prof_icon_rgba(int icon, unsigned color, int S)
+unsigned char *prof_icon_rgba(int icon, unsigned color, int dark, int S)
 {
     uint8_t *art = NULL;
     int aw = 0, ah = 0, x, y;
@@ -212,8 +217,10 @@ unsigned char *prof_icon_rgba(int icon, unsigned color, int S)
     c[1] = (float)((color >> 8) & 255);
     c[2] = (float)(color & 255);
     for (x = 0; x < 3; x++) {
-        top[x]  = c[x] + (255 - c[x]) * 0.55f;
-        bot[x]  = c[x] * 0.7f;
+        /* light: white into the colour, deeper at the bottom; dark: black
+         * into the colour, lighter at the bottom */
+        top[x]  = dark ? c[x] * 0.12f : c[x] + (255 - c[x]) * 0.55f;
+        bot[x]  = dark ? c[x] + (255 - c[x]) * 0.2f : c[x] * 0.7f;
         glow[x] = c[x] + (255 - c[x]) * 0.6f;
     }
 
@@ -261,7 +268,8 @@ unsigned char *prof_icon_rgba(int icon, unsigned color, int S)
               + (py / (S * 0.5f)) * (py / (S * 0.5f));
             if (e < 1.0f) {                     /* the gloss */
                 float edge = clampf((1.0f - sqrtf(e)) * S * 0.5f, 0, 1);
-                a = (0.55f + (0.04f - 0.55f) * clampf(py / (S * 0.5f), 0, 1)) * edge;
+                float g0 = dark ? 0.35f : 0.55f, g1 = dark ? 0.03f : 0.04f;
+                a = (g0 + (g1 - g0) * clampf(py / (S * 0.5f), 0, 1)) * edge;
                 for (i = 0; i < 3; i++)
                     col[i] += (255 - col[i]) * a;
             }

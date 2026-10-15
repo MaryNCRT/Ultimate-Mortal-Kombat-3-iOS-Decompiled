@@ -70,7 +70,7 @@ enum { PAGE_GFX, PAGE_KEYS, PAGE_PAD, PAGE_PROF, N_PAGES };
 enum {
     R_DISPLAY, R_RES, R_APPLY, R_RRES, R_AA, R_TEXQ, R_ASPECT, R_UI, R_HIDE,
     R_PLAYER, R_LAYOUT, R_KEY, R_KRESET, R_DEVICE, R_PADB, R_PRESET,
-    R_PNAME, R_PICON, R_PCOLOR, R_PID, R_PRESET2,
+    R_PNAME, R_PICON, R_PCOLOR, R_PSHADE, R_PID, R_PRESET2,
     R_CLOSE, R_QUIT
 };
 
@@ -450,6 +450,9 @@ static void build(void)
             else
                 add(R_PCOLOR, 0, tx("COLOR DE FONDO", "BACKGROUND COLOUR"), "< #%06X >",
                     p->color);
+            add(R_PSHADE, 0, tx("DEGRADADO", "GRADIENT"), "< %s >",
+                p->dark ? tx("OSCURO (DESDE NEGRO)", "DARK (FROM BLACK)")
+                        : tx("CLARO (DESDE BLANCO)", "LIGHT (FROM WHITE)"));
             add(R_PID, 0, tx("ID DE JUGADOR", "PLAYER ID"), "%s", p->id);
             g_rows[g_n - 1].en = 0;     /* shown, not chosen */
             add(R_PRESET2, 0, tx("REINICIAR DATOS", "RESET DATA"), "%s",
@@ -467,7 +470,7 @@ static int has_value(int kind)
     switch (kind) {
     case R_DISPLAY: case R_RES: case R_RRES: case R_AA: case R_TEXQ:
     case R_ASPECT: case R_UI: case R_HIDE: case R_PLAYER: case R_LAYOUT:
-    case R_DEVICE: case R_PICON: case R_PCOLOR:
+    case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE:
         return 1;
     }
     return 0;
@@ -516,6 +519,12 @@ static void change(int kind, int d)
     case R_PICON:
         if (prof_get()) {
             prof_get()->icon = wrap(prof_get()->icon + d, PROF_ICONS);
+            prof_save();
+        }
+        return;
+    case R_PSHADE:
+        if (prof_get()) {
+            prof_get()->dark = !prof_get()->dark;
             prof_save();
         }
         return;
@@ -847,24 +856,59 @@ void set_menu_draw(void)
         snprintf(footer, sizeof footer, "%s %s   %s",
                  tx("FLECHAS O RATON", "ARROWS OR MOUSE"), k,
                  tx("CIERRA", "CLOSES"));
-    ui_menu_show(tx("AJUSTES", "SETTINGS"), tabs, N_PAGES, g_page, lp, vp,
-                 en, rows, g_sel - g_first, footer, &g_geo);
-    if (g_page == PAGE_PROF && prof_get()) {
-        /* the profile's icon, above the box (profiles.c draws it) */
-        const struct profile *p = prof_get();
-        int key = p->icon << 24 | (int)(p->color & 0xffffff);
-        float size = 56, top = g_geo.title0 - 28, y = top - size - 4;
+    {
+        /* on PROFILE the profile's icon goes beside the box, as big as the
+         * space leaves (up to 120 points), and the box moves right to make
+         * room for it */
+        float ow = g_geo.ow > 0 ? g_geo.ow : 480.0f;
+        float size = ow - 360.0f - 18.0f;
 
-        if (key != g_icon_key) {
-            unsigned char *px = prof_icon_rgba(p->icon, p->color, 128);
-            ui_icon_set(px, 128, 128);
-            free(px);
-            g_icon_key = key;
+        if (size > 120.0f)
+            size = 120.0f;
+        ui_menu_shift = (g_page == PAGE_PROF && prof_get() && size >= 40.0f)
+                        ? (size + 8.0f) * 0.5f : 0.0f;
+        ui_menu_show(tx("AJUSTES", "SETTINGS"), tabs, N_PAGES, g_page, lp, vp,
+                     en, rows, g_sel - g_first, footer, &g_geo);
+        if (ui_menu_shift > 0) {
+            const struct profile *p = prof_get();
+            int key = p->icon << 25 | p->dark << 24 | (int)(p->color & 0xffffff);
+            float x = g_geo.bx - 15.0f - 8.0f - size;
+            float y = g_geo.top;
+
+            if (key != g_icon_key) {
+                unsigned char *px = prof_icon_rgba(p->icon, p->color, p->dark, 256);
+                ui_icon_set(px, 256, 256);
+                free(px);
+                g_icon_key = key;
+            }
+            ui_icon_draw(x, y, size);
         }
-        if (y < 2)
-            y = 2;
-        ui_icon_draw((g_geo.ow - size) * 0.5f, y, size);
+        ui_menu_shift = 0.0f;
     }
+}
+
+/* The player's badge on the main menu (game_main.c calls it after the
+ * frame): the profile's icon and name, bottom right. */
+void set_menu_badge(void)
+{
+    static unsigned char *icon;
+    static int icon_key = -1;
+    const struct profile *p = prof_get();
+    unsigned key = 2166136261u;
+    const char *c;
+    int k;
+
+    if (!p)
+        return;
+    k = p->icon << 25 | p->dark << 24 | (int)(p->color & 0xffffff);
+    if (k != icon_key || !icon) {
+        free(icon);
+        icon = prof_icon_rgba(p->icon, p->color, p->dark, 96);
+        icon_key = k;
+    }
+    for (c = p->name; *c; c++)
+        key = (key ^ (unsigned char)*c) * 16777619u;
+    ui_badge(p->name, icon, 96, key ^ (unsigned)k);
 }
 
 /* ---------------------------------------------------------------- save

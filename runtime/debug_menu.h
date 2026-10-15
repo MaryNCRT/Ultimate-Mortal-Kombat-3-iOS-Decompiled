@@ -45,6 +45,11 @@ void ui_grab(int vx, int vy, int vw, int vh);
 /* a picture beside the box: uploaded once, drawn at (x, y), size points */
 void ui_icon_set(const unsigned char *rgba, int w, int h);
 void ui_icon_draw(float x, float y, float size);
+/* the player's badge, bottom right; rebuilt when `key` changes */
+void ui_badge(const char *name, const unsigned char *icon, int icon_px,
+              unsigned key);
+/* points the box is moved right by (a picture beside it), 0 centred */
+extern float ui_menu_shift;
 void ui_menu_show(const char *title, const char *const *tabs, int ntabs,
                   int page, const char *const *label,
                   const char *const *value, const int *enabled, int rows,

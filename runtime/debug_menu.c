@@ -648,6 +648,10 @@ static void footer_text(char *f, size_t n)
              p, q, c);
 }
 
+/* Points the next boxes are moved right by, for a picture beside them
+ * (the settings menu's profile icon); 0 centres them. */
+float ui_menu_shift;
+
 /* Any menu box over the frozen frame: the debug menu's and the settings
  * menu's (settings_menu.c). In the iPhone OS 3 alert dress the in-game
  * alerts wear (plat_ui_menu, runtime/platform/win32_gl.c), drawn at the
@@ -716,7 +720,7 @@ static int draw_ios(const char *title, const char *const *tabs, int ntabs,
     }
     {
         float w = tw / ts, h = th / ts;
-        float x = (g_ow - w) * 0.5f, y = (320 - h) * 0.5f;
+        float x = (g_ow - w) * 0.5f + ui_menu_shift, y = (320 - h) * 0.5f;
 
         /* plat_ui_menu's layout, in points: a 6 margin, the title band
          * 22 tall, the tab strip 20 (inset 9 at the sides), a 4 gap, rows
@@ -845,6 +849,58 @@ void ui_icon_set(const unsigned char *rgba, int w, int h)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
                  GL_UNSIGNED_BYTE, rgba);
     glBindTexture(GL_TEXTURE_2D, (GLuint)old);
+}
+
+/* The player's badge in the bottom right corner of the menu space (the
+ * main menu, game_main.c): made again only when `key` changes. */
+void ui_badge(const char *name, const unsigned char *icon, int icon_px,
+              unsigned key)
+{
+    static GLuint tex;
+    static unsigned last;
+    static int tw, th;
+    static float ts;
+    GLint view[4];
+    float s, w, h;
+
+    glGetIntegerv(GL_VIEWPORT, view);
+    s = view[3] / 320.0f;
+    if (s <= 0)
+        return;
+    key ^= (unsigned)(s * 1000.0f);
+    if (!tex || key != last) {
+        unsigned char *px = plat_ui_badge(name, icon, icon_px, s, &tw, &th);
+        if (!px)
+            return;
+        if (!tex)
+            glGenTextures(1, &tex);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tw, th, 0, GL_RGBA,
+                     GL_UNSIGNED_BYTE, px);
+        free(px);
+        ts = s;
+        last = key;
+    }
+    begin_2d();
+    w = tw / ts;
+    h = th / ts;
+    glEnable(GL_TEXTURE_2D);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);        /* premultiplied */
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glColor4f(1, 1, 1, 1);
+    glBegin(GL_QUADS);
+    glTexCoord2f(0, 0); glVertex2f(g_ow - w - 2, 320 - h - 2);
+    glTexCoord2f(1, 0); glVertex2f(g_ow - 2, 320 - h - 2);
+    glTexCoord2f(1, 1); glVertex2f(g_ow - 2, 318);
+    glTexCoord2f(0, 1); glVertex2f(g_ow - w - 2, 318);
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+    end_2d();
 }
 
 void ui_icon_draw(float x, float y, float size)

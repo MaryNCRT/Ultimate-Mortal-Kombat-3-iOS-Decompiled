@@ -113,6 +113,12 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
  * [NSLocale preferredLanguages][0]. */
 void plat_language(char *out, int n);
 
+/* The player's badge (port): an icon (icon_px square, straight RGBA) and
+ * a name in a small black box of the same dress; NULL where there is no
+ * such drawing. */
+unsigned char *plat_ui_badge(const char *name, const unsigned char *icon,
+                             int icon_px, float s, int *w, int *h);
+
 /* ------------------------------------------------------------------ input
  *
  * The fight engine takes ONE TEN-BIT WORD PER PLAYER and nothing else -- see

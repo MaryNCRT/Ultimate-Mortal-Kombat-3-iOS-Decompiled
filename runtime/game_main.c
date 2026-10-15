@@ -2526,6 +2526,9 @@ int main(int argc, char **argv)
             if (g_cfg_skip_intro && CurrentTask == 0 && SplashCount > 0
                 && SplashCount < 491)
                 SplashCount = 491;
+            /* the player's badge on the main menu (port) */
+            if (CurrentTask == 3 && FE_CurrentTask == 0)
+                set_menu_badge();
             render_resolve();
             if (g_cfg_debug_keys) {
                 if (dbg_info_on()) {

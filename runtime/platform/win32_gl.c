@@ -1180,6 +1180,92 @@ static void al_say(al_box *b, const char *s, int fontpx, int bold, float x,
     free(m);
 }
 
+/* The player's badge (settings_menu.c, port): the profile's icon and name
+ * in a small box of the alerts' dress -- the border ring, the gloss, the
+ * drop shadow -- but black instead of blue, darker at the bottom. `icon` is
+ * icon_px square, straight RGBA; `s` pixels per point. Returns RGBA8,
+ * premultiplied, *w x *h, malloc'd. */
+unsigned char *plat_ui_badge(const char *name, const unsigned char *icon,
+                             int icon_px, float s, int *ow, int *oh)
+{
+    al_box b;
+    float m = 4 * s, h = 30 * s, isz = 24 * s, pad = 3 * s, rad = 8 * s,
+          bw = 1.5f * s;
+    int tw = 0, th = 0, x, y;
+    unsigned char *tm = al_line(name && name[0] ? name : "-", (int)(12 * s), 1,
+                                &tw, &th);
+    unsigned char *out;
+
+    memset(&b, 0, sizeof b);
+    b.s = s;
+    b.bx0 = m;
+    b.by0 = m;
+    b.bx1 = m + pad + isz + 6 * s + tw + 8 * s;
+    b.by1 = m + h;
+    b.w = (int)(b.bx1 + m + 1);
+    b.h = (int)(b.by1 + m + 1);
+    b.px = (al_px *)calloc((size_t)b.w * b.h, sizeof(al_px));
+    if (!b.px) {
+        free(tm);
+        return NULL;
+    }
+    for (y = 0; y < b.h; y++)
+        for (x = 0; x < b.w; x++) {
+            al_px *d = &b.px[y * b.w + x];
+            float sh = al_rr((float)x, (float)y - 2 * s, b.bx0, b.by0,
+                             b.bx1, b.by1, rad + 2 * s);
+            float out_ = al_rr((float)x, (float)y, b.bx0, b.by0, b.bx1,
+                               b.by1, rad);
+            float in = al_rr((float)x, (float)y, b.bx0 + bw, b.by0 + bw,
+                             b.bx1 - bw, b.by1 - bw, rad - bw);
+            float t = (y + 0.5f - b.by0) / (b.by1 - b.by0), ex, ey;
+
+            if (sh > 0)
+                al_over(d, 0, 0, 0, sh * 0.3f);         /* the drop shadow */
+            if (out_ <= 0)
+                continue;
+            al_over(d, 0.86f, 0.88f, 0.93f, (out_ - in > 0 ? out_ - in : 0) * 0.85f);
+            if (in <= 0)
+                continue;
+            /* black, a dark grey at the top */
+            al_over(d, 0.16f * (1 - t), 0.16f * (1 - t), 0.18f * (1 - t),
+                    in * (0.80f + 0.12f * t));
+            ex = (x + 0.5f - (b.bx0 + b.bx1) * 0.5f) / ((b.bx1 - b.bx0) * 0.75f);
+            ey = (y + 0.5f - (b.by0 - h * 0.35f)) / (h * 0.8f);
+            if (ex * ex + ey * ey < 1)                  /* the gloss */
+                al_over(d, 1, 1, 1, in * 0.18f);
+        }
+    if (icon && icon_px > 0) {                          /* the icon, scaled */
+        int ix0 = (int)(b.bx0 + pad), iy0 = (int)(b.by0 + (h - isz) * 0.5f);
+        int n = (int)isz;
+        for (y = 0; y < n; y++)
+            for (x = 0; x < n; x++) {
+                int X = ix0 + x, Y = iy0 + y;
+                const unsigned char *p = icon + ((size_t)(y * icon_px / n) * icon_px
+                                                 + (size_t)(x * icon_px / n)) * 4;
+                if (X >= 0 && X < b.w && Y >= 0 && Y < b.h && p[3])
+                    al_over(&b.px[Y * b.w + X], p[0] / 255.0f, p[1] / 255.0f,
+                            p[2] / 255.0f, p[3] / 255.0f);
+            }
+    }
+    al_put_line(&b, tm, tw, th, (int)(b.bx0 + pad + isz + 6 * s),
+                (int)((b.by0 + b.by1) * 0.5f - th * 0.5f), 1, 1, 1, 1);
+    free(tm);
+
+    out = (unsigned char *)malloc((size_t)b.w * b.h * 4);
+    if (out)
+        for (x = 0; x < b.w * b.h; x++) {
+            out[x * 4 + 0] = (unsigned char)(b.px[x].r * 255 + 0.5f);
+            out[x * 4 + 1] = (unsigned char)(b.px[x].g * 255 + 0.5f);
+            out[x * 4 + 2] = (unsigned char)(b.px[x].b * 255 + 0.5f);
+            out[x * 4 + 3] = (unsigned char)(b.px[x].a * 255 + 0.5f);
+        }
+    free(b.px);
+    *ow = b.w;
+    *oh = b.h;
+    return out;
+}
+
 /* The debug menu (runtime/debug_menu.c) in the alerts' iPhone OS 3 dress:
  * the same translucent box, the title on top, one row per entry -- the
  * label on the left, its value on the right -- the selected row in the
