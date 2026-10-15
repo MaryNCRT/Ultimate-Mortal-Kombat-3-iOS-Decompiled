@@ -284,7 +284,9 @@ The colour picker on the select screen ("< COLOR 1 >" under each fighter,
 3D model (`RenderFECharacters`), the versus portrait and the fight
 (`LoadLevelCharacters`) follow it, and with nothing picked they keep the
 binary's rule. The pick is kept in `save\palette.txt` (runtime/game_main.c,
-`palette_load` / `palette_sync`), so it survives a restart.
+`palette_load` / `palette_sync`), so it survives a restart. An Arcade
+ladder keeps the palette it began with (`PortArcadePalette`, saved in the
+same file), so a ladder continued after a restart uses it too.
 
 ### 5.2 Scripted runs (for the person fixing)
 

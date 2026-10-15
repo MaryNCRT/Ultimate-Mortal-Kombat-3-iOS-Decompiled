@@ -11311,6 +11311,12 @@ void sendCharacterPacket(long which);
  * keeps the binary's rule on both machines. */
 int PortPalette[2];
 
+/* The palette player one confirmed an Arcade ladder with (0 = none yet).
+ * Every Arcade fight uses it -- also a ladder continued after a restart,
+ * which never passes the select screen -- and game_main.c keeps it in
+ * save/palette.txt with the picks. */
+int PortArcadePalette;
+
 /* 1 or 2: the palette `side` gets with characters c1 against c2. */
 int PortPaletteOf(int side, long c1, long c2)
 {
@@ -11322,6 +11328,19 @@ int PortPaletteOf(int side, long c1, long c2)
         return p0;
     if (PortPalette[1])
         return PortPalette[1];
+    return c1 == c2 ? (p0 == 2 ? 1 : 2) : 1;
+}
+
+/* The same for a fight: in Arcade, the palette its ladder began with. */
+int PortFightPalette(int side, long c1, long c2)
+{
+    int p0;
+
+    if (GameMode != 0 || PortArcadePalette == 0)
+        return PortPaletteOf(side, c1, c2);
+    p0 = PortArcadePalette;
+    if (side == 0)
+        return p0;
     return c1 == c2 ? (p0 == 2 ? 1 : 2) : 1;
 }
 
@@ -11368,6 +11387,8 @@ static void palette_picker(void)
 
     if (GameMode == 1)
         return;
+    if (GameMode == 0 && CharacterConfirmed != -1)    /* a new ladder */
+        PortArcadePalette = PortPaletteOf(0, CharacterConfirmed, -1);
     if (p1 != -1)
         palette_box(0, 56, 290, p1, p2);
     if (GameMode == 6 && p2 != -1)

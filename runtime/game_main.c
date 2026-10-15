@@ -1379,12 +1379,13 @@ static void hb_draw(void)
     glPopAttrib();
 }
 
-/* On every tick: the hooks on while HITBOXES is (or UMK3_DBG_HITBOX=1). */
 /* The select screen's colour picker (PortPalette, FrontEnd.c) survives a
- * restart: read from save/palette.txt at start, written whenever it changes.
- * A scripted run neither reads nor writes it, unless UMK3_SAVE_DIR points
- * it elsewhere. Port only. */
-extern int PortPalette[2];
+ * restart, and so does the palette an Arcade ladder began with
+ * (PortArcadePalette), for a ladder continued later: "p1 p2 arcade" in
+ * save/palette.txt, read at start, written whenever one changes. A scripted
+ * run neither reads nor writes it, unless UMK3_SAVE_DIR points it
+ * elsewhere. Port only. */
+extern int PortPalette[2], PortArcadePalette;
 void port_save_path(char *out, size_t n, const char *file);
 
 static int palette_scripted(void)
@@ -1397,7 +1398,7 @@ static void palette_load(void)
 {
     char path[1100];
     FILE *f;
-    int a = 0, b = 0;
+    int a = 0, b = 0, c = 0;
 
     if (palette_scripted())
         return;
@@ -1405,33 +1406,39 @@ static void palette_load(void)
     f = fopen(path, "r");
     if (!f)
         return;
-    if (fscanf(f, "%d %d", &a, &b) == 2) {
+    if (fscanf(f, "%d %d %d", &a, &b, &c) >= 2) {
         PortPalette[0] = (a == 1 || a == 2) ? a : 0;
         PortPalette[1] = (b == 1 || b == 2) ? b : 0;
+        PortArcadePalette = (c == 1 || c == 2) ? c : 0;
     }
     fclose(f);
 }
 
 static void palette_sync(void)
 {
-    static int last[2], init;
+    static int last[3], init;
     char path[1100];
     FILE *f;
 
     if (palette_scripted())
         return;
-    if (init && last[0] == PortPalette[0] && last[1] == PortPalette[1])
+    if (init && last[0] == PortPalette[0] && last[1] == PortPalette[1]
+        && last[2] == PortArcadePalette)
         return;
     init = 1;
     last[0] = PortPalette[0];
     last[1] = PortPalette[1];
+    last[2] = PortArcadePalette;
     port_save_path(path, sizeof path, "palette.txt");
     f = fopen(path, "w");
     if (f) {
-        fprintf(f, "%d %d\n", PortPalette[0], PortPalette[1]);
+        fprintf(f, "%d %d %d\n", PortPalette[0], PortPalette[1],
+                PortArcadePalette);
         fclose(f);
     }
 }
+
+/* On every tick: the hooks on while HITBOXES is (or UMK3_DBG_HITBOX=1). */
 
 static void hb_update(void)
 {
