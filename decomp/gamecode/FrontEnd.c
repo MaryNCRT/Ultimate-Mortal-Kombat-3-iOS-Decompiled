@@ -5394,27 +5394,26 @@ int  sprintf(char *dst, const char *fmt, ...);
 
 
 /* Port, not in the binary: the ULTIMATE strip of the continue and game over
- * screens (GameOverTopTexture) on 16:9. The device spreads the sheet's top
- * 0.75 over the whole screen, each texel a little flatter than wide; 16:9
- * widened it further and the logo came out stretched (Mary). There the
- * sheet keeps the 3:2 screen's proportions -- the full width, each texel
- * as tall against its width as on 3:2 -- and the rows that no longer fit
- * are cut at the bottom, under the lower sheet. Other shapes draw it as the
- * device did. */
+ * screens (GameOverTopTexture) on 16:9. The device spreads the sheet over
+ * the whole screen; 16:9 widened it and the logo came out stretched (Mary).
+ * There it is drawn exactly as on 3:2 -- the screen's height, 1.5 times
+ * that wide, the same rows, no zoom -- centred, and the sides are left to
+ * the black the screen is cleared to. Other shapes draw it as the device
+ * did. */
 static void PortDrawGameOverTop(const float *col)
 {
     float W = (float)limeScreenWidth, H = (float)limeScreenHeight;
-    float a = W / H, dv = 0.75f;
+    float a = W / H;
 
     if (PortWideMenus && a > 1.7f && a < 1.8f) {
-        /* on 3:2 a texel is 480/1024 wide and 320/768 tall: 0.8889 */
-        float row = (W / 1024.0f) * ((320.0f / 768.0f) / (480.0f / 1024.0f));
-        dv = (H / row) / 1024.0f;
-        if (dv > 0.75f)
-            dv = 0.75f;
+        float wc = H * 1.5f;
+
+        limeDrawSprite((TEXTURE *)GameOverTopTexture, (W - wc) * 0.5f, 0.0f,
+                       wc, H, 0.0f, 0.0f, 1.0f, 0.75f, col);
+        return;
     }
     limeDrawSprite((TEXTURE *)GameOverTopTexture, 0.0f, 0.0f, W, H,
-                   0.0f, 0.0f, 1.0f, dv, col);
+                   0.0f, 0.0f, 1.0f, 0.75f, col);
 }
 
 /* TWO arguments -- see the note in GameCode.c. Every call site loads r0 with
