@@ -120,7 +120,7 @@ $src = @(
     'runtime\game_main.c', 'runtime\draw_gl.c', 'runtime\gamecode_globals.c',
     'runtime\gamecode_stubs.c', 'runtime\lime_menu.c', 'runtime\lime_platform.c',
     'runtime\lime_app.c', 'runtime\wav.c', 'runtime\fight_runtime.c',
-    'runtime\debug_menu.c',
+    'runtime\debug_menu.c', 'runtime\savestate.c',
     'runtime\platform\win32_gl.c', 'runtime\platform\win32_gl_cdecl.c',
     'runtime\platform\win32_audio.c'
 ) | ForEach-Object { Join-Path $Root $_ }
@@ -135,6 +135,19 @@ $flags = @('-std=gnu11', '-w', '-DUMK3_HAVE_MK3', '-DUMK3_REAL_GL', '-DUMK3_SHEL
            '-I', (Join-Path $Root 'runtime'), '-I', (Join-Path $Root 'decomp\lime'),
            '-I', (Join-Path $Root 'decomp\gamecode\logic'))
 function Quote($s) { '"' + ($s -replace '\\', '/') + '"' }
+# Save states (runtime/savestate.h): every file sees the header; the game's
+# own files -- decomp\, runtime\lime\, the generated tables and the runtime
+# files that hold game state -- also get UMK3_STATE_FILE. CMakeLists.txt
+# does the same.
+$flags += '-include', (Join-Path $Root 'runtime\savestate.h')
+$stateRuntime = 'gamecode_globals.c', 'gamecode_stubs.c', 'lime_menu.c',
+                'lime_platform.c', 'lime_app.c', 'wav.c', 'fight_runtime.c'
+function IsStateFile($s) {
+    $n = [IO.Path]::GetFileName($s)
+    return ($s -like '*\decomp\*') -or ($s -like '*\runtime\lime\*') -or
+           ($s -like (Join-Path $Work '*')) -or
+           (($s -like '*\runtime\*') -and ($stateRuntime -contains $n))
+}
 
 # One clang per source, several at a time.
 $jobs = [Math]::Max(1, [Environment]::ProcessorCount)
@@ -146,7 +159,9 @@ foreach ($s in $src) {
     $o = Join-Path $objdir ('{0:D3}_{1}.o' -f $i, [IO.Path]::GetFileNameWithoutExtension($s))
     $objs += $o
     $rsp = "$o.rsp"
-    (($flags | ForEach-Object { if ($_ -like '-*') { $_ } else { Quote $_ } }) +
+    $f = $flags
+    if (IsStateFile $s) { $f += '-DUMK3_STATE_FILE' }
+    (($f | ForEach-Object { if ($_ -like '-*') { $_ } else { Quote $_ } }) +
         @('-c', (Quote $s), '-o', (Quote $o))) -join "`n" | Set-Content -Encoding ascii $rsp
     $p = Start-Process -FilePath $cc -ArgumentList "@`"$rsp`"" -NoNewWindow -PassThru
     $null = $p.Handle                     # keeps ExitCode readable after exit

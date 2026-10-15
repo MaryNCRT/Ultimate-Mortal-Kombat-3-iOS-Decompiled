@@ -344,6 +344,7 @@ if(UMK3_BINARY)
             runtime/lime_app.c
             runtime/wav.c
             runtime/fight_runtime.c
+            runtime/savestate.c
             ${UMK3_GAME_GAMECODE}
             ${UMK3_GAME_LIME}
             ${UMK3_GAME_RUNLIME}
@@ -356,6 +357,22 @@ if(UMK3_BINARY)
             runtime decomp/lime decomp/gamecode/logic)
         target_compile_definitions(umk3-game PRIVATE
             UMK3_REAL_GL UMK3_SHELL UMK3_HAVE_MK3)
+        # Save states (runtime/savestate.h): every file sees the header; the
+        # game's own files keep their globals in .umkstd/.umkstb and their
+        # heap in the arena. launcher/build_game.ps1 does the same.
+        if(NOT MSVC)
+            target_compile_options(umk3-game PRIVATE
+                -include ${CMAKE_SOURCE_DIR}/runtime/savestate.h)
+            set_source_files_properties(
+                runtime/gamecode_globals.c runtime/gamecode_stubs.c
+                runtime/lime_menu.c runtime/lime_platform.c runtime/lime_app.c
+                runtime/wav.c runtime/fight_runtime.c
+                ${UMK3_GAME_GAMECODE} ${UMK3_GAME_LIME} ${UMK3_GAME_RUNLIME}
+                ${UMK3_LOGIC_SOURCES} ${UMK3_LOGIC_TABLES} ${UMK3_LEVEL_INFO}
+                ${UMK3_SEQ_DATA}
+                TARGET_DIRECTORY umk3-game
+                PROPERTIES COMPILE_DEFINITIONS UMK3_STATE_FILE)
+        endif()
         if(WIN32)
             target_sources(umk3-game PRIVATE
                 runtime/platform/win32_gl.c

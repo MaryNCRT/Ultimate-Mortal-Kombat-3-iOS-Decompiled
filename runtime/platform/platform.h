@@ -187,6 +187,8 @@ int  plat_audio_play_at(const unsigned char *pcm, int frames, int rate,
 
 /* Stop every voice still playing from `pcm`, before the caller frees it. */
 void plat_audio_stop_pcm(const unsigned char *pcm);
+/* Every voice off (a save state was loaded). */
+void plat_audio_stop_all(void);
 
 /* Reclaim finished one-shot sound buffers. Call once a frame. */
 void plat_audio_update(void);

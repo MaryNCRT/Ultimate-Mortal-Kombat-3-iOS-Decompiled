@@ -11291,6 +11291,10 @@ long do_next_a9_frame_pxob(MK3OBJ *obj, MK3OBJ *ref, MK3OBJ *other)
  */
 extern uint32_t block_xfers[];          /* through the slot at 0x000f3208 */
 
+/* Port, not in the binary: the debug menu's hitboxes see every strike test,
+ * the attack's box and the target's, and whether they met. NULL otherwise. */
+void (*PortStrikeHook)(const MK3BOX *attack, const MK3BOX *target, long hit);
+
 long strike_check_regs(MK3OBJ *obj, const uint32_t *p)
 {
     uint32_t saved48 = obj->field48;
@@ -11342,6 +11346,9 @@ long strike_check_regs(MK3OBJ *obj, const uint32_t *p)
     obj->field1c = saved1c;
     box_a.right = obj->field28;
     box_a.bottom = obj->field20;
+
+    if (PortStrikeHook != NULL)
+        PortStrikeHook(&box_b, &box_a, intersect(&box_b, &box_a));
 
     if (intersect(&box_b, &box_a) == 0) {
         obj->field5c = 0;

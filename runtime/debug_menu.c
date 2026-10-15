@@ -11,14 +11,15 @@
  * value row its left half lowers the value and its right half raises it,
  * on any other row it picks.
  *
- * Four pages: FIGHTERS (the two fighters, their palettes, the stage, START
+ * Five pages: FIGHTERS (the two fighters, their palettes, the stage, START
  * FIGHT), DURING THE FIGHT (round and match keys, FINISHER, the Arcade
- * bosses), MENUS (any screen, the main menu), OPTIONS (direct keys, info).
+ * bosses), MENUS (any screen, the main menu), OPTIONS (direct keys, info),
+ * TOOLS (hitboxes, fight speed, save states).
  *
  *     FIGHTER 1 / FIGHTER 2   any of CharacterNames' 26, the bosses included
  *     PALETTE 1 / PALETTE 2   AUTO (the game's rule: the alternate only for
  *                             the second of two identical fighters), 1 or 2,
- *                             for every fight loaded from then on
+ *                             for the next debug fight (back to AUTO after)
  *     STAGE                   a Level_Info row, 0..15
  *     START FIGHT             from the menus or from inside a fight
  *     SCREEN                  any of the front end's 51 screens
@@ -33,6 +34,13 @@
  *     ARCADE: MOTARO / SHAO KAHN  Arcade only: the next fight is that boss
  *     DIRECT KEYS             F3, F6..F12 on or off (on at start)
  *     INFO                    the task / screen line in the corner (also F3)
+ *     HITBOXES                the boxes the fight engine tests, drawn over
+ *                             the fight: each fighter's body, and every
+ *                             strike for a moment (red, white on a hit)
+ *     FIGHT SPEED             10% to 400%, a bar; only the fight runs at it
+ *     STATE SLOT, SAVE STATE, LOAD STATE   four slots; a save is the whole
+ *                             game at that tick and a load goes back to it,
+ *                             in the same session (runtime/savestate.h)
  *
  * Everything is drawn here, with a 5x7 font of its own, in the 480x320 space
  * the game uses; nothing comes from the game's assets, so the menu works on a
@@ -251,7 +259,9 @@ enum {
     ROW_WIN_ROUND, ROW_LOSE_ROUND, ROW_WIN_MATCH, ROW_LOSE_MATCH,
     ROW_FINISHER,
     ROW_MOTARO, ROW_SK,
-    ROW_KEYS, ROW_INFO, ROW_CLOSE, N_ROWS
+    ROW_KEYS, ROW_INFO,
+    ROW_HITBOX, ROW_SPEED, ROW_SLOT, ROW_SAVE, ROW_LOAD,
+    ROW_CLOSE, N_ROWS
 };
 
 /* One page per kind of thing, Q / E (the launcher can rebind them) or a
@@ -269,16 +279,20 @@ static const struct {
         ROW_FINISHER, ROW_MOTARO, ROW_SK, ROW_CLOSE } },
     { "MENUS", 3, { ROW_SCREEN, ROW_MAIN, ROW_CLOSE } },
     { "OPTIONS", 3, { ROW_KEYS, ROW_INFO, ROW_CLOSE } },
+    { "TOOLS", 6,
+      { ROW_HITBOX, ROW_SPEED, ROW_SLOT, ROW_SAVE, ROW_LOAD, ROW_CLOSE } },
 };
 #define N_PAGES (int)(sizeof k_pages / sizeof k_pages[0])
-enum { PAGE_FIGHTERS, PAGE_FIGHT, PAGE_MENUS, PAGE_OPTIONS };
+enum { PAGE_FIGHTERS, PAGE_FIGHT, PAGE_MENUS, PAGE_OPTIONS, PAGE_TOOLS };
 
 static const char *const k_label[N_ROWS] = {
     "FIGHTER 1", "PALETTE 1", "FIGHTER 2", "PALETTE 2", "STAGE",
     "START FIGHT", "SCREEN", "MAIN MENU", "WIN ROUND", "LOSE ROUND",
     "WIN MATCH (SKIP FIGHT)", "LOSE MATCH", "FINISHER (IN FINISH HIM)",
     "ARCADE: NEXT IS MOTARO", "ARCADE: NEXT IS SHAO KAHN",
-    "DIRECT KEYS", "INFO LINE", "CLOSE"
+    "DIRECT KEYS", "INFO LINE",
+    "HITBOXES", "FIGHT SPEED", "STATE SLOT", "SAVE STATE", "LOAD STATE",
+    "CLOSE"
 };
 
 static int g_open, g_want_open, g_page, g_sel;
@@ -290,12 +304,20 @@ static const char *const k_fin[7] = {
     "BABALITY", "FRIENDSHIP"
 };
 static int g_keys = 1;                 /* the direct keys (F3, F6..F12) */
+static int g_hitbox;                    /* the TOOLS page */
+static const int k_speed[] = { 10, 25, 50, 75, 100, 125, 150, 200, 300, 400 };
+#define N_SPEEDS (int)(sizeof k_speed / sizeof k_speed[0])
+static int g_speed = 4;                 /* 100% */
+static int g_slot;
 static int g_task;                      /* CurrentTask while open */
 
-/* Each fighter's colours for the fights loaded from now on: 0 the game's
- * own rule (palette 2 only for the second of two identical fighters), 1 the
- * first palette, 2 the alternate. LoadLevelCharacters reads it (port only). */
+/* Each fighter's colours for the next debug fight: 0 the game's own rule
+ * (palette 2 only for the second of two identical fighters), 1 the first
+ * palette, 2 the alternate. LoadLevelCharacters reads it only while
+ * DbgFightActive (game_main.c sets it from the start of a debug fight to
+ * its end, then puts both back to AUTO). Port only. */
 int DbgPalette[2];
+int DbgFightActive;
 static const char *const k_pal[3] = { "AUTO", "1", "2 (ALTERNATE)" };
 
 /* Where the box was last drawn, in the 480x320 space, for the mouse. */
@@ -305,6 +327,8 @@ static int   g_mouse_was;
 int dbg_menu_is_open(void) { return g_open; }
 int dbg_info_on(void)      { return g_info; }
 int dbg_keys_on(void)      { return g_keys; }
+int dbg_hitboxes_on(void)  { return g_hitbox; }
+int dbg_speed_percent(void) { return k_speed[g_speed]; }
 void dbg_info_toggle(void) { g_info = !g_info; }
 
 void dbg_menu_toggle(void)
@@ -359,6 +383,10 @@ static int row_enabled(int row)
         return g_task == 6 && dbg_finishing();
     if (row == ROW_MOTARO || row == ROW_SK)
         return dbg_in_arcade();
+    if (row == ROW_SAVE)
+        return dbg_state_can_save();
+    if (row == ROW_LOAD)
+        return dbg_state_has(g_slot);
     return 1;
 }
 
@@ -369,6 +397,7 @@ static int has_value(int row)
     switch (row) {
     case ROW_P1: case ROW_PAL1: case ROW_P2: case ROW_PAL2: case ROW_STAGE:
     case ROW_SCREEN: case ROW_FINISHER: case ROW_KEYS: case ROW_INFO:
+    case ROW_HITBOX: case ROW_SPEED: case ROW_SLOT:
         return 1;
     }
     return 0;
@@ -386,6 +415,13 @@ static void change(int row, int d)
     case ROW_FINISHER: g_fin = wrap(g_fin + d, 7); break;
     case ROW_INFO:     g_info = !g_info; break;
     case ROW_KEYS:     g_keys = !g_keys; break;
+    case ROW_HITBOX:   g_hitbox = !g_hitbox; break;
+    case ROW_SPEED:                     /* a bar: it stops at both ends */
+        g_speed += d;
+        if (g_speed < 0) g_speed = 0;
+        if (g_speed > N_SPEEDS - 1) g_speed = N_SPEEDS - 1;
+        break;
+    case ROW_SLOT:     g_slot = wrap(g_slot + d, DBG_STATE_SLOTS); break;
     }
 }
 
@@ -499,9 +535,15 @@ int dbg_menu_tick(struct dbg_request *rq)
         rq->what = DBG_BOSS;
         rq->a = row == ROW_MOTARO ? 24 : 25;
         break;
-    case ROW_INFO: case ROW_KEYS:
+    case ROW_INFO: case ROW_KEYS: case ROW_HITBOX:
         change(row, 1);
         return 0;
+    case ROW_SPEED: case ROW_SLOT:
+        return 0;
+    case ROW_SAVE: case ROW_LOAD:
+        rq->what = row == ROW_SAVE ? DBG_SAVE_STATE : DBG_LOAD_STATE;
+        rq->a = g_slot;
+        break;
     case ROW_CLOSE:
         break;
     }
@@ -534,6 +576,20 @@ static void row_value(int i, char *v, size_t n)
         snprintf(v, n, "< %s >  %s", g_info ? "ON" : "OFF", a);
         break;
     case ROW_FINISHER: snprintf(v, n, "< %s >", k_fin[g_fin]); break;
+    case ROW_HITBOX: snprintf(v, n, "< %s >", g_hitbox ? "ON" : "OFF"); break;
+    case ROW_SPEED: {
+        char bar[N_SPEEDS + 1];
+        int i;
+        for (i = 0; i < N_SPEEDS; i++)
+            bar[i] = i <= g_speed ? '#' : '-';
+        bar[N_SPEEDS] = 0;
+        snprintf(v, n, "< %s %3d%% >", bar, k_speed[g_speed]);
+        break;
+    }
+    case ROW_SLOT:
+        snprintf(v, n, "< %d %s >", g_slot + 1,
+                 dbg_state_has(g_slot) ? "SAVED" : "EMPTY");
+        break;
     }
 }
 

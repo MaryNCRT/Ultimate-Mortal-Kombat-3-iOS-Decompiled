@@ -950,6 +950,8 @@ void LoadGameCharacterCheckCache(PLAYER *p, const PLAYERDEF *def,
  * character is touched, so a level load always starts from a blank remap.
  */
 extern int DbgPalette[2];              /* runtime/debug_menu.c, port only */
+extern int DbgFightActive;             /* the same, while a debug fight runs */
+int PortPaletteOf(int side, long c1, long c2);  /* FrontEnd.c, port only */
 
 void LoadLevelCharacters(EPLAYER a, EPLAYER b)
 {
@@ -964,11 +966,18 @@ void LoadLevelCharacters(EPLAYER a, EPLAYER b)
     ClearAnimRemapTables();
     LoadAllFramesTXT();
 
-    /* Port only: the debug menu's PALETTE rows (DbgPalette, 0 = the
-     * binary's own rule below) pick each fighter's palette. */
-    LoadGameCharacter(p0, da, 0, DbgPalette[0] ? DbgPalette[0] == 2 : 0);
-    LoadGameCharacter(p1, db, 0, DbgPalette[1] ? DbgPalette[1] == 2
-                                               : (a == b) ? 1 : 0);
+    /* Port only: in a debug fight the menu's PALETTE rows (DbgPalette,
+     * 0 = the binary's own rule), otherwise the select screen's colour
+     * picker (PortPaletteOf, FrontEnd.c), pick each fighter's palette.
+     * With nothing picked both give the binary's rule: 0, and 1 for
+     * player two when a == b. */
+    {
+        int pa = DbgFightActive ? DbgPalette[0] : PortPaletteOf(0, a, b);
+        int pb = DbgFightActive ? DbgPalette[1] : PortPaletteOf(1, a, b);
+
+        LoadGameCharacter(p0, da, 0, pa ? pa == 2 : 0);
+        LoadGameCharacter(p1, db, 0, pb ? pb == 2 : (a == b) ? 1 : 0);
+    }
 
     p0->altCostume = 0;                 /* already cleared, twice over */
     p1->altCostume = 0;

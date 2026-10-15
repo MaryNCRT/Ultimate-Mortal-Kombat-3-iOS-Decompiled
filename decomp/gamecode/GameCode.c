@@ -1034,7 +1034,12 @@ void limeClearDepthBuffer(void);
  * RenderLevelPlayers sets it. Combined with LevelSelect == 2 it triggers a
  * depth clear before the second event pass -- a character drawn on top of the
  * arena regardless of depth, which is what a level-select preview needs.
+ *
+ * `PortAfterScene` is the port's, not the binary's: the debug menu's hitboxes,
+ * drawn while the camera is still set. NULL unless they are on.
  */
+void (*PortAfterScene)(void);
+
 void RenderGameView(void)
 {
     float eye[3];
@@ -1059,6 +1064,9 @@ void RenderGameView(void)
     MaintainParticles();
     KillIllegalWhirlwinds();
     RenderExtras();
+
+    if (PortAfterScene != NULL)             /* port: the debug hitboxes */
+        PortAfterScene();
 }
 
 
