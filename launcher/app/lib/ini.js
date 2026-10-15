@@ -12,6 +12,9 @@
  *     buttons=5|6    key5_p=85 key5_b=79 key5_k=74 key5_r=76
  *       (the layout, and the five-button layout's own keys; its S is
  *        key_special, the six-button layout's keys are key_hp .. key_run)
+ *     pad=auto|off|xinput|054c:0ce6   (player one's pad: the first found,
+ *       none, an Xbox pad, or one pad by USB vendor:product)
+ *     pad_name=DualSense Wireless Controller   (the launcher's own label)
  *
  * The game only reads width/height/render_width/render_height/fullscreen/borderless/
  * language/debug_keys/skip_intro and the
@@ -102,6 +105,9 @@ function defaultConfig() {
         ipa: '',
         marco: '',                   /* fullscreen bars picture, optional */
         buttons: 5,                  /* the layout the game starts with (its factory default, Settings[4] = 5) */
+        pad: 'auto',                 /* pad=: auto, off, xinput or vvvv:pppp */
+        padName: '',                 /* pad_name=: how the launcher showed it */
+        padDbgMenu: 'L3+R3',         /* pad_dbg_menu=: the pad buttons that open the debug menu */
         keys,
         keys5,
     };
@@ -154,6 +160,13 @@ function load(p) {
             cfg.ipa = val;
         } else if (key === 'marco') {
             cfg.marco = val;
+        } else if (key === 'pad') {
+            cfg.pad = /^(auto|off|xinput|[0-9a-f]{4}:[0-9a-f]{4})$/i.test(val)
+                ? val.toLowerCase() : 'auto';
+        } else if (key === 'pad_dbg_menu') {
+            cfg.padDbgMenu = /^([A-Z0-9]+(\+[A-Z0-9]+)*)?$/i.test(val) ? val.toUpperCase() : 'L3+R3';
+        } else if (key === 'pad_name') {
+            cfg.padName = val;
         } else if (key === 'buttons') {
             cfg.buttons = num === 6 ? 6 : 5;
         } else if (key.startsWith('key5_') && KEY5_NAMES.includes(key.slice(5))) {
@@ -192,7 +205,11 @@ function save(p, cfg) {
         'skip_intro=' + (cfg.skipIntro ? 1 : 0),
         'hide_controls=' + (cfg.hideControls ? 1 : 0),
         'buttons=' + (cfg.buttons === 6 ? 6 : 5),
+        'pad=' + (cfg.pad || 'auto'),
+        'pad_dbg_menu=' + (cfg.padDbgMenu === undefined ? 'L3+R3' : cfg.padDbgMenu),
     ];
+    if (cfg.padName)
+        lines.push('pad_name=' + cfg.padName.replace(/[\r\n]/g, ' '));
     if (cfg.rres > 0 && RES[cfg.rres - 1])
         lines.push('render_width=' + RES[cfg.rres - 1].w,
                    'render_height=' + RES[cfg.rres - 1].h);

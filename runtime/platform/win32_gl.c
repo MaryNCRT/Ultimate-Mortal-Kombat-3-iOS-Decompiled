@@ -379,71 +379,308 @@ void plat_wait_until(double t)
         YieldProcessor();
 }
 
-/* The gamepad, through XInput loaded at run time.
+/* The gamepad: XInput (loaded at run time) and the WinMM joystick API.
  *
- * `LoadLibrary` rather than a link-time import on purpose: a machine with no
- * XInput still runs the build, `plat_pad` just answers -1 forever. The engine
- * cannot tell the difference between no pad and a pad with nothing pressed,
- * and that is the right behaviour -- a missing driver must never be a crash.
- */
-#define PAD_A       0x1000
-#define PAD_B       0x2000
-#define PAD_X       0x4000
-#define PAD_Y       0x8000
-#define PAD_LB      0x0100
-#define PAD_RB      0x0200
-#define PAD_DUP     0x0001
-#define PAD_DDOWN   0x0002
-#define PAD_DLEFT   0x0004
-#define PAD_DRIGHT  0x0008
+ * XInput covers the Xbox pads and anything a driver shows as one (Steam,
+ * DS4Windows). WinMM covers the rest -- PlayStation 4 and 5 pads, the Switch
+ * Pro controller, generic USB pads -- each read through the layout its
+ * vendor uses (pad_map). Both end up in one PLAT_PAD, the face buttons named
+ * by position.
+ *
+ * Not DirectInput: on some machines its EnumDevices takes 40 seconds (one
+ * slow HID device is enough), and finding the pad must never hold the game
+ * up. WinMM reads a known pad in microseconds; looking for one -- trying the
+ * 16 joystick ids -- runs on a thread of its own, again every two seconds
+ * while none is found, so a pad plugged in later is picked up. A missing
+ * driver reads as no pad, never as a crash. Port only. */
+#include <mmsystem.h>
+
+#define XI_A       0x1000
+#define XI_B       0x2000
+#define XI_X       0x4000
+#define XI_Y       0x8000
+#define XI_LB      0x0100
+#define XI_RB      0x0200
+#define XI_BACK    0x0020
+#define XI_START   0x0010
+#define XI_LTHUMB  0x0040
+#define XI_RTHUMB  0x0080
+#define XI_DUP     0x0001
+#define XI_DDOWN   0x0002
+#define XI_DLEFT   0x0004
+#define XI_DRIGHT  0x0008
 
 typedef struct { unsigned long packet; unsigned short buttons;
-                 unsigned char lt, rt; short lx, ly, rx, ry; } PAD_STATE;
-typedef unsigned long (__stdcall *PADGET)(unsigned long, PAD_STATE *);
+                 unsigned char lt, rt; short lx, ly, rx, ry; } XI_STATE;
+typedef unsigned long (__stdcall *XIGET)(unsigned long, XI_STATE *);
 
-static PADGET g_padget;
-static int    g_pad_tried;
+static XIGET          g_xiget;
+static int            g_pad_tried;
+static char           g_pad_want[32] = "auto";
+static volatile LONG  g_jid = -1;            /* the WinMM pad in use, or -1 */
+static unsigned       g_jid_vidpid;          /* its vendor | product << 16 */
+static char           g_jid_name[64];
+static HANDLE         g_pad_thread;
 
-int plat_pad(int which)
+static unsigned want_vidpid(void)
 {
-    PAD_STATE s;
-    int bits = 0;
+    unsigned v, p;
 
-    if (!g_pad_tried) {
-        static const char *dll[] = { "xinput1_4.dll", "xinput1_3.dll",
-                                     "xinput9_1_0.dll", "xinput1_2.dll" };
-        int i;
-        g_pad_tried = 1;
-        for (i = 0; i < 4 && !g_padget; i++) {
-            HMODULE m = LoadLibraryA(dll[i]);
-            if (m)
-                g_padget = (PADGET)(void *)GetProcAddress(m, "XInputGetState");
+    if (sscanf(g_pad_want, "%x:%x", &v, &p) == 2)
+        return (v & 0xffff) | (p & 0xffff) << 16;
+    return 0;
+}
+
+/* The name Windows gives a pad (Game Controllers in the control panel):
+ * OEMName under the joystick OEM key for its VID/PID; the driver's generic
+ * name when there is none. */
+static void pad_name(unsigned vp, const char *fallback, char *out, int n)
+{
+    char key[160];
+    DWORD size = (DWORD)n, type;
+    HKEY h;
+    int i;
+
+    snprintf(key, sizeof key, "System\\CurrentControlSet\\Control\\"
+             "MediaProperties\\PrivateProperties\\Joystick\\OEM\\"
+             "VID_%04X&PID_%04X", vp & 0xffff, vp >> 16);
+    for (i = 0; i < 2; i++) {
+        if (RegOpenKeyExA(i ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER, key, 0,
+                          KEY_READ, &h) == ERROR_SUCCESS) {
+            size = (DWORD)n;
+            if (RegQueryValueExA(h, "OEMName", NULL, &type, (BYTE *)out,
+                                 &size) == ERROR_SUCCESS && type == REG_SZ
+                && size > 1) {
+                out[n - 1] = 0;
+                RegCloseKey(h);
+                return;
+            }
+            RegCloseKey(h);
         }
     }
-    if (!g_padget)
-        return -1;
+    snprintf(out, (size_t)n, "%s", fallback);
+}
 
-    memset(&s, 0, sizeof s);
-    if (g_padget((unsigned long)which, &s) != 0)
-        return -1;                      /* nothing plugged into that slot */
+/* Joystick id `id`: attached? Its vendor | product << 16 and name. */
+static int joy_probe(UINT id, unsigned *vp, char *name, int n)
+{
+    JOYINFOEX j;
+    JOYCAPSA c;
 
+    memset(&j, 0, sizeof j);
+    j.dwSize = sizeof j;
+    j.dwFlags = JOY_RETURNALL;
+    if (joyGetPosEx(id, &j) != JOYERR_NOERROR)
+        return 0;
+    if (joyGetDevCapsA(id, &c, sizeof c) != JOYERR_NOERROR)
+        return 0;
+    *vp = (unsigned)c.wMid | (unsigned)c.wPid << 16;
+    if (name)
+        pad_name(*vp, c.szPname, name, n);
+    return 1;
+}
+
+/* The search, off the game's thread. */
+static DWORD WINAPI pad_search(LPVOID arg)
+{
+    (void)arg;
+    for (;;) {
+        if (g_jid < 0 && strcmp(g_pad_want, "off") != 0
+            && strcmp(g_pad_want, "keyboard") != 0
+            && strcmp(g_pad_want, "xinput") != 0) {
+            unsigned want = want_vidpid(), vp;
+            char name[64];
+            UINT id;
+
+            for (id = 0; id < 16 && g_jid < 0; id++) {
+                if (!joy_probe(id, &vp, name, sizeof name))
+                    continue;
+                if (want ? vp != want
+                         : (vp & 0xffff) == 0x045e)  /* Xbox: XInput */
+                    continue;
+                g_jid_vidpid = vp;
+                snprintf(g_jid_name, sizeof g_jid_name, "%s", name);
+                InterlockedExchange(&g_jid, (LONG)id);
+            }
+        }
+        Sleep(2000);
+    }
+    return 0;
+}
+
+void plat_pad_select(const char *which)
+{
+    snprintf(g_pad_want, sizeof g_pad_want, "%s",
+             which && *which ? which : "auto");
+    InterlockedExchange(&g_jid, -1);            /* look again */
+}
+
+static void pad_load(void)
+{
+    static const char *xi[] = { "xinput1_4.dll", "xinput1_3.dll",
+                                "xinput9_1_0.dll", "xinput1_2.dll" };
+    int i;
+
+    g_pad_tried = 1;
+    for (i = 0; i < 4 && !g_xiget; i++) {
+        HMODULE m = LoadLibraryA(xi[i]);
+        if (m)
+            g_xiget = (XIGET)(void *)GetProcAddress(m, "XInputGetState");
+    }
+}
+
+/* Which WinMM button is which, by vendor. Index = PB_*, value = the button
+ * number (bit of dwButtons), -1 none. The triggers are buttons on all
+ * three. */
+static const signed char g_map_sony[PB_COUNT] =      /* PS4 / PS5 */
+    { 1, 2, 0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
+static const signed char g_map_nintendo[PB_COUNT] =  /* Switch Pro */
+    { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
+static const signed char g_map_generic[PB_COUNT] =   /* most USB pads */
+    { 1, 2, 0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
+
+static int pad_winmm(PLAT_PAD *out)
+{
+    JOYINFOEX j;
+    const signed char *map;
+    LONG id = g_jid;
+    DWORD pov;
+    int i;
+
+    if (!g_pad_thread)
+        g_pad_thread = CreateThread(NULL, 0, pad_search, NULL, 0, NULL);
+    if (id < 0)
+        return 0;
+    memset(&j, 0, sizeof j);
+    j.dwSize = sizeof j;
+    j.dwFlags = JOY_RETURNALL;
+    if (joyGetPosEx((UINT)id, &j) != JOYERR_NOERROR) {
+        InterlockedCompareExchange(&g_jid, -1, id);  /* unplugged */
+        return 0;
+    }
+    switch (g_jid_vidpid & 0xffff) {
+    case 0x054c: map = g_map_sony; break;
+    case 0x057e: map = g_map_nintendo; break;
+    default:     map = g_map_generic; break;
+    }
+    for (i = 0; i < PB_COUNT; i++)
+        if (map[i] >= 0 && (j.dwButtons & (1u << map[i])))
+            out->buttons |= 1u << i;
+    pov = j.dwPOV;                              /* hundredths of a degree */
+    if (pov <= 35900) {
+        if (pov >= 31500 || pov <= 4500)  out->up = 1;
+        if (pov >= 4500 && pov <= 13500)  out->right = 1;
+        if (pov >= 13500 && pov <= 22500) out->down = 1;
+        if (pov >= 22500 && pov <= 31500) out->left = 1;
+    }
+    /* the stick: 0..65535, a direction past a third of the way out */
+    if (j.dwYpos < 20000) out->up = 1;
+    if (j.dwYpos > 45535) out->down = 1;
+    if (j.dwXpos < 20000) out->left = 1;
+    if (j.dwXpos > 45535) out->right = 1;
+    snprintf(out->name, sizeof out->name, "%s", g_jid_name);
+    return out->connected = 1;
+}
+
+static int pad_xinput(PLAT_PAD *out)
+{
+    XI_STATE s;
+    unsigned long i;
+
+    if (!g_xiget)
+        return 0;
+    for (i = 0; i < 4; i++) {
+        memset(&s, 0, sizeof s);
+        if (g_xiget(i, &s) == 0)
+            break;
+    }
+    if (i == 4)
+        return 0;
+    if (s.buttons & XI_A)      out->buttons |= 1u << PB_SOUTH;
+    if (s.buttons & XI_B)      out->buttons |= 1u << PB_EAST;
+    if (s.buttons & XI_X)      out->buttons |= 1u << PB_WEST;
+    if (s.buttons & XI_Y)      out->buttons |= 1u << PB_NORTH;
+    if (s.buttons & XI_LB)     out->buttons |= 1u << PB_L1;
+    if (s.buttons & XI_RB)     out->buttons |= 1u << PB_R1;
+    if (s.lt > 64)             out->buttons |= 1u << PB_L2;
+    if (s.rt > 64)             out->buttons |= 1u << PB_R2;
+    if (s.buttons & XI_BACK)   out->buttons |= 1u << PB_SELECT;
+    if (s.buttons & XI_START)  out->buttons |= 1u << PB_START;
+    if (s.buttons & XI_LTHUMB) out->buttons |= 1u << PB_L3;
+    if (s.buttons & XI_RTHUMB) out->buttons |= 1u << PB_R3;
     /* The stick counts as a direction past a third of its range, so the pad
      * feels like the arcade's switch rather than like an analogue axis. */
-    if ((s.buttons & PAD_DUP)    || s.ly >  10000) bits |= 1 << 0;
-    if ((s.buttons & PAD_DDOWN)  || s.ly < -10000) bits |= 1 << 1;
-    if ((s.buttons & PAD_DLEFT)  || s.lx < -10000) bits |= 1 << 2;
-    if ((s.buttons & PAD_DRIGHT) || s.lx >  10000) bits |= 1 << 3;
+    out->up    = (s.buttons & XI_DUP)    || s.ly >  10000;
+    out->down  = (s.buttons & XI_DDOWN)  || s.ly < -10000;
+    out->left  = (s.buttons & XI_DLEFT)  || s.lx < -10000;
+    out->right = (s.buttons & XI_DRIGHT) || s.lx >  10000;
+    snprintf(out->name, sizeof out->name, "XInput pad %lu", i + 1);
+    return out->connected = 1;
+}
 
-    /* Face buttons to the punches and kicks, shoulders to block and run --
-     * the layout a six-button fighter normally gets on a four-button pad. */
-    if (s.buttons & PAD_X)  bits |= 1 << 4;      /* HP  */
-    if (s.buttons & PAD_A)  bits |= 1 << 5;      /* LP  */
-    if (s.buttons & PAD_RB) bits |= 1 << 6;      /* BL  */
-    if (s.buttons & PAD_Y)  bits |= 1 << 7;      /* HK  */
-    if (s.buttons & PAD_B)  bits |= 1 << 8;      /* LK  */
-    if (s.buttons & PAD_LB) bits |= 1 << 9;      /* RUN */
-    if (s.rt > 64)          bits |= 1 << 9;
+int plat_pad_read(PLAT_PAD *out)
+{
+    memset(out, 0, sizeof *out);
+    if (!g_pad_tried)
+        pad_load();
+    if (strcmp(g_pad_want, "off") == 0 || strcmp(g_pad_want, "keyboard") == 0)
+        return 0;
+    if (strcmp(g_pad_want, "xinput") == 0)
+        return pad_xinput(out);
+    if (want_vidpid())
+        return pad_winmm(out);
+    return pad_xinput(out) || pad_winmm(out);   /* auto */
+}
 
+/* --list-pads: every WinMM pad by the name Windows gives it (an Xbox pad
+ * listed as "xinput", since that is how the game reads it), then any XInput
+ * slot not already named that way. */
+void plat_pad_list(void)
+{
+    XI_STATE s;
+    unsigned vp;
+    char name[64];
+    int xbox = 0;
+    UINT id;
+    unsigned long i;
+
+    if (!g_pad_tried)
+        pad_load();
+    for (id = 0; id < 16; id++) {
+        if (!joy_probe(id, &vp, name, sizeof name))
+            continue;
+        if ((vp & 0xffff) == 0x045e) {
+            xbox++;
+            printf("xinput\t%s\n", name);
+        } else {
+            printf("%04x:%04x\t%s\n", vp & 0xffff, vp >> 16, name);
+        }
+    }
+    for (i = 0; g_xiget && i < 4; i++)
+        if (g_xiget(i, &s) == 0 && xbox-- <= 0)
+            printf("xinput\tXInput pad %lu\n", i + 1);
+    fflush(stdout);
+}
+
+/* The old ten-bit read (runtime/fight_scene.c): the same pad, the layout a
+ * six-button fighter gets on a four-button pad. */
+int plat_pad(int which)
+{
+    PLAT_PAD p;
+    int bits = 0;
+
+    if (which != 0 || !plat_pad_read(&p))
+        return -1;
+    if (p.up)    bits |= 1 << 0;
+    if (p.down)  bits |= 1 << 1;
+    if (p.left)  bits |= 1 << 2;
+    if (p.right) bits |= 1 << 3;
+    if (p.buttons & (1u << PB_WEST))  bits |= 1 << 4;      /* HP  */
+    if (p.buttons & (1u << PB_SOUTH)) bits |= 1 << 5;      /* LP  */
+    if (p.buttons & (1u << PB_R1))    bits |= 1 << 6;      /* BL  */
+    if (p.buttons & (1u << PB_NORTH)) bits |= 1 << 7;      /* HK  */
+    if (p.buttons & (1u << PB_EAST))  bits |= 1 << 8;      /* LK  */
+    if (p.buttons & (1u << PB_L1))    bits |= 1 << 9;      /* RUN */
     return bits;
 }
 

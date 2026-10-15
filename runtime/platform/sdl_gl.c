@@ -308,6 +308,80 @@ int plat_pad(int which)
     return bits;
 }
 
+/* The PLAT_PAD read through SDL's game controller layer, which already names
+ * the face buttons by position (SDL's A is the south one on every pad).
+ * pad= picks "off" or a vendor:product; anything else takes the first pad. */
+static char g_pad_want[32] = "auto";
+
+void plat_pad_select(const char *which)
+{
+    snprintf(g_pad_want, sizeof g_pad_want, "%s",
+             which && *which ? which : "auto");
+}
+
+void plat_pad_list(void)
+{
+    int i;
+
+    if (SDL_WasInit(SDL_INIT_GAMECONTROLLER) == 0)
+        SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER);
+    for (i = 0; i < SDL_NumJoysticks(); i++)
+        if (SDL_IsGameController(i)) {
+            SDL_GameController *c = SDL_GameControllerOpen(i);
+            if (!c)
+                continue;
+            printf("%04x:%04x\t%s\n", SDL_GameControllerGetVendor(c),
+                   SDL_GameControllerGetProduct(c),
+                   SDL_GameControllerName(c) ? SDL_GameControllerName(c)
+                                             : "pad");
+            SDL_GameControllerClose(c);
+        }
+    fflush(stdout);
+}
+
+int plat_pad_read(PLAT_PAD *out)
+{
+    static const SDL_GameControllerButton b[PB_COUNT] = {
+        SDL_CONTROLLER_BUTTON_A, SDL_CONTROLLER_BUTTON_B,
+        SDL_CONTROLLER_BUTTON_X, SDL_CONTROLLER_BUTTON_Y,
+        SDL_CONTROLLER_BUTTON_LEFTSHOULDER, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER,
+        SDL_CONTROLLER_BUTTON_INVALID, SDL_CONTROLLER_BUTTON_INVALID,
+        SDL_CONTROLLER_BUTTON_BACK, SDL_CONTROLLER_BUTTON_START,
+        SDL_CONTROLLER_BUTTON_LEFTSTICK, SDL_CONTROLLER_BUTTON_RIGHTSTICK,
+        SDL_CONTROLLER_BUTTON_GUIDE,
+    };
+    SDL_GameController *pad;
+    unsigned v, p;
+    int i;
+
+    memset(out, 0, sizeof *out);
+    if (strcmp(g_pad_want, "off") == 0 || strcmp(g_pad_want, "keyboard") == 0)
+        return 0;
+    if (plat_pad(0) < 0)                /* opens the first pad if needed */
+        return 0;
+    pad = g_controller;
+    if (sscanf(g_pad_want, "%x:%x", &v, &p) == 2
+        && (SDL_GameControllerGetVendor(pad) != v
+            || SDL_GameControllerGetProduct(pad) != p))
+        return 0;
+    for (i = 0; i < PB_COUNT; i++)
+        if (b[i] != SDL_CONTROLLER_BUTTON_INVALID
+            && SDL_GameControllerGetButton(pad, b[i]))
+            out->buttons |= 1u << i;
+    if (SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 8000)
+        out->buttons |= 1u << PB_L2;
+    if (SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 8000)
+        out->buttons |= 1u << PB_R2;
+    i = plat_pad(0);
+    out->up = (i >> 0) & 1;
+    out->down = (i >> 1) & 1;
+    out->left = (i >> 2) & 1;
+    out->right = (i >> 3) & 1;
+    snprintf(out->name, sizeof out->name, "%s",
+             SDL_GameControllerName(pad) ? SDL_GameControllerName(pad) : "pad");
+    return out->connected = 1;
+}
+
 double plat_time(void)
 {
     if (!g_freq) return 0.0;

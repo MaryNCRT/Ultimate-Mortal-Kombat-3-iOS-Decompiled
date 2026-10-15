@@ -456,18 +456,38 @@ void dbg_menu_mouse(float x, float y, int down)
     g_mdown = down;
 }
 
+/* The pad, passed in by game_main.c each frame the menu is open: d-pad or
+ * stick to move, south (cross / A) to pick, L1 / R1 to turn the page, east
+ * (circle / B) to close. */
+static PLAT_PAD g_pad, g_pad_was;
+
+void dbg_menu_pad(const PLAT_PAD *p)
+{
+    g_pad = *p;
+}
+
+#define PAD_EDGE(f)  (g_pad.f && !g_pad_was.f)
+#define PAD_HIT(b)   ((g_pad.buttons & ~g_pad_was.buttons) & (1u << (b)))
+
 int dbg_menu_tick(struct dbg_request *rq)
 {
     static int was[11];
     int up, down, left, right, ok, prev, next, row, click;
 
-    up    = edge(PK_UP, &was[0])    | edge(PK_P2_UP, &was[1]);
-    down  = edge(PK_DOWN, &was[2])  | edge(PK_P2_DOWN, &was[3]);
-    left  = edge(PK_LEFT, &was[4])  | edge(PK_P2_LEFT, &was[5]);
-    right = edge(PK_RIGHT, &was[6]) | edge(PK_P2_RIGHT, &was[7]);
-    ok    = edge(PK_OK, &was[8]);
-    prev  = edge(PK_DBG_PAGE_PREV, &was[9]);
-    next  = edge(PK_DBG_PAGE_NEXT, &was[10]);
+    up    = edge(PK_UP, &was[0])    | edge(PK_P2_UP, &was[1])    | PAD_EDGE(up);
+    down  = edge(PK_DOWN, &was[2])  | edge(PK_P2_DOWN, &was[3])  | PAD_EDGE(down);
+    left  = edge(PK_LEFT, &was[4])  | edge(PK_P2_LEFT, &was[5])  | PAD_EDGE(left);
+    right = edge(PK_RIGHT, &was[6]) | edge(PK_P2_RIGHT, &was[7]) | PAD_EDGE(right);
+    ok    = edge(PK_OK, &was[8]) | (PAD_HIT(PB_SOUTH) != 0);
+    prev  = edge(PK_DBG_PAGE_PREV, &was[9]) | (PAD_HIT(PB_L1) != 0);
+    next  = edge(PK_DBG_PAGE_NEXT, &was[10]) | (PAD_HIT(PB_R1) != 0);
+    if (PAD_HIT(PB_EAST)) {
+        g_pad_was = g_pad;
+        dbg_menu_toggle();
+        memset(rq, 0, sizeof *rq);
+        return 0;
+    }
+    g_pad_was = g_pad;
     click = g_mdown && !g_mouse_was;
     g_mouse_was = g_mdown;
 

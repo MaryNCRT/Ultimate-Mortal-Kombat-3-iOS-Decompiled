@@ -29,6 +29,7 @@ RUNTIME_FILES = [
     "runtime/lime_menu.c", "runtime/lime_platform.c", "runtime/lime_app.c",
     "runtime/wav.c", "runtime/wav.h", "runtime/fight_runtime.c",
     "runtime/fight_runtime.h", "runtime/arm_runtime.h", "runtime/debug_menu.h",
+    "runtime/savestate.c", "runtime/savestate.h",
     "runtime/platform/platform.h", "runtime/platform/gl.h",
     "runtime/platform/win32_gl.c", "runtime/platform/win32_gl_cdecl.c",
     "runtime/platform/win32_audio.c",

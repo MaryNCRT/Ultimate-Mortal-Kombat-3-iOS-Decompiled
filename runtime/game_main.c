@@ -44,6 +44,8 @@
  *   UMK3_CRASH_TEST=<tick>     crash on purpose (the crash report)
  *   UMK3_LOG_P1=1              player one frame and buttons, every change
  *   UMK3_LOG_PACE=1            the frame pacing (input lag), once a second
+ *   UMK3_LOG_PAD=1             the pad's buttons, every change (pad= in umk3.ini)
+ *   UMK3_PAD=<auto|off|xinput|vvvv:pppp>  the pad, over umk3.ini's pad=
  *   UMK3_FRAME_DELAY=0         no late key read before a 60 Hz refresh
  *   UMK3_PACE_HZ=<hz>          pace as if the screen ran at <hz>
  *   UMK3_DBG_HITBOX=1          the hitboxes on (as the debug menu's TOOLS)
@@ -66,6 +68,7 @@
  *
  * Debug, to skip the menus:
  *   umk3-game --fight <p1> <p2> [stage]     (or UMK3_FIGHT="p1,p2,stage")
+ *   umk3-game --list-pads                   the pads attached (for the launcher)
  * goes straight from the main menu into a fight. A fighter is a name from
  * CharacterNames ("kitana", "kunglao", "sub-zero") or its number 0..25; the
  * stage is a Level_Info row, 0..15 (default 0). It sets what the select
@@ -192,6 +195,34 @@ extern int   Settings[10];
  * key5_p/b/k/r and key_special for five. */
 extern int PortKeyButtons[7], PortKeyDial;
 
+static PLAT_PAD g_pad;                  /* player one's pad, read each tick */
+
+/* The pad combination that opens the debug menu: umk3.ini pad_dbg_menu=,
+ * button names joined by "+" (SOUTH EAST WEST NORTH L1 R1 L2 R2 SELECT START
+ * L3 R3 HOME). L3+R3 unless it says otherwise; empty = none. */
+static unsigned g_pad_dbg_mask = (1u << PB_L3) | (1u << PB_R3);
+
+static unsigned pad_combo(const char *v)
+{
+    static const char *const names[PB_COUNT] = {
+        "SOUTH", "EAST", "WEST", "NORTH", "L1", "R1", "L2", "R2",
+        "SELECT", "START", "L3", "R3", "HOME",
+    };
+    unsigned m = 0;
+    int i;
+
+    while (*v) {
+        size_t n = strcspn(v, "+");
+        for (i = 0; i < PB_COUNT; i++)
+            if (strlen(names[i]) == n && _strnicmp(v, names[i], n) == 0)
+                m |= 1u << i;
+        v += n;
+        if (*v)
+            v++;
+    }
+    return m;
+}
+
 static void keyboard_buttons(void)
 {
     static const int keys6[7][2] = {    /* button index 0..6, two keys each */
@@ -208,18 +239,33 @@ static void keyboard_buttons(void)
     static const int dial[3][3] = {     /* [dy + 1][dx + 1] */
         { 8, 1, 2 }, { 7, 0, 3 }, { 6, 5, 4 },
     };
+    /* The pad (plat_pad_read, umk3.ini pad=), by position: the face
+     * buttons as the arcade's -- punches on the left, kicks on the right,
+     * high on top -- R1 block, L1 / L2 run, R2 the special button. With five
+     * buttons both left ones punch and both right ones kick. */
+    static const unsigned pad6[7] = {
+        1u << PB_WEST, 1u << PB_SOUTH, 1u << PB_R1, 1u << PB_NORTH,
+        1u << PB_EAST, (1u << PB_L1) | (1u << PB_L2), 1u << PB_R2,
+    };
+    static const unsigned pad5[7] = {
+        (1u << PB_WEST) | (1u << PB_NORTH), 0, 1u << PB_R1,
+        (1u << PB_SOUTH) | (1u << PB_EAST), 0,
+        (1u << PB_L1) | (1u << PB_L2), 1u << PB_R2,
+    };
     const int (*keys)[2] = (Player1NumButtons == 6) ? keys6 : keys5;
+    const unsigned *padb = (Player1NumButtons == 6) ? pad6 : pad5;
     int dx, dy, b, live = CurrentTask == 6;
 
-    dx = (plat_key(PK_RIGHT) || plat_key(PK_P2_RIGHT))
-       - (plat_key(PK_LEFT) || plat_key(PK_P2_LEFT));
-    dy = (plat_key(PK_DOWN) || plat_key(PK_P2_DOWN))
-       - (plat_key(PK_UP) || plat_key(PK_P2_UP));
+    dx = (plat_key(PK_RIGHT) || plat_key(PK_P2_RIGHT) || g_pad.right)
+       - (plat_key(PK_LEFT) || plat_key(PK_P2_LEFT) || g_pad.left);
+    dy = (plat_key(PK_DOWN) || plat_key(PK_P2_DOWN) || g_pad.down)
+       - (plat_key(PK_UP) || plat_key(PK_P2_UP) || g_pad.up);
     PortKeyDial = live ? dial[dy + 1][dx + 1] : 0;
 
     for (b = 0; b < 7; b++)
         PortKeyButtons[b] = live && keys[b][0] >= 0
-            && (plat_key(keys[b][0]) || plat_key(keys[b][1]));
+            && (plat_key(keys[b][0]) || plat_key(keys[b][1])
+                || (g_pad.buttons & padb[b]));
 }
 
 /* --fight: -1 until parsed. */
@@ -665,6 +711,10 @@ static void read_config(const char *dir)
             g_cfg_debug_keys = atoi(v) != 0;
         else if (strcmp(line, "skip_intro") == 0)
             g_cfg_skip_intro = atoi(v) != 0;
+        else if (strcmp(line, "pad_dbg_menu") == 0)
+            g_pad_dbg_mask = pad_combo(v);
+        else if (strcmp(line, "pad") == 0)    /* auto, off, xinput, vvvv:pppp */
+            plat_pad_select(v);
         else if (strcmp(line, "hide_controls") == 0)
             PortHideControls = atoi(v) != 0;
         else if (strncmp(line, "key_", 4) == 0) {
@@ -742,7 +792,9 @@ static void hud_keys(void)
         lime_touch_ended(g_ktap_x, g_ktap_y, g_ktap_x, g_ktap_y);
 
     for (k = 0; k < 2; k++) {
-        int down = plat_key(PK_PAUSE + k);
+        /* the pad: start is P, select (Back / Share / Create) is M */
+        int down = plat_key(PK_PAUSE + k)
+                   || (g_pad.buttons & (1u << (k ? PB_SELECT : PB_START)));
         int hit = down && !was[k];
         float x = -1.0f, y = 10.0f;
 
@@ -1618,6 +1670,12 @@ int main(int argc, char **argv)
     double last, acc = 0.0;
 
     setvbuf(stdout, NULL, _IONBF, 0);
+    /* --list-pads: the pads attached, one "pad=value<TAB>name" a line, and
+     * out -- the launcher's CONTROLS > GAMEPAD list comes from here */
+    if (argc > 1 && strcmp(argv[1], "--list-pads") == 0) {
+        plat_pad_list();
+        return 0;
+    }
 #ifdef _WIN32
     /* No argument: `res` beside the exe, wherever it was started from, so a
      * double-click in the game folder just works. */
@@ -1664,6 +1722,8 @@ int main(int argc, char **argv)
         g_cfg_debug_keys = 1;
     if (getenv("UMK3_SKIP_INTRO"))
         g_cfg_skip_intro = 1;
+    if (getenv("UMK3_PAD"))             /* over umk3.ini's pad= */
+        plat_pad_select(getenv("UMK3_PAD"));
     if (getenv("UMK3_BUTTONS"))         /* 5 or 6, over umk3.ini's buttons= */
         g_cfg_buttons = atoi(getenv("UMK3_BUTTONS"));
     g_keys_off = shot_at != 0;
@@ -1894,9 +1954,31 @@ int main(int argc, char **argv)
                         q++;
                 }
             }
+            /* a script ignores the pad too, unless UMK3_LOG_PAD asks to
+             * watch it */
+            if (!g_keys_off || getenv("UMK3_LOG_PAD")) {
+                static int was_on = -1;
+                static unsigned was_b;
+
+                plat_pad_read(&g_pad);
+                if (g_pad.connected != was_on)
+                    printf(g_pad.connected ? "pad: %s\n" : "pad: none\n",
+                           g_pad.name);
+                if (getenv("UMK3_LOG_PAD") && g_pad.buttons != was_b)
+                    printf("pad buttons %04x dirs %d%d%d%d\n", g_pad.buttons,
+                           g_pad.up, g_pad.down, g_pad.left, g_pad.right);
+                was_on = g_pad.connected;
+                was_b = g_pad.buttons;
+            }
             if (g_cfg_debug_keys) {
                 static int was_f2, was_f3;
-                int f2 = plat_key(PK_TEST), f3 = plat_key(PK_BACK);
+                /* the pad's combination (pad_dbg_menu=, L3+R3 unless the
+                 * launcher set another) opens and closes the menu too */
+                int f2 = plat_key(PK_TEST)
+                         || (g_pad_dbg_mask
+                             && (g_pad.buttons & g_pad_dbg_mask)
+                                == g_pad_dbg_mask),
+                    f3 = plat_key(PK_BACK);
                 if (f2 && !was_f2)
                     dbg_menu_toggle();
                 if (f3 && !was_f3 && dbg_keys_on())
@@ -1910,6 +1992,7 @@ int main(int argc, char **argv)
                 /* glClear ignores the viewport: this cleared the whole
                  * window and the frame picture with it */
                 clear_frame(ww, wh, vx, vy, vw, vh);
+                dbg_menu_pad(&g_pad);
                 if (dbg_menu_tick(&rq))
                     debug_request(&rq);
                 dbg_menu_draw();

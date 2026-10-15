@@ -28,6 +28,8 @@ int  dbg_menu_tick(struct dbg_request *rq);
 /* The pointer in the 480x320 space and whether a button is down, each
  * frame the menu is open. */
 void dbg_menu_mouse(float x, float y, int down);
+/* the pad, each frame the menu is open (include platform/platform.h first) */
+void dbg_menu_pad(const PLAT_PAD *p);
 /* Each fighter's palette for the fights loaded next: 0 the game's rule,
  * 1 the first, 2 the alternate (LoadLevelCharacters, port only). */
 extern int DbgPalette[2];
