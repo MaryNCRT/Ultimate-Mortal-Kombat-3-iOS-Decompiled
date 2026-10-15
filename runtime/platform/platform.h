@@ -131,6 +131,9 @@ enum {
     PK_5_P, PK_5_B, PK_5_K, PK_5_R,
     /* debug menu: previous / next page */
     PK_DBG_PAGE_PREV, PK_DBG_PAGE_NEXT,
+    /* player two's keys for the five-button layout: P B K R (S is
+     * PK_P2_SPECIAL) */
+    PK_P2_5_P, PK_P2_5_B, PK_P2_5_K, PK_P2_5_R,
     PK_COUNT
 };
 
@@ -178,6 +181,11 @@ void plat_pad_select(const char *which);
 
 /* Player one's pad right now; 0 (and out->connected 0) when there is none. */
 int plat_pad_read(PLAT_PAD *out);
+
+/* Player two's pad, the same way (umk3.ini p2pad=). Never the pad player
+ * one is using. Port only; the SDL backend has none. */
+void plat_pad2_select(const char *which);
+int plat_pad2_read(PLAT_PAD *out);
 
 /* Print every pad attached now, one line each: the pad= value, a tab, the
  * name the system gives it. For `umk3-game --list-pads`, which the launcher

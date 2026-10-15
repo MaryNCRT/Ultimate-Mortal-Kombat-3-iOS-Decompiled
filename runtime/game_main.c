@@ -250,6 +250,7 @@ extern int   Settings[10];
 extern int PortKeyButtons[7], PortKeyDial;
 
 static PLAT_PAD g_pad;                  /* player one's pad, read each tick */
+static PLAT_PAD g_pad2;                 /* player two's (p2pad=), port */
 
 /* The pad combination that opens the debug menu: umk3.ini pad_dbg_menu=,
  * button names joined by "+" (SOUTH EAST WEST NORTH L1 R1 L2 R2 SELECT START
@@ -298,6 +299,20 @@ static unsigned g_pad5[7] = {
 static unsigned g_pad_pause = 1u << PB_START;
 static unsigned g_pad_moves = 1u << PB_SELECT;
 
+/* Player two's pad, the same actions and defaults: the launcher's GAMEPAD
+ * tab for player two writes p2pad_<action>= and p2pad5_<p|b|k|r>= (port). */
+static unsigned g_p2pad6[7] = {
+    1u << PB_WEST, 1u << PB_SOUTH, 1u << PB_R1, 1u << PB_NORTH,
+    1u << PB_EAST, (1u << PB_L1) | (1u << PB_L2), 1u << PB_R2,
+};
+static unsigned g_p2pad5[7] = {
+    (1u << PB_WEST) | (1u << PB_NORTH), 0, 1u << PB_R1,
+    (1u << PB_SOUTH) | (1u << PB_EAST), 0,
+    (1u << PB_L1) | (1u << PB_L2), 1u << PB_R2,
+};
+static unsigned g_p2pad_pause = 1u << PB_START;
+static unsigned g_p2pad_moves = 1u << PB_SELECT;
+
 static void keyboard_buttons(void)
 {
     static const int keys6[7][2] = {    /* button index 0..6, two keys each */
@@ -306,8 +321,8 @@ static void keyboard_buttons(void)
         { PK_SPECIAL, PK_P2_SPECIAL },
     };
     static const int keys5[7][2] = {    /* P - B K - R S; -1: no button */
-        { PK_5_P, PK_P2_HP }, { -1, -1 }, { PK_5_B, PK_P2_BL },
-        { PK_5_K, PK_P2_HK }, { -1, -1 }, { PK_5_R, PK_P2_RUN },
+        { PK_5_P, PK_P2_5_P }, { -1, -1 }, { PK_5_B, PK_P2_5_B },
+        { PK_5_K, PK_P2_5_K }, { -1, -1 }, { PK_5_R, PK_P2_5_R },
         { PK_SPECIAL, PK_P2_SPECIAL },
     };
     /* (dx, dy) -> CheckLeftDial + 1: 1 up, 2 up-right ... 8 up-left */
@@ -319,27 +334,36 @@ static void keyboard_buttons(void)
     const unsigned *padb = (Player1NumButtons == 6) ? g_pad6 : g_pad5;
     int dx, dy, b, live = CurrentTask == 6;
     /* GameMode 6 (DUELO, two players on one device): player one has the
-     * first key set and the pad, player two the second set. Otherwise both
-     * sets drive player one. */
+     * first key set and the first pad, player two the second set and the
+     * second pad. Otherwise both sets and both pads drive player one. */
     int duel = GameMode == 6, two = !duel;
+    const unsigned *padb2 =
+        ((duel ? Player2NumButtons : Player1NumButtons) == 6)
+        ? g_p2pad6 : g_p2pad5;
+    PLAT_PAD p2 = g_pad2;
 
-    dx = (plat_key(PK_RIGHT) || (two && plat_key(PK_P2_RIGHT)) || g_pad.right)
-       - (plat_key(PK_LEFT) || (two && plat_key(PK_P2_LEFT)) || g_pad.left);
-    dy = (plat_key(PK_DOWN) || (two && plat_key(PK_P2_DOWN)) || g_pad.down)
-       - (plat_key(PK_UP) || (two && plat_key(PK_P2_UP)) || g_pad.up);
+    dx = (plat_key(PK_RIGHT) || (two && (plat_key(PK_P2_RIGHT) || p2.right))
+          || g_pad.right)
+       - (plat_key(PK_LEFT) || (two && (plat_key(PK_P2_LEFT) || p2.left))
+          || g_pad.left);
+    dy = (plat_key(PK_DOWN) || (two && (plat_key(PK_P2_DOWN) || p2.down))
+          || g_pad.down)
+       - (plat_key(PK_UP) || (two && (plat_key(PK_P2_UP) || p2.up))
+          || g_pad.up);
     PortKeyDial = live ? dial[dy + 1][dx + 1] : 0;
 
     for (b = 0; b < 7; b++)
         PortKeyButtons[b] = live && keys[b][0] >= 0
-            && (plat_key(keys[b][0]) || (two && plat_key(keys[b][1]))
+            && (plat_key(keys[b][0])
+                || (two && (plat_key(keys[b][1]) || (p2.buttons & padb2[b])))
                 || (g_pad.buttons & padb[b]));
 
-    dx = plat_key(PK_P2_RIGHT) - plat_key(PK_P2_LEFT);
-    dy = plat_key(PK_P2_DOWN) - plat_key(PK_P2_UP);
+    dx = (plat_key(PK_P2_RIGHT) || p2.right) - (plat_key(PK_P2_LEFT) || p2.left);
+    dy = (plat_key(PK_P2_DOWN) || p2.down) - (plat_key(PK_P2_UP) || p2.up);
     PortKeyDialP2 = live && duel ? dial[dy + 1][dx + 1] : 0;
     for (b = 0; b < 7; b++)
         PortKeyButtonsP2[b] = live && duel && keys2[b][1] >= 0
-            && plat_key(keys2[b][1]);
+            && (plat_key(keys2[b][1]) || (p2.buttons & padb2[b]));
 }
 
 /* --fight: -1 until parsed. */
@@ -737,6 +761,47 @@ static int  g_cfg_skip_intro;          /* skip_intro=1: no publisher logos */
 static char g_cfg_lang[8];
 static char g_cfg_frame[1024];        /* marco=: the picture behind the bars */
 
+/* Player two's lines, "p2" and then the name player one's would have:
+ * p2pad=, p2pad_<action>=, p2pad5_<p|b|k|r>=, p2key_<up..run|special>=,
+ * p2key5_<p|b|k|r>= (the launcher's controls for player two, port). */
+static void read_config_p2(const char *n, const char *v)
+{
+    static const char *const names[] = {
+        "up", "down", "left", "right", "hp", "lp", "block", "hk", "lk", "run"
+    };
+    static const char *const names5[] = { "p", "b", "k", "r" };
+    static const int at5[] = { 0, 2, 3, 5 };
+    int i;
+
+    if (strcmp(n, "pad") == 0)
+        plat_pad2_select(v);
+    else if (strncmp(n, "pad5_", 5) == 0) {
+        for (i = 0; i < 4; i++)
+            if (strcmp(n + 5, names5[i]) == 0)
+                g_p2pad5[at5[i]] = pad_combo(v);
+    } else if (strncmp(n, "pad_", 4) == 0) {
+        for (i = 0; i < 6; i++)
+            if (strcmp(n + 4, names[4 + i]) == 0)
+                g_p2pad6[i] = pad_combo(v);
+        if (strcmp(n + 4, "special") == 0)
+            g_p2pad6[6] = g_p2pad5[6] = pad_combo(v);
+        else if (strcmp(n + 4, "pause") == 0)
+            g_p2pad_pause = pad_combo(v);
+        else if (strcmp(n + 4, "moves") == 0)
+            g_p2pad_moves = pad_combo(v);
+    } else if (strncmp(n, "key5_", 5) == 0) {
+        for (i = 0; i < 4; i++)
+            if (strcmp(n + 5, names5[i]) == 0)
+                plat_bind_key(PK_P2_5_P + i, atoi(v));
+    } else if (strncmp(n, "key_", 4) == 0) {
+        for (i = 0; i < 10; i++)
+            if (strcmp(n + 4, names[i]) == 0)
+                plat_bind_key(PK_P2_UP + i, atoi(v));
+        if (strcmp(n + 4, "special") == 0)
+            plat_bind_key(PK_P2_SPECIAL, atoi(v));
+    }
+}
+
 static void read_config(const char *dir)
 {
     char path[1100], line[128];
@@ -795,6 +860,8 @@ static void read_config(const char *dir)
             PortTextureQuality = _stricmp(v, "max") == 0 ? 2
                                : _stricmp(v, "ipad") == 0 ? 1 : 0;
         }
+        else if (strncmp(line, "p2", 2) == 0)
+            read_config_p2(line + 2, v);
         else if (strcmp(line, "pad_dbg_menu") == 0)
             g_pad_dbg_mask = pad_combo(v);
         else if (strncmp(line, "pad5_", 5) == 0) {
@@ -908,7 +975,8 @@ static void hud_keys(void)
     for (k = 0; k < 2; k++) {
         /* the pad: start is P, select (Back / Share / Create) is M */
         int down = plat_key(PK_PAUSE + k)
-                   || (g_pad.buttons & (k ? g_pad_moves : g_pad_pause));
+                   || (g_pad.buttons & (k ? g_pad_moves : g_pad_pause))
+                   || (g_pad2.buttons & (k ? g_p2pad_moves : g_p2pad_pause));
         int hit = down && !was[k];
         float x = -1.0f, y = 10.0f;
 
@@ -2119,6 +2187,7 @@ int main(int argc, char **argv)
                 static unsigned was_b;
 
                 plat_pad_read(&g_pad);
+                plat_pad2_read(&g_pad2);
                 if (g_pad.connected != was_on)
                     printf(g_pad.connected ? "pad: %s\n" : "pad: none\n",
                            g_pad.name);

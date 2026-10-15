@@ -1,4 +1,4 @@
-ULTIMATE MORTAL KOMBAT 3 - PORT DE PC - 0.1.0b ALPHA
+ULTIMATE MORTAL KOMBAT 3 - PORT DE PC - 0.1.1 ALPHA
 ====================================================
 
 Port nativo para Windows de la version de iOS (1.2.59), hecho por
@@ -111,6 +111,15 @@ NUEVO EN 0.0.9
   memoria). Una pelea del debug ya no deja sus luchadores, escenario ni
   paletas para los demas modos.
 - Launcher: botones mas pequenos.
+
+NUEVO EN 0.1.1
+- CONTROLES: pestanas JUGADOR 1 / JUGADOR 2 en TECLADO y MANDO. El
+  jugador 2 tiene sus propias teclas (6 y 5 botones) y su propio mando
+  para JUGAR > DUELO.
+- DUELO sale con cualquier tamano de interfaz.
+- Con la interfaz de iPad en 16:9 y 21:9: los luchadores de la
+  seleccion vuelven a su sitio, los letreros de las torres quedan
+  centrados y el marco de JUGADORES tambien.
 
 NUEVO EN 0.1.0b
 - En 4:3 los menus son los de la version de iPad (pantallas de
@@ -254,7 +263,7 @@ ARREGLADO EN 0.0.2
 - La melena de Sindel aparece, con su textura.
 - El joystick en pantalla se mueve.
 
-ERRORES CONOCIDOS EN 0.1.0b
+ERRORES CONOCIDOS EN 0.1.1
 - Algunos objetos aparte de los luchadores aun pueden no verse.
 - Faltan animaciones en algunos fatalities (el de Sonya no se ve bien).
 - Siguen apareciendo errores de texturas en algunos escenarios y
@@ -289,7 +298,9 @@ picker on the select screen ("< COLOR 1 >", saved), no input lag, crash
 reports, the Kombat Kode loading tip fixed, debug TOOLS (hitboxes, fight
 speed, save states), smaller launcher buttons. New in 0.1.0b: the iPad build's menus on 4:3,
 PLAY > DUELO (two players, one PC), free gamepad binding, a tabbed debug
-menu, wide-screen fixes. New in 0.0.7: BABALITY banner and tune (and animality, mercy, friendship
+menu, wide-screen fixes. New in 0.1.1: player two's own keys and gamepad
+for DUELO (CONTROLS > PLAYER 2), DUELO with every interface size, select
+and tower screens fixed on wide screens with the iPad interface. New in 0.0.7: BABALITY banner and tune (and animality, mercy, friendship
 banners), Kung Lao's hat on the select screen, Sub-Zero's ice (frozen
 fighters, ice clone), a paged debug menu with mouse and palettes, skip the
 intros, debug keys in the launcher. New in 0.0.6c: a FINISHER row in the F2 debug menu forces player one's

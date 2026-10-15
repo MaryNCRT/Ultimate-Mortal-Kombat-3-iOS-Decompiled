@@ -302,7 +302,9 @@ static int g_vk[PK_COUNT] = {
     VK_F6, VK_F7, VK_F8,                /* debug: screen back/next, main menu */
     'H', VK_NUMPAD0,                    /* the special button, P1 / P2 */
     'U', 'O', 'J', 'L',                 /* five buttons: P B K R */
-    'Q', 'E'                            /* debug menu: page back / on */
+    'Q', 'E',                           /* debug menu: page back / on */
+    VK_NUMPAD7, VK_NUMPAD9,             /* P2 five buttons: P B */
+    VK_NUMPAD4, VK_NUMPAD6,             /* P2 five buttons: K R */
 };
 
 void plat_key_label(int code, char *out, int n)
@@ -416,17 +418,29 @@ typedef unsigned long (__stdcall *XIGET)(unsigned long, XI_STATE *);
 
 static XIGET          g_xiget;
 static int            g_pad_tried;
-static char           g_pad_want[32] = "auto";
-static volatile LONG  g_jid = -1;            /* the WinMM pad in use, or -1 */
-static unsigned       g_jid_vidpid;          /* its vendor | product << 16 */
-static char           g_jid_name[64];
 static HANDLE         g_pad_thread;
 
-static unsigned want_vidpid(void)
+/* One per player: pad= for player one, p2pad= for player two (port). A
+ * pad one player holds -- a WinMM id or an XInput slot -- is never the
+ * other's, so "auto" on both gives each its own pad. */
+typedef struct {
+    char          want[32];
+    volatile LONG jid;                  /* the WinMM pad in use, or -1 */
+    unsigned      vidpid;               /* its vendor | product << 16 */
+    char          name[64];
+    volatile LONG xi;                   /* the XInput slot last read, or -1 */
+} PAD_SLOT;
+
+static PAD_SLOT g_slot[2] = {
+    { "auto", -1, 0, "", -1 },
+    { "auto", -1, 0, "", -1 },
+};
+
+static unsigned want_vidpid(const PAD_SLOT *ps)
 {
     unsigned v, p;
 
-    if (sscanf(g_pad_want, "%x:%x", &v, &p) == 2)
+    if (sscanf(ps->want, "%x:%x", &v, &p) == 2)
         return (v & 0xffff) | (p & 0xffff) << 16;
     return 0;
 }
@@ -480,27 +494,36 @@ static int joy_probe(UINT id, unsigned *vp, char *name, int n)
     return 1;
 }
 
-/* The search, off the game's thread. */
+/* The search, off the game's thread: player one first, so with "auto" on
+ * both player one gets the first pad found. */
 static DWORD WINAPI pad_search(LPVOID arg)
 {
     (void)arg;
     for (;;) {
-        if (g_jid < 0 && strcmp(g_pad_want, "off") != 0
-            && strcmp(g_pad_want, "keyboard") != 0
-            && strcmp(g_pad_want, "xinput") != 0) {
-            unsigned want = want_vidpid(), vp;
+        int s;
+
+        for (s = 0; s < 2; s++) {
+            PAD_SLOT *ps = &g_slot[s];
+            unsigned want = want_vidpid(ps), vp;
             char name[64];
             UINT id;
 
-            for (id = 0; id < 16 && g_jid < 0; id++) {
+            if (ps->jid >= 0 || strcmp(ps->want, "off") == 0
+                || strcmp(ps->want, "keyboard") == 0
+                || strcmp(ps->want, "xinput") == 0
+                || (!want && ps->xi >= 0))      /* auto, on an XInput pad */
+                continue;
+            for (id = 0; id < 16 && ps->jid < 0; id++) {
+                if ((LONG)id == g_slot[1 - s].jid)
+                    continue;
                 if (!joy_probe(id, &vp, name, sizeof name))
                     continue;
                 if (want ? vp != want
                          : (vp & 0xffff) == 0x045e)  /* Xbox: XInput */
                     continue;
-                g_jid_vidpid = vp;
-                snprintf(g_jid_name, sizeof g_jid_name, "%s", name);
-                InterlockedExchange(&g_jid, (LONG)id);
+                ps->vidpid = vp;
+                snprintf(ps->name, sizeof ps->name, "%s", name);
+                InterlockedExchange(&ps->jid, (LONG)id);
             }
         }
         Sleep(2000);
@@ -508,12 +531,16 @@ static DWORD WINAPI pad_search(LPVOID arg)
     return 0;
 }
 
-void plat_pad_select(const char *which)
+static void pad_select(PAD_SLOT *ps, const char *which)
 {
-    snprintf(g_pad_want, sizeof g_pad_want, "%s",
+    snprintf(ps->want, sizeof ps->want, "%s",
              which && *which ? which : "auto");
-    InterlockedExchange(&g_jid, -1);            /* look again */
+    InterlockedExchange(&ps->jid, -1);          /* look again */
+    InterlockedExchange(&ps->xi, -1);
 }
+
+void plat_pad_select(const char *which)  { pad_select(&g_slot[0], which); }
+void plat_pad2_select(const char *which) { pad_select(&g_slot[1], which); }
 
 static void pad_load(void)
 {
@@ -539,11 +566,11 @@ static const signed char g_map_nintendo[PB_COUNT] =  /* Switch Pro */
 static const signed char g_map_generic[PB_COUNT] =   /* most USB pads */
     { 1, 2, 0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
 
-static int pad_winmm(PLAT_PAD *out)
+static int pad_winmm(PAD_SLOT *ps, PLAT_PAD *out)
 {
     JOYINFOEX j;
     const signed char *map;
-    LONG id = g_jid;
+    LONG id = ps->jid;
     DWORD pov;
     int i;
 
@@ -555,10 +582,10 @@ static int pad_winmm(PLAT_PAD *out)
     j.dwSize = sizeof j;
     j.dwFlags = JOY_RETURNALL;
     if (joyGetPosEx((UINT)id, &j) != JOYERR_NOERROR) {
-        InterlockedCompareExchange(&g_jid, -1, id);  /* unplugged */
+        InterlockedCompareExchange(&ps->jid, -1, id);  /* unplugged */
         return 0;
     }
-    switch (g_jid_vidpid & 0xffff) {
+    switch (ps->vidpid & 0xffff) {
     case 0x054c: map = g_map_sony; break;
     case 0x057e: map = g_map_nintendo; break;
     default:     map = g_map_generic; break;
@@ -578,24 +605,29 @@ static int pad_winmm(PLAT_PAD *out)
     if (j.dwYpos > 45535) out->down = 1;
     if (j.dwXpos < 20000) out->left = 1;
     if (j.dwXpos > 45535) out->right = 1;
-    snprintf(out->name, sizeof out->name, "%s", g_jid_name);
+    snprintf(out->name, sizeof out->name, "%s", ps->name);
     return out->connected = 1;
 }
 
-static int pad_xinput(PLAT_PAD *out)
+/* The first XInput slot attached that the other player is not using. */
+static int pad_xinput(PAD_SLOT *ps, PLAT_PAD *out)
 {
     XI_STATE s;
+    LONG other = g_slot[ps == g_slot ? 1 : 0].xi;
     unsigned long i;
 
     if (!g_xiget)
         return 0;
     for (i = 0; i < 4; i++) {
         memset(&s, 0, sizeof s);
-        if (g_xiget(i, &s) == 0)
+        if ((LONG)i != other && g_xiget(i, &s) == 0)
             break;
     }
-    if (i == 4)
+    if (i == 4) {
+        InterlockedExchange(&ps->xi, -1);
         return 0;
+    }
+    InterlockedExchange(&ps->xi, (LONG)i);
     if (s.buttons & XI_A)      out->buttons |= 1u << PB_SOUTH;
     if (s.buttons & XI_B)      out->buttons |= 1u << PB_EAST;
     if (s.buttons & XI_X)      out->buttons |= 1u << PB_WEST;
@@ -618,19 +650,28 @@ static int pad_xinput(PLAT_PAD *out)
     return out->connected = 1;
 }
 
-int plat_pad_read(PLAT_PAD *out)
+static int pad_read(PAD_SLOT *ps, PLAT_PAD *out)
 {
     memset(out, 0, sizeof *out);
     if (!g_pad_tried)
         pad_load();
-    if (strcmp(g_pad_want, "off") == 0 || strcmp(g_pad_want, "keyboard") == 0)
+    if (strcmp(ps->want, "off") == 0 || strcmp(ps->want, "keyboard") == 0)
         return 0;
-    if (strcmp(g_pad_want, "xinput") == 0)
-        return pad_xinput(out);
-    if (want_vidpid())
-        return pad_winmm(out);
-    return pad_xinput(out) || pad_winmm(out);   /* auto */
+    if (strcmp(ps->want, "xinput") == 0)
+        return pad_xinput(ps, out);
+    if (want_vidpid(ps))
+        return pad_winmm(ps, out);
+    if (pad_xinput(ps, out)) {                  /* auto: XInput first */
+        LONG id = ps->jid;
+        if (id >= 0)                            /* let the other have it */
+            InterlockedCompareExchange(&ps->jid, -1, id);
+        return 1;
+    }
+    return pad_winmm(ps, out);
 }
+
+int plat_pad_read(PLAT_PAD *out)  { return pad_read(&g_slot[0], out); }
+int plat_pad2_read(PLAT_PAD *out) { return pad_read(&g_slot[1], out); }
 
 /* --list-pads: every WinMM pad by the name Windows gives it (an Xbox pad
  * listed as "xinput", since that is how the game reads it), then any XInput

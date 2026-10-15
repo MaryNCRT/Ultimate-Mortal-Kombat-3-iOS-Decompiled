@@ -20,6 +20,8 @@
  *     pad_name=DualSense Wireless Controller   (the launcher's own label)
  *     pad_hp=WEST ... pad_moves=SELECT, pad5_p=WEST+NORTH ...   (the pad's
  *       button for each action, PB_* names joined by "+", empty = none)
+ *     p2pad= p2pad_name= p2pad_<action>= p2pad5_<x>= p2key_<name>=
+ *       p2key5_<x>=   (player two's, for DUELO; same values)
  *
  * The game only reads width/height/render_width/render_height/fullscreen/borderless/
  * language/debug_keys/skip_intro and the
@@ -104,6 +106,18 @@ const PAD5_NAMES = ['p', 'b', 'k', 'r'];
 const PAD5_DEFAULTS = { p: 'WEST+NORTH', b: 'R1', k: 'SOUTH+EAST', r: 'L1+L2' };
 const PAD_VALUE = /^([A-Z0-9]+(\+[A-Z0-9]+)*)?$/i;
 
+/* Player two (DUELO, two players on one PC): p2key_<name>= for the moves
+ * and the six buttons and S, p2key5_<p|b|k|r>=, p2pad=, p2pad_name=,
+ * p2pad_<action>= and p2pad5_<p|b|k|r>= -- the same as player one's. The
+ * keys default to the game's second set: arrows and the numeric keypad. */
+const P2_KEY_NAMES = ['up', 'down', 'left', 'right',
+    'hp', 'lp', 'block', 'hk', 'lk', 'run', 'special'];
+const P2_KEY_DEFAULTS = {
+    up: 38, down: 40, left: 37, right: 39,
+    hp: 103, lp: 104, block: 105, hk: 100, lk: 101, run: 102, special: 96,
+};
+const P2_KEY5_DEFAULTS = { p: 103, b: 105, k: 100, r: 102 };
+
 function defaultConfig() {
     const keys = {};
     for (const name of KEY_NAMES)
@@ -137,6 +151,12 @@ function defaultConfig() {
         keys5,
         padKeys: Object.assign({}, PAD_DEFAULTS),
         padKeys5: Object.assign({}, PAD5_DEFAULTS),
+        p2Pad: 'auto',               /* p2pad=: player two's pad */
+        p2PadName: '',
+        p2Keys: Object.assign({}, P2_KEY_DEFAULTS),
+        p2Keys5: Object.assign({}, P2_KEY5_DEFAULTS),
+        p2PadKeys: Object.assign({}, PAD_DEFAULTS),
+        p2PadKeys5: Object.assign({}, PAD5_DEFAULTS),
     };
 }
 
@@ -188,6 +208,23 @@ function load(p) {
             cfg.ipa = val;
         } else if (key === 'marco') {
             cfg.marco = val;
+        } else if (key === 'p2pad') {
+            cfg.p2Pad = /^(auto|off|xinput|[0-9a-f]{4}:[0-9a-f]{4})$/i.test(val)
+                ? val.toLowerCase() : 'auto';
+        } else if (key === 'p2pad_name') {
+            cfg.p2PadName = val;
+        } else if (key.startsWith('p2pad5_') && PAD5_NAMES.includes(key.slice(7))) {
+            if (PAD_VALUE.test(val))
+                cfg.p2PadKeys5[key.slice(7)] = val.toUpperCase();
+        } else if (key.startsWith('p2pad_') && PAD_NAMES.includes(key.slice(6))) {
+            if (PAD_VALUE.test(val))
+                cfg.p2PadKeys[key.slice(6)] = val.toUpperCase();
+        } else if (key.startsWith('p2key5_') && KEY5_NAMES.includes(key.slice(7))) {
+            if (num > 0 && num < 256)
+                cfg.p2Keys5[key.slice(7)] = num;
+        } else if (key.startsWith('p2key_') && P2_KEY_NAMES.includes(key.slice(6))) {
+            if (num > 0 && num < 256)
+                cfg.p2Keys[key.slice(6)] = num;
         } else if (key === 'pad') {
             cfg.pad = /^(auto|off|xinput|[0-9a-f]{4}:[0-9a-f]{4})$/i.test(val)
                 ? val.toLowerCase() : 'auto';
@@ -264,6 +301,19 @@ function save(p, cfg) {
         lines.push('pad_' + name + '=' + (pk[name] === undefined ? PAD_DEFAULTS[name] : pk[name]));
     for (const name of PAD5_NAMES)
         lines.push('pad5_' + name + '=' + (pk5[name] === undefined ? PAD5_DEFAULTS[name] : pk5[name]));
+    lines.push('p2pad=' + (cfg.p2Pad || 'auto'));
+    if (cfg.p2PadName)
+        lines.push('p2pad_name=' + cfg.p2PadName.replace(/[\r\n]/g, ' '));
+    const k2 = cfg.p2Keys || {}, k25 = cfg.p2Keys5 || {};
+    for (const name of P2_KEY_NAMES)
+        lines.push('p2key_' + name + '=' + (k2[name] || P2_KEY_DEFAULTS[name]));
+    for (const name of KEY5_NAMES)
+        lines.push('p2key5_' + name + '=' + (k25[name] || P2_KEY5_DEFAULTS[name]));
+    const p2k = cfg.p2PadKeys || {}, p2k5 = cfg.p2PadKeys5 || {};
+    for (const name of PAD_NAMES)
+        lines.push('p2pad_' + name + '=' + (p2k[name] === undefined ? PAD_DEFAULTS[name] : p2k[name]));
+    for (const name of PAD5_NAMES)
+        lines.push('p2pad5_' + name + '=' + (p2k5[name] === undefined ? PAD5_DEFAULTS[name] : p2k5[name]));
     fs.writeFileSync(p, lines.join('\n') + '\n', 'utf8');
 }
 
@@ -283,5 +333,6 @@ function gameReady(root) {
 }
 
 module.exports = { RES, LANGS, KEY_NAMES, KEY_DEFAULTS, KEY5_NAMES, KEY5_DEFAULTS,
-                   PAD_NAMES, PAD_DEFAULTS, PAD5_NAMES, PAD5_DEFAULTS, defaultConfig,
+                   PAD_NAMES, PAD_DEFAULTS, PAD5_NAMES, PAD5_DEFAULTS,
+                   P2_KEY_NAMES, P2_KEY_DEFAULTS, P2_KEY5_DEFAULTS, defaultConfig,
                    load, save, gameReady, gameBuiltAt };
