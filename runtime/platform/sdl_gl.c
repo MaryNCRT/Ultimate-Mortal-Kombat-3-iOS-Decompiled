@@ -319,6 +319,18 @@ void plat_pad_select(const char *which)
              which && *which ? which : "auto");
 }
 
+/* Player two's pad: none on this backend (port). */
+void plat_pad2_select(const char *which)
+{
+    (void)which;
+}
+
+int plat_pad2_read(PLAT_PAD *out)
+{
+    memset(out, 0, sizeof *out);
+    return 0;
+}
+
 void plat_pad_list(void)
 {
     int i;

@@ -4,7 +4,9 @@ Current state of the project. Written so that someone can pick it up with no pri
 
 **Last updated:** 2026-10-15 -- see [HANDOFF.md](HANDOFF.md) for the route.
 
-## Current state (alpha 0.1.0b, 2026-10-15)
+## Current state (alpha 0.1.1, 2026-10-15)
+
+**2026-10-15, 0.1.1 (notes: [RELEASE-0.1.1-alpha.md](RELEASE-0.1.1-alpha.md)):** player two's controls for DUELO, all Port, not in the binary. The launcher's CONTROLS has PLAYER 1 / PLAYER 2 tabs; umk3.ini gains `p2key_<up..run|special>=`, `p2key5_<p|b|k|r>=`, `p2pad=`, `p2pad_<action>=`, `p2pad5_<p|b|k|r>=` (read by `read_config_p2`, `runtime/game_main.c`). `win32_gl.c` keeps a pad slot per player (`plat_pad2_read`); a WinMM id or XInput slot one player holds is skipped for the other. `PK_P2_5_P..R` are player two's five-button keys (keypad 7 9 4 6). PLAY shows DUELO with every interface size, on the iPad's rows (40 + 56 n). Mary's 16:9 reports with the iPad interface: the select camera x 2.3 and the tower's y -2.739 now apply on 4:3 only (`PortIPadTall`); there `Tower_X` scales by 2.239 / 2.739 so the labels and torches follow the farther camera (not checked on a capture). `FE_Task_Multiplayer`'s frame takes `FE_XC` (checked on a 16:9 capture). Two pads at once were not tested.
 
 **2026-10-15, Mary's 0.1.0 list, released as 0.1.0b (notes: [RELEASE-0.1.0b-alpha.md](RELEASE-0.1.0b-alpha.md); the list with what each item found: [CHECKLIST.md](CHECKLIST.md)):** the iPad build's layout, read by diffing every function of the two binaries (`sidediff2.py`, pool islands skipped, registers normalised). `PortIPad` (4:3, or interface size IPAD) takes the pause and moves-list corners 40 wide (`TogglePauseMenu`), PLAY's five rows 56 apart from y 40 with DUELO (GameMode 6; player two reads the second key set, `PortKeyButtonsP2`), the multiplayer title at y 26, the two-ring vortex (`DrawVortex3D`), the glass window's 12 slices 55 apart (`RenderLevelBG`), and the data the iPad changes: the select camera x 2.3 (`FECAMPOSX`) and the tower's pulled-back y -2.739 (`TowerPulledPos`), applied at their use sites because the globals are rewritten after start-up. `PortIPadTall` (4:3) takes Continue and 1P: texts 36 iPad points lower, BACK at y 322, boxes `(int)(102 * limeScreenHeight / 640)` = 122 tall; and `repell_func`'s 0x100 gap. Still to read from the iPad binary: `DrawTower3D`, `FE_Task_About_Help`. Wide screens (checked by Mary): tower taps and layout (`Tower_X`), the red highlight by ATRÁS, the achievements frame and pop-up, settings box texts, select ATRÁS and COLOR boxes, usage sharing and four more `FE_XC` sites, main-menu submenu texts. Controls (checked by Mary): START/P pause on any width; pad binding per action in the launcher (`pad_<action>=`, `pad5_<p|b|k|r>=`). Debug menu: no longer stretched (ortho follows the viewport), tabs per page. All Port, not in the binary, except the iPad layout, which is the iPad binary's.
 
@@ -27,7 +29,7 @@ Current state of the project. Written so that someone can pick it up with no pri
 - **The game is playable on Windows by the real path.**
   - Everything the retail game does runs in `umk3-game.exe` (i686): the front end, Arcade to Shao Kahn and the treasure screen, the tower, and whole fights with every finisher, Continue and the next fight.
   - The launcher compiles it from the player's own iPhone 1.2.59 `.ipa`.
-  - **0.1.0b is the current published build** ([notes](RELEASE-0.1.0b-alpha.md)). 0.1.0 added 3:2 / 4:3 / 16:9 / 21:9, the iPad UI size, texture quality, faster loading and launcher updates; 0.1.0b adds the iPad build's layout, DUELO, pad binding and wide-screen fixes.
+  - **0.1.1 is the current published build** ([notes](RELEASE-0.1.1-alpha.md)); 0.1.1 gives player two their own keys and pad for DUELO. 0.1.0 added 3:2 / 4:3 / 16:9 / 21:9, the iPad UI size, texture quality, faster loading and launcher updates; 0.1.0b adds the iPad build's layout, DUELO, pad binding and wide-screen fixes.
   - Every release's notes are in `docs/RELEASE-*.md`. The GitHub releases of 0.0.1-0.0.3 were deleted on 2026-10-09 when the history was rewritten.
 - **Every function is decompiled** (2,572 of 2,572) and the fight engine is
   behaviourally tested file by file (table below). The figure is
@@ -37,7 +39,7 @@ Current state of the project. Written so that someone can pick it up with no pri
   - The menus are incomplete, and modes other than Arcade can crash.
   - Texture errors remain on some stages and fighters, and some fatalities miss animations.
   - Every bug found since the game first ran was a transcription that did not quite match armv7, so each new symptom starts by re-reading the binary.
-- **No pull requests are open** once the 0.1.0b pass is merged (2026-10-15).
+- **No pull requests are open** once the 0.1.1 pass is merged (2026-10-15).
 - **New contributors:** [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md) explains how
   the game runs, the code map, the bug method and the test tools.
 

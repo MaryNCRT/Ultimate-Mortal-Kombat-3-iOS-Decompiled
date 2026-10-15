@@ -4819,8 +4819,9 @@ extern float  SceneGroundOffset;        /* pointer slot -> 0x0014df8c */
 extern float  ShadowOffset;             /* pointer slot */
 extern float  FECAMPOSX;                /* 0x00101710 */
 /* The iPad build's data has the select screen's camera at x 2.3, not 2.9
- * (its _FECAMPOSX): the fighters stand further in. With the iPad interface. */
-#define FE_CAMPOS_X  (PortIPad ? 2.3f : FECAMPOSX)
+ * (its _FECAMPOSX): the fighters stand further in. On 4:3 only; 16:9 and
+ * 21:9 keep the iPhone's, which leaves room beside the grid (Mary). */
+#define FE_CAMPOS_X  (PortIPadTall ? 2.3f : FECAMPOSX)
 extern float  FECAMPOSY;                /* 0x00101714 */
 extern float  FECAMPOSZ;                /* 0x00101718 */
 extern float  FEPlayer1Offset;          /* 0x00183d68 */
@@ -9695,11 +9696,13 @@ void DrawTower3D(void)
 #define PLAY_OPTION_X      384.0f
 #define PLAY_OPTION_SCALE  1.25f
 #define PLAY_OPTION_WIDTH  186.0f
-/* The iPad build (4:3, PortIPad) has five options, 56 apart from y 40:
- * the fifth is GameText(0x3f0), "2 PLAYER" / "DUELO", which gives sel 5 --
- * GameMode 6, two players on one device (iPad _FE_Task_Play 0x1a854). */
-#define PLAY_ROW0          (PortIPad ? 40.0f : 48.0f)
-#define PLAY_ROW_PITCH     (PortIPad ? 56.0f : 64.0f)
+/* The iPad build has five options, 56 apart from y 40: the fifth is
+ * GameText(0x3f0), "2 PLAYER" / "DUELO", which gives sel 5 -- GameMode 6,
+ * two players on one device (iPad _FE_Task_Play 0x1a854). The iPhone build
+ * has the first four, 64 apart from y 48; the port shows the iPad's five
+ * with every interface size (Mary). */
+#define PLAY_ROW0          40.0f
+#define PLAY_ROW_PITCH     56.0f
 #define PLAY_TASK_RESUME   2
 #define PLAY_TASK_LOBBY    3
 #define PLAY_TASK_START    0x1b
@@ -9826,7 +9829,7 @@ void FE_Task_Play(void)
         && limeTouchScreenX[0] == -1.0f)
         sel = 4;
 
-    if (PortIPad) {                     /* the iPad build's fifth option */
+    {                                   /* the iPad build's fifth option */
         LastTouch_PlayDuel = Touch_PlayDuel;
         Touch_PlayDuel = DrawOptionAsButton(GameText(0x3f0),
                                             FESlideOffset * PLAY_SLIDE_SPAN
@@ -11207,8 +11210,11 @@ void FE_Task_Multiplayer(void)
                  (float)(int)(FE_HeightScale * 12.0f),
                  1, FE_WidthScale, col);
 
+    /* the binary places the frame at x 6 with no centring offset, so on wide
+     * screens it sat left of its title and rows; + FE_XC (port, not in the
+     * binary; 0 on 3:2) */
     limeDrawSprite((TEXTURE *)*FEBits3,
-                   FE_WidthScale * 6.0f, FE_HeightScale * 60.0f,
+                   FE_WidthScale * 6.0f + FE_XC, FE_HeightScale * 60.0f,
                    FE_WidthScale * 468.0f, FE_HeightScale * 218.0f,
                    0.0f, 0.0f, 0.9140625f, 0.42578125f, col);
 
@@ -13327,8 +13333,10 @@ extern float TowerWait;                 /* 0x00101750 */
 extern float FECamPos[3];               /* 0x000ff954 */
 extern float TowerPulledPos[3];         /* 0x00101728 */
 /* The iPad build's data has the pulled-back tower camera at y -2.739, not
- * -2.239 (its _TowerPulledPos); with the iPad interface. */
-#define TOWER_PULLED_Y  (PortIPad ? -2.739f : TowerPulledPos[1])
+ * -2.239 (its _TowerPulledPos). On 4:3 only: on 16:9 and 21:9 the towers
+ * spread as Tower_X expects with the iPhone's camera, and the labels and
+ * torches stayed off their towers with this one (Mary). */
+#define TOWER_PULLED_Y  (PortIPadTall ? -2.739f : TowerPulledPos[1])
 extern float TowerSelect1TopPos[3];     /* 0x00101734 */
 extern float TowerSelect1BottomPos[3];  /* 0x00101740 */
 extern long  playerLostRound;           /* 0x000ff8b8 */
@@ -13396,9 +13404,14 @@ static float Tower_S(void)
     return (float)limeScreenHeight / 320.0f;
 }
 
+/* The towers spread inversely to the pulled-back camera's distance: on 4:3
+ * the iPad's camera (y -2.739, not -2.239) draws them 2.239 / 2.739 as far
+ * apart, and the torches, labels and tap columns follow (port). */
 static float Tower_X(float v)
 {
-    return (float)(limeScreenWidth / 2) + (v - 240.0f) * Tower_S();
+    float k = PortIPadTall ? TowerPulledPos[1] / TOWER_PULLED_Y : 1.0f;
+
+    return (float)(limeScreenWidth / 2) + (v - 240.0f) * Tower_S() * k;
 }
 
 static void Tower_DrawTorch(long slot, float x, float y, long text,

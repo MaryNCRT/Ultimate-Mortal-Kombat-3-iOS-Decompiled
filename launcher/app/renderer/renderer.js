@@ -17,7 +17,7 @@ const T = {
         mPlay: 'JUGAR', mQuit: 'SALIR',
         dBuild: 'El juego se compila en tu PC a partir de tu propio .ipa de UMK3 para iPhone (1.2.59).',
         dVideo: 'Resolución de ventana, resolución 3D, modo de pantalla y el marco de las barras.',
-        dControls: 'Teclado y mando del jugador 1 (Xbox, PlayStation, Switch y otros), para 5 y 6 botones, y las teclas del modo debug.',
+        dControls: 'Teclado y mando de los jugadores 1 y 2 (Xbox, PlayStation, Switch y otros), para 5 y 6 botones, y las teclas del modo debug.',
         dPlay: 'Arranca Ultimate Mortal Kombat 3: idioma del juego, intros y modo debug.',
         dQuit: 'Cierra el launcher.',
         hBuild: 'COMPILAR TU .IPA', ipaLbl: 'TU .IPA DE UMK3 (IPHONE 1.2.59)',
@@ -32,7 +32,9 @@ const T = {
         aspect: 'RELACIÓN DE ASPECTO', aspects: ['3:2 (ORIGINAL, IPHONE)', '4:3 (IPAD)', '16:9 (PANORÁMICA)', '21:9 (ULTRA PANORÁMICA)'], aa: 'ANTIALIASING', aaOff: 'DESACTIVADO', texq: 'CALIDAD DE TEXTURAS', texqs: ['IPHONE (ACTUAL)', 'IPAD', 'SIN LÍMITE'], uisize: 'TAMAÑO DE LA INTERFAZ', uisizes: ['IPHONE (ACTUAL)', 'IPAD (HUD MÁS PEQUEÑO)'], hidectl: 'OCULTAR LOS CONTROLES EN PANTALLA (JOYSTICK Y BOTONES)',
         lang: 'IDIOMA DEL JUEGO', frame: 'MARCO (PANTALLA COMPLETA)',
         dbg: 'MODO DEBUG (MENÚ Y ATAJOS, VER CONTROLES)', hDbgKeys: 'TECLAS Y ATAJOS DEL MODO DEBUG', gDbgMenu: 'MENÚ DEBUG', gDbgFight: 'PELEA', gDbgScreens: 'PANTALLAS', dbgKeysNote: 'SOLO ACTÚAN CON EL MODO DEBUG ACTIVADO (SECCIÓN JUGAR).', wsNote: '4:3 ES LA VISTA DEL IPAD. EN 16:9 Y 21:9 LA PELEA OCUPA TODA LA PANTALLA (SE VE MÁS ESCENARIO, SIN ESTIRAR) Y LOS MENÚS QUEDAN EN 3:2. EN PANTALLA COMPLETA, EL MARCO RELLENA LAS BARRAS.',
-        hControls: 'TECLADO DEL JUGADOR 1', hPad: 'MANDO DEL JUGADOR 1', gMove: 'MOVIMIENTO', gButtons: 'BOTONES', gSystem: 'SISTEMA',
+        hControls: 'TECLADO DEL JUGADOR 1', hPad: 'MANDO DEL JUGADOR 1',
+        hControls2: 'TECLADO DEL JUGADOR 2 (DUELO)', hPad2: 'MANDO DEL JUGADOR 2 (DUELO)',
+        tabP1: 'JUGADOR 1', tabP2: 'JUGADOR 2', gMove: 'MOVIMIENTO', gButtons: 'BOTONES', gSystem: 'SISTEMA',
         schemes: 'EL JUEGO EMPIEZA CON EL ESQUEMA ELEGIDO; CADA UNO GUARDA SUS TECLAS. EN PAUSA SE PUEDE CAMBIAR DURANTE LA PARTIDA.',
         tab6: '6 BOTONES', tab5: '5 BOTONES', tabNote: 'EL JUEGO EMPIEZA CON ESTE ESQUEMA',
         reskey: 'RESTABLECER', press: 'PULSA UNA TECLA…  (ESC CANCELA)',
@@ -65,7 +67,7 @@ const T = {
         mPlay: 'PLAY', mQuit: 'QUIT',
         dBuild: 'The game is compiled on your PC from your own UMK3 iPhone .ipa (1.2.59).',
         dVideo: 'Window resolution, 3D resolution, display mode and the bars frame.',
-        dControls: 'Player 1 keyboard and gamepad (Xbox, PlayStation, Switch and others), for 5 and 6 buttons, and debug mode\'s keys.',
+        dControls: 'Players 1 and 2 keyboard and gamepad (Xbox, PlayStation, Switch and others), for 5 and 6 buttons, and debug mode\'s keys.',
         dPlay: 'Starts Ultimate Mortal Kombat 3: game language, intros and debug mode.',
         dQuit: 'Closes the launcher.',
         hBuild: 'COMPILE YOUR .IPA', ipaLbl: 'YOUR UMK3 .IPA (IPHONE 1.2.59)',
@@ -80,7 +82,9 @@ const T = {
         aspect: 'ASPECT RATIO', aspects: ['3:2 (ORIGINAL, IPHONE)', '4:3 (IPAD)', '16:9 (WIDESCREEN)', '21:9 (ULTRAWIDE)'], aa: 'ANTIALIASING', aaOff: 'OFF', texq: 'TEXTURE QUALITY', texqs: ['IPHONE (CURRENT)', 'IPAD', 'NO LIMIT'], uisize: 'INTERFACE SIZE', uisizes: ['IPHONE (CURRENT)', 'IPAD (SMALLER HUD)'], hidectl: 'HIDE THE ON-SCREEN CONTROLS (STICK AND BUTTONS)',
         lang: 'GAME LANGUAGE', frame: 'FRAME (FULLSCREEN)',
         dbg: 'DEBUG MODE (MENU AND SHORTCUTS, SEE CONTROLS)', hDbgKeys: 'DEBUG MODE KEYS AND SHORTCUTS', gDbgMenu: 'DEBUG MENU', gDbgFight: 'FIGHT', gDbgScreens: 'SCREENS', dbgKeysNote: 'THEY ONLY ACT WITH DEBUG MODE ON (PLAY SECTION).', wsNote: '4:3 IS THE IPAD VIEW. IN 16:9 AND 21:9 THE FIGHT FILLS THE SCREEN (MORE OF THE STAGE, NO STRETCH) AND THE MENUS STAY 3:2. IN FULLSCREEN THE FRAME FILLS THE BARS.',
-        hControls: 'PLAYER 1 KEYBOARD', hPad: 'PLAYER 1 GAMEPAD', gMove: 'MOVEMENT', gButtons: 'BUTTONS', gSystem: 'SYSTEM',
+        hControls: 'PLAYER 1 KEYBOARD', hPad: 'PLAYER 1 GAMEPAD',
+        hControls2: 'PLAYER 2 KEYBOARD (DUEL)', hPad2: 'PLAYER 2 GAMEPAD (DUEL)',
+        tabP1: 'PLAYER 1', tabP2: 'PLAYER 2', gMove: 'MOVEMENT', gButtons: 'BUTTONS', gSystem: 'SYSTEM',
         schemes: 'THE GAME STARTS WITH THE CHOSEN LAYOUT; EACH KEEPS ITS OWN KEYS. THE PAUSE MENU CAN SWITCH IT DURING A GAME.',
         tab6: '6 BUTTONS', tab5: '5 BUTTONS', tabNote: 'THE GAME STARTS WITH THIS LAYOUT',
         reskey: 'RESET', press: 'PRESS A KEY…  (ESC CANCELS)',
@@ -122,24 +126,26 @@ const PAD_DEFAULT = {
     special: 'R2', pause: 'START', moves: 'SELECT',
 };
 const PAD5_DEFAULT = { p: 'WEST+NORTH', b: 'R1', k: 'SOUTH+EAST', r: 'L1+L2' };
+/* The player the KEYBOARD and GAMEPAD tabs edit: 1, or 2 (DUELO, umk3.ini
+ * p2key_*, p2pad*). */
+let pl = 1;
+const PK = () => (pl === 2 ? 'p2PadKeys' : 'padKeys');
 function padGet(act) {
     if (act.startsWith('5:')) {
-        const v = cfg.padKeys5 && cfg.padKeys5[act.slice(2)];
+        const v = cfg[PK() + '5'] && cfg[PK() + '5'][act.slice(2)];
         return v === undefined ? PAD5_DEFAULT[act.slice(2)] : v;
     }
-    const v = cfg.padKeys && cfg.padKeys[act];
+    const v = cfg[PK()] && cfg[PK()][act];
     return v === undefined ? PAD_DEFAULT[act] : v;
 }
 function padSet(act, v) {
     selectBlip();
-    if (act.startsWith('5:')) {
-        cfg.padKeys5 = Object.assign({}, cfg.padKeys5, { [act.slice(2)]: v });
-        save({ padKeys5: { [act.slice(2)]: v } });
-    } else {
-        cfg.padKeys = Object.assign({}, cfg.padKeys, { [act]: v });
-        save({ padKeys: { [act]: v } });
-    }
+    const k = act.startsWith('5:') ? PK() + '5' : PK();
+    const n = act.startsWith('5:') ? act.slice(2) : act;
+    cfg[k] = Object.assign({}, cfg[k], { [n]: v });
+    save({ [k]: { [n]: v } });
 }
+const padWant = () => (pl === 2 ? cfg.p2Pad : cfg.pad) || 'auto';
 
 /* The pads Windows has attached, by the name it gives them, as pad= values:
  * "xinput" or the USB "vendor:product". They come from the game itself
@@ -198,21 +204,22 @@ function fillPads() {
                   ['xinput', seenPads.xinput ? T[ui].padX + ': ' + seenPads.xinput : T[ui].padX]];
     for (const [v, n] of Object.entries(seenPads))
         if (v !== 'xinput') opts.push([v, n + '  (' + v.toUpperCase() + ')']);
-    if (!opts.some(o => o[0] === cfg.pad))
-        opts.push([cfg.pad, (cfg.padName || cfg.pad.toUpperCase()) + '  ' + T[ui].padGone]);
+    const want = padWant(), wantName = pl === 2 ? cfg.p2PadName : cfg.padName;
+    if (!opts.some(o => o[0] === want))
+        opts.push([want, (wantName || want.toUpperCase()) + '  ' + T[ui].padGone]);
     s.innerHTML = '';
     for (const [v, n] of opts) {
         const o = el('option', null, (seenPads[v] ? '● ' : '') + n);   /* ● = connected */
         o.value = v;
         s.appendChild(o);
     }
-    s.value = cfg.pad || 'auto';
+    s.value = want;
     const any = Object.keys(seenPads).length;
     $('padSeen').textContent = any ? T[ui].padNow + ': ' + Object.values(seenPads).join(', ') : T[ui].padSeen;
     paintPadMap();
 }
 function paintPadMap() {
-    const on = cfg.pad !== 'off';
+    const on = padWant() !== 'off';
     $('padMap').classList.toggle('hidden', !on);
     $('respad').classList.toggle('hidden', !on || ctlTab !== 'pad');
     const b = $('k-pad');
@@ -280,7 +287,7 @@ const KGROUPS = {
     'k-buttons': () => (cfg.buttons !== 6
         ? ['5:p', '5:b', '5:k', '5:r', 'special']
         : ['hp', 'lp', 'block', 'hk', 'lk', 'run']),
-    'k-system': () => ['pause', 'moves'],
+    'k-system': () => (pl === 2 ? [] : ['pause', 'moves']),
     'k-dbgmenu': () => ['dbg_menu', 'dbg_info', 'dbg_page_prev', 'dbg_page_next'],
     'k-dbgfight': () => ['dbg_ko_p2', 'dbg_ko_p1', 'dbg_win', 'dbg_lose'],
     'k-dbgscr': () => ['dbg_scr_prev', 'dbg_scr_next', 'dbg_scr_menu'],
@@ -289,19 +296,26 @@ const DBG_KEYS = ['dbg_menu', 'dbg_info', 'dbg_page_prev', 'dbg_page_next',
     'dbg_ko_p2', 'dbg_ko_p1', 'dbg_win', 'dbg_lose',
     'dbg_scr_prev', 'dbg_scr_next', 'dbg_scr_menu'];
 const KEY5_DEFAULT = { p: 85, b: 79, k: 74, r: 76 };
+/* Player two's defaults: the game's second set, arrows and the keypad. */
+const P2_KEY_DEFAULT = {
+    up: 38, down: 40, left: 37, right: 39,
+    hp: 103, lp: 104, block: 105, hk: 100, lk: 101, run: 102, special: 96,
+};
+const P2_KEY5_DEFAULT = { p: 103, b: 105, k: 100, r: 102 };
+const KEYS_OF = n => (pl === 2 && !DBG_KEYS.includes(n) ? 'p2Keys' : 'keys');
 function keyGet(name) {
-    if (name.startsWith('5:'))
-        return (cfg.keys5 && cfg.keys5[name.slice(2)]) || KEY5_DEFAULT[name.slice(2)];
-    return (cfg.keys && cfg.keys[name]) || KEY_DEFAULT[name];
+    if (name.startsWith('5:')) {
+        const d = pl === 2 ? P2_KEY5_DEFAULT : KEY5_DEFAULT, k = pl === 2 ? 'p2Keys5' : 'keys5';
+        return (cfg[k] && cfg[k][name.slice(2)]) || d[name.slice(2)];
+    }
+    const k = KEYS_OF(name);
+    return (cfg[k] && cfg[k][name]) || (k === 'p2Keys' ? P2_KEY_DEFAULT : KEY_DEFAULT)[name];
 }
 function keySet(name, vk) {
-    if (name.startsWith('5:')) {
-        cfg.keys5[name.slice(2)] = vk;
-        save({ keys5: { [name.slice(2)]: vk } });
-    } else {
-        cfg.keys[name] = vk;
-        save({ keys: { [name]: vk } });
-    }
+    const k = name.startsWith('5:') ? (pl === 2 ? 'p2Keys5' : 'keys5') : KEYS_OF(name);
+    const n = name.startsWith('5:') ? name.slice(2) : name;
+    cfg[k] = Object.assign({}, cfg[k], { [n]: vk });
+    save({ [k]: { [n]: vk } });
 }
 const KEY_DEFAULT = {
     up: 87, down: 83, left: 65, right: 68,
@@ -422,7 +436,12 @@ let ctlTab = 'p';
 function paintKeys() {
     document.querySelectorAll('.tab').forEach(t =>
         t.classList.toggle('active', t.dataset.c ? t.dataset.c === ctlTab
+            : t.dataset.pl ? Number(t.dataset.pl) === pl
             : Number(t.dataset.b) === (cfg.buttons === 6 ? 6 : 5)));
+    $('hCtlP').textContent = tx(pl === 2 ? 'hControls2' : 'hControls');
+    $('hCtlM').textContent = tx(pl === 2 ? 'hPad2' : 'hPad');
+    $('ctlPlayers').classList.toggle('hidden', ctlTab === 'dbg');
+    $('k-system').parentNode.classList.toggle('hidden', pl === 2);
     for (const [id, on] of [['hCtlP', 'p'], ['ctlP', 'p'], ['reskeys', 'p'],
                             ['hCtlM', 'pad'], ['ctlM', 'pad'], ['respad', 'pad'],
                             ['hCtlD', 'dbg'], ['ctlD', 'dbg'], ['resdbg', 'dbg']])
@@ -807,10 +826,11 @@ async function init() {
     $('hidectl').addEventListener('change', () => save({ hideControls: $('hidectl').checked }));
     $('pad').addEventListener('change', () => {
         const v = $('pad').value;
-        cfg.pad = v;
-        cfg.padName = seenPads[v] || '';
+        const k = pl === 2 ? 'p2Pad' : 'pad', kn = pl === 2 ? 'p2PadName' : 'padName';
+        cfg[k] = v;
+        cfg[kn] = seenPads[v] || '';
         selectBlip();
-        save({ pad: v, padName: seenPads[v] || '' });
+        save({ [k]: v, [kn]: seenPads[v] || '' });
         paintPadMap();
     });
     $('padDbgA').addEventListener('change', savePadDbg);
@@ -837,19 +857,25 @@ async function init() {
     });
     $('respad').addEventListener('click', () => {
         selectBlip();
-        cfg.padKeys = Object.assign({}, PAD_DEFAULT);
-        cfg.padKeys5 = Object.assign({}, PAD5_DEFAULT);
-        save({ padKeys: cfg.padKeys, padKeys5: cfg.padKeys5 });
+        cfg[PK()] = Object.assign({}, PAD_DEFAULT);
+        cfg[PK() + '5'] = Object.assign({}, PAD5_DEFAULT);
+        save({ [PK()]: cfg[PK()], [PK() + '5']: cfg[PK() + '5'] });
         paintPadMap();
     });
     $('reskeys').addEventListener('click', () => {
         selectBlip();
         /* the player's keys only; the debug keys have their own reset */
-        const d = Object.assign({}, KEY_DEFAULT);
-        for (const n of DBG_KEYS) d[n] = keyGet(n);
-        cfg.keys = d;
-        cfg.keys5 = Object.assign({}, KEY5_DEFAULT);
-        save({ keys: cfg.keys, keys5: cfg.keys5 });
+        if (pl === 2) {
+            cfg.p2Keys = Object.assign({}, P2_KEY_DEFAULT);
+            cfg.p2Keys5 = Object.assign({}, P2_KEY5_DEFAULT);
+            save({ p2Keys: cfg.p2Keys, p2Keys5: cfg.p2Keys5 });
+        } else {
+            const d = Object.assign({}, KEY_DEFAULT);
+            for (const n of DBG_KEYS) d[n] = keyGet(n);
+            cfg.keys = d;
+            cfg.keys5 = Object.assign({}, KEY5_DEFAULT);
+            save({ keys: cfg.keys, keys5: cfg.keys5 });
+        }
         waitingKey = null;
         $('keyhint').textContent = T[ui].hint;
         paintKeys();
@@ -858,7 +884,10 @@ async function init() {
         t.addEventListener('pointerenter', hoverBlip);
         t.addEventListener('click', () => {
             selectBlip();
-            if (t.dataset.c) {
+            if (t.dataset.pl) {
+                pl = Number(t.dataset.pl);
+                fillPads();
+            } else if (t.dataset.c) {
                 ctlTab = t.dataset.c;
                 if (ctlTab === 'pad') {
                     $('padSeen').textContent = T[ui].padLook;

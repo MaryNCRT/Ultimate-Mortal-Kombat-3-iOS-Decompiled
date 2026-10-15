@@ -60,6 +60,10 @@ only once Mary has checked it in game. What is known so far is under each one.
   - the stage's glass window: 12 slices 55 apart, not 32 at 40;
   - data: the select screen camera x 2.3 (fighters inside the screen,
     checked by Mary) and the tower's pulled-back camera y -2.739.
+  After 0.1.0b (Mary, 16:9 with the iPad interface): the select camera and
+  the tower camera moved the fighters onto the grid and the tower labels
+  off their towers, so both are the iPad's on 4:3 only; DUELO shows with
+  every interface size (released in 0.1.1).
   Identical in both and nothing to do: `drawCharacterSelection`,
   `RenderFECharacters`, `FE_Task_Play`'s code apart from the rows, and every
   other menu screen. Still to read: `DrawTower3D` and `FE_Task_About_Help`.
@@ -108,6 +112,11 @@ only once Mary has checked it in game. What is known so far is under each one.
   included, and RESTABLECER. The launcher writes `pad_<action>=` /
   `pad5_<p|b|k|r>=` (PB_* names joined by "+"); `runtime/game_main.c` reads
   them over its by-position defaults. Checked by Mary.
+
+- [ ] **Player two's controls for DUELO** (0.1.1): CONTROLS > PLAYER 2 in
+  the launcher, keys and pad like player one's; the two never share a pad.
+  Two pads at once not tested yet.
+- [ ] **JUGADORES frame centred** on wide screens (0.1.1, `FE_XC`).
 
 ## Fight
 
