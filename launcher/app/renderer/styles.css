@@ -166,11 +166,13 @@ button, input, select { font: inherit; color: inherit; }
     padding: calc(var(--u) * .4) 0; white-space: nowrap;
 }
 /* the menu follows the ring's curve */
+/* an arc, symmetric about the middle of the six */
 .mi:nth-child(1) { margin-left: calc(var(--u) * 3); }
-.mi:nth-child(2) { margin-left: calc(var(--u) * 1.2); }
-.mi:nth-child(3) { margin-left: 0; }
-.mi:nth-child(4) { margin-left: calc(var(--u) * 1.2); }
-.mi:nth-child(5) { margin-left: calc(var(--u) * 3); }
+.mi:nth-child(2) { margin-left: calc(var(--u) * 1.4); }
+.mi:nth-child(3) { margin-left: calc(var(--u) * .4); }
+.mi:nth-child(4) { margin-left: calc(var(--u) * .4); }
+.mi:nth-child(5) { margin-left: calc(var(--u) * 1.4); }
+.mi:nth-child(6) { margin-left: calc(var(--u) * 3); }
 .orb {
     width: calc(var(--u) * 2.7); height: calc(var(--u) * 2.7); border-radius: 50%;
     visibility: hidden;
@@ -230,7 +232,7 @@ h3 { margin: 0 0 calc(var(--u) * .8); font-size: calc(var(--u) * 1.6); color: va
 .prof .fields { flex: 1; }
 .proficon { width: calc(var(--u) * 16); height: calc(var(--u) * 16); flex: none; }
 .idcode {
-    height: calc(var(--u) * 3.5); line-height: calc(var(--u) * 3.5);
+    height: calc(var(--u) * 3.5); line-height: calc(var(--u) * 3.5); white-space: nowrap;
     font-family: Consolas, monospace; font-size: calc(var(--u) * 1.8);
     letter-spacing: .12em; color: #9fd0ff;
 }
@@ -244,6 +246,25 @@ h3 { margin: 0 0 calc(var(--u) * .8); font-size: calc(var(--u) * 1.6); color: va
 .icongrid { display: grid; grid-template-columns: repeat(12, 1fr); gap: calc(var(--u) * .5); }
 .icongrid canvas { width: 100%; cursor: pointer; border-radius: 18%; outline: 2px solid transparent; }
 .icongrid canvas.on { outline-color: #fff; }
+.row.end { justify-content: flex-end; }
+#profShade { margin: calc(var(--u) * .4) 0 0; }
+/* the player's badge, top right: the game's main-menu badge, the alerts'
+ * glossy box in black */
+#profBadge {
+    position: fixed; top: calc(var(--u) * 4.2); right: calc(var(--u) * 1.6); z-index: 9;
+    display: flex; align-items: center; gap: calc(var(--u) * .9);
+    padding: calc(var(--u) * .5) calc(var(--u) * 1.4) calc(var(--u) * .5) calc(var(--u) * .5);
+    border: 2px solid rgba(220, 225, 237, .85); border-radius: calc(var(--u) * 1.1);
+    background:
+        radial-gradient(ellipse 75% 60% at 50% -10%, rgba(255,255,255,.2) 0 99%, transparent 100%),
+        linear-gradient(#2a2a2e, #000);
+    box-shadow: 0 calc(var(--u) * .3) calc(var(--u) * .8) rgba(0, 0, 0, .5);
+    color: #fff; font: inherit; font-weight: 700; font-size: calc(var(--u) * 1.6);
+    letter-spacing: .04em; cursor: pointer; max-width: calc(var(--u) * 30);
+}
+#profBadge canvas { width: calc(var(--u) * 4.2); height: calc(var(--u) * 4.2); flex: none; }
+#profBadge span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#profBadge:hover { border-color: #fff; }
 .hidden { display: none !important; }
 .field .row { margin: 0; }
 .fields .chk { font-size: calc(var(--u) * 1.8); }

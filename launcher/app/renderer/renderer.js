@@ -18,7 +18,7 @@ const T = {
         dProfile: 'Tu perfil de jugador: nombre, icono e ID de esta instalación. El juego lo edita también (Esc > PERFIL).',
         hProfile: 'PERFIL DE JUGADOR',
         profName: 'NOMBRE DE JUGADOR', profId: 'ID DE JUGADOR', profColor: 'COLOR DE FONDO', profIconLbl: 'ICONO',
-        profLight: 'CLARO (DESDE BLANCO)', profDark: 'OSCURO (DESDE NEGRO)',
+        profLight: 'CLARO (DESDE BLANCO)', profDark: 'OSCURO (DESDE NEGRO)', profShadeLbl: 'DEGRADADO',
         profDefault: 'JUGADOR', profReset: 'REINICIAR DATOS', profResetAsk: '¿SEGURO? PULSA OTRA VEZ',
         dBuild: 'El juego se compila en tu PC a partir de tu propio .ipa de UMK3 para iPhone (1.2.59).',
         dVideo: 'Resolución de ventana, resolución 3D, modo de pantalla y el marco de las barras.',
@@ -73,7 +73,7 @@ const T = {
         dProfile: 'Your player profile: name, icon and the ID of this installation. The game edits it too (Esc > PROFILE).',
         hProfile: 'PLAYER PROFILE',
         profName: 'PLAYER NAME', profId: 'PLAYER ID', profColor: 'BACKGROUND COLOUR', profIconLbl: 'ICON',
-        profLight: 'LIGHT (FROM WHITE)', profDark: 'DARK (FROM BLACK)',
+        profLight: 'LIGHT (FROM WHITE)', profDark: 'DARK (FROM BLACK)', profShadeLbl: 'GRADIENT',
         profDefault: 'PLAYER', profReset: 'RESET DATA', profResetAsk: 'SURE? PRESS AGAIN',
         dBuild: 'The game is compiled on your PC from your own UMK3 iPhone .ipa (1.2.59).',
         dVideo: 'Window resolution, 3D resolution, display mode and the bars frame.',
@@ -834,6 +834,9 @@ function paintProfile() {
     $('profReset').textContent = tx(profResetArmed ? 'profResetAsk' : 'profReset');
     $('profColor').value = '#' + p.color.toLowerCase();
     drawIcon($('profIcon'), p.icon, p.color, p.dark);
+    drawIcon($('profBadgeIcon'), p.icon, p.color, p.dark);
+    $('profBadgeName').textContent = p.name || tx('profDefault');
+    $('profBadge').classList.remove('hidden');
     document.querySelectorAll('#profShade .tab').forEach(t =>
         t.classList.toggle('active', Number(t.dataset.shade) === (p.dark ? 1 : 0)));
     const sw = $('profSwatches');
@@ -862,6 +865,7 @@ async function refreshProfile() {
 }
 
 function initProfile() {
+    $('profBadge').addEventListener('click', () => { selectBlip(); setSection('profile', false); });
     $('profName').addEventListener('input', () =>
         updateProf({ name: $('profName').value.replace(/[|\r\n\t]/g, ' ') }));
     $('profName').addEventListener('change', () => {

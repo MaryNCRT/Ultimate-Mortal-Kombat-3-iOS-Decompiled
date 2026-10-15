@@ -42,6 +42,9 @@
   </div>
 </header>
 
+<!-- the player's profile, top right: its icon and name; a click opens PERFIL -->
+<button id="profBadge" class="hidden"><canvas id="profBadgeIcon" width="96" height="96"></canvas><span id="profBadgeName"></span></button>
+
 <div id="logo" aria-label="Ultimate Mortal Kombat 3">
   <img id="logoImg" class="hidden" alt="Ultimate Mortal Kombat 3">
   <div class="l-ultimate">ULTIMATE</div>
@@ -210,10 +213,7 @@
         </div>
         <div class="field">
           <label class="lbl" data-t="profId">ID DE JUGADOR</label>
-          <div class="row">
-            <div id="profId" class="idcode"></div>
-            <button id="profReset" class="btn" data-t="profReset">REINICIAR DATOS</button>
-          </div>
+          <div id="profId" class="idcode"></div>
         </div>
         <div class="field wide">
           <label class="lbl" data-t="profColor">COLOR DE FONDO</label>
@@ -221,6 +221,7 @@
             <div id="profSwatches" class="swatches"></div>
             <input id="profColor" type="color" class="colorpick">
           </div>
+          <label class="lbl" data-t="profShadeLbl">DEGRADADO</label>
           <span id="profShade" class="tabs sub">
             <button class="tab" data-shade="0" data-t="profLight">CLARO (DESDE BLANCO)</button>
             <button class="tab" data-shade="1" data-t="profDark">OSCURO (DESDE NEGRO)</button>
@@ -229,6 +230,11 @@
         <div class="field wide">
           <label class="lbl" data-t="profIconLbl">ICONO</label>
           <div id="profIcons" class="icongrid"></div>
+        </div>
+        <div class="field wide">
+          <div class="row end">
+            <button id="profReset" class="btn" data-t="profReset">REINICIAR DATOS</button>
+          </div>
         </div>
       </div>
     </div>
