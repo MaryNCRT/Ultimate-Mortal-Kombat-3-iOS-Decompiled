@@ -3439,6 +3439,11 @@ extern long   GamePaused;               /* 0x0014e1fc */
 extern long   PauseMenuAreYouSure;      /* 0x0014e260 */
 extern long   DidIntroThisFrame;        /* 0x0010dec4 */
 extern float  HUD_Scale;                /* pointer slot */
+extern int    PortIPad;                 /* FrontEnd.c: 4:3 is the iPad build's */
+
+/* The pause and moves-list corners: 80 wide on the iPhone, 40 in the iPad
+ * build (TogglePauseMenu 0x1e1fc / 0x1e2ae there, both vldr of 40.0f). */
+#define PAUSE_CORNER  (PortIPad ? 40.0f : 80.0f)
 extern float *FE_FadeAddP;              /* pointer slot -> 0x0010089c */
 extern float  limeLastTouchScreenX[];     /* pointer slot */
 extern float  limeLastTouchScreenY[];     /* pointer slot */
@@ -3521,7 +3526,7 @@ void TogglePauseMenu(void)
     lx = limeLastTouchScreenX[0];
 
     if (lx != -1.0f
-        && lx > (float)limeScreenWidth - HUD_Scale * 80.0f
+        && lx > (float)limeScreenWidth - HUD_Scale * PAUSE_CORNER
         && (ly = limeLastTouchScreenY[0]) < HUD_Scale * 64.0f
         && DidIntroThisFrame == 0) {
 
@@ -3550,7 +3555,7 @@ void TogglePauseMenu(void)
     lx = limeLastTouchScreenX[0];
     if (lx == -1.0f)
         return;
-    if (lx >= HUD_Scale * 80.0f)
+    if (lx >= HUD_Scale * PAUSE_CORNER)
         return;
     if (limeLastTouchScreenY[0] >= HUD_Scale * 64.0f)
         return;
@@ -4326,6 +4331,10 @@ extern long JoystickStateP2;            /* 0x0014fecc */
  * 0 (no key) or 1..8 as CheckLeftDial + 1 gives it: 1 up, then clockwise. */
 int PortKeyButtons[7];
 int PortKeyDial;
+/* Port, not in the binary: player two's keys in GameMode 6 (two players on
+ * one device, the iPad's DUELO), applied as the P2 touches are. */
+int PortKeyButtonsP2[7];
+int PortKeyDialP2;
 
 
 /* -------------------------------------------------------------- ReadControls
@@ -4486,6 +4495,13 @@ void ReadControls(void)
             ButtonStatesP2[ButtonsPosP2[nearest * (BUTTONPOS_STRIDE / 4) + 4]]
                 = 1;
     }
+
+    /* Port, not in the binary: player two's keys, as player one's above */
+    for (i = 0; i < 7; i++)
+        if (PortKeyButtonsP2[i])
+            ButtonStatesP2[i] = 1;
+    if (PortKeyDialP2 != 0)
+        JoystickStateP2 = PortKeyDialP2;
 }
 
 
@@ -4554,11 +4570,14 @@ extern float JSIZE;                     /* 0x0014e1dc = 64.0 */
  * The `size / 2` centring uses the signed `(n + (n >>> 31)) >> 1` shape, and the
  * outer 0.5 is what makes this a preview rather than the live control.
  */
+float PortPreviewCX = -1.0f, PortPreviewCY = -1.0f;   /* port, see below */
+
 void DrawControlsPreview(long originX, long originY)
 {
     float colour[4];
     float alpha;
     long i, k;
+    long pminx, pminy, pmaxx, pmaxy;
     const long *src;
 
     colour[0] = colour[1] = colour[2] = colour[3] = 1.0f;   /* C.126 */
@@ -4579,6 +4598,19 @@ void DrawControlsPreview(long originX, long originY)
     JoystickStatePosXv = (long)JSIZE;
     JoystickStatePosYv = (long)((float)limeScreenHeight - JSIZE);
 
+    pminx = pminy = 1 << 30;            /* port: the group's extents */
+    pmaxx = pmaxy = -(1 << 30);
+    for (i = 0; i < 6; i++) {
+        const long *e = &ButtonsPos[i * 5];
+
+        if (e[4] == -1)
+            continue;
+        if (e[0] - e[2] / 2 < pminx) pminx = e[0] - e[2] / 2;
+        if (e[0] + e[2] / 2 > pmaxx) pmaxx = e[0] + e[2] / 2;
+        if (e[1] - e[2] / 2 < pminy) pminy = e[1] - e[2] / 2;
+        if (e[1] + e[2] / 2 > pmaxy) pmaxy = e[1] + e[2] / 2;
+    }
+
     for (i = 0; i < 6; i++) {
         const long *e = &ButtonsPos[i * 5];
         long idx = e[4];
@@ -4596,10 +4628,20 @@ void DrawControlsPreview(long originX, long originY)
         x  = (float)FE_X((float)originX)
              + (float)(e[0] - ((e[2] + ((unsigned long)e[2] >> 31)) >> 1))
                * 0.5f;
+
         y  = (float)FE_Y((float)originY)
              + (float)(e[1] - ((e[2] + ((unsigned long)e[2] >> 31)) >> 1))
                * 0.5f;
         wh = (float)e[2] * 0.5f;
+        /* Port: on a wide surface (PortPreviewCX set by FE_Task_Button_Config)
+         * the half-size buttons are centred in the menu box: the group's
+         * extents, centred on the box's centre. Not taken on 3:2 and 4:3. */
+        if (PortPreviewCX >= 0.0f) {
+            x = PortPreviewCX - (pmaxx - pminx) * 0.25f
+              + (float)(e[0] - e[2] / 2 - pminx) * 0.5f;
+            y = PortPreviewCY - (pmaxy - pminy) * 0.25f
+              + (float)(e[1] - e[2] / 2 - pminy) * 0.5f;
+        }
 
         colour[3] = alpha;
 
@@ -5664,7 +5706,12 @@ void InitAllGameData(void)
     float SW = (float)limeScreenWidth;
     float SH = (float)limeScreenHeight;
     float halfW = (float)(limeScreenWidth / 2);
-    float B = (SW / 640.0f) * ButtonSize;
+    /* Port, not in the binary: the device scaled the buttons by the WIDTH,
+     * which on a surface wider than 3:2 (launcher aspect= 16:9 / 21:9) makes
+     * them bigger than on the iPhone. There the width of the 3:2 screen of the
+     * same height is used; the buttons still sit against the right edge. */
+    float BW = (SW > SH * 1.5f) ? SH * 1.5f : SW;
+    float B = (BW / 640.0f) * ButtonSize;
     float C = B * 0.66666698f;
     float M = halfW + C * -0.5f;
 
@@ -6524,8 +6571,12 @@ void RenderLevelBG(void)
 
         {
             long slice;
+            /* the iPad build (0x2561e there): 12 slices 55 apart, the same
+             * alpha step; the iPhone's 32 slices 40 apart */
+            long  slices = PortIPad ? 12 : 32;
+            float pitch  = PortIPad ? 55.0f : 40.0f;
 
-            for (slice = 0; slice < 32; slice++) {
+            for (slice = 0; slice < slices; slice++) {
                 RenderMeshAlphaOverRide =
                     (float)((1.0 + (double)slice * -0.03125) / 10.0);
 
@@ -6534,12 +6585,13 @@ void RenderLevelBG(void)
                             (TEXTURE *)LevelBGTexture[1], 0,
                             (MESHSETINFO *)MeshSet_LEVEL_01, 0);
 
-                GlassWindowPos[1] = GlassWindowPos[1] - 40.0f;
+                GlassWindowPos[1] = GlassWindowPos[1] - pitch;
             }
         }
 
         TestScale = 0.01f;
-        GlassWindowPos[1] = GlassWindowPos[1] + 1280.0f;   /* 32 * 40, exact */
+        /* 32 * 40 = 1280 on the iPhone, 12 * 55 = 660 on the iPad, exact */
+        GlassWindowPos[1] = GlassWindowPos[1] + (PortIPad ? 660.0f : 1280.0f);
         RenderMeshAlphaOverRide = 1.0f;
 
         limeEnableDepthTest();
@@ -11037,7 +11089,8 @@ void RenderLevelPlayers(void)
 #define CANCEL_SIZE          36.0f     /* HUD_Scale units */
 #define CANCEL_X_OFF         (-32.0f)
 #define CANCEL_Y_OFF         (-6.0f)
-#define CANCEL_HIT           80.0f     /* the hit box, more than twice the art */
+/* the hit box, more than twice the art; 40 in the iPad build (0x27276) */
+#define CANCEL_HIT           (PortIPad ? 40.0f : 80.0f)
 
 #define PAUSE_SFX_CLICK      (0x68 / 4)
 #define PAUSE_BUTTONS_WRAP   7         /* 7 wraps back to 5 */

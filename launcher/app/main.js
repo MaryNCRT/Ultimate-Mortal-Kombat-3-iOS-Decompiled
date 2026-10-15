@@ -191,12 +191,16 @@ ipcMain.handle('config:save', (_ev, delta) => {
     g_cfg = ini.load(path.join(g_root, 'umk3.ini'));
     /* a delta names only the keys that changed: merge them, never replace
      * the whole set (that wrote "undefined" for every other key) */
-    const { keys, keys5, ...rest } = delta;
+    const { keys, keys5, padKeys, padKeys5, ...rest } = delta;
     Object.assign(g_cfg, rest);
     if (keys)
         Object.assign(g_cfg.keys, keys);
     if (keys5)
         Object.assign(g_cfg.keys5, keys5);
+    if (padKeys)
+        Object.assign(g_cfg.padKeys, padKeys);
+    if (padKeys5)
+        Object.assign(g_cfg.padKeys5, padKeys5);
     ini.save(path.join(g_root, 'umk3.ini'), g_cfg);
     return JSON.parse(JSON.stringify(g_cfg));
 });

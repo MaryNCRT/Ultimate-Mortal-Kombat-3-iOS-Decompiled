@@ -109,16 +109,37 @@ const T = {
     },
 };
 
-/* The pad, by position (runtime/game_main.c keyboard_buttons): what each
- * button does in either layout. [PlayStation / Xbox label, action key]. */
+/* The pad's buttons for each action (umk3.ini pad_<name>= / pad5_<name>=,
+ * runtime/game_main.c): up to two buttons each, either one presses it. The
+ * defaults are the game's own, by position. "5:x" is the five-button
+ * layout's; special, pause and moves serve both layouts. */
 const PAD_ROWS = {
-    6: [['D-PAD / L-STICK', 'dir'], ['□ / X', 'hp'], ['✕ / A', 'lp'], ['△ / Y', 'hk'],
-        ['○ / B', 'lk'], ['R1 / RB', 'block'], ['L1 L2 / LB LT', 'run'], ['R2 / RT', 'special'],
-        ['OPTIONS / START', 'start'], ['SHARE / BACK', 'select']],
-    5: [['D-PAD / L-STICK', 'dir'], ['□ △ / X Y', '5:p'], ['✕ ○ / A B', '5:k'],
-        ['R1 / RB', '5:b'], ['L1 L2 / LB LT', '5:r'], ['R2 / RT', 'special'],
-        ['OPTIONS / START', 'start'], ['SHARE / BACK', 'select']],
+    6: ['hp', 'lp', 'hk', 'lk', 'block', 'run', 'special', 'pause', 'moves'],
+    5: ['5:p', '5:k', '5:b', '5:r', 'special', 'pause', 'moves'],
 };
+const PAD_DEFAULT = {
+    hp: 'WEST', lp: 'SOUTH', block: 'R1', hk: 'NORTH', lk: 'EAST', run: 'L1+L2',
+    special: 'R2', pause: 'START', moves: 'SELECT',
+};
+const PAD5_DEFAULT = { p: 'WEST+NORTH', b: 'R1', k: 'SOUTH+EAST', r: 'L1+L2' };
+function padGet(act) {
+    if (act.startsWith('5:')) {
+        const v = cfg.padKeys5 && cfg.padKeys5[act.slice(2)];
+        return v === undefined ? PAD5_DEFAULT[act.slice(2)] : v;
+    }
+    const v = cfg.padKeys && cfg.padKeys[act];
+    return v === undefined ? PAD_DEFAULT[act] : v;
+}
+function padSet(act, v) {
+    selectBlip();
+    if (act.startsWith('5:')) {
+        cfg.padKeys5 = Object.assign({}, cfg.padKeys5, { [act.slice(2)]: v });
+        save({ padKeys5: { [act.slice(2)]: v } });
+    } else {
+        cfg.padKeys = Object.assign({}, cfg.padKeys, { [act]: v });
+        save({ padKeys: { [act]: v } });
+    }
+}
 
 /* The pads Windows has attached, by the name it gives them, as pad= values:
  * "xinput" or the USB "vendor:product". They come from the game itself
@@ -193,12 +214,40 @@ function fillPads() {
 function paintPadMap() {
     const on = cfg.pad !== 'off';
     $('padMap').classList.toggle('hidden', !on);
+    $('respad').classList.toggle('hidden', !on || ctlTab !== 'pad');
     const b = $('k-pad');
     b.innerHTML = '';
-    for (const [label, act] of PAD_ROWS[cfg.buttons === 6 ? 6 : 5]) {
+    const dir = el('div', 'keybtn ro');
+    dir.appendChild(el('span', 'kname', T[ui].pads.dir));
+    dir.appendChild(el('span', 'kkey', 'D-PAD / L-STICK'));
+    b.appendChild(dir);
+    for (const act of PAD_ROWS[cfg.buttons === 6 ? 6 : 5]) {
         const k = el('div', 'keybtn ro');
-        k.appendChild(el('span', 'kname', T[ui].pads[act] || T[ui].keys[act]));
-        k.appendChild(el('span', 'kkey', label));
+        const name = act === 'pause' ? T[ui].pads.start : act === 'moves' ? T[ui].pads.select
+                   : T[ui].keys[act];
+        k.appendChild(el('span', 'kname', name));
+        const cur = padGet(act).split('+').filter(Boolean);
+        const sels = [0, 1].map(i => {
+            const s = el('select', 'sel padsel');
+            const none = el('option', null, '—');
+            none.value = '';
+            s.appendChild(none);
+            for (const [n, label] of PAD_BTNS) {
+                const o = el('option', null, label);
+                o.value = n;
+                s.appendChild(o);
+            }
+            s.value = cur[i] || '';
+            return s;
+        });
+        const change = () => padSet(act, sels.map(x => x.value).filter(Boolean)
+            .filter((x, i, a) => a.indexOf(x) === i).join('+'));
+        const box = el('span', 'padsels');
+        for (const x of sels) {
+            x.addEventListener('change', change);
+            box.appendChild(x);
+        }
+        k.appendChild(box);
         b.appendChild(k);
     }
 }
@@ -375,7 +424,7 @@ function paintKeys() {
         t.classList.toggle('active', t.dataset.c ? t.dataset.c === ctlTab
             : Number(t.dataset.b) === (cfg.buttons === 6 ? 6 : 5)));
     for (const [id, on] of [['hCtlP', 'p'], ['ctlP', 'p'], ['reskeys', 'p'],
-                            ['hCtlM', 'pad'], ['ctlM', 'pad'],
+                            ['hCtlM', 'pad'], ['ctlM', 'pad'], ['respad', 'pad'],
                             ['hCtlD', 'dbg'], ['ctlD', 'dbg'], ['resdbg', 'dbg']])
         $(id).classList.toggle('hidden', ctlTab !== on);
     $('ctlLayouts').classList.toggle('hidden', ctlTab === 'dbg');
@@ -785,6 +834,13 @@ async function init() {
         waitingKey = null;
         $('keyhint').textContent = T[ui].hint;
         paintKeys();
+    });
+    $('respad').addEventListener('click', () => {
+        selectBlip();
+        cfg.padKeys = Object.assign({}, PAD_DEFAULT);
+        cfg.padKeys5 = Object.assign({}, PAD5_DEFAULT);
+        save({ padKeys: cfg.padKeys, padKeys5: cfg.padKeys5 });
+        paintPadMap();
     });
     $('reskeys').addEventListener('click', () => {
         selectBlip();

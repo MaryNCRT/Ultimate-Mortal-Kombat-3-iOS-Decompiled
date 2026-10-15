@@ -1,4 +1,4 @@
-ULTIMATE MORTAL KOMBAT 3 - PORT DE PC - 0.1.0 ALPHA
+ULTIMATE MORTAL KOMBAT 3 - PORT DE PC - 0.1.0b ALPHA
 ====================================================
 
 Port nativo para Windows de la version de iOS (1.2.59), hecho por
@@ -111,6 +111,18 @@ NUEVO EN 0.0.9
   memoria). Una pelea del debug ya no deja sus luchadores, escenario ni
   paletas para los demas modos.
 - Launcher: botones mas pequenos.
+
+NUEVO EN 0.1.0b
+- En 4:3 los menus son los de la version de iPad (pantallas de
+  continuar y 1P, seleccion, torre). Con TAMANO DE LA INTERFAZ > IPAD,
+  ademas, botones de pausa mas pequenos y el resto del iPad.
+- JUGAR > DUELO: dos jugadores en un PC (jugador 2 con flechas y
+  teclado numerico).
+- CONTROLES > MANDO: cada accion se asigna a cualquier boton.
+- START del mando y P pausan en cualquier pantalla.
+- Menu debug (F2) con pestanas arriba y sin estirarse.
+- En 16:9 y 21:9: la torre, logros, ajustes, ATRAS y otros textos
+  ya quedan en su sitio.
 
 NUEVO EN 0.1.0
 - El launcher abre en menos de un segundo: ahora vive descomprimido en
@@ -242,7 +254,7 @@ ARREGLADO EN 0.0.2
 - La melena de Sindel aparece, con su textura.
 - El joystick en pantalla se mueve.
 
-ERRORES CONOCIDOS EN 0.1.0
+ERRORES CONOCIDOS EN 0.1.0b
 - Algunos objetos aparte de los luchadores aun pueden no verse.
 - Faltan animaciones en algunos fatalities (el de Sonya no se ve bien).
 - Siguen apareciendo errores de texturas en algunos escenarios y
@@ -251,7 +263,9 @@ ERRORES CONOCIDOS EN 0.1.0
   completo y faltan modos.
 - Al pausar a veces la pelea se ve encogida.
 - Los menus no se manejan con el mando (raton).
-- Algunos ataques especiales (sobre todo proyectiles) no tienen sonido.
+- Algunos ataques especiales (sobre todo proyectiles) no tienen sonido;
+  a Reptile le faltan sonidos en fatalities y especiales.
+- Tras un round un luchador puede verse con el modelo de otro.
 - Solo Windows. Linux y macOS todavia no tienen launcher.
 - Si el juego falla, mira logs\ junto a umk3-game.exe y reportalo
   con ese archivo en GitHub (Issues).
@@ -273,7 +287,9 @@ the 5-button layout separately. New in 0.0.9: gamepads (Xbox, PlayStation 4/5,
 Switch Pro, other USB pads; pick the input device in CONTROLS), a palette
 picker on the select screen ("< COLOR 1 >", saved), no input lag, crash
 reports, the Kombat Kode loading tip fixed, debug TOOLS (hitboxes, fight
-speed, save states), smaller launcher buttons. New in 0.0.7: BABALITY banner and tune (and animality, mercy, friendship
+speed, save states), smaller launcher buttons. New in 0.1.0b: the iPad build's menus on 4:3,
+PLAY > DUELO (two players, one PC), free gamepad binding, a tabbed debug
+menu, wide-screen fixes. New in 0.0.7: BABALITY banner and tune (and animality, mercy, friendship
 banners), Kung Lao's hat on the select screen, Sub-Zero's ice (frozen
 fighters, ice clone), a paged debug menu with mouse and palettes, skip the
 intros, debug keys in the launcher. New in 0.0.6c: a FINISHER row in the F2 debug menu forces player one's

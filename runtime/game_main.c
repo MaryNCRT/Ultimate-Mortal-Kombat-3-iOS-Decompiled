@@ -46,6 +46,8 @@
  *   UMK3_LOG_PACE=1            the frame pacing (input lag), once a second
  *   UMK3_LOG_PAD=1             the pad's buttons, every change (pad= in umk3.ini)
  *   UMK3_TEXQ=0|1|2          texture quality iphone / ipad / max (texture_quality=)
+ *   UMK3_ASPECT=4:3|16:9|21:9  aspect ratio (aspect=); UMK3_UI=0|1 UI size (ui_size=)
+ *   UMK3_HIDE_CONTROLS=0|1   on-screen controls (hide_controls=)
  *   UMK3_PAD=<auto|off|xinput|vvvv:pppp>  the pad, over umk3.ini's pad=
  *   UMK3_FRAME_DELAY=0         no late key read before a 60 Hz refresh
  *   UMK3_PACE_HZ=<hz>          pace as if the screen ran at <hz>
@@ -229,6 +231,9 @@ extern const char *CharacterNames[26];
 extern float limeTouchScreenX[10], limeTouchScreenY[10];
 extern void *G;                         /* GAMESTATE *, the fight engine's state */
 extern long  Player1NumButtons;        /* 5 or 6, Settings[4] */
+extern long  Player2NumButtons;
+extern long  GameMode;
+extern int   PortKeyButtonsP2[7], PortKeyDialP2;
 extern int   Settings[10];
 
 /* Keyboard -> player 1, straight into the engine's button state: no
@@ -272,6 +277,27 @@ static unsigned pad_combo(const char *v)
     return m;
 }
 
+/* The pad's buttons for each action, as masks of PB_* bits (any one of
+ * them presses it). By position unless umk3.ini says otherwise: the face
+ * buttons as the arcade's -- punches on the left, kicks on the right, high
+ * on top -- R1 block, L1 / L2 run, R2 the special button, START pause and
+ * SELECT the moves list. With five buttons both left ones punch and both
+ * right ones kick. The launcher's GAMEPAD tab writes pad_<action>= (pad_hp
+ * .. pad_run, pad_special, pad_pause, pad_moves) and pad5_<p|b|k|r>=, button
+ * names joined by "+"; an empty value leaves the action without a button.
+ * Indices as PortKeyButtons: HP LP BL HK LK RN S. */
+static unsigned g_pad6[7] = {
+    1u << PB_WEST, 1u << PB_SOUTH, 1u << PB_R1, 1u << PB_NORTH,
+    1u << PB_EAST, (1u << PB_L1) | (1u << PB_L2), 1u << PB_R2,
+};
+static unsigned g_pad5[7] = {
+    (1u << PB_WEST) | (1u << PB_NORTH), 0, 1u << PB_R1,
+    (1u << PB_SOUTH) | (1u << PB_EAST), 0,
+    (1u << PB_L1) | (1u << PB_L2), 1u << PB_R2,
+};
+static unsigned g_pad_pause = 1u << PB_START;
+static unsigned g_pad_moves = 1u << PB_SELECT;
+
 static void keyboard_buttons(void)
 {
     static const int keys6[7][2] = {    /* button index 0..6, two keys each */
@@ -288,33 +314,32 @@ static void keyboard_buttons(void)
     static const int dial[3][3] = {     /* [dy + 1][dx + 1] */
         { 8, 1, 2 }, { 7, 0, 3 }, { 6, 5, 4 },
     };
-    /* The pad (plat_pad_read, umk3.ini pad=), by position: the face
-     * buttons as the arcade's -- punches on the left, kicks on the right,
-     * high on top -- R1 block, L1 / L2 run, R2 the special button. With five
-     * buttons both left ones punch and both right ones kick. */
-    static const unsigned pad6[7] = {
-        1u << PB_WEST, 1u << PB_SOUTH, 1u << PB_R1, 1u << PB_NORTH,
-        1u << PB_EAST, (1u << PB_L1) | (1u << PB_L2), 1u << PB_R2,
-    };
-    static const unsigned pad5[7] = {
-        (1u << PB_WEST) | (1u << PB_NORTH), 0, 1u << PB_R1,
-        (1u << PB_SOUTH) | (1u << PB_EAST), 0,
-        (1u << PB_L1) | (1u << PB_L2), 1u << PB_R2,
-    };
     const int (*keys)[2] = (Player1NumButtons == 6) ? keys6 : keys5;
-    const unsigned *padb = (Player1NumButtons == 6) ? pad6 : pad5;
+    const int (*keys2)[2] = (Player2NumButtons == 6) ? keys6 : keys5;
+    const unsigned *padb = (Player1NumButtons == 6) ? g_pad6 : g_pad5;
     int dx, dy, b, live = CurrentTask == 6;
+    /* GameMode 6 (DUELO, two players on one device): player one has the
+     * first key set and the pad, player two the second set. Otherwise both
+     * sets drive player one. */
+    int duel = GameMode == 6, two = !duel;
 
-    dx = (plat_key(PK_RIGHT) || plat_key(PK_P2_RIGHT) || g_pad.right)
-       - (plat_key(PK_LEFT) || plat_key(PK_P2_LEFT) || g_pad.left);
-    dy = (plat_key(PK_DOWN) || plat_key(PK_P2_DOWN) || g_pad.down)
-       - (plat_key(PK_UP) || plat_key(PK_P2_UP) || g_pad.up);
+    dx = (plat_key(PK_RIGHT) || (two && plat_key(PK_P2_RIGHT)) || g_pad.right)
+       - (plat_key(PK_LEFT) || (two && plat_key(PK_P2_LEFT)) || g_pad.left);
+    dy = (plat_key(PK_DOWN) || (two && plat_key(PK_P2_DOWN)) || g_pad.down)
+       - (plat_key(PK_UP) || (two && plat_key(PK_P2_UP)) || g_pad.up);
     PortKeyDial = live ? dial[dy + 1][dx + 1] : 0;
 
     for (b = 0; b < 7; b++)
         PortKeyButtons[b] = live && keys[b][0] >= 0
-            && (plat_key(keys[b][0]) || plat_key(keys[b][1])
+            && (plat_key(keys[b][0]) || (two && plat_key(keys[b][1]))
                 || (g_pad.buttons & padb[b]));
+
+    dx = plat_key(PK_P2_RIGHT) - plat_key(PK_P2_LEFT);
+    dy = plat_key(PK_P2_DOWN) - plat_key(PK_P2_UP);
+    PortKeyDialP2 = live && duel ? dial[dy + 1][dx + 1] : 0;
+    for (b = 0; b < 7; b++)
+        PortKeyButtonsP2[b] = live && duel && keys2[b][1] >= 0
+            && plat_key(keys2[b][1]);
 }
 
 /* --fight: -1 until parsed. */
@@ -772,6 +797,32 @@ static void read_config(const char *dir)
         }
         else if (strcmp(line, "pad_dbg_menu") == 0)
             g_pad_dbg_mask = pad_combo(v);
+        else if (strncmp(line, "pad5_", 5) == 0) {
+            static const char *const names5[] = { "p", "b", "k", "r" };
+            static const int at5[] = { 0, 2, 3, 5 };
+            int i;
+
+            for (i = 0; i < 4; i++)
+                if (strcmp(line + 5, names5[i]) == 0)
+                    g_pad5[at5[i]] = pad_combo(v);
+        }
+        else if (strncmp(line, "pad_", 4) == 0 && strcmp(line, "pad_name") != 0) {
+            static const char *const names[] = {
+                "hp", "lp", "block", "hk", "lk", "run", "special"
+            };
+            int i;
+
+            for (i = 0; i < 7; i++)
+                if (strcmp(line + 4, names[i]) == 0) {
+                    g_pad6[i] = pad_combo(v);
+                    if (i == 6)
+                        g_pad5[6] = g_pad6[6];  /* one special button for both */
+                }
+            if (strcmp(line + 4, "pause") == 0)
+                g_pad_pause = pad_combo(v);
+            else if (strcmp(line + 4, "moves") == 0)
+                g_pad_moves = pad_combo(v);
+        }
         else if (strcmp(line, "pad") == 0)    /* auto, off, xinput, vvvv:pppp */
             plat_pad_select(v);
         else if (strcmp(line, "hide_controls") == 0)
@@ -839,6 +890,10 @@ extern int  Health[2];
  */
 extern long GamePaused;
 
+extern int limeScreenWidth;
+float FE_X(float v);
+#define R_EDGE 1.0e6f                   /* "the right edge", resolved below */
+
 static float g_ktap_x, g_ktap_y;
 static int   g_ktap_left;              /* ticks the synthetic finger stays down */
 
@@ -853,23 +908,31 @@ static void hud_keys(void)
     for (k = 0; k < 2; k++) {
         /* the pad: start is P, select (Back / Share / Create) is M */
         int down = plat_key(PK_PAUSE + k)
-                   || (g_pad.buttons & (1u << (k ? PB_SELECT : PB_START)));
+                   || (g_pad.buttons & (k ? g_pad_moves : g_pad_pause));
         int hit = down && !was[k];
         float x = -1.0f, y = 10.0f;
 
         was[k] = down;
         if (!hit || CurrentTask != 6 || g_ktap_left > 0)
             continue;
+        /* the right corner is the screen's own edge: on 16:9 and 21:9 the
+         * surface is wider than 480 and TogglePauseMenu tests
+         * x > limeScreenWidth - 80, so a tap at 470 missed it */
         if (k == 0) {
-            if (GamePaused == 0 || GamePaused == 2) x = 470.0f;
+            if (GamePaused == 0 || GamePaused == 2) x = R_EDGE;
             else if (GamePaused == 1) { x = 384.0f; y = 18.0f; }
         } else {
             if (GamePaused == 0) x = 10.0f;
-            else if (GamePaused == 2) x = 470.0f;
+            else if (GamePaused == 2) x = R_EDGE;
         }
         if (x < 0.0f)
             continue;
-        g_ktap_x = x * g_ui_k;
+        if (x == R_EDGE)
+            g_ktap_x = (float)limeScreenWidth - 10.0f * g_ui_k;
+        else if (x == 384.0f)
+            g_ktap_x = FE_X(384.0f);    /* the pause panel's RESUME */
+        else
+            g_ktap_x = x * g_ui_k;
         g_ktap_y = y * g_ui_k;
         g_ktap_left = 3;
         lime_touch_began(g_ktap_x, g_ktap_y);
@@ -1781,6 +1844,8 @@ int main(int argc, char **argv)
         g_cfg_debug_keys = 1;
     if (getenv("UMK3_SKIP_INTRO"))
         g_cfg_skip_intro = 1;
+    if (getenv("UMK3_HIDE_CONTROLS"))   /* 0 1, over hide_controls= */
+        PortHideControls = atoi(getenv("UMK3_HIDE_CONTROLS")) != 0;
     if (getenv("UMK3_ASPECT"))          /* 4:3 16:9 21:9, over aspect= */
         g_aspect = parse_aspect(getenv("UMK3_ASPECT"));
     if (getenv("UMK3_UI"))              /* 0 1, over ui_size= */
@@ -1853,6 +1918,8 @@ int main(int argc, char **argv)
      * wide is 480x360, the iPad's shape); wider keeps the height (16:9 at
      * 320 high is 568x320, the iPhone 5's). Even sizes. */
     if (g_aspect <= 1.5f) {
+        extern int PortIPadTall;        /* 4:3: the iPad build's menus */
+        PortIPadTall = g_aspect > 1.32f && g_aspect < 1.35f;
         g_fight_w = (int)(VIRT_W * g_ui_k);
         g_fight_h = ((int)(g_fight_w / g_aspect + 0.5f)) & ~1;
         g_menu_w = g_fight_w;
@@ -1865,6 +1932,11 @@ int main(int argc, char **argv)
         PortWideMenus = 1;
         g_menu_w = g_fight_w;
         g_menu_h = g_fight_h;
+    }
+    {
+        extern int PortIPad, PortIPadTall; /* the iPad build's layout */
+        /* launcher: interface size IPAD, and always on 4:3 (Mary) */
+        PortIPad = g_ui_k > 1.5f || PortIPadTall;
     }
     use_surface(0);
 
@@ -1942,8 +2014,8 @@ int main(int argc, char **argv)
             float tx = (float)(mx - vx) * g_virt_w / (vw ? vw : 1);
             float ty = (float)(my - vy) * g_virt_h / (vh ? vh : 1);
 
-            if (dbg_menu_is_open())     /* the debug menu takes the mouse, 480x320 */
-                dbg_menu_mouse(tx / g_ui_k, ty / g_ui_k,
+            if (dbg_menu_is_open())     /* the debug menu takes the mouse, as fractions */
+                dbg_menu_mouse(tx / g_virt_w, ty / g_virt_h,
                                plat_mouse(&mx, &my) && g_ntaps == 0);
 
             if (down && !was_down)

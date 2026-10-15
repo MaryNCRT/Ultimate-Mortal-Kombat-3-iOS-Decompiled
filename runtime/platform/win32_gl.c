@@ -1046,9 +1046,12 @@ static void al_say(al_box *b, const char *s, int fontpx, int bold, float x,
  * the same translucent box, the title on top, one row per entry -- the
  * label on the left, its value on the right -- the selected row in the
  * iPhone's blue selection bar, rows that cannot act now in grey, and the
- * key help at the bottom. `s` is pixels per point of the 480x320 screen.
+ * key help at the bottom. Under the title, one tab per page, the current
+ * one in the selection blue. `s` is pixels per point of the menu's
+ * 320-high space.
  * Returns RGBA8, premultiplied, *w x *h, malloc'd. */
-unsigned char *plat_ui_menu(const char *title, const char *const *label,
+unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
+                            int ntab, int tab, const char *const *label,
                             const char *const *value, const int *enabled,
                             int n, int sel, const char *footer, float s,
                             int *ow, int *oh)
@@ -1062,19 +1065,40 @@ unsigned char *plat_ui_menu(const char *title, const char *const *label,
     b.s = s;
     b.bx0 = m;
     b.by0 = m;
-    b.bx1 = m + 330 * s;
-    top = b.by0 + 28 * s;                   /* under the title */
+    b.bx1 = m + 360 * s;
+    top = b.by0 + 22 * s + 20 * s + 4 * s;  /* under the title and tabs */
     b.by1 = top + n * rowh + 26 * s;
     b.w = (int)(b.bx1 + m + 1);
     b.h = (int)(b.by1 + m + 1);
     b.px = (al_px *)malloc(sizeof(al_px) * b.w * b.h);
     al_draw_bg(&b);
 
-    al_say(&b, title, (int)(14 * s), 1, (b.bx0 + b.bx1) * 0.5f,
-           b.by0 + 15 * s, 1, 1, 1, 1, 1);
+    al_say(&b, title, (int)(13 * s), 1, (b.bx0 + b.bx1) * 0.5f,
+           b.by0 + 12 * s, 1, 1, 1, 1, 1);
 
     x0 = b.bx0 + 9 * s;
     x1 = b.bx1 - 9 * s;
+    for (i = 0; i < ntab; i++) {            /* the tab strip */
+        float tw = (x1 - x0) / ntab, tx0 = x0 + i * tw + 1 * s,
+              tx1 = x0 + (i + 1) * tw - 1 * s, ty0 = b.by0 + 22 * s,
+              ty1 = ty0 + 18 * s;
+        int x, y;
+        for (y = (int)ty0; y < (int)ty1 + 1; y++)
+            for (x = (int)tx0 - 1; x <= (int)tx1 + 1; x++) {
+                float c = al_rr((float)x, (float)y, tx0, ty0, tx1, ty1, 5 * s);
+                float t = (y + 0.5f - ty0) / (ty1 - ty0);
+                if (c <= 0 || x < 0 || x >= b.w || y < 0 || y >= b.h)
+                    continue;
+                if (i == tab)
+                    al_over(&b.px[y * b.w + x], 0.02f + 0.03f * (1 - t),
+                            0.36f + 0.20f * (1 - t), 0.90f + 0.06f * (1 - t),
+                            c * 0.95f);
+                else
+                    al_over(&b.px[y * b.w + x], 1, 1, 1, c * 0.12f);
+            }
+        al_say(&b, tabs[i], (int)(10 * s), 1, (tx0 + tx1) * 0.5f,
+               (ty0 + ty1) * 0.5f, 1, 1, 1, 1, i == tab ? 1.0f : 0.75f);
+    }
     for (i = 0; i < n; i++) {
         float y0 = top + i * rowh, a = enabled[i] ? 1.0f : 0.4f;
         if (i == sel) {                     /* the blue selection bar */

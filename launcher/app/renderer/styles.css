@@ -308,6 +308,18 @@ h3 { margin: 0 0 calc(var(--u) * .8); font-size: calc(var(--u) * 1.6); color: va
 #padMap { margin-top: calc(var(--u) * 1.6); }
 .devfield { margin-bottom: calc(var(--u) * 1.4); }
 .devfield .sel { flex: 0 1 calc(var(--u) * 34); }
+/* the GAMEPAD tab: one row an action, its name and two equal selectors */
+.padkeys .keybtn {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: calc(var(--u) * .8);
+    min-height: calc(var(--u) * 2.8); padding: calc(var(--u) * .3) calc(var(--u) * .8);
+    font-size: calc(var(--u) * 1.3);
+}
+.padkeys .kname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.padsels { display: flex; gap: calc(var(--u) * .4); }
+.padsel {
+    flex: none; width: calc(var(--u) * 10.5); height: calc(var(--u) * 2.4);
+    padding: 0 calc(var(--u) * .4); font-size: calc(var(--u) * 1.1); line-height: 1;
+}
 .keybtn.waiting { border-color: var(--red); box-shadow: 0 0 calc(var(--u) * 1) rgba(227, 36, 43, .7); }
 .note { color: var(--dim); font-size: calc(var(--u) * 1.4); margin: calc(var(--u) * 1.2) 0 0; }
 .hint { color: var(--dim); font-size: calc(var(--u) * 1.4); margin-right: auto; }
