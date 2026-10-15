@@ -107,7 +107,7 @@ symbolise. A log is deleted once the error it shows is fixed.
 
 ### Known problems (9 October 2026, alpha 0.0.7)
 
-Release notes: [0.0.8](docs/RELEASE-0.0.8-alpha.md), [0.0.7b](docs/RELEASE-0.0.7b-alpha.md), [0.0.7](docs/RELEASE-0.0.7-alpha.md), [0.0.6c](docs/RELEASE-0.0.6c-alpha.md), [0.0.6b](docs/RELEASE-0.0.6b-alpha.md), [0.0.6](docs/RELEASE-0.0.6-alpha.md), [0.0.5](docs/RELEASE-0.0.5-alpha.md), [0.0.4](docs/RELEASE-0.0.4-alpha.md), [0.0.3](docs/RELEASE-0.0.3-alpha.md), [0.0.2](docs/RELEASE-0.0.2-alpha.md), [0.0.1](docs/RELEASE-0.0.1-alpha.md).
+Release notes: [0.0.9](docs/RELEASE-0.0.9-alpha.md), [0.0.8](docs/RELEASE-0.0.8-alpha.md), [0.0.7b](docs/RELEASE-0.0.7b-alpha.md), [0.0.7](docs/RELEASE-0.0.7-alpha.md), [0.0.6c](docs/RELEASE-0.0.6c-alpha.md), [0.0.6b](docs/RELEASE-0.0.6b-alpha.md), [0.0.6](docs/RELEASE-0.0.6-alpha.md), [0.0.5](docs/RELEASE-0.0.5-alpha.md), [0.0.4](docs/RELEASE-0.0.4-alpha.md), [0.0.3](docs/RELEASE-0.0.3-alpha.md), [0.0.2](docs/RELEASE-0.0.2-alpha.md), [0.0.1](docs/RELEASE-0.0.1-alpha.md).
 
 What a player sees today, and what is known about each.
 
@@ -183,6 +183,7 @@ What a player sees today, and what is known about each.
 | ~~Debug menu: show hitboxes.~~ | **Done** (Mary saw them, 2026-10-15; placement fixed after). F2 > TOOLS > HITBOXES: each fighter's body box (player one blue, player two green) from the engine's own extents; every strike test (`strike_check_regs`, other.c) shows the attack box in red and the target's box in yellow for 20 ticks, white on a hit. `UMK3_DBG_HITBOX=1`. |
 | Debug menu: fight speed and save states. | **Done** (save states checked by Mary, 2026-10-15). TOOLS > FIGHT SPEED, 10% to 400% (`UMK3_DBG_SPEED`); STATE SLOT / SAVE STATE / LOAD STATE, four slots in memory that restore the exact moment without restarting (`UMK3_DBG_STATE="tick:s1;tick:l1"`). How: [HOW-THE-GAME-WORKS](docs/HOW-THE-GAME-WORKS.md#save-states-port-only). |
 | ~~Pick palette 1 or 2 on the character select screen.~~ | **Done** (checked by Mary, 2026-10-15). A "< COLOR 1 >" box under each fighter (player two's in 2-player versus only); a click switches it, and the 3D model, the versus portrait and the fight follow. Port only; nothing picked = the binary's rule (player two takes the second palette in a mirror match). |
+| ~~Gamepad support; keyboard and gamepad in separate launcher tabs.~~ | **Done for 0.0.9** (checked by Mary, 2026-10-15). XInput for Xbox pads, WinMM for PlayStation 4/5, Switch Pro and generic pads (DirectInput's EnumDevices took 40 s on one machine; WinMM is searched on a thread). `pad=` picks the pad, `pad_dbg_menu=` the combination that opens the debug menu (L3+R3), `umk3-game --list-pads` feeds the launcher's list. The menus are still mouse-only. |
 | **Windows only for the launcher.** | Linux/macOS still build from source with CMake. |
 | **Only the iPhone 1.2.59 .ipa works.** | The launcher refuses any other binary (uuid check); the iPad 1.2.56 build has different addresses. |
 

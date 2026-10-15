@@ -308,6 +308,7 @@ Environment variables read by `runtime/game_main.c` (all listed in its header):
 | `UMK3_LOG_P1=1` | in a fight, every change of player one's frame and of the engine's button word |
 | `UMK3_LOG_PACE=1`, `UMK3_FRAME_DELAY=0`, `UMK3_PACE_HZ=<hz>` | input-lag pacing: log it once a second, turn it off, or pace as if the screen ran at that rate |
 | `UMK3_CRASH_TEST=<tick>` | crash on purpose, to check the crash report |
+| `UMK3_PAD=<auto\|off\|xinput\|vvvv:pppp>`, `UMK3_LOG_PAD=1` | the pad over `pad=`; log its buttons (and read it even in a scripted run). `umk3-game --list-pads` prints the pads attached |
 | `UMK3_DBG_HITBOX=1`, `UMK3_DBG_SPEED=<percent>` | the TOOLS page's hitboxes and fight speed |
 | `UMK3_DBG_STATE="tick:s1;tick:l1"` | save / load state slot 1-4 at those ticks: test a moment again without replaying up to it |
 | `UMK3_DBG_FIN="tick:n;..."` | the FINISHER row (0-6) at the first FINISH HIM from that tick |
