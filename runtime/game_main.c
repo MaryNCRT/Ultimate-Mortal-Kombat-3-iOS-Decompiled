@@ -45,6 +45,7 @@
  *   UMK3_LOG_P1=1              player one frame and buttons, every change
  *   UMK3_LOG_PACE=1            the frame pacing (input lag), once a second
  *   UMK3_LOG_PAD=1             the pad's buttons, every change (pad= in umk3.ini)
+ *   UMK3_TEXQ=0|1|2          texture quality iphone / ipad / max (texture_quality=)
  *   UMK3_PAD=<auto|off|xinput|vvvv:pppp>  the pad, over umk3.ini's pad=
  *   UMK3_FRAME_DELAY=0         no late key read before a 60 Hz refresh
  *   UMK3_PACE_HZ=<hz>          pace as if the screen ran at <hz>
@@ -711,6 +712,12 @@ static void read_config(const char *dir)
             g_cfg_debug_keys = atoi(v) != 0;
         else if (strcmp(line, "skip_intro") == 0)
             g_cfg_skip_intro = atoi(v) != 0;
+        else if (strcmp(line, "texture_quality") == 0) {
+            /* iphone, ipad or max: see draw_gl.c */
+            extern int PortTextureQuality;
+            PortTextureQuality = _stricmp(v, "max") == 0 ? 2
+                               : _stricmp(v, "ipad") == 0 ? 1 : 0;
+        }
         else if (strcmp(line, "pad_dbg_menu") == 0)
             g_pad_dbg_mask = pad_combo(v);
         else if (strcmp(line, "pad") == 0)    /* auto, off, xinput, vvvv:pppp */
@@ -1722,6 +1729,10 @@ int main(int argc, char **argv)
         g_cfg_debug_keys = 1;
     if (getenv("UMK3_SKIP_INTRO"))
         g_cfg_skip_intro = 1;
+    if (getenv("UMK3_TEXQ")) {          /* 0 1 2, over texture_quality= */
+        extern int PortTextureQuality;
+        PortTextureQuality = atoi(getenv("UMK3_TEXQ"));
+    }
     if (getenv("UMK3_PAD"))             /* over umk3.ini's pad= */
         plat_pad_select(getenv("UMK3_PAD"));
     if (getenv("UMK3_BUTTONS"))         /* 5 or 6, over umk3.ini's buttons= */

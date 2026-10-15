@@ -100,6 +100,19 @@ typedef struct TexEntry {
 
 static TexEntry *g_textures;
 
+/* The launcher's texture quality (umk3.ini texture_quality=), port only:
+ *
+ *      0  IPHONE  the device's own: at 480 wide the game loads the _LOW
+ *                 sheets (SetupFEScale's UseLOWAssets)
+ *      1  IPAD    the full sheets a wider screen gets (FrontEnd.c)
+ *      2  MAX     the full sheets, a sheet's lossless .png before its PVRTC
+ *                 .pvr when the bundle has both, mipmaps and the card's
+ *                 largest anisotropic filtering
+ *
+ * The .pvr data is compressed in the .ipa itself; nothing here can undo that,
+ * MAX is the best those files give. */
+int PortTextureQuality;
+
 static TexEntry *tex_find(const char *path)
 {
     TexEntry *e;
@@ -135,6 +148,8 @@ static int load_rgba(const char *path, LimeImage *out)
      * data says ".PNG" for files that are .pvr on disk -- the exporter wrote
      * one extension and the device supplied another. */
     static const char *const exts[] = { ".pvr", ".PVR", NULL, ".png", ".PNG" };
+    static const char *const exts_max[] = { ".png", ".PNG", NULL, ".pvr", ".PVR" };
+    const char *const *ext = PortTextureQuality >= 2 ? exts_max : exts;
 
     const char *root = lime_platform_asset_root();
     char full[1200];
@@ -152,11 +167,11 @@ static int load_rgba(const char *path, LimeImage *out)
 
     for (e = 0; e < (int)(sizeof(exts) / sizeof(exts[0])); e++) {
         for (d = 0; d < (int)(sizeof(dirs) / sizeof(dirs[0])); d++) {
-            if (exts[e] == NULL)
+            if (ext[e] == NULL)
                 snprintf(full, sizeof(full), "%s/%s%s", root, dirs[d], path);
             else
                 snprintf(full, sizeof(full), "%s/%s%s%s",
-                         root, dirs[d], stem, exts[e]);
+                         root, dirs[d], stem, ext[e]);
             if (try_one(full, out))
                 return 1;
         }
@@ -222,6 +237,23 @@ TEXTURE *limeLoadTexture(const char *path, int a, int b)
      * glyph on the second atlas page has a V past 1.0 (J is at 2504 of 2048),
      * which REPEAT folds onto the second sheet. This used to set GL_CLAMP,
      * and J, Á and Ñ drew as nothing: "UGAR" for JUGAR. */
+    if (PortTextureQuality >= 2) {
+        /* MAX: mipmaps (GL_GENERATE_MIPMAP, GL 1.4) and the largest
+         * anisotropy the card offers (EXT_texture_filter_anisotropic) */
+        static float aniso = -1.0f;
+
+        if (aniso < 0.0f) {
+            const char *x = (const char *)glGetString(GL_EXTENSIONS);
+            aniso = 0.0f;
+            if (x && strstr(x, "GL_EXT_texture_filter_anisotropic"))
+                glGetFloatv(0x84FF, &aniso);   /* MAX_TEXTURE_MAX_ANISOTROPY */
+        }
+        glTexParameteri(GL_TEXTURE_2D, 0x8191, GL_TRUE);  /* GENERATE_MIPMAP */
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                        GL_LINEAR_MIPMAP_LINEAR);
+        if (aniso > 1.0f)
+            glTexParameterf(GL_TEXTURE_2D, 0x84FE, aniso);  /* MAX_ANISOTROPY */
+    }
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.width, img.height, 0,
                  GL_RGBA, GL_UNSIGNED_BYTE, img.rgba);
     free(img.rgba);

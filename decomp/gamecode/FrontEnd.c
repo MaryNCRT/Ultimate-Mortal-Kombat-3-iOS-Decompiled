@@ -1750,6 +1750,7 @@ extern float HUD_Scale;                 /* 0x000ff9c4 */
 /* The symbol is `_UseLOWAssets`; the Ptr suffix was invented here and
  * made one variable look like two. */
 extern long UseLOWAssets;               /* 0x0010df10 */
+extern int  PortTextureQuality;         /* runtime/draw_gl.c, port only */
 
 
 /* --------------------------------------------------------------- SetupFEScale
@@ -1798,6 +1799,13 @@ void SetupFEScale(void)
     HUD_Scale = (FE_WidthScale >= 2.0f) ? 1.75f : 1.0f;
 
     UseLOWAssets = (w == 480) ? 1 : 0;           /* exactly 480, not <= */
+
+    /* Port, not in the binary: the port always runs at 480 wide, so the
+     * launcher's texture quality (umk3.ini texture_quality=, draw_gl.c)
+     * decides instead -- IPHONE keeps the _LOW sheets, IPAD and MAX load
+     * the full ones a wider screen gets. */
+    if (PortTextureQuality > 0)
+        UseLOWAssets = 0;
 }
 
 
