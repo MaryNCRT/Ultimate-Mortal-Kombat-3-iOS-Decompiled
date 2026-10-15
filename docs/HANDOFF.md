@@ -1,6 +1,6 @@
 # Handoff
 
-> **The first two sections were rewritten on 2026-10-15 for alpha 0.1.0.**
+> **The first two sections were rewritten on 2026-10-15 for alpha 0.1.0b.**
 > Everything after them is a dated diary of what each finished module
 > settled; it is kept because the facts in it are still true, but its counts
 > ("1,752 of 2,172" and the like) and its "next steps" are history. The live
@@ -15,8 +15,8 @@ Read this, then [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md) and
 
 ## Releases
 
-The current build is **0.1.0 alpha** ([notes](RELEASE-0.1.0-alpha.md)),
-published on GitHub as a pre-release with `UMK3-PC-0.1.0-alpha.zip`. 0.0.9 back
+The current build is **0.1.0b alpha** ([notes](RELEASE-0.1.0b-alpha.md)),
+published on GitHub as a pre-release with `UMK3-PC-0.1.0b-alpha.zip`. 0.1.0 back
 to 0.0.4 are still published; 0.0.1-0.0.3 were deleted from GitHub when the
 history was rewritten on 2026-10-09 (their notes stay in `docs/`). What each
 release fixed, with addresses, is in PROGRESS.md.
@@ -30,7 +30,7 @@ release fixed, with addresses, is in PROGRESS.md.
 4. Compile the result once from scratch with the `.ipa`.
 5. Run `gh release create vX.Y.Z-alpha <zip> --prerelease --notes-file docs/RELEASE-X.Y.Z-alpha.md`.
 
-## Where the project stands (2026-10-15, alpha 0.1.0)
+## Where the project stands (2026-10-15, alpha 0.1.0b)
 
 - **Done:** every function is decompiled (2,572 of 2,572). The game plays the
   menus, Arcade to the end (treasure screen) and whole fights with every
@@ -43,6 +43,11 @@ release fixed, with addresses, is in PROGRESS.md.
   - **The launcher updates itself** from GitHub releases.
   
   Where each lives: HOW-THE-GAME-WORKS.md, sections 2 and 3.
+- **New in 0.1.0b:** the iPad build's layout (`PortIPad`: 4:3 or interface
+  size IPAD; `PortIPadTall`: 4:3), read from the iPad binary with
+  `WORK/claude-tests/sidediff2.py`; PLAY > DUELO; gamepad binding; the
+  debug menu with tabs; wide-screen centring fixes. Mary's open items are
+  in `docs/CHECKLIST.md`.
 - **Open list:** the README's *Known problems*. Mary's list goes on with:
   - monitor choice in the launcher;
   - a render backend option (DirectX 12 / Vulkan / OpenGL, a large job);

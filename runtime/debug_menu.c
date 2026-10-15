@@ -5,14 +5,14 @@
  * box, in PLAY). F2 opens it over the game, which freezes underneath -- the
  * frame it was showing stays as a dimmed backdrop and GameCodeMain is not
  * called while the menu is up. Arrows or W/S move, left/right change a
- * value, Enter picks, Q / E turn the page, F2 closes; every one of those
+ * value, Enter picks, Q / E change the tab, F2 closes; every one of those
  * debug keys can be rebound in the launcher's CONTROLS (key_dbg_* in
- * umk3.ini). The mouse works too: a click on the title turns the page, on a
+ * umk3.ini). The mouse works too: a click on a tab opens it, on a
  * value row its left half lowers the value and its right half raises it,
  * on any other row it picks.
  *
- * Five pages: FIGHTERS (the two fighters, their palettes, the stage, START
- * FIGHT), DURING THE FIGHT (round and match keys, FINISHER, the Arcade
+ * Five tabs along the top: FIGHTERS (the two fighters, their palettes, the
+ * stage, START FIGHT), FIGHT (round and match keys, FINISHER, the Arcade
  * bosses), MENUS (any screen, the main menu), OPTIONS (direct keys, info),
  * TOOLS (hitboxes, fight speed, save states).
  *
@@ -42,8 +42,8 @@
  *                             game at that tick and a load goes back to it,
  *                             in the same session (runtime/savestate.h)
  *
- * Everything is drawn here, with a 5x7 font of its own, in the 480x320 space
- * the game uses; nothing comes from the game's assets, so the menu works on a
+ * Everything is drawn here, with a 5x7 font of its own, in a space 320 high
+ * and as wide as the view's shape, so it never stretches; nothing comes from the game's assets, so the menu works on a
  * screen whose own textures are broken. What a pick DOES is game_main.c's
  * business: this file only hands back a request.
  */
@@ -179,11 +179,24 @@ static struct {
     GLfloat colour[4];
 } g_saved;
 
+/* The menu's space: 320 high and as wide as the view's shape, so on 4:3,
+ * 16:9 or 21:9 the box keeps its proportions instead of stretching with a
+ * 480-wide space. Set by begin_2d. */
+static float g_ow = 480.0f;
+
 /* The game sets most of its state once and expects to find it again, so the
- * menu puts back everything it touches. */
-static void begin_2d(void)
+ * menu puts back everything it touches. `w` is the space's width, 0 for the
+ * view's shape. */
+static void begin_2d_w(float w)
 {
     int i;
+
+    if (w <= 0) {
+        GLint view[4];
+        glGetIntegerv(GL_VIEWPORT, view);
+        w = view[3] > 0 ? 320.0f * view[2] / view[3] : 480.0f;
+    }
+    g_ow = w;
 
     for (i = 0; i < N_CAPS; i++)
         glGetIntegerv(k_caps[i], &g_saved.caps[i]);
@@ -196,7 +209,7 @@ static void begin_2d(void)
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
-    glOrtho(0.0, 480.0, 320.0, 0.0, -1.0, 1.0);
+    glOrtho(0.0, w, 320.0, 0.0, -1.0, 1.0);
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     glLoadIdentity();
@@ -205,6 +218,8 @@ static void begin_2d(void)
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
+
+static void begin_2d(void) { begin_2d_w(0); }
 
 static void end_2d(void)
 {
@@ -264,8 +279,9 @@ enum {
     ROW_CLOSE, N_ROWS
 };
 
-/* One page per kind of thing, Q / E (the launcher can rebind them) or a
- * click on the title to turn; CLOSE ends every page. */
+/* One page per kind of thing, shown as tabs along the top: Q / E (the
+ * launcher can rebind them), L1 / R1 or a click on a tab to change; CLOSE
+ * ends every page. */
 #define MAX_PAGE_ROWS 10
 static const struct {
     const char *name;
@@ -274,7 +290,7 @@ static const struct {
 } k_pages[] = {
     { "FIGHTERS", 7,
       { ROW_P1, ROW_PAL1, ROW_P2, ROW_PAL2, ROW_STAGE, ROW_FIGHT, ROW_CLOSE } },
-    { "DURING THE FIGHT", 8,
+    { "FIGHT", 8,
       { ROW_WIN_ROUND, ROW_LOSE_ROUND, ROW_WIN_MATCH, ROW_LOSE_MATCH,
         ROW_FINISHER, ROW_MOTARO, ROW_SK, ROW_CLOSE } },
     { "MENUS", 3, { ROW_SCREEN, ROW_MAIN, ROW_CLOSE } },
@@ -320,7 +336,8 @@ int DbgPalette[2];
 int DbgFightActive;
 static const char *const k_pal[3] = { "AUTO", "1", "2 (ALTERNATE)" };
 
-/* Where the box was last drawn, in the 480x320 space, for the mouse. */
+/* Where the box was last drawn, in the menu's space, for the mouse: the
+ * tab strip from g_title0 to g_top, N_PAGES tabs from g_bx, g_bw wide. */
 static float g_bx, g_by, g_bw, g_top, g_rowh, g_title0;
 static int   g_mouse_was;
 
@@ -442,17 +459,17 @@ static int edge(int k, int *was)
     return hit;
 }
 
-/* The mouse: game_main.c passes the pointer in the 480x320 space each
- * frame the menu is open. A click on the title turns the page (left half
- * back, right half on); on a row with a value, the left half lowers it and
- * the right half raises it; on any other row it picks. */
+/* The mouse: game_main.c passes the pointer as fractions of the view each
+ * frame the menu is open. A click on a tab opens that page; on a row with a
+ * value, the left half lowers it and the right half raises it; on any other
+ * row it picks. */
 static float g_mx, g_my;
 static int   g_mdown;
 
 void dbg_menu_mouse(float x, float y, int down)
 {
-    g_mx = x;
-    g_my = y;
+    g_mx = x * g_ow;
+    g_my = y * 320.0f;
     g_mdown = down;
 }
 
@@ -498,7 +515,9 @@ int dbg_menu_tick(struct dbg_request *rq)
     if (click && g_rowh > 0 && g_mx >= g_bx && g_mx < g_bx + g_bw) {
         float mid = g_bx + g_bw * 0.5f;
         if (g_my >= g_title0 && g_my < g_top) {
-            turn_page(g_mx < mid ? -1 : 1);
+            int t = (int)((g_mx - g_bx) * N_PAGES / g_bw);
+            if (t >= 0 && t < N_PAGES && t != g_page)
+                turn_page(t - g_page);
         } else if (g_my >= g_top) {
             int i = (int)((g_my - g_top) / g_rowh);
             if (i < k_pages[g_page].n
@@ -615,8 +634,7 @@ static void row_value(int i, char *v, size_t n)
 
 static void title_text(char *t, size_t n)
 {
-    snprintf(t, n, "<   DEBUG: %s  %d/%d   >", k_pages[g_page].name,
-             g_page + 1, N_PAGES);
+    snprintf(t, n, "DEBUG MENU");
 }
 
 static void footer_text(char *f, size_t n)
@@ -626,7 +644,7 @@ static void footer_text(char *f, size_t n)
     plat_key_label(PK_DBG_PAGE_PREV, p, sizeof p);
     plat_key_label(PK_DBG_PAGE_NEXT, q, sizeof q);
     plat_key_label(PK_TEST, c, sizeof c);
-    snprintf(f, n, "%s/%s PAGE   ARROWS OR MOUSE   ENTER PICK   %s CLOSE",
+    snprintf(f, n, "%s/%s TAB   ARROWS OR MOUSE   ENTER PICK   %s CLOSE",
              p, q, c);
 }
 
@@ -642,15 +660,17 @@ static int draw_ios(void)
     static int tw, th;
     static float ts;
     char vals[MAX_PAGE_ROWS][64], sig[2048], title[96], footer[128];
-    const char *vp[MAX_PAGE_ROWS], *lp[MAX_PAGE_ROWS];
+    const char *vp[MAX_PAGE_ROWS], *lp[MAX_PAGE_ROWS], *tabs[N_PAGES];
     int en[MAX_PAGE_ROWS], i, n = 0, rows = k_pages[g_page].n;
     GLint view[4];
     float s;
 
     glGetIntegerv(GL_VIEWPORT, view);
-    s = view[2] / 480.0f;
+    s = view[3] / 320.0f;               /* by height: the shape is kept */
     if (s <= 0)
         return 0;
+    for (i = 0; i < N_PAGES; i++)
+        tabs[i] = k_pages[i].name;
     title_text(title, sizeof title);
     footer_text(footer, sizeof footer);
     n = snprintf(sig, sizeof sig, "%s|%s|", title, footer);
@@ -664,12 +684,12 @@ static int draw_ios(void)
         if (n >= (int)sizeof sig - 80)
             break;
     }
-    snprintf(sig + n, sizeof sig - n, "%d %.3f", g_sel, s);
+    snprintf(sig + n, sizeof sig - n, "%d %d %.3f", g_sel, g_page, s);
 
     if (!tex || strcmp(sig, last) != 0) {
         int w, h;
-        unsigned char *px = plat_ui_menu(title, lp, vp, en, rows, g_sel,
-                                         footer, s, &w, &h);
+        unsigned char *px = plat_ui_menu(title, tabs, N_PAGES, g_page, lp, vp,
+                                         en, rows, g_sel, footer, s, &w, &h);
         if (!px)
             return 0;
         if (!tex)
@@ -696,21 +716,22 @@ static int draw_ios(void)
         glColor4f(0.6f, 0.6f, 0.6f, 1.0f);
         glBegin(GL_QUADS);                      /* glReadPixels is bottom-up */
         glTexCoord2f(0, 1); glVertex2f(0, 0);
-        glTexCoord2f(1, 1); glVertex2f(480, 0);
-        glTexCoord2f(1, 0); glVertex2f(480, 320);
+        glTexCoord2f(1, 1); glVertex2f(g_ow, 0);
+        glTexCoord2f(1, 0); glVertex2f(g_ow, 320);
         glTexCoord2f(0, 0); glVertex2f(0, 320);
         glEnd();
     }
     {
         float w = tw / ts, h = th / ts;
-        float x = (480 - w) * 0.5f, y = (320 - h) * 0.5f;
+        float x = (g_ow - w) * 0.5f, y = (320 - h) * 0.5f;
 
         /* plat_ui_menu's layout, in points: a 6 margin, the title band
-         * 28 tall, rows 15 tall inside a box 330 wide */
-        g_bx = x + 6;
-        g_bw = 330;
-        g_title0 = y + 6;
-        g_top = y + 6 + 28;
+         * 22 tall, the tab strip 20 (inset 9 at the sides), a 4 gap, rows
+         * 15 tall inside a box 360 wide */
+        g_bx = x + 6 + 9;
+        g_bw = 360 - 18;
+        g_title0 = y + 6 + 22;
+        g_top = y + 6 + 22 + 20 + 4;
         g_rowh = 15;
 
         glEnable(GL_TEXTURE_2D);
@@ -732,7 +753,8 @@ static int draw_ios(void)
 
 void dbg_menu_draw(void)
 {
-    const float px = 1.0f, x0 = 96.0f, y0 = 34.0f, lh = 15.0f;
+    const float px = 1.0f, lh = 15.0f, y0 = 46.0f;
+    float x0, bw;
     char v[64], title[96], footer[128];
     int i, rows = k_pages[g_page].n;
 
@@ -740,21 +762,23 @@ void dbg_menu_draw(void)
         return;
     title_text(title, sizeof title);
     footer_text(footer, sizeof footer);
-    g_bx = x0 - 12;
-    g_bw = 480 - 2 * (x0 - 12);
-    g_title0 = y0 - 26;
-    g_top = y0 - 4;
-    g_rowh = lh;
 
     begin_2d();
+    x0 = (g_ow - 288.0f) * 0.5f;
+    bw = g_ow - 2 * (x0 - 12);
+    g_bx = x0 - 12;
+    g_bw = bw;
+    g_title0 = y0 - 22;
+    g_top = y0 - 4;
+    g_rowh = lh;
     if (g_shot) {
         glEnable(GL_TEXTURE_2D);
         glBindTexture(GL_TEXTURE_2D, g_shot);
         glColor4f(0.45f, 0.45f, 0.45f, 1.0f);
         glBegin(GL_QUADS);                      /* glReadPixels is bottom-up */
         glTexCoord2f(0, 1); glVertex2f(0, 0);
-        glTexCoord2f(1, 1); glVertex2f(480, 0);
-        glTexCoord2f(1, 0); glVertex2f(480, 320);
+        glTexCoord2f(1, 1); glVertex2f(g_ow, 0);
+        glTexCoord2f(1, 0); glVertex2f(g_ow, 320);
         glTexCoord2f(0, 0); glVertex2f(0, 320);
         glEnd();
         glDisable(GL_TEXTURE_2D);
@@ -762,12 +786,23 @@ void dbg_menu_draw(void)
 
     glBegin(GL_QUADS);
     glColor4f(0.0f, 0.0f, 0.0f, 0.75f);
-    rect(x0 - 12, y0 - 26, 480 - 2 * (x0 - 12), rows * lh + 52);
+    rect(x0 - 12, y0 - 40, bw, rows * lh + 66);
+    for (i = 0; i < N_PAGES; i++) {             /* the tabs */
+        float tw = bw / N_PAGES, tx = x0 - 12 + i * tw;
+        if (i == g_page)
+            glColor4f(0.8f, 0.1f, 0.1f, 0.9f);
+        else
+            glColor4f(0.25f, 0.25f, 0.25f, 0.9f);
+        rect(tx + 1, y0 - 22, tw - 2, 14);
+        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+        text(tx + (tw - (float)strlen(k_pages[i].name) * CH_W) * 0.5f,
+             y0 - 19, px, k_pages[i].name);
+    }
     glColor4f(0.8f, 0.1f, 0.1f, 0.9f);
-    rect(x0 - 8, y0 + g_sel * lh - 4, 480 - 2 * (x0 - 8), lh - 1);
+    rect(x0 - 8, y0 + g_sel * lh - 4, bw - 8, lh - 1);
 
     glColor4f(1.0f, 0.85f, 0.2f, 1.0f);
-    text(x0, y0 - 20, px, title);
+    text(x0, y0 - 36, px, title);
     for (i = 0; i < rows; i++) {
         int r = k_pages[g_page].rows[i];
         float y = y0 + i * lh;
@@ -835,7 +870,7 @@ void dbg_frame_draw(int ww, int wh)
         v0 = (1 - keep) / 2;
         v1 = v0 + keep;
     }
-    begin_2d();
+    begin_2d_w(480.0f);                 /* the whole window, cropped above */
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, g_frame_tex);
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);

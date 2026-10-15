@@ -4,7 +4,9 @@ Current state of the project. Written so that someone can pick it up with no pri
 
 **Last updated:** 2026-10-15 -- see [HANDOFF.md](HANDOFF.md) for the route.
 
-## Current state (alpha 0.1.0, 2026-10-15)
+## Current state (alpha 0.1.0b, 2026-10-15)
+
+**2026-10-15, Mary's 0.1.0 list, released as 0.1.0b (notes: [RELEASE-0.1.0b-alpha.md](RELEASE-0.1.0b-alpha.md); the list with what each item found: [CHECKLIST.md](CHECKLIST.md)):** the iPad build's layout, read by diffing every function of the two binaries (`sidediff2.py`, pool islands skipped, registers normalised). `PortIPad` (4:3, or interface size IPAD) takes the pause and moves-list corners 40 wide (`TogglePauseMenu`), PLAY's five rows 56 apart from y 40 with DUELO (GameMode 6; player two reads the second key set, `PortKeyButtonsP2`), the multiplayer title at y 26, the two-ring vortex (`DrawVortex3D`), the glass window's 12 slices 55 apart (`RenderLevelBG`), and the data the iPad changes: the select camera x 2.3 (`FECAMPOSX`) and the tower's pulled-back y -2.739 (`TowerPulledPos`), applied at their use sites because the globals are rewritten after start-up. `PortIPadTall` (4:3) takes Continue and 1P: texts 36 iPad points lower, BACK at y 322, boxes `(int)(102 * limeScreenHeight / 640)` = 122 tall; and `repell_func`'s 0x100 gap. Still to read from the iPad binary: `DrawTower3D`, `FE_Task_About_Help`. Wide screens (checked by Mary): tower taps and layout (`Tower_X`), the red highlight by ATRÁS, the achievements frame and pop-up, settings box texts, select ATRÁS and COLOR boxes, usage sharing and four more `FE_XC` sites, main-menu submenu texts. Controls (checked by Mary): START/P pause on any width; pad binding per action in the launcher (`pad_<action>=`, `pad5_<p|b|k|r>=`). Debug menu: no longer stretched (ortho follows the viewport), tabs per page. All Port, not in the binary, except the iPad layout, which is the iPad binary's.
 
 **2026-10-15, aspect ratios, released as 0.1.0 (checked by Mary; notes: [RELEASE-0.1.0-alpha.md](RELEASE-0.1.0-alpha.md)):** launcher GRAPHICS > ASPECT RATIO, `aspect=3:2|4:3|16:9|21:9` (`UMK3_ASPECT`). The surface takes the shape: narrower than 3:2 keeps the width (4:3 = 480x360, the iPad's), wider keeps the height (16:9 = 568x320). `LIMEDS_Set3dMode` (decomp/lime/LIMEDS_Misc.c): 3:2 untouched; 4:3 is the iPad build's own (UMK3 for iPad 1.2.56, `_LIMEDS_Set3dMode` 0x5d99c: aspect 0x3f3f7cee and a second `limeScaleMatrix` by 0x3f9f928e, re-read from its disassembly); wider uses the same rule, not in either binary -- k = (h/w)/0.6, aspect 0.6k, scale k -- the iPhone's vertical view, the extra width shows more stage, nothing stretched. The fight's HUD is anchored to `limeScreenWidth` in the binary and goes to the corners by itself. Menus: the iPad's `SetupFEScale` is the iPhone's (width-driven, `FE_YOffset` letterbox), which crops on anything wider than 3:2; so from 16:9 up the port scales the menus by height and `FE_X` adds `PortFEExtraX/2` (centred) on every screen, except the main menu (FE task 0), whose slabs and texts (x < 220) stay on the left edge. Sites that scale a position by `FE_WidthScale` themselves were fixed where seen: treasure and kode strips, treasure select, the controls preview (its buttons are right-anchored), the intro logos. Others may remain on screens not checked. Splash logos are already 1024 PNG in both IPAs (no HD to add).
 
@@ -25,7 +27,7 @@ Current state of the project. Written so that someone can pick it up with no pri
 - **The game is playable on Windows by the real path.**
   - Everything the retail game does runs in `umk3-game.exe` (i686): the front end, Arcade to Shao Kahn and the treasure screen, the tower, and whole fights with every finisher, Continue and the next fight.
   - The launcher compiles it from the player's own iPhone 1.2.59 `.ipa`.
-  - **0.1.0 is the current published build** ([notes](RELEASE-0.1.0-alpha.md)). It adds 3:2 / 4:3 / 16:9 / 21:9, the iPad UI size, texture quality, faster loading and launcher updates.
+  - **0.1.0b is the current published build** ([notes](RELEASE-0.1.0b-alpha.md)). 0.1.0 added 3:2 / 4:3 / 16:9 / 21:9, the iPad UI size, texture quality, faster loading and launcher updates; 0.1.0b adds the iPad build's layout, DUELO, pad binding and wide-screen fixes.
   - Every release's notes are in `docs/RELEASE-*.md`. The GitHub releases of 0.0.1-0.0.3 were deleted on 2026-10-09 when the history was rewritten.
 - **Every function is decompiled** (2,572 of 2,572) and the fight engine is
   behaviourally tested file by file (table below). The figure is
@@ -35,7 +37,7 @@ Current state of the project. Written so that someone can pick it up with no pri
   - The menus are incomplete, and modes other than Arcade can crash.
   - Texture errors remain on some stages and fighters, and some fatalities miss animations.
   - Every bug found since the game first ran was a transcription that did not quite match armv7, so each new symptom starts by re-reading the binary.
-- **No pull requests are open** once the 0.1.0 docs pass is merged (2026-10-15).
+- **No pull requests are open** once the 0.1.0b pass is merged (2026-10-15).
 - **New contributors:** [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md) explains how
   the game runs, the code map, the bug method and the test tools.
 

@@ -18,6 +18,8 @@
  *     pad=auto|off|xinput|054c:0ce6   (player one's pad: the first found,
  *       none, an Xbox pad, or one pad by USB vendor:product)
  *     pad_name=DualSense Wireless Controller   (the launcher's own label)
+ *     pad_hp=WEST ... pad_moves=SELECT, pad5_p=WEST+NORTH ...   (the pad's
+ *       button for each action, PB_* names joined by "+", empty = none)
  *
  * The game only reads width/height/render_width/render_height/fullscreen/borderless/
  * language/debug_keys/skip_intro and the
@@ -90,6 +92,18 @@ const KEY_DEFAULTS = {
     dbg_scr_prev: 117, dbg_scr_next: 118, dbg_scr_menu: 119,
 };
 
+/* The pad's button for each action (pad_<name>= and pad5_<name>=): the
+ * game's PB_* names joined by "+" (any one presses it), "" for none.
+ * The defaults are the game's own, by position (runtime/game_main.c). */
+const PAD_NAMES = ['hp', 'lp', 'block', 'hk', 'lk', 'run', 'special', 'pause', 'moves'];
+const PAD_DEFAULTS = {
+    hp: 'WEST', lp: 'SOUTH', block: 'R1', hk: 'NORTH', lk: 'EAST', run: 'L1+L2',
+    special: 'R2', pause: 'START', moves: 'SELECT',
+};
+const PAD5_NAMES = ['p', 'b', 'k', 'r'];
+const PAD5_DEFAULTS = { p: 'WEST+NORTH', b: 'R1', k: 'SOUTH+EAST', r: 'L1+L2' };
+const PAD_VALUE = /^([A-Z0-9]+(\+[A-Z0-9]+)*)?$/i;
+
 function defaultConfig() {
     const keys = {};
     for (const name of KEY_NAMES)
@@ -121,6 +135,8 @@ function defaultConfig() {
         padDbgMenu: 'L3+R3',         /* pad_dbg_menu=: the pad buttons that open the debug menu */
         keys,
         keys5,
+        padKeys: Object.assign({}, PAD_DEFAULTS),
+        padKeys5: Object.assign({}, PAD5_DEFAULTS),
     };
 }
 
@@ -183,6 +199,12 @@ function load(p) {
             cfg.padDbgMenu = /^([A-Z0-9]+(\+[A-Z0-9]+)*)?$/i.test(val) ? val.toUpperCase() : 'L3+R3';
         } else if (key === 'pad_name') {
             cfg.padName = val;
+        } else if (key.startsWith('pad5_') && PAD5_NAMES.includes(key.slice(5))) {
+            if (PAD_VALUE.test(val))
+                cfg.padKeys5[key.slice(5)] = val.toUpperCase();
+        } else if (key.startsWith('pad_') && PAD_NAMES.includes(key.slice(4))) {
+            if (PAD_VALUE.test(val))
+                cfg.padKeys[key.slice(4)] = val.toUpperCase();
         } else if (key === 'buttons') {
             cfg.buttons = num === 6 ? 6 : 5;
         } else if (key.startsWith('key5_') && KEY5_NAMES.includes(key.slice(5))) {
@@ -237,6 +259,11 @@ function save(p, cfg) {
         lines.push('key_' + name + '=' + cfg.keys[name]);
     for (const name of KEY5_NAMES)
         lines.push('key5_' + name + '=' + cfg.keys5[name]);
+    const pk = cfg.padKeys || {}, pk5 = cfg.padKeys5 || {};
+    for (const name of PAD_NAMES)
+        lines.push('pad_' + name + '=' + (pk[name] === undefined ? PAD_DEFAULTS[name] : pk[name]));
+    for (const name of PAD5_NAMES)
+        lines.push('pad5_' + name + '=' + (pk5[name] === undefined ? PAD5_DEFAULTS[name] : pk5[name]));
     fs.writeFileSync(p, lines.join('\n') + '\n', 'utf8');
 }
 
@@ -255,5 +282,6 @@ function gameReady(root) {
     return fs.existsSync(exe) && fs.existsSync(plist);
 }
 
-module.exports = { RES, LANGS, KEY_NAMES, KEY_DEFAULTS, KEY5_NAMES, KEY5_DEFAULTS, defaultConfig,
+module.exports = { RES, LANGS, KEY_NAMES, KEY_DEFAULTS, KEY5_NAMES, KEY5_DEFAULTS,
+                   PAD_NAMES, PAD_DEFAULTS, PAD5_NAMES, PAD5_DEFAULTS, defaultConfig,
                    load, save, gameReady, gameBuiltAt };

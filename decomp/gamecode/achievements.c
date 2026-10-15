@@ -686,6 +686,9 @@ void  limeDrawSprite(TEXTURE *tex, float x, float y, float w, float h,
  *
  * So nothing leaks; the port's limeDeleteTexture keeps its cache anyway.
  */
+/* Port: centred on a surface wider than 3:2 (FrontEnd.c FE_X); 0 otherwise. */
+extern float PortFEExtraX;
+
 void drawKodeTip(long index)
 {
     float white[4];
@@ -702,11 +705,11 @@ void drawKodeTip(long index)
     seq[5] = kodes[index].seq[5];
 
     limeDrawFONT(GameFont, GameText(0x363),
-                 240.0f * FE_WidthScale, 116.0f * FE_HeightScale,
+                 PortFEExtraX * 0.5f + 240.0f * FE_WidthScale, 116.0f * FE_HeightScale,
                  1, FE_WidthScale, fontcolP);
 
     limeDrawFONT(GameFont, GameText(0x364),
-                 240.0f * FE_WidthScale, 132.0f * FE_HeightScale,
+                 PortFEExtraX * 0.5f + 240.0f * FE_WidthScale, 132.0f * FE_HeightScale,
                  1, FE_WidthScale, fontcolP);
 
     /* loaded here and deleted at the end, every call -- see above */
@@ -719,7 +722,7 @@ void drawKodeTip(long index)
         float x  = (float)(0x86 + (i % 3) * 0x20 + (i < 3 ? 0 : 0x74));
 
         limeDrawSprite((TEXTURE *)KodesTexture,
-                       x * FE_WidthScale, 160.0f * FE_HeightScale,
+                       PortFEExtraX * 0.5f + x * FE_WidthScale, 160.0f * FE_HeightScale,
                        32.0f * FE_WidthScale, 32.0f * FE_HeightScale,
                        (float)((double)(col * 48) * 0.00390625),   /* 1/256 */
                        (float)((double)(row * 48) * 0.0078125),    /* 1/128 */
@@ -727,7 +730,7 @@ void drawKodeTip(long index)
     }
 
     limeDrawFONT(GameFont, GameText(kodes[index].text),
-                 240.0f * FE_WidthScale, 202.0f * FE_HeightScale,
+                 PortFEExtraX * 0.5f + 240.0f * FE_WidthScale, 202.0f * FE_HeightScale,
                  1, FE_WidthScale, fontcolP);
 
     limeDeleteTexture((TEXTURE *)KodesTexture);

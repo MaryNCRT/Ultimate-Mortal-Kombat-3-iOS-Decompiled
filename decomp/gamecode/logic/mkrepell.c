@@ -102,7 +102,11 @@
 #define P_FLG  0x30             /* bit 10: not subject to the arena */
 
 #define NEAR_GAP   0x3c         /* closer than this and they are pushed apart */
-#define FAR_GAP   0x130         /* further than this and they are pulled in */
+/* further than this and they are pulled in: 0x100 in the iPad build
+ * (_repell_func 0xa52bc there), whose 4:3 view is narrower: with the iPad
+ * interface on 4:3 (PortIPadTall, decomp/gamecode/FrontEnd.c). */
+extern int PortIPadTall;
+#define FAR_GAP   (PortIPadTall ? 0x100 : 0x130)
 #define PUSH_VEL  0x30000       /* 3.0 in 16.16 */
 
 extern char *GrObj;             /* slot 0x000f320c -> 0x0038c698 */

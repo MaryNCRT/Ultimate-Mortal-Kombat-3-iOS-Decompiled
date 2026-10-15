@@ -422,12 +422,13 @@ static void utf16_to_utf8(const unsigned short *in, char *out, size_t n)
     out[o] = 0;
 }
 
-unsigned char *plat_ui_menu(const char *title, const char *const *label,
+unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
+                            int ntab, int tab, const char *const *label,
                             const char *const *value, const int *enabled,
                             int n, int sel, const char *footer, float s,
                             int *w, int *h)
 {
-    (void)title; (void)label; (void)value; (void)enabled; (void)n;
+    (void)title; (void)tabs; (void)ntab; (void)tab; (void)label; (void)value; (void)enabled; (void)n;
     (void)sel; (void)footer; (void)s; (void)w; (void)h;
     return NULL;                        /* the menu's own font */
 }

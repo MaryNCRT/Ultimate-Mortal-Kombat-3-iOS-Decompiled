@@ -25,8 +25,8 @@ void dbg_menu_after_frame(int vx, int vy, int vw, int vh, int task, int fe);
 /* While open, instead of the game's tick: 1 and *rq filled when a pick
  * closes the menu. */
 int  dbg_menu_tick(struct dbg_request *rq);
-/* The pointer in the 480x320 space and whether a button is down, each
- * frame the menu is open. */
+/* The pointer as fractions of the game view (0..1) and whether a button is
+ * down, each frame the menu is open. */
 void dbg_menu_mouse(float x, float y, int down);
 /* the pad, each frame the menu is open (include platform/platform.h first) */
 void dbg_menu_pad(const PLAT_PAD *p);

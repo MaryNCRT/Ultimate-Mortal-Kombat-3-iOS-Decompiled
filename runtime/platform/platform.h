@@ -84,11 +84,13 @@ bool plat_focused(void);
 int plat_ask(const unsigned short *msg, const unsigned short *ok,
              const unsigned short *cancel);
 
-/* The debug menu drawn as an iPhone OS 3 alert box (title, rows of label and
- * value, the selected row in blue, greyed rows, a footer), at `s` pixels per
- * point of the 480x320 screen: RGBA8 premultiplied, *w x *h, malloc'd. NULL
- * where the backend cannot draw it; the menu then uses its own font. */
-unsigned char *plat_ui_menu(const char *title, const char *const *label,
+/* The debug menu drawn as an iPhone OS 3 alert box (title, a strip of
+ * `ntab` tabs with `tab` current, rows of label and value, the selected row
+ * in blue, greyed rows, a footer), at `s` pixels per point of the menu's
+ * 320-high space: RGBA8 premultiplied, *w x *h, malloc'd. NULL where the
+ * backend cannot draw it; the menu then uses its own font. */
+unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
+                            int ntab, int tab, const char *const *label,
                             const char *const *value, const int *enabled,
                             int n, int sel, const char *footer, float s,
                             int *w, int *h);

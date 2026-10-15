@@ -186,6 +186,13 @@ widens the horizontal view beyond 3:2. On wide surfaces SetupFEScale
 scales the front end by height and `FE_X` centres it (`PortFEExtraX`),
 except the main menu's buttons, which stay on the left edge.
 
+iPad layout (from the iPad binary, UMK3 for iPad 1.2.56): `PortIPad` (4:3,
+or UI size `ipad`) and `PortIPadTall` (4:3) are set in game_main.c and
+gate the places where the iPad build's code differs from the iPhone's:
+the pause corners, PLAY's rows and DUELO, the vortex, the glass window,
+the select and tower cameras, Continue and 1P, and `repell_func`. Each
+site names the iPad address it was read from.
+
 ---
 
 ## 3. Where things are

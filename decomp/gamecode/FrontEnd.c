@@ -88,12 +88,33 @@ float FE_H(float v);
  * 16:9 or 21:9, PortWideMenus) SetupFEScale scales the menus by their
  * height -- nothing is zoomed -- and leaves PortFEExtraX, the width left
  * over, here. Every screen keeps its layout centred in it (the select
- * screen's grid must stay whole), except the main menu's buttons (front-
+ * screen's grid must stay whole) but for its edges: from x 390 a position
+ * goes to the right edge and up to x 90 to the left edge, so the BACK / QUIT
+ * / NEXT buttons and their labels sit in the corners (not on the two select
+ * screens, tasks 27 and 42, whose grid starts at x 60). The main menu's
+ * buttons (front-
  * end task 0: the slabs at x 0 and their texts up to x 218 -- everything
  * left of the logo, which starts at 220): they stay on the left edge, the
  * logo stays centred. 0 on 3:2 and 4:3. */
 int   PortWideMenus;
+/* Port, not in the binary: 1 with the launcher's interface size IPAD
+ * (ui_size=ipad), which then takes the iPad build's layout (UMK3 for iPad
+ * 1.2.56): the functions whose code differs between the two binaries use
+ * the iPad's constants and paths. PortIPadTall is that on a 4:3 screen, the
+ * iPad's own shape; the iPad changes that need its extra height or its
+ * narrower view take it, so nothing leaves a 3:2 or wider screen. */
+int   PortIPad;
+int   PortIPadTall;
+/* The iPad build's screen is 1024 points wide (landscape), and a few of its
+ * screens use that width or add raw points to a position. On the port's 4:3
+ * surface those become the same fraction of limeScreenWidth. */
+#define IPAD_SCREEN_W  1024.0f
+#define IPAD_PT(v)     ((v) * (float)limeScreenWidth / IPAD_SCREEN_W)
 float PortFEExtraX;
+/* Port, not in the binary: set around the select screens' BACK button and
+ * label, so they go to the right edge like on every other screen while the
+ * grid stays centred. */
+static int PortFERightEdge;
 /* the centring offset for the sites that scale a position by
  * FE_WidthScale themselves instead of calling FE_X */
 #define FE_XC (PortFEExtraX * 0.5f)
@@ -104,8 +125,20 @@ float FE_X(float v)
     if (PortFEExtraX > 0.0f) {
         float off = PortFEExtraX * 0.5f;
 
-        if (FE_CurrentTask == 0 && v < 220.0f)
-            off = 0.0f;
+        if (PortFERightEdge) {
+            off = PortFEExtraX;
+        } else if (FE_CurrentTask == 0) {
+            if (v < 220.0f)
+                off = 0.0f;
+        } else if (FE_CurrentTask != 27 && FE_CurrentTask != 42) {
+            /* the edge buttons (BACK, QUIT, NEXT: x 38-82 and 398-442 in
+             * DrawButtonNew) and their labels go to the edges; the select
+             * screens keep their grid whole */
+            if (v <= 90.0f)
+                off = 0.0f;
+            else if (v >= 390.0f)
+                off = PortFEExtraX;
+        }
         return v * FE_WidthScale + off;
     }
     return v * FE_WidthScale;
@@ -1537,6 +1570,37 @@ void Load_PresetButtonData(void)
     for (i = 0; i < 0x78 / 4; i++)
         ((long *)CustomButtonsPos6)[i] = src[i];
     limeFree(src);
+
+    /* Port, not in the binary: the presets are saved in screen pixels, and
+     * the launcher can change the surface (aspect=, ui_size=). A layout
+     * with a button off the current surface goes back to its default (the
+     * one InitAllGameData just computed for this surface), and the presets
+     * are written again. */
+    {
+        char *const live[3] = { CustomButtonsPos4, CustomButtonsPos5,
+                                CustomButtonsPos6 };
+        char *const dflt[3] = { DEFAULT_CustomButtonsPos4,
+                                DEFAULT_CustomButtonsPos5,
+                                DEFAULT_CustomButtonsPos6 };
+        int k, fixed = 0;
+
+        for (k = 0; k < 3; k++) {
+            const long *e = (const long *)live[k];
+            int bad = 0;
+
+            for (i = 0; i < 6; i++)
+                if (e[i * 5 + 4] != -1
+                    && (e[i * 5] < 0 || e[i * 5] > limeScreenWidth
+                        || e[i * 5 + 1] < 0 || e[i * 5 + 1] > limeScreenHeight))
+                    bad = 1;
+            if (bad) {
+                memcpy(live[k], dflt[k], 0x78);
+                fixed = 1;
+            }
+        }
+        if (fixed)
+            Write_PresetButtonData();
+    }
     return;
 
 reset:
@@ -2476,22 +2540,36 @@ void limeFillRect(float x, float y, float w, float h,
  *
  * `h` arrives in r3 and `thick` is the only stack argument.
  */
+/* Port, not in the binary: on a wide surface FE_X moves each edge by where
+ * that edge is, so a box near the right edge split apart -- the left bar
+ * half the extra width, the right bar all of it. Every edge moves by where the
+ * box's centre is instead, as DrawButtonNew does. Identical to FE_X when
+ * PortFEExtraX is 0. */
+static float Highlight_X(float v, float cx)
+{
+    if (PortFEExtraX > 0.0f)
+        return (float)FE_X(cx) + (v - cx) * FE_WidthScale;
+    return (float)FE_X(v);
+}
+
 static void DrawHighlight(int x, int y, int w, int h, int thick,
                           float r, float g, float b)
 {
-    limeFillRect((float)FE_X((float)x), (float)FE_Y((float)y),
+    float cx = (float)x + (float)w * 0.5f;
+
+    limeFillRect(Highlight_X((float)x, cx), (float)FE_Y((float)y),
                  (float)FE_W((float)w), (float)FE_H((float)thick),
                  r, g, b, 1.0f);
 
-    limeFillRect((float)FE_X((float)x), (float)FE_Y((float)(h + y - thick)),
+    limeFillRect(Highlight_X((float)x, cx), (float)FE_Y((float)(h + y - thick)),
                  (float)FE_W((float)w), (float)FE_H((float)thick),
                  r, g, b, 1.0f);
 
-    limeFillRect((float)FE_X((float)x), (float)FE_Y((float)y),
+    limeFillRect(Highlight_X((float)x, cx), (float)FE_Y((float)y),
                  (float)FE_W((float)thick), (float)FE_H((float)h),
                  r, g, b, 1.0f);
 
-    limeFillRect((float)FE_X((float)(w + x - thick)), (float)FE_Y((float)y),
+    limeFillRect(Highlight_X((float)(w + x - thick), cx), (float)FE_Y((float)y),
                  (float)FE_W((float)thick), (float)FE_H((float)h),
                  r, g, b, 1.0f);
 }
@@ -3161,6 +3239,16 @@ void DrawVortex3D(void)
     RenderAMesh(0, 0, FEObjPos, TowerBGMatrix, 0,
                 Vortex1Texture, 0, MeshSet_VORTEX1, 0);
 
+    /* The iPad build (_DrawVortex3D 0x7824 there) draws two rings only:
+     * VORTEX1 and VORTEX2 at 1.1 times the spin, both with Vortex1Texture. */
+    if (PortIPad) {
+        RotMatrixY(TowerBGMatrix, (float)((double)VortexSpin * 1.1));
+        RenderAMesh(0, 0, FEObjPos, TowerBGMatrix, 0,
+                    Vortex1Texture, 0, MeshSet_VORTEX2, 0);
+        limeEnableAlphaBlending_Basic();
+        return;
+    }
+
     RotMatrixY(TowerBGMatrix, (float)((double)VortexSpin * 1.1));
     RenderAMesh(0, 0, FEObjPos, TowerBGMatrix, 0,
                 Vortex2Texture, 0, MeshSet_VORTEX2, 0);
@@ -3223,6 +3311,16 @@ void limeDrawFONTAtAngle(void *font, const char *text, float x, float y,
  * `FE_H(384)` with UVs `(0, 0)` to `(0.5, 0.75)` -- the left half and top three
  * quarters of the texture. The -32 puts it above the top of the screen.
  */
+/* Port, not in the binary: the five texts sit on the slabs at the left
+ * edge, so on wide screens they stay there on every screen that draws the
+ * main menu underneath (OPTIONS, PLAY, ABOUT, EXTRAS), not only on task 0,
+ * where FE_X already leaves everything left of x 220 alone. Identical to
+ * FE_X on 3:2. */
+static float MainMenu_X(float v)
+{
+    return v * FE_WidthScale;
+}
+
 void DrawMainMenu(int c1, int c2, int c3, int c4, int c5)
 {
     void *font;
@@ -3235,27 +3333,27 @@ void DrawMainMenu(int c1, int c2, int c3, int c4, int c5)
     font = &GameFont;
 
     limeDrawFONTAtAngle(font, GameText(4),
-                        (float)FE_X(170.0f), (float)FE_Y(24.0f), 2,
+                        MainMenu_X(170.0f), (float)FE_Y(24.0f), 2,
                         (float)((double)FE_WidthScale * 1.4),
                         &mmfontcol[c1 * 4], -0.021f);
 
     limeDrawFONTAtAngle(font, GameText(10),
-                        (float)FE_X(218.0f), (float)FE_Y(104.0f), 2,
+                        MainMenu_X(218.0f), (float)FE_Y(104.0f), 2,
                         (float)((double)FE_WidthScale * 1.6),
                         &mmfontcol[c2 * 4], -0.0021f);
 
     limeDrawFONTAtAngle(font, GameText(6),
-                        (float)FE_X(190.0f), (float)FE_Y(180.0f), 2,
+                        MainMenu_X(190.0f), (float)FE_Y(180.0f), 2,
                         (float)((double)FE_WidthScale * 1.3),
                         &mmfontcol[c3 * 4], 0.008f);
 
     limeDrawFONTAtAngle(font, GameText(5),
-                        (float)FE_X(190.0f), (float)FE_Y(250.0f), 2,
+                        MainMenu_X(190.0f), (float)FE_Y(250.0f), 2,
                         (float)((double)FE_WidthScale * 1.3),
                         &mmfontcol[c4 * 4], 0.023f);
 
     limeDrawFONTAtAngle(font, GameText(213),
-                        (float)FE_X(167.0f), (float)FE_Y(290.0f), 2,
+                        MainMenu_X(167.0f), (float)FE_Y(290.0f), 2,
                         (float)((double)FE_WidthScale * 1.3),
                         &mmfontcol[c5 * 4], 0.015f);
 }
@@ -3468,6 +3566,12 @@ long DrawButtonNew(BUTTONNEW *b, int x, int y, int interactive)
     }
 
     px = (float)FE_X((float)(x - ((b->w + ((unsigned long)b->w >> 31)) >> 1)));
+    /* Port: on a wide surface the button moves by where its CENTRE is (FE_X's
+     * edges), not its left edge, so it stays with its label. Identical to
+     * the line above when PortFEExtraX is 0. */
+    if (PortFEExtraX > 0.0f)
+        px = (float)FE_X((float)x)
+           - FE_WidthScale * (float)((b->w + ((unsigned long)b->w >> 31)) >> 1);
     py = (float)FE_Y((float)(y - ((b->h + ((unsigned long)b->h >> 31)) >> 1)));
     pw = (float)FE_W((float)b->w);
     ph = (float)FE_H((float)b->h);
@@ -3671,6 +3775,13 @@ extern char ButtonSplitText[];          /* 0x00184730, 256 bytes a line */
  */
 /* x, y and scale are FLOATS, for the same reason as DrawOptionAsText above:
  * `vmov s20, r1`, `vmov s22, r2`, `vmov s16, r3`, no conversion. */
+/* Port, not in the binary: pixels added to every DrawOptionAsButton x. The
+ * main menu's sliding panel (OPTIONS, PLAY, ABOUT, EXTRAS) reaches the right
+ * edge on wide screens, so its visible part is wider by the extra width and
+ * its centre sits a quarter of it further right; those screens set this to
+ * PortFEExtraX / 4 while drawing their options. 0 everywhere else. */
+static float PortOptionShift;
+
 long DrawOptionAsButton(const char *text, float x, float y, float scale,
                         const float *colour, float maxWidth)
 {
@@ -3690,7 +3801,7 @@ long DrawOptionAsButton(const char *text, float x, float y, float scale,
             float w;
 
             limeDrawFONT(&GameFont, limeUC(line),
-                         FE_X(x), FE_Y(py),
+                         FE_X(x) + PortOptionShift, FE_Y(py),
                          1, scale * FE_WidthScale, colour);
 
             w = (float)limeGetStringWidth(&GameFont, limeUC(line))
@@ -3707,11 +3818,11 @@ long DrawOptionAsButton(const char *text, float x, float y, float scale,
 
     tx = limeTouchScreenX[0];
 
-    edge = FE_X(x - 8.0f) + widest * -0.5f;
+    edge = FE_X(x - 8.0f) + PortOptionShift + widest * -0.5f;
     if (tx < edge)
         return 0;
 
-    edge = FE_X(x + 8.0f) + widest * 0.5f;
+    edge = FE_X(x + 8.0f) + PortOptionShift + widest * 0.5f;
     if (tx > edge)
         return 0;
 
@@ -4162,7 +4273,7 @@ void FE_Task_About_Usage_Sharing(void)
 
     limeDrawFONT(&GameFont,
                  GameText(Settings[9] != 0 ? 0xaf : 0xb0),
-                 240.0f * FE_WidthScale, (float)FE_Y(152.0f),
+                 240.0f * FE_WidthScale + FE_XC, (float)FE_Y(152.0f),
                  1, FE_WidthScale, fontcol);
 
     if (pressed == 1)
@@ -4707,6 +4818,9 @@ extern long   FEChars[2];               /* 0x0018ed78 */
 extern float  SceneGroundOffset;        /* pointer slot -> 0x0014df8c */
 extern float  ShadowOffset;             /* pointer slot */
 extern float  FECAMPOSX;                /* 0x00101710 */
+/* The iPad build's data has the select screen's camera at x 2.3, not 2.9
+ * (its _FECAMPOSX): the fighters stand further in. With the iPad interface. */
+#define FE_CAMPOS_X  (PortIPad ? 2.3f : FECAMPOSX)
 extern float  FECAMPOSY;                /* 0x00101714 */
 extern float  FECAMPOSZ;                /* 0x00101718 */
 extern float  FEPlayer1Offset;          /* 0x00183d68 */
@@ -4754,9 +4868,9 @@ void RenderFECharacters(long slot0, long slot1)
         long   which;
 
         if (i == 0)
-            FECamPos[0] = FECAMPOSX + FEPlayer1Offset;
+            FECamPos[0] = FE_CAMPOS_X + FEPlayer1Offset;
         else
-            FECamPos[0] = FEPlayer2Offset - FECAMPOSX;
+            FECamPos[0] = FEPlayer2Offset - FE_CAMPOS_X;
 
         FECamPos[1] = FECAMPOSY;
         FECamPos[2] = FECAMPOSZ;
@@ -5228,6 +5342,11 @@ void EASDK_LogEventEnumEnumString(long id, long a, const char *s1,
 void FE_Task_Continue_Screen(void)
 {
     long yes, no, action;
+    /* the iPad build (0xa434 there) moves the four texts down 36 points and
+     * makes both boxes (int)(102 * limeScreenHeight / 640) tall: 122 on its
+     * 768 */
+    float dy = PortIPadTall ? IPAD_PT(36.0f) : 0.0f;
+    int   bh = PortIPadTall ? 122 : 0x66;
 
     limeFillRect(0.0f, 0.0f,
                  (float)limeScreenWidth, (float)limeScreenHeight,
@@ -5243,11 +5362,11 @@ void FE_Task_Continue_Screen(void)
                    0.0f, 0.0f, 1.0f, 0.75f, col);
 
     limeDrawFONT(&GameFont, GameText(0x51), (float)FE_X(120.0f),
-                 (float)FE_Y(208.0f), 1, FE_WidthScale, fontcol);
+                 (float)FE_Y(208.0f) + dy, 1, FE_WidthScale, fontcol);
     limeDrawFONT(&GameFont, GameText(0x52), (float)FE_X(120.0f),
-                 (float)FE_Y(224.0f), 1, FE_WidthScale, fontcol);
+                 (float)FE_Y(224.0f) + dy, 1, FE_WidthScale, fontcol);
     limeDrawFONT(&GameFont, GameText(0x5b), (float)FE_X(360.0f),
-                 (float)FE_Y(224.0f), 1, FE_WidthScale, fontcol);
+                 (float)FE_Y(224.0f) + dy, 1, FE_WidthScale, fontcol);
 
     KontinueTime = (float)((double)KontinueTime
                            + -0.016666666666666666 / (double)limeFPSScaleFactor);
@@ -5256,17 +5375,17 @@ void FE_Task_Continue_Screen(void)
 
     action = 0;
 
-    yes = TouchAreaWH(0x10, 0xb8, 0xd0, 0x66);
+    yes = TouchAreaWH(0x10, 0xb8, 0xd0, bh);
     if (yes == 2) {
-        DrawRedHighlight(0x10, 0xb8, 0xd0, 0x66, 0xb);
+        DrawRedHighlight(0x10, 0xb8, 0xd0, bh, 0xb);
     } else if (yes == 1) {
         if (FE_FadeAdd == 0.0f)
             action = 1;
     }
 
-    no = TouchAreaWH(0x100, 0xb8, 0xd0, 0x66);
+    no = TouchAreaWH(0x100, 0xb8, 0xd0, bh);
     if (no == 2)
-        DrawRedHighlight(0x100, 0xb8, 0xd0, 0x66, 0xb);
+        DrawRedHighlight(0x100, 0xb8, 0xd0, bh, 0xb);
 
     if (no == 1 || KontinueTime == 0.0f) {
         if (FE_FadeAdd == 0.0f)
@@ -5276,10 +5395,10 @@ void FE_Task_Continue_Screen(void)
     if (KontinueTime != 0.0f) {
         sprintf(strBuf, "%d", (int)((long)KontinueTime + 1));
         limeDrawFONT(&GameFont, strBuf, (float)FE_X(120.0f),
-                     (float)FE_Y(240.0f), 1, FE_WidthScale, fontcol);
+                     (float)FE_Y(240.0f) + dy, 1, FE_WidthScale, fontcol);
     } else {
         limeDrawFONT(&GameFont, "0", (float)FE_X(120.0f),
-                     (float)FE_Y(240.0f), 1, FE_WidthScale, fontcol);
+                     (float)FE_Y(240.0f) + dy, 1, FE_WidthScale, fontcol);
     }
 
     if (action == 1) {
@@ -5808,26 +5927,26 @@ void FE_Task_Settings(void)
 
     choice = drawPage2x2BigForSettings();
 
-    limeDrawFONT(&GameFont, GameText(0x118), (float)FE_X(152.0f),
+    limeDrawFONT(&GameFont, GameText(0x118), (float)FE_X(156.0f),
                  (float)FE_Y(72.0f), 1, FE_WidthScale, fontcol);
-    limeDrawFONT(&GameFont, GameText(0x119), (float)FE_X(152.0f),
+    limeDrawFONT(&GameFont, GameText(0x119), (float)FE_X(156.0f),
                  (float)FE_Y(88.0f), 1, FE_WidthScale, fontcol);
-    limeDrawFONT(&GameFont, GameText(0xdc), (float)FE_X(152.0f),
+    limeDrawFONT(&GameFont, GameText(0xdc), (float)FE_X(156.0f),
                  (float)FE_Y(208.0f), 1, FE_WidthScale, fontcol);
 
     musicLabel = (Settings[2] == 3) ? 0xe0
                : (Settings[2] == 2) ? 0xdf
                : (Settings[2] == 1) ? 0xde : 0xe2;
-    limeDrawFONT(&GameFont, GameText(musicLabel), (float)FE_X(152.0f),
+    limeDrawFONT(&GameFont, GameText(musicLabel), (float)FE_X(156.0f),
                  (float)FE_Y(224.0f), 1, FE_WidthScale, fontcol);
 
-    limeDrawFONT(&GameFont, GameText(0xdd), (float)FE_X(320.0f),
+    limeDrawFONT(&GameFont, GameText(0xdd), (float)FE_X(325.0f),
                  (float)FE_Y(208.0f), 1, FE_WidthScale, fontcol);
 
     sfxLabel = (Settings[3] == 3) ? 0xe0
              : (Settings[3] == 2) ? 0xdf
              : (Settings[3] == 1) ? 0xde : 0xe2;
-    limeDrawFONT(&GameFont, GameText(sfxLabel), (float)FE_X(320.0f),
+    limeDrawFONT(&GameFont, GameText(sfxLabel), (float)FE_X(325.0f),
                  (float)FE_Y(224.0f), 1, FE_WidthScale, fontcol);
 
     back = DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1);
@@ -5970,9 +6089,12 @@ void FE_Task_Achievements(void)
     limeDrawFONT(&GameFont, GameText(0xcc), (float)FE_X(240.0f),
                  (float)FE_Y(4.0f), 1, FE_WidthScale, rowcol);
 
+    /* Port, not in the binary: on wide screens the frame spans the whole
+     * width, since its rows' names stay on the left edge and their markers
+     * (x 460) go to the right one. */
     limeDrawSprite((TEXTURE *)*FEBits3,
                    (float)FE_X(6.0f), (float)FE_Y(26.0f),
-                   (float)FE_W(468.0f), (float)FE_H(256.0f),
+                   (float)FE_W(468.0f) + PortFEExtraX, (float)FE_H(256.0f),
                    0.0f, 0.4296875f, 0.9140625f, 0.5f, col);
 
     sel = DrawButtonNew(&BUTTON_MINI_1, 0x52, 0x12e, (int)prevEnabled) ? 1 : 0;
@@ -6534,10 +6656,12 @@ void FE_Task_Character_Select(void)
     drawCharacterSelection(-1);
 
     if (FE_TaskStackPointer > 0) {
+        PortFERightEdge = 1;
         back = DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1);
 
         limeDrawFONT(&GameFont, GameText(7), (float)FE_X(423.0f),
                      (float)FE_Y(296.0f), 1, FE_WidthScale, fontcol);
+        PortFERightEdge = 0;
 
         if (back) {
             PopFETaskDeferred();
@@ -6719,19 +6843,22 @@ void FE_Task_Button_Config(void)
         && DrawButtonNew(&BUTTON_BOXRB, 0x145, 0xe0, 1) && FE_FadeAdd == 0.0f)
         sel = 4;
 
-    /* Port: the fight's buttons sit against the right edge (ButtonsPos), so
-     * on a wide surface they carry all of PortFEExtraX where the box is
-     * centred by half of it; the preview, drawn at half size, moves back by
-     * that half. 0 on 3:2 and 4:3. */
-    DrawControlsPreview(-36 - (long)(FE_XC / FE_WidthScale),
-                        (long)(-40.0f - FE_YOffset / FE_HeightScale));
+    /* Port: on a wide surface the preview is centred in the top-left box
+     * (BUTTON_BOXLT, centred at 0x9c, 0x59); see DrawControlsPreview. */
+    {
+        extern float PortPreviewCX, PortPreviewCY;
+
+        PortPreviewCX = PortFEExtraX > 0.0f ? (float)FE_X(156.0f) : -1.0f;
+        PortPreviewCY = (float)FE_Y(89.0f);
+    }
+    DrawControlsPreview(-36, (long)(-40.0f - FE_YOffset / FE_HeightScale));
 
     limeDrawFONT(&GameFont, GameText(0xe5),
-                 FE_X(322.0f), FE_Y(72.0f), 1, FE_WidthScale, fontcol);
+                 FE_X(325.0f), FE_Y(72.0f), 1, FE_WidthScale, fontcol);
     limeDrawFONT(&GameFont, GameText(Settings[5] ? 0x111 : 0x122),
-                 FE_X(322.0f), FE_Y(88.0f), 1, FE_WidthScale, fontcol);
+                 FE_X(325.0f), FE_Y(88.0f), 1, FE_WidthScale, fontcol);
     limeDrawFONT(&GameFont, GameText(0xe6),
-                 FE_X(153.0f), FE_Y(184.0f), 1, FE_WidthScale, fontcol);
+                 FE_X(156.0f), FE_Y(184.0f), 1, FE_WidthScale, fontcol);
 
     if (Settings[6] == 0)
         alpha = 0.5f;
@@ -6743,7 +6870,7 @@ void FE_Task_Button_Config(void)
 
     if (Settings[5] != 0)
         limeDrawFONT(&GameFont, GameText(0x59),
-                     FE_X(322.0f), FE_Y(216.0f), 1, FE_WidthScale, fontcol);
+                     FE_X(325.0f), FE_Y(216.0f), 1, FE_WidthScale, fontcol);
 
     back = DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1);
     limeDrawFONT(&GameFont, GameText(7),
@@ -7163,6 +7290,8 @@ void FE_Task_Options(void)
 {
     long sel;
 
+    PortOptionShift = PortFEExtraX * 0.25f;   /* port, see DrawOptionAsButton */
+
     limeEnableAlphaBlending_Basic();
     limeSet2DDrawing();
 
@@ -7295,6 +7424,8 @@ void FE_Task_Options(void)
 
     DrawTicker();
     achievementsDraw();
+
+    PortOptionShift = 0.0f;
 }
 
 
@@ -7374,7 +7505,9 @@ void FE_Task_Options(void)
 #define FESP_RIGHT_X      0x100
 #define FESP_HALF_Y       0xb8
 #define FESP_HALF_W       0xd0
-#define FESP_HALF_H       0x66
+/* the iPad build (0x18368 there) makes the boxes (int)(102 * limeScreenHeight
+ * / 640) tall: 122 on its 768 */
+#define FESP_HALF_H       (PortIPadTall ? 122 : 0x66)
 #define FESP_HALF_THICK   0xb
 #define FESP_TOUCH_HELD   2
 #define FESP_TOUCH_TAP    1
@@ -7398,6 +7531,9 @@ void FE_Task_Single_Player(void)
     long sel = 0;
     long back;
     long hit;
+    /* the iPad build (0x1836c there): the texts 36 points lower, BACK at
+     * y 322, and both halves limeScreenHeight / 640 * 102 tall (122) */
+    float dy = PortIPadTall ? IPAD_PT(36.0f) : 0.0f;
 
     limeFillRect(0.0f, 0.0f,
                  (float)limeScreenWidth, (float)limeScreenHeight,
@@ -7411,17 +7547,17 @@ void FE_Task_Single_Player(void)
                    0.0f, 0.0f, 1.0f, 0.75f, col);
 
     limeDrawFONT(&GameFont, GameText(0x51),
-                 FE_X(120.0f), FE_Y(216.0f), 1, FE_WidthScale, fontcol);
+                 FE_X(120.0f), FE_Y(216.0f) + dy, 1, FE_WidthScale, fontcol);
     limeDrawFONT(&GameFont, GameText(0x52),
-                 FE_X(120.0f), FE_Y(232.0f), 1, FE_WidthScale, fontcol);
+                 FE_X(120.0f), FE_Y(232.0f) + dy, 1, FE_WidthScale, fontcol);
     limeDrawFONT(&GameFont, GameText(0x5c),
-                 FE_X(360.0f), FE_Y(216.0f), 1, FE_WidthScale, fontcol);
+                 FE_X(360.0f), FE_Y(216.0f) + dy, 1, FE_WidthScale, fontcol);
     limeDrawFONT(&GameFont, GameText(0x5d),
-                 FE_X(360.0f), FE_Y(232.0f), 1, FE_WidthScale, fontcol);
+                 FE_X(360.0f), FE_Y(232.0f) + dy, 1, FE_WidthScale, fontcol);
 
-    back = DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1);
+    back = DrawButtonNew(&BUTTON_BACK, 0x1a7, PortIPadTall ? 0x142 : 0x130, 1);
     limeDrawFONT(&GameFont, GameText(7),
-                 FE_X(423.0f), FE_Y(296.0f), 1, FE_WidthScale, fontcol);
+                 FE_X(423.0f), FE_Y(296.0f) + dy, 1, FE_WidthScale, fontcol);
 
     /* ---- the left half ---- */
     hit = TouchAreaWH(FESP_LEFT_X, FESP_HALF_Y, FESP_HALF_W, FESP_HALF_H);
@@ -7981,7 +8117,7 @@ void FE_Task_EnterName(void)
                    0.0f, 0.0f, 1.0f, 1.0f, col);
 
     limeDrawFONT(&GameFont, GameText(0xf4),
-                 (float)(long)(FE_WidthScale * 240.0f),
+                 (float)(long)(FE_WidthScale * 240.0f + FE_XC),
                  (float)(long)(FE_HeightScale * 16.0f),
                  1, FE_WidthScale, col);
 
@@ -7992,7 +8128,7 @@ void FE_Task_EnterName(void)
 
     strcpy(name, ourName);
     limeDrawFONT(&GameFont, name,
-                 FE_WidthScale * 240.0f, FE_HeightScale * 72.0f,
+                 FE_WidthScale * 240.0f + FE_XC, FE_HeightScale * 72.0f,
                  1, FE_WidthScale, col);
 
     /* ---- the keyboard, as wide as ourCharacters is long ---- */
@@ -8223,15 +8359,17 @@ void FE_Task_Multiplayer_Character_Select(void)
 
     if (pressedPlay == 0)
         limeDrawFONT(&GameFont, GameText(0x4a),
-                     FE_WidthScale * 240.0f, FE_HeightScale * 8.0f,
+                     FE_WidthScale * 240.0f + FE_XC, FE_HeightScale * 8.0f,
                      1, FE_WidthScale, fontcol);
 
     /* the argument is re-derived from the same flag the line above tested */
     sel = drawCharacterSelection(pressedPlay ? 1 : -1);
 
+    PortFERightEdge = 1;
     back = DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1);
     limeDrawFONT(&GameFont, GameText(7),
                  FE_X(423.0f), FE_Y(296.0f), 1, FE_WidthScale, fontcol);
+    PortFERightEdge = 0;
 
     if (back) {
         /* ---- tear the session down, start a new one, keep drawing ---- */
@@ -8260,8 +8398,10 @@ void FE_Task_Multiplayer_Character_Select(void)
                      pressedPlay ? dimcol : fontcol);
 
         if (pressedPlay != 0 && (sendInd % 128) <= MPCS_BLINK_ON)
+            /* the iPad build draws this one at y 26 (0x1748e there) */
             limeDrawFONT(&GameFont, GameText(0xe),
-                         FE_WidthScale * 240.0f, FE_HeightScale * 8.0f,
+                         FE_WidthScale * 240.0f + FE_XC,
+                         FE_HeightScale * (PortIPad ? 26.0f : 8.0f),
                          1, FE_WidthScale, fontcol);
     }
 
@@ -8402,6 +8542,8 @@ static void FE_About_OpenURL(const char *fmt)
 void FE_Task_About(void)
 {
     long sel;
+
+    PortOptionShift = PortFEExtraX * 0.25f;   /* port, see DrawOptionAsButton */
 
     limeEnableAlphaBlending_Basic();
     limeSet2DDrawing();
@@ -8575,6 +8717,8 @@ void FE_Task_About(void)
 
     DrawTicker();
     achievementsDraw();
+
+    PortOptionShift = 0.0f;
 }
 
 
@@ -8668,6 +8812,8 @@ void FE_Task_Extras(void)
     long sel;
     long endings;
     long i;
+
+    PortOptionShift = PortFEExtraX * 0.25f;   /* port, see DrawOptionAsButton */
 
     limeEnableAlphaBlending_Basic();
     limeSet2DDrawing();
@@ -8861,6 +9007,8 @@ void FE_Task_Extras(void)
 
     DrawTicker();
     achievementsDraw();
+
+    PortOptionShift = 0.0f;
 }
 
 
@@ -9533,9 +9681,10 @@ void DrawTower3D(void)
  * `resetPeerNames()` and `startMP()` run here, before the task is even pushed,
  * so the radio is up while the lobby screen is still sliding in.
  *
- * ### The `sel == 5` arm is unreachable
+ * ### The `sel == 5` arm is unreachable on the iPhone
  *
- * It sets `GameMode = 6` -- two players on one device -- and pushes 0x1b. No
+ * It sets `GameMode = 6` -- two players on one device -- and pushes 0x1b. The
+ * iPad build's fifth option (2 PLAYER / DUELO) gives it; on the iPhone no
  * option and no main-menu area ever produces 5: the four options give 1..4 and
  * the menu gives -1 and 6..10. The mode is reachable elsewhere; this entry into
  * it is not. Transcribed as written.
@@ -9546,8 +9695,11 @@ void DrawTower3D(void)
 #define PLAY_OPTION_X      384.0f
 #define PLAY_OPTION_SCALE  1.25f
 #define PLAY_OPTION_WIDTH  186.0f
-#define PLAY_ROW0          48.0f
-#define PLAY_ROW_PITCH     64.0f
+/* The iPad build (4:3, PortIPad) has five options, 56 apart from y 40:
+ * the fifth is GameText(0x3f0), "2 PLAYER" / "DUELO", which gives sel 5 --
+ * GameMode 6, two players on one device (iPad _FE_Task_Play 0x1a854). */
+#define PLAY_ROW0          (PortIPad ? 40.0f : 48.0f)
+#define PLAY_ROW_PITCH     (PortIPad ? 56.0f : 64.0f)
 #define PLAY_TASK_RESUME   2
 #define PLAY_TASK_LOBBY    3
 #define PLAY_TASK_START    0x1b
@@ -9565,11 +9717,15 @@ extern long LastTouch_PlayArcade;       /* 0x00100e70 */
 extern long LastTouch_PlayMultiPlayer;  /* 0x00100e74 */
 extern long LastTouch_PlaySurvival;     /* 0x00100e78 */
 extern long LastTouch_PlaySK;           /* 0x00100e7c */
+/* the iPad's fifth option (DUELO); globals of the iPad build only */
+static long Touch_PlayDuel, LastTouch_PlayDuel;
 
 void FE_Task_Play(void)
 {
     char text[256];                     /* sp+0x18, the karnage label */
     long sel;
+
+    PortOptionShift = PortFEExtraX * 0.25f;   /* port, see DrawOptionAsButton */
 
     limeEnableAlphaBlending_Basic();
     limeSet2DDrawing();
@@ -9670,6 +9826,20 @@ void FE_Task_Play(void)
         && limeTouchScreenX[0] == -1.0f)
         sel = 4;
 
+    if (PortIPad) {                     /* the iPad build's fifth option */
+        LastTouch_PlayDuel = Touch_PlayDuel;
+        Touch_PlayDuel = DrawOptionAsButton(GameText(0x3f0),
+                                            FESlideOffset * PLAY_SLIDE_SPAN
+                                                + PLAY_OPTION_X,
+                                            PLAY_ROW0 + 4 * PLAY_ROW_PITCH,
+                                            PLAY_OPTION_SCALE,
+                                            &mmfontcol[(LastTouch_PlayDuel + 1) * 4],
+                                            FE_W(PLAY_OPTION_WIDTH));
+        if (LastTouch_PlayDuel != 0 && Touch_PlayDuel == 0
+            && limeTouchScreenX[0] == -1.0f)
+            sel = 5;
+    }
+
     MaintainFESlide();
 
     if (FESlideOffset == 0.0f) {
@@ -9744,6 +9914,8 @@ void FE_Task_Play(void)
 
     DrawTicker();
     achievementsDraw();
+
+    PortOptionShift = 0.0f;
 }
 
 
@@ -11031,7 +11203,7 @@ void FE_Task_Multiplayer(void)
     GamePaused         = 0;
 
     limeDrawFONT(&GameFont, GameText(0x39f),
-                 (float)(int)(FE_WidthScale * 240.0f),
+                 (float)(int)(FE_WidthScale * 240.0f + FE_XC),
                  (float)(int)(FE_HeightScale * 12.0f),
                  1, FE_WidthScale, col);
 
@@ -11405,31 +11577,36 @@ int PortFightPalette(int side, long c1, long c2)
 #define PP_W  92                        /* the box, in 480x320 units */
 #define PP_H  22
 
-/* One box, centred on cx with its top at y; returns 1 when clicked. */
-static int palette_box(int side, int cx, int y, long c1, long c2)
+/* One box, its top at y, fixed beside the screen edge on the fighter's
+ * side (player one left, player two right) on every aspect ratio; returns
+ * 1 when clicked. */
+static int palette_box(int side, int y, long c1, long c2)
 {
     char buf[32];
-    int x = cx - PP_W / 2;
+    float w = (float)FE_W((float)PP_W), t = (float)FE_W(2.0f);
+    float L = side == 0 ? (float)FE_W(8.0f)
+                        : (float)limeScreenWidth - FE_W(8.0f) - w;
+    float mid = L + w * 0.5f;
+    float T = FE_Y((float)y), H = FE_H((float)PP_H);
     int hit;
 
-    limeFillRect(FE_X((float)x), FE_Y((float)y),
-                 FE_W((float)PP_W), FE_H((float)PP_H),
-                 0.0f, 0.0f, 0.0f, 0.6f);
-    DrawRedHighlight(x, y, PP_W, PP_H, 2);
+    limeFillRect(L, T, w, H, 0.0f, 0.0f, 0.0f, 0.6f);
+    limeFillRect(L, T, w, FE_H(2.0f), 1.0f, 0.0f, 0.0f, 1.0f);
+    limeFillRect(L, T + H - FE_H(2.0f), w, FE_H(2.0f), 1.0f, 0.0f, 0.0f, 1.0f);
+    limeFillRect(L, T, t, H, 1.0f, 0.0f, 0.0f, 1.0f);
+    limeFillRect(L + w - t, T, t, H, 1.0f, 0.0f, 0.0f, 1.0f);
 
     snprintf(buf, sizeof buf, "COLOR %d", PortPaletteOf(side, c1, c2));
-    limeDrawFONT(&GameFont, "<", FE_X((float)(x + 8)), FE_Y((float)(y + 3)),
+    limeDrawFONT(&GameFont, "<", L + FE_W(8.0f), FE_Y((float)(y + 3)),
                  1, FE_WidthScale, fontcol);
-    limeDrawFONT(&GameFont, buf, FE_X((float)cx), FE_Y((float)(y + 3)),
+    limeDrawFONT(&GameFont, buf, mid, FE_Y((float)(y + 3)),
                  1, FE_WidthScale, fontcol);
-    limeDrawFONT(&GameFont, ">", FE_X((float)(x + PP_W - 8)),
+    limeDrawFONT(&GameFont, ">", L + w - FE_W(8.0f),
                  FE_Y((float)(y + 3)), 1, FE_WidthScale, fontcol);
 
     hit = FE_FadeAdd == 0.0f && limeLastTouchScreenX[0] == -1.0f
-          && limeTouchScreenX[0] >= FE_X((float)x)
-          && limeTouchScreenX[0] <= FE_X((float)(x + PP_W))
-          && limeTouchScreenY[0] >= FE_Y((float)y)
-          && limeTouchScreenY[0] <= FE_Y((float)(y + PP_H));
+          && limeTouchScreenX[0] >= L && limeTouchScreenX[0] <= L + w
+          && limeTouchScreenY[0] >= T && limeTouchScreenY[0] <= T + H;
     if (hit) {
         PortPalette[side] = PortPaletteOf(side, c1, c2) == 2 ? 1 : 2;
         limeLastTouchScreenX[0] = limeTouchScreenX[0];  /* one switch a tap */
@@ -11448,9 +11625,9 @@ static void palette_picker(void)
     if (GameMode == 0 && CharacterConfirmed != -1)    /* a new ladder */
         PortArcadePalette = PortPaletteOf(0, CharacterConfirmed, -1);
     if (p1 != -1)
-        palette_box(0, 56, 290, p1, p2);
+        palette_box(0, 290, p1, p2);
     if (GameMode == 6 && p2 != -1)
-        palette_box(1, 424, 262, p1, p2);
+        palette_box(1, 262, p1, p2);
 }
 
 long drawCharacterSelection(long sel)
@@ -11888,7 +12065,6 @@ void EditButtons(void)
     pickedX = LastButtonPosX;
     pickedY = LastButtonPosY;
     touchY  = limeTouchScreenY[0];
-
     if (b != 0) {
         for (i = 0; i < EB_BUTTONS; i++) {
             float dx, dy;
@@ -13150,6 +13326,9 @@ extern float TowerFireCount;            /* 0x00101760 */
 extern float TowerWait;                 /* 0x00101750 */
 extern float FECamPos[3];               /* 0x000ff954 */
 extern float TowerPulledPos[3];         /* 0x00101728 */
+/* The iPad build's data has the pulled-back tower camera at y -2.739, not
+ * -2.239 (its _TowerPulledPos); with the iPad interface. */
+#define TOWER_PULLED_Y  (PortIPad ? -2.739f : TowerPulledPos[1])
 extern float TowerSelect1TopPos[3];     /* 0x00101734 */
 extern float TowerSelect1BottomPos[3];  /* 0x00101740 */
 extern long  playerLostRound;           /* 0x000ff8b8 */
@@ -13205,20 +13384,37 @@ static long Tower_TappedToSkip(void)
                                - FE_HeightScale * TOWER_BOTTOM;
 }
 
+/* Port, not in the binary: where layout x and y land on the tower screen.
+ * The towers are 3D, and LIMEDS_Set3dMode keeps the iPhone's vertical view on
+ * every aspect ratio, so they spread from the screen centre by the height
+ * (h / 320 per layout unit), measured on 3:2, 4:3, 16:9 and 21:9 captures.
+ * On 3:2 this is FE_X / FE_Y as the binary has it; elsewhere the 2D layout's
+ * own scale and offset do not follow the towers. The torches and the four tap
+ * columns go through it, so they stay on their towers. */
+static float Tower_S(void)
+{
+    return (float)limeScreenHeight / 320.0f;
+}
+
+static float Tower_X(float v)
+{
+    return (float)(limeScreenWidth / 2) + (v - 240.0f) * Tower_S();
+}
+
 static void Tower_DrawTorch(long slot, float x, float y, long text,
                             float labelX, float labelY)
 {
-    long frame = (long)(TowerFireCount * TOWER_FIRE_RATE) % TOWER_FIRE_FRAMES;
+    long  frame = (long)(TowerFireCount * TOWER_FIRE_RATE) % TOWER_FIRE_FRAMES;
+    float s     = Tower_S();
 
     (void)slot;
 
     limeDrawSprite((TEXTURE *)FireLogo[frame],
-                   FE_X(x), FE_Y(y),
-                   FE_WidthScale * 64.0f, FE_HeightScale * 64.0f,
+                   Tower_X(x), y * s, s * 64.0f, s * 64.0f,
                    0.0f, 0.0f, 1.0f, 1.0f, col);
 
     limeDrawFONT(&GameFont, GameText(text),
-                 FE_X(labelX), FE_Y(labelY), 1, FE_WidthScale, fontcol);
+                 Tower_X(labelX), labelY * s, 1, s, fontcol);
 }
 
 void FE_Task_Tower(void)
@@ -13241,7 +13437,7 @@ void FE_Task_Tower(void)
     case -1:
         if (GameStarted == 0) {
             FECamPos[0] = TowerPulledPos[0];
-            FECamPos[1] = TowerPulledPos[1];
+            FECamPos[1] = TOWER_PULLED_Y;
             FECamPos[2] = TowerPulledPos[2];
 
             DestinyToSelect = -1;
@@ -13257,7 +13453,7 @@ void FE_Task_Tower(void)
             break;                      /* straight into the climb, below */
 
         FECamPos[0] = TowerPulledPos[0];
-        FECamPos[1] = TowerPulledPos[1];
+        FECamPos[1] = TOWER_PULLED_Y;
         FECamPos[2] = TowerPulledPos[2];
 
         TowerWait += k;
@@ -13309,8 +13505,9 @@ void FE_Task_Tower(void)
                 static const float lo[4] = { 74.0f, 150.0f, 230.0f, 308.0f };
                 static const float hi[4] = { 150.0f, 230.0f, 308.0f, 386.0f };
 
-                if (tx <= FE_WidthScale * lo[n]
-                    || tx >= FE_WidthScale * hi[n])
+                /* port: Tower_X, the binary's FE_WidthScale * lo/hi on 3:2 */
+                if (tx <= Tower_X(lo[n])
+                    || tx >= Tower_X(hi[n]))
                     continue;
 
                 if (Settings[3] != 0)
