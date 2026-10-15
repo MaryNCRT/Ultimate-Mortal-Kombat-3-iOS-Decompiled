@@ -18,7 +18,7 @@ const T = {
         dProfile: 'Tu perfil de jugador: nombre, icono e ID de esta instalación. El juego lo edita también (Esc > PERFIL).',
         hProfile: 'PERFIL DE JUGADOR',
         profName: 'NOMBRE DE JUGADOR', profId: 'ID DE JUGADOR', profColor: 'COLOR DE FONDO', profIconLbl: 'ICONO',
-        profLight: 'CLARO (DESDE BLANCO)', profDark: 'OSCURO (DESDE NEGRO)', profShadeLbl: 'DEGRADADO',
+        profLight: 'CLARO (DESDE BLANCO)', profDark: 'OSCURO (HACIA NEGRO)', profShadeLbl: 'DEGRADADO',
         profDefault: 'JUGADOR', profReset: 'REINICIAR DATOS', profResetAsk: '¿SEGURO? PULSA OTRA VEZ',
         dBuild: 'El juego se compila en tu PC a partir de tu propio .ipa de UMK3 para iPhone (1.2.59).',
         dVideo: 'Resolución de ventana, resolución 3D, modo de pantalla y el marco de las barras.',
@@ -73,7 +73,7 @@ const T = {
         dProfile: 'Your player profile: name, icon and the ID of this installation. The game edits it too (Esc > PROFILE).',
         hProfile: 'PLAYER PROFILE',
         profName: 'PLAYER NAME', profId: 'PLAYER ID', profColor: 'BACKGROUND COLOUR', profIconLbl: 'ICON',
-        profLight: 'LIGHT (FROM WHITE)', profDark: 'DARK (FROM BLACK)', profShadeLbl: 'GRADIENT',
+        profLight: 'LIGHT (FROM WHITE)', profDark: 'DARK (TO BLACK)', profShadeLbl: 'GRADIENT',
         profDefault: 'PLAYER', profReset: 'RESET DATA', profResetAsk: 'SURE? PRESS AGAIN',
         dBuild: 'The game is compiled on your PC from your own UMK3 iPhone .ipa (1.2.59).',
         dVideo: 'Window resolution, 3D resolution, display mode and the bars frame.',
@@ -775,17 +775,18 @@ function drawIcon(cv, icon, color, dark) {
     g.clip();
     /* the sky: light at the top, the colour, deeper at the bottom */
     let gr = g.createLinearGradient(0, 0, 0, S);
-    /* light: white into the colour, deeper at the bottom; dark: black into
-     * the colour, lighter at the bottom (profiles.c, the same numbers) */
-    gr.addColorStop(0, css(dark ? mix(c, black, 0.88) : mix(c, white, 0.55)));
-    gr.addColorStop(0.5, css(c));
-    gr.addColorStop(1, css(dark ? mix(c, white, 0.2) : mix(c, black, 0.3)));
+    /* light: white into the colour, deeper at the bottom; dark: the colour
+     * at the top going down to black (profiles.c, the same numbers) */
+    gr.addColorStop(0, css(dark ? mix(c, white, 0.15) : mix(c, white, 0.55)));
+    gr.addColorStop(0.5, css(dark ? mix(c, black, 0.45) : c));
+    gr.addColorStop(1, css(dark ? mix(c, black, 0.92) : mix(c, black, 0.3)));
     g.fillStyle = gr;
     g.fillRect(0, 0, S, S);
     /* the glow rising from the bottom */
     gr = g.createRadialGradient(S / 2, S * 1.05, 0, S / 2, S * 1.05, S * 0.6);
-    gr.addColorStop(0, css(mix(c, white, 0.6), 0.75));
-    gr.addColorStop(1, css(mix(c, white, 0.6), 0));
+    const gc = dark ? c : mix(c, white, 0.6);
+    gr.addColorStop(0, css(gc, dark ? 0.35 : 0.75));
+    gr.addColorStop(1, css(gc, 0));
     g.fillStyle = gr;
     g.fillRect(0, 0, S, S);
     /* the fighter */

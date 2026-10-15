@@ -451,7 +451,7 @@ static void build(void)
                 add(R_PCOLOR, 0, tx("COLOR DE FONDO", "BACKGROUND COLOUR"), "< #%06X >",
                     p->color);
             add(R_PSHADE, 0, tx("DEGRADADO", "GRADIENT"), "< %s >",
-                p->dark ? tx("OSCURO (DESDE NEGRO)", "DARK (FROM BLACK)")
+                p->dark ? tx("OSCURO (HACIA NEGRO)", "DARK (TO BLACK)")
                         : tx("CLARO (DESDE BLANCO)", "LIGHT (FROM WHITE)"));
             add(R_PID, 0, tx("ID DE JUGADOR", "PLAYER ID"), "%s", p->id);
             g_rows[g_n - 1].en = 0;     /* shown, not chosen */

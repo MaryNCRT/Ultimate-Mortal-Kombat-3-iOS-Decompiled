@@ -198,7 +198,7 @@ unsigned char *prof_icon_rgba(int icon, unsigned color, int dark, int S)
     uint8_t *art = NULL;
     int aw = 0, ah = 0, x, y;
     unsigned char *out;
-    float c[3], top[3], bot[3], glow[3];
+    float c[3], top[3], mid[3], bot[3], glow[3];
     char path[1200];
     const char *root = lime_platform_asset_root();
 
@@ -217,11 +217,12 @@ unsigned char *prof_icon_rgba(int icon, unsigned color, int dark, int S)
     c[1] = (float)((color >> 8) & 255);
     c[2] = (float)(color & 255);
     for (x = 0; x < 3; x++) {
-        /* light: white into the colour, deeper at the bottom; dark: black
-         * into the colour, lighter at the bottom */
-        top[x]  = dark ? c[x] * 0.12f : c[x] + (255 - c[x]) * 0.55f;
-        bot[x]  = dark ? c[x] + (255 - c[x]) * 0.2f : c[x] * 0.7f;
-        glow[x] = c[x] + (255 - c[x]) * 0.6f;
+        /* light: white into the colour, deeper at the bottom; dark: the
+         * colour at the top going down to black (red into black) */
+        top[x]  = dark ? c[x] + (255 - c[x]) * 0.15f : c[x] + (255 - c[x]) * 0.55f;
+        mid[x]  = dark ? c[x] * 0.55f : c[x];
+        bot[x]  = dark ? c[x] * 0.08f : c[x] * 0.7f;
+        glow[x] = dark ? c[x] : c[x] + (255 - c[x]) * 0.6f;
     }
 
     for (y = 0; y < S; y++)
@@ -232,11 +233,11 @@ unsigned char *prof_icon_rgba(int icon, unsigned color, int dark, int S)
             int i;
 
             for (i = 0; i < 3; i++)             /* the sky */
-                col[i] = t < 0.5f ? top[i] + (c[i] - top[i]) * (t / 0.5f)
-                                  : c[i] + (bot[i] - c[i]) * ((t - 0.5f) / 0.5f);
+                col[i] = t < 0.5f ? top[i] + (mid[i] - top[i]) * (t / 0.5f)
+                                  : mid[i] + (bot[i] - mid[i]) * ((t - 0.5f) / 0.5f);
             k = sqrtf((px - S * 0.5f) * (px - S * 0.5f)
                       + (py - S * 1.05f) * (py - S * 1.05f));
-            a = 0.75f * clampf(1.0f - k / (S * 0.6f), 0, 1);    /* the glow */
+            a = (dark ? 0.35f : 0.75f) * clampf(1.0f - k / (S * 0.6f), 0, 1);   /* the glow */
             for (i = 0; i < 3; i++)
                 col[i] += (glow[i] - col[i]) * a;
             if (art) {                          /* the fighter, bilinear */
