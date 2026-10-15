@@ -120,6 +120,8 @@ static int PortFERightEdge;
 #define FE_XC (PortFEExtraX * 0.5f)
 extern int FE_CurrentTask;
 
+int Port16x9Centred(void);
+
 float FE_X(float v)
 {
     if (PortFEExtraX > 0.0f) {
@@ -130,6 +132,11 @@ float FE_X(float v)
         } else if (FE_CurrentTask == 0) {
             if (v < 220.0f)
                 off = 0.0f;
+        } else if (Port16x9Centred()) {
+            /* the continue screens on 16:9: centred with their sheets,
+             * BACK still at the edge */
+            if (v >= 390.0f)
+                off = PortFEExtraX;
         } else if (FE_CurrentTask != 27 && FE_CurrentTask != 42) {
             /* the edge buttons (BACK, QUIT, NEXT: x 38-82 and 398-442 in
              * DrawButtonNew) and their labels go to the edges; the select
@@ -5393,26 +5400,64 @@ extern const char *DestinyNames[];        /* 0x00176760, 108 bytes */
 int  sprintf(char *dst, const char *fmt, ...);
 
 
-/* Port, not in the binary: the ULTIMATE strip of the continue and game over
- * screens (GameOverTopTexture) on 16:9. The device spreads the sheet over
- * the whole screen; 16:9 widened it and the logo came out stretched (Mary).
- * There it is drawn exactly as on 3:2 -- the screen's height, 1.5 times
- * that wide, the same rows, no zoom -- centred, and the sides are left to
- * the black the screen is cleared to. Other shapes draw it as the device
- * did. */
+/* Port, not in the binary: the continue screen and Arcade's continue / new
+ * game (FE_Task_Continue_Screen, FE_Task_Single_Player) on 16:9. The device
+ * spreads both sheets over the whole screen; 16:9 widened them and the
+ * ULTIMATE logo and the frames came out stretched (Mary). There:
+ *
+ *   - the top: a picture made for 16:9 when the player has one,
+ *     res/Textures/FE_GAMEOVER_TOP_169.PNG, over the whole screen -- made
+ *     from the game's own art, so never shipped, only in the player's
+ *     folder; else the sheet exactly as on 3:2, centred, no zoom;
+ *   - the bottom, the two frames: as on 3:2, centred;
+ *   - their texts and red boxes: centred with them (FE_X, Port16x9Centred).
+ *
+ * Other shapes draw them as the device did. */
+void *limeLoadTexture(const char *name, long a, long b);
+
+int Port16x9Centred(void)
+{
+    float a = (float)limeScreenWidth / (float)limeScreenHeight;
+
+    return PortWideMenus && a > 1.7f && a < 1.8f
+           && (FE_CurrentTask == 2 || FE_CurrentTask == 29);
+}
+
 static void PortDrawGameOverTop(const float *col)
 {
+    static TEXTURE *wide;
+    static int      tried;
     float W = (float)limeScreenWidth, H = (float)limeScreenHeight;
-    float a = W / H;
 
-    if (PortWideMenus && a > 1.7f && a < 1.8f) {
+    if (Port16x9Centred()) {
         float wc = H * 1.5f;
 
-        limeDrawSprite((TEXTURE *)GameOverTopTexture, (W - wc) * 0.5f, 0.0f,
-                       wc, H, 0.0f, 0.0f, 1.0f, 0.75f, col);
+        if (!tried) {
+            tried = 1;
+            wide = (TEXTURE *)limeLoadTexture("FE_GAMEOVER_TOP_169.PNG", 0, 0);
+        }
+        if (wide)
+            limeDrawSprite(wide, 0.0f, 0.0f, W, H, 0.0f, 0.0f, 1.0f, 1.0f, col);
+        else
+            limeDrawSprite((TEXTURE *)GameOverTopTexture, (W - wc) * 0.5f, 0.0f,
+                           wc, H, 0.0f, 0.0f, 1.0f, 0.75f, col);
         return;
     }
     limeDrawSprite((TEXTURE *)GameOverTopTexture, 0.0f, 0.0f, W, H,
+                   0.0f, 0.0f, 1.0f, 0.75f, col);
+}
+
+static void PortDrawGameOverBottom(float y, const float *col)
+{
+    float W = (float)limeScreenWidth, H = (float)limeScreenHeight;
+
+    if (Port16x9Centred()) {
+        float wc = H * 1.5f;
+        limeDrawSprite((TEXTURE *)GameOverBottomTexture, (W - wc) * 0.5f, y,
+                       wc, H, 0.0f, 0.0f, 1.0f, 0.75f, col);
+        return;
+    }
+    limeDrawSprite((TEXTURE *)GameOverBottomTexture, 0.0f, y, W, H,
                    0.0f, 0.0f, 1.0f, 0.75f, col);
 }
 
@@ -5437,11 +5482,7 @@ void FE_Task_Continue_Screen(void)
                  0.0f, 0.0f, 0.0f, 1.0f);
 
     PortDrawGameOverTop(col);
-
-    limeDrawSprite((TEXTURE *)GameOverBottomTexture,
-                   0.0f, (float)FE_Y(143.0f),
-                   (float)limeScreenWidth, (float)limeScreenHeight,
-                   0.0f, 0.0f, 1.0f, 0.75f, col);
+    PortDrawGameOverBottom((float)FE_Y(143.0f), col);
 
     limeDrawFONT(&GameFont, GameText(0x51), (float)FE_X(120.0f),
                  (float)FE_Y(208.0f) + dy, 1, FE_WidthScale, fontcol);
@@ -7622,9 +7663,7 @@ void FE_Task_Single_Player(void)
                  0.0f, 0.0f, 0.0f, 1.0f);
 
     PortDrawGameOverTop(col);
-    limeDrawSprite((TEXTURE *)GameOverBottomTexture, 0.0f, FE_Y(143.0f),
-                   (float)limeScreenWidth, (float)limeScreenHeight,
-                   0.0f, 0.0f, 1.0f, 0.75f, col);
+    PortDrawGameOverBottom(FE_Y(143.0f), col);
 
     limeDrawFONT(&GameFont, GameText(0x51),
                  FE_X(120.0f), FE_Y(216.0f) + dy, 1, FE_WidthScale, fontcol);
