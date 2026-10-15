@@ -2660,6 +2660,8 @@ void Task_LoadingScreen(void);
  * `{1, 1, 1, 1}` and then filled with four more explicit 1.0 stores before the
  * alpha is overwritten. Transcribed once; the duplication does nothing.
  */
+extern float PortFEExtraX;             /* FrontEnd.c, port only */
+
 void Task_LoadSplashScreen(void)
 {
     float colour[4];
@@ -2710,7 +2712,9 @@ void Task_LoadSplashScreen(void)
         tex = SplashTexture1;
     }
 
-    limeDrawSprite(tex, 0.0f, FE_YOffset,
+    /* Port: centred on a surface wider than 3:2 (FrontEnd.c FE_X);
+     * PortFEExtraX is 0 otherwise, so x stays 0 as in the binary. */
+    limeDrawSprite(tex, PortFEExtraX * 0.5f, FE_YOffset,
                    480.0f * FE_WidthScale,
                    320.0f * FE_HeightScale,
                    0.03125f, 0.1875f, 0.9375f, 0.625f,

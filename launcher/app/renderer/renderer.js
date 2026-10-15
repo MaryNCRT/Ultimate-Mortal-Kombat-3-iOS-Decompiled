@@ -21,13 +21,17 @@ const T = {
         dPlay: 'Arranca Ultimate Mortal Kombat 3: idioma del juego, intros y modo debug.',
         dQuit: 'Cierra el launcher.',
         hBuild: 'COMPILAR TU .IPA', ipaLbl: 'TU .IPA DE UMK3 (IPHONE 1.2.59)',
+        updCheck: 'BUSCAR ACTUALIZACIONES', updGet: 'DESCARGAR E INSTALAR', notesLbl: 'NOVEDADES DE LA ÚLTIMA VERSIÓN',
+        updLooking: 'BUSCANDO ACTUALIZACIONES…', updNone: 'ESTÁS EN LA ÚLTIMA VERSIÓN', updNew: 'NUEVA VERSIÓN DISPONIBLE',
+        updFail: 'NO SE PUDO CONSULTAR GITHUB', updYours: 'TU VERSIÓN', updDl: 'DESCARGANDO', updInst: 'INSTALANDO: EL LAUNCHER SE CERRARÁ Y VOLVERÁ A ABRIRSE…',
+        updDone: 'ACTUALIZADO A', updRebuild: 'RECOMPILANDO EL JUEGO CON LA NUEVA VERSIÓN…', updFailed: 'LA ACTUALIZACIÓN NO SE PUDO COPIAR (VER update\\apply.log)', updNoNotes: 'SIN NOTAS.',
         browse: 'BUSCAR…', build: 'COMPILAR', rebuild: 'RECOMPILAR', cancel: 'CANCELAR', clear: 'QUITAR',
         builtAt: 'JUEGO COMPILADO', notBuilt: 'TODAVÍA NO ESTÁ COMPILADO: ELIGE TU .IPA Y PULSA COMPILAR.',
         hVideo: 'GRÁFICOS', res: 'RESOLUCIÓN DE VENTANA', rres: 'RESOLUCIÓN 3D', mode: 'MODO DE PANTALLA',
         modes: ['VENTANA', 'PANTALLA COMPLETA', 'PANTALLA COMPLETA SIN BORDES'], sameRes: 'IGUAL QUE LA VENTANA', tabDbg: 'DEBUG', tabKb: 'TECLADO', tabPad: 'MANDO',
-        aspect: 'RELACIÓN DE ASPECTO', aspects: ['3:2 (ORIGINAL)'], aa: 'ANTIALIASING', aaOff: 'DESACTIVADO', texq: 'CALIDAD DE TEXTURAS', texqs: ['IPHONE (ACTUAL)', 'IPAD', 'SIN LÍMITE'], hidectl: 'OCULTAR LOS CONTROLES EN PANTALLA (JOYSTICK Y BOTONES)',
+        aspect: 'RELACIÓN DE ASPECTO', aspects: ['3:2 (ORIGINAL, IPHONE)', '4:3 (IPAD)', '16:9 (PANORÁMICA)', '21:9 (ULTRA PANORÁMICA)'], aa: 'ANTIALIASING', aaOff: 'DESACTIVADO', texq: 'CALIDAD DE TEXTURAS', texqs: ['IPHONE (ACTUAL)', 'IPAD', 'SIN LÍMITE'], uisize: 'TAMAÑO DE LA INTERFAZ', uisizes: ['IPHONE (ACTUAL)', 'IPAD (HUD MÁS PEQUEÑO)'], hidectl: 'OCULTAR LOS CONTROLES EN PANTALLA (JOYSTICK Y BOTONES)',
         lang: 'IDIOMA DEL JUEGO', frame: 'MARCO (PANTALLA COMPLETA)',
-        dbg: 'MODO DEBUG (MENÚ Y ATAJOS, VER CONTROLES)', hDbgKeys: 'TECLAS Y ATAJOS DEL MODO DEBUG', gDbgMenu: 'MENÚ DEBUG', gDbgFight: 'PELEA', gDbgScreens: 'PANTALLAS', dbgKeysNote: 'SOLO ACTÚAN CON EL MODO DEBUG ACTIVADO (SECCIÓN JUGAR).', wsNote: 'PANTALLA ANCHA (16:9): EN DESARROLLO. EN PANTALLA COMPLETA, EL MARCO RELLENA LAS BARRAS.',
+        dbg: 'MODO DEBUG (MENÚ Y ATAJOS, VER CONTROLES)', hDbgKeys: 'TECLAS Y ATAJOS DEL MODO DEBUG', gDbgMenu: 'MENÚ DEBUG', gDbgFight: 'PELEA', gDbgScreens: 'PANTALLAS', dbgKeysNote: 'SOLO ACTÚAN CON EL MODO DEBUG ACTIVADO (SECCIÓN JUGAR).', wsNote: '4:3 ES LA VISTA DEL IPAD. EN 16:9 Y 21:9 LA PELEA OCUPA TODA LA PANTALLA (SE VE MÁS ESCENARIO, SIN ESTIRAR) Y LOS MENÚS QUEDAN EN 3:2. EN PANTALLA COMPLETA, EL MARCO RELLENA LAS BARRAS.',
         hControls: 'TECLADO DEL JUGADOR 1', hPad: 'MANDO DEL JUGADOR 1', gMove: 'MOVIMIENTO', gButtons: 'BOTONES', gSystem: 'SISTEMA',
         schemes: 'EL JUEGO EMPIEZA CON EL ESQUEMA ELEGIDO; CADA UNO GUARDA SUS TECLAS. EN PAUSA SE PUEDE CAMBIAR DURANTE LA PARTIDA.',
         tab6: '6 BOTONES', tab5: '5 BOTONES', tabNote: 'EL JUEGO EMPIEZA CON ESTE ESQUEMA',
@@ -65,13 +69,17 @@ const T = {
         dPlay: 'Starts Ultimate Mortal Kombat 3: game language, intros and debug mode.',
         dQuit: 'Closes the launcher.',
         hBuild: 'COMPILE YOUR .IPA', ipaLbl: 'YOUR UMK3 .IPA (IPHONE 1.2.59)',
+        updCheck: 'CHECK FOR UPDATES', updGet: 'DOWNLOAD AND INSTALL', notesLbl: 'WHAT IS NEW IN THE LATEST VERSION',
+        updLooking: 'CHECKING FOR UPDATES…', updNone: 'YOU HAVE THE LATEST VERSION', updNew: 'NEW VERSION AVAILABLE',
+        updFail: 'COULD NOT REACH GITHUB', updYours: 'YOUR VERSION', updDl: 'DOWNLOADING', updInst: 'INSTALLING: THE LAUNCHER WILL CLOSE AND OPEN AGAIN…',
+        updDone: 'UPDATED TO', updRebuild: 'RECOMPILING THE GAME WITH THE NEW VERSION…', updFailed: 'THE UPDATE COULD NOT BE COPIED (SEE update\\apply.log)', updNoNotes: 'NO NOTES.',
         browse: 'BROWSE…', build: 'COMPILE', rebuild: 'REBUILD', cancel: 'CANCEL', clear: 'CLEAR',
         builtAt: 'GAME COMPILED', notBuilt: 'NOT COMPILED YET: CHOOSE YOUR .IPA AND PRESS COMPILE.',
         hVideo: 'GRAPHICS', res: 'WINDOW RESOLUTION', rres: '3D RESOLUTION', mode: 'DISPLAY MODE',
         modes: ['WINDOW', 'FULLSCREEN', 'BORDERLESS FULLSCREEN'], sameRes: 'SAME AS THE WINDOW', tabDbg: 'DEBUG', tabKb: 'KEYBOARD', tabPad: 'GAMEPAD',
-        aspect: 'ASPECT RATIO', aspects: ['3:2 (ORIGINAL)'], aa: 'ANTIALIASING', aaOff: 'OFF', texq: 'TEXTURE QUALITY', texqs: ['IPHONE (CURRENT)', 'IPAD', 'NO LIMIT'], hidectl: 'HIDE THE ON-SCREEN CONTROLS (STICK AND BUTTONS)',
+        aspect: 'ASPECT RATIO', aspects: ['3:2 (ORIGINAL, IPHONE)', '4:3 (IPAD)', '16:9 (WIDESCREEN)', '21:9 (ULTRAWIDE)'], aa: 'ANTIALIASING', aaOff: 'OFF', texq: 'TEXTURE QUALITY', texqs: ['IPHONE (CURRENT)', 'IPAD', 'NO LIMIT'], uisize: 'INTERFACE SIZE', uisizes: ['IPHONE (CURRENT)', 'IPAD (SMALLER HUD)'], hidectl: 'HIDE THE ON-SCREEN CONTROLS (STICK AND BUTTONS)',
         lang: 'GAME LANGUAGE', frame: 'FRAME (FULLSCREEN)',
-        dbg: 'DEBUG MODE (MENU AND SHORTCUTS, SEE CONTROLS)', hDbgKeys: 'DEBUG MODE KEYS AND SHORTCUTS', gDbgMenu: 'DEBUG MENU', gDbgFight: 'FIGHT', gDbgScreens: 'SCREENS', dbgKeysNote: 'THEY ONLY ACT WITH DEBUG MODE ON (PLAY SECTION).', wsNote: 'WIDESCREEN (16:9): IN DEVELOPMENT. IN FULLSCREEN THE FRAME FILLS THE BARS.',
+        dbg: 'DEBUG MODE (MENU AND SHORTCUTS, SEE CONTROLS)', hDbgKeys: 'DEBUG MODE KEYS AND SHORTCUTS', gDbgMenu: 'DEBUG MENU', gDbgFight: 'FIGHT', gDbgScreens: 'SCREENS', dbgKeysNote: 'THEY ONLY ACT WITH DEBUG MODE ON (PLAY SECTION).', wsNote: '4:3 IS THE IPAD VIEW. IN 16:9 AND 21:9 THE FIGHT FILLS THE SCREEN (MORE OF THE STAGE, NO STRETCH) AND THE MENUS STAY 3:2. IN FULLSCREEN THE FRAME FILLS THE BARS.',
         hControls: 'PLAYER 1 KEYBOARD', hPad: 'PLAYER 1 GAMEPAD', gMove: 'MOVEMENT', gButtons: 'BUTTONS', gSystem: 'SYSTEM',
         schemes: 'THE GAME STARTS WITH THE CHOSEN LAYOUT; EACH KEEPS ITS OWN KEYS. THE PAUSE MENU CAN SWITCH IT DURING A GAME.',
         tab6: '6 BUTTONS', tab5: '5 BUTTONS', tabNote: 'THE GAME STARTS WITH THIS LAYOUT',
@@ -202,10 +210,16 @@ const RES = [
     { w: 3840, h: 2560 },
     { w: 1280, h: 720 }, { w: 1600, h: 900 }, { w: 1920, h: 1080 },
     { w: 2560, h: 1440 }, { w: 3840, h: 2160 },
+    { w: 1024, h: 768 }, { w: 1600, h: 1200 }, { w: 2048, h: 1536 },
+    { w: 2560, h: 1080 }, { w: 3440, h: 1440 },
 ];
+/* aspect= in umk3.ini */
+const ASPECT = ['3:2', '4:3', '16:9', '21:9'];
 /* texture_quality= in umk3.ini: IPHONE = the _LOW sheets the 480-wide phone loads, IPAD = the full
  * sheets, NO LIMIT = full sheets, PNG before PVRTC, mipmaps and anisotropic filtering */
 const TEXQ = ['iphone', 'ipad', 'max'];
+/* ui_size= in umk3.ini: IPAD lays the game out on 960x640, where it draws the HUD at 1.75 of 2 */
+const UISIZE = ['iphone', 'ipad'];
 
 /* antialiasing= in umk3.ini: the multisampling the game asks the card for */
 const AA = [0, 2, 4, 8, 16];
@@ -403,6 +417,8 @@ function fillSelects() {
     AA.forEach(n => $('aa').appendChild(el('option', null, n ? 'x' + n : T[ui].aaOff)));
     $('texq').innerHTML = '';
     T[ui].texqs.forEach(n => $('texq').appendChild(el('option', null, n)));
+    $('uisize').innerHTML = '';
+    T[ui].uisizes.forEach(n => $('uisize').appendChild(el('option', null, n)));
     lang.innerHTML = '';
     LANGS.forEach(n => lang.appendChild(el('option', null, n || T[ui].auto)));
 }
@@ -414,9 +430,10 @@ function applyConfig() {
     $('lang').selectedIndex = cfg.language || 0;
     $('rres').selectedIndex = cfg.rres > 0 ? cfg.rres : 0;
     $('mode').selectedIndex = cfg.fullscreen ? 1 : cfg.borderless ? 2 : 0;
-    $('aspect').selectedIndex = 0;
+    $('aspect').selectedIndex = Math.max(0, ASPECT.indexOf(cfg.aspect || '3:2'));
     $('aa').selectedIndex = Math.max(0, AA.indexOf(cfg.antialiasing || 0));
     $('texq').selectedIndex = Math.max(0, TEXQ.indexOf(cfg.textureQuality || 'iphone'));
+    $('uisize').selectedIndex = Math.max(0, UISIZE.indexOf(cfg.uiSize || 'iphone'));
     $('dbg').checked = !!cfg.debug;
     $('skip').checked = !!cfg.skipIntro;
     $('hidectl').checked = !!cfg.hideControls;
@@ -495,6 +512,137 @@ async function startBuild() {
         setStatus('need', r.code === -3 ? T[ui].notIpa : T[ui].buildFail);
         failChord();
     }
+}
+
+/* ------------------------------------------------------------ updates -- */
+
+let rel = null, updating = false;
+
+function setUpdBar(pct) {
+    const bar = $('updbar');
+    if (!bar.firstChild) bar.appendChild(el('i'));
+    bar.firstChild.style.width = Math.max(0, Math.min(100, pct || 0)) + '%';
+}
+
+/* A release's notes are GitHub markdown: headings, bullets, **bold**,
+ * `code` and [links](...). Drawn as text nodes, never as HTML. */
+function inlineMd(parent, text) {
+    const re = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\)|\*[^*\s][^*]*\*)/g;
+    let at = 0, m;
+    while ((m = re.exec(text))) {
+        if (m.index > at) parent.appendChild(document.createTextNode(text.slice(at, m.index)));
+        const t = m[0];
+        if (t.startsWith('**')) parent.appendChild(el('b', null, t.slice(2, -2)));
+        else if (t.startsWith('`')) parent.appendChild(el('code', null, t.slice(1, -1)));
+        else if (t.startsWith('[')) parent.appendChild(el('u', null, t.slice(1, t.indexOf(']'))));
+        else parent.appendChild(el('i', 'em', t.slice(1, -1)));
+        at = m.index + t.length;
+    }
+    if (at < text.length) parent.appendChild(document.createTextNode(text.slice(at)));
+}
+
+function paintNotes(md) {
+    const box = $('notes');
+    box.textContent = '';
+    let list = null;
+    for (const raw of String(md || '').replace(/\r/g, '').split('\n')) {
+        const line = raw.trimEnd();
+        const h = line.match(/^#{1,6}\s+(.*)$/);
+        const li = line.match(/^\s*[-*]\s+(.*)$/);
+        if (li) {
+            if (!list) { list = el('ul'); box.appendChild(list); }
+            const n = el('li');
+            inlineMd(n, li[1]);
+            (/^\s{2,}/.test(line) && list.lastChild ? (list.lastChild.querySelector('ul') || list.lastChild.appendChild(el('ul'))) : list).appendChild(n);
+            continue;
+        }
+        list = null;
+        if (!line.trim()) continue;
+        const n = el(h ? 'h4' : 'p');
+        inlineMd(n, h ? h[1] : line);
+        box.appendChild(n);
+    }
+    if (!box.firstChild) box.textContent = T[ui].updNoNotes;
+}
+
+function paintUpdate(r) {
+    const s = $('updstate');
+    $('updget').classList.add('hidden');
+    if (!r) { s.className = 'state'; s.textContent = T[ui].updLooking; return; }
+    if (!r.ok || !r.rel) {
+        s.className = 'state need';
+        s.textContent = T[ui].updFail + (r.error ? ' (' + r.error + ')' : '') + ' — ' + T[ui].updYours + ' ' + r.current;
+        return;
+    }
+    rel = r.rel;
+    $('notesLbl').textContent = T[ui].notesLbl + ' — ' + rel.name;
+    paintNotes(rel.notes);
+    if (rel.newer) {
+        s.className = 'state need';
+        s.textContent = T[ui].updNew + ': ' + rel.tag + ' (' + (rel.size / 1048576).toFixed(0) + ' MB) — ' + T[ui].updYours + ' ' + r.current;
+        $('updget').classList.remove('hidden');
+        document.querySelector('.mi[data-sec="build"]').classList.add('news');
+    } else {
+        s.className = 'state ok';
+        s.textContent = T[ui].updNone + ' (' + r.current + ')';
+    }
+}
+
+async function checkUpdate() {
+    if (updating) return;
+    $('updcheck').disabled = true;
+    paintUpdate(null);
+    paintUpdate(await window.umk3.checkUpdate());
+    $('updcheck').disabled = false;
+}
+
+async function installUpdate() {
+    if (updating || building || !rel) return;
+    selectBlip();
+    updating = true;
+    $('updget').disabled = $('updcheck').disabled = $('build').disabled = true;
+    $('updwrap').classList.remove('hidden');
+    setUpdBar(0);
+    const r = await window.umk3.installUpdate();
+    if (!r.ok) {
+        updating = false;
+        $('updget').disabled = $('updcheck').disabled = $('build').disabled = false;
+        $('updstate').className = 'state need';
+        $('updstate').textContent = 'ERROR: ' + r.error;
+        failChord();
+    }
+}
+
+function handleUpdateProgress(p) {
+    if (p.phase === 'install') {
+        setUpdBar(100);
+        $('updlabel').textContent = T[ui].updInst;
+        return;
+    }
+    const pct = p.total ? p.got * 100 / p.total : 0;
+    setUpdBar(pct);
+    $('updlabel').textContent = T[ui].updDl + ' ' + (p.got / 1048576).toFixed(1) + ' / ' + (p.total / 1048576).toFixed(1) + ' MB';
+}
+
+/* Opened again by update/apply.ps1: say so and compile the new sources. */
+async function afterUpdate() {
+    const r = await window.umk3.updateResult();
+    if (!r) return false;
+    setSection('build', false);
+    if (!r.ok) {
+        $('updstate').className = 'state need';
+        $('updstate').textContent = T[ui].updFailed;
+        return true;
+    }
+    $('updstate').className = 'state ok';
+    $('updstate').textContent = T[ui].updDone + ' ' + r.tag;
+    $('notesLbl').textContent = T[ui].notesLbl + ' — ' + (r.name || r.tag);
+    paintNotes(r.notes);
+    if (cfg.ipa && cfg.ipa.trim()) {
+        setStatus('building', T[ui].updRebuild);
+        startBuild();
+    }
+    return true;
 }
 
 /* --------------------------------------------------------------- play -- */
@@ -599,6 +747,8 @@ async function init() {
     $('rres').addEventListener('change', () => save({ rres: $('rres').selectedIndex }));
     $('aa').addEventListener('change', () => save({ antialiasing: AA[$('aa').selectedIndex] }));
     $('texq').addEventListener('change', () => save({ textureQuality: TEXQ[$('texq').selectedIndex] }));
+    $('aspect').addEventListener('change', () => save({ aspect: ASPECT[$('aspect').selectedIndex] }));
+    $('uisize').addEventListener('change', () => save({ uiSize: UISIZE[$('uisize').selectedIndex] }));
     $('mode').addEventListener('change', () => {
         const m = $('mode').selectedIndex;
         save({ fullscreen: m === 1, borderless: m === 2 });
@@ -622,6 +772,9 @@ async function init() {
     window.umk3.onBuildData(handleBuildData);
     $('build').addEventListener('click', startBuild);
     $('cancel').addEventListener('click', () => window.umk3.cancelBuild());
+    window.umk3.onUpdateProgress(handleUpdateProgress);
+    $('updcheck').addEventListener('click', () => { selectBlip(); checkUpdate(); });
+    $('updget').addEventListener('click', installUpdate);
 
     $('resdbg').addEventListener('click', () => {
         selectBlip();
@@ -677,6 +830,11 @@ async function init() {
 
     const want = new URLSearchParams(location.search).get('sec');
     setSection(SECTIONS.includes(want) && want !== 'quit' ? want : ready ? 'play' : 'build', false);
+
+    /* an update just installed is compiled first; else ask GitHub, without
+     * holding up the window */
+    if (!(await afterUpdate()))
+        setTimeout(checkUpdate, 800);
 
     /* development aid: UMK3_LAUNCHER_SHOT=<png> captures the window */
     setTimeout(() => window.umk3.shot(), 600);

@@ -172,6 +172,20 @@ Players.c); `max` also upscales sheets of 256 or less 4x at load
 whose uv stays inside [0,1] is clamped to edge for that draw only, which is
 what removed the white seams (`lime_port_edge_clamp`).
 
+UI size (`ui_size=` / `UMK3_UI`, Port, not in the binary): `ipad` hands the
+game a 960x640 surface instead of 480x320 (`lime_menu_set_screen`,
+`lime_gl_set_screen`), so `SetupFEScale` takes the binary's own big-screen
+branch -- FE_WidthScale 2, HUD_Scale 1.75 -- and the HUD is drawn at 7/8 of
+the menus' scale. game_main.c maps the mouse onto that surface and scales
+the 480x320 coordinates of scripted and pad taps by `g_ui_k`.
+
+Aspect (`aspect=` / `UMK3_ASPECT`, Port): game_main.c shapes the surface
+(4:3 = 480x360, 16:9 = 568x320, times the UI size). `LIMEDS_Set3dMode`
+keeps the iPhone's projection at 3:2, uses the iPad build's at 4:3 and
+widens the horizontal view beyond 3:2. On wide surfaces SetupFEScale
+scales the front end by height and `FE_X` centres it (`PortFEExtraX`),
+except the main menu's buttons, which stay on the left edge.
+
 ---
 
 ## 3. Where things are

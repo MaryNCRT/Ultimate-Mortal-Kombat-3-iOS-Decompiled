@@ -118,6 +118,22 @@ test('pad= round-trips and rejects junk', () => {
     fs.writeFileSync(p, 'pad=evil;rm\n');
     assert.equal(ini.load(p).pad, 'auto');
 });
+test('aspect= round-trips and rejects junk', () => {
+    const p = tmpIni();
+    fs.writeFileSync(p, 'aspect=21:9\n');
+    assert.equal(ini.load(p).aspect, '21:9');
+    fs.writeFileSync(p, 'aspect=5:1\n');
+    assert.equal(ini.load(p).aspect, '3:2');
+});
+
+test('ui_size= round-trips and rejects junk', () => {
+    const p = tmpIni();
+    fs.writeFileSync(p, 'ui_size=IPAD\n');
+    assert.equal(ini.load(p).uiSize, 'ipad');
+    fs.writeFileSync(p, 'ui_size=huge\n');
+    assert.equal(ini.load(p).uiSize, 'iphone');
+});
+
 test('texture_quality= round-trips and rejects junk', () => {
     const p = tmpIni();
     const c = ini.defaultConfig();

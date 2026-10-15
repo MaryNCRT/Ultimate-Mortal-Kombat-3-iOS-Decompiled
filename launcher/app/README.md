@@ -70,6 +70,16 @@ One launch blocker to know about:
 - `signAndEditExecutable` is off (winCodeSign needs admin rights to unpack);
   the window icon is supplied at runtime by the app itself.
 
+## Updates
+
+`lib/update.js`: the newest GitHub release of the repository (pre-releases
+count) against `app.getVersion()`, i.e. `package.json`'s `version` -- **bump
+it for every release**, or players are never told. The release needs its
+`UMK3-PC-<version>.zip` asset (make_release.py `--zip`). Installing writes
+`update\apply.ps1`, started through WMI so it outlives the launcher; it
+mirrors decomp, runtime, tools and launcher, keeps umk3.ini and res, reopens
+the launcher, and the page then recompiles (`update/installed.json`).
+
 ## Design notes (the iOS-style brief, since 2026-10-09)
 
 - Frameless midnight-blue/near-black window with a nebula background, now

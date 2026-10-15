@@ -4,7 +4,9 @@
  *     width=960      height=640      fullscreen=0   borderless=0
  *     hide_controls=1   (no on-screen stick and buttons)
  *     texture_quality=iphone|ipad|max
- *     antialiasing=0|2|4|8|16   aspect=3:2 (the game's 3:2, the only one so far)
+ *     ui_size=iphone|ipad   (ipad: the game lays out on 960x640, a smaller HUD)
+ *     antialiasing=0|2|4|8|16   aspect=3:2|4:3|16:9|21:9 (3:2 the iPhone's, 4:3 the iPad's;
+ *       wider: the fight fills it, the menus stay 3:2)
  *     render_width=1920  render_height=1280   (the 3D resolution; absent =
  *       the window's size)
  *     language=ES    ui=EN           ipa=C:\x\UMK3.ipa
@@ -45,6 +47,11 @@ const RES = [
     { w: 1920, h: 1080 },
     { w: 2560, h: 1440 },
     { w: 3840, h: 2160 },
+    { w: 1024, h: 768 },
+    { w: 1600, h: 1200 },
+    { w: 2048, h: 1536 },
+    { w: 2560, h: 1080 },
+    { w: 3440, h: 1440 },
 ];
 
 /* The languages Info.plist maps (LANGUAGE_TEXT_xx); "" follows Windows. */
@@ -97,7 +104,9 @@ function defaultConfig() {
         fullscreen: false,
         borderless: false,           /* fullscreen without a border, at the desktop's mode */
         antialiasing: 0,             /* 0, 2, 4, 8 or 16 samples */
+        uiSize: 'iphone',            /* ui_size=: iphone (480x320) or ipad (960x640: HUD at 1.75 of 2) */
         textureQuality: 'iphone',    /* texture_quality=: iphone (the _LOW sheets), ipad (full sheets) or max (full sheets, PNG first, mipmaps) */
+        aspect: '3:2',               /* aspect=: 3:2, 4:3, 16:9 or 21:9 */
         widescreen: false,           /* native: widen the 3D view, no stretch */
         debug: false,
         skipIntro: false,            /* skip_intro=1: no publisher logos */
@@ -149,6 +158,7 @@ function load(p) {
         else if (key === 'borderless') cfg.borderless = num === 1;
         else if (key === 'antialiasing') cfg.antialiasing = [2, 4, 8, 16].includes(num) ? num : 0;
         else if (key === 'widescreen') cfg.widescreen = num === 1;
+        else if (key === 'aspect') cfg.aspect = ['3:2', '4:3', '16:9', '21:9'].includes(val) ? val : '3:2';
         else if (key === 'debug_keys') cfg.debug = num === 1;
         else if (key === 'skip_intro') cfg.skipIntro = num === 1;
         else if (key === 'hide_controls') cfg.hideControls = num === 1;
@@ -165,6 +175,8 @@ function load(p) {
         } else if (key === 'pad') {
             cfg.pad = /^(auto|off|xinput|[0-9a-f]{4}:[0-9a-f]{4})$/i.test(val)
                 ? val.toLowerCase() : 'auto';
+        } else if (key === 'ui_size') {
+            cfg.uiSize = /^(iphone|ipad)$/i.test(val) ? val.toLowerCase() : 'iphone';
         } else if (key === 'texture_quality') {
             cfg.textureQuality = /^(iphone|ipad|max)$/i.test(val) ? val.toLowerCase() : 'iphone';
         } else if (key === 'pad_dbg_menu') {
@@ -200,7 +212,7 @@ function save(p, cfg) {
         'fullscreen=' + (cfg.fullscreen ? 1 : 0),
         'borderless=' + (cfg.borderless ? 1 : 0),
         'antialiasing=' + ([2, 4, 8, 16].includes(cfg.antialiasing) ? cfg.antialiasing : 0),
-        'aspect=3:2',
+        'aspect=' + (cfg.aspect || '3:2'),
         'widescreen=' + (cfg.widescreen ? 1 : 0),
         'language=' + lang,
         'ui=' + (cfg.ui === 'EN' ? 'EN' : 'ES'),
@@ -211,6 +223,7 @@ function save(p, cfg) {
         'buttons=' + (cfg.buttons === 6 ? 6 : 5),
         'pad=' + (cfg.pad || 'auto'),
         'texture_quality=' + (cfg.textureQuality || 'iphone'),
+        'ui_size=' + (cfg.uiSize || 'iphone'),
         'pad_dbg_menu=' + (cfg.padDbgMenu === undefined ? 'L3+R3' : cfg.padDbgMenu),
     ];
     if (cfg.padName)

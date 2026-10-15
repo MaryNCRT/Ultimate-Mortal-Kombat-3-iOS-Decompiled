@@ -10,12 +10,13 @@
  */
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage, net, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const ini = require('./lib/ini');
 const rootm = require('./lib/root');
 const bld = require('./lib/build');
+const upd = require('./lib/update');
 
 let g_win = null;
 let g_root = null;
@@ -288,6 +289,56 @@ ipcMain.handle('build:start', async (_ev, ipa) => {
 });
 
 ipcMain.handle('build:cancel', () => bld.cancelBuild());
+
+/* ---------------------------------------------------------- updates ---- */
+
+/* The newest release on GitHub and its notes (lib/update.js). The page asks
+ * once when it opens and again on BUSCAR ACTUALIZACIONES; a newer one also
+ * gets a Windows notification, once per launch. */
+let g_rel = null, g_notified = false;
+
+ipcMain.handle('update:check', async () => {
+    try {
+        g_rel = await upd.check(net.fetch, app.getVersion());
+    } catch (err) {
+        return { ok: false, error: err.message, current: app.getVersion() };
+    }
+    if (g_rel && g_rel.newer && !g_notified && Notification.isSupported()) {
+        g_notified = true;
+        new Notification({
+            title: 'UMK3 — actualización disponible',
+            body: g_rel.name + ' (' + g_rel.tag + '). Ábrela en COMPILAR TU .IPA.',
+        }).show();
+    }
+    return { ok: true, rel: g_rel, current: app.getVersion() };
+});
+
+/* Download, unpack, hand over to update/apply.ps1 and quit: the script copies
+ * the files once this launcher is closed and starts it again. */
+ipcMain.handle('update:install', async () => {
+    if (!g_rel || !g_rel.newer)
+        return { ok: false, error: 'no hay una versión más nueva' };
+    try {
+        const zip = await upd.download(net.fetch, g_rel, path.join(g_root, 'update'),
+            (got, total) => send('update:progress', { got, total }));
+        send('update:progress', { got: 1, total: 1, phase: 'install' });
+        upd.install(g_root, zip, g_rel);
+    } catch (err) {
+        return { ok: false, error: err.message };
+    }
+    setTimeout(() => app.quit(), 400);
+    return { ok: true };
+});
+
+/* After apply.ps1 restarted us: what it installed, once. */
+let g_updResult;
+ipcMain.handle('update:result', () => {
+    if (g_updResult === undefined)
+        g_updResult = upd.takeResult(g_root);
+    const r = g_updResult;
+    g_updResult = null;
+    return r;
+});
 
 /* The pads Windows has attached, by name: `umk3-game --list-pads` prints one
  * "pad=value<TAB>name" a line (the game's own search, WinMM and XInput).
