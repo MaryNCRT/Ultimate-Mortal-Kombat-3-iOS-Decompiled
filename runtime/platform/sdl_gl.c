@@ -97,6 +97,8 @@ void plat_fullscreen(void)
     SDL_SetWindowFullscreen(g_wnd, SDL_WINDOW_FULLSCREEN_DESKTOP);
 }
 
+int plat_open_borderless;
+
 void plat_fullscreen_exclusive(void)
 {
     if (SDL_SetWindowFullscreen(g_wnd, SDL_WINDOW_FULLSCREEN) != 0)
@@ -229,6 +231,27 @@ int plat_key(int code)
         return 0;
     keys = SDL_GetKeyboardState(&count);
     return g_scancode[code] < count && keys[g_scancode[code]] != 0;
+}
+
+int plat_refresh_hz(void)
+{
+    SDL_DisplayMode m;
+    if (g_wnd && SDL_GetWindowDisplayMode(g_wnd, &m) == 0)
+        return m.refresh_rate;
+    return 0;
+}
+
+void plat_input_used(void)
+{
+}
+
+void plat_wait_until(double t)
+{
+    double left = t - plat_time();
+    if (left > 0.002)
+        SDL_Delay((Uint32)((left - 0.001) * 1000.0));
+    while (plat_time() < t)
+        ;
 }
 
 int plat_pad(int which)

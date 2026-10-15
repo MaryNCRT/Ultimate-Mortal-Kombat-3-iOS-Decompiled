@@ -2,9 +2,11 @@
 
 Current state of the project. Written so that someone can pick it up with no prior context.
 
-**Last updated:** 2026-10-09 -- see [HANDOFF.md](HANDOFF.md) for the route.
+**Last updated:** 2026-10-14 -- see [HANDOFF.md](HANDOFF.md) for the route.
 
 ## Current state (alpha 0.0.8, 2026-10-10)
+
+**2026-10-14, Diego's list (not released yet):** hold-and-release moves fire (`QueueAndJump` stores a button's press time only for a press entry, `cbz` at 0x572d4; Mileena's sai and Liu Kang's bicycle kick checked by Diego). Input lag removed (checked by Diego): poses drawn on their own tick (`AnimSmoothWindowSize` 0 in a fight, a port change), `glFinish` after the swap, keys straight into `ButtonStates`/`JoystickState` and holdable, short taps latched, one tick per 60 Hz frame, late key read before a 60 Hz refresh. A crash writes `logs\crash-*.log` and shows a message box with the reason and the function by name. "Borderless window" is now borderless fullscreen. A debug-menu fight's opponent no longer stays for the Arcade fights after it (to be checked in game). Still to check in game: Ermac's friendship and animality, the Mileena combo's sync. Not started: debug-menu hitboxes, the dizzy opponent sliding after a forced finisher.
 
 **2026-10-10, released as 0.0.8 (checked by Mary):** the MERCY banner and `Mercy.mp3` last their full time (DrawHUD's counter adds 0.2 a frame, 0x2844e / 0x286f4, not 13). Mercy, then animality, now run start to finish with banner, tune and model; with friendship, babality and the fatalities that is every finisher. Mary's 0.0.7b release is the base from here (its game sources equal main; she rebuilt the launcher). Queued next: game language moves to PLAY, a separate video section with a real render resolution apart from the window size (engine scaling), and fullscreen and borderless window as separate options.
 

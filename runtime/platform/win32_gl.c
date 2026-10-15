@@ -28,6 +28,9 @@ static bool      g_mouse_down;
 static bool      g_focused = true;
 static int       g_mouse_x, g_mouse_y;
 static unsigned char g_key[256];
+/* A key pressed since the game last ticked: a tap shorter than one tick
+ * (down and up in the same frame) still reaches the game once. */
+static unsigned char g_tap[256];
 
 static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -37,7 +40,7 @@ static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         g_quit = true;
         return 0;
     case WM_KEYDOWN:
-        if (wp < 256) g_key[wp] = 1;
+        if (wp < 256) g_key[wp] = g_tap[wp] = 1;
         return 0;
     case WM_KEYUP:
         if (wp < 256) g_key[wp] = 0;
@@ -104,10 +107,25 @@ bool plat_open(const char *title, int width, int height)
     RECT r = { 0, 0, width, height };
     AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
 
-    g_wnd = CreateWindowA("LimeWindow", title, WS_OVERLAPPEDWINDOW,
-                          CW_USEDEFAULT, CW_USEDEFAULT,
-                          r.right - r.left, r.bottom - r.top,
-                          NULL, NULL, inst, NULL);
+    if (plat_open_borderless) {
+        /* born borderless and covering the monitor: never shown as a
+         * window first (see plat_fullscreen for the extra row) */
+        RECT m;
+        POINT o = { 0, 0 };
+        MONITORINFO mi;
+
+        mi.cbSize = sizeof mi;
+        GetMonitorInfoA(MonitorFromPoint(o, MONITOR_DEFAULTTOPRIMARY), &mi);
+        m = mi.rcMonitor;
+        g_wnd = CreateWindowA("LimeWindow", title, WS_POPUP,
+                              m.left, m.top, m.right - m.left,
+                              m.bottom - m.top + 1, NULL, NULL, inst, NULL);
+    } else {
+        g_wnd = CreateWindowA("LimeWindow", title, WS_OVERLAPPEDWINDOW,
+                              CW_USEDEFAULT, CW_USEDEFAULT,
+                              r.right - r.left, r.bottom - r.top,
+                              NULL, NULL, inst, NULL);
+    }
     if (!g_wnd) return false;
 
     g_dc = GetDC(g_wnd);
@@ -135,6 +153,13 @@ bool plat_open(const char *title, int width, int height)
     return true;
 }
 
+int plat_open_borderless;
+
+/* Borderless fullscreen is one row taller than the monitor. A window that
+ * covers it exactly is promoted by the driver to exclusive fullscreen, and
+ * then every Alt+Tab switches modes and the screen flickers; one row more
+ * keeps it an ordinary window the desktop composes. Exclusive fullscreen
+ * (g_mode set) wants the exact size. */
 void plat_fullscreen(void)
 {
     MONITORINFO mi;
@@ -145,7 +170,7 @@ void plat_fullscreen(void)
     SetWindowLongA(g_wnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
     SetWindowPos(g_wnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top,
                  mi.rcMonitor.right - mi.rcMonitor.left,
-                 mi.rcMonitor.bottom - mi.rcMonitor.top,
+                 mi.rcMonitor.bottom - mi.rcMonitor.top + (g_mode.dmSize ? 0 : 1),
                  SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 }
 
@@ -193,7 +218,27 @@ bool plat_poll(void)
     return !g_quit;
 }
 
-bool plat_swap(void) { return SwapBuffers(g_dc) != FALSE; }
+/* After a crash, before the message box: the desktop's own display mode
+ * back (exclusive fullscreen changed it) and the game window out of the
+ * way, so the box is not hidden behind a frozen fullscreen frame. */
+void plat_crash_restore(void)
+{
+    if (g_mode.dmSize)
+        ChangeDisplaySettingsA(NULL, 0);
+    if (g_wnd)
+        ShowWindow(g_wnd, SW_HIDE);
+}
+
+/* glFinish after the swap: without it the driver may queue two or three
+ * frames ahead, and every one of them is input lag. Waiting here keeps the
+ * frame the player sees one tick behind the keys at most. */
+bool plat_swap(void)
+{
+    bool ok = SwapBuffers(g_dc) != FALSE;
+
+    glFinish();
+    return ok;
+}
 
 void plat_size(int *width, int *height)
 {
@@ -292,7 +337,46 @@ int plat_key(int code)
 {
     if (code < 0 || code >= PK_COUNT)
         return 0;
-    return g_key[g_vk[code]] ? 1 : 0;
+    return (g_key[g_vk[code]] || g_tap[g_vk[code]]) ? 1 : 0;
+}
+
+int plat_refresh_hz(void)
+{
+    int hz = g_dc ? GetDeviceCaps(g_dc, VREFRESH) : 0;
+    return hz > 1 ? hz : 0;            /* 0 and 1 mean the default */
+}
+
+void plat_input_used(void)
+{
+    memset(g_tap, 0, sizeof g_tap);
+}
+
+/* Sleep until plat_time() reaches t: a high-resolution waitable timer for
+ * all but the last millisecond, then a spin, so the wake-up is on time to
+ * a few microseconds. */
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
+void plat_wait_until(double t)
+{
+    static HANDLE timer;
+    static int tried;
+    double left = t - plat_time();
+
+    if (!tried) {
+        tried = 1;
+        timer = CreateWaitableTimerExW(NULL, NULL,
+                                       CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+                                       TIMER_ALL_ACCESS);
+    }
+    if (left > 0.0015 && timer) {
+        LARGE_INTEGER due;
+        due.QuadPart = -(LONGLONG)((left - 0.001) * 1e7);  /* 100 ns units */
+        if (SetWaitableTimer(timer, &due, 0, NULL, NULL, FALSE))
+            WaitForSingleObject(timer, 100);
+    }
+    while (plat_time() < t)
+        YieldProcessor();
 }
 
 /* The gamepad, through XInput loaded at run time.
