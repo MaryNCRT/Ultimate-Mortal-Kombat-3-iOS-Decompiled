@@ -283,7 +283,8 @@ The colour picker on the select screen ("< COLOR 1 >" under each fighter,
 `PortPalette` / `PortPaletteOf` in FrontEnd.c) is a port feature too: the
 3D model (`RenderFECharacters`), the versus portrait and the fight
 (`LoadLevelCharacters`) follow it, and with nothing picked they keep the
-binary's rule.
+binary's rule. The pick is kept in `save\palette.txt` (runtime/game_main.c,
+`palette_load` / `palette_sync`), so it survives a restart.
 
 ### 5.2 Scripted runs (for the person fixing)
 

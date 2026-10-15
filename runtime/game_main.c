@@ -1380,6 +1380,59 @@ static void hb_draw(void)
 }
 
 /* On every tick: the hooks on while HITBOXES is (or UMK3_DBG_HITBOX=1). */
+/* The select screen's colour picker (PortPalette, FrontEnd.c) survives a
+ * restart: read from save/palette.txt at start, written whenever it changes.
+ * A scripted run neither reads nor writes it, unless UMK3_SAVE_DIR points
+ * it elsewhere. Port only. */
+extern int PortPalette[2];
+void port_save_path(char *out, size_t n, const char *file);
+
+static int palette_scripted(void)
+{
+    return (getenv("UMK3_SHOT") || getenv("UMK3_SHOTS"))
+           && !getenv("UMK3_SAVE_DIR");
+}
+
+static void palette_load(void)
+{
+    char path[1100];
+    FILE *f;
+    int a = 0, b = 0;
+
+    if (palette_scripted())
+        return;
+    port_save_path(path, sizeof path, "palette.txt");
+    f = fopen(path, "r");
+    if (!f)
+        return;
+    if (fscanf(f, "%d %d", &a, &b) == 2) {
+        PortPalette[0] = (a == 1 || a == 2) ? a : 0;
+        PortPalette[1] = (b == 1 || b == 2) ? b : 0;
+    }
+    fclose(f);
+}
+
+static void palette_sync(void)
+{
+    static int last[2], init;
+    char path[1100];
+    FILE *f;
+
+    if (palette_scripted())
+        return;
+    if (init && last[0] == PortPalette[0] && last[1] == PortPalette[1])
+        return;
+    init = 1;
+    last[0] = PortPalette[0];
+    last[1] = PortPalette[1];
+    port_save_path(path, sizeof path, "palette.txt");
+    f = fopen(path, "w");
+    if (f) {
+        fprintf(f, "%d %d\n", PortPalette[0], PortPalette[1]);
+        fclose(f);
+    }
+}
+
 static void hb_update(void)
 {
     extern void (*PortAfterScene)(void);
@@ -1610,6 +1663,7 @@ int main(int argc, char **argv)
     if (getenv("UMK3_SCREEN"))
         g_screen_jump = parse_screen(getenv("UMK3_SCREEN"));
     parse_taps(getenv("UMK3_TAPS"));
+    palette_load();
     {
         int i;
         for (i = 1; i < argc; i++)
@@ -1871,6 +1925,7 @@ int main(int argc, char **argv)
 
             clear_frame(ww, wh, vx, vy, vw, vh);
             hb_update();
+            palette_sync();
             lime_menu_advance_clock(1.0 / 60.0);
             keyboard_buttons();
             hud_keys();

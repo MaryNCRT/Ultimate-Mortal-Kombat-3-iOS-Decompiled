@@ -11306,9 +11306,9 @@ void sendCharacterPacket(long which);
  *
  * PortPalette[side] is 0 until the player clicks: then the binary's own
  * rule stands (player two takes the second palette in a mirror match). A
- * player who picks keeps it for the whole ladder; leaving the select screen
- * with nobody picked clears it. Local modes only -- a network match keeps
- * the binary's rule on both machines. */
+ * pick stays until the player changes it, and runtime/game_main.c keeps it
+ * in save/palette.txt across sessions. Local modes only -- a network match
+ * keeps the binary's rule on both machines. */
 int PortPalette[2];
 
 /* 1 or 2: the palette `side` gets with characters c1 against c2. */
@@ -11368,10 +11368,6 @@ static void palette_picker(void)
 
     if (GameMode == 1)
         return;
-    if (p1 == -1 && p2 == -1) {
-        PortPalette[0] = PortPalette[1] = 0;
-        return;
-    }
     if (p1 != -1)
         palette_box(0, 56, 290, p1, p2);
     if (GameMode == 6 && p2 != -1)
