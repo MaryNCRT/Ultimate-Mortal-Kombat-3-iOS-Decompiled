@@ -266,6 +266,10 @@ Environment variables read by `runtime/game_main.c` (all listed in its header):
 | `UMK3_DEBUG_KEYS=1`, `UMK3_DBG_KEY="tick:k;..."` | debug keys, and F9+k pressed by script |
 | `UMK3_DBG_OPEN=<tick>`, `UMK3_DBG_BOSS="tick:24\|25"` | open the menu / the Arcade boss jump by script |
 | `UMK3_LOG_TASKS=1`, `UMK3_LOG_SOUND=1`, `UMK3_LOG_FADE=1` | logs: tasks, sounds loaded/played, fades |
+| `UMK3_KEYS="tick:keys:hold;..."` | player one's keys by script; keys joined with `+` from `up down left right hp lp bl hk lk run s`, or `p b k r` for five buttons; held `hold` ticks (default 4) |
+| `UMK3_LOG_P1=1` | in a fight, every change of player one's frame and of the engine's button word |
+| `UMK3_LOG_PACE=1`, `UMK3_FRAME_DELAY=0`, `UMK3_PACE_HZ=<hz>` | input-lag pacing: log it once a second, turn it off, or pace as if the screen ran at that rate |
+| `UMK3_CRASH_TEST=<tick>` | crash on purpose, to check the crash report |
 
 A scripted run ignores the real mouse and keyboard, so it is not disturbed by
 someone typing in another window. Example -- the moves list in a fight:
@@ -274,9 +278,11 @@ someone typing in another window. Example -- the moves list in a fight:
 UMK3_SHOT=1450 UMK3_TAPS="1350:10,10" umk3-game.exe --fight kitana sub-zero 2
 ```
 
-A crash writes `crash: exception ... at <addr> (image base <base>)` and a
-return stack to the log; subtract the base, add 0x400000 and look the address up
-with `llvm-nm -n umk3-game.exe` to get the function.
+A crash writes `logs\crash-<date>-<time>.log` and shows the same text in a
+message box: the reason (access violation, division by zero...), the function
+and offset by name (the exe keeps its symbols; outside it, the DLL), the call
+stack by name, and the task, screen, fighters and stage. `UMK3_CRASH_TEST=<tick>`
+crashes on purpose to check it.
 
 ### 5.3 Differential tests
 

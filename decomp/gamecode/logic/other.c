@@ -10088,9 +10088,9 @@ long t_one_on_one(MK3THREAD *thread)
  *              mytc[who].func    = h[id]
  *              mytc[who].field08 = 0
  *          }
+ *          last_switch_ram[id * 2    ][who] = r    ; halfwords, presses only
+ *          last_switch_ram[id * 2 + 1][who] = r
  *      }
- *      last_switch_ram[id * 2    ][who] = r        ; halfwords
- *      last_switch_ram[id * 2 + 1][who] = r
  *      if ((int16_t)Plyr[who].field00->field7c != 0) {
  *          if (id == 0)      DoSwitchJump(e[3], who, 1)
  *          else if (id == 3) DoSwitchJump(e[3], who, 4)
@@ -10159,10 +10159,16 @@ void QueueAndJump(const uint32_t *e, uint32_t unused)
             th->func    = h[id];
             th->field08 = 0;
         }
-    }
 
-    last_switch_ram[id * 2][who]     = r;
-    last_switch_ram[id * 2 + 1][who] = r;
+        /* Inside the e[3] test: 0x572d4 `cbz` on e[3] goes to 0x57394,
+         * past these two stores (0x57322, 0x57326). A release entry has
+         * e[3] == 0, so only a press is timestamped. Written outside it,
+         * the release overwrote its own press and every hold-and-release
+         * move (Mileena's sai, Liu Kang's bicycle kick) read "pressed 0
+         * ticks ago" and never fired. */
+        last_switch_ram[id * 2][who]     = r;
+        last_switch_ram[id * 2 + 1][who] = r;
+    }
 
     if (*(const int16_t *)((char *)(*(MK3OBJPROC **)plyr) + 0x7c) != 0) {
         if (id == 0)                            /* the four-button scheme */

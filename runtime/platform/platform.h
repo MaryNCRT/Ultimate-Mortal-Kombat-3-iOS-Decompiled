@@ -24,6 +24,10 @@ bool plat_open(const char *title, int width, int height);
  * desktop's own mode: the launcher's "ventana sin bordes" (borderless=1). */
 void plat_fullscreen(void);
 
+/* Set before plat_open: the window is created borderless over the whole
+ * monitor instead of as a window that plat_fullscreen restyles later. */
+extern int plat_open_borderless;
+
 /* Exclusive fullscreen: the monitor switched to the window's size. Falls
  * back to plat_fullscreen when the monitor has no such mode. The launcher's
  * "pantalla completa" (fullscreen=1). */
@@ -42,6 +46,16 @@ bool plat_poll(void);
 
 /* Present the back buffer. */
 bool plat_swap(void);
+
+/* The game has ticked with the keys as they are: forget the taps it saw
+ * (a key down and up again between two ticks still counts as one press). */
+void plat_input_used(void);
+
+/* The screen's refresh rate in Hz, 0 if unknown. */
+int plat_refresh_hz(void);
+
+/* Sleep until plat_time() reaches t. */
+void plat_wait_until(double t);
 
 void plat_close(void);
 

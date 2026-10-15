@@ -4301,6 +4301,12 @@ extern long ButtonStatesP2[7];          /* 0x0014ff2c */
 extern long LastButtonStatesP2[7];      /* 0x0014ff10 */
 extern long JoystickStateP2;            /* 0x0014fecc */
 
+/* Port, not in the binary: player one's keys, written by the runtime every
+ * tick and ORed in at the end of ReadControls' player-one scan. The dial is
+ * 0 (no key) or 1..8 as CheckLeftDial + 1 gives it: 1 up, then clockwise. */
+int PortKeyButtons[7];
+int PortKeyDial;
+
 
 /* -------------------------------------------------------------- ReadControls
  *
@@ -4408,6 +4414,16 @@ void ReadControls(void)
         if (nearest != -1)
             ButtonStates[ButtonsPos[nearest * (BUTTONPOS_STRIDE / 4) + 4]] = 1;
     }
+
+    /* Port, not in the binary: the keyboard and the gamepad go straight
+     * into the state the touches produce, so they work with the on-screen
+     * controls hidden and a held key is a held button. See
+     * runtime/game_main.c, keyboard_buttons. */
+    for (i = 0; i < 7; i++)
+        if (PortKeyButtons[i])
+            ButtonStates[i] = 1;
+    if (PortKeyDial != 0)
+        JoystickState = PortKeyDial;
 
     if (P2Controls == 0)
         return;

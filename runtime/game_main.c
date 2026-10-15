@@ -41,6 +41,11 @@
  *   UMK3_SCREEN=<n|name>  open that front-end screen once the menu is up
  *   UMK3_DBG_OPEN=<n> open the debug menu at tick n (with debug_keys)
  *   UMK3_DBG_KEY=<tick:k;...>  press F9+k at that tick (with debug_keys)
+ *   UMK3_CRASH_TEST=<tick>     crash on purpose (the crash report)
+ *   UMK3_LOG_P1=1              player one frame and buttons, every change
+ *   UMK3_LOG_PACE=1            the frame pacing (input lag), once a second
+ *   UMK3_FRAME_DELAY=0         no late key read before a 60 Hz refresh
+ *   UMK3_PACE_HZ=<hz>          pace as if the screen ran at <hz>
  *   UMK3_SHOTS=<t,t,...>       write umk3-shot-<t>.ppm at each tick, go on
  *   UMK3_ARCADE=<destiny,stage> with --fight: that rung of an Arcade ladder
  *   UMK3_SCREENS=<tick:n;...>  open front-end screen n at that tick, so one
@@ -53,9 +58,8 @@
  *   H  special (the S button of the five-button layout)
  *   P  pause menu   M  moves list   (Esc no longer quits)
  * umk3.ini key_up= ... key_moves= rebinds them (virtual-key codes).
- * Each key held is a synthetic touch on the real control -- the dial or the
- * on-screen button -- so it goes through ReadControls and CheckLeftDial
- * exactly as a finger does, and the button lights as if pressed.
+ * The keys go straight into ReadControls' button and dial state (see
+ * keyboard_buttons), so they do not need the on-screen controls.
  *
  * Debug, to skip the menus:
  *   umk3-game --fight <p1> <p2> [stage]     (or UMK3_FIGHT="p1,p2,stage")
@@ -87,7 +91,8 @@ static long g_tick;                     /* the tick count, for UMK3_KEYS */
 
 /* UMK3_KEYS="tick:keys:hold;..." -- player one's keys pressed by script, so a
  * test can type a move: keys joined with '+' from up down left right hp lp
- * bl hk lk run s (the special button); held for `hold` ticks (default 4).
+ * bl hk lk run s (the special button), or p b k r for five buttons; held
+ * for `hold` ticks (default 4).
  * Example, Scorpion's spear: "1000:left:4;1005:left:4;1010:lp:4". */
 static int scripted_key(int code)
 {
@@ -96,6 +101,7 @@ static int scripted_key(int code)
         { "right", PK_RIGHT }, { "hp", PK_HP }, { "lp", PK_LP },
         { "bl", PK_BL }, { "hk", PK_HK }, { "lk", PK_LK },
         { "run", PK_RUN }, { "s", PK_SPECIAL },
+        { "p", PK_5_P }, { "b", PK_5_B }, { "k", PK_5_K }, { "r", PK_5_R },
     };
     const char *q = getenv("UMK3_KEYS");
 
@@ -167,21 +173,23 @@ extern const char *CharacterNames[26];
 
 extern float limeTouchScreenX[10], limeTouchScreenY[10];
 extern void *G;                         /* GAMESTATE *, the fight engine's state */
-extern long  ButtonsPos[];              /* 6 x { x, y, ?, ?, button index } */
-extern long  JoystickStatePosX, JoystickStatePosY;
 extern long  Player1NumButtons;        /* 5 or 6, Settings[4] */
 extern int   Settings[10];
 
-/* Keyboard -> player 1, as touches. Slot 9 is the dial, slots 3..8 the
- * button indices 0..5 and slot 2 the special button (index 6); the mouse
- * takes the first free slot, from 0 up.
+/* Keyboard -> player 1, straight into the engine's button state: no
+ * synthetic touches, so it does not depend on where the on-screen controls
+ * are, or on them being shown (hide_controls=1). ReadControls (GameCode.c)
+ * ORs PortKeyButtons into ButtonStates after its touch scan and takes
+ * PortKeyDial as JoystickState, every tick, so a held key is a held button
+ * -- what the hold-and-release moves need. The mouse is still a finger.
  *
- * A key presses whichever on-screen button carries its index, so both
- * layouts work: six buttons (HP LP BL HK LK RN = 0 1 2 3 4 5) and five
- * (DEFAULT_CustomButtonsPos5: P = 0, B = 2, K = 3, R = 5 and S = 6, the
- * special button, which had no key at all). Each layout has its own keys:
- * key_hp .. key_run for six, key5_p/b/k/r and key_special for five. */
-static void keyboard_touches(void)
+ * Button indices: six buttons HP LP BL HK LK RN = 0 1 2 3 4 5, five buttons
+ * (DEFAULT_CustomButtonsPos5) P = 0, B = 2, K = 3, R = 5, and the special
+ * button S = 6. Each layout has its own keys: key_hp .. key_run for six,
+ * key5_p/b/k/r and key_special for five. */
+extern int PortKeyButtons[7], PortKeyDial;
+
+static void keyboard_buttons(void)
 {
     static const int keys6[7][2] = {    /* button index 0..6, two keys each */
         { PK_HP, PK_P2_HP }, { PK_LP, PK_P2_LP }, { PK_BL, PK_P2_BL },
@@ -193,48 +201,27 @@ static void keyboard_touches(void)
         { PK_5_K, PK_P2_HK }, { -1, -1 }, { PK_5_R, PK_P2_RUN },
         { PK_SPECIAL, PK_P2_SPECIAL },
     };
+    /* (dx, dy) -> CheckLeftDial + 1: 1 up, 2 up-right ... 8 up-left */
+    static const int dial[3][3] = {     /* [dy + 1][dx + 1] */
+        { 8, 1, 2 }, { 7, 0, 3 }, { 6, 5, 4 },
+    };
     const int (*keys)[2] = (Player1NumButtons == 6) ? keys6 : keys5;
-    static int owned[10];
-    int dx, dy, b, i;
+    int dx, dy, b, live = CurrentTask == 6;
 
     dx = (plat_key(PK_RIGHT) || plat_key(PK_P2_RIGHT))
        - (plat_key(PK_LEFT) || plat_key(PK_P2_LEFT));
     dy = (plat_key(PK_DOWN) || plat_key(PK_P2_DOWN))
        - (plat_key(PK_UP) || plat_key(PK_P2_UP));
-    if (CurrentTask != 6)
-        dx = dy = 0;
-    if (dx || dy) {
-        /* between JINNERDIAL (22.85) and the outer ring (80) */
-        float len = (dx && dy) ? 0.7071f : 1.0f;
-        limeTouchScreenX[9] = (float)JoystickStatePosX + dx * len * 45.0f;
-        limeTouchScreenY[9] = (float)JoystickStatePosY + dy * len * 45.0f;
-        owned[9] = 1;
-    } else if (owned[9]) {
-        limeTouchScreenX[9] = limeTouchScreenY[9] = -1.0f;
-        owned[9] = 0;
-    }
+    PortKeyDial = live ? dial[dy + 1][dx + 1] : 0;
 
-    for (b = 0; b < 7; b++) {
-        int slot = (b < 6) ? 3 + b : 2, down = 0;
-
-        if (CurrentTask == 6 && (plat_key(keys[b][0]) || plat_key(keys[b][1])))
-            for (i = 0; i < 6; i++)
-                if (ButtonsPos[i * 5 + 4] == b) {
-                    limeTouchScreenX[slot] = (float)ButtonsPos[i * 5];
-                    limeTouchScreenY[slot] = (float)ButtonsPos[i * 5 + 1];
-                    down = 1;
-                }
-        if (down)
-            owned[slot] = 1;
-        else if (owned[slot]) {
-            limeTouchScreenX[slot] = limeTouchScreenY[slot] = -1.0f;
-            owned[slot] = 0;
-        }
-    }
+    for (b = 0; b < 7; b++)
+        PortKeyButtons[b] = live && keys[b][0] >= 0
+            && (plat_key(keys[b][0]) || plat_key(keys[b][1]));
 }
 
 /* --fight: -1 until parsed. */
 static long g_fight_p1 = -1, g_fight_p2 = -1, g_fight_stage = 0;
+static int  g_fight_override;           /* Character2Override is ours */
 
 /* A fighter by number or by name, ignoring case, spaces and hyphens. */
 static long fighter_id(const char *s)
@@ -328,27 +315,204 @@ static void start_app(void)
  * crashes in places no log line was planned for; this is the log line. */
 #include <windows.h>
 #include <io.h>
+#include <stdint.h>
 
-static LONG WINAPI on_crash(EXCEPTION_POINTERS *ep)
+/* The function an address falls in, from the exe's own COFF symbol table
+ * (the build does not strip it): the nearest function symbol at or below
+ * the address. Read from the file on disk, so it works after any crash
+ * that leaves the file system usable. "?" when nothing matches. */
+static void crash_symbol(const void *addr, char *out, size_t n)
 {
     HMODULE self = GetModuleHandleA(NULL);
+    unsigned long rva = (unsigned long)((uintptr_t)addr - (uintptr_t)self);
+    unsigned long best = 0;
+    char path[MAX_PATH], name[9];
+    unsigned char h[24], *syms = NULL, *sec = NULL;
+    unsigned long pe, symtab, nsym, nsec, opt, strsz = 0, i;
+    char *strs = NULL;
+    FILE *f;
 
-    fprintf(stderr, "\ncrash: exception 0x%08lx at %p (image base %p)\n",
-            (unsigned long)ep->ExceptionRecord->ExceptionCode,
-            ep->ExceptionRecord->ExceptionAddress, (void *)self);
-#if defined(_M_IX86) || defined(__i386__)
+    snprintf(out, n, "?");
     {
+        /* outside the exe: name the DLL instead (opengl32, a driver...) */
+        HMODULE m = NULL;
+        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS
+                               | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               (LPCSTR)addr, &m) && m != self) {
+            char *base;
+            if (!GetModuleFileNameA(m, path, MAX_PATH))
+                strcpy(path, "?");
+            base = strrchr(path, '\\');
+            snprintf(out, n, "%s+0x%lx", base ? base + 1 : path,
+                     (unsigned long)((uintptr_t)addr - (uintptr_t)m));
+            return;
+        }
+        if (!m) {
+            snprintf(out, n, "0x%08lx (no module)",
+                     (unsigned long)(uintptr_t)addr);
+            return;
+        }
+    }
+    if (!GetModuleFileNameA(NULL, path, MAX_PATH) || !(f = fopen(path, "rb")))
+        return;
+    if (fseek(f, 0x3c, SEEK_SET) || fread(h, 1, 4, f) != 4)
+        goto done;
+    pe = h[0] | h[1] << 8 | (unsigned long)h[2] << 16 | (unsigned long)h[3] << 24;
+    if (fseek(f, (long)pe, SEEK_SET) || fread(h, 1, 24, f) != 24)
+        goto done;
+    nsec   = h[6] | h[7] << 8;
+    symtab = h[12] | h[13] << 8 | (unsigned long)h[14] << 16 | (unsigned long)h[15] << 24;
+    nsym   = h[16] | h[17] << 8 | (unsigned long)h[18] << 16 | (unsigned long)h[19] << 24;
+    opt    = h[20] | h[21] << 8;
+    if (!symtab || !nsym || nsym > 1000000 || !nsec || nsec > 96)
+        goto done;
+    sec  = malloc(nsec * 40);
+    syms = malloc(nsym * 18);
+    if (!sec || !syms || fseek(f, (long)(pe + 24 + opt), SEEK_SET)
+        || fread(sec, 40, nsec, f) != nsec
+        || fseek(f, (long)symtab, SEEK_SET) || fread(syms, 18, nsym, f) != nsym
+        || fread(h, 1, 4, f) != 4)
+        goto done;
+    strsz = h[0] | h[1] << 8 | (unsigned long)h[2] << 16 | (unsigned long)h[3] << 24;
+    if (strsz >= 4 && strsz < (64ul << 20) && (strs = malloc(strsz)) != NULL) {
+        memset(strs, 0, 4);
+        if (fread(strs + 4, 1, strsz - 4, f) != strsz - 4)
+            strsz = 0;
+    }
+    for (i = 0; i < nsym; i++) {
+        const unsigned char *s = syms + i * 18;
+        unsigned secno = s[12] | s[13] << 8;
+        unsigned long v = s[8] | s[9] << 8 | (unsigned long)s[10] << 16
+                        | (unsigned long)s[11] << 24;
+        unsigned type = s[14] | s[15] << 8;
+
+        if (secno >= 1 && secno <= nsec && (type & 0x20)) {   /* a function */
+            const unsigned char *sh = sec + (secno - 1) * 40;
+            unsigned long at = v + (sh[12] | sh[13] << 8
+                                    | (unsigned long)sh[14] << 16
+                                    | (unsigned long)sh[15] << 24);
+            if (at <= rva && at >= best) {
+                best = at;
+                if (s[0] | s[1] | s[2] | s[3]) {
+                    memcpy(name, s, 8);
+                    name[8] = 0;
+                    snprintf(out, n, "%s+0x%lx", name, rva - at);
+                } else {
+                    unsigned long o = s[4] | s[5] << 8
+                                    | (unsigned long)s[6] << 16
+                                    | (unsigned long)s[7] << 24;
+                    snprintf(out, n, "%s+0x%lx",
+                             (strs && o < strsz) ? strs + o : "?", rva - at);
+                }
+            }
+        }
+        i += s[17];                     /* skip the aux records */
+    }
+done:
+    free(sec);
+    free(syms);
+    free(strs);
+    fclose(f);
+}
+
+static const char *crash_reason(unsigned long code)
+{
+    switch (code) {
+    case EXCEPTION_ACCESS_VIOLATION:      return "memory access violation";
+    case EXCEPTION_ARRAY_BOUNDS_EXCEEDED: return "array index out of bounds";
+    case EXCEPTION_DATATYPE_MISALIGNMENT: return "misaligned access";
+    case EXCEPTION_FLT_DIVIDE_BY_ZERO:    return "float division by zero";
+    case EXCEPTION_INT_DIVIDE_BY_ZERO:    return "integer division by zero";
+    case EXCEPTION_ILLEGAL_INSTRUCTION:   return "illegal instruction";
+    case EXCEPTION_PRIV_INSTRUCTION:      return "privileged instruction";
+    case EXCEPTION_STACK_OVERFLOW:        return "stack overflow";
+    case EXCEPTION_IN_PAGE_ERROR:         return "page error (file read failed)";
+    default:                              return "unknown exception";
+    }
+}
+
+void plat_crash_restore(void);          /* win32_gl.c: desktop mode, no window */
+
+/* A crash writes logs\crash-<date>-<time>.log beside the exe -- the reason,
+ * the function, the call stack by name, what the game was doing -- copies it
+ * to the session log, and shows the reason in a message box, so a player can
+ * send the file and the next fix starts from a name instead of an address. */
+static LONG WINAPI on_crash(EXCEPTION_POINTERS *ep)
+{
+    static char path[MAX_PATH + 64], msg[2048];
+    HMODULE self = GetModuleHandleA(NULL);
+    unsigned long code = (unsigned long)ep->ExceptionRecord->ExceptionCode;
+    void *at = ep->ExceptionRecord->ExceptionAddress;
+    char fn[160], detail[96] = "";
+    FILE *f = NULL;
+    SYSTEMTIME t;
+    DWORD len;
+    char *slash;
+    int pos;
+
+    crash_symbol(at, fn, sizeof fn);
+    if (code == EXCEPTION_ACCESS_VIOLATION
+        && ep->ExceptionRecord->NumberParameters >= 2)
+        snprintf(detail, sizeof detail, " (%s address 0x%08lx)",
+                 ep->ExceptionRecord->ExceptionInformation[0] == 1 ? "writing"
+                 : ep->ExceptionRecord->ExceptionInformation[0] == 8 ? "running"
+                 : "reading",
+                 (unsigned long)ep->ExceptionRecord->ExceptionInformation[1]);
+
+    pos = snprintf(msg, sizeof msg,
+                   "Reason: %s%s\r\nException 0x%08lx in %s\r\n"
+                   "Address %p (exe offset 0x%lx)\r\n"
+                   "Tick %ld, task %d, screen %d, %s vs %s, stage %ld\r\n\r\n"
+                   "Call stack:\r\n  %s\r\n",
+                   crash_reason(code), detail, code, fn, at,
+                   (unsigned long)((uintptr_t)at - (uintptr_t)self),
+                   g_tick, CurrentTask, FE_CurrentTask,
+                   CharacterNames[((unsigned long)PLAYER1MODEL) % 26],
+                   CharacterNames[((unsigned long)PLAYER2MODEL) % 26],
+                   LevelSelect, fn);
+#if defined(_M_IX86) || defined(__i386__)
+    if (code != EXCEPTION_STACK_OVERFLOW) {
         /* Walk the frame-pointer chain from the faulting context. */
         unsigned long *fp = (unsigned long *)ep->ContextRecord->Ebp;
         int i;
-        fprintf(stderr, "  at  %p\n", (void *)ep->ContextRecord->Eip);
-        for (i = 0; i < 24 && fp && !IsBadReadPtr(fp, 8); i++) {
-            fprintf(stderr, "  ret %p\n", (void *)fp[1]);
+        for (i = 0; i < 24 && fp && !IsBadReadPtr(fp, 8)
+                    && pos < (int)sizeof msg - 200; i++) {
+            crash_symbol((void *)fp[1], fn, sizeof fn);
+            pos += snprintf(msg + pos, sizeof msg - pos, "  %s\r\n", fn);
             fp = (unsigned long *)fp[0];
         }
     }
 #endif
+
+    fprintf(stderr, "\ncrash:\n%s", msg);
     fflush(stderr);
+
+    len = GetModuleFileNameA(NULL, path, MAX_PATH);
+    slash = (len > 0 && len < MAX_PATH) ? strrchr(path, '\\') : NULL;
+    if (slash) {
+        strcpy(slash + 1, "logs");
+        CreateDirectoryA(path, NULL);
+        GetLocalTime(&t);
+        sprintf(slash + 1, "logs\\crash-%04d%02d%02d-%02d%02d%02d.log",
+                t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+        f = fopen(path, "wb");
+        if (f) {
+            fputs("UMK3 crash report\r\n\r\n", f);
+            fputs(msg, f);
+            fclose(f);
+        }
+    }
+
+    /* scripted runs (UMK3_SHOT) never wait on a dialog */
+    if (!g_keys_off) {
+        char box[2600];
+        plat_crash_restore();
+        snprintf(box, sizeof box,
+                 "The game stopped because of an error.\r\n\r\n%s\r\n"
+                 "Saved to:\r\n%s", msg, f ? path : "(could not write the file)");
+        MessageBoxA(NULL, box, "UMK3 - crash",
+                    MB_OK | MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
+    }
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
@@ -1051,6 +1215,78 @@ static void fit_view(int ww, int wh, int *vx, int *vy, int *vw, int *vh)
     *vy = (wh - *vh) / 2;
 }
 
+/* Input lag: a port's own, nothing of this is in the binary.
+ *
+ * With vsync the swap returns at the screen's refresh. Reading the keys
+ * right then and drawing at once leaves the finished frame waiting most of
+ * a refresh for the next one, and the keys it shows are that old. Instead
+ * wait here until just before the refresh -- the screen's period less the
+ * longest a frame has lately taken to tick and draw, less a margin -- and
+ * only then read the keys, tick and draw. The press reaches the screen in
+ * about the time the frame takes to make, not a whole refresh later.
+ * Without vsync the swap does not wait, the period measured is about the
+ * work itself, and this never sleeps. UMK3_FRAME_DELAY=0 turns it off. */
+static double g_pace_vbl = -1.0, g_pace_gap, g_pace_work = 0.004;
+static double g_pace_start;
+
+/* Only on a screen of about 60 Hz. A faster one already shows a tick within
+ * a few ms of making it: the loop spins, reading the keys, until the tick is
+ * due, and the next refresh is close. */
+static void pace_frame(void)
+{
+    static int off = -1, hz;
+    double now = plat_time(), period;
+
+    if (off < 0) {
+        off = getenv("UMK3_FRAME_DELAY") && atoi(getenv("UMK3_FRAME_DELAY")) == 0;
+        hz = getenv("UMK3_PACE_HZ") ? atoi(getenv("UMK3_PACE_HZ"))
+                                    : plat_refresh_hz();   /* for tests */
+    }
+    period = (hz >= 50 && hz <= 65) ? 1.0 / hz : 0.0;
+    if (g_pace_vbl >= 0.0) {
+        double d = now - g_pace_vbl;
+        g_pace_gap = g_pace_gap * 0.95 + d * 0.05;
+        if (period > 0.0 && d > period * 1.5 && d < 0.1) {
+            /* a refresh missed: the wait was too long, keep more margin */
+            g_pace_work += 0.001;
+            if (g_pace_work > 0.012)
+                g_pace_work = 0.012;
+        }
+    }
+    g_pace_vbl = now;
+    if (getenv("UMK3_LOG_PACE")) {      /* UMK3_LOG_PACE=1: once a second */
+        static int n;
+        if (++n % 60 == 0)
+            printf("pace: screen %d Hz, between swaps %.2f ms, frame work %.2f ms, wait %.2f ms\n",
+                   hz, g_pace_gap * 1e3, g_pace_work * 1e3,
+                   off || !period ? 0.0
+                                  : (period - g_pace_work - 0.003) * 1e3);
+    }
+    /* the swap waited for the refresh only if it took a while: with vsync
+     * off it returns at once and there is nothing to wait for */
+    if (!off && period > 0.0 && g_pace_gap > period * 0.8) {
+        double wake = now + period - g_pace_work - 0.003;
+        if (wake > now)
+            plat_wait_until(wake);
+    }
+}
+
+/* The frame's work starts here, once a tick is due: not the spin before. */
+static void pace_work_start(void)
+{
+    g_pace_start = plat_time();
+}
+
+static void pace_work_end(void)
+{
+    double w = plat_time() - g_pace_start;
+
+    if (w > 0.012)          /* a load, not a frame: do not wait for long */
+        w = 0.012;
+    /* the longest lately: up at once, down over a second or so */
+    g_pace_work = w > g_pace_work ? w : g_pace_work * 0.98 + w * 0.02;
+}
+
 int main(int argc, char **argv)
 {
     const char *root = (argc > 1 && argv[1][0] != '-') ? argv[1] : "res";
@@ -1140,6 +1376,7 @@ int main(int argc, char **argv)
         }
     }
 
+    plat_open_borderless = g_cfg_borderless && !g_cfg_full;
     if (!plat_open("Ultimate Mortal Kombat 3", g_cfg_w, g_cfg_h)) {
         fprintf(stderr, "could not open a window\n");
         return 1;
@@ -1175,6 +1412,16 @@ int main(int argc, char **argv)
      * (tools/level_info.py); GameInit_LoadABit reads them at steps 27-29. */
     umk3_relocate_level_info();
     GameCodeInit();
+    /* Port, not in the binary: in a fight PlayerAutoSmoothAnims draws each
+     * fighter's pose AnimSmoothWindowSize ticks late (2 at 0x171368) while
+     * positions, hits, blood and sound are immediate -- felt as input delay,
+     * and seen as the victim reacting before the blow lands. 0 draws the
+     * current frame (a hard cut every tick). The front end and the intro
+     * borrow their own window (40, 20) around each call and put this back. */
+    {
+        extern long AnimSmoothWindowSize;
+        AnimSmoothWindowSize = 0;
+    }
 
     last = plat_time();
     while (plat_poll()) {
@@ -1199,12 +1446,23 @@ int main(int argc, char **argv)
             }
         }
 
-        acc += plat_time() - last;
-        last = plat_time();
+        {
+            /* A frame that took one tick's time, give or take 2 ms, counts
+             * as exactly one tick: on a 60 Hz screen the clock and the
+             * refresh would otherwise drift apart and now and then run two
+             * ticks in one frame and none in the next -- a press that
+             * waits a whole frame to show. */
+            double now = plat_time(), dt = now - last;
+            if (dt > 1.0 / 60.0 - 0.002 && dt < 1.0 / 60.0 + 0.002)
+                dt = 1.0 / 60.0;
+            acc += dt;
+            last = now;
+        }
         if (acc > 0.25)
             acc = 0.25;
         if (acc < 1.0 / 60.0)
             continue;
+        pace_work_start();
 
         plat_size(&ww, &wh);
         fit_view(ww, wh, &vx, &vy, &vw, &vh);
@@ -1237,6 +1495,11 @@ int main(int argc, char **argv)
         while (acc >= 1.0 / 60.0) {
             int i;
 
+            /* UMK3_CRASH_TEST=<tick>: crash on purpose, to check the
+             * crash report and its message box */
+            if (getenv("UMK3_CRASH_TEST")
+                && ticks == atol(getenv("UMK3_CRASH_TEST")))
+                *(volatile int *)(uintptr_t)16 = 1;
             if (g_cfg_debug_keys && getenv("UMK3_DBG_OPEN")
                 && ticks == atol(getenv("UMK3_DBG_OPEN")))
                 dbg_menu_toggle();      /* a test opens the menu by script */
@@ -1313,6 +1576,9 @@ int main(int argc, char **argv)
                 if (dbg_menu_tick(&rq))
                     debug_request(&rq);
                 dbg_menu_draw();
+                /* drawn into the multisampled buffer: resolve it, or
+                 * render_present shows the last frame without the menu */
+                render_resolve();
                 acc -= 1.0 / 60.0;
                 ticks++;                /* the clock UMK3_SHOT counts */
                 continue;               /* the game does not tick */
@@ -1329,7 +1595,7 @@ int main(int argc, char **argv)
 
             clear_frame(ww, wh, vx, vy, vw, vh);
             lime_menu_advance_clock(1.0 / 60.0);
-            keyboard_touches();
+            keyboard_buttons();
             hud_keys();
             if (g_cfg_debug_keys && dbg_keys_on()) {
                 debug_keys();
@@ -1404,6 +1670,16 @@ int main(int argc, char **argv)
                 }
                 CurrentTask = 4;                /* Task_FEDestroy */
                 g_fight_p1 = -1;
+                g_fight_override = 1;
+            }
+            /* Character2Override is what makes Task_GameInit take our player
+             * two; only the VS screen clears it (FrontEnd.c, -1 on its
+             * entry), so a debug fight's opponent stayed for every Arcade
+             * fight after it. Task_GameInit has copied it once the fight is
+             * up: clear it then, so nothing of the debug fight remains. */
+            if (g_fight_override && CurrentTask == 6) {
+                Character2Override = -1;
+                g_fight_override = 0;
             }
         no_fight_yet:
             if (getenv("UMK3_SCREENS")) {
@@ -1425,6 +1701,36 @@ int main(int argc, char **argv)
                 }
             }
 
+            /* UMK3_LOG_P1=1: in a fight, every change of player one's
+             * frame (Players +0x14) or of the engine's button word
+             * (G +0x1c, TranslateJoybits' output), for input tests. */
+            if (getenv("UMK3_LOG_P1") && CurrentTask == 6 && G) {
+                extern char Players[];
+                static long last_fr = -1, last_bits = -1;
+                long fr = *(long *)(Players + 0x14);
+                long bits = *(long *)((char *)G + 0x1c);
+                extern long ButtonStates[7], JoystickState;
+                if (fr != last_fr || bits != last_bits)
+                    printf("tick %ld: p1 frame %ld bits %06lx btn %ld%ld%ld%ld%ld%ld%ld dial %ld keys %ld\n",
+                           ticks, fr, bits, ButtonStates[0], ButtonStates[1],
+                           ButtonStates[2], ButtonStates[3], ButtonStates[4],
+                           ButtonStates[5], ButtonStates[6], JoystickState,
+                           Player1NumButtons);
+                last_fr = fr;
+                last_bits = bits;
+            }
+            {
+                /* Task_LoadGeneralData (task 1, once at boot) loads the
+                 * saved settings again, after start_app, and put the saved
+                 * layout back over the launcher's: buttons=6 played with
+                 * five. Apply it again the tick the loading screen after
+                 * it (task 8, boot order 0, 1, 8, 2) hands over. */
+                static int was8;
+                if (was8 && CurrentTask != 8
+                    && (g_cfg_buttons == 5 || g_cfg_buttons == 6))
+                    Settings[4] = g_cfg_buttons;
+                was8 = CurrentTask == 8;
+            }
             /* UMK3_LOG_FADE=1: every start of a screen fade, for finding
              * who starts one. FE_FadeAdd < 0 fades out, > 0 back in. */
             if (getenv("UMK3_LOG_FADE")) {
@@ -1448,6 +1754,7 @@ int main(int argc, char **argv)
             ticks++;
             g_tick = ticks;
         }
+        plat_input_used();      /* the taps this frame's ticks have seen */
         plat_audio_update();
         render_present();
 
@@ -1471,8 +1778,10 @@ int main(int argc, char **argv)
             save_shot(ww, wh);
             break;
         }
+        pace_work_end();
         if (!plat_swap())
             break;
+        pace_frame();
     }
 
     plat_close();
