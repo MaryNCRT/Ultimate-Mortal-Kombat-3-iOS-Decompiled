@@ -1788,6 +1788,40 @@ typedef struct MESHREC {
 extern uint16_t RenderIndexes[];        /* 0x0036a820, slot 0x000f3244 */
 int WantThisFrame(long frame);
 
+/* Port, not in the binary: the select screen's (and p's) fighters load the
+ * _LITE skins, 256 square. From IPAD up the fight's own skin is taken
+ * instead, 1024 square and on the same layout -- _DIFFUSE2_LITE and
+ * _DIFFUSE_LITE2 become _DIFFUSE2, _DIFFUSE_LITE becomes _DIFFUSE -- and
+ * the _LITE one is still the fallback. */
+extern int PortTextureQuality;          /* runtime/draw_gl.c */
+
+static TEXTURE *port_load_lite(const char *path)
+{
+    static const char *const from[3] = { "_DIFFUSE2_LITE.", "_DIFFUSE_LITE2.",
+                                         "_DIFFUSE_LITE." };
+    static const char *const to[3]   = { "_DIFFUSE2.", "_DIFFUSE2.",
+                                         "_DIFFUSE." };
+    char big[200];
+    const char *hit;
+    TEXTURE *t;
+    int i;
+
+    if (PortTextureQuality > 0) {
+        for (i = 0; i < 3; i++) {
+            hit = strstr(path, from[i]);
+            if (hit != NULL && strlen(path) < sizeof(big) - 8) {
+                snprintf(big, sizeof(big), "%.*s%s%s", (int)(hit - path), path,
+                         to[i], hit + strlen(from[i]));
+                t = limeLoadTexture(big, 0, 0);
+                if (t != NULL)
+                    return t;
+                break;
+            }
+        }
+    }
+    return limeLoadTexture((char *)path, 0, 0);
+}
+
 ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
                                          char *bonesFile, char *lightingName,
                                          char *meshbaseFile, char *texBase,
@@ -2069,14 +2103,14 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
                 strcpy(texPath, "DUMMY_DIFFUSE_LITE.PNG");
             else
                 sprintf(texPath, "%s_DIFFUSE2_LITE.PNG", texBase);
-            c->diffuse2 = limeLoadTexture(texPath, 0, 0);
+            c->diffuse2 = port_load_lite(texPath);
 
             if (c->diffuse2 == NULL) {
                 if (dummy)
                     strcpy(texPath, "DUMMY_DIFFUSE_LITE.PNG");
                 else
                     sprintf(texPath, "%s_DIFFUSE_LITE2.PNG", texBase);
-                c->diffuse2 = limeLoadTexture(texPath, 0, 0);
+                c->diffuse2 = port_load_lite(texPath);
             }
         }
 
@@ -2084,7 +2118,7 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
             strcpy(texPath, "DUMMY_DIFFUSE_LITE.PNG");
         else
             sprintf(texPath, "%s_DIFFUSE_LITE.PNG", texBase);
-        c->diffuse = limeLoadTexture(texPath, 0, 0);
+        c->diffuse = port_load_lite(texPath);
     } else {
         int dummy = (strcmp(frameListName, "dummyframes.txt") == 0);
 

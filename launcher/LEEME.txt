@@ -32,7 +32,10 @@ COMO JUGAR
    relacion de aspecto (3:2, la original), el antialiasing (hasta x16),
    si quieres ocultar el joystick y los botones en pantalla y, si
    quieres, un marco (una imagen tuya) para los lados en pantalla
-   completa. Se guardan solos en umk3.ini.
+   completa, y la calidad de texturas: IPHONE (la original), IPAD
+   (letras y botones del iPad, texturas sin comprimir donde existen y
+   luchadores a 1024 en la seleccion) o SIN LIMITE (ademas agranda 4x
+   el HUD pequeno). Se guardan solos en umk3.ini.
    En "CONTROLES", categoria JUGADOR 1, eliges el esquema de 6 o de 5
    botones (el juego empieza con el que elijas) y cambias las teclas de
    cada uno por separado: haz clic en una accion y pulsa la tecla nueva

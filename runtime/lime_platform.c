@@ -555,6 +555,12 @@ static struct {
  * this signature used to drop. Nothing draws here, so it is not read -- but the
  * shape has to match or every argument after the fourth is misplaced. */
 #ifndef UMK3_REAL_GL   /* headless; see runtime/draw_gl.c for the windowed half */
+/* draw_gl.c's edge clamp; the headless build draws nothing */
+int  lime_port_edge_clamp(const float *uv, int stride,
+                          const unsigned short *idx, int n)
+{ (void)uv; (void)stride; (void)idx; (void)n; return 0; }
+void lime_port_edge_restore(int clamped) { (void)clamped; }
+
 void limeDrawSprite(TEXTURE *page, float x, float y, float w, float h,
                     float u, float v, float du, float dv,
                     const float *colour)

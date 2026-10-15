@@ -149,7 +149,10 @@ static int load_rgba(const char *path, LimeImage *out)
      * one extension and the device supplied another. */
     static const char *const exts[] = { ".pvr", ".PVR", NULL, ".png", ".PNG" };
     static const char *const exts_max[] = { ".png", ".PNG", NULL, ".pvr", ".PVR" };
-    const char *const *ext = PortTextureQuality >= 2 ? exts_max : exts;
+    /* Port, not in the binary: from IPAD up, the 38 sheets the bundle also
+     * ships as uncompressed PNG (the VS portraits, the logos, FE_METAL_BG,
+     * the lightning and vortex) are taken from the PNG, not the PVRTC. */
+    const char *const *ext = PortTextureQuality >= 1 ? exts_max : exts;
 
     const char *root = lime_platform_asset_root();
     char full[1200];
@@ -165,6 +168,31 @@ static int load_rgba(const char *path, LimeImage *out)
     memcpy(stem, path, n);
     stem[n] = 0;
 
+    /* Port, not in the binary: from IPAD up, a sheet the bundle also has
+     * at twice the size under an _IPAD name is taken from there -- the game
+     * font (MKFONT_0/1 -> MKFONT_IPAD_0/1, 2048 square, the grid its
+     * mkfont_ipad.ft2 is laid out on). The iPhone binary does not load it;
+     * the iPad build's Task_LoadGeneralData does. BUTTONS_TPAGE_IPAD is not
+     * swapped in here: the iPad build loads it for the fight only
+     * (GameInit_LoadABit) and keeps BUTTONS_TPAGE in the menus
+     * (FEInit_LoadABit), whose sample button draws the pressed cell --
+     * a glow on the iPad sheet. See GameInit_LoadABit, case 26. */
+    if (PortTextureQuality >= 1 && strncmp(stem, "MKFONT_", 7) == 0) {
+        char big[300];
+        size_t k = strlen(stem);
+
+        if (k >= 2 && stem[k - 2] == '_' && stem[k - 1] >= '0' && stem[k - 1] <= '9')
+            snprintf(big, sizeof(big), "%.*s_IPAD%s", (int)(k - 2), stem, stem + k - 2);
+        else
+            snprintf(big, sizeof(big), "%s_IPAD", stem);
+        for (e = 0; e < 2; e++) {
+            snprintf(full, sizeof(full), "%s/Textures/%s%s", root, big,
+                     e ? ".png" : ".PNG");
+            if (try_one(full, out))
+                return 1;
+        }
+    }
+
     for (e = 0; e < (int)(sizeof(exts) / sizeof(exts[0])); e++) {
         for (d = 0; d < (int)(sizeof(dirs) / sizeof(dirs[0])); d++) {
             if (ext[e] == NULL)
@@ -177,6 +205,96 @@ static int load_rgba(const char *path, LimeImage *out)
         }
     }
     return 0;
+}
+
+/* Port, not in the binary: SIN LIMITE's upscale of the small sheets.
+ *
+ * The HUD is drawn from tiny sheets -- DANGER.PNG is 64x16, the timer's
+ * COUNTDOWNFONT 128 square, NAMES_FONT and HUD_TPAGE (the bars, the round
+ * medallion) 256 -- uncompressed, with nothing bigger in either bundle (the
+ * iPad .ipa's textures are byte-for-byte the iPhone's). Magnified by the
+ * card's bilinear filter they go soft and blocky. So a sheet of at most 256
+ * on its longer side is enlarged four times here, once, at load: Catmull-Rom
+ * bicubic on premultiplied colour, and where the alpha is mostly hard
+ * (text, bars, icons -- not smoke or glows) the edge is tightened back to
+ * the width of a source pixel. The coordinates are 0..1, so nothing else
+ * changes. */
+static float cubic_w(float t)
+{
+    t = t < 0.0f ? -t : t;
+    if (t < 1.0f) return 1.5f * t * t * t - 2.5f * t * t + 1.0f;
+    if (t < 2.0f) return -0.5f * t * t * t + 2.5f * t * t - 4.0f * t + 2.0f;
+    return 0.0f;
+}
+
+static int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+static void upscale_small(LimeImage *img)
+{
+    const int S = 4, w = img->width, h = img->height;
+    const int W = w * S, H = h * S;
+    float *pm, *tmp;
+    uint8_t *out;
+    long hard = 0, n = (long)w * h;
+    int x, y, c, k, sharpen;
+
+    if (w <= 0 || h <= 0 || (w > 256 || h > 256) || (w < 8 && h < 8))
+        return;
+    for (k = 0; k < n; k++) {
+        uint8_t a = img->rgba[k * 4 + 3];
+        hard += (a < 24 || a > 231);
+    }
+    sharpen = hard * 10 >= n * 9;        /* 90% of the pixels hard */
+
+    pm  = (float *)malloc((size_t)n * 4 * sizeof(float));
+    tmp = (float *)malloc((size_t)W * h * 4 * sizeof(float));
+    out = (uint8_t *)malloc((size_t)W * H * 4);
+    if (!pm || !tmp || !out) { free(pm); free(tmp); free(out); return; }
+
+    for (k = 0; k < n; k++) {
+        float a = img->rgba[k * 4 + 3] / 255.0f;
+        for (c = 0; c < 3; c++) pm[k * 4 + c] = img->rgba[k * 4 + c] * a;
+        pm[k * 4 + 3] = img->rgba[k * 4 + 3];
+    }
+    /* across, then down; samples at pixel centres, edges clamped */
+    for (y = 0; y < h; y++)
+        for (x = 0; x < W; x++) {
+            float sx = (x + 0.5f) / S - 0.5f, acc[4] = { 0, 0, 0, 0 };
+            int x0 = (int)(sx < 0 ? sx - 1 : sx);
+            for (k = -1; k <= 2; k++) {
+                float wt = cubic_w(sx - (float)(x0 + k));
+                const float *q = pm + ((size_t)y * w + clampi(x0 + k, 0, w - 1)) * 4;
+                for (c = 0; c < 4; c++) acc[c] += q[c] * wt;
+            }
+            for (c = 0; c < 4; c++) tmp[((size_t)y * W + x) * 4 + c] = acc[c];
+        }
+    for (y = 0; y < H; y++) {
+        float sy = (y + 0.5f) / S - 0.5f;
+        int y0 = (int)(sy < 0 ? sy - 1 : sy);
+        for (x = 0; x < W; x++) {
+            float acc[4] = { 0, 0, 0, 0 }, a;
+            uint8_t *o = out + ((size_t)y * W + x) * 4;
+            for (k = -1; k <= 2; k++) {
+                float wt = cubic_w(sy - (float)(y0 + k));
+                const float *q = tmp + ((size_t)clampi(y0 + k, 0, h - 1) * W + x) * 4;
+                for (c = 0; c < 4; c++) acc[c] += q[c] * wt;
+            }
+            a = acc[3];
+            if (sharpen) {               /* a source pixel's ramp -> a quarter of it */
+                a = (a - 127.5f) * 2.5f + 127.5f;
+            }
+            a = a < 0.0f ? 0.0f : (a > 255.0f ? 255.0f : a);
+            for (c = 0; c < 3; c++) {
+                float v = acc[3] > 0.5f ? acc[c] / (acc[3] / 255.0f) : 0.0f;
+                o[c] = (uint8_t)(v < 0.0f ? 0.0f : (v > 255.0f ? 255.0f : v + 0.5f));
+            }
+            o[3] = (uint8_t)(a + 0.5f);
+        }
+    }
+    free(pm); free(tmp); free(img->rgba);
+    img->rgba = out;
+    img->width = W;
+    img->height = H;
 }
 
 /* armv7 0x000670a0 keeps the texture's own name in its first 0x40 bytes:
@@ -223,6 +341,8 @@ TEXTURE *limeLoadTexture(const char *path, int a, int b)
             fprintf(stderr, "[tex] %s MISSING\n", path);
         return NULL;                    /* the failure branch the engine has */
     }
+    if (PortTextureQuality >= 2)
+        upscale_small(&img);
     if (getenv("LIME_TRACE_TEX"))
         fprintf(stderr, "[tex] %s %dx%d\n", path, img.width, img.height);
 
@@ -400,6 +520,58 @@ void limeSetColourMask(long r, long g, long b, long a)
 
 /* --------------------------------------------------------------- sprites */
 
+/* Port, not in the binary: the edge clamp.
+ *
+ * Every texture keeps GL_REPEAT, as in the binary (see limeLoadTexture), and
+ * with linear filtering a draw that reaches a texture's edge then blends in
+ * the OPPOSITE edge. Art with a transparent or black margin -- a select-screen
+ * portrait is u 0..1 with its right part empty -- shows that as a 1-pixel
+ * light line along the edge at PC resolutions. A draw whose texture
+ * coordinates all stay inside 0..1 never needs REPEAT, so it is drawn with
+ * CLAMP_TO_EDGE and REPEAT is put back after; a draw that runs past 1.0 (the
+ * font's second sheet, a tiled stage floor) keeps REPEAT untouched.
+ *
+ * `uv` is the first U, `stride` the distance between vertices in floats;
+ * `idx` the indices drawn, or NULL for vertices 0..n-1. Returns whether it
+ * clamped, for lime_port_edge_restore. */
+#define EDGE_EPS 0.0001f
+
+static int edge_clamp_if_inside(float u0, float u1, float v0, float v1)
+{
+    if (u0 < -EDGE_EPS || u1 > 1.0f + EDGE_EPS ||
+        v0 < -EDGE_EPS || v1 > 1.0f + EDGE_EPS)
+        return 0;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, 0x812F);  /* CLAMP_TO_EDGE */
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F);
+    return 1;
+}
+
+int lime_port_edge_clamp(const float *uv, int stride,
+                         const unsigned short *idx, int n)
+{
+    float u0 = 1e30f, u1 = -1e30f, v0 = 1e30f, v1 = -1e30f;
+    int i;
+
+    if (uv == NULL || n <= 0)
+        return 0;
+    for (i = 0; i < n; i++) {
+        const float *t = uv + (size_t)(idx ? idx[i] : i) * (size_t)stride;
+        if (t[0] < u0) u0 = t[0];
+        if (t[0] > u1) u1 = t[0];
+        if (t[1] < v0) v0 = t[1];
+        if (t[1] > v1) v1 = t[1];
+    }
+    return edge_clamp_if_inside(u0, u1, v0, v1);
+}
+
+void lime_port_edge_restore(int clamped)
+{
+    if (!clamped)
+        return;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+}
+
 static void quad(TEXTURE *page, float x, float y, float w, float h,
                  float u, float v, float du, float dv,
                  const float *colour, float angle)
@@ -429,12 +601,19 @@ static void quad(TEXTURE *page, float x, float y, float w, float h,
     /* `du`/`dv` are extents, and a negative one mirrors -- the front end flips
      * a sprite that way rather than carrying a second texture. Adding the
      * extent to the origin handles both signs without a branch. */
+    /* edge clamp, see lime_port_edge_clamp */
+    const int clamp = edge_clamp_if_inside(du < 0.0f ? u + du : u,
+                                           du < 0.0f ? u : u + du,
+                                           dv < 0.0f ? v + dv : v,
+                                           dv < 0.0f ? v : v + dv);
     glBegin(GL_QUADS);
         glTexCoord2f(u,      v);       glVertex2f(x,     y);
         glTexCoord2f(u + du, v);       glVertex2f(x + w, y);
         glTexCoord2f(u + du, v + dv);  glVertex2f(x + w, y + h);
         glTexCoord2f(u,      v + dv);  glVertex2f(x,     y + h);
     glEnd();
+
+    lime_port_edge_restore(clamp);
 
     if (angle != 0.0f)
         glPopMatrix();
@@ -554,7 +733,11 @@ static void face_draw(TEXTURE *tex, const float *xyz, const float *uv,
     glEnableClientState(GL_VERTEX_ARRAY);
     glTexCoordPointer(2, GL_FLOAT, 0, uv);
     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    {
+        const int clamp = lime_port_edge_clamp(uv, 2, NULL, 4);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        lime_port_edge_restore(clamp);
+    }
     glDisable(GL_TEXTURE_2D);
 }
 

@@ -15,47 +15,43 @@ static uint32_t rd_u32(const uint8_t *p)
            ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
-/* Endpoint A -- the top 16 bits of the colour word. */
-static void colour_a(uint16_t packed, int *out)
+/* The two endpoint colours of a block, by the PVRTC format (PowerVR's
+ * reference decoder, PVRTDecompress): 5-bit red, green and blue and 4-bit
+ * alpha, widened to 8 bits only once the pixel is mixed.
+ *
+ * Colour A is the LOW 16 bits of the colour word. Bit 0 is the block's
+ * modulation flag, so A's blue has one bit fewer than B's: opaque 5-5-4,
+ * translucent 3-4-4-3 (alpha-red-green-blue). Colour B is the HIGH 16 bits:
+ * opaque 5-5-5, translucent 3-4-4-4. A translucent endpoint's three alpha
+ * bits become aaa0, so it reaches at most 14 of 15. */
+static void colour_a(uint32_t c, int *out)
 {
-    if (packed & 0x8000) {                 /* opaque: 5-5-5 */
-        int r = (packed >> 10) & 0x1F, g = (packed >> 5) & 0x1F, b = packed & 0x1F;
-        out[0] = (r << 3) | (r >> 2);
-        out[1] = (g << 3) | (g >> 2);
-        out[2] = (b << 3) | (b >> 2);
-        out[3] = 255;
-        return;
+    if (c & 0x8000) {
+        out[0] = (int)((c & 0x7c00) >> 10);
+        out[1] = (int)((c & 0x3e0) >> 5);
+        out[2] = (int)((c & 0x1e) | ((c & 0x1e) >> 4));
+        out[3] = 0xf;
+    } else {
+        out[0] = (int)(((c & 0xf00) >> 7) | ((c & 0xf00) >> 11));
+        out[1] = (int)(((c & 0xf0) >> 3) | ((c & 0xf0) >> 7));
+        out[2] = (int)(((c & 0xe) << 1) | ((c & 0xe) >> 2));
+        out[3] = (int)((c & 0x7000) >> 11);
     }
-    int a = (packed >> 12) & 0x07;         /* translucent: 3-4-4-3 */
-    int r = (packed >> 8) & 0x0F;
-    int g = (packed >> 4) & 0x0F;
-    int b = (packed >> 1) & 0x07;
-    out[0] = (r << 4) | r;
-    out[1] = (g << 4) | g;
-    out[2] = (b << 5) | (b << 2) | (b >> 1);
-    out[3] = (a << 5) | (a << 2) | (a >> 1);
 }
 
-/* Endpoint B -- the low 16 bits. B has four bits of blue where A has three,
- * because A gives up its low bit to the modulation flag. */
-static void colour_b(uint16_t packed, int *out)
+static void colour_b(uint32_t c, int *out)
 {
-    if (packed & 0x8000) {                 /* opaque: 5-5-5 */
-        int r = (packed >> 10) & 0x1F, g = (packed >> 5) & 0x1F, b = packed & 0x1F;
-        out[0] = (r << 3) | (r >> 2);
-        out[1] = (g << 3) | (g >> 2);
-        out[2] = (b << 3) | (b >> 2);
-        out[3] = 255;
-        return;
+    if (c & 0x80000000u) {
+        out[0] = (int)((c & 0x7c000000u) >> 26);
+        out[1] = (int)((c & 0x3e00000u) >> 21);
+        out[2] = (int)((c & 0x1f0000u) >> 16);
+        out[3] = 0xf;
+    } else {
+        out[0] = (int)(((c & 0xf000000u) >> 23) | ((c & 0xf000000u) >> 27));
+        out[1] = (int)(((c & 0xf00000u) >> 19) | ((c & 0xf00000u) >> 23));
+        out[2] = (int)(((c & 0xf0000u) >> 15) | ((c & 0xf0000u) >> 19));
+        out[3] = (int)((c & 0x70000000u) >> 27);
     }
-    int a = (packed >> 12) & 0x07;         /* translucent: 3-4-4-4 */
-    int r = (packed >> 8) & 0x0F;
-    int g = (packed >> 4) & 0x0F;
-    int b = packed & 0x0F;
-    out[0] = (r << 4) | r;
-    out[1] = (g << 4) | g;
-    out[2] = (b << 4) | b;
-    out[3] = (a << 5) | (a << 2) | (a >> 1);
 }
 
 /* Blocks are stored in Morton order: the bits of x and y interleaved, with
@@ -85,6 +81,16 @@ static int floor_div(float f)
     return (f < 0.0f && (float)i != f) ? i - 1 : i;
 }
 
+/* Modulation, per pixel: 0..8, the weight of colour B in eighths. PUNCH
+ * marks a 4bpp punch-through (transparent) pixel; INTERP a 2bpp pixel whose
+ * value comes from its neighbours, with the axis in its low two bits until
+ * it is resolved. */
+#define MOD_PUNCH  0x10
+#define MOD_INTERP 0x20
+
+static const uint8_t MOD_DIRECT[4] = { 0, 3, 5, 8 };
+static const uint8_t MOD_PUNCHT[4] = { 0, 4, 4 | MOD_PUNCH, 8 };
+
 static bool decode_pvrtc(const uint8_t *raw, long raw_len, int width, int height,
                          int two_bpp, LimeImage *out)
 {
@@ -94,39 +100,88 @@ static bool decode_pvrtc(const uint8_t *raw, long raw_len, int width, int height
     if (raw_len < (long)bx * by * BLOCK_BYTES) return false;
 
     const int nb = bx * by;
-    uint32_t *mods = malloc((size_t)nb * sizeof(uint32_t));
-    uint8_t  *mode = malloc((size_t)nb);
+    const int gw = bx * bw, gh = by * bh;      /* the block grid, in pixels */
     int      *ca   = malloc((size_t)nb * 4 * sizeof(int));
     int      *cb   = malloc((size_t)nb * 4 * sizeof(int));
+    uint8_t  *mod  = malloc((size_t)gw * (size_t)gh);
     uint8_t  *rgba = malloc((size_t)width * (size_t)height * 4);
-    if (!mods || !mode || !ca || !cb || !rgba) {
-        free(mods); free(mode); free(ca); free(cb); free(rgba);
+    if (!ca || !cb || !mod || !rgba) {
+        free(ca); free(cb); free(mod); free(rgba);
         return false;
     }
 
+    /* 1. each block's endpoints, and each pixel's modulation */
     for (int j = 0; j < by; j++) {
         for (int i = 0; i < bx; i++) {
             long off = (long)morton_index(i, j, bx, by) * BLOCK_BYTES;
             uint32_t m = rd_u32(raw + off);
             uint32_t c = rd_u32(raw + off + 4);
             int k = j * bx + i;
-            mods[k] = m;
-            mode[k] = (uint8_t)(c & 1);
-            /* Colour B is the LOW 16 bits and is NOT shifted: the modulation
-             * flag shares bit 0 with the least significant bit of blue rather
-             * than displacing the field. Shifting corrupts every channel. */
-            colour_b((uint16_t)(c & 0xFFFF), &cb[k * 4]);
-            colour_a((uint16_t)((c >> 16) & 0xFFFF), &ca[k * 4]);
+            int flag = (int)(c & 1);
+            int how = 0;
+
+            colour_a(c, &ca[k * 4]);
+            colour_b(c, &cb[k * 4]);
+
+            if (two_bpp && flag) {
+                /* Interpolated 2bpp. Bit 0 asks for one axis only and bit 20
+                 * says which; then bit 1 stands in for bit 0, and bit 21 for
+                 * bit 20, as data. */
+                if (m & 1u) {
+                    how = (m & (1u << 20)) ? 2 : 1;   /* 2 vertical, 1 horizontal */
+                    if (m & (1u << 21)) m |= (1u << 20);
+                    else                m &= ~(1u << 20);
+                }
+                if (m & 2u) m |= 1u; else m &= ~1u;
+            }
+
+            for (int y = 0; y < bh; y++) {
+                uint8_t *row = mod + (size_t)(j * bh + y) * gw + (size_t)i * bw;
+                for (int x = 0; x < bw; x++) {
+                    uint8_t v;
+                    if (!two_bpp) {
+                        int sel = (int)((m >> ((y * 4 + x) * 2)) & 3u);
+                        v = flag ? MOD_PUNCHT[sel] : MOD_DIRECT[sel];
+                    } else if (!flag) {
+                        v = ((m >> (y * 8 + x)) & 1u) ? 8 : 0;
+                    } else if (((x ^ y) & 1) == 0) {
+                        /* the stored half of the checkerboard, 2 bits each */
+                        v = MOD_DIRECT[m & 3u];
+                        m >>= 2;
+                    } else {
+                        v = (uint8_t)(MOD_INTERP | how);
+                    }
+                    row[x] = v;
+                }
+            }
         }
     }
 
-    static const float W_PUNCH[4]  = { 0.0f, 0.5f, 0.5f, 1.0f };
-    static const float W_NORMAL[4] = { 0.0f, 0.375f, 0.625f, 1.0f };
+    /* 2. an interpolated 2bpp pixel is the average of its neighbours -- the
+     *    stored half of the checkerboard, or a direct block's pixels --
+     *    wrapping across the texture as the block grid does */
+    if (two_bpp) {
+        for (int y = 0; y < gh; y++) {
+            for (int x = 0; x < gw; x++) {
+                uint8_t *p = mod + (size_t)y * gw + x;
+                if (!(*p & MOD_INTERP))
+                    continue;
+                int l = mod[(size_t)y * gw + wrapi(x - 1, gw)] & 0xf;
+                int r = mod[(size_t)y * gw + wrapi(x + 1, gw)] & 0xf;
+                int u = mod[(size_t)wrapi(y - 1, gh) * gw + x] & 0xf;
+                int d = mod[(size_t)wrapi(y + 1, gh) * gw + x] & 0xf;
+                int how = *p & 3;
+                *p = (uint8_t)(how == 1 ? (l + r + 1) / 2
+                             : how == 2 ? (u + d + 1) / 2
+                             : (l + r + u + d + 2) / 4);
+            }
+        }
+    }
 
+    /* 3. the endpoints of the four blocks whose centres surround the pixel
+     *    (the grid sits half a block off), bilinearly, mixed by modulation */
     for (int py = 0; py < height; py++) {
         for (int px = 0; px < width; px++) {
-            /* The endpoints for a pixel come from the four blocks whose
-             * centres surround it, so the block grid sits half a block off. */
             float fx = (float)(px - bw / 2) / (float)bw;
             float fy = (float)(py - bh / 2) / (float)bh;
             int i0 = floor_div(fx), j0 = floor_div(fy);
@@ -139,39 +194,25 @@ static bool decode_pvrtc(const uint8_t *raw, long raw_len, int width, int height
             float w00 = (1.0f - u) * (1.0f - v), w10 = u * (1.0f - v);
             float w01 = (1.0f - u) * v,          w11 = u * v;
 
-            float A[4], B[4];
-            for (int ch = 0; ch < 4; ch++) {
-                A[ch] = (float)ca[k00*4+ch]*w00 + (float)ca[k10*4+ch]*w10 +
-                        (float)ca[k01*4+ch]*w01 + (float)ca[k11*4+ch]*w11;
-                B[ch] = (float)cb[k00*4+ch]*w00 + (float)cb[k10*4+ch]*w10 +
-                        (float)cb[k01*4+ch]*w01 + (float)cb[k11*4+ch]*w11;
-            }
-
-            /* modulation comes from the block the pixel physically sits in */
-            int mk = (py / bh) * bx + (px / bw);
-            int lx = px % bw, ly = py % bh;
-            float w;
-            int punch = 0;
-            if (two_bpp) {
-                w = ((mods[mk] >> (ly * 8 + lx)) & 1u) ? 1.0f : 0.0f;
-            } else {
-                int sel = (int)((mods[mk] >> ((ly * 4 + lx) * 2)) & 3u);
-                if (mode[mk]) { w = W_PUNCH[sel]; punch = (sel == 2); }
-                else          { w = W_NORMAL[sel]; }
-            }
+            int mv = mod[(size_t)py * gw + px];
+            float w = (float)(mv & 0xf) / 8.0f;
 
             uint8_t *o = rgba + ((size_t)py * (size_t)width + (size_t)px) * 4;
-            for (int ch = 0; ch < 3; ch++) {
-                float val = B[ch] * (1.0f - w) + A[ch] * w + 0.5f;
+            for (int ch = 0; ch < 4; ch++) {
+                float A = (float)ca[k00*4+ch]*w00 + (float)ca[k10*4+ch]*w10 +
+                          (float)ca[k01*4+ch]*w01 + (float)ca[k11*4+ch]*w11;
+                float B = (float)cb[k00*4+ch]*w00 + (float)cb[k10*4+ch]*w10 +
+                          (float)cb[k01*4+ch]*w01 + (float)cb[k11*4+ch]*w11;
+                float val = (A * (1.0f - w) + B * w)
+                          * (ch < 3 ? 255.0f / 31.0f : 255.0f / 15.0f) + 0.5f;
                 o[ch] = (uint8_t)(val < 0.0f ? 0.0f : (val > 255.0f ? 255.0f : val));
             }
-            float al = B[3] * (1.0f - w) + A[3] * w + 0.5f;
-            o[3] = punch ? 0 :
-                   (uint8_t)(al < 0.0f ? 0.0f : (al > 255.0f ? 255.0f : al));
+            if (mv & MOD_PUNCH)
+                o[3] = 0;
         }
     }
 
-    free(mods); free(mode); free(ca); free(cb);
+    free(ca); free(cb); free(mod);
     out->width = width;
     out->height = height;
     out->rgba = rgba;

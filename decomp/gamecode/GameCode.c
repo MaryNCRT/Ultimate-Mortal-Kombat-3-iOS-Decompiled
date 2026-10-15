@@ -11,6 +11,8 @@
 #include "lime_glapi.h"   /* the GL calls' calling convention */
 #include <string.h>   /* memset, for clearSpriteListsAndEvents */
 
+extern int PortTextureQuality;          /* runtime/draw_gl.c, port only */
+
 /* TEXTURETOLOAD is the engine's {name, destination} pair — see decomp/lime,
  * where LIME_SetSceneTextures walks the same shape. Declared rather than
  * included: gamecode has no header of its own yet and one file should not
@@ -7100,7 +7102,12 @@ long GameInit_LoadABit(long step)
 
     case 26:
         PauseBGTexture = limeLoadTexture("PAUSEBG.PNG", 0, 0);
-        ButtonsTPage   = (TEXTURE *)limeLoadTexture("BUTTONS_TPAGE.PNG", 0, 0);
+        /* Port, not in the binary: from texture quality IPAD up, the iPad
+         * build's sheet, which its own GameInit_LoadABit loads here (the
+         * menus keep BUTTONS_TPAGE, as in that build's FEInit_LoadABit). */
+        ButtonsTPage   = (TEXTURE *)limeLoadTexture(PortTextureQuality >= 1
+                                                    ? "BUTTONS_TPAGE_IPAD.PNG"
+                                                    : "BUTTONS_TPAGE.PNG", 0, 0);
         return 0;
 
     case 27: {

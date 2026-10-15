@@ -163,6 +163,15 @@ animation, the font, matrices. Formats are documented in `docs/*-FORMAT.md`.
 mixing, MP3 music; Win32 and SDL2 backends), `gamecode_globals.c` (generated
 storage for every global the decompiled code declares, see 4.2).
 
+Texture quality (`texture_quality=` / `UMK3_TEXQ`, all Port, not in the
+binary): `iphone` loads what the iPhone build loads; `ipad` adds the iPad
+build's `MKFONT_IPAD` font sheets and, in the fight only, `BUTTONS_TPAGE_IPAD`, prefers a `.png` twin over a `.pvr`,
+and gives the select screen the 1024 fight skins (`port_load_lite`,
+Players.c); `max` also upscales sheets of 256 or less 4x at load
+(`upscale_small`). Every texture keeps GL_REPEAT as on the device; a draw
+whose uv stays inside [0,1] is clamped to edge for that draw only, which is
+what removed the white seams (`lime_port_edge_clamp`).
+
 ---
 
 ## 3. Where things are

@@ -938,6 +938,10 @@ void CreateFadedRGBS(const uint8_t *src, uint8_t *dst, float level, long count,
  * GL_TEXTURE, an invalid enum there, which GL ignores -- and is kept.
  */
 extern long limeRenderedPolyCount;
+/* Port, not in the binary: draw_gl.c's edge clamp */
+int  lime_port_edge_clamp(const float *uv, int stride,
+                          const unsigned short *idx, int n);
+void lime_port_edge_restore(int clamped);
 extern limeVECTOR3 *RenderVerts;
 
 void LIME_RenderMeshSingleIndexed(void *rec, TEXTURE *tex, float alpha,
@@ -1002,7 +1006,13 @@ void LIME_RenderMeshSingleIndexed(void *rec, TEXTURE *tex, float alpha,
         glEnable(GL_TEXTURE_2D);
     }
 
-    glDrawElements(GL_TRIANGLES, nfaces * 3, GL_UNSIGNED_SHORT, indices);
+    {   /* Port, not in the binary: the edge clamp (draw_gl.c) */
+        const int clamp = tex ? lime_port_edge_clamp((const float *)uvs, 2,
+                                   (const unsigned short *)indices,
+                                                     nfaces * 3) : 0;
+        glDrawElements(GL_TRIANGLES, nfaces * 3, GL_UNSIGNED_SHORT, indices);
+        lime_port_edge_restore(clamp);
+    }
 
     glClientActiveTexture(GL_TEXTURE1);
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
@@ -1230,8 +1240,13 @@ void LIME_RenderMeshSingle(MESHINFO *mesh, TEXTURE *t0, TEXTURE *t1,
 
     glPushMatrix();                     /* direct, NOT LIME_PushMatrix */
     glScalef(scale, scale, scale);
-    glDrawElements(GL_TRIANGLES, mesh->numFaces * 3,
-                   GL_UNSIGNED_SHORT, mesh->indices);   /* +0x1c */
+    {   /* Port, not in the binary: the edge clamp (draw_gl.c) */
+        const int clamp = t0 ? lime_port_edge_clamp(&mesh->verts[0].u, 4,
+                                   mesh->indices, mesh->numFaces * 3) : 0;
+        glDrawElements(GL_TRIANGLES, mesh->numFaces * 3,
+                       GL_UNSIGNED_SHORT, mesh->indices);   /* +0x1c */
+        lime_port_edge_restore(clamp);
+    }
     glPopMatrix();
 
     glDepthMask(1);                     /* direct, not limeEnableDepthWrites */

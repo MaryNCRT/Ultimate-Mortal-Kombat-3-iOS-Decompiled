@@ -19,6 +19,8 @@ The current build is **0.0.8 alpha** ([notes](RELEASE-0.0.8-alpha.md)), announce
 rewritten on 2026-10-09 (their notes stay in `docs/`). What each release fixed,
 with addresses, is in PROGRESS.md, "Release history".
 
+**Since 0.0.9 (2026-10-15):** texture quality option and texture fixes, see PROGRESS.md.
+
 ## Where the project actually stands (2026-10-10, alpha 0.0.8)
 
 **Start with [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)** -- how the game
