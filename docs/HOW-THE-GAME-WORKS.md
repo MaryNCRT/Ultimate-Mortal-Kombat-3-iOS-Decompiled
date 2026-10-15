@@ -377,7 +377,7 @@ second exe for tests by changing the `-o` line of a copy of `link.rsp`.
 
 **From source on Linux/macOS:** CMake, target `umk3-game` (see the README).
 
-**A release:** `npm run dist` in `launcher/app`, then `python launcher/make_release.py launcher/app/dist/win-unpacked <out dir> --zip` (the launcher goes unpacked to `launcher\bin\`, and a 19 KB stub becomes `UMK3-Launcher.exe`),
+**A release:** bump `version` in `launcher/app/package.json` (the updater compares it with the newest GitHub release), `npm run dist` in `launcher/app`, then `python launcher/make_release.py launcher/app/dist/win-unpacked <out dir> --zip` (the launcher goes unpacked to `launcher\bin\`, and a 19 KB stub becomes `UMK3-Launcher.exe`),
 then build that zip once from an `.ipa` to check it before publishing.
 
 ---
@@ -392,8 +392,12 @@ contributions:
   constants with `cd.py`. Several such fixes were one-line swaps.
 - **A missing sound**: is the event posted (`UMK3_LOG_SOUND=1`)? Is the file in
   the sound table?
-- **Port features** that were never in the original (widescreen, frame rate,
-  in-game windows for the ads): issues #22, #23, #24 discuss them.
+- **Port features** that were never in the original: a higher frame rate,
+  in-game windows for the ads (issues #23, #24 discuss them), the monitor
+  choice and other renderers.
+- **Wide-screen stragglers**: a menu element off centre in 16:9/21:9 is a
+  site that scales a position by `FE_WidthScale` itself; add `FE_XC` there
+  (FrontEnd.c, see `FE_X`).
 - **Linux/macOS launcher.**
 
 Open an issue saying what you are taking. Send logs (`logs\`) with bug reports.

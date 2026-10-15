@@ -172,8 +172,8 @@ If that last command prints zero divergences, your setup is correct and you are 
 
 ## 5. Where you could actually help
 
-The decompilation is finished and the game runs: alpha 0.0.5 plays the menus,
-Arcade to the end and whole fights on Windows. What is left is fixing the
+The decompilation is finished and the game runs: alpha 0.1.0 plays the menus,
+Arcade to the end and whole fights on Windows, in 3:2, 4:3, 16:9 or 21:9. What is left is fixing the
 places where the C and the binary still disagree, as players find them.
 
 Read [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md) next -- it explains how the
