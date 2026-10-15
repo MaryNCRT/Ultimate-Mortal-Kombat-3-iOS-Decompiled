@@ -91,6 +91,7 @@
 #include "platform/platform.h"
 #include "platform/gl.h"
 #include "debug_menu.h"
+#include "settings_menu.h"
 
 /* A scripted run (UMK3_SHOT) ignores the real keyboard, as it ignores the
  * mouse: a test window takes the focus when it opens, and whoever is typing
@@ -100,7 +101,8 @@ static long g_tick;                     /* the tick count, for UMK3_KEYS */
 
 /* UMK3_KEYS="tick:keys:hold;..." -- player one's keys pressed by script, so a
  * test can type a move: keys joined with '+' from up down left right hp lp
- * bl hk lk run s (the special button), or p b k r for five buttons; held
+ * bl hk lk run s (the special button), or p b k r for five buttons, esc
+ * (the settings menu) and ok (Enter); held
  * for `hold` ticks (default 4).
  * Example, Scorpion's spear: "1000:left:4;1005:left:4;1010:lp:4". */
 static int scripted_key(int code)
@@ -111,6 +113,7 @@ static int scripted_key(int code)
         { "bl", PK_BL }, { "hk", PK_HK }, { "lk", PK_LK },
         { "run", PK_RUN }, { "s", PK_SPECIAL },
         { "p", PK_5_P }, { "b", PK_5_B }, { "k", PK_5_K }, { "r", PK_5_R },
+        { "esc", PK_SETTINGS }, { "ok", PK_OK },
     };
     const char *q = getenv("UMK3_KEYS");
 
@@ -149,6 +152,7 @@ static int scripted_key(int code)
 }
 #define plat_key(code) (g_keys_off ? scripted_key(code) \
                         : ((plat_key)(code) || scripted_key(code)))
+static int game_key(int code) { return plat_key(code); }
 
 #define VIRT_W 480
 #define VIRT_H 320
@@ -760,6 +764,11 @@ static int  g_cfg_debug_keys;          /* debug_keys=1: F9..F12, see debug_keys(
 static int  g_cfg_skip_intro;          /* skip_intro=1: no publisher logos */
 static char g_cfg_lang[8];
 static char g_cfg_frame[1024];        /* marco=: the picture behind the bars */
+/* What the settings menu (settings_menu.c) writes back: umk3.ini's path,
+ * aspect= as written, pad= and p2pad= (port). */
+static char g_ini_path[1100];
+static char g_cfg_aspect[8] = "3:2";
+static char g_cfg_pad[2][32] = { "auto", "auto" };
 
 /* Player two's lines, "p2" and then the name player one's would have:
  * p2pad=, p2pad_<action>=, p2pad5_<p|b|k|r>=, p2key_<up..run|special>=,
@@ -773,8 +782,10 @@ static void read_config_p2(const char *n, const char *v)
     static const int at5[] = { 0, 2, 3, 5 };
     int i;
 
-    if (strcmp(n, "pad") == 0)
+    if (strcmp(n, "pad") == 0) {
         plat_pad2_select(v);
+        snprintf(g_cfg_pad[1], sizeof g_cfg_pad[1], "%s", v);
+    }
     else if (strncmp(n, "pad5_", 5) == 0) {
         for (i = 0; i < 4; i++)
             if (strcmp(n + 5, names5[i]) == 0)
@@ -808,6 +819,7 @@ static void read_config(const char *dir)
     FILE *f;
 
     snprintf(path, sizeof path, "%s%s", dir, "umk3.ini");
+    snprintf(g_ini_path, sizeof g_ini_path, "%s", path);
     f = fopen(path, "r");
     if (!f)
         return;
@@ -850,8 +862,11 @@ static void read_config(const char *dir)
             g_cfg_debug_keys = atoi(v) != 0;
         else if (strcmp(line, "skip_intro") == 0)
             g_cfg_skip_intro = atoi(v) != 0;
-        else if (strcmp(line, "aspect") == 0)
+        else if (strcmp(line, "aspect") == 0) {
             g_aspect = parse_aspect(v);
+            snprintf(g_cfg_aspect, sizeof g_cfg_aspect, "%s",
+                     g_aspect == 1.5f ? "3:2" : v);
+        }
         else if (strcmp(line, "ui_size") == 0)        /* iphone or ipad */
             g_ui_k = _stricmp(v, "ipad") == 0 ? 2.0f : 1.0f;
         else if (strcmp(line, "texture_quality") == 0) {
@@ -890,8 +905,10 @@ static void read_config(const char *dir)
             else if (strcmp(line + 4, "moves") == 0)
                 g_pad_moves = pad_combo(v);
         }
-        else if (strcmp(line, "pad") == 0)    /* auto, off, xinput, vvvv:pppp */
+        else if (strcmp(line, "pad") == 0) {  /* auto, off, xinput, vvvv:pppp */
             plat_pad_select(v);
+            snprintf(g_cfg_pad[0], sizeof g_cfg_pad[0], "%s", v);
+        }
         else if (strcmp(line, "hide_controls") == 0)
             PortHideControls = atoi(v) != 0;
         else if (strncmp(line, "key_", 4) == 0) {
@@ -922,6 +939,7 @@ static void read_config(const char *dir)
                     { "dbg_scr_prev", PK_DBG_SCR_PREV },
                     { "dbg_scr_next", PK_DBG_SCR_NEXT },
                     { "dbg_scr_menu", PK_DBG_SCR_MENU },
+                    { "settings", PK_SETTINGS },
                 };
                 for (i = 0; i < (int)(sizeof dbg / sizeof dbg[0]); i++)
                     if (strcmp(line + 4, dbg[i].n) == 0)
@@ -1849,6 +1867,230 @@ static void pace_work_end(void)
     g_pace_work = w > g_pace_work ? w : g_pace_work * 0.98 + w * 0.02;
 }
 
+/* ------------------------------------------------- the settings menu's side
+ *
+ * Port, not in the binary: what settings_menu.c changes while the game
+ * runs, and the startup code it shares. */
+static char g_root[1100];
+static int  g_frame_loaded;
+
+/* The picture for the bars: marco= in umk3.ini, else marco.png beside the
+ * exe; none, and the bars stay black. Once, when a fullscreen first needs
+ * it. */
+static void load_frame(void)
+{
+    if (g_frame_loaded)
+        return;
+    g_frame_loaded = 1;
+    if (!dbg_frame_load(g_cfg_frame[0] ? g_cfg_frame : NULL)) {
+        char p[1100];
+        snprintf(p, sizeof p, "%s", g_root);
+        if (strlen(p) > 3 && (strrchr(p, '\\') || strrchr(p, '/'))) {
+            char *sl = strrchr(p, '\\') ? strrchr(p, '\\') : strrchr(p, '/');
+            snprintf(sl + 1, sizeof p - (size_t)(sl + 1 - p), "marco.png");
+            dbg_frame_load(p);
+        }
+    }
+}
+
+/* The surfaces from g_aspect and g_ui_k. Narrower than 3:2 keeps the width
+ * and grows the height (4:3 at 480 wide is 480x360, the iPad's shape);
+ * wider keeps the height (16:9 at 320 high is 568x320, the iPhone 5's).
+ * Even sizes. */
+static void setup_surfaces(void)
+{
+    extern int PortIPad, PortIPadTall, PortWideMenus;
+
+    PortIPadTall = 0;
+    PortWideMenus = 0;
+    if (g_aspect <= 1.5f) {
+        /* 4:3: the iPad build's menus */
+        PortIPadTall = g_aspect > 1.32f && g_aspect < 1.35f;
+        g_fight_w = (int)(VIRT_W * g_ui_k);
+        g_fight_h = ((int)(g_fight_w / g_aspect + 0.5f)) & ~1;
+    } else {
+        g_fight_h = (int)(VIRT_H * g_ui_k);
+        g_fight_w = ((int)(g_fight_h * g_aspect + 0.5f)) & ~1;
+        /* the menus wide too, their buttons out to the corners (FE_X) */
+        PortWideMenus = 1;
+    }
+    g_menu_w = g_fight_w;
+    g_menu_h = g_fight_h;
+    /* the iPad build's layout: interface size IPAD, and always on 4:3 */
+    PortIPad = g_ui_k > 1.5f || PortIPadTall;
+}
+
+/* The render buffers again for the antialiasing and 3D resolution the menu
+ * set: made if there were none, dropped when both are off, and remade at
+ * the next clear_frame. */
+static void render_reconfig(void)
+{
+    if (g_cfg_rw <= 0 && g_cfg_aa <= 0) {
+        if (g_rs_on && g_rs_bind_fb)
+            g_rs_bind_fb(RS_FRAMEBUFFER, 0);
+        g_rs_on = 0;
+        return;
+    }
+    if (!g_rs_gen_fb) {
+        render_init();
+        g_rs_w = 0;
+        return;
+    }
+    g_rs_samples = 0;
+    if (g_cfg_aa > 0 && g_rs_storage_ms) {
+        GLint max = 0;
+        glGetIntegerv(RS_MAX_SAMPLES, &max);
+        g_rs_samples = g_cfg_aa < max ? g_cfg_aa : max;
+        if (g_rs_samples < 2)
+            g_rs_samples = 0;
+    }
+    g_rs_on = 1;
+    g_rs_w = 0;                         /* remade at the next clear_frame */
+}
+
+void port_gfx_get(struct port_gfx *g)
+{
+    extern int PortTextureQuality;
+
+    g->mode = g_cfg_full ? 2 : g_cfg_borderless ? 1 : 0;
+    g->w = g_cfg_w;
+    g->h = g_cfg_h;
+    g->rw = g_cfg_rw;
+    g->rh = g_cfg_rh;
+    g->aa = g_cfg_aa;
+    g->texq = PortTextureQuality;
+    g->ui = g_ui_k > 1.5f;
+    g->hidectl = PortHideControls;
+    snprintf(g->aspect, sizeof g->aspect, "%s", g_cfg_aspect);
+}
+
+void port_gfx_set(const struct port_gfx *g, int display)
+{
+    extern int PortTextureQuality;
+    extern void *ButtonsTPage;
+    void *limeLoadTexture(const char *path, int a, int b);
+    void  SetupFEScale(void);
+    float k = g->ui ? 2.0f : 1.0f;
+
+    if (display) {
+        g_cfg_full = g->mode == 2;
+        g_cfg_borderless = g->mode == 1;
+        g_cfg_w = g->w;
+        g_cfg_h = g->h;
+        plat_display(g->mode, g->w, g->h);
+        if (g->mode)
+            load_frame();
+    }
+    if (g->aa != g_cfg_aa || g->rw != g_cfg_rw || g->rh != g_cfg_rh) {
+        g_cfg_aa = g->aa;
+        g_cfg_rw = g->rw;
+        g_cfg_rh = g->rh;
+        render_reconfig();
+    }
+    int   texq_was = PortTextureQuality;
+
+    if ((g->texq >= 1) != (PortTextureQuality >= 1) && ButtonsTPage) {
+        /* the HUD buttons' sheet, loaded at boot for the quality then:
+         * drawSingleButton picks its cell by PortTextureQuality */
+        PortTextureQuality = g->texq;
+        ButtonsTPage = limeLoadTexture(g->texq >= 1 ? "BUTTONS_TPAGE_IPAD.PNG"
+                                                    : "BUTTONS_TPAGE.PNG", 0, 0);
+    }
+    PortTextureQuality = g->texq;
+    PortHideControls = g->hidectl;
+    if (strcmp(g->aspect, g_cfg_aspect) != 0 || k != g_ui_k) {
+        /* the on-screen controls are laid out in the surface's pixels:
+         * InitAllGameData again for the new one (ButtonsPos4/5/6, the two
+         * players', ButtonSize, which DrawControls reads every frame), and
+         * the player's own layouts moved onto it */
+        extern char CustomButtonsPos4[0x78], CustomButtonsPos5[0x78],
+                    CustomButtonsPos6[0x78];
+        extern int limeScreenWidth, limeScreenHeight;
+        void InitAllGameData(void);
+        void Write_PresetButtonData(void);
+        void PortRemapButtons(char *layout, long ow, long oh, long nw, long nh);
+        char keep[3][0x78];
+        long ow = limeScreenWidth, oh = limeScreenHeight;
+
+        memcpy(keep[0], CustomButtonsPos4, 0x78);
+        memcpy(keep[1], CustomButtonsPos5, 0x78);
+        memcpy(keep[2], CustomButtonsPos6, 0x78);
+        snprintf(g_cfg_aspect, sizeof g_cfg_aspect, "%s", g->aspect);
+        g_aspect = parse_aspect(g_cfg_aspect);
+        g_ui_k = k;
+        setup_surfaces();
+        g_surface = -1;
+        use_surface(CurrentTask == 6);
+        SetupFEScale();
+        /* InitAllGameData scales ButtonSize by itself (B = BW / 640 *
+         * ButtonSize, then ButtonSize = B): from its __data value, 80, as
+         * at boot, or the stick and buttons grow with every change */
+        {
+            extern float ButtonSize;
+            ButtonSize = 80.0f;
+        }
+        InitAllGameData();
+        PortRemapButtons(keep[0], ow, oh, limeScreenWidth, limeScreenHeight);
+        PortRemapButtons(keep[1], ow, oh, limeScreenWidth, limeScreenHeight);
+        PortRemapButtons(keep[2], ow, oh, limeScreenWidth, limeScreenHeight);
+        memcpy(CustomButtonsPos4, keep[0], 0x78);
+        memcpy(CustomButtonsPos5, keep[1], 0x78);
+        memcpy(CustomButtonsPos6, keep[2], 0x78);
+        Write_PresetButtonData();
+    } else
+        SetupFEScale();                 /* UseLOWAssets follows the quality */
+    if (g->texq != texq_was) {
+        /* every texture so far again, at the new quality (draw_gl.c) */
+        extern long UseLOWAssets;
+        void lime_textures_requality(int use_low);
+        lime_textures_requality(UseLOWAssets != 0);
+    }
+    printf("settings: %s %dx%d render %dx%d aa %d tex %d aspect %s ui %d\n",
+           g_cfg_full ? "fullscreen" : g_cfg_borderless ? "borderless" : "window",
+           g_cfg_w, g_cfg_h, g_cfg_rw, g_cfg_rh, g_cfg_aa, PortTextureQuality,
+           g_cfg_aspect, g->ui);
+}
+
+unsigned *port_pad_action(int player, int i)
+{
+    static unsigned none;
+
+    if (i >= 0 && i < 7)
+        return player ? &g_p2pad6[i] : &g_pad6[i];
+    if (i >= 7 && i < 14)
+        return player ? &g_p2pad5[i - 7] : &g_pad5[i - 7];
+    if (i == 14)
+        return player ? &g_p2pad_pause : &g_pad_pause;
+    if (i == 15)
+        return player ? &g_p2pad_moves : &g_pad_moves;
+    none = 0;
+    return &none;
+}
+
+const char *port_pad_device(int player) { return g_cfg_pad[player ? 1 : 0]; }
+
+void port_pad_device_set(int player, const char *v)
+{
+    snprintf(g_cfg_pad[player ? 1 : 0], sizeof g_cfg_pad[0], "%s", v);
+    if (player)
+        plat_pad2_select(v);
+    else
+        plat_pad_select(v);
+}
+
+int port_buttons(void)
+{
+    return Settings[4] == 5 ? 5 : 6;
+}
+
+void port_buttons_set(int n)
+{
+    g_cfg_buttons = n;
+    Settings[4] = n;
+}
+
+const char *port_ini_path(void) { return g_ini_path; }
+
 int main(int argc, char **argv)
 {
     const char *root = (argc > 1 && argv[1][0] != '-') ? argv[1] : "res";
@@ -1916,6 +2158,7 @@ int main(int argc, char **argv)
         PortHideControls = atoi(getenv("UMK3_HIDE_CONTROLS")) != 0;
     if (getenv("UMK3_ASPECT"))          /* 4:3 16:9 21:9, over aspect= */
         g_aspect = parse_aspect(getenv("UMK3_ASPECT"));
+        snprintf(g_cfg_aspect, sizeof g_cfg_aspect, "%s", getenv("UMK3_ASPECT"));
     if (getenv("UMK3_UI"))              /* 0 1, over ui_size= */
         g_ui_k = atoi(getenv("UMK3_UI")) ? 2.0f : 1.0f;
     if (getenv("UMK3_TEXQ")) {          /* 0 1 2, over texture_quality= */
@@ -1964,48 +2207,17 @@ int main(int argc, char **argv)
     }
     render_init();
     plat_ask_hook = render_ask_hook;
+    snprintf(g_root, sizeof g_root, "%s", root);
+    set_menu_key = game_key;
     if (g_cfg_full || g_cfg_borderless) {
         if (g_cfg_full)
             plat_fullscreen_exclusive();
         else
             plat_fullscreen();
-        /* the picture for the bars: marco= in umk3.ini, else marco.png
-         * beside the exe; none, and the bars stay black */
-        if (!dbg_frame_load(g_cfg_frame[0] ? g_cfg_frame : NULL)) {
-            char p[1100];
-            snprintf(p, sizeof p, "%s", root);
-            if (strlen(p) > 3 && (strrchr(p, '\\') || strrchr(p, '/'))) {
-                char *sl = strrchr(p, '\\') ? strrchr(p, '\\') : strrchr(p, '/');
-                snprintf(sl + 1, sizeof p - (size_t)(sl + 1 - p), "marco.png");
-                dbg_frame_load(p);
-            }
-        }
+        load_frame();
     }
     lime_platform_set_asset_root(root);
-    /* Narrower than 3:2 keeps the width and grows the height (4:3 at 480
-     * wide is 480x360, the iPad's shape); wider keeps the height (16:9 at
-     * 320 high is 568x320, the iPhone 5's). Even sizes. */
-    if (g_aspect <= 1.5f) {
-        extern int PortIPadTall;        /* 4:3: the iPad build's menus */
-        PortIPadTall = g_aspect > 1.32f && g_aspect < 1.35f;
-        g_fight_w = (int)(VIRT_W * g_ui_k);
-        g_fight_h = ((int)(g_fight_w / g_aspect + 0.5f)) & ~1;
-        g_menu_w = g_fight_w;
-        g_menu_h = g_fight_h;
-    } else {
-        g_fight_h = (int)(VIRT_H * g_ui_k);
-        g_fight_w = ((int)(g_fight_h * g_aspect + 0.5f)) & ~1;
-        /* the menus wide too, their buttons out to the corners (FE_X) */
-        extern int PortWideMenus;
-        PortWideMenus = 1;
-        g_menu_w = g_fight_w;
-        g_menu_h = g_fight_h;
-    }
-    {
-        extern int PortIPad, PortIPadTall; /* the iPad build's layout */
-        /* launcher: interface size IPAD, and always on 4:3 (Mary) */
-        PortIPad = g_ui_k > 1.5f || PortIPadTall;
-    }
+    setup_surfaces();
     use_surface(0);
 
     start_app();
@@ -2076,7 +2288,8 @@ int main(int argc, char **argv)
         /* The mouse as one finger, on its edges; see runtime/menu_main.c. */
         /* A scripted run is the script's alone: a click on the window
          * would be a second finger nobody asked for. */
-        down = plat_mouse(&mx, &my) && g_ntaps == 0 && !dbg_menu_is_open();
+        down = plat_mouse(&mx, &my) && g_ntaps == 0 && !dbg_menu_is_open()
+               && !set_menu_is_open();
         {
             static float prev_tx = -1.0f, prev_ty = -1.0f;
             float tx = (float)(mx - vx) * g_virt_w / (vw ? vw : 1);
@@ -2084,6 +2297,9 @@ int main(int argc, char **argv)
 
             if (dbg_menu_is_open())     /* the debug menu takes the mouse, as fractions */
                 dbg_menu_mouse(tx / g_virt_w, ty / g_virt_h,
+                               plat_mouse(&mx, &my) && g_ntaps == 0);
+            if (set_menu_is_open())     /* and so does the settings menu */
+                set_menu_mouse(tx / g_virt_w, ty / g_virt_h,
                                plat_mouse(&mx, &my) && g_ntaps == 0);
 
             if (down && !was_down)
@@ -2197,7 +2413,30 @@ int main(int argc, char **argv)
                 was_on = g_pad.connected;
                 was_b = g_pad.buttons;
             }
-            if (g_cfg_debug_keys) {
+            {
+                /* Esc (key_settings=): the settings menu, port */
+                static int was_esc;
+                int esc = plat_key(PK_SETTINGS);
+                if (esc && !was_esc && !set_menu_is_open()
+                    && !dbg_menu_is_open())
+                    set_menu_toggle();
+                was_esc = esc;
+            }
+            if (set_menu_is_open()) {
+                clear_frame(ww, wh, vx, vy, vw, vh);
+                set_menu_pads(&g_pad, &g_pad2);
+                set_menu_tick();
+                if (set_menu_is_open()) {
+                    /* a change of aspect or display moves the view */
+                    use_surface(CurrentTask == 6);
+                    set_menu_draw();
+                }
+                render_resolve();
+                acc -= 1.0 / 60.0;
+                g_tick = ++ticks;       /* UMK3_KEYS' clock goes on */
+                continue;               /* the game does not tick */
+            }
+            if (g_cfg_debug_keys && !set_menu_is_open()) {
                 static int was_f2, was_f3;
                 /* the pad's combination (pad_dbg_menu=, L3+R3 unless the
                  * launcher set another) opens and closes the menu too */
@@ -2294,6 +2533,10 @@ int main(int argc, char **argv)
                 else
                     dbg_menu_after_frame(vx, vy, vw, vh, CurrentTask, FE_CurrentTask);
             }
+            if (g_rs_on)
+                set_menu_after_frame(0, 0, g_rs_w, g_rs_h);
+            else
+                set_menu_after_frame(vx, vy, vw, vh);
 
             /* --fight: once the main menu is up, do what the select screen
              * and the tower would, and leave the front end. */

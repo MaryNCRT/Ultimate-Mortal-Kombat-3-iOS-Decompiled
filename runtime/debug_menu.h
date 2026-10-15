@@ -35,6 +35,18 @@ void dbg_menu_pad(const PLAT_PAD *p);
 extern int DbgPalette[2];
 void dbg_menu_draw(void);
 
+/* The box both in-game menus draw (debug_menu.c), shared with the settings
+ * menu (settings_menu.c): over the frame ui_grab took, dimmed. `geo` gets
+ * where it went, in the menu's space (320 high, ow wide), for the mouse:
+ * the tabs from title0 to top, the rows from top, rowh each, between bx
+ * and bx + bw. */
+struct ui_geo { float bx, bw, title0, top, rowh, ow; };
+void ui_grab(int vx, int vy, int vw, int vh);
+void ui_menu_show(const char *title, const char *const *tabs, int ntabs,
+                  int page, const char *const *label,
+                  const char *const *value, const int *enabled, int rows,
+                  int sel, const char *footer, struct ui_geo *geo);
+
 /* Whether the fight keys can act now (a round in play) and whether the
  * Arcade boss jumps apply; game_main.c answers both. */
 int  dbg_round_live(void);

@@ -1075,6 +1075,41 @@ void Write_PresetButtonData(void)
     limeWriteFile("preset4data", CustomButtonsPos4, 0x78, 0);
     limeWriteFile("preset5data", CustomButtonsPos5, 0x78, 0);
     limeWriteFile("preset6data", CustomButtonsPos6, 0x78, 0);
+    /* Port, not in the binary: the surface the positions are in pixels of,
+     * so a change of aspect= or ui_size= can move them (PortRemapButtons). */
+    {
+        extern int limeScreenHeight;
+        long surf[2];
+        surf[0] = limeScreenWidth;
+        surf[1] = limeScreenHeight;
+        limeWriteFile("presetsurf", surf, sizeof surf, 0);
+    }
+}
+
+/* Port, not in the binary: a layout of six CUSTOMBUTTON records (x, y, size,
+ * pad, id) laid out on an ow x oh surface, moved onto nw x nh. The game
+ * puts the buttons against the bottom right corner and sizes them by the
+ * width of the 3:2 screen of the surface's height (InitAllGameData), so a
+ * button keeps its distance from the bottom edge, and from the right edge
+ * when it sat in the right half (from the left one otherwise), all scaled
+ * as the buttons are. The defaults land on the new defaults. */
+void PortRemapButtons(char *layout, long ow, long oh, long nw, long nh)
+{
+    long *e = (long *)layout;
+    float ob = (float)(ow < oh * 3 / 2 ? ow : oh * 3 / 2);
+    float nb = (float)(nw < nh * 3 / 2 ? nw : nh * 3 / 2);
+    float k = ob > 0 ? nb / ob : 1.0f;
+    int i;
+
+    if (ow <= 0 || oh <= 0 || (ow == nw && oh == nh))
+        return;
+    for (i = 0; i < 6; i++, e += 5) {
+        if (e[4] == -1)
+            continue;
+        e[0] = e[0] > ow / 2 ? (long)(nw - (ow - e[0]) * k) : (long)(e[0] * k);
+        e[1] = (long)(nh - (oh - e[1]) * k);
+        e[2] = (long)(e[2] * k);
+    }
 }
 
 
@@ -1572,10 +1607,34 @@ void Load_PresetButtonData(void)
     limeFree(src);
 
     /* Port, not in the binary: the presets are saved in screen pixels, and
-     * the launcher can change the surface (aspect=, ui_size=). A layout
-     * with a button off the current surface goes back to its default (the
-     * one InitAllGameData just computed for this surface), and the presets
-     * are written again. */
+     * the launcher or the settings menu can change the surface (aspect=,
+     * ui_size=). Saved on another surface (presetsurf, Write_PresetButtonData)
+     * they are moved onto this one; with no presetsurf (saved by 0.1.1 or
+     * before, on a surface nobody knows) they go back to the defaults
+     * InitAllGameData just computed. Then a layout with a button off the
+     * surface goes back to its default, and the presets are written again. */
+    {
+        long *surf = (long *)limeLoadSaveFile("presetsurf");
+        char *const lay[3] = { CustomButtonsPos4, CustomButtonsPos5,
+                               CustomButtonsPos6 };
+        char *const def[3] = { DEFAULT_CustomButtonsPos4,
+                               DEFAULT_CustomButtonsPos5,
+                               DEFAULT_CustomButtonsPos6 };
+        int k;
+
+        for (k = 0; k < 3; k++) {
+            if (surf == 0)
+                memcpy(lay[k], def[k], 0x78);
+            else
+                PortRemapButtons(lay[k], surf[0], surf[1],
+                                 limeScreenWidth, limeScreenHeight);
+        }
+        if (surf == 0 || surf[0] != limeScreenWidth
+            || surf[1] != limeScreenHeight)
+            Write_PresetButtonData();
+        if (surf)
+            limeFree(surf);
+    }
     {
         char *const live[3] = { CustomButtonsPos4, CustomButtonsPos5,
                                 CustomButtonsPos6 };

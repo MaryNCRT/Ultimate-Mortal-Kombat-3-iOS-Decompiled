@@ -105,6 +105,26 @@ void plat_fullscreen_exclusive(void)
         plat_fullscreen();
 }
 
+void plat_display(int mode, int w, int h)
+{
+    if (mode == 0) {
+        SDL_SetWindowFullscreen(g_wnd, 0);
+        SDL_SetWindowSize(g_wnd, w, h);
+        SDL_SetWindowPosition(g_wnd, SDL_WINDOWPOS_CENTERED,
+                              SDL_WINDOWPOS_CENTERED);
+    } else if (mode == 1)
+        plat_fullscreen();
+    else {
+        SDL_SetWindowSize(g_wnd, w, h);
+        plat_fullscreen_exclusive();
+    }
+}
+
+void plat_quit(void)
+{
+    g_quit = true;
+}
+
 void *plat_gl_proc(const char *name)
 {
     return SDL_GL_GetProcAddress(name);
@@ -199,7 +219,8 @@ static SDL_Scancode g_scancode[PK_COUNT] = {
     SDL_SCANCODE_F6, SDL_SCANCODE_F7, SDL_SCANCODE_F8,
     SDL_SCANCODE_H, SDL_SCANCODE_KP_0,
     SDL_SCANCODE_U, SDL_SCANCODE_O, SDL_SCANCODE_J, SDL_SCANCODE_L,
-    SDL_SCANCODE_Q, SDL_SCANCODE_E
+    SDL_SCANCODE_Q, SDL_SCANCODE_E,
+    [PK_SETTINGS] = SDL_SCANCODE_ESCAPE,
 };
 
 void plat_key_label(int code, char *out, int n)
@@ -220,6 +241,22 @@ void plat_bind_key(int code, int key)
 {
     if (code >= 0 && code < PK_COUNT && key > 0 && key < SDL_NUM_SCANCODES)
         g_scancode[code] = (SDL_Scancode)key;
+}
+
+int plat_key_bound(int code)
+{
+    return code >= 0 && code < PK_COUNT ? (int)g_scancode[code] : 0;
+}
+
+int plat_key_any(void)
+{
+    int count, i;
+    const Uint8 *keys = SDL_GetKeyboardState(&count);
+
+    for (i = 1; i < count; i++)
+        if (keys[i])
+            return i;
+    return 0;
 }
 
 int plat_key(int code)

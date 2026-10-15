@@ -476,34 +476,12 @@ static void tex_set_name(TEXTURE *t, const char *path)
 #else
 #define MIP_API
 #endif
-TEXTURE *limeLoadTexture(const char *path, int a, int b)
+/* An image into GL object `name`, at the quality set now. */
+static void tex_upload(GLuint name, LimeImage *img)
 {
     static int mip_tried;
     static void (MIP_API *gen_mip)(GLenum);
-    TexEntry *e;
-    LimeImage img;
-    GLuint name = 0;
 
-    (void)a; (void)b;
-    if (path == NULL || *path == 0)
-        return NULL;
-
-    e = tex_find(path);
-    if (e)
-        return &e->tex;
-
-    memset(&img, 0, sizeof(img));
-    if (!load_rgba(path, &img)) {
-        if (getenv("LIME_TRACE_TEX"))
-            fprintf(stderr, "[tex] %s MISSING\n", path);
-        return NULL;                    /* the failure branch the engine has */
-    }
-    if (PortTextureQuality >= 2)
-        upscale_small(&img);
-    if (getenv("LIME_TRACE_TEX"))
-        fprintf(stderr, "[tex] %s %dx%d\n", path, img.width, img.height);
-
-    glGenTextures(1, &name);
     glBindTexture(GL_TEXTURE_2D, name);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -538,11 +516,43 @@ TEXTURE *limeLoadTexture(const char *path, int a, int b)
                         GL_LINEAR_MIPMAP_LINEAR);
         if (aniso > 1.0f)
             glTexParameterf(GL_TEXTURE_2D, 0x84FE, aniso);  /* MAX_ANISOTROPY */
+    } else {                            /* a texture MAX made, again lower */
+        glTexParameteri(GL_TEXTURE_2D, 0x8191, GL_FALSE);
+        glTexParameterf(GL_TEXTURE_2D, 0x84FE, 1.0f);
     }
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.width, img.height, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, img.rgba);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img->width, img->height, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, img->rgba);
     if (PortTextureQuality >= 2 && gen_mip)
         gen_mip(GL_TEXTURE_2D);
+}
+
+TEXTURE *limeLoadTexture(const char *path, int a, int b)
+{
+    TexEntry *e;
+    LimeImage img;
+    GLuint name = 0;
+
+    (void)a; (void)b;
+    if (path == NULL || *path == 0)
+        return NULL;
+
+    e = tex_find(path);
+    if (e)
+        return &e->tex;
+
+    memset(&img, 0, sizeof(img));
+    if (!load_rgba(path, &img)) {
+        if (getenv("LIME_TRACE_TEX"))
+            fprintf(stderr, "[tex] %s MISSING\n", path);
+        return NULL;                    /* the failure branch the engine has */
+    }
+    if (PortTextureQuality >= 2)
+        upscale_small(&img);
+    if (getenv("LIME_TRACE_TEX"))
+        fprintf(stderr, "[tex] %s %dx%d\n", path, img.width, img.height);
+
+    glGenTextures(1, &name);
+    tex_upload(name, &img);
     free(img.rgba);
 
     /* The TEXTURE handed back is stored in 32-bit words of the binary's
@@ -562,6 +572,63 @@ TEXTURE *limeLoadTexture(const char *path, int a, int b)
     e->next = g_textures;
     g_textures = e;
     return &e->tex;
+}
+
+/* Port, not in the binary: the settings menu's TEXTURES (settings_menu.c).
+ * Every texture loaded so far is loaded again at the quality set now, into
+ * the same GL object, so what the game holds stays valid. Where the game
+ * picks a file by quality (UseLOWAssets' _LOW sheets, the fighters'
+ * _DIFFUSE_LITE skins, Players.c port_load_lite), the other file is taken:
+ * `use_low` is UseLOWAssets as SetupFEScale now sets it. A _LOW sheet
+ * becomes its full one and back; a LITE skin becomes the full one (and stays
+ * so until the next start, as at load time going down is not undone). */
+void lime_textures_requality(int use_low)
+{
+    static const char *const from[3] = { "_DIFFUSE2_LITE.", "_DIFFUSE_LITE2.",
+                                         "_DIFFUSE_LITE." };
+    static const char *const to[3]   = { "_DIFFUSE2.", "_DIFFUSE2.",
+                                         "_DIFFUSE." };
+    TexEntry *e;
+    int n = 0;
+
+    for (e = g_textures; e; e = e->next) {
+        char file[300], *low, *dot;
+        LimeImage img;
+        int i, got = 0;
+
+        memset(&img, 0, sizeof(img));
+        snprintf(file, sizeof file, "%s", e->path);
+        low = strstr(file, "_LOW.");
+        if (!use_low) {
+            if (low)                        /* _LOW sheet -> the full one */
+                memmove(low, low + 4, strlen(low + 4) + 1);
+            for (i = 0; i < 3 && PortTextureQuality > 0; i++) {
+                char *hit = strstr(file, from[i]);
+                if (hit) {
+                    char big[300];
+                    snprintf(big, sizeof big, "%.*s%s%s", (int)(hit - file),
+                             file, to[i], hit + strlen(from[i]));
+                    got = load_rgba(big, &img);
+                    break;
+                }
+            }
+        } else if (!low && (dot = strrchr(file, '.')) != NULL
+                   && strlen(file) + 5 < sizeof file) {
+            char lo[300];                   /* the full sheet -> its _LOW */
+            snprintf(lo, sizeof lo, "%.*s_LOW%s", (int)(dot - file), file, dot);
+            got = load_rgba(lo, &img);
+        }
+        if (!got && !load_rgba(file, &img))
+            continue;
+        if (PortTextureQuality >= 2)
+            upscale_small(&img);
+        tex_upload(e->tex.name, &img);
+        e->w = img.width;
+        e->h = img.height;
+        free(img.rgba);
+        n++;
+    }
+    printf("textures: %d loaded again at quality %d\n", n, PortTextureQuality);
 }
 
 void limeDeleteTexture(TEXTURE *tex)

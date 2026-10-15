@@ -648,20 +648,23 @@ static void footer_text(char *f, size_t n)
              p, q, c);
 }
 
-/* The menu in the iPhone OS 3 alert dress the in-game alerts wear
- * (plat_ui_menu, runtime/platform/win32_gl.c), drawn at the game view's
- * own pixel size so the text is sharp. The box is redrawn only when
- * something in it changes. 0 when the backend has no such drawing; the
- * caller then uses the 5x7 font below. */
-static int draw_ios(void)
+/* Any menu box over the frozen frame: the debug menu's and the settings
+ * menu's (settings_menu.c). In the iPhone OS 3 alert dress the in-game
+ * alerts wear (plat_ui_menu, runtime/platform/win32_gl.c), drawn at the
+ * game view's own pixel size so the text is sharp, and redrawn only when
+ * something in it changes; the 5x7 font when the backend has no such
+ * drawing. `geo` gets where the box went, in the menu's space, for the
+ * mouse. */
+static int draw_ios(const char *title, const char *const *tabs, int ntabs,
+                    int page, const char *const *lp, const char *const *vp,
+                    const int *en, int rows, int sel, const char *footer)
 {
     static GLuint tex;
-    static char last[2048];
+    static char last[4096];
     static int tw, th;
     static float ts;
-    char vals[MAX_PAGE_ROWS][64], sig[2048], title[96], footer[128];
-    const char *vp[MAX_PAGE_ROWS], *lp[MAX_PAGE_ROWS], *tabs[N_PAGES];
-    int en[MAX_PAGE_ROWS], i, n = 0, rows = k_pages[g_page].n;
+    char sig[4096];
+    int i, n = 0;
     GLint view[4];
     float s;
 
@@ -669,27 +672,17 @@ static int draw_ios(void)
     s = view[3] / 320.0f;               /* by height: the shape is kept */
     if (s <= 0)
         return 0;
-    for (i = 0; i < N_PAGES; i++)
-        tabs[i] = k_pages[i].name;
-    title_text(title, sizeof title);
-    footer_text(footer, sizeof footer);
-    n = snprintf(sig, sizeof sig, "%s|%s|", title, footer);
-    for (i = 0; i < rows; i++) {
-        int r = k_pages[g_page].rows[i];
-        row_value(r, vals[i], sizeof vals[i]);
-        vp[i] = vals[i];
-        lp[i] = k_label[r];
-        en[i] = row_enabled(r);
-        n += snprintf(sig + n, sizeof sig - n, "%s%d|", vals[i], en[i]);
-        if (n >= (int)sizeof sig - 80)
-            break;
-    }
-    snprintf(sig + n, sizeof sig - n, "%d %d %.3f", g_sel, g_page, s);
+    n = snprintf(sig, sizeof sig, "%s|%s|%d|", title, footer, ntabs);
+    for (i = 0; i < ntabs && n < (int)sizeof sig - 200; i++)
+        n += snprintf(sig + n, sizeof sig - n, "%s|", tabs[i]);
+    for (i = 0; i < rows && n < (int)sizeof sig - 200; i++)
+        n += snprintf(sig + n, sizeof sig - n, "%s=%s%d|", lp[i], vp[i], en[i]);
+    snprintf(sig + n, sizeof sig - n, "%d %d %.3f", sel, page, s);
 
     if (!tex || strcmp(sig, last) != 0) {
         int w, h;
-        unsigned char *px = plat_ui_menu(title, tabs, N_PAGES, g_page, lp, vp,
-                                         en, rows, g_sel, footer, s, &w, &h);
+        unsigned char *px = plat_ui_menu(title, tabs, ntabs, page, lp, vp,
+                                         en, rows, sel, footer, s, &w, &h);
         if (!px)
             return 0;
         if (!tex)
@@ -731,7 +724,7 @@ static int draw_ios(void)
         g_bx = x + 6 + 9;
         g_bw = 360 - 18;
         g_title0 = y + 6 + 22;
-        g_top = y + 6 + 22 + 20 + 4;
+        g_top = y + 6 + 22 + (ntabs > 0 ? 20 + 4 : 4);
         g_rowh = 15;
 
         glEnable(GL_TEXTURE_2D);
@@ -751,75 +744,103 @@ static int draw_ios(void)
     return 1;
 }
 
-void dbg_menu_draw(void)
+void ui_menu_show(const char *title, const char *const *tabs, int ntabs,
+                  int page, const char *const *lp, const char *const *vp,
+                  const int *en, int rows, int sel, const char *footer,
+                  struct ui_geo *geo)
 {
     const float px = 1.0f, lh = 15.0f, y0 = 46.0f;
     float x0, bw;
-    char v[64], title[96], footer[128];
-    int i, rows = k_pages[g_page].n;
+    int i;
 
-    if (draw_ios())
-        return;
+    if (!draw_ios(title, tabs, ntabs, page, lp, vp, en, rows, sel, footer)) {
+        begin_2d();
+        x0 = (g_ow - 288.0f) * 0.5f;
+        bw = g_ow - 2 * (x0 - 12);
+        g_bx = x0 - 12;
+        g_bw = bw;
+        g_title0 = y0 - 22;
+        g_top = y0 - 4;
+        g_rowh = lh;
+        if (g_shot) {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, g_shot);
+            glColor4f(0.45f, 0.45f, 0.45f, 1.0f);
+            glBegin(GL_QUADS);                  /* glReadPixels is bottom-up */
+            glTexCoord2f(0, 1); glVertex2f(0, 0);
+            glTexCoord2f(1, 1); glVertex2f(g_ow, 0);
+            glTexCoord2f(1, 0); glVertex2f(g_ow, 320);
+            glTexCoord2f(0, 0); glVertex2f(0, 320);
+            glEnd();
+            glDisable(GL_TEXTURE_2D);
+        }
+
+        glBegin(GL_QUADS);
+        glColor4f(0.0f, 0.0f, 0.0f, 0.75f);
+        rect(x0 - 12, y0 - 40, bw, rows * lh + 66);
+        for (i = 0; i < ntabs; i++) {           /* the tabs */
+            float tw = bw / ntabs, tx = x0 - 12 + i * tw;
+            if (i == page)
+                glColor4f(0.8f, 0.1f, 0.1f, 0.9f);
+            else
+                glColor4f(0.25f, 0.25f, 0.25f, 0.9f);
+            rect(tx + 1, y0 - 22, tw - 2, 14);
+            glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+            text(tx + (tw - (float)strlen(tabs[i]) * CH_W) * 0.5f,
+                 y0 - 19, px, tabs[i]);
+        }
+        glColor4f(0.8f, 0.1f, 0.1f, 0.9f);
+        rect(x0 - 8, y0 + sel * lh - 4, bw - 8, lh - 1);
+
+        glColor4f(1.0f, 0.85f, 0.2f, 1.0f);
+        text(x0, y0 - 36, px, title);
+        for (i = 0; i < rows; i++) {
+            float y = y0 + i * lh;
+
+            if (en[i])
+                glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+            else
+                glColor4f(0.45f, 0.45f, 0.45f, 1.0f);
+            text(x0, y, px, lp[i]);
+            if (vp[i][0])
+                text(x0 + 100, y, px, vp[i]);
+        }
+        glColor4f(0.7f, 0.7f, 0.7f, 1.0f);
+        text(x0, y0 + rows * lh + 6, px, footer);
+        glEnd();
+        end_2d();
+    }
+    if (geo) {
+        geo->bx = g_bx;
+        geo->bw = g_bw;
+        geo->title0 = g_title0;
+        geo->top = g_top;
+        geo->rowh = g_rowh;
+        geo->ow = g_ow;
+    }
+}
+
+void ui_grab(int vx, int vy, int vw, int vh) { grab(vx, vy, vw, vh); }
+
+void dbg_menu_draw(void)
+{
+    char vals[MAX_PAGE_ROWS][64], title[96], footer[128];
+    const char *vp[MAX_PAGE_ROWS], *lp[MAX_PAGE_ROWS], *tabs[N_PAGES];
+    int en[MAX_PAGE_ROWS], i, rows = k_pages[g_page].n;
+
+    for (i = 0; i < N_PAGES; i++)
+        tabs[i] = k_pages[i].name;
     title_text(title, sizeof title);
     footer_text(footer, sizeof footer);
-
-    begin_2d();
-    x0 = (g_ow - 288.0f) * 0.5f;
-    bw = g_ow - 2 * (x0 - 12);
-    g_bx = x0 - 12;
-    g_bw = bw;
-    g_title0 = y0 - 22;
-    g_top = y0 - 4;
-    g_rowh = lh;
-    if (g_shot) {
-        glEnable(GL_TEXTURE_2D);
-        glBindTexture(GL_TEXTURE_2D, g_shot);
-        glColor4f(0.45f, 0.45f, 0.45f, 1.0f);
-        glBegin(GL_QUADS);                      /* glReadPixels is bottom-up */
-        glTexCoord2f(0, 1); glVertex2f(0, 0);
-        glTexCoord2f(1, 1); glVertex2f(g_ow, 0);
-        glTexCoord2f(1, 0); glVertex2f(g_ow, 320);
-        glTexCoord2f(0, 0); glVertex2f(0, 320);
-        glEnd();
-        glDisable(GL_TEXTURE_2D);
-    }
-
-    glBegin(GL_QUADS);
-    glColor4f(0.0f, 0.0f, 0.0f, 0.75f);
-    rect(x0 - 12, y0 - 40, bw, rows * lh + 66);
-    for (i = 0; i < N_PAGES; i++) {             /* the tabs */
-        float tw = bw / N_PAGES, tx = x0 - 12 + i * tw;
-        if (i == g_page)
-            glColor4f(0.8f, 0.1f, 0.1f, 0.9f);
-        else
-            glColor4f(0.25f, 0.25f, 0.25f, 0.9f);
-        rect(tx + 1, y0 - 22, tw - 2, 14);
-        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-        text(tx + (tw - (float)strlen(k_pages[i].name) * CH_W) * 0.5f,
-             y0 - 19, px, k_pages[i].name);
-    }
-    glColor4f(0.8f, 0.1f, 0.1f, 0.9f);
-    rect(x0 - 8, y0 + g_sel * lh - 4, bw - 8, lh - 1);
-
-    glColor4f(1.0f, 0.85f, 0.2f, 1.0f);
-    text(x0, y0 - 36, px, title);
     for (i = 0; i < rows; i++) {
         int r = k_pages[g_page].rows[i];
-        float y = y0 + i * lh;
-
-        row_value(r, v, sizeof v);
-        if (row_enabled(r))
-            glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-        else
-            glColor4f(0.45f, 0.45f, 0.45f, 1.0f);
-        text(x0, y, px, k_label[r]);
-        if (v[0])
-            text(x0 + 100, y, px, v);
+        row_value(r, vals[i], sizeof vals[i]);
+        vp[i] = vals[i];
+        lp[i] = k_label[r];
+        en[i] = row_enabled(r);
     }
-    glColor4f(0.7f, 0.7f, 0.7f, 1.0f);
-    text(x0, y0 + rows * lh + 6, px, footer);
-    glEnd();
-    end_2d();
+    ui_menu_show(title, tabs, N_PAGES, g_page, lp, vp, en, rows, g_sel,
+                 footer, NULL);
 }
 
 /* ---------------------------------------------------------------- frame

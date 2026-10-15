@@ -196,6 +196,48 @@ void plat_fullscreen_exclusive(void)
     plat_fullscreen();              /* now the monitor is the window's size */
 }
 
+void plat_display(int mode, int w, int h)
+{
+    if (g_mode.dmSize) {                /* out of exclusive fullscreen */
+        ChangeDisplaySettingsA(NULL, 0);
+        g_mode.dmSize = 0;
+    }
+    if (mode == 1) {
+        plat_fullscreen();
+        return;
+    }
+    if (mode == 2) {
+        SetWindowLongA(g_wnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+        SetWindowPos(g_wnd, HWND_TOP, 0, 0, w, h,
+                     SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+        plat_fullscreen_exclusive();
+        return;
+    }
+    {
+        RECT r = { 0, 0, w, h };
+        MONITORINFO mi;
+        int ww, wh, x, y;
+
+        AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
+        ww = r.right - r.left;
+        wh = r.bottom - r.top;
+        mi.cbSize = sizeof mi;
+        GetMonitorInfoA(MonitorFromWindow(g_wnd, MONITOR_DEFAULTTOPRIMARY), &mi);
+        x = mi.rcWork.left + (mi.rcWork.right - mi.rcWork.left - ww) / 2;
+        y = mi.rcWork.top + (mi.rcWork.bottom - mi.rcWork.top - wh) / 2;
+        if (x < mi.rcWork.left) x = mi.rcWork.left;
+        if (y < mi.rcWork.top) y = mi.rcWork.top;
+        SetWindowLongA(g_wnd, GWL_STYLE, WS_OVERLAPPEDWINDOW | WS_VISIBLE);
+        SetWindowPos(g_wnd, HWND_NOTOPMOST, x, y, ww, wh,
+                     SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+    }
+}
+
+void plat_quit(void)
+{
+    g_quit = true;
+}
+
 void *plat_gl_proc(const char *name)
 {
     PROC p = wglGetProcAddress(name);
@@ -305,6 +347,7 @@ static int g_vk[PK_COUNT] = {
     'Q', 'E',                           /* debug menu: page back / on */
     VK_NUMPAD7, VK_NUMPAD9,             /* P2 five buttons: P B */
     VK_NUMPAD4, VK_NUMPAD6,             /* P2 five buttons: K R */
+    VK_ESCAPE,                          /* the settings menu */
 };
 
 void plat_key_label(int code, char *out, int n)
@@ -333,6 +376,21 @@ void plat_bind_key(int code, int key)
 {
     if (code >= 0 && code < PK_COUNT && key > 0 && key < 256)
         g_vk[code] = key;
+}
+
+int plat_key_bound(int code)
+{
+    return code >= 0 && code < PK_COUNT ? g_vk[code] : 0;
+}
+
+int plat_key_any(void)
+{
+    int vk;
+
+    for (vk = 8; vk < 256; vk++)        /* not the mouse buttons */
+        if (g_key[vk])
+            return vk;
+    return 0;
 }
 
 int plat_key(int code)

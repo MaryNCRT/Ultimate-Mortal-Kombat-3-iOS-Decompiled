@@ -773,6 +773,16 @@ async function init() {
     ui = cfg.ui === 'EN' ? 'EN' : 'ES';
     await refreshRoot();
     applyTexts();
+    /* The game's settings menu (Esc) writes umk3.ini too: read it again
+     * whenever the launcher comes back to the front. */
+    window.addEventListener('focus', async () => {
+        if (waitingKey || building)
+            return;
+        cfg = await window.umk3.loadConfig();
+        applyConfig();
+        paintKeys();
+        fillPads();
+    });
 
     $('closeBtn').addEventListener('click', () => window.umk3.close());
     $('minBtn').addEventListener('click', () => window.umk3.minimize());
