@@ -702,8 +702,8 @@ extern int PortHideControls;           /* GameCode.c: hide_controls=1 */
  * window (see render_init); missing or 0, the game's area on the window.
  * antialiasing= is the multisampling, 0 or 2..16. fullscreen=1 is exclusive
  * fullscreen at the window's size; borderless=1 covers the monitor without a
- * border at the desktop's mode. aspect= is the launcher's: 3:2 (the
- * iPhone's) is the only one so far, and what fit_view always uses.
+ * border at the desktop's mode. aspect= is 3:2 (the iPhone's), 4:3, 16:9
+ * or 21:9: the surface's shape (see g_aspect), and fit_view's.
  * Missing file or keys keep the defaults. */
 static int  g_cfg_w = VIRT_W * SCALE, g_cfg_h = VIRT_H * SCALE, g_cfg_full;
 static int  g_cfg_rw, g_cfg_rh, g_cfg_borderless, g_cfg_aa;

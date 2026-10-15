@@ -134,7 +134,7 @@ function unpack(root, zip) {
     if (r.status !== 0)
         throw new Error('no se pudo descomprimir la actualización');
     /* the zip holds one folder, UMK3-PC-<version>; up to 0.0.9 the launcher
-     * was one portable UMK3-Launcher.exe, since then a stub over launcherin */
+     * was one portable UMK3-Launcher.exe, since then a stub over launcher\bin */
     const cands = [dest].concat(fs.readdirSync(dest).map(n => path.join(dest, n)));
     const src = cands.find(d => fs.existsSync(path.join(d, 'launcher', 'build_game.ps1'))
                              && fs.existsSync(path.join(d, 'UMK3-Launcher.exe')));

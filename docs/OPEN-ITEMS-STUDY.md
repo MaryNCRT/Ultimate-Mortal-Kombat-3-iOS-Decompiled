@@ -1,5 +1,9 @@
 # Open items after 0.0.6c: what the binary says, and where to start
 
+> **History (2026-10-15):** most items here were fixed in 0.0.6c-0.1.0 (see
+> PROGRESS.md). The open list is the README's *Known problems*; the
+> measurements below are kept because they are still true.
+
 Written on 2026-10-09, at the end of the session that shipped 0.0.6c, so that
 nothing is left half-understood. Each item records what was **measured** (a
 run, a trace, a disassembly), what is **not known yet**, and the **first step**

@@ -1,10 +1,10 @@
 /* Finds the game folder (the release/repository root) that holds
  * launcher\build_game.ps1, umk3-game.exe, res\ and umk3.ini.
  *
- * The packaged launcher is a portable single .exe: Windows extracts it to a
- * temp folder, so "the exe's folder" is NOT the game folder.  The player
- * double-clicks the launcher inside the game folder, so process.cwd() it is,
- * with the exe dir and a UMK3_ROOT override as fallbacks.
+ * The packaged launcher lives in launcher\bin\ and is started by the stub
+ * UMK3-Launcher.exe in the game folder, which sets UMK3_ROOT and the working
+ * directory to that folder; process.cwd() and the exe's own directory are the
+ * fallbacks.
  */
 'use strict';
 

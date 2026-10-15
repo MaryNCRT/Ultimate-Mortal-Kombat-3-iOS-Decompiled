@@ -6,7 +6,8 @@
  * launcher.c.  The renderer is a plain HTML/CSS/JS page; it talks to this
  * process over contextBridge (no nodeIntegration).
  *
- * Packaged as a portable single .exe (npm run portable -> dist/UMK3-Launcher.exe).
+ * Packaged unpacked (npm run dist -> dist/win-unpacked), shipped in
+ * launcher\bin\ behind the stub UMK3-Launcher.exe (launcher/stub/).
  */
 'use strict';
 
@@ -51,9 +52,8 @@ function findRoot() {
     ]);
 }
 
-/* The portable .exe extracts to a temp folder at every run, so its location
- * says nothing about where the game lives.  The player keeps the launcher
- * inside the game folder (or runs it from there); when the heuristics above
+/* Started without the stub (the bin exe directly, a shortcut), its location
+ * says nothing certain about where the game lives; when the heuristics above
  * still fail -- e.g. launched from a shortcut or the search box -- remember
  * the folder chosen / found once, in the roaming profile. */
 function savedRoot() {

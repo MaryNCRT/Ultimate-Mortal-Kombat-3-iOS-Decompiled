@@ -1,59 +1,67 @@
 # Handoff
 
-> **The status section below was rewritten on 2026-10-02 and updated on
-> 2026-10-09.** Most of the rest
-> of this file is a dated diary of what each finished module settled; it is
-> kept because the facts in it are still true, but its counts ("1,752 of
-> 2,172" and the like) are history. The live numbers are in
-> [PROGRESS.md](PROGRESS.md) and come from `python tools/progress.py`.
+> **The first two sections were rewritten on 2026-10-15 for alpha 0.1.0.**
+> Everything after them is a dated diary of what each finished module
+> settled; it is kept because the facts in it are still true, but its counts
+> ("1,752 of 2,172" and the like) and its "next steps" are history. The live
+> numbers are in [PROGRESS.md](PROGRESS.md) and come from
+> `python tools/progress.py`.
 
 Written for whoever picks this up next, human or model, with no prior context.
-Read this, then [METHODOLOGY.md](METHODOLOGY.md). Everything else is reference.
+Read this, then [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md) and
+[METHODOLOGY.md](METHODOLOGY.md). Everything else is reference.
 
 ---
 
 ## Releases
 
-The current build is **0.0.8 alpha** ([notes](RELEASE-0.0.8-alpha.md)), announced as 100% playable; 0.0.7b, 0.0.7, 0.0.6c, 0.0.6b,
-0.0.6, 0.0.5 and 0.0.4 are still published, 0.0.1-0.0.3 were deleted from GitHub when the history was
-rewritten on 2026-10-09 (their notes stay in `docs/`). What each release fixed,
-with addresses, is in PROGRESS.md, "Release history".
+The current build is **0.1.0 alpha** ([notes](RELEASE-0.1.0-alpha.md)),
+published on GitHub as a pre-release with `UMK3-PC-0.1.0-alpha.zip`. 0.0.9 back
+to 0.0.4 are still published; 0.0.1-0.0.3 were deleted from GitHub when the
+history was rewritten on 2026-10-09 (their notes stay in `docs/`). What each
+release fixed, with addresses, is in PROGRESS.md.
 
-**Since 0.0.9 (2026-10-15):** texture quality option and texture fixes; faster launcher (unpacked, stub) and loading (all cores, several steps a frame); iPad UI size (`ui_size=`); launcher update check, download and install from GitHub releases (`lib/update.js`); aspect ratios 4:3 (the iPad's projection) / 16:9 / 21:9 (`aspect=`). Released as 0.1.0. Next on Mary's list: monitor choice, render backend (DX12/Vulkan/OpenGL), wide-menu stragglers. See PROGRESS.md.
+**Making a release:**
+1. Bump `launcher/app/package.json`'s `version`. The launcher's updater
+   compares it with the newest GitHub release's tag, so a release without
+   the bump is never offered to players.
+2. Run `npm run dist` in `launcher/app`.
+3. Run `python launcher/make_release.py <win-unpacked> <out> --zip`.
+4. Compile the result once from scratch with the `.ipa`.
+5. Run `gh release create vX.Y.Z-alpha <zip> --prerelease --notes-file docs/RELEASE-X.Y.Z-alpha.md`.
 
-## Where the project actually stands (2026-10-10, alpha 0.0.8)
+## Where the project stands (2026-10-15, alpha 0.1.0)
 
-**Start with [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)** -- how the game
-runs, the code map, the bug method, the debug menu and every test variable.
-
-- Every function is decompiled (2,572 of 2,572); the game plays the menus,
-  Arcade to the end (treasure screen) and whole fights on Windows.
-- The open list is the README's *Known problems*. Done in 0.0.6: the
-  Electron launcher, Shao Kahn's death and the ending texts, the treasure
-  softlock, the pier floor. Next in Mary's queue: texture errors on other
-  stages and fighters (Kung Lao's hat), crashes in modes other than Arcade,
-  fatality animations, white frozen fighters.
-- **0.0.9 released (2026-10-15):** gamepads -- `PLAT_PAD` / `plat_pad_read` in platform.h; win32: XInput + WinMM (not DirectInput: its EnumDevices took 40 s on Mary's PC), the WinMM search on a thread; `keyboard_buttons` ORs the pad in by position; `pad=`, `pad_dbg_menu=`, `UMK3_PAD`, `UMK3_LOG_PAD=1` (also reads the pad in a scripted run). Launcher: `pads:list` runs `umk3-game --list-pads`. Next: drive the game's menus with the pad.
-- **Session of 2026-10-15 (Mary's list, not released, checked by Mary):** F2 menu TOOLS page -- HITBOXES (`hb_*` in game_main.c; body boxes from the fighter object's extents +0x34..+0x40 against the engine floor G+0xac; strike boxes through `PortStrikeHook` in other.c's `strike_check_regs`, drawn by `PortAfterScene` in GameCode.c), FIGHT SPEED, SAVE/LOAD STATE (`runtime/savestate.c`; see HOW-THE-GAME-WORKS 5.1: every new runtime file that holds game state must join the state list in CMakeLists.txt, build_game.ps1 and any rsp). Debug fights restore everything when they end (`g_dbg_saved`, `DbgFightActive`). `drawKodeTip` re-read from armv7: one row, plus the kode's name at y 202. Colour picker on the select screen (`palette_picker`, `PortPaletteOf` in FrontEnd.c; Players.c and the VS screen read it). The dizzy slide is no longer seen. Next: Ermac's friendship/animality and the Mileena combo by eye; use `UMK3_DBG_STATE` to repeat a moment instead of replaying a fight.
-- **Session of 2026-10-14 (Mary's list, not released):** hold-and-release moves (Mileena's sai, Liu Kang's bicycle kick) fire: `QueueAndJump` (other.c) stores `last_switch_ram` only for press entries (0x572d4 `cbz` skips 0x57322/0x57326). Input lag gone, checked by Mary: `AnimSmoothWindowSize = 0` in game_main.c (port), `glFinish` in `plat_swap`, `keyboard_buttons()` feeds `PortKeyButtons`/`PortKeyDial` read at the end of ReadControls (GameCode.c), taps latched (`plat_input_used`), one tick per 60 Hz frame, late key read before a 60 Hz refresh (`pace_frame`, `UMK3_LOG_PACE=1`; Mary's screen is 180 Hz, where it stays off). Crash report: `on_crash` in game_main.c names functions from the exe's COFF symbols, writes `logs\crash-*.log`, shows a message box. Debug fights clear `Character2Override` at task 6. Next: debug-menu hitboxes (FrameInfo boxes per GameObjects entry, drawn at the end of RenderLevelPlayers), check Ermac's friendship/animality and Mileena's combo in game, the dizzy loser sliding after a debug-forced finisher (the menu calls `DoASpecial` outside `mk3_update`).
-- **Session of 2026-10-10 (released as 0.0.8):** video options done, as Mary asked: real 3D resolution (FBO, `render_init` / `render_present` in game_main.c), antialiasing up to x16, exclusive fullscreen (`plat_fullscreen_exclusive`) and borderless fullscreen, aspect 3:2 only (launcher; the game always uses 3:2), `hide_controls=1` (GameCode.c `PortHideControls`, the layout is still computed for touch), game language in PLAY, CONTROLS split into PLAYER 1 / DEBUG, Mary's logo code restored. Before that: the MERCY banner and tune last their full time (DrawHUD 0x2844e adds 0.2 a frame, not 13). Mercy and animality checked by Mary; every finisher works. Mary rebuilt and published v0.0.7b herself: use her launcher as the base and keep her logo. Next, as she asked: game language to PLAY; a video section with render resolution separate from window resolution (really rendered at that size, an engine change); fullscreen and borderless as separate options. `UMK3_DBG_FIN` takes `tick:n;tick:n` (a mercy, then the animality).
-- **Session of 2026-10-09 (after 0.0.6c), fixed and checked by Mary, not released yet** (branch `claude/survival-fix`): Survival crash, Scorpion's spear, Shao Karnage HUD and difficulty, finisher banners, finish timing, typed 5-button finishers. Also fixed after that: the BABALITY banner (8 bouncing blocks) and the missing babality/animality/mercy/friendship banner and tune (`create_fx_param` must use the code read on entry, 0x58b68); 6-button babality typed D,B,B,HK works (`UMK3_BUTTONS=6` for tests). Watch: the dizzy loser sliding toward the winner (seen once more by Mary, not reproduced since). Mary's next requests: debug menu with mouse, one page per category (Q/E to turn pages, keys configurable in the launcher), palette 1/2 per player when picking fighters, the debug box moved to the launcher's PLAY section. Fixed after that, checked by Mary: Kung Lao's hat on the select screen (StaticMeshAmbient is 0 outside a fight; game_main.c gives the front end the body's light), white frozen fighters and Sub-Zero's ice clone (LoadAnimatedCharacter now loads `_DIFFUSE_ICE` on the fight path too, as 0x5c7f8 does; the diffuse is loaded with (0, 0) as every arm does). REA (rea-agents 6.3.0) is built at `E:\rea-rea-agents-6.3.0` and registered in the worktree's `.mcp.json` (PowerShell: use `npm.cmd`, not `npm`). The launcher's *PLAY* section has a *Skip the intros* box (`skip_intro=1`, or `UMK3_SKIP_INTRO=1`): game_main.c jumps `SplashCount` to 491 after the first splash frame, so the menu is up at tick 94 instead of 584 (checked by Mary).
-- **Start with [OPEN-ITEMS-STUDY.md](OPEN-ITEMS-STUDY.md)**: what the binary says about every open item, with the first step for each, and Noob Saibot's status.
-- **Next (Mary's list after 0.0.6b, findings in the README table):**
-  projectiles not drawn (start from the spear: `UMK3_DBG_SPECIAL="1000:0"`
-  `--fight scorpion reptile 13`, frame lookup -1 in `RenderLevelPlayers`);
-  typed finishers and the FATALITY banner/voice (force one with the F2
-  FINISHER row or `UMK3_DBG_KEY="1300:2" UMK3_DBG_FIN="1300:2"`);
-  Kung Lao's hat on the select screen; Survival crash after a win;
-  Sub-Zero's ice clone textures.
-- Two transcription traps found in 0.0.6 are worth checking elsewhere:
-  armv6-era bodies that look complete but are not (`LIME_RenderEvents` drew
-  with an uninitialised matrix), and helpers whose name misleads
-  (`StringInString` is strcmp, not strstr).
+- **Done:** every function is decompiled (2,572 of 2,572). The game plays the
+  menus, Arcade to the end (treasure screen) and whole fights with every
+  finisher on Windows. Input comes from the keyboard, a gamepad or the mouse.
+- **New in 0.1.0** (all Port, not in the binary, except the 4:3 projection):
+  - **Aspect ratios:** 3:2, 4:3 (the iPad build's own projection) and 16:9/21:9 (a wider view, menus centred).
+  - **iPad UI size.**
+  - **Texture quality**, up to uncompressed and HD.
+  - **Loading speed:** parallel decoders, the launcher unpacked behind a stub.
+  - **The launcher updates itself** from GitHub releases.
+  
+  Where each lives: HOW-THE-GAME-WORKS.md, sections 2 and 3.
+- **Open list:** the README's *Known problems*. Mary's list goes on with:
+  - monitor choice in the launcher;
+  - a render backend option (DirectX 12 / Vulkan / OpenGL, a large job);
+  - pad-driven menus;
+  - the remaining texture errors, fatality animations and crashes in modes other than Arcade.
+- **Wide menus:** many front-end sites scale a position by `FE_WidthScale`
+  themselves instead of calling `FE_X`. On 16:9/21:9 such an element sits off
+  centre until `FE_XC` is added there (FrontEnd.c; done for the treasure and
+  kode strips, treasure select, the controls preview and the intro logos).
+- **Two transcription traps** are worth checking elsewhere:
+  - armv6-era bodies that look complete but are not (`LIME_RenderEvents` drew with an uninitialised matrix);
+  - helpers whose name misleads (`StringInString` is strcmp, not strstr).
 - Re-run `python tools/progress.py` before quoting a percentage (set
-  `UMK3_FUNC_TO_FILE` to `OUTPUT/func-to-file.txt`); it is 87.59%.
-- Fix locally in a built game folder (the fast rebuild in the guide, section
-  6), test with a scripted run, have a human check it, then commit.
+  `UMK3_FUNC_TO_FILE` to `OUTPUT/func-to-file.txt`); it is 98.30%.
+- **How work is done:**
+  1. Fix locally in a built game folder (the fast rebuild in HOW-THE-GAME-WORKS, section 6).
+  2. Test with a scripted run and captures.
+  3. Have Mary check it.
+  4. Then commit, open the PR and merge, with the docs updated.
 
 ---
 
