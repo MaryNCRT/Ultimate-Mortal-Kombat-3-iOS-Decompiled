@@ -29,6 +29,7 @@ struct port_gfx {
     int  ui;                    /* ui_size=: 0 iphone, 1 ipad */
     int  hidectl;               /* hide_controls= */
     char aspect[8];             /* aspect=: 3:2 4:3 16:9 21:9 */
+    int  monitor;               /* monitor=: 0 the window's, 1..n */
 };
 void port_gfx_get(struct port_gfx *g);
 /* Applies it now; `display` also the window mode and size. */

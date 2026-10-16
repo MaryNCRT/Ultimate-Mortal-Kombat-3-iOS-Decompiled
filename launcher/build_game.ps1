@@ -192,13 +192,13 @@ Step "5/5 Copiando res desde tu .ipa"
 if ($LASTEXITCODE -ne 0) { Fail "setup_res.ps1" }
 
 # Mary's own pictures for the wide screens (the continue screens on 16:9
-# and 21:9): from launcherditional textures, which updates bring, to the
+# and 21:9): from launcher\aditional textures, which updates bring, to the
 # folder beside res the game reads them from.
 $addSrc = Join-Path $PSScriptRoot 'aditional textures'
 if (Test-Path $addSrc) {
     $addDst = Join-Path $Root 'aditional textures'
     New-Item -ItemType Directory -Force -Path $addDst | Out-Null
-    Copy-Item -Path (Join-Path $addSrc '*') -Destination $addDst -Force
+    Copy-Item -Path (Join-Path $addSrc '*') -Destination $addDst -Recurse -Force
 }
 
 $ini = Join-Path $Root 'umk3.ini'

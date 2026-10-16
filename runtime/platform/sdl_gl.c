@@ -257,6 +257,60 @@ void plat_key_label(int code, char *out, int n)
             *p = (char)(*p - 32);
 }
 
+void plat_key_glyph(int code, char *out, int n)
+{
+    plat_key_label(code, out, n);
+}
+
+int plat_pad_glyph_style(int player, int style)
+{
+    (void)player;
+    (void)style;
+    return 0;
+}
+
+unsigned char *plat_ui_grid(const char *title,
+                            const unsigned char *const *cells, int n,
+                            int cols, int cpx, float cell, int sel,
+                            const char *footer, float s, int *w, int *h)
+{
+    (void)title; (void)cells; (void)n; (void)cols; (void)cpx; (void)cell; (void)sel;
+    (void)footer; (void)s; (void)w; (void)h;
+    return NULL;
+}
+
+void plat_monitor_select(int i) { (void)i; }
+int  plat_monitor(void) { return 0; }
+int  plat_monitor_count(void) { return 1; }
+void plat_monitor_name(int i, char *out, int n)
+{
+    if (n > 0)
+        snprintf(out, (size_t)n, "%d", i);
+}
+void plat_monitor_list(void) { printf("1\t1\n"); }
+
+int plat_pad_sony_kind(unsigned product)
+{
+    return product == 0x05c4 || product == 0x09cc || product == 0x0ba0 ? 4 : 2;
+}
+
+int plat_pad_glyph_kind(int player, int kind)
+{
+    (void)player;
+    return kind;
+}
+
+void plat_pad_glyph(int kind, int pb, char *out, int n)
+{
+    static const char *const names[PB_COUNT] = {
+        "SOUTH", "EAST", "WEST", "NORTH", "L1", "R1", "L2", "R2",
+        "SELECT", "START", "L3", "R3", "HOME",
+    };
+    (void)kind;
+    if (n > 0)
+        snprintf(out, (size_t)n, "%s", pb >= 0 && pb < PB_COUNT ? names[pb] : "");
+}
+
 void plat_bind_key(int code, int key)
 {
     if (code >= 0 && code < PK_COUNT && key > 0 && key < SDL_NUM_SCANCODES)

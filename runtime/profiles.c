@@ -102,8 +102,9 @@ void prof_save(void)
     }
     fprintf(f, "; UMK3 player profile: the launcher and the game both edit this;\n");
     fprintf(f, "; the id belongs to this installation and never changes\n");
-    fprintf(f, "profile=%s|%s|%d|%06X|%c\n", g_prof.id, g_prof.name, g_prof.icon,
-            g_prof.color & 0xffffff, g_prof.dark ? 'D' : 'L');
+    fprintf(f, "profile=%s|%s|%d|%06X|%c|%06X\n", g_prof.id, g_prof.name, g_prof.icon,
+            g_prof.color & 0xffffff, "LDC"[g_prof.dark >= 0 && g_prof.dark <= 2 ? g_prof.dark : 0],
+            g_prof.color2 & 0xffffff);
     fclose(f);
 }
 
@@ -149,7 +150,21 @@ void prof_load(const char *ini_path, const char *default_name)
             g_prof.icon = DEF_ICON;
         g_prof.color = (unsigned)strtoul(fld[3], NULL, 16) & 0xffffff;
         /* the fifth field, if any: the loop left v on it */
-        g_prof.dark = v && (*v == 'D' || *v == 'd');
+        /* L, D or C, then |RRGGBB, the other end; an older file has only
+         * L or D, or the custom one's RRGGBB alone */
+        g_prof.dark = 0;
+        if (v && strspn(v, "0123456789ABCDEFabcdef") >= 6) {
+            g_prof.dark = 2;
+            g_prof.color2 = (unsigned)strtoul(v, NULL, 16) & 0xffffff;
+        } else {
+            if (v && (*v == 'D' || *v == 'd'))
+                g_prof.dark = 1;
+            else if (v && (*v == 'C' || *v == 'c'))
+                g_prof.dark = 2;
+            g_prof.color2 = prof_shade_default(g_prof.dark);
+            if (v && (v = strchr(v, '|')) != NULL && strspn(v + 1, "0123456789ABCDEFabcdef") >= 6)
+                g_prof.color2 = (unsigned)strtoul(v + 1, NULL, 16) & 0xffffff;
+        }
         g_have = 1;
     }
     if (f)
@@ -161,6 +176,7 @@ void prof_load(const char *ini_path, const char *default_name)
         g_prof.icon = DEF_ICON;
         g_prof.color = DEF_COLOR;
         g_prof.dark = 0;
+        g_prof.color2 = prof_shade_default(0);
         g_have = 1;
         prof_save();
         printf("profiles: new profile %s\n", g_prof.id);
@@ -175,7 +191,24 @@ void prof_reset(const char *default_name)
     g_prof.icon = DEF_ICON;
     g_prof.color = DEF_COLOR;
     g_prof.dark = 0;
+    g_prof.color2 = prof_shade_default(0);
     prof_save();
+}
+
+unsigned prof_shade_default(int dark)
+{
+    return dark == 1 ? 0x000000 : dark == 2 ? 0x6E0B12 : 0xFFFFFF;
+}
+
+unsigned prof_look_key(const struct profile *p)
+{
+    unsigned k = 2166136261u;
+
+    k = (k ^ (unsigned)p->icon) * 16777619u;
+    k = (k ^ p->color) * 16777619u;
+    k = (k ^ (unsigned)p->dark) * 16777619u;
+    k = (k ^ p->color2) * 16777619u;
+    return k;
 }
 
 /* ------------------------------------------------------------------ icon */
@@ -193,12 +226,13 @@ static float sd_round(float x, float y, float c, float h, float r)
     return sqrtf(ox * ox + oy * oy) + (in < 0 ? in : 0) - r;
 }
 
-unsigned char *prof_icon_rgba(int icon, unsigned color, int dark, int S)
+unsigned char *prof_icon_rgba(int icon, unsigned color, int dark,
+                              unsigned color2, int S)
 {
     uint8_t *art = NULL;
     int aw = 0, ah = 0, x, y;
     unsigned char *out;
-    float c[3], top[3], mid[3], bot[3], glow[3];
+    float c[3], c2[3], top[3], mid[3], bot[3], glow[3], ga, g0, g1;
     char path[1200];
     const char *root = lime_platform_asset_root();
 
@@ -216,14 +250,35 @@ unsigned char *prof_icon_rgba(int icon, unsigned color, int dark, int S)
     c[0] = (float)((color >> 16) & 255);
     c[1] = (float)((color >> 8) & 255);
     c[2] = (float)(color & 255);
+    c2[0] = (float)((color2 >> 16) & 255);
+    c2[1] = (float)((color2 >> 8) & 255);
+    c2[2] = (float)(color2 & 255);
     for (x = 0; x < 3; x++) {
         /* light: white into the colour, deeper at the bottom; dark: the
-         * colour at the top going down to black (red into black) */
-        top[x]  = dark ? c[x] + (255 - c[x]) * 0.15f : c[x] + (255 - c[x]) * 0.55f;
-        mid[x]  = dark ? c[x] * 0.55f : c[x];
-        bot[x]  = dark ? c[x] * 0.08f : c[x] * 0.7f;
-        glow[x] = dark ? c[x] : c[x] + (255 - c[x]) * 0.6f;
+         * colour at the top going down to black (red into black); custom:
+         * the colour at the top going down to the second one */
+        if (dark == 2) {
+            top[x]  = c[x] + (255 - c[x]) * 0.2f;
+            mid[x]  = c[x] + (c2[x] - c[x]) * 0.5f;
+            bot[x]  = c2[x];
+            glow[x] = c2[x] + (255 - c2[x]) * 0.3f;
+        } else if (dark) {
+            /* the colour into color2, black by default */
+            top[x]  = c[x] + (255 - c[x]) * 0.15f;
+            mid[x]  = c[x] + (c2[x] - c[x]) * 0.45f;
+            bot[x]  = c[x] + (c2[x] - c[x]) * 0.92f;
+            glow[x] = c[x];
+        } else {
+            /* color2, white by default, into the colour */
+            top[x]  = c[x] + (c2[x] - c[x]) * 0.55f;
+            mid[x]  = c[x];
+            bot[x]  = c[x] * 0.7f;
+            glow[x] = c[x] + (c2[x] - c[x]) * 0.6f;
+        }
     }
+    ga = dark == 2 ? 0.45f : dark ? 0.35f : 0.75f;     /* glow */
+    g0 = dark == 2 ? 0.45f : dark ? 0.35f : 0.55f;     /* gloss, top */
+    g1 = dark == 2 ? 0.04f : dark ? 0.03f : 0.04f;     /* gloss, middle */
 
     for (y = 0; y < S; y++)
         for (x = 0; x < S; x++) {
@@ -237,7 +292,7 @@ unsigned char *prof_icon_rgba(int icon, unsigned color, int dark, int S)
                                   : mid[i] + (bot[i] - mid[i]) * ((t - 0.5f) / 0.5f);
             k = sqrtf((px - S * 0.5f) * (px - S * 0.5f)
                       + (py - S * 1.05f) * (py - S * 1.05f));
-            a = (dark ? 0.35f : 0.75f) * clampf(1.0f - k / (S * 0.6f), 0, 1);   /* the glow */
+            a = ga * clampf(1.0f - k / (S * 0.6f), 0, 1);   /* the glow */
             for (i = 0; i < 3; i++)
                 col[i] += (glow[i] - col[i]) * a;
             if (art) {                          /* the fighter, bilinear */
@@ -269,7 +324,6 @@ unsigned char *prof_icon_rgba(int icon, unsigned color, int dark, int S)
               + (py / (S * 0.5f)) * (py / (S * 0.5f));
             if (e < 1.0f) {                     /* the gloss */
                 float edge = clampf((1.0f - sqrtf(e)) * S * 0.5f, 0, 1);
-                float g0 = dark ? 0.35f : 0.55f, g1 = dark ? 0.03f : 0.04f;
                 a = (g0 + (g1 - g0) * clampf(py / (S * 0.5f), 0, 1)) * edge;
                 for (i = 0; i < 3; i++)
                     col[i] += (255 - col[i]) * a;

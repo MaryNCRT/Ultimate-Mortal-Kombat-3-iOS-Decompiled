@@ -13,12 +13,14 @@
 const T = {
     ES: {
         ui: 'ENGLISH', ttlSub: 'PORT DE PC',
-        mBuild: 'COMPILAR TU .IPA', mVideo: 'GRÁFICOS', mControls: 'CONTROLES',
-        mPlay: 'JUGAR', mQuit: 'SALIR', mProfile: 'PERFIL',
+        mBuild: 'Compilar tu .ipa', mVideo: 'Gráficos', mControls: 'Controles',
+        mPlay: 'Jugar', mQuit: 'Salir', mProfile: 'Perfil',
+        monitorLbl: 'MONITOR', monitorAuto: 'AUTOMÁTICO (EL PRINCIPAL)', monitorMain: 'PRINCIPAL',
+        padIconsLbl: 'ICONOS DE BOTONES', padIcons: ['AUTOMÁTICO (LOS DEL MANDO)', 'XBOX', 'PLAYSTATION 5', 'PLAYSTATION 4', 'NINTENDO'],
         dProfile: 'Tu perfil de jugador: nombre, icono e ID de esta instalación. El juego lo edita también (Esc > PERFIL).',
         hProfile: 'PERFIL DE JUGADOR',
         profName: 'NOMBRE DE JUGADOR', profId: 'ID DE JUGADOR', profColor: 'COLOR DE FONDO', profIconLbl: 'ICONO',
-        profLight: 'CLARO (DESDE BLANCO)', profDark: 'OSCURO (HACIA NEGRO)', profShadeLbl: 'DEGRADADO',
+        profLight: 'CLARO', profDark: 'OSCURO', profCustom: 'PERSONALIZADO', profShadeLbl: 'DEGRADADO', profColor2: 'HACIA EL COLOR', profColorLight: 'COLOR CLARO (ARRIBA)', profColorDark: 'COLOR OSCURO (ABAJO)',
         profDefault: 'JUGADOR', profReset: 'REINICIAR DATOS', profResetAsk: '¿SEGURO? PULSA OTRA VEZ',
         dBuild: 'El juego se compila en tu PC a partir de tu propio .ipa de UMK3 para iPhone (1.2.59).',
         dVideo: 'Resolución de ventana, resolución 3D, modo de pantalla y el marco de las barras.',
@@ -32,6 +34,9 @@ const T = {
         updDone: 'ACTUALIZADO A', updRebuild: 'RECOMPILANDO EL JUEGO CON LA NUEVA VERSIÓN…', updFailed: 'LA ACTUALIZACIÓN NO SE PUDO COPIAR (VER update\\apply.log)', updNoNotes: 'SIN NOTAS.',
         browse: 'BUSCAR…', build: 'COMPILAR', rebuild: 'RECOMPILAR', cancel: 'CANCELAR', clear: 'QUITAR',
         builtAt: 'JUEGO COMPILADO', notBuilt: 'TODAVÍA NO ESTÁ COMPILADO: ELIGE TU .IPA Y PULSA COMPILAR.',
+        gVideo: 'VIDEO', gTex: 'TEXTURAS', gUi: 'INTERFAZ', hGVideo: 'VIDEO', hGTex: 'TEXTURAS', hGUi: 'INTERFAZ',
+        gScreen: 'PANTALLA', gImage: 'IMAGEN', gUpdates: 'ACTUALIZACIONES',
+        texNote: 'IPHONE: LAS TEXTURAS REDUCIDAS DEL IPHONE (_LOW), COMO EL ORIGINAL. IPAD: LAS COMPLETAS. SIN LÍMITE: LAS COMPLETAS EN PNG, CON MIPMAPS Y FILTRO ANISÓTROPO. SE CAMBIA SIN REINICIAR DESDE EL MENÚ DEL JUEGO (ESC).',
         hVideo: 'GRÁFICOS', res: 'RESOLUCIÓN DE VENTANA', rres: 'RESOLUCIÓN 3D', mode: 'MODO DE PANTALLA',
         modes: ['VENTANA', 'PANTALLA COMPLETA', 'PANTALLA COMPLETA SIN BORDES'], sameRes: 'IGUAL QUE LA VENTANA', tabDbg: 'DEBUG', tabKb: 'TECLADO', tabPad: 'MANDO',
         aspect: 'RELACIÓN DE ASPECTO', aspects: ['3:2 (ORIGINAL, IPHONE)', '4:3 (IPAD)', '16:9 (PANORÁMICA)', '21:9 (ULTRA PANORÁMICA)'], aa: 'ANTIALIASING', aaOff: 'DESACTIVADO', texq: 'CALIDAD DE TEXTURAS', texqs: ['IPHONE (ACTUAL)', 'IPAD', 'SIN LÍMITE'], uisize: 'TAMAÑO DE LA INTERFAZ', uisizes: ['IPHONE (ACTUAL)', 'IPAD (HUD MÁS PEQUEÑO)'], hidectl: 'OCULTAR LOS CONTROLES EN PANTALLA (JOYSTICK Y BOTONES)',
@@ -64,16 +69,18 @@ const T = {
         padOff: 'Ninguno (solo teclado)', padAuto: 'Mando: el primero que se conecte', padX: 'Mando de Xbox (XInput)',
         padSeen: 'NINGÚN MANDO CONECTADO EN WINDOWS', padLook: 'BUSCANDO MANDOS…', padNow: 'CONECTADO', padGone: '(no conectado)',
         padNote: 'EL TECLADO SIGUE FUNCIONANDO CON EL MANDO. LOS MENÚS SE USAN CON EL RATÓN.',
-        pads: { dir: 'Moverse', start: 'Pausa', select: 'Combos' },
+        pads: { dir: 'Moverse', start: 'Pausa', select: 'Combos', settings: 'Abrir ajustes' },
     },
     EN: {
         ui: 'ESPAÑOL', ttlSub: 'PC PORT',
-        mBuild: 'COMPILE YOUR .IPA', mVideo: 'GRAPHICS', mControls: 'CONTROLS',
-        mPlay: 'PLAY', mQuit: 'QUIT', mProfile: 'PROFILE',
+        mBuild: 'Compile your .ipa', mVideo: 'Graphics', mControls: 'Controls',
+        monitorLbl: 'MONITOR', monitorAuto: 'AUTOMATIC (THE MAIN ONE)', monitorMain: 'MAIN',
+        padIconsLbl: 'BUTTON ICONS', padIcons: ['AUTOMATIC (THE PAD\u2019S OWN)', 'XBOX', 'PLAYSTATION 5', 'PLAYSTATION 4', 'NINTENDO'],
+        mPlay: 'Play', mQuit: 'Quit', mProfile: 'Profile',
         dProfile: 'Your player profile: name, icon and the ID of this installation. The game edits it too (Esc > PROFILE).',
         hProfile: 'PLAYER PROFILE',
         profName: 'PLAYER NAME', profId: 'PLAYER ID', profColor: 'BACKGROUND COLOUR', profIconLbl: 'ICON',
-        profLight: 'LIGHT (FROM WHITE)', profDark: 'DARK (TO BLACK)', profShadeLbl: 'GRADIENT',
+        profLight: 'LIGHT', profDark: 'DARK', profCustom: 'CUSTOM', profShadeLbl: 'GRADIENT', profColor2: 'INTO THE COLOUR', profColorLight: 'LIGHT COLOUR (TOP)', profColorDark: 'DARK COLOUR (BOTTOM)',
         profDefault: 'PLAYER', profReset: 'RESET DATA', profResetAsk: 'SURE? PRESS AGAIN',
         dBuild: 'The game is compiled on your PC from your own UMK3 iPhone .ipa (1.2.59).',
         dVideo: 'Window resolution, 3D resolution, display mode and the bars frame.',
@@ -87,6 +94,9 @@ const T = {
         updDone: 'UPDATED TO', updRebuild: 'RECOMPILING THE GAME WITH THE NEW VERSION…', updFailed: 'THE UPDATE COULD NOT BE COPIED (SEE update\\apply.log)', updNoNotes: 'NO NOTES.',
         browse: 'BROWSE…', build: 'COMPILE', rebuild: 'REBUILD', cancel: 'CANCEL', clear: 'CLEAR',
         builtAt: 'GAME COMPILED', notBuilt: 'NOT COMPILED YET: CHOOSE YOUR .IPA AND PRESS COMPILE.',
+        gVideo: 'VIDEO', gTex: 'TEXTURES', gUi: 'INTERFACE', hGVideo: 'VIDEO', hGTex: 'TEXTURES', hGUi: 'INTERFACE',
+        gScreen: 'SCREEN', gImage: 'IMAGE', gUpdates: 'UPDATES',
+        texNote: 'IPHONE: THE IPHONE\u2019S REDUCED TEXTURES (_LOW), AS THE ORIGINAL. IPAD: THE FULL ONES. NO LIMIT: THE FULL ONES AS PNG, WITH MIPMAPS AND ANISOTROPIC FILTERING. THE GAME\u2019S MENU (ESC) CHANGES IT WITHOUT RESTARTING.',
         hVideo: 'GRAPHICS', res: 'WINDOW RESOLUTION', rres: '3D RESOLUTION', mode: 'DISPLAY MODE',
         modes: ['WINDOW', 'FULLSCREEN', 'BORDERLESS FULLSCREEN'], sameRes: 'SAME AS THE WINDOW', tabDbg: 'DEBUG', tabKb: 'KEYBOARD', tabPad: 'GAMEPAD',
         aspect: 'ASPECT RATIO', aspects: ['3:2 (ORIGINAL, IPHONE)', '4:3 (IPAD)', '16:9 (WIDESCREEN)', '21:9 (ULTRAWIDE)'], aa: 'ANTIALIASING', aaOff: 'OFF', texq: 'TEXTURE QUALITY', texqs: ['IPHONE (CURRENT)', 'IPAD', 'NO LIMIT'], uisize: 'INTERFACE SIZE', uisizes: ['IPHONE (CURRENT)', 'IPAD (SMALLER HUD)'], hidectl: 'HIDE THE ON-SCREEN CONTROLS (STICK AND BUTTONS)',
@@ -119,7 +129,7 @@ const T = {
         padOff: 'None (keyboard only)', padAuto: 'Gamepad: the first one connected', padX: 'Xbox pad (XInput)',
         padSeen: 'NO GAMEPAD CONNECTED TO WINDOWS', padLook: 'LOOKING FOR GAMEPADS…', padNow: 'CONNECTED', padGone: '(not connected)',
         padNote: 'THE KEYBOARD STILL WORKS WITH A PAD. THE MENUS ARE USED WITH THE MOUSE.',
-        pads: { dir: 'Move', start: 'Pause', select: 'Moves' },
+        pads: { dir: 'Move', start: 'Pause', select: 'Moves', settings: 'Open settings' },
     },
 };
 
@@ -128,12 +138,12 @@ const T = {
  * defaults are the game's own, by position. "5:x" is the five-button
  * layout's; special, pause and moves serve both layouts. */
 const PAD_ROWS = {
-    6: ['hp', 'lp', 'hk', 'lk', 'block', 'run', 'special', 'pause', 'moves'],
-    5: ['5:p', '5:k', '5:b', '5:r', 'special', 'pause', 'moves'],
+    6: ['hp', 'lp', 'hk', 'lk', 'block', 'run', 'special', 'pause', 'moves', 'settings'],
+    5: ['5:p', '5:k', '5:b', '5:r', 'special', 'pause', 'moves', 'settings'],
 };
 const PAD_DEFAULT = {
     hp: 'WEST', lp: 'SOUTH', block: 'R1', hk: 'NORTH', lk: 'EAST', run: 'L1+L2',
-    special: 'R2', pause: 'START', moves: 'SELECT',
+    special: 'R2', pause: 'START', moves: 'SELECT', settings: 'HOME',
 };
 const PAD5_DEFAULT = { p: 'WEST+NORTH', b: 'R1', k: 'SOUTH+EAST', r: 'L1+L2' };
 /* The player the KEYBOARD and GAMEPAD tabs edit: 1, or 2 (DUELO, umk3.ini
@@ -179,31 +189,14 @@ async function scanPads() {
 }
 /* The debug menu's pad combination (pad_dbg_menu=): two buttons held
  * together, the game's PB_* names. */
-const PAD_BTNS = [['L3', 'L3'], ['R3', 'R3'], ['L1', 'L1 / LB'], ['R1', 'R1 / RB'],
-    ['L2', 'L2 / LT'], ['R2', 'R2 / RT'], ['SELECT', 'SHARE / BACK'], ['START', 'OPTIONS / START'],
-    ['SOUTH', '✕ / A'], ['EAST', '○ / B'], ['WEST', '□ / X'], ['NORTH', '△ / Y'], ['HOME', 'PS / HOME']];
 function fillPadDbg() {
-    const parts = (cfg.padDbgMenu || '').split('+');
-    [['padDbgA', parts[0] || ''], ['padDbgB', parts[1] || '']].forEach(([id, v]) => {
-        const s = $(id);
-        s.innerHTML = '';
-        const none = el('option', null, '—');
-        none.value = '';
-        s.appendChild(none);
-        for (const [n, label] of PAD_BTNS) {
-            const o = el('option', null, label);
-            o.value = n;
-            s.appendChild(o);
-        }
-        s.value = v;
+    const box = $('padDbgSlots');
+    box.innerHTML = '';
+    padSlots(box, cfg.padDbgMenu || '', padKindOf(1), v => {
+        cfg.padDbgMenu = v;
+        save({ padDbgMenu: v });
+        fillPadDbg();
     });
-}
-function savePadDbg() {
-    const v = [$('padDbgA').value, $('padDbgB').value].filter(Boolean)
-        .filter((x, i, a) => a.indexOf(x) === i).join('+');
-    cfg.padDbgMenu = v;
-    selectBlip();
-    save({ padDbgMenu: v });
 }
 
 function fillPads() {
@@ -226,6 +219,14 @@ function fillPads() {
     s.value = want;
     const any = Object.keys(seenPads).length;
     $('padSeen').textContent = any ? T[ui].padNow + ': ' + Object.values(seenPads).join(', ') : T[ui].padSeen;
+    const ic = $('padIcons');
+    ic.innerHTML = '';
+    T[ui].padIcons.forEach((n, i) => {
+        const o = el('option', null, n);
+        o.value = PAD_ICON_NAMES[i];
+        ic.appendChild(o);
+    });
+    ic.value = (pl === 2 ? cfg.p2PadIcons : cfg.padIcons) || 'auto';
     paintPadMap();
 }
 function paintPadMap() {
@@ -236,38 +237,311 @@ function paintPadMap() {
     b.innerHTML = '';
     const dir = el('div', 'keybtn ro');
     dir.appendChild(el('span', 'kname', T[ui].pads.dir));
-    dir.appendChild(el('span', 'kkey', 'D-PAD / L-STICK'));
+    const kind = padKindOf(pl);
+    const dk = el('span', 'kkey');
+    for (const f of ['Dpad', kind === 'xbox' ? 'L' : kind === 'nintendo' ? 'L' : 'L3']) {
+        const im = glyphImg(PAD_SETS[kind].dir + '/' + PAD_SETS[kind].extra[f]);
+        if (im) dk.appendChild(im);
+    }
+    if (!dk.childNodes.length) dk.textContent = 'D-PAD / L-STICK';
+    dir.appendChild(dk);
     b.appendChild(dir);
     for (const act of PAD_ROWS[cfg.buttons === 6 ? 6 : 5]) {
         const k = el('div', 'keybtn ro');
         const name = act === 'pause' ? T[ui].pads.start : act === 'moves' ? T[ui].pads.select
-                   : T[ui].keys[act];
+                   : act === 'settings' ? T[ui].pads.settings : T[ui].keys[act];
         k.appendChild(el('span', 'kname', name));
-        const cur = padGet(act).split('+').filter(Boolean);
-        const sels = [0, 1].map(i => {
-            const s = el('select', 'sel padsel');
-            const none = el('option', null, '—');
-            none.value = '';
-            s.appendChild(none);
-            for (const [n, label] of PAD_BTNS) {
-                const o = el('option', null, label);
-                o.value = n;
-                s.appendChild(o);
-            }
-            s.value = cur[i] || '';
-            return s;
-        });
-        const change = () => padSet(act, sels.map(x => x.value).filter(Boolean)
-            .filter((x, i, a) => a.indexOf(x) === i).join('+'));
         const box = el('span', 'padsels');
-        for (const x of sels) {
-            x.addEventListener('change', change);
-            box.appendChild(x);
-        }
+        padSlots(box, padGet(act), kind, v => { padSet(act, v); paintPadMap(); });
         k.appendChild(box);
         b.appendChild(k);
     }
 }
+
+/* ------------------------------------------------------------ glyphs --
+ * The key and button pictures (Julio Cacko's Free Input Prompts, CC0), the
+ * same the game's menus draw (runtime/platform/win32_gl.c): the Vintage
+ * keyboard, the Retro Xbox and PlayStation 5 pads, the Stylized PlayStation
+ * 4 and the Default Nintendo ones. */
+let GLYPH = {};
+function glyphImg(name) {
+    if (!GLYPH[name]) return null;
+    const im = el('img', 'glyph');
+    im.src = GLYPH[name];
+    im.alt = '';
+    im.draggable = false;
+    return im;
+}
+/* a virtual key's picture: kb/T_<file>_Key_Vintage */
+const KB_FILES = {
+    8: 'BackSpace', 9: 'Tab', 13: 'Enter', 16: 'Shift', 17: 'Crtl', 18: 'Alt', 20: 'CapsLock',
+    27: 'Esc', 32: 'Space', 33: 'PageUp', 34: 'PageDown', 35: 'End', 36: 'Home',
+    37: 'Left', 38: 'Up', 39: 'Right', 40: 'Down', 44: 'PrtScrn', 45: 'Ins', 46: 'Del',
+    106: 'Asterisk', 107: 'Plus', 109: 'Minus', 110: 'Del', 111: 'Slash', 144: 'NumLock',
+    186: 'Semicolon', 187: 'Plus', 189: 'Minus', 191: 'Slash', 192: 'Tilde',
+    219: 'Brackets_L', 221: 'Brackets_R', 222: 'Quotation',
+};
+function kbFile(vk) {
+    if ((vk >= 65 && vk <= 90) || (vk >= 48 && vk <= 57)) return String.fromCharCode(vk);
+    if (vk >= 96 && vk <= 105) return String(vk - 96);
+    if (vk >= 112 && vk <= 123) return 'F' + (vk - 111);
+    return KB_FILES[vk] || null;
+}
+function keyFace(vk) {
+    const f = kbFile(vk), span = el('span', 'kkey');
+    const im = f && glyphImg('kb/T_' + f + '_Key_Vintage');
+    if (!im) {
+        span.textContent = vkLabel(vk);
+        return span;
+    }
+    if (vk >= 96 && vk <= 111) span.appendChild(el('span', 'knum', 'NUM'));
+    span.appendChild(im);
+    return span;
+}
+/* The game's PB_* buttons, by position, and each make's pictures. */
+const PB = ['SOUTH', 'EAST', 'WEST', 'NORTH', 'L1', 'R1', 'L2', 'R2', 'SELECT', 'START', 'L3', 'R3', 'HOME'];
+const PAD_ICON_NAMES = ['auto', 'xbox', 'ps5', 'ps4', 'nintendo'];
+const PAD_SETS = {
+    xbox: { dir: 'xb', files: ['T_X_A_Color_Retro', 'T_X_B_Color_Retro', 'T_X_X_Color_Retro',
+        'T_X_Y_Color_Retro', 'T_X_LB_Retro', 'T_X_RB_Retro', 'T_X_LT_Retro', 'T_X_RT_Retro',
+        'T_X_Share_Retro', null, 'T_X_Left_Stick_Click_Retro', 'T_X_Right_Stick_Click_Retro', null],
+        names: { START: 'MENU', HOME: 'XBOX' }, extra: { Dpad: 'T_X_Dpad_Retro', L: 'T_X_L_Retro' } },
+    ps5: { dir: 'ps', files: ['T_P5_Cross_Color_Retro', 'T_P5_Circle_Color_Retro',
+        'T_P5_Square_Color_Retro', 'T_P5_Triangle_Color_Retro', 'T_P5_L1_Retro', 'T_P5_R1_Retro',
+        'T_P5_L2_Retro', 'T_P5_R2_Retro', 'T_P5_Share_Retro', 'T_P5_Options_Retro',
+        'T_P5_L3_Retro', 'T_P5_R3_Retro', null],
+        names: { HOME: 'PS' }, extra: { Dpad: 'T_P5_Dpad_Retro', L3: 'T_P5_L_Retro' } },
+    ps4: { dir: 'p4', files: ['T_P4_Cross_Color_Stylized', 'T_P4_Circle_Color_Stylized',
+        'T_P4_Square_Color_Stylized', 'T_P4_Triangle_Color_Stylized', 'T_P4_L1_Stylized',
+        'T_P4_R1_Stylized', 'T_P4_L2_Stylized', 'T_P4_R2_Stylized', 'T_P4_Share_Stylized',
+        'T_P4_Options_Stylized', 'T_P4_L3_Stylized', 'T_P4_R3_Stylized', null],
+        names: { HOME: 'PS' }, extra: { Dpad: 'T_P4_Dpad_Stylized', L3: 'T_P4_l_Stylized' } },
+    /* by position: a Nintendo pad's south button is its B */
+    nintendo: { dir: 'ns', files: ['T_S_B', 'T_S_A', 'T_S_Y', 'T_S_X', 'T_S_LB', 'T_S_RB',
+        'T_S_LT', 'T_S_RT', 'T_S_Minus', 'T_S_Plus', 'T_S_L', 'T_S_R', 'T_S_Home'],
+        names: {}, extra: { Dpad: 'T_S_Dpad', L: 'T_S_L' } },
+};
+/* A pad= value's make: 054c Sony (the DualShock 4's products apart), 057e
+ * Nintendo, anything else Xbox. */
+function padMake(dev, id) {
+    const s = String(dev || '') + ' ' + String(id || '');
+    if (/054c[:\s-]*(product:\s*)?(05c4|09cc|0ba0)/i.test(s)) return 'ps4';
+    if (/054c/i.test(s)) return 'ps5';
+    if (/057e/i.test(s)) return 'nintendo';
+    return 'xbox';
+}
+/* The pictures for a player's pad: pad_icons= / p2pad_icons=, else the
+ * pad's own make (the chosen one, or for auto the one connected). */
+function padKindOf(p) {
+    const st = (p === 2 ? cfg.p2PadIcons : cfg.padIcons) || 'auto';
+    if (st !== 'auto' && PAD_SETS[st]) return st;
+    const dev = (p === 2 ? cfg.p2Pad : cfg.pad) || 'auto';
+    if (/^[0-9a-f]{4}:/i.test(dev)) return padMake(dev);
+    const gp = livePad();
+    return gp ? padMake('', gp.id) : 'xbox';
+}
+function padFace(kind, b) {
+    const set = PAD_SETS[kind] || PAD_SETS.xbox, i = PB.indexOf(b);
+    const im = i >= 0 && set.files[i] && glyphImg(set.dir + '/' + set.files[i]);
+    return im || el('span', 'gname', set.names[b] || b);
+}
+function comboFace(kind, v, into) {
+    const parts = String(v || '').split('+').filter(Boolean);
+    if (!parts.length) into.appendChild(el('span', 'gname', '—'));
+    parts.forEach((b, i) => {
+        if (i) into.appendChild(el('span', 'gplus', '+'));
+        into.appendChild(padFace(kind, b));
+    });
+}
+/* Two slots, either button of the two presses it; each opens the picker. */
+function padSlots(box, value, kind, onChange) {
+    const cur = String(value || '').split('+').filter(Boolean);
+    [0, 1].forEach(i => {
+        const s = el('button', 'padslot');
+        comboFace(kind, cur[i] || '', s);
+        s.addEventListener('click', ev => {
+            ev.stopPropagation();
+            selectBlip();
+            openPicker(s, kind, b => {
+                const next = cur.slice();
+                next[i] = b;
+                onChange(next.filter(Boolean).filter((x, j, a) => a.indexOf(x) === j).join('+'));
+            });
+        });
+        box.appendChild(s);
+    });
+}
+function closePicker() {
+    const p = $('picker');
+    if (p) p.remove();
+}
+function openPicker(anchor, kind, pick) {
+    closePicker();
+    const box = el('div', 'picker');
+    box.id = 'picker';
+    for (const b of [''].concat(PB)) {
+        const o = el('button', 'pick');
+        if (b) o.appendChild(padFace(kind, b));
+        else o.appendChild(el('span', 'gname', '—'));
+        o.title = b || '—';
+        o.addEventListener('click', ev => {
+            ev.stopPropagation();
+            selectBlip();
+            closePicker();
+            pick(b);
+        });
+        box.appendChild(o);
+    }
+    document.body.appendChild(box);
+    const r = anchor.getBoundingClientRect(), w = box.offsetWidth, h = box.offsetHeight;
+    box.style.left = Math.max(4, Math.min(window.innerWidth - w - 4, r.right - w)) + 'px';
+    box.style.top = (r.bottom + h + 4 < window.innerHeight ? r.bottom + 4 : r.top - h - 4) + 'px';
+}
+document.addEventListener('click', closePicker);
+
+function paintGfxTab(g) {
+    document.querySelectorAll('.tab[data-g]').forEach(t => t.classList.toggle('active', t.dataset.g === g));
+    document.querySelectorAll('.gpage').forEach(p => p.classList.toggle('hidden', p.dataset.g !== g));
+}
+
+/* The menu's selection, the band and the orb, slides to the chosen line
+ * instead of jumping there. */
+function moveMenuSel() {
+    const a = document.querySelector('.mi.active'), s = $('menuSel');
+    if (!a || !s) return;
+    const orb = a.querySelector('.orb');
+    const x = orb ? orb.offsetLeft : a.offsetLeft;
+    s.style.transform = 'translate(' + x + 'px, ' + a.offsetTop + 'px)';
+    s.style.width = (a.offsetLeft + a.offsetWidth - x) + 'px';
+    s.style.height = a.offsetHeight + 'px';
+    s.classList.add('on');
+}
+window.addEventListener('resize', moveMenuSel);
+
+/* ------------------------------------------------------------ ring --
+ * The backdrop's rings: thick segments of dark blue marble (an SVG
+ * turbulence, no picture) with white rims that glow, a big ring round the
+ * whole window and a smaller one behind the title, and the circuit traces
+ * under them. In a 1600 x 900 box the window crops to cover. */
+function buildRing() {
+    const svg = $('ring'), NS = 'http://www.w3.org/2000/svg';
+    const mk = (tag, attrs, parent) => {
+        const n = document.createElementNS(NS, tag);
+        for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+        (parent || svg).appendChild(n);
+        return n;
+    };
+    const defs = mk('defs', {});
+    const marble = mk('filter', { id: 'marble', x: '0', y: '0', width: '100%', height: '100%',
+                                  filterUnits: 'userSpaceOnUse',
+                                  'color-interpolation-filters': 'sRGB' }, defs);
+    mk('feTurbulence', { type: 'turbulence', baseFrequency: '0.006 0.011', numOctaves: '5',
+                         seed: '11', result: 't' }, marble);
+    /* grey from the noise, then mostly dark with bright veins, then blue */
+    mk('feColorMatrix', { in: 't', type: 'matrix', result: 'g', values:
+        '1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  0 0 0 0 1' }, marble);
+    const ct = mk('feComponentTransfer', { in: 'g', result: 'v' }, marble);
+    for (const ch of ['feFuncR', 'feFuncG', 'feFuncB'])
+        mk(ch, { type: 'table', tableValues: '0 0.04 0.1 0.22 0.55 1' }, ct);
+    mk('feColorMatrix', { in: 'v', type: 'matrix', result: 'c', values:
+        '0.55 0 0 0 0.02  0.62 0 0 0 0.05  0.85 0 0 0 0.17  0 0 0 0 1' }, marble);
+    mk('feComposite', { in: 'c', in2: 'SourceGraphic', operator: 'in' }, marble);
+    const glow = mk('filter', { id: 'rimglow', x: '-10%', y: '-10%', width: '120%', height: '120%',
+                                'color-interpolation-filters': 'sRGB' }, defs);
+    mk('feGaussianBlur', { in: 'SourceGraphic', stdDeviation: '5', result: 'b' }, glow);
+    const m = mk('feMerge', {}, glow);
+    mk('feMergeNode', { in: 'b' }, m);
+    mk('feMergeNode', { in: 'b' }, m);
+    mk('feMergeNode', { in: 'SourceGraphic' }, m);
+
+    /* the circuit traces: dark grooves with a faint light edge */
+    const traces = ['M0 250 H260 L330 320 H640', 'M0 610 H180 L260 530 H560 L640 450',
+        'M1600 170 H1380 L1310 240 H1120', 'M1600 690 H1400 L1320 610 H1150',
+        'M380 900 L480 800 H860 L920 740', 'M0 700 H90 L140 650 H300',
+        'M1600 420 H1500 L1450 470 H1260', 'M760 0 L820 60 H1040'];
+    const tg = mk('g', { class: 'traces' });
+    for (const d of traces) {
+        mk('path', { d, class: 'trace' }, tg);
+        mk('path', { d, class: 'trace-lit', transform: 'translate(0 -3)' }, tg);
+    }
+
+    const rad = a => a * Math.PI / 180;
+    const seg = (cx, cy, r0, r1, a0, a1) => {
+        const p = (r, a) => (cx + r * Math.cos(rad(a))).toFixed(1) + ' ' + (cy + r * Math.sin(rad(a))).toFixed(1);
+        const big = a1 - a0 > 180 ? 1 : 0;
+        return 'M' + p(r1, a0) + ' A' + r1 + ' ' + r1 + ' 0 ' + big + ' 1 ' + p(r1, a1) +
+               ' L' + p(r0, a1) + ' A' + r0 + ' ' + r0 + ' 0 ' + big + ' 0 ' + p(r0, a0) + ' Z';
+    };
+    const ring = (cx, cy, r0, r1, spans, cls) => {
+        const g = mk('g', { class: cls });
+        g.style.transformOrigin = cx + 'px ' + cy + 'px';  /* it turns on its centre */
+        const body = mk('g', { filter: 'url(#marble)' }, g);
+        const rims = mk('g', { filter: 'url(#rimglow)' }, g);
+        for (const [a0, a1] of spans) {
+            const d = seg(cx, cy, r0, r1, a0, a1);
+            mk('path', { d, class: 'seg-body' }, body);
+            mk('path', { d, class: 'seg-rim' }, rims);
+        }
+    };
+    /* the big ring: open at the top, where the title is, and at the bottom */
+    ring(820, 520, 690, 790, [[-140, -110], [-68, -26], [-18, 22], [30, 70],
+                              [110, 150], [158, 198]], 'ring-big');
+    /* the small one, behind the title and the panel */
+    const small = [];
+    for (let a = -100; a < 250; a += 44) small.push([a, a + 36]);
+    ring(1060, 400, 300, 342, small, 'ring-small');
+}
+
+/* ---------------------------------------------------- the pad, here --
+ * The launcher follows a pad too: up / down the menu, south to pick, east
+ * back. The command bar shows the pictures of whichever was used last,
+ * the pad's or the keyboard's -- not both. */
+let usingPad = false, padWas = [];
+function livePad() {
+    const all = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
+    return all.find(g => g.connected) || null;
+}
+function paintCmdbar() {
+    const kind = padKindOf(1);
+    const put = (id, node) => { const s = $(id); s.innerHTML = ''; s.appendChild(node); };
+    if (usingPad) {
+        put('cgA', padFace(kind, 'SOUTH'));
+        put('cgB', padFace(kind, 'EAST'));
+    } else {
+        put('cgA', keyFace(13));
+        put('cgB', keyFace(27));
+        put('cgF', keyFace(122));
+    }
+    $('cgF').classList.toggle('hidden', usingPad);
+    $('cgFl').classList.toggle('hidden', usingPad);
+}
+function useDevice(pad) {
+    if (pad === usingPad) return;
+    usingPad = pad;
+    paintCmdbar();
+}
+function padTick() {
+    const g = livePad();
+    if (g) {
+        const b = g.buttons.map(x => x.pressed), ay = g.axes[1] || 0;
+        b[12] = b[12] || ay < -0.6;
+        b[13] = b[13] || ay > 0.6;
+        const hit = i => b[i] && !padWas[i];
+        if (b.some(Boolean)) useDevice(true);
+        if (!$('picker') && !waitingKey) {
+            if (hit(12)) navKey('ArrowUp');
+            if (hit(13)) navKey('ArrowDown');
+            if (hit(0)) navKey('Enter');
+            if (hit(1)) navKey('Escape');
+        }
+        padWas = b;
+    } else if (usingPad)
+        useDevice(false);
+    requestAnimationFrame(padTick);
+}
+window.addEventListener('gamepadconnected', () => { paintKeys(); fillPads(); });
+window.addEventListener('keydown', () => useDevice(false), true);
+window.addEventListener('mousemove', () => useDevice(false));
 
 /* index = res in umk3.ini (lib/ini.js): the game's own 3:2 sizes and 16:9 ones */
 const RES = [
@@ -418,6 +692,7 @@ function setSection(next, run) {
     document.querySelectorAll('.mi').forEach(b =>
         b.classList.toggle('active', b.dataset.sec === next));
     $('desc').textContent = tx(DESC[next]);
+    moveMenuSel();
 }
 
 /* --------------------------------------------------------------- keys -- */
@@ -444,7 +719,7 @@ function vkLabel(vk) {
 let ctlTab = 'p';
 
 function paintKeys() {
-    document.querySelectorAll('.tab').forEach(t =>
+    document.querySelectorAll('section[data-sec="controls"] .tab').forEach(t =>
         t.classList.toggle('active', t.dataset.c ? t.dataset.c === ctlTab
             : t.dataset.pl ? Number(t.dataset.pl) === pl
             : Number(t.dataset.b) === (cfg.buttons === 6 ? 6 : 5)));
@@ -464,7 +739,7 @@ function paintKeys() {
             const vk = keyGet(name);
             const k = el('button', 'keybtn' + (waitingKey === name ? ' waiting' : ''));
             k.appendChild(el('span', 'kname', T[ui].keys[name]));
-            k.appendChild(el('span', 'kkey', vkLabel(vk)));
+            k.appendChild(keyFace(vk));
             k.addEventListener('pointerenter', hoverBlip);
             k.addEventListener('click', () => {
                 selectBlip();
@@ -501,6 +776,32 @@ function fillSelects() {
     LANGS.forEach(n => lang.appendChild(el('option', null, n || T[ui].auto)));
 }
 
+/* The monitors the game sees (`umk3-game --list-monitors`); before the
+ * game is compiled only AUTOMATIC. */
+let monitors = [];
+async function fillMonitors() {
+    try { monitors = await window.umk3.listMonitors(); } catch (err) { monitors = []; }
+    paintMonitors();
+}
+function paintMonitors() {
+    const s = $('monitor');
+    s.innerHTML = '';
+    const auto = el('option', null, T[ui].monitorAuto);
+    auto.value = '0';
+    s.appendChild(auto);
+    for (const m of monitors) {
+        const o = el('option', null, T[ui].monitorLbl + ' ' + m.name.replace(' *', '  (' + T[ui].monitorMain + ')'));
+        o.value = String(m.value);
+        s.appendChild(o);
+    }
+    if (cfg.monitor && !monitors.some(m => m.value === cfg.monitor)) {
+        const o = el('option', null, T[ui].monitorLbl + ' ' + cfg.monitor);
+        o.value = String(cfg.monitor);
+        s.appendChild(o);
+    }
+    s.value = String(cfg.monitor || 0);
+}
+
 function applyConfig() {
     $('ipa').value = cfg.ipa || '';
     $('marco').value = cfg.marco || '';
@@ -515,6 +816,7 @@ function applyConfig() {
     $('dbg').checked = !!cfg.debug;
     $('skip').checked = !!cfg.skipIntro;
     $('hidectl').checked = !!cfg.hideControls;
+    paintMonitors();
 }
 
 async function save(delta) {
@@ -563,6 +865,8 @@ async function refreshRoot() {
     const info = await window.umk3.root();
     ready = info.ready;
     builtAt = info.builtAt;
+    if (info.version)                   /* 0.1.3-beta: "0.1.3 beta" */
+        $('ttl-ver').textContent = info.version.replace('-', ' ');
     paintState();
 }
 
@@ -744,8 +1048,24 @@ async function doPlay() {
  * read from res\Textures, nothing imported) over a glossy Frutiger Aero
  * gradient of the profile's colour. runtime/profiles.c draws the same icon
  * with the same numbers. */
-const PROF_COLORS = ['3A8EE6', '1FB5C9', '3DBE5B', '8CCB2E', 'F2C230', 'F28A2E',
-                     'E2423B', 'E2509B', '8A55D8', '8A97A8', '2A2F38'];
+/* The palette, the same as the game's settings menu (settings_menu.c,
+ * pal_make): 15 hues across and a grey column, seven shades from light to
+ * dark; the colour picker beside it gives any other. */
+function hslHex(h, s, l) {
+    const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+    const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+                    : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+    return [r, g, b].map(v => Math.floor((v + m) * 255 + 0.5).toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+const PROF_COLORS = [];
+{
+    const L = [0.88, 0.76, 0.64, 0.52, 0.40, 0.28, 0.16];
+    const GREY = ['FFFFFF', 'D4D4D4', 'AAAAAA', '808080', '555555', '2B2B2B', '000000'];
+    L.forEach((l, r) => {
+        for (let c = 0; c < 15; c++) PROF_COLORS.push(hslHex(c * 24, 0.85, l));
+        PROF_COLORS.push(GREY[r]);
+    });
+}
 let profArt = [];
 
 function hexRgb(h) {
@@ -765,9 +1085,11 @@ function roundRect(g, x, y, w, h, r) {
     g.closePath();
 }
 
-function drawIcon(cv, icon, color, dark) {
+function drawIcon(cv, icon, color, shade, color2) {
     const g = cv.getContext('2d'), S = cv.width, c = hexRgb(color);
     const white = [255, 255, 255], black = [0, 0, 0];
+    const dark = shade === 'D', o = hexRgb(color2 || (dark ? '000000' : 'FFFFFF'));
+    const c2 = shade === 'C' ? o : null;
 
     g.clearRect(0, 0, S, S);
     g.save();
@@ -775,17 +1097,19 @@ function drawIcon(cv, icon, color, dark) {
     g.clip();
     /* the sky: light at the top, the colour, deeper at the bottom */
     let gr = g.createLinearGradient(0, 0, 0, S);
-    /* light: white into the colour, deeper at the bottom; dark: the colour
-     * at the top going down to black (profiles.c, the same numbers) */
-    gr.addColorStop(0, css(dark ? mix(c, white, 0.15) : mix(c, white, 0.55)));
-    gr.addColorStop(0.5, css(dark ? mix(c, black, 0.45) : c));
-    gr.addColorStop(1, css(dark ? mix(c, black, 0.92) : mix(c, black, 0.3)));
+    /* light: the second colour (white unless chosen) into the colour,
+     * deeper at the bottom; dark: the colour at the top going down to the
+     * second (black unless chosen); custom: the colour to the second
+     * (profiles.c, the same numbers) */
+    gr.addColorStop(0, css(c2 ? mix(c, white, 0.2) : dark ? mix(c, white, 0.15) : mix(c, o, 0.55)));
+    gr.addColorStop(0.5, css(c2 ? mix(c, c2, 0.5) : dark ? mix(c, o, 0.45) : c));
+    gr.addColorStop(1, css(c2 ? c2 : dark ? mix(c, o, 0.92) : mix(c, black, 0.3)));
     g.fillStyle = gr;
     g.fillRect(0, 0, S, S);
     /* the glow rising from the bottom */
     gr = g.createRadialGradient(S / 2, S * 1.05, 0, S / 2, S * 1.05, S * 0.6);
-    const gc = dark ? c : mix(c, white, 0.6);
-    gr.addColorStop(0, css(gc, dark ? 0.35 : 0.75));
+    const gc = c2 ? mix(c2, white, 0.3) : dark ? c : mix(c, o, 0.6);
+    gr.addColorStop(0, css(gc, c2 ? 0.45 : dark ? 0.35 : 0.75));
     gr.addColorStop(1, css(gc, 0));
     g.fillStyle = gr;
     g.fillRect(0, 0, S, S);
@@ -794,8 +1118,8 @@ function drawIcon(cv, icon, color, dark) {
         g.drawImage(profArt[icon], 0, 0, S, S);
     /* the gloss: a white bubble over the top half */
     gr = g.createLinearGradient(0, 0, 0, S * 0.5);
-    gr.addColorStop(0, 'rgba(255,255,255,' + (dark ? 0.35 : 0.55) + ')');
-    gr.addColorStop(1, 'rgba(255,255,255,' + (dark ? 0.03 : 0.04) + ')');
+    gr.addColorStop(0, 'rgba(255,255,255,' + (c2 ? 0.45 : dark ? 0.35 : 0.55) + ')');
+    gr.addColorStop(1, 'rgba(255,255,255,' + (c2 ? 0.04 : dark ? 0.03 : 0.04) + ')');
     g.fillStyle = gr;
     g.beginPath();
     g.ellipse(S / 2, 0, S * 0.72, S * 0.5, 0, 0, Math.PI * 2);
@@ -834,26 +1158,31 @@ function paintProfile() {
     $('profId').textContent = p.id;
     $('profReset').textContent = tx(profResetArmed ? 'profResetAsk' : 'profReset');
     $('profColor').value = '#' + p.color.toLowerCase();
-    drawIcon($('profIcon'), p.icon, p.color, p.dark);
-    drawIcon($('profBadgeIcon'), p.icon, p.color, p.dark);
+    $('profColor2').value = '#' + p.color2.toLowerCase();
+    $('profColor2Lbl').textContent = tx(p.shade === 'C' ? 'profColor2' : p.shade === 'D' ? 'profColorDark' : 'profColorLight');
+    drawIcon($('profIcon'), p.icon, p.color, p.shade, p.color2);
+    drawIcon($('profBadgeIcon'), p.icon, p.color, p.shade, p.color2);
     $('profBadgeName').textContent = p.name || tx('profDefault');
     $('profBadge').classList.remove('hidden');
     document.querySelectorAll('#profShade .tab').forEach(t =>
-        t.classList.toggle('active', Number(t.dataset.shade) === (p.dark ? 1 : 0)));
-    const sw = $('profSwatches');
-    sw.innerHTML = '';
-    PROF_COLORS.forEach(c => {
-        const b = el('button', 'swatch' + (c === p.color ? ' on' : ''));
-        b.style.background = '#' + c;               /* CSSOM: allowed by the CSP */
-        b.addEventListener('click', () => { selectBlip(); updateProf({ color: c }); });
-        sw.appendChild(b);
-    });
+        t.classList.toggle('active', t.dataset.shade === p.shade));
+    const swatches = (box, cur, key) => {
+        box.innerHTML = '';
+        PROF_COLORS.forEach(c => {
+            const b = el('button', 'swatch' + (c === cur ? ' on' : ''));
+            b.style.background = '#' + c;           /* CSSOM: allowed by the CSP */
+            b.addEventListener('click', () => { selectBlip(); updateProf({ [key]: c }); });
+            box.appendChild(b);
+        });
+    };
+    swatches($('profSwatches'), p.color, 'color');
+    swatches($('profSwatches2'), p.color2, 'color2');
     const grid = $('profIcons');
     grid.innerHTML = '';
     for (let i = 0; i < 24; i++) {
         const cv = el('canvas', i === p.icon ? 'on' : '');
         cv.width = cv.height = 64;
-        drawIcon(cv, i, p.color, p.dark);
+        drawIcon(cv, i, p.color, p.shade, p.color2);
         cv.addEventListener('click', () => { selectBlip(); updateProf({ icon: i }); });
         grid.appendChild(cv);
     }
@@ -878,8 +1207,10 @@ function initProfile() {
     document.querySelectorAll('#profShade .tab').forEach(t =>
         t.addEventListener('click', () => {
             selectBlip();
-            updateProf({ dark: t.dataset.shade === '1' });
+            updateProf({ shade: t.dataset.shade });
         }));
+    $('profColor2').addEventListener('input', () =>
+        updateProf({ color2: $('profColor2').value.replace('#', '').toUpperCase() }));
     $('profReset').addEventListener('click', async () => {
         if (!profResetArmed) { profResetArmed = true; paintProfile(); return; }
         profResetArmed = false;
@@ -912,20 +1243,31 @@ function onKey(e) {
     }
     const tag = (document.activeElement && document.activeElement.tagName) || '';
     if (tag === 'SELECT' || tag === 'INPUT') return;
-    const i = SECTIONS.indexOf(sec);
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (navKey(e.key))
         e.preventDefault();
-        const n = SECTIONS[(i + (e.key === 'ArrowDown' ? 1 : SECTIONS.length - 1)) % SECTIONS.length];
+}
+
+/* The menu's keys, from the keyboard or the pad: true when one acted. */
+function navKey(key) {
+    const i = SECTIONS.indexOf(sec);
+    if (key === 'ArrowDown' || key === 'ArrowUp') {
+        const n = SECTIONS[(i + (key === 'ArrowDown' ? 1 : SECTIONS.length - 1)) % SECTIONS.length];
         hoverBlip();
         setSection(n === 'quit' ? 'quit' : n, false);
         if (n === 'quit') sec = 'quit';
-    } else if (e.key === 'Enter' && document.activeElement === document.body) {
-        e.preventDefault();
+        return true;
+    }
+    if (key === 'Enter' && document.activeElement === document.body) {
         selectBlip();
         setSection(sec, true);
-    } else if (e.key === 'Escape') {
-        setSection('build', false);
+        return true;
     }
+    if (key === 'Escape') {
+        closePicker();
+        setSection('build', false);
+        return true;
+    }
+    return false;
 }
 
 /* -------------------------------------------------------------- init ---- */
@@ -934,6 +1276,10 @@ async function init() {
     cfg = await window.umk3.loadConfig();
     ui = cfg.ui === 'EN' ? 'EN' : 'ES';
     await refreshRoot();
+    buildRing();
+    GLYPH = (await window.umk3.glyphs()) || {};
+    paintCmdbar();
+    requestAnimationFrame(padTick);
     applyTexts();
     initProfile();
     refreshProfile();
@@ -1009,8 +1355,20 @@ async function init() {
         save({ [k]: v, [kn]: seenPads[v] || '' });
         paintPadMap();
     });
-    $('padDbgA').addEventListener('change', savePadDbg);
-    $('padDbgB').addEventListener('change', savePadDbg);
+    $('monitor').addEventListener('change', () => {
+        cfg.monitor = Number($('monitor').value) || 0;
+        selectBlip();
+        save({ monitor: cfg.monitor });
+    });
+    fillMonitors();
+    $('padIcons').addEventListener('change', () => {
+        const k = pl === 2 ? 'p2PadIcons' : 'padIcons';
+        cfg[k] = $('padIcons').value;
+        selectBlip();
+        save({ [k]: cfg[k] });
+        fillPads();
+        paintCmdbar();
+    });
     /* pads come and go: asked again every three seconds on the GAMEPAD tab */
     setInterval(scanPads, 3000);
 
@@ -1056,7 +1414,13 @@ async function init() {
         $('keyhint').textContent = T[ui].hint;
         paintKeys();
     });
-    document.querySelectorAll('.tab').forEach(t => {
+    /* GRAPHICS: VIDEO, TEXTURES, INTERFACE */
+    document.querySelectorAll('.tab[data-g]').forEach(t => {
+        t.addEventListener('pointerenter', hoverBlip);
+        t.addEventListener('click', () => { selectBlip(); paintGfxTab(t.dataset.g); });
+    });
+    paintGfxTab('video');
+    document.querySelectorAll('section[data-sec="controls"] .tab').forEach(t => {
         t.addEventListener('pointerenter', hoverBlip);
         t.addEventListener('click', () => {
             selectBlip();
@@ -1089,8 +1453,11 @@ async function init() {
     $('play').addEventListener('click', doPlay);
     document.querySelectorAll('.btn').forEach(b => b.addEventListener('pointerenter', hoverBlip));
 
-    const want = new URLSearchParams(location.search).get('sec');
+    /* UMK3_LAUNCHER_SEC=<section>[:<controls tab>], the capture aid */
+    const [want, sub] = (new URLSearchParams(location.search).get('sec') || '').split(':');
     setSection(SECTIONS.includes(want) && want !== 'quit' ? want : ready ? 'play' : 'build', false);
+    if (sub && document.querySelector('.tab[data-c="' + sub + '"]'))
+        document.querySelector('.tab[data-c="' + sub + '"]').click();
 
     /* an update just installed is compiled first; else ask GitHub, without
      * holding up the window */

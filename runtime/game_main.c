@@ -72,6 +72,7 @@
  * Debug, to skip the menus:
  *   umk3-game --fight <p1> <p2> [stage]     (or UMK3_FIGHT="p1,p2,stage")
  *   umk3-game --list-pads                   the pads attached (for the launcher)
+ *   umk3-game --list-monitors               the monitors (for the launcher)
  * goes straight from the main menu into a fight. A fighter is a name from
  * CharacterNames ("kitana", "kunglao", "sub-zero") or its number 0..25; the
  * stage is a Level_Info row, 0..15 (default 0). It sets what the select
@@ -303,6 +304,10 @@ static unsigned g_pad5[7] = {
     (1u << PB_L1) | (1u << PB_L2), 1u << PB_R2,
 };
 static unsigned g_pad_pause = 1u << PB_START;
+/* port: the pad's button for the settings menu (pad_settings=, HOME unless
+ * the player binds another) */
+static unsigned g_pad_settings = 1u << PB_HOME;
+static unsigned g_p2pad_settings = 1u << PB_HOME;
 static unsigned g_pad_moves = 1u << PB_SELECT;
 
 /* Player two's pad, the same actions and defaults: the launcher's GAMEPAD
@@ -802,6 +807,8 @@ static void read_config_p2(const char *n, const char *v)
             g_p2pad_pause = pad_combo(v);
         else if (strcmp(n + 4, "moves") == 0)
             g_p2pad_moves = pad_combo(v);
+        else if (strcmp(n + 4, "settings") == 0)
+            g_p2pad_settings = pad_combo(v);
     } else if (strncmp(n, "key5_", 5) == 0) {
         for (i = 0; i < 4; i++)
             if (strcmp(n + 5, names5[i]) == 0)
@@ -840,6 +847,8 @@ static void read_config(const char *dir)
             g_cfg_full = atoi(v) != 0;
         else if (strcmp(line, "borderless") == 0)
             g_cfg_borderless = atoi(v) != 0;
+        else if (strcmp(line, "monitor") == 0)     /* port: 0 auto, 1..n */
+            plat_monitor_select(atoi(v));
         else if (strcmp(line, "antialiasing") == 0)
             g_cfg_aa = atoi(v) >= 2 ? (atoi(v) > 16 ? 16 : atoi(v)) : 0;
         else if (strcmp(line, "render_width") == 0)
@@ -877,6 +886,12 @@ static void read_config(const char *dir)
             PortTextureQuality = _stricmp(v, "max") == 0 ? 2
                                : _stricmp(v, "ipad") == 0 ? 1 : 0;
         }
+        else if (strcmp(line, "pad_icons") == 0 || strcmp(line, "p2pad_icons") == 0)
+            /* port: the pictures of each player's pad */
+            plat_pad_glyph_style(line[1] == '2', strcmp(v, "xbox") == 0 ? 1
+                                 : strcmp(v, "ps5") == 0 ? 2
+                                 : strcmp(v, "nintendo") == 0 ? 3
+                                 : strcmp(v, "ps4") == 0 ? 4 : 0);
         else if (strncmp(line, "p2", 2) == 0)
             read_config_p2(line + 2, v);
         else if (strcmp(line, "pad_dbg_menu") == 0)
@@ -906,6 +921,8 @@ static void read_config(const char *dir)
                 g_pad_pause = pad_combo(v);
             else if (strcmp(line + 4, "moves") == 0)
                 g_pad_moves = pad_combo(v);
+            else if (strcmp(line + 4, "settings") == 0)
+                g_pad_settings = pad_combo(v);
         }
         else if (strcmp(line, "pad") == 0) {  /* auto, off, xinput, vvvv:pppp */
             plat_pad_select(v);
@@ -1972,6 +1989,7 @@ void port_gfx_get(struct port_gfx *g)
     g->ui = g_ui_k > 1.5f;
     g->hidectl = PortHideControls;
     snprintf(g->aspect, sizeof g->aspect, "%s", g_cfg_aspect);
+    g->monitor = plat_monitor();
 }
 
 void port_gfx_set(const struct port_gfx *g, int display)
@@ -1987,6 +2005,7 @@ void port_gfx_set(const struct port_gfx *g, int display)
         g_cfg_borderless = g->mode == 1;
         g_cfg_w = g->w;
         g_cfg_h = g->h;
+        plat_monitor_select(g->monitor);
         plat_display(g->mode, g->w, g->h);
         if (g->mode)
             load_frame();
@@ -2073,6 +2092,8 @@ unsigned *port_pad_action(int player, int i)
         return player ? &g_p2pad_pause : &g_pad_pause;
     if (i == 15)
         return player ? &g_p2pad_moves : &g_pad_moves;
+    if (i == 16)
+        return player ? &g_p2pad_settings : &g_pad_settings;
     none = 0;
     return &none;
 }
@@ -2116,6 +2137,12 @@ int main(int argc, char **argv)
      * out -- the launcher's CONTROLS > GAMEPAD list comes from here */
     if (argc > 1 && strcmp(argv[1], "--list-pads") == 0) {
         plat_pad_list();
+        return 0;
+    }
+    /* --list-monitors: the monitors, "index<TAB>name" a line (the launcher's
+     * GRAPHICS > MONITOR) */
+    if (argc > 1 && strcmp(argv[1], "--list-monitors") == 0) {
+        plat_monitor_list();
         return 0;
     }
 #ifdef _WIN32
@@ -2166,9 +2193,10 @@ int main(int argc, char **argv)
         g_cfg_skip_intro = 1;
     if (getenv("UMK3_HIDE_CONTROLS"))   /* 0 1, over hide_controls= */
         PortHideControls = atoi(getenv("UMK3_HIDE_CONTROLS")) != 0;
-    if (getenv("UMK3_ASPECT"))          /* 4:3 16:9 21:9, over aspect= */
+    if (getenv("UMK3_ASPECT")) {        /* 4:3 16:9 21:9, over aspect= */
         g_aspect = parse_aspect(getenv("UMK3_ASPECT"));
         snprintf(g_cfg_aspect, sizeof g_cfg_aspect, "%s", getenv("UMK3_ASPECT"));
+    }
     if (getenv("UMK3_UI"))              /* 0 1, over ui_size= */
         g_ui_k = atoi(getenv("UMK3_UI")) ? 2.0f : 1.0f;
     if (getenv("UMK3_TEXQ")) {          /* 0 1 2, over texture_quality= */
@@ -2427,9 +2455,14 @@ int main(int argc, char **argv)
                 was_b = g_pad.buttons;
             }
             {
-                /* Esc (key_settings=): the settings menu, port */
+                /* Esc (key_settings=) or either pad's pad_settings=
+                 * button: the settings menu, port */
                 static int was_esc;
-                int esc = plat_key(PK_SETTINGS);
+                int esc = plat_key(PK_SETTINGS)
+                          || (g_pad_settings && (g_pad.buttons & g_pad_settings)
+                                                == g_pad_settings)
+                          || (g_p2pad_settings && (g_pad2.buttons & g_p2pad_settings)
+                                                  == g_p2pad_settings);
                 if (esc && !was_esc && !set_menu_is_open()
                     && !dbg_menu_is_open())
                     set_menu_toggle();

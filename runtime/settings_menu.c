@@ -32,6 +32,7 @@
  *     QUIT GAME.
  */
 
+#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -65,12 +66,13 @@ static const char *const k_pb[PB_COUNT] = {
     "SELECT", "START", "L3", "R3", "HOME",
 };
 
-enum { PAGE_GFX, PAGE_KEYS, PAGE_PAD, PAGE_PROF, N_PAGES };
+/* GRAPHICS in three: the window, the textures, the interface */
+enum { PAGE_GFX, PAGE_TEX, PAGE_UI, PAGE_KEYS, PAGE_PAD, PAGE_PROF, N_PAGES };
 
 enum {
-    R_DISPLAY, R_RES, R_APPLY, R_RRES, R_AA, R_TEXQ, R_ASPECT, R_UI, R_HIDE,
-    R_PLAYER, R_LAYOUT, R_KEY, R_KRESET, R_DEVICE, R_PADB, R_PRESET,
-    R_PNAME, R_PICON, R_PCOLOR, R_PSHADE, R_PID, R_PRESET2,
+    R_DISPLAY, R_MONITOR, R_RES, R_APPLY, R_RRES, R_AA, R_TEXQ, R_ASPECT, R_UI, R_HIDE,
+    R_PLAYER, R_LAYOUT, R_KEY, R_KRESET, R_DEVICE, R_PICONS, R_PADB, R_PRESET,
+    R_PNAME, R_PICON, R_PCOLOR, R_PSHADE, R_PCOLOR2, R_PID, R_PRESET2,
     R_CLOSE, R_QUIT
 };
 
@@ -89,12 +91,19 @@ static const char *const k_fighter_en[PROF_ICONS] = {
 };
 /* The launcher's swatches (renderer.js PROF_COLORS), with their names. */
 static const struct { unsigned rgb; const char *es, *en; } k_pcol[] = {
-    { 0x3A8EE6, "AZUL CIELO", "SKY BLUE" }, { 0x1FB5C9, "AGUAMARINA", "AQUA" },
-    { 0x3DBE5B, "VERDE", "GREEN" }, { 0x8CCB2E, "LIMA", "LIME" },
-    { 0xF2C230, "AMARILLO", "YELLOW" }, { 0xF28A2E, "NARANJA", "ORANGE" },
-    { 0xE2423B, "ROJO", "RED" }, { 0xE2509B, "ROSA", "PINK" },
-    { 0x8A55D8, "MORADO", "PURPLE" }, { 0x8A97A8, "PLATA", "SILVER" },
-    { 0x2A2F38, "GRAFITO", "GRAPHITE" },
+    { 0xE2423B, "ROJO", "RED" }, { 0xB0171F, "CARMESI", "CRIMSON" },
+    { 0x6E0B12, "SANGRE", "BLOOD" }, { 0xF28A2E, "NARANJA", "ORANGE" },
+    { 0xF2C230, "DORADO", "GOLD" }, { 0xFFE45C, "AMARILLO", "YELLOW" },
+    { 0x8CCB2E, "LIMA", "LIME" }, { 0x3DBE5B, "VERDE", "GREEN" },
+    { 0x1E7A3C, "BOSQUE", "FOREST" }, { 0x3AC7A8, "TURQUESA", "TEAL" },
+    { 0x1FB5C9, "AGUAMARINA", "AQUA" }, { 0x3A8EE6, "AZUL CIELO", "SKY BLUE" },
+    { 0x1D4FB8, "AZUL REY", "ROYAL BLUE" }, { 0x16245E, "MARINO", "NAVY" },
+    { 0x5A2A9C, "INDIGO", "INDIGO" }, { 0x8A55D8, "MORADO", "PURPLE" },
+    { 0xC34FE0, "VIOLETA", "VIOLET" }, { 0xE2509B, "ROSA", "PINK" },
+    { 0xFF9DC0, "ROSA PALIDO", "ROSE" }, { 0x8B5A2B, "CAFE", "BROWN" },
+    { 0xD9C39A, "ARENA", "SAND" }, { 0xFFFFFF, "BLANCO", "WHITE" },
+    { 0x8A97A8, "PLATA", "SILVER" }, { 0x2A2F38, "GRAFITO", "GRAPHITE" },
+    { 0x000000, "NEGRO", "BLACK" },
 };
 #define N_PCOL (int)(sizeof k_pcol / sizeof k_pcol[0])
 
@@ -106,7 +115,7 @@ static int  g_icon_key = -1;                    /* icon and colour shown */
 #define VIS_ROWS 13
 static struct {
     int  kind, arg;
-    char label[40], value[64];
+    char label[40], value[192];
     int  en;
 } g_rows[MAX_ROWS];
 static int g_n;
@@ -114,6 +123,7 @@ static int g_n;
 static int g_open, g_want, g_page, g_sel, g_first, g_player, g_dirty;
 static struct port_gfx g_gfx;           /* the menu's */
 static int g_disp_mode, g_disp_w, g_disp_h;   /* the window as applied */
+static int g_disp_mon;
 static int g_capture;                   /* 1 a key, 2 a pad button */
 static int g_armed;                     /* nothing held since it began */
 static struct ui_geo g_geo;
@@ -121,6 +131,54 @@ static float g_mx, g_my;
 static int   g_mdown, g_mouse_was;
 static PLAT_PAD g_pad[2], g_pad_was[2];
 static int   g_esc_was;
+
+/* The list a row with values opens (Enter, or a click on it), as the
+ * launcher's drop-downs: its row, the options, the current one and the one
+ * under the cursor. The icons and colours open a grid of pictures. */
+#define MAX_DROP 128
+#define VIS_DROP 13
+static int  g_drop, g_drop_kind, g_drop_n, g_drop_cur, g_drop_sel, g_drop_first;
+static char g_drop_lab[MAX_DROP][48];
+static char g_drop_title[40];
+static unsigned char *g_drop_cell[MAX_DROP];   /* the grid's pictures */
+static struct ui_geo g_dgeo;
+static struct ui_grid_geo g_ggeo;
+
+/* The colour grid, the launcher's picker in the game: 15 hues across, a
+ * grey column, seven shades from light to dark -- any colour, not only the
+ * named ones. */
+#define PAL_COLS 16
+#define PAL_ROWS 7
+static unsigned g_pal[PAL_COLS * PAL_ROWS];
+
+static unsigned hsl(float h, float s, float l)
+{
+    float c = (1 - fabsf(2 * l - 1)) * s, x = c * (1 - fabsf(fmodf(h / 60.0f, 2) - 1));
+    float m = l - c / 2, r = 0, g = 0, b = 0;
+
+    if (h < 60)       { r = c; g = x; }
+    else if (h < 120) { r = x; g = c; }
+    else if (h < 180) { g = c; b = x; }
+    else if (h < 240) { g = x; b = c; }
+    else if (h < 300) { r = x; b = c; }
+    else              { r = c; b = x; }
+    return (unsigned)((r + m) * 255 + 0.5f) << 16 | (unsigned)((g + m) * 255 + 0.5f) << 8
+         | (unsigned)((b + m) * 255 + 0.5f);
+}
+
+static void pal_make(void)
+{
+    static const float L[PAL_ROWS] = { 0.88f, 0.76f, 0.64f, 0.52f, 0.40f, 0.28f, 0.16f };
+    static const unsigned grey[PAL_ROWS] = { 0xFFFFFF, 0xD4D4D4, 0xAAAAAA, 0x808080,
+                                             0x555555, 0x2B2B2B, 0x000000 };
+    int r, c;
+
+    for (r = 0; r < PAL_ROWS; r++) {
+        for (c = 0; c < PAL_COLS - 1; c++)
+            g_pal[r * PAL_COLS + c] = hsl(c * 24.0f, 0.85f, L[r]);
+        g_pal[r * PAL_COLS + PAL_COLS - 1] = grey[r];
+    }
+}
 
 int set_menu_is_open(void) { return g_open; }
 
@@ -158,6 +216,7 @@ void set_menu_after_frame(int vx, int vy, int vw, int vh)
     g_disp_mode = g_gfx.mode;
     g_disp_w = g_gfx.w;
     g_disp_h = g_gfx.h;
+    g_disp_mon = g_gfx.monitor;
     prof_load(port_ini_path(), tx("JUGADOR", "PLAYER"));    /* the launcher may have changed it */
     g_icon_key = -1;
     g_del_armed = 0;
@@ -175,8 +234,24 @@ void set_menu_mouse(float x, float y, int down)
     g_mdown = down;
 }
 
+/* The footer shows the pictures of what the player is using: 0 the
+ * keyboard (and mouse), 1 player one's pad, 2 player two's. */
+static int g_using;
+
+static int pad_busy(const PLAT_PAD *p)
+{
+    return p->connected && (p->buttons || p->up || p->down || p->left || p->right);
+}
+
 void set_menu_pads(const PLAT_PAD *p1, const PLAT_PAD *p2)
 {
+    if (pad_busy(p1))
+        g_using = 1;
+    else if (pad_busy(p2))
+        g_using = 2;
+    else if (plat_key_any() || (g_using == 1 && !p1->connected)
+             || (g_using == 2 && !p2->connected))
+        g_using = 0;
     g_pad[0] = *p1;
     g_pad[1] = *p2;
 }
@@ -235,21 +310,38 @@ static void reset_keys(int player)
 /* ----------------------------------------------------------------- pad */
 
 #define B(x) (1u << PB_##x)
-static const unsigned k_pad_def[16] = {
+static const unsigned k_pad_def[17] = {
     B(WEST), B(SOUTH), B(R1), B(NORTH), B(EAST), B(L1) | B(L2), B(R2),
     B(WEST) | B(NORTH), 0, B(R1), B(SOUTH) | B(EAST), 0, B(L1) | B(L2), B(R2),
-    B(START), B(SELECT),
+    B(START), B(SELECT), B(HOME),
 };
 
 static void reset_pad(int player)
 {
     int i;
 
-    for (i = 0; i < 16; i++)
+    for (i = 0; i < 17; i++)
         *port_pad_action(player, i) = k_pad_def[i];
 }
 
-static void mask_text(unsigned m, char *out, size_t n)
+/* Which pad's pictures: the one connected, else the one the ini names. */
+static int pad_kind(int pl)
+{
+    const char *dev = port_pad_device(pl);
+
+    if (plat_pad_glyph_style(pl, -1))
+        return plat_pad_glyph_style(pl, -1);
+    if (g_pad[pl].connected)
+        return g_pad[pl].kind;
+    if (strncmp(dev, "054c", 4) == 0 || strncmp(dev, "054C", 4) == 0)
+        return plat_pad_sony_kind((unsigned)strtoul(dev + 5, NULL, 16));
+    if (strncmp(dev, "057e", 4) == 0 || strncmp(dev, "057E", 4) == 0)
+        return 3;
+    return 1;
+}
+
+/* A combination as umk3.ini writes it: the buttons' names joined by "+". */
+static void mask_names(unsigned m, char *out, size_t n)
 {
     size_t k = 0;
     int i;
@@ -261,19 +353,37 @@ static void mask_text(unsigned m, char *out, size_t n)
                                   k ? "+" : "", k_pb[i]);
 }
 
+/* The same as pictures, for the menu. */
+static void mask_text(unsigned m, char *out, size_t n)
+{
+    size_t k = 0;
+    char g[96];
+    int i;
+
+    out[0] = 0;
+    for (i = 0; i < PB_COUNT; i++)
+        if (m & (1u << i)) {
+            plat_pad_glyph(pad_kind(g_player), i, g, sizeof g);
+            k += (size_t)snprintf(out + k, n > k ? n - k : 0, "%s%s",
+                                  k ? "+" : "", g);
+        }
+}
+
 /* The pad rows: the action's index for port_pad_action, with the labels. */
-static const struct kdef k_pad6[9] = {
+static const struct kdef k_pad6[10] = {
     { 0, "PUNO ALTO", "HIGH PUNCH" }, { 1, "PUNO BAJO", "LOW PUNCH" },
     { 2, "BLOQUEO", "BLOCK" }, { 3, "PATADA ALTA", "HIGH KICK" },
     { 4, "PATADA BAJA", "LOW KICK" }, { 5, "CORRER", "RUN" },
     { 6, "ESPECIAL", "SPECIAL" }, { 14, "PAUSA", "PAUSE" },
     { 15, "LISTA DE MOVIMIENTOS", "MOVES LIST" },
+    { 16, "ABRIR AJUSTES", "OPEN SETTINGS" },
 };
-static const struct kdef k_pad5[7] = {
+static const struct kdef k_pad5[8] = {
     { 7, "PUNO", "PUNCH" }, { 9, "BLOQUEO", "BLOCK" },
     { 10, "PATADA", "KICK" }, { 12, "CORRER", "RUN" },
     { 6, "ESPECIAL", "SPECIAL" }, { 14, "PAUSA", "PAUSE" },
     { 15, "LISTA DE MOVIMIENTOS", "MOVES LIST" },
+    { 16, "ABRIR AJUSTES", "OPEN SETTINGS" },
 };
 
 static const char *const k_dev[3] = { "auto", "off", "xinput" };
@@ -296,6 +406,20 @@ static void add(int kind, int arg, const char *label, const char *fmt, ...)
     g_n++;
 }
 
+/* A colour row: its name in the palette, or #RRGGBB for one the launcher's
+ * picker chose. */
+static void add_colour(int kind, const char *label, unsigned rgb)
+{
+    int i;
+
+    for (i = 0; i < N_PCOL && k_pcol[i].rgb != rgb; i++)
+        ;
+    if (i < N_PCOL)
+        add(kind, 0, label, "< %s >", tx(k_pcol[i].es, k_pcol[i].en));
+    else
+        add(kind, 0, label, "< #%06X >", rgb);
+}
+
 static int res_index(int w, int h)
 {
     int i;
@@ -314,7 +438,7 @@ static const char *player_text(void)
 
 static void key_row(int code)
 {
-    char k[32];
+    char k[96];
     const struct kdef *d = NULL;
     int i;
 
@@ -326,7 +450,7 @@ static void key_row(int code)
     if (g_capture == 1 && g_n == g_sel)
         snprintf(k, sizeof k, "%s", tx("PULSA UNA TECLA...", "PRESS A KEY..."));
     else
-        plat_key_label(code, k, sizeof k);
+        plat_key_glyph(code, k, sizeof k);
     if (d)
         add(R_KEY, code, tx(d->es, d->en), "%s", k);
     else if (code == PK_SPECIAL || code == PK_P2_SPECIAL)
@@ -347,16 +471,19 @@ static void build(void)
     case PAGE_GFX: {
         static const char *mode_es[3] = { "VENTANA", "SIN BORDES", "PANTALLA COMPLETA" };
         static const char *mode_en[3] = { "WINDOW", "BORDERLESS", "FULLSCREEN" };
-        static const char *tq_es[3] = { "IPHONE", "IPAD", "SIN LIMITE" };
-        static const char *tq_en[3] = { "IPHONE", "IPAD", "NO LIMIT" };
 
         add(R_DISPLAY, 0, tx("PANTALLA", "DISPLAY"), "< %s >",
             tx(mode_es[g_gfx.mode], mode_en[g_gfx.mode]));
+        if (g_gfx.monitor) {
+            plat_monitor_name(g_gfx.monitor, v, sizeof v);
+            add(R_MONITOR, 0, "MONITOR", "< %s >", v);
+        } else
+            add(R_MONITOR, 0, "MONITOR", "< %s >", tx("AUTOMATICO", "AUTOMATIC"));
         add(R_RES, 0, tx("RESOLUCION", "RESOLUTION"), "< %dx%d >", g_gfx.w, g_gfx.h);
         if (g_gfx.mode == 1)
             g_rows[g_n - 1].en = 0;     /* borderless is the monitor's size */
         add(R_APPLY, 0, tx("APLICAR PANTALLA", "APPLY DISPLAY"), "%s",
-            g_gfx.mode != g_disp_mode
+            g_gfx.mode != g_disp_mode || g_gfx.monitor != g_disp_mon
             || (g_gfx.mode != 1 && (g_gfx.w != g_disp_w || g_gfx.h != g_disp_h))
             ? tx("PENDIENTE", "PENDING") : "");
         g_rows[g_n - 1].en = g_rows[g_n - 1].value[0] != 0;
@@ -370,8 +497,17 @@ static void build(void)
             add(R_AA, 0, "ANTIALIASING", "< X%d >", g_gfx.aa);
         else
             add(R_AA, 0, "ANTIALIASING", "< %s >", tx("DESACTIVADO", "OFF"));
-        add(R_TEXQ, 0, tx("TEXTURAS", "TEXTURES"), "< %s >",
+        break;
+    }
+    case PAGE_TEX: {
+        static const char *tq_es[3] = { "IPHONE", "IPAD", "SIN LIMITE" };
+        static const char *tq_en[3] = { "IPHONE", "IPAD", "NO LIMIT" };
+
+        add(R_TEXQ, 0, tx("CALIDAD DE TEXTURAS", "TEXTURE QUALITY"), "< %s >",
             tx(tq_es[g_gfx.texq], tq_en[g_gfx.texq]));
+        break;
+    }
+    case PAGE_UI:
         add(R_ASPECT, 0, tx("RELACION DE ASPECTO", "ASPECT RATIO"), "< %s >",
             g_gfx.aspect);
         add(R_UI, 0, tx("TAMANO DE LA INTERFAZ", "INTERFACE SIZE"), "< %s >",
@@ -379,7 +515,6 @@ static void build(void)
         add(R_HIDE, 0, tx("CONTROLES EN PANTALLA", "ON-SCREEN CONTROLS"), "< %s >",
             g_gfx.hidectl ? tx("OCULTOS", "HIDDEN") : tx("VISIBLES", "SHOWN"));
         break;
-    }
     case PAGE_KEYS: {
         int five = port_buttons() == 5;
 
@@ -404,11 +539,13 @@ static void build(void)
     }
     case PAGE_PAD: {
         const struct kdef *d = port_buttons() == 5 ? k_pad5 : k_pad6;
-        int nd = port_buttons() == 5 ? 7 : 9;
+        int nd = port_buttons() == 5 ? 8 : 10;
         const char *dev = port_pad_device(g_player);
         const PLAT_PAD *p = &g_pad[g_player];
 
         add(R_PLAYER, 0, tx("JUGADOR", "PLAYER"), "%s", player_text());
+        add(R_LAYOUT, 0, tx("BOTONES", "LAYOUT"), "< %d %s >",
+            port_buttons() == 5 ? 5 : 6, tx("BOTONES", "BUTTONS"));
         snprintf(v, sizeof v, "%s", dev);
         for (i = 0; v[i]; i++)
             if (v[i] >= 'a' && v[i] <= 'z')
@@ -418,6 +555,13 @@ static void build(void)
         else
             add(R_DEVICE, 0, tx("MANDO", "GAMEPAD"), "< %s > %.24s", v,
                 p->connected ? p->name : tx("(NO CONECTADO)", "(NOT CONNECTED)"));
+        {
+            static const char *const st_es[5] = { "AUTO (LAS DEL MANDO)", "XBOX", "PLAYSTATION 5", "NINTENDO", "PLAYSTATION 4" };
+            static const char *const st_en[5] = { "AUTO (THE PAD'S OWN)", "XBOX", "PLAYSTATION 5", "NINTENDO", "PLAYSTATION 4" };
+            int st = plat_pad_glyph_style(g_player, -1);
+            add(R_PICONS, 0, tx("ICONOS DE BOTONES", "BUTTON ICONS"), "< %s >",
+                tx(st_es[st], st_en[st]));
+        }
         for (i = 0; i < nd; i++) {
             if (g_capture == 2 && g_sel == g_n)
                 snprintf(v, sizeof v, "%s",
@@ -442,17 +586,14 @@ static void build(void)
                 add(R_PNAME, 0, tx("NOMBRE", "NAME"), "%s", p->name[0] ? p->name : "-");
             add(R_PICON, 0, tx("ICONO", "ICON"), "< %s >",
                 tx(k_fighter_es[p->icon], k_fighter_en[p->icon]));
-            for (i = 0; i < N_PCOL && k_pcol[i].rgb != p->color; i++)
-                ;
-            if (i < N_PCOL)
-                add(R_PCOLOR, 0, tx("COLOR DE FONDO", "BACKGROUND COLOUR"), "< %s >",
-                    tx(k_pcol[i].es, k_pcol[i].en));
-            else
-                add(R_PCOLOR, 0, tx("COLOR DE FONDO", "BACKGROUND COLOUR"), "< #%06X >",
-                    p->color);
+            add_colour(R_PCOLOR, tx("COLOR DE FONDO", "BACKGROUND COLOUR"), p->color);
             add(R_PSHADE, 0, tx("DEGRADADO", "GRADIENT"), "< %s >",
-                p->dark ? tx("OSCURO (HACIA NEGRO)", "DARK (TO BLACK)")
-                        : tx("CLARO (DESDE BLANCO)", "LIGHT (FROM WHITE)"));
+                p->dark == 2 ? tx("PERSONALIZADO", "CUSTOM")
+                : p->dark ? tx("OSCURO", "DARK")
+                          : tx("CLARO", "LIGHT"));
+            add_colour(R_PCOLOR2, p->dark == 2 ? tx("HACIA EL COLOR", "INTO THE COLOUR")
+                                  : p->dark ? tx("COLOR OSCURO", "DARK COLOUR")
+                                            : tx("COLOR CLARO", "LIGHT COLOUR"), p->color2);
             add(R_PID, 0, tx("ID DE JUGADOR", "PLAYER ID"), "%s", p->id);
             g_rows[g_n - 1].en = 0;     /* shown, not chosen */
             add(R_PRESET2, 0, tx("REINICIAR DATOS", "RESET DATA"), "%s",
@@ -468,9 +609,10 @@ static void build(void)
 static int has_value(int kind)
 {
     switch (kind) {
-    case R_DISPLAY: case R_RES: case R_RRES: case R_AA: case R_TEXQ:
+    case R_DISPLAY: case R_MONITOR: case R_RES: case R_RRES: case R_AA: case R_TEXQ:
     case R_ASPECT: case R_UI: case R_HIDE: case R_PLAYER: case R_LAYOUT:
-    case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE:
+    case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE: case R_PCOLOR2:
+    case R_PICONS:
         return 1;
     }
     return 0;
@@ -485,6 +627,9 @@ static void change(int kind, int d)
     switch (kind) {
     case R_DISPLAY:
         g_gfx.mode = wrap(g_gfx.mode + d, 3);
+        return;
+    case R_MONITOR:                     /* applied with APPLY DISPLAY */
+        g_gfx.monitor = wrap(g_gfx.monitor + d, plat_monitor_count() + 1);
         return;
     case R_RES:
         i = res_index(g_gfx.w, g_gfx.h);
@@ -516,6 +661,18 @@ static void change(int kind, int d)
         g_dirty = 1;
         return;
     }
+    case R_PICONS:
+        {
+            /* in the order the row shows them: auto, Xbox, PS5, PS4, Nintendo */
+            static const int order[5] = { 0, 1, 2, 4, 3 };
+            int st = plat_pad_glyph_style(g_player, -1), at = 0;
+            for (i = 0; i < 5; i++)
+                if (order[i] == st)
+                    at = i;
+            plat_pad_glyph_style(g_player, order[wrap(at + d, 5)]);
+        }
+        g_dirty = 1;
+        return;
     case R_PICON:
         if (prof_get()) {
             prof_get()->icon = wrap(prof_get()->icon + d, PROF_ICONS);
@@ -524,19 +681,24 @@ static void change(int kind, int d)
         return;
     case R_PSHADE:
         if (prof_get()) {
-            prof_get()->dark = !prof_get()->dark;
+            struct profile *p = prof_get();
+
+            p->dark = wrap(p->dark + d, 3);
+            p->color2 = prof_shade_default(p->dark);
             prof_save();
         }
         return;
-    case R_PCOLOR: {
+    case R_PCOLOR: case R_PCOLOR2: {
         struct profile *p = prof_get();
+        unsigned *c;
 
         if (!p)
             return;
-        for (i = 0; i < N_PCOL && k_pcol[i].rgb != p->color; i++)
+        c = kind == R_PCOLOR ? &p->color : &p->color2;
+        for (i = 0; i < N_PCOL && k_pcol[i].rgb != *c; i++)
             ;
         i = i < N_PCOL ? wrap(i + d, N_PCOL) : (d > 0 ? 0 : N_PCOL - 1);
-        p->color = k_pcol[i].rgb;
+        *c = k_pcol[i].rgb;
         prof_save();
         return;
     }
@@ -567,6 +729,294 @@ static void change(int kind, int d)
     g_dirty = 1;
 }
 
+/* ------------------------------------------------------------ lists */
+
+static int drop_grid(int kind)
+{
+    return kind == R_PICON || kind == R_PCOLOR || kind == R_PCOLOR2;
+}
+
+static void drop_free(void)
+{
+    int i;
+
+    for (i = 0; i < MAX_DROP; i++) {
+        free(g_drop_cell[i]);
+        g_drop_cell[i] = NULL;
+    }
+}
+
+/* A colour's swatch for the grid: a glossy disc with a white rim. */
+static unsigned char *swatch(unsigned rgb, int S)
+{
+    unsigned char *o = (unsigned char *)malloc((size_t)S * S * 4);
+    float c[3] = { (float)((rgb >> 16) & 255), (float)((rgb >> 8) & 255),
+                   (float)(rgb & 255) }, R = S * 0.46f;
+    int x, y, i;
+
+    if (!o)
+        return NULL;
+    for (y = 0; y < S; y++)
+        for (x = 0; x < S; x++) {
+            float dx = x + 0.5f - S * 0.5f, dy = y + 0.5f - S * 0.5f;
+            float d = sqrtf(dx * dx + dy * dy), a = R + 0.5f - d, rim, g;
+            unsigned char *p = o + ((size_t)y * S + x) * 4;
+
+            a = a < 0 ? 0 : a > 1 ? 1 : a;
+            rim = d > R - S * 0.06f ? 1.0f : 0.0f;
+            g = dy < 0 ? 0.4f * (-dy / R) : 0;          /* the gloss */
+            for (i = 0; i < 3; i++) {
+                float v = rim ? 235 : c[i] + (255 - c[i]) * g;
+                p[i] = (unsigned char)(v > 255 ? 255 : v);
+            }
+            p[3] = (unsigned char)(a * 255);
+        }
+    return o;
+}
+
+/* The options of a row, the current one in g_drop_cur (-1: none of them). */
+static int drop_fill(int kind)
+{
+    static const char *mode_es[3] = { "VENTANA", "SIN BORDES", "PANTALLA COMPLETA" };
+    static const char *mode_en[3] = { "WINDOW", "BORDERLESS", "FULLSCREEN" };
+    static const char *tq_es[3] = { "IPHONE", "IPAD", "SIN LIMITE" };
+    static const char *tq_en[3] = { "IPHONE", "IPAD", "NO LIMIT" };
+    static const char *ic_es[5] = { "AUTO (LAS DEL MANDO)", "XBOX", "PLAYSTATION 5", "PLAYSTATION 4", "NINTENDO" };
+    static const char *ic_en[5] = { "AUTO (THE PAD'S OWN)", "XBOX", "PLAYSTATION 5", "PLAYSTATION 4", "NINTENDO" };
+    static const int ic_order[5] = { 0, 1, 2, 4, 3 };
+    struct profile *p = prof_get();
+    char (*L)[48] = g_drop_lab;
+    int n = 0, i;
+
+    g_drop_cur = -1;
+    switch (kind) {
+    case R_DISPLAY:
+        for (n = 0; n < 3; n++)
+            snprintf(L[n], 48, "%s", tx(mode_es[n], mode_en[n]));
+        g_drop_cur = g_gfx.mode;
+        break;
+    case R_MONITOR:
+        snprintf(L[0], 48, "%s", tx("AUTOMATICO", "AUTOMATIC"));
+        for (n = 1; n <= plat_monitor_count() && n < MAX_DROP; n++)
+            plat_monitor_name(n, L[n], 48);
+        g_drop_cur = g_gfx.monitor;
+        break;
+    case R_RES:
+        for (n = 0; n < N_RES; n++)
+            snprintf(L[n], 48, "%d x %d", k_res[n].w, k_res[n].h);
+        g_drop_cur = res_index(g_gfx.w, g_gfx.h);
+        break;
+    case R_RRES:
+        snprintf(L[0], 48, "%s", tx("LA DE LA VENTANA", "THE WINDOW'S"));
+        for (n = 1; n <= N_RES; n++)
+            snprintf(L[n], 48, "%d x %d", k_res[n - 1].w, k_res[n - 1].h);
+        g_drop_cur = g_gfx.rw > 0 ? res_index(g_gfx.rw, g_gfx.rh) + 1 : 0;
+        break;
+    case R_AA:
+        for (n = 0; n < 5; n++) {
+            if (k_aa[n])
+                snprintf(L[n], 48, "X%d", k_aa[n]);
+            else
+                snprintf(L[n], 48, "%s", tx("DESACTIVADO", "OFF"));
+            if (k_aa[n] == g_gfx.aa)
+                g_drop_cur = n;
+        }
+        break;
+    case R_TEXQ:
+        for (n = 0; n < 3; n++)
+            snprintf(L[n], 48, "%s", tx(tq_es[n], tq_en[n]));
+        g_drop_cur = g_gfx.texq;
+        break;
+    case R_ASPECT:
+        for (n = 0; n < 4; n++) {
+            snprintf(L[n], 48, "%s", k_aspect[n]);
+            if (strcmp(k_aspect[n], g_gfx.aspect) == 0)
+                g_drop_cur = n;
+        }
+        break;
+    case R_UI:
+        snprintf(L[0], 48, "IPHONE");
+        snprintf(L[1], 48, "IPAD");
+        n = 2;
+        g_drop_cur = g_gfx.ui ? 1 : 0;
+        break;
+    case R_HIDE:
+        snprintf(L[0], 48, "%s", tx("VISIBLES", "SHOWN"));
+        snprintf(L[1], 48, "%s", tx("OCULTOS", "HIDDEN"));
+        n = 2;
+        g_drop_cur = g_gfx.hidectl ? 1 : 0;
+        break;
+    case R_PLAYER:
+        snprintf(L[0], 48, "%s", tx("JUGADOR 1", "PLAYER 1"));
+        snprintf(L[1], 48, "%s", tx("JUGADOR 2 (DUELO)", "PLAYER 2 (DUEL)"));
+        n = 2;
+        g_drop_cur = g_player;
+        break;
+    case R_LAYOUT:
+        snprintf(L[0], 48, "6 %s", tx("BOTONES", "BUTTONS"));
+        snprintf(L[1], 48, "5 %s", tx("BOTONES", "BUTTONS"));
+        n = 2;
+        g_drop_cur = port_buttons() == 5 ? 1 : 0;
+        break;
+    case R_DEVICE: {
+        const char *dev = port_pad_device(g_player);
+
+        snprintf(L[0], 48, "AUTO");
+        snprintf(L[1], 48, "%s", tx("NINGUNO", "NONE"));
+        snprintf(L[2], 48, "XINPUT (XBOX)");
+        n = 3;
+        for (i = 0; i < 3 && strcmp(dev, k_dev[i]) != 0; i++)
+            ;
+        if (i == 3) {                   /* the vvvv:pppp the ini names */
+            snprintf(L[3], 48, "%s", g_pad[g_player].connected ? g_pad[g_player].name : dev);
+            n = 4;
+        }
+        g_drop_cur = i;
+        break;
+    }
+    case R_PICONS: {
+        int st = plat_pad_glyph_style(g_player, -1);
+        for (n = 0; n < 5; n++) {
+            snprintf(L[n], 48, "%s", tx(ic_es[n], ic_en[n]));
+            if (ic_order[n] == st)
+                g_drop_cur = n;
+        }
+        break;
+    }
+    case R_PSHADE:
+        snprintf(L[0], 48, "%s", tx("CLARO", "LIGHT"));
+        snprintf(L[1], 48, "%s", tx("OSCURO", "DARK"));
+        snprintf(L[2], 48, "%s", tx("PERSONALIZADO", "CUSTOM"));
+        n = 3;
+        g_drop_cur = p ? p->dark : 0;
+        break;
+    case R_PICON:
+        if (!p)
+            return 0;
+        for (n = 0; n < PROF_ICONS; n++) {
+            snprintf(L[n], 48, "%s", tx(k_fighter_es[n], k_fighter_en[n]));
+            g_drop_cell[n] = prof_icon_rgba(n, p->color, p->dark, p->color2, 96);
+        }
+        g_drop_cur = p->icon;
+        break;
+    case R_PCOLOR: case R_PCOLOR2: {
+        unsigned have;
+
+        if (!p)
+            return 0;
+        have = kind == R_PCOLOR ? p->color : p->color2;
+        pal_make();
+        for (n = 0; n < PAL_COLS * PAL_ROWS; n++) {
+            for (i = 0; i < N_PCOL && k_pcol[i].rgb != g_pal[n]; i++)
+                ;
+            if (i < N_PCOL)
+                snprintf(L[n], 48, "%s", tx(k_pcol[i].es, k_pcol[i].en));
+            else
+                snprintf(L[n], 48, "#%06X", g_pal[n]);
+            g_drop_cell[n] = swatch(g_pal[n], 64);
+            if (g_pal[n] == have)
+                g_drop_cur = n;
+        }
+        break;
+    }
+    }
+    return n;
+}
+
+static void drop_open(int kind)
+{
+    int i;
+
+    drop_free();
+    g_drop_n = drop_fill(kind);
+    if (g_drop_n <= 0)
+        return;
+    for (i = 0; i < g_n && g_rows[i].kind != kind; i++)
+        ;
+    snprintf(g_drop_title, sizeof g_drop_title, "%s", i < g_n ? g_rows[i].label : "");
+    g_drop = 1;
+    g_drop_kind = kind;
+    g_drop_sel = g_drop_cur >= 0 ? g_drop_cur : 0;
+    g_drop_first = 0;
+}
+
+static void drop_close(void)
+{
+    g_drop = 0;
+    drop_free();
+}
+
+/* Choose option i of the open list: the row's own step does it, so
+ * everything that follows a change (applied at once, umk3.ini) follows. */
+static void drop_apply(int i)
+{
+    int kind = g_drop_kind, cur = g_drop_cur;
+    struct profile *p = prof_get();
+
+    if (kind == R_RES) {
+        g_gfx.w = k_res[i].w;
+        g_gfx.h = k_res[i].h;
+    } else if (kind == R_PCOLOR || kind == R_PCOLOR2) {
+        if (p) {
+            *(kind == R_PCOLOR ? &p->color : &p->color2) = g_pal[i];
+            prof_save();
+        }
+    } else if (kind == R_PICON) {
+        if (p) {
+            p->icon = i;
+            prof_save();
+        }
+    } else if (i != cur)
+        change(kind, i - (cur < 0 ? 0 : cur));
+    drop_close();
+}
+
+/* The open list's turn: arrows (a grid's go across too), Enter picks, Esc
+ * or the pad's east button goes back, a click picks or, outside, goes back. */
+static void drop_tick(int up, int down, int left, int right, int ok, int back,
+                      int click)
+{
+    int grid = drop_grid(g_drop_kind), cols = grid ? g_ggeo.cols : 1;
+
+    if (back) {
+        drop_close();
+        return;
+    }
+    if (grid && cols > 0) {
+        if (left)  g_drop_sel = wrap(g_drop_sel - 1, g_drop_n);
+        if (right) g_drop_sel = wrap(g_drop_sel + 1, g_drop_n);
+        if (up && g_drop_sel - cols >= 0) g_drop_sel -= cols;
+        if (down && g_drop_sel + cols < g_drop_n) g_drop_sel += cols;
+    } else {
+        if (up)   g_drop_sel = wrap(g_drop_sel - 1, g_drop_n);
+        if (down) g_drop_sel = wrap(g_drop_sel + 1, g_drop_n);
+    }
+    if (click) {
+        int i = -1;
+
+        if (grid && g_ggeo.step > 0) {
+            float fx = (g_mx - g_ggeo.x0) / g_ggeo.step, fy = (g_my - g_ggeo.y0) / g_ggeo.step;
+            int cx = (int)floorf(fx), cy = (int)floorf(fy);
+            if (fx >= 0 && fy >= 0 && cx < g_ggeo.cols
+                && fx - cx < g_ggeo.cell / g_ggeo.step && fy - cy < g_ggeo.cell / g_ggeo.step)
+                i = cy * g_ggeo.cols + cx;
+        } else if (g_dgeo.rowh > 0 && g_mx >= g_dgeo.bx && g_mx < g_dgeo.bx + g_dgeo.bw
+                   && g_my >= g_dgeo.top) {
+            i = g_drop_first + (int)((g_my - g_dgeo.top) / g_dgeo.rowh);
+            if (i - g_drop_first >= VIS_DROP)
+                i = -1;
+        }
+        if (i >= 0 && i < g_drop_n) {
+            drop_apply(i);
+            return;
+        }
+        drop_close();
+        return;
+    }
+    if (ok)
+        drop_apply(g_drop_sel);
+}
+
 static void pick(int kind)
 {
     switch (kind) {
@@ -576,6 +1026,7 @@ static void pick(int kind)
         g_disp_mode = g_gfx.mode;
         g_disp_w = g_gfx.w;
         g_disp_h = g_gfx.h;
+        g_disp_mon = g_gfx.monitor;
         g_dirty = 1;
         break;
     case R_KEY:
@@ -618,7 +1069,7 @@ static void pick(int kind)
         break;
     default:
         if (has_value(kind))
-            change(kind, 1);
+            drop_open(kind);
     }
 }
 
@@ -770,6 +1221,15 @@ void set_menu_tick(void)
     click = g_mdown && !g_mouse_was;
     g_mouse_was = g_mdown;
 
+    if (g_drop) {
+        drop_tick(up, down, left, right, ok, esc || back, click);
+        if (g_dirty) {
+            save_ini();
+            g_dirty = 0;
+        }
+        build();
+        return;
+    }
     if (esc || back) {
         close_menu();
         return;
@@ -791,11 +1251,9 @@ void set_menu_tick(void)
             int i = g_first + (int)((g_my - g_geo.top) / g_geo.rowh);
             if (i < g_n && i - g_first < VIS_ROWS && g_rows[i].en) {
                 g_sel = i;
-                if (has_value(g_rows[i].kind))
-                    change(g_rows[i].kind, g_mx < mid ? -1 : 1);
-                else
-                    ok = 1;
+                ok = 1;                 /* a row with values opens its list */
             }
+            (void)mid;
         }
     }
 
@@ -823,7 +1281,7 @@ void set_menu_draw(void)
 {
     const char *tabs[N_PAGES], *lp[VIS_ROWS], *vp[VIS_ROWS];
     int en[VIS_ROWS], i, rows;
-    char footer[128], k[24];
+    char footer[384], k[96], ok[96], pa[96], pb[96], ta[96], tb[96];
 
     if (g_sel < g_first)
         g_first = g_sel;
@@ -832,7 +1290,9 @@ void set_menu_draw(void)
     if (g_first > g_n - VIS_ROWS)
         g_first = g_n - VIS_ROWS > 0 ? g_n - VIS_ROWS : 0;
     rows = g_n - g_first < VIS_ROWS ? g_n - g_first : VIS_ROWS;
-    tabs[PAGE_GFX] = tx("GRAFICOS", "GRAPHICS");
+    tabs[PAGE_GFX] = "VIDEO";
+    tabs[PAGE_TEX] = tx("TEXTURAS", "TEXTURES");
+    tabs[PAGE_UI] = tx("INTERFAZ", "INTERFACE");
     tabs[PAGE_KEYS] = tx("TECLADO", "KEYBOARD");
     tabs[PAGE_PAD] = tx("MANDO", "GAMEPAD");
     tabs[PAGE_PROF] = tx("PERFIL", "PROFILE");
@@ -841,21 +1301,33 @@ void set_menu_draw(void)
         vp[i] = g_rows[g_first + i].value;
         en[i] = g_rows[g_first + i].en;
     }
-    plat_key_label(PK_SETTINGS, k, sizeof k);
+    if (g_using && g_capture != 3) {  /* only the pad's pictures */
+        int kind = pad_kind(g_using - 1);
+        plat_pad_glyph(kind, PB_SOUTH, ok, sizeof ok);
+        plat_pad_glyph(kind, PB_EAST, k, sizeof k);
+        plat_pad_glyph(kind, PB_L1, ta, sizeof ta);
+        plat_pad_glyph(kind, PB_R1, tb, sizeof tb);
+    } else {                            /* only the keyboard's */
+        plat_key_glyph(PK_SETTINGS, k, sizeof k);
+        plat_key_glyph(PK_OK, ok, sizeof ok);
+        plat_key_glyph(PK_DBG_PAGE_PREV, ta, sizeof ta);
+        plat_key_glyph(PK_DBG_PAGE_NEXT, tb, sizeof tb);
+    }
+    (void)pa;
+    (void)pb;
     if (g_capture == 3)
-        snprintf(footer, sizeof footer, "%s",
-                 tx("ESCRIBE EL NOMBRE   ENTER GUARDA   ESC CANCELA",
-                    "TYPE THE NAME   ENTER KEEPS IT   ESC CANCELS"));
+        snprintf(footer, sizeof footer, "%s %s   %s %s",
+                 ok, tx("GUARDA", "KEEPS IT"), k, tx("CANCELA", "CANCELS"));
     else if (g_capture)
-        snprintf(footer, sizeof footer, "%s",
-                 tx("ESC CANCELA", "ESC CANCELS"));
+        snprintf(footer, sizeof footer, "%s %s", k, tx("CANCELA", "CANCELS"));
     else if (g_n > VIS_ROWS)
-        snprintf(footer, sizeof footer, "%d-%d / %d   %s %s",
-                 g_first + 1, g_first + rows, g_n, k, tx("CIERRA", "CLOSES"));
+        snprintf(footer, sizeof footer, "%d-%d / %d   %s%s %s   %s %s   %s %s",
+                 g_first + 1, g_first + rows, g_n, ta, tb, tx("PESTANA", "TAB"),
+                 ok, tx("ELIGE", "PICK"), k, tx("CIERRA", "CLOSES"));
     else
-        snprintf(footer, sizeof footer, "%s %s   %s",
-                 tx("FLECHAS O RATON", "ARROWS OR MOUSE"), k,
-                 tx("CIERRA", "CLOSES"));
+        snprintf(footer, sizeof footer, "%s%s %s   %s %s   %s %s",
+                 ta, tb, tx("PESTANA", "TAB"), ok, tx("ELIGE", "PICK"),
+                 k, tx("CIERRA", "CLOSES"));
     {
         /* on PROFILE the profile's icon goes beside the box, as big as the
          * space leaves (up to 120 points), and the box moves right to make
@@ -871,12 +1343,12 @@ void set_menu_draw(void)
                      en, rows, g_sel - g_first, footer, &g_geo);
         if (ui_menu_shift > 0) {
             const struct profile *p = prof_get();
-            int key = p->icon << 25 | p->dark << 24 | (int)(p->color & 0xffffff);
+            int key = (int)prof_look_key(p);
             float x = g_geo.bx - 15.0f - 8.0f - size;
             float y = g_geo.top;
 
             if (key != g_icon_key) {
-                unsigned char *px = prof_icon_rgba(p->icon, p->color, p->dark, 256);
+                unsigned char *px = prof_icon_rgba(p->icon, p->color, p->dark, p->color2, 256);
                 ui_icon_set(px, 256, 256);
                 free(px);
                 g_icon_key = key;
@@ -884,6 +1356,48 @@ void set_menu_draw(void)
             ui_icon_draw(x, y, size);
         }
         ui_menu_shift = 0.0f;
+    }
+    if (g_drop) {                       /* the open list, over the menu */
+        char df[384];
+
+        snprintf(df, sizeof df, "%s %s   %s %s", ok, tx("ELIGE", "PICK"),
+                 k, tx("VUELVE", "BACK"));
+        if (drop_grid(g_drop_kind)) {
+            const unsigned char *cells[MAX_DROP];
+            const struct profile *p = prof_get();
+            unsigned key = (unsigned)g_drop_kind * 2654435761u ^ (p ? prof_look_key(p) : 0);
+            char t[96];
+
+            for (i = 0; i < g_drop_n; i++)
+                cells[i] = g_drop_cell[i];
+            /* the title names the one under the cursor */
+            snprintf(t, sizeof t, "%s: %s", g_drop_title, g_drop_lab[g_drop_sel]);
+            for (i = 0; t[i]; i++)
+                key = (key ^ (unsigned char)t[i]) * 16777619u;
+            if (g_drop_kind == R_PICON)
+                ui_grid_show(t, cells, g_drop_n, 8, 96, 34, g_drop_sel, df, key, &g_ggeo);
+            else
+                ui_grid_show(t, cells, g_drop_n, PAL_COLS, 64, 22, g_drop_sel, df,
+                             key, &g_ggeo);
+        } else {
+            const char *dl[VIS_DROP], *dv[VIS_DROP];
+            int de[VIS_DROP], dn;
+
+            if (g_drop_sel < g_drop_first)
+                g_drop_first = g_drop_sel;
+            if (g_drop_sel >= g_drop_first + VIS_DROP)
+                g_drop_first = g_drop_sel - VIS_DROP + 1;
+            dn = g_drop_n - g_drop_first < VIS_DROP ? g_drop_n - g_drop_first : VIS_DROP;
+            for (i = 0; i < dn; i++) {
+                dl[i] = g_drop_lab[g_drop_first + i];
+                dv[i] = g_drop_first + i == g_drop_cur ? tx("ACTUAL", "CURRENT") : "";
+                de[i] = 1;
+            }
+            ui_menu_layer = 1;
+            ui_menu_show(g_drop_title, NULL, 0, 0, dl, dv, de, dn,
+                         g_drop_sel - g_drop_first, df, &g_dgeo);
+            ui_menu_layer = 0;
+        }
     }
 }
 
@@ -900,10 +1414,10 @@ void set_menu_badge(void)
 
     if (!p)
         return;
-    k = p->icon << 25 | p->dark << 24 | (int)(p->color & 0xffffff);
+    k = (int)prof_look_key(p);
     if (k != icon_key || !icon) {
         free(icon);
-        icon = prof_icon_rgba(p->icon, p->color, p->dark, 96);
+        icon = prof_icon_rgba(p->icon, p->color, p->dark, p->color2, 96);
         icon_key = k;
     }
     for (c = p->name; *c; c++)
@@ -942,10 +1456,11 @@ static void put(const char *k, const char *fmt, ...)
 
 static void put_pad(const char *pre, int player)
 {
-    static const char *const n6[9] = {
-        "hp", "lp", "block", "hk", "lk", "run", "special", "pause", "moves"
+    static const char *const n6[10] = {
+        "hp", "lp", "block", "hk", "lk", "run", "special", "pause", "moves",
+        "settings"
     };
-    static const int a6[9] = { 0, 1, 2, 3, 4, 5, 6, 14, 15 };
+    static const int a6[10] = { 0, 1, 2, 3, 4, 5, 6, 14, 15, 16 };
     static const char *const n5[4] = { "p", "b", "k", "r" };
     static const int a5[4] = { 7, 9, 10, 12 };
     char k[24], v[48];
@@ -953,14 +1468,14 @@ static void put_pad(const char *pre, int player)
 
     snprintf(k, sizeof k, "%s", pre);
     put(k, "%s", port_pad_device(player));
-    for (i = 0; i < 9; i++) {
+    for (i = 0; i < 10; i++) {
         snprintf(k, sizeof k, "%s_%s", pre, n6[i]);
-        mask_text(*port_pad_action(player, a6[i]), v, sizeof v);
+        mask_names(*port_pad_action(player, a6[i]), v, sizeof v);
         put(k, "%s", v);
     }
     for (i = 0; i < 4; i++) {
         snprintf(k, sizeof k, "%s5_%s", pre, n5[i]);
-        mask_text(*port_pad_action(player, a5[i]), v, sizeof v);
+        mask_names(*port_pad_action(player, a5[i]), v, sizeof v);
         put(k, "%s", v);
     }
 }
@@ -987,6 +1502,7 @@ static void save_ini(void)
     put("height", "%d", g.h);
     put("fullscreen", "%d", g.mode == 2);
     put("borderless", "%d", g.mode == 1);
+    put("monitor", "%d", g.monitor);
     put("antialiasing", "%d", g.aa);
     if (g.rw > 0) {
         put("render_width", "%d", g.rw);
@@ -1000,6 +1516,11 @@ static void save_ini(void)
     put("texture_quality", "%s", tq[g.texq]);
     put("hide_controls", "%d", g.hidectl);
     put("buttons", "%d", port_buttons());
+    {
+        static const char *const st[5] = { "auto", "xbox", "ps5", "nintendo", "ps4" };
+        put("pad_icons", "%s", st[plat_pad_glyph_style(0, -1)]);
+        put("p2pad_icons", "%s", st[plat_pad_glyph_style(1, -1)]);
+    }
     for (i = 0; i < 10; i++) {
         snprintf(k, sizeof k, "key_%s", kn[i]);
         put(k, "%d", plat_key_bound(PK_UP + i));

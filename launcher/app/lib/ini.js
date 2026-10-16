@@ -97,11 +97,14 @@ const KEY_DEFAULTS = {
 /* The pad's button for each action (pad_<name>= and pad5_<name>=): the
  * game's PB_* names joined by "+" (any one presses it), "" for none.
  * The defaults are the game's own, by position (runtime/game_main.c). */
-const PAD_NAMES = ['hp', 'lp', 'block', 'hk', 'lk', 'run', 'special', 'pause', 'moves'];
+const PAD_NAMES = ['hp', 'lp', 'block', 'hk', 'lk', 'run', 'special', 'pause', 'moves', 'settings'];
 const PAD_DEFAULTS = {
     hp: 'WEST', lp: 'SOUTH', block: 'R1', hk: 'NORTH', lk: 'EAST', run: 'L1+L2',
-    special: 'R2', pause: 'START', moves: 'SELECT',
+    special: 'R2', pause: 'START', moves: 'SELECT', settings: 'HOME',
 };
+/* pad_icons= / p2pad_icons=: the pictures of a player's pad buttons, in the
+ * game's menus and here (auto: the pad's own) */
+const PAD_ICONS = ['auto', 'xbox', 'ps5', 'ps4', 'nintendo'];
 const PAD5_NAMES = ['p', 'b', 'k', 'r'];
 const PAD5_DEFAULTS = { p: 'WEST+NORTH', b: 'R1', k: 'SOUTH+EAST', r: 'L1+L2' };
 const PAD_VALUE = /^([A-Z0-9]+(\+[A-Z0-9]+)*)?$/i;
@@ -146,7 +149,10 @@ function defaultConfig() {
         buttons: 5,                  /* the layout the game starts with (its factory default, Settings[4] = 5) */
         pad: 'auto',                 /* pad=: auto, off, xinput or vvvv:pppp */
         padName: '',                 /* pad_name=: how the launcher showed it */
-        padDbgMenu: 'L3+R3',         /* pad_dbg_menu=: the pad buttons that open the debug menu */
+        padDbgMenu: 'L3+R3',
+        padIcons: 'auto',            /* pad_icons=: auto xbox ps5 ps4 nintendo */
+        monitor: 0,                  /* monitor=: 0 automatic, 1..n */
+        p2PadIcons: 'auto',          /* p2pad_icons= */         /* pad_dbg_menu=: the pad buttons that open the debug menu */
         keys,
         keys5,
         padKeys: Object.assign({}, PAD_DEFAULTS),
@@ -208,6 +214,11 @@ function load(p) {
             cfg.ipa = val;
         } else if (key === 'marco') {
             cfg.marco = val;
+        } else if (key === 'monitor') {
+            cfg.monitor = num >= 0 && num < 16 ? num : 0;
+        } else if (key === 'pad_icons' || key === 'p2pad_icons') {
+            cfg[key === 'pad_icons' ? 'padIcons' : 'p2PadIcons'] =
+                PAD_ICONS.includes(val.toLowerCase()) ? val.toLowerCase() : 'auto';
         } else if (key === 'p2pad') {
             cfg.p2Pad = /^(auto|off|xinput|[0-9a-f]{4}:[0-9a-f]{4})$/i.test(val)
                 ? val.toLowerCase() : 'auto';
@@ -284,6 +295,9 @@ function save(p, cfg) {
         'texture_quality=' + (cfg.textureQuality || 'iphone'),
         'ui_size=' + (cfg.uiSize || 'iphone'),
         'pad_dbg_menu=' + (cfg.padDbgMenu === undefined ? 'L3+R3' : cfg.padDbgMenu),
+        'pad_icons=' + (cfg.padIcons || 'auto'),
+        'monitor=' + (cfg.monitor | 0),
+        'p2pad_icons=' + (cfg.p2PadIcons || 'auto'),
     ];
     if (cfg.padName)
         lines.push('pad_name=' + cfg.padName.replace(/[\r\n]/g, ' '));

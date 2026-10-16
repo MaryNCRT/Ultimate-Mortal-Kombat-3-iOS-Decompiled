@@ -50,6 +50,16 @@ void ui_badge(const char *name, const unsigned char *icon, int icon_px,
               unsigned key);
 /* points the box is moved right by (a picture beside it), 0 centred */
 extern float ui_menu_shift;
+/* 1: the next box goes over the one already drawn (a list it opened):
+ * that one dimmed instead of the frozen frame */
+extern int ui_menu_layer;
+/* A grid of pictures over the menu (plat_ui_grid), the menu dimmed; made
+ * again when `key` or `sel` change. geo: the first cell's corner, the step
+ * and the cell's size, in the menu's space. */
+struct ui_grid_geo { float x0, y0, step, cell; int cols, n; };
+void ui_grid_show(const char *title, const unsigned char *const *cells,
+                  int n, int cols, int cpx, float cell, int sel,
+                  const char *footer, unsigned key, struct ui_grid_geo *geo);
 void ui_menu_show(const char *title, const char *const *tabs, int ntabs,
                   int page, const char *const *label,
                   const char *const *value, const int *enabled, int rows,

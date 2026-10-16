@@ -478,9 +478,17 @@ void dbg_menu_mouse(float x, float y, int down)
  * (circle / B) to close. */
 static PLAT_PAD g_pad, g_pad_was;
 
+/* The footer shows the pictures of what the player is using: the pad or
+ * the keyboard (and mouse), not both. */
+static int g_using_pad;
+
 void dbg_menu_pad(const PLAT_PAD *p)
 {
     g_pad = *p;
+    if (p->connected && (p->buttons || p->up || p->down || p->left || p->right))
+        g_using_pad = 1;
+    else if (!p->connected || plat_key_any())
+        g_using_pad = 0;
 }
 
 #define PAD_EDGE(f)  (g_pad.f && !g_pad_was.f)
@@ -593,7 +601,7 @@ int dbg_menu_tick(struct dbg_request *rq)
 /* A row's value, "" for none. */
 static void row_value(int i, char *v, size_t n)
 {
-    char a[24], b[24];
+    char a[96], b[96];
 
     v[0] = 0;
     switch (i) {
@@ -606,12 +614,12 @@ static void row_value(int i, char *v, size_t n)
         snprintf(v, n, "< %2d %s >", g_screen, FETaskNames[g_screen] + 8);
         break;
     case ROW_KEYS:
-        plat_key_label(PK_DBG_KO_P2, a, sizeof a);
-        plat_key_label(PK_DBG_LOSE, b, sizeof b);
+        plat_key_glyph(PK_DBG_KO_P2, a, sizeof a);
+        plat_key_glyph(PK_DBG_LOSE, b, sizeof b);
         snprintf(v, n, "< %s >  %s-%s", g_keys ? "ON" : "OFF", a, b);
         break;
     case ROW_INFO:
-        plat_key_label(PK_BACK, a, sizeof a);
+        plat_key_glyph(PK_BACK, a, sizeof a);
         snprintf(v, n, "< %s >  %s", g_info ? "ON" : "OFF", a);
         break;
     case ROW_FINISHER: snprintf(v, n, "< %s >", k_fin[g_fin]); break;
@@ -639,18 +647,44 @@ static void title_text(char *t, size_t n)
 
 static void footer_text(char *f, size_t n)
 {
-    char p[24], q[24], c[24];
+    char p[96], q[96], c[96], o[96];
 
-    plat_key_label(PK_DBG_PAGE_PREV, p, sizeof p);
-    plat_key_label(PK_DBG_PAGE_NEXT, q, sizeof q);
-    plat_key_label(PK_TEST, c, sizeof c);
-    snprintf(f, n, "%s/%s TAB   ARROWS OR MOUSE   ENTER PICK   %s CLOSE",
-             p, q, c);
+    if (g_using_pad) {                  /* only the pad's pictures */
+        int k = plat_pad_glyph_kind(0, g_pad.kind);
+        plat_pad_glyph(k, PB_L1, p, sizeof p);
+        plat_pad_glyph(k, PB_R1, q, sizeof q);
+        plat_pad_glyph(k, PB_SOUTH, o, sizeof o);
+        plat_pad_glyph(k, PB_EAST, c, sizeof c);
+        snprintf(f, n, "%s%s TAB   %s PICK   %s CLOSE", p, q, o, c);
+    } else {                            /* only the keyboard's */
+        plat_key_glyph(PK_DBG_PAGE_PREV, p, sizeof p);
+        plat_key_glyph(PK_DBG_PAGE_NEXT, q, sizeof q);
+        plat_key_glyph(PK_TEST, c, sizeof c);
+        plat_key_glyph(PK_OK, o, sizeof o);
+        snprintf(f, n, "%s%s TAB   ARROWS OR MOUSE   %s PICK   %s CLOSE",
+                 p, q, o, c);
+    }
 }
 
 /* Points the next boxes are moved right by, for a picture beside them
  * (the settings menu's profile icon); 0 centres them. */
 float ui_menu_shift;
+int ui_menu_layer;
+
+/* the menu under an open list, dimmed */
+static void dim_all(void)
+{
+    glDisable(GL_TEXTURE_2D);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glColor4f(0, 0, 0, 0.78f);
+    glBegin(GL_QUADS);
+    glVertex2f(0, 0);
+    glVertex2f(g_ow, 0);
+    glVertex2f(g_ow, 320);
+    glVertex2f(0, 320);
+    glEnd();
+}
 
 /* Any menu box over the frozen frame: the debug menu's and the settings
  * menu's (settings_menu.c). In the iPhone OS 3 alert dress the in-game
@@ -663,10 +697,16 @@ static int draw_ios(const char *title, const char *const *tabs, int ntabs,
                     int page, const char *const *lp, const char *const *vp,
                     const int *en, int rows, int sel, const char *footer)
 {
-    static GLuint tex;
-    static char last[4096];
-    static int tw, th;
-    static float ts;
+    /* one cache for the menu, one for a list over it (ui_menu_layer) */
+    static GLuint texs[2];
+    static char lasts[2][4096];
+    static int tws[2], ths[2];
+    static float tss[2];
+    int L = ui_menu_layer ? 1 : 0;
+    GLuint tex = texs[L];
+    char *last = lasts[L];
+    int tw = tws[L], th = ths[L];
+    float ts = tss[L];
     char sig[4096];
     int i, n = 0;
     GLint view[4];
@@ -700,14 +740,17 @@ static int draw_ios(const char *title, const char *const *tabs, int ntabs,
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
                      GL_UNSIGNED_BYTE, px);
         free(px);
-        tw = w;
-        th = h;
-        ts = s;
+        tws[L] = tw = w;
+        ths[L] = th = h;
+        tss[L] = ts = s;
+        texs[L] = tex;
         strcpy(last, sig);
     }
 
     begin_2d();
-    if (g_shot) {                       /* the frozen frame, dimmed */
+    if (L)
+        dim_all();
+    else if (g_shot) {                  /* the frozen frame, dimmed */
         glEnable(GL_TEXTURE_2D);
         glBindTexture(GL_TEXTURE_2D, g_shot);
         glColor4f(0.6f, 0.6f, 0.6f, 1.0f);
@@ -826,6 +869,69 @@ void ui_menu_show(const char *title, const char *const *tabs, int ntabs,
 
 void ui_grab(int vx, int vy, int vw, int vh) { grab(vx, vy, vw, vh); }
 
+void ui_grid_show(const char *title, const unsigned char *const *cells,
+                  int n, int cols, int cpx, float cell, int sel,
+                  const char *footer, unsigned key, struct ui_grid_geo *geo)
+{
+    static GLuint tex;
+    static unsigned last;
+    static int tw, th;
+    static float ts;
+    GLint view[4];
+    float s, w, h, x, y;
+
+    glGetIntegerv(GL_VIEWPORT, view);
+    s = view[3] / 320.0f;
+    if (s <= 0)
+        return;
+    key = (key ^ (unsigned)(s * 1000.0f)) * 16777619u ^ (unsigned)sel;
+    if (!tex || key != last) {
+        unsigned char *px = plat_ui_grid(title, cells, n, cols, cpx, cell, sel,
+                                         footer, s, &tw, &th);
+        if (!px)
+            return;
+        if (!tex)
+            glGenTextures(1, &tex);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tw, th, 0, GL_RGBA,
+                     GL_UNSIGNED_BYTE, px);
+        free(px);
+        ts = s;
+        last = key;
+    }
+    w = tw / ts;
+    h = th / ts;
+    x = (g_ow - w) * 0.5f;
+    y = (320 - h) * 0.5f;
+    begin_2d();
+    dim_all();
+    glEnable(GL_TEXTURE_2D);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);        /* premultiplied */
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glColor4f(1, 1, 1, 1);
+    glBegin(GL_QUADS);
+    glTexCoord2f(0, 0); glVertex2f(x, y);
+    glTexCoord2f(1, 0); glVertex2f(x + w, y);
+    glTexCoord2f(1, 1); glVertex2f(x + w, y + h);
+    glTexCoord2f(0, 1); glVertex2f(x, y + h);
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+    end_2d();
+    if (geo) {                          /* plat_ui_grid's layout, in points */
+        geo->x0 = x + 6 + 10;
+        geo->y0 = y + 6 + 22 + 4;
+        geo->step = cell + 4;
+        geo->cell = cell;
+        geo->cols = cols;
+        geo->n = n;
+    }
+}
+
 /* A picture beside the box (the settings menu's profile icon): uploaded
  * once by ui_icon_set, drawn each frame by ui_icon_draw in the menu's
  * space. Straight alpha. */
@@ -923,7 +1029,7 @@ void ui_icon_draw(float x, float y, float size)
 
 void dbg_menu_draw(void)
 {
-    char vals[MAX_PAGE_ROWS][64], title[96], footer[128];
+    char vals[MAX_PAGE_ROWS][192], title[96], footer[512];
     const char *vp[MAX_PAGE_ROWS], *lp[MAX_PAGE_ROWS], *tabs[N_PAGES];
     int en[MAX_PAGE_ROWS], i, rows = k_pages[g_page].n;
 
