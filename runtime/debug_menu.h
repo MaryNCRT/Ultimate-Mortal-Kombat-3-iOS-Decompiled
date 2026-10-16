@@ -48,7 +48,7 @@ void ui_grab(int vx, int vy, int vw, int vh);
 /* a picture beside the box: uploaded once, drawn at (x, y), size points */
 void ui_icon_set(const unsigned char *rgba, int w, int h);
 void ui_icon_draw(float x, float y, float size);
-/* the player's badge, bottom right; rebuilt when `key` changes */
+/* the player's badge, top right; rebuilt when `key` changes */
 void ui_badge(const char *name, const unsigned char *icon, int icon_px,
               unsigned key);
 /* points the box is moved right by (a picture beside it), 0 centred */
@@ -56,6 +56,11 @@ extern float ui_menu_shift;
 /* 1: the next box goes over the one already drawn (a list it opened):
  * that one dimmed instead of the frozen frame */
 extern int ui_menu_layer;
+/* The pad's highlight on the game's own menus (pad_nav.c): a glowing frame
+ * round a box given in the touch's units, `sh` of them to the screen's
+ * height. */
+void ui_nav_frame(float x, float y, float w, float h, float sh, int p2);
+
 /* A grid of pictures over the menu (plat_ui_grid), the menu dimmed; made
  * again when `key` or `sel` change. geo: the first cell's corner, the step
  * and the cell's size, in the menu's space. */

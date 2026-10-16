@@ -31,6 +31,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNTIME_FILES = [
     "runtime/game_main.c", "runtime/debug_menu.c", "runtime/draw_gl.c",
     "runtime/settings_menu.c", "runtime/settings_menu.h",
+    "runtime/pad_nav.c", "runtime/pad_nav.h",
     "runtime/profiles.c", "runtime/profiles.h",
     "runtime/gamecode_globals.c",
     "runtime/gamecode_globals.h", "runtime/gamecode_stubs.c",

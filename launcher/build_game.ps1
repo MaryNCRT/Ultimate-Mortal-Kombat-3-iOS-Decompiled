@@ -121,7 +121,7 @@ $src = @(
     'runtime\gamecode_stubs.c', 'runtime\lime_menu.c', 'runtime\lime_platform.c',
     'runtime\lime_app.c', 'runtime\wav.c', 'runtime\fight_runtime.c',
     'runtime\debug_menu.c', 'runtime\savestate.c',
-    'runtime\settings_menu.c', 'runtime\profiles.c',
+    'runtime\settings_menu.c', 'runtime\profiles.c', 'runtime\pad_nav.c',
     'runtime\platform\win32_gl.c', 'runtime\platform\win32_gl_cdecl.c',
     'runtime\platform\win32_audio.c'
 ) | ForEach-Object { Join-Path $Root $_ }

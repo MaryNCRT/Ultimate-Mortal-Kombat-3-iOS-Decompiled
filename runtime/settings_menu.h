@@ -5,6 +5,9 @@
 
 int  set_menu_is_open(void);
 void set_menu_toggle(void);
+/* The game's button setup with the on-screen controls off: the CONTROLS
+ * page alone, in the game's own panel. */
+void set_menu_open_controls(void);
 /* After GameCodeMain: a pending open grabs the frame just drawn. */
 void set_menu_after_frame(int vx, int vy, int vw, int vh);
 /* Each frame the menu is open, instead of the game's tick: the pointer as

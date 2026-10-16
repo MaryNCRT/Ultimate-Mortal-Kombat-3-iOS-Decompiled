@@ -7666,6 +7666,8 @@ typedef struct BUTTONNEW BUTTONNEW;
 extern BUTTONNEW BUTTON_BACK;           /* 0x001007bc */
 long DrawButtonNew(BUTTONNEW *b, int x, int y, int interactive);
 void PortFERightEdgeSet(int on);
+extern int PortNavAsOk;                 /* port: FrontEnd.c */
+void PortNavTarget(float x, float y, float w, float h, int kind);  /* port */
 
 extern long  MoveListPage;              /* 0x00150eb4 */
 extern long  Generic_Moves5[];          /* 0x001030d8 */
@@ -7749,10 +7751,15 @@ static void DrawGenericPage(long first)
 
 /* One page of a character's own list. `section` is 0 or 1; section 2 exists in
  * the table and is never shown here. */
+int PortMovesWho(void);                 /* port: runtime/game_main.c */
+
 static void DrawCharacterPage(long character, long section)
 {
     const MOVESSECTION *s = &MovesListTab[character].section[section];
-    const long *table = (Player1NumButtons == 5) ? s->moves5 : s->moves6;
+    /* port: player two's list in VS goes by their own layout */
+    const long *table = ((PortMovesWho() == 2 ? Player2NumButtons
+                                               : Player1NumButtons) == 5)
+                        ? s->moves5 : s->moves6;
     long row;
 
     for (row = 0; row < s->rows; row++)
@@ -7771,6 +7778,10 @@ void MovesList(void)
 
     /* On the guest of a network game the local player is player 2. */
     if (GameMode == 1 && !isParentBasedOnSpeed())
+        character = PLAYER2MODEL;
+    /* Port, not in the binary: in VS, player two's own fighter when they
+     * opened it (their pad or keys) */
+    if (PortMovesWho() == 2)
         character = PLAYER2MODEL;
 
     page   = MoveListPage;
@@ -7793,6 +7804,7 @@ void MovesList(void)
     /* Port, not in the binary: on 16:9 and 21:9 NEXT and its label sit at
      * the screen's right edge, as on the front end's screens */
     PortFERightEdgeSet(1);
+    PortNavAsOk = 1;                    /* port: NEXT is the pad's cross */
     if (DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1)) {
         MoveListPage = MoveListPage + 1;
         MoveListPage %= (GameMode == 6) ? 10 : 5;
@@ -7800,6 +7812,7 @@ void MovesList(void)
 
     limeDrawFONT(&GameFont, GameText(8), (float)FE_X(423.0f),
                  (float)FE_Y(296.0f), 1, FE_WidthScale, fontcol);
+    PortNavAsOk = 0;
     PortFERightEdgeSet(0);
 }
 
@@ -8821,6 +8834,7 @@ static void DrawJoystick(long x, long y, long state,
 }
 
 int PortHideControls;                   /* port: see the end of DrawControls */
+void set_menu_open_controls(void);     /* port: runtime/settings_menu.c */
 
 void DrawControls(void)
 {
@@ -11295,6 +11309,9 @@ void UpdateInGamePauseMenu(void)
                        0.0f, 0.0f, 1.0f, 1.0f, col);
         limeEnableAlphaBlending_Basic();
         MovesList();
+        /* port: the corner's cancel is the pad's circle (BACK, not a stop) */
+        PortNavTarget((float)limeScreenWidth - HUD_Scale * CANCEL_HIT, 0.0f,
+                      HUD_Scale * CANCEL_HIT, HUD_Scale * CANCEL_HIT, 5);
 
         /* the corner is dismissed on the frame the finger comes off */
         if (limeLastTouchScreenX[0] == -1.0f)
@@ -11454,7 +11471,12 @@ void UpdateInGamePauseMenu(void)
 
         /* ---- row 4: the second layout line ---- */
         LastTouch_Pause4 = Touch_Pause4;
-        if (GameMode == 6)
+        if (PortHideControls && GameMode != 6)
+            /* port: with the on-screen controls off, their layout gives
+             * way to the keys and pads' setup */
+            usprintf(text, Language[0] == 'E' && Language[1] == 'S'
+                           ? UC("CONFIG. BOTONES") : UC("BUTTON SETUP"));
+        else if (GameMode == 6)
             usprintf(text, UC("%s - %s : %s"),
                      GameTextNoHeader(TXT_BUTTONS_P2),
                      GameTextNoHeader(TXT_LAYOUT_A),
@@ -11468,8 +11490,13 @@ void UpdateInGamePauseMenu(void)
                                           PAUSE_SCALE,
                                           PAUSE_COL(LastTouch_Pause4),
                                           FE_W(PAUSE_WIDTH));
-        if (PAUSE_RELEASED(LastTouch_Pause4, Touch_Pause4))
-            sel = 4;
+        if (PAUSE_RELEASED(LastTouch_Pause4, Touch_Pause4)) {
+            if (PortHideControls && GameMode != 6) {
+                PauseClick();
+                set_menu_open_controls();   /* port: see row 4 */
+            } else
+                sel = 4;
+        }
 
         /* ---- row 5: MUSIC.  The fourth argument is one too many for the
          * format and is never consumed -- it is in the binary all four ways. */

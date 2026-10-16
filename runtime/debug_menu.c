@@ -48,6 +48,7 @@
  * business: this file only hands back a request.
  */
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -895,6 +896,45 @@ void ui_menu_show(const char *title, const char *const *tabs, int ntabs,
 
 void ui_grab(int vx, int vy, int vw, int vh) { grab(vx, vy, vw, vh); }
 
+void ui_nav_frame(float x, float y, float w, float h, float sh, int p2)
+{
+    static float t;
+    float k = sh > 0 ? 320.0f / sh : 1.0f, pulse, g;
+    int i;
+
+    t += 1.0f / 60.0f;
+    pulse = 0.65f + 0.35f * sinf(t * 6.0f);
+    x *= k; y *= k; w *= k; h *= k;
+    begin_2d();
+    glDisable(GL_TEXTURE_2D);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBegin(GL_QUADS);                  /* a faint fill */
+    if (p2)                             /* player two's: green */
+        glColor4f(0.3f, 1.0f, 0.45f, 0.12f * pulse);
+    else
+        glColor4f(0.3f, 0.55f, 1.0f, 0.12f * pulse);
+    rect(x, y, w, h);
+    glEnd();
+    for (i = 4; i >= 0; i--) {          /* the glow, then the line */
+        float lw = i ? 1.5f : 2.0f;
+        g = (float)i * 1.5f;
+        if (p2)
+            glColor4f(i ? 0.3f : 0.7f, 1.0f, i ? 0.4f : 0.75f,
+                      (i ? 0.22f : 1.0f) * pulse);
+        else
+            glColor4f(i ? 0.3f : 1.0f, i ? 0.6f : 1.0f, 1.0f,
+                      (i ? 0.22f : 1.0f) * pulse);
+        glBegin(GL_QUADS);
+        rect(x - g, y - g, w + 2 * g, lw);
+        rect(x - g, y + h + g - lw, w + 2 * g, lw);
+        rect(x - g, y - g, lw, h + 2 * g);
+        rect(x + w + g - lw, y - g, lw, h + 2 * g);
+        glEnd();
+    }
+    end_2d();
+}
+
 void ui_grid_show(const char *title, const unsigned char *const *cells,
                   int n, int cols, int cpx, float cell, int sel,
                   const char *footer, unsigned key, struct ui_grid_geo *geo)
@@ -983,8 +1023,8 @@ void ui_icon_set(const unsigned char *rgba, int w, int h)
     glBindTexture(GL_TEXTURE_2D, (GLuint)old);
 }
 
-/* The player's badge in the bottom right corner of the menu space (the
- * main menu, game_main.c): made again only when `key` changes. */
+/* The player's badge in the top right corner of the menu space (the main
+ * menu, game_main.c; the bottom one has the pad's hints): made again only when `key` changes. */
 void ui_badge(const char *name, const unsigned char *icon, int icon_px,
               unsigned key)
 {
@@ -1021,15 +1061,20 @@ void ui_badge(const char *name, const unsigned char *icon, int icon_px,
     begin_2d();
     w = tw / ts;
     h = th / ts;
+    if (g_ow < 500.0f) {                /* 4:3 and 3:2: smaller, clear of
+                                         * the logo */
+        w *= 0.6f;
+        h *= 0.6f;
+    }
     glEnable(GL_TEXTURE_2D);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);        /* premultiplied */
     glBindTexture(GL_TEXTURE_2D, tex);
     glColor4f(1, 1, 1, 1);
     glBegin(GL_QUADS);
-    glTexCoord2f(0, 0); glVertex2f(g_ow - w - 2, 320 - h - 2);
-    glTexCoord2f(1, 0); glVertex2f(g_ow - 2, 320 - h - 2);
-    glTexCoord2f(1, 1); glVertex2f(g_ow - 2, 318);
-    glTexCoord2f(0, 1); glVertex2f(g_ow - w - 2, 318);
+    glTexCoord2f(0, 0); glVertex2f(g_ow - w - 2, 2);
+    glTexCoord2f(1, 0); glVertex2f(g_ow - 2, 2);
+    glTexCoord2f(1, 1); glVertex2f(g_ow - 2, h + 2);
+    glTexCoord2f(0, 1); glVertex2f(g_ow - w - 2, h + 2);
     glEnd();
     glDisable(GL_TEXTURE_2D);
     end_2d();

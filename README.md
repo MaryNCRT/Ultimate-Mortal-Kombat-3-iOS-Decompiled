@@ -26,18 +26,18 @@ You need a legally obtained copy of *Ultimate Mortal Kombat 3* for iOS (version 
 
 ---
 
-## Where the project stands — 15 October 2026 (alpha 0.1.2)
+## Where the project stands — 16 October 2026 (beta 0.1.3)
 
 | | |
 |---|---|
 | **Decompiled** | ✅ **All of it.** 2,572 of 2,572 game functions have hand-written C: the LIME engine core (109), the game logic (291) and the fight engine (2,172). Nothing is left to transcribe. |
 | **Verified** | ✅ The engine core passes differential tests against the recompiled original with zero divergences. The fight engine passes a behavioural differential test file by file, with the exceptions listed in [Verification](#how-much-of-it-is-verified) — every one of them a known limit of the test harness, not a known bug. |
 | **Runs natively** | ✅ The real game runs natively on Windows (Linux/macOS from source): the front end with its 51 screens, Arcade to Shao Kahn and the treasure screen, whole fights with every finisher, sound, music and saves. How it fits together: [docs/HOW-THE-GAME-WORKS.md](docs/HOW-THE-GAME-WORKS.md). |
-| **Playable** | ✅ **Alpha 0.1.2** ([release](https://github.com/MaryNCRT/Ultimate-Mortal-Kombat-3-iOS-Recomp/releases)): 100% playable. It can still have bugs, which are being fixed. You can play with the keyboard (rebindable), a gamepad (Xbox, PlayStation, Switch and others) or the mouse as the finger. The screen can be **3:2, 4:3 (the iPad's view), 16:9 or 21:9**. Texture quality goes up to uncompressed, and an iPad-size HUD is optional; 4:3 uses the iPad build's menus. PLAY > DUELO is two players on one PC, each with their own keys and gamepad. Esc opens a settings menu in the game (graphics and controls without restarting, quit), there is a player profile (name, ID, icon) for the leaderboards to come, a debug menu (hitboxes, fight speed, save states), and the launcher updates itself. Still wrong: see *Known problems*. The fight engine's 229 data tables are extracted from the player's own binary at build time and verified against it. |
+| **Playable** | ✅ **Beta 0.1.3** ([release](https://github.com/MaryNCRT/Ultimate-Mortal-Kombat-3-iOS-Recomp/releases)): 100% playable. It can still have bugs, which are being fixed. You can play with the keyboard (rebindable), a gamepad (Xbox, PlayStation, Switch and others) or the mouse as the finger. The screen can be **3:2, 4:3 (the iPad's view), 16:9 or 21:9**. Texture quality goes up to uncompressed, and an iPad-size HUD is optional; 4:3 uses the iPad build's menus. PLAY > DUELO is two players on one PC, each with their own keys and gamepad. Esc opens a settings menu in the game (graphics and controls without restarting, quit), there is a player profile (name, ID, icon) for the leaderboards to come, a debug menu (hitboxes, fight speed, save states), and the launcher updates itself. Still wrong: see *Known problems*. The fight engine's 229 data tables are extracted from the player's own binary at build time and verified against it. |
 
-### How to play (alpha 0.1.2, Windows)
+### How to play (beta 0.1.3, Windows)
 
-**Alpha 0.1.2** ([notes](docs/RELEASE-0.1.2-alpha.md); earlier: [0.1.1](docs/RELEASE-0.1.1-alpha.md), [0.1.0b](docs/RELEASE-0.1.0b-alpha.md), [0.1.0](docs/RELEASE-0.1.0-alpha.md), [0.0.9](docs/RELEASE-0.0.9-alpha.md), [0.0.8](docs/RELEASE-0.0.8-alpha.md), [0.0.7b](docs/RELEASE-0.0.7b-alpha.md), [0.0.7](docs/RELEASE-0.0.7-alpha.md), [0.0.6c](docs/RELEASE-0.0.6c-alpha.md), [0.0.6b](docs/RELEASE-0.0.6b-alpha.md), [0.0.6](docs/RELEASE-0.0.6-alpha.md), [0.0.5](docs/RELEASE-0.0.5-alpha.md), [0.0.4](docs/RELEASE-0.0.4-alpha.md), [0.0.3](docs/RELEASE-0.0.3-alpha.md), [0.0.2](docs/RELEASE-0.0.2-alpha.md), [0.0.1](docs/RELEASE-0.0.1-alpha.md)).
+**Beta 0.1.3** ([notes](docs/RELEASE-0.1.3-beta.md); earlier: [0.1.2](docs/RELEASE-0.1.2-alpha.md), [0.1.1](docs/RELEASE-0.1.1-alpha.md), [0.1.0b](docs/RELEASE-0.1.0b-alpha.md), [0.1.0](docs/RELEASE-0.1.0-alpha.md), [0.0.9](docs/RELEASE-0.0.9-alpha.md), [0.0.8](docs/RELEASE-0.0.8-alpha.md), [0.0.7b](docs/RELEASE-0.0.7b-alpha.md), [0.0.7](docs/RELEASE-0.0.7-alpha.md), [0.0.6c](docs/RELEASE-0.0.6c-alpha.md), [0.0.6b](docs/RELEASE-0.0.6b-alpha.md), [0.0.6](docs/RELEASE-0.0.6-alpha.md), [0.0.5](docs/RELEASE-0.0.5-alpha.md), [0.0.4](docs/RELEASE-0.0.4-alpha.md), [0.0.3](docs/RELEASE-0.0.3-alpha.md), [0.0.2](docs/RELEASE-0.0.2-alpha.md), [0.0.1](docs/RELEASE-0.0.1-alpha.md)).
 [Releases](https://github.com/MaryNCRT/Ultimate-Mortal-Kombat-3-iOS-Recomp/releases)
 has the launcher and only the sources the build needs, no game data.
 
@@ -82,6 +82,7 @@ executable are distributed: the exe only exists after the player's own
 - **P** opens the pause menu (again: resume), **M** the moves list.
 - The mouse is the finger.
 - On a pad, the buttons go by position; START pauses and BACK opens the moves list.
+- **The menus:** the d-pad, the left stick or the arrows move, cross / A or Enter accepts, circle / B or Backspace goes back; the right stick changes the fighter's colour. Player two: their movement keys, keypad 1 accepts, keypad / pauses, keypad * opens the moves list.
 
 ### Debug: straight into a fight
 
@@ -111,10 +112,10 @@ F3 and F6-F12 are the *direct keys*; the F2 menu turns them off and on.
 - **Logs:** every session started by double-click writes `logs/umk3-<date>-<time>.log` beside the exe. It holds the task changes and loading steps.
 - **Crashes:** a crash writes `logs/crash-<date>-<time>.log` and shows it in a message box. It names the function, the stack, the task, the screen and the fighters. Attach it to an issue.
 
-### Known problems (15 October 2026, alpha 0.1.2)
+### Known problems (16 October 2026, beta 0.1.3)
 
 What a player can still see. Everything fixed is in the release notes
-([0.1.2](docs/RELEASE-0.1.2-alpha.md) and earlier) and in
+([0.1.3](docs/RELEASE-0.1.3-beta.md) and earlier) and in
 [docs/PROGRESS.md](docs/PROGRESS.md).
 
 | Symptom | What is known |
@@ -123,8 +124,7 @@ What a player can still see. Everything fixed is in the release notes
 | Some fatalities lack animation (Sonya's does not show properly). | Not investigated. |
 | Texture errors on some stages and fighters (parts of Kung Lao's hat black in a fight). | Not investigated stage by stage; report each with the stage and fighter. |
 | Some modes besides Arcade can close the game; the menu is incomplete and some modes are missing. | Not inventoried yet. A crash log helps. |
-| The game's menus are used with the mouse, not the pad. | The pad works in fights, in the debug menu and in the settings menu (Esc). |
-| Some specials, projectiles above all, have no sound. | Not investigated. Reptile's tongue fatality has no sound in the original either (Mary checked). |
+| Some specials, projectiles above all, have no sound; Mercy's sound sometimes does not play. | Not investigated. Reptile's tongue fatality has no sound in the original either (Mary checked). |
 | After a round a fighter can be drawn with another's model and a loose head (Ermac against Sub-Zero). | Seen once by Mary; cause not found yet. |
 | Some attacks seem to connect from too far. | The collision code and frame tables match the binary; a concrete move is needed. |
 | Pausing sometimes shows the fight shrunk into a corner behind the pause menu. | Not investigated. |
@@ -133,7 +133,8 @@ What a player can still see. Everything fixed is in the release notes
 | The game's ads open in separate windows. | Wanted: windows drawn inside the game. |
 | Windows only for the launcher. | Linux/macOS build from source with CMake. |
 | Only the iPhone 1.2.59 `.ipa` works. | The launcher refuses any other binary (uuid check); the iPad 1.2.56 build has different addresses. |
-| Choosing the monitor and the renderer (DirectX 12 / Vulkan / OpenGL). | On Mary's list, not started. The game draws with OpenGL. |
+| The right stick of a PlayStation pad read through DirectInput (no Steam or DS4Windows) may do nothing. | Its axis (Z) is a guess; XInput and SDL pads are read directly. |
+| Choosing the renderer (DirectX 12 / Vulkan / OpenGL). | On Mary's list, not started. The game draws with OpenGL. |
 
 **What "decompiled" does and does not mean here.** It means every function the
 game runs has a body that was written against the disassembly and checked

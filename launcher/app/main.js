@@ -419,6 +419,9 @@ ipcMain.handle('play', () => {
     if (!ini.gameReady(g_root))
         return { ok: false };
     bld.play(g_root);
+    /* the game runs on its own (detached): the launcher steps aside, once
+     * the answer has reached the page */
+    setTimeout(() => app.quit(), 800);
     return { ok: true };
 });
 

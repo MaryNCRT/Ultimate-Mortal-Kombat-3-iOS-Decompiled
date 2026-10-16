@@ -39,9 +39,11 @@ body {
     display: grid;
     grid-template-columns: minmax(calc(var(--u) * 30), 34%) minmax(0, 1fr);
     grid-template-rows: calc(var(--u) * 4.2) auto minmax(0, 1fr) auto auto;
+    /* the title over the menu on the left; the panel takes the whole right
+     * side, top to bottom */
     grid-template-areas:
         "tb   tb"
-        "menu logo"
+        "logo stage"
         "menu stage"
         "desc stage"
         "cmd  cmd";
@@ -104,7 +106,7 @@ button, input, select { font: inherit; color: inherit; }
 
 /* ----------------------------------------------------------- logo */
 
-#logo img { display: block; width: min(calc(var(--u) * 50), 100%); max-height: 17vh; object-fit: contain; margin: 0 auto; }
+#logo img { display: block; width: min(calc(var(--u) * 40), 100%); max-height: 15vh; object-fit: contain; margin: 0 auto; }
 #logo.img .l-ultimate, #logo.img .l-mk { display: none; }
 #logo.img .l-sub { text-align: center; margin-top: calc(var(--u) * .2); }
 .tabs { display: flex; align-items: center; gap: calc(var(--u) * 1); margin-bottom: calc(var(--u) * 1.4); }
@@ -124,7 +126,7 @@ button, input, select { font: inherit; color: inherit; }
 .kg .hint { margin: calc(var(--u) * 1.4) 0 0; }
 #logo {
     grid-area: logo; position: relative; justify-self: center;
-    text-align: center; z-index: 2; padding: calc(var(--u) * .5) calc(var(--u) * 3) calc(var(--u) * 1.5) 0;
+    text-align: center; z-index: 2; padding: calc(var(--u) * .5) 0 calc(var(--u) * 1) calc(var(--u) * 2);
 }
 .l-ultimate {
     font-size: calc(var(--u) * 4.2); letter-spacing: .55em; font-weight: 300;
@@ -155,9 +157,9 @@ button, input, select { font: inherit; color: inherit; }
 
 #menu {
     grid-area: menu; position: relative; align-self: start;
-    margin-top: calc(var(--u) * 13);
+    margin-top: calc(var(--u) * .5);
     padding-left: calc(var(--u) * 9);
-    display: flex; flex-direction: column; gap: calc(var(--u) * .5); z-index: 3;
+    display: flex; flex-direction: column; gap: calc(var(--u) * .2); z-index: 3;
 }
 .mi {
     display: flex; align-items: center; gap: calc(var(--u) * 1.4);
@@ -165,7 +167,7 @@ button, input, select { font: inherit; color: inherit; }
     cursor: pointer; text-align: left;
     font-size: calc(var(--u) * 2.5); font-weight: 600; letter-spacing: .01em;
     color: var(--lav); text-shadow: 0 calc(var(--u) * .2) calc(var(--u) * .4) #000, 0 0 calc(var(--u) * .8) rgba(0, 0, 0, .8);
-    padding: calc(var(--u) * .55) calc(var(--u) * 6) calc(var(--u) * .55) 0; white-space: nowrap;
+    padding: calc(var(--u) * .35) calc(var(--u) * 6) calc(var(--u) * .35) 0; white-space: nowrap;
 }
 /* the menu follows the ring's curve */
 /* an arc, symmetric about the middle of the six */
@@ -211,8 +213,8 @@ button, input, select { font: inherit; color: inherit; }
 
 #stage {
     grid-area: stage; position: relative; min-height: 0;
-    width: min(100%, calc(var(--u) * 80)); justify-self: center;
-    padding: 0 calc(var(--u) * 3) calc(var(--u) * 1.6) 0;
+    width: min(100%, calc(var(--u) * 110)); justify-self: center;
+    padding: calc(var(--u) * 6) calc(var(--u) * 2.5) calc(var(--u) * 1.6) 0;
     display: flex; flex-direction: column;
     z-index: 4;
 }

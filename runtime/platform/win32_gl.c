@@ -485,6 +485,7 @@ static int g_vk[PK_COUNT] = {
     VK_NUMPAD7, VK_NUMPAD9,             /* P2 five buttons: P B */
     VK_NUMPAD4, VK_NUMPAD6,             /* P2 five buttons: K R */
     VK_ESCAPE,                          /* the settings menu */
+    VK_DIVIDE, VK_MULTIPLY, VK_NUMPAD1, /* P2: pause, moves list, accept */
 };
 
 void plat_key_label(int code, char *out, int n)
@@ -671,6 +672,11 @@ void plat_bind_key(int code, int key)
 int plat_key_bound(int code)
 {
     return code >= 0 && code < PK_COUNT ? g_vk[code] : 0;
+}
+
+int plat_key_backspace(void)
+{
+    return g_key[VK_BACK] ? 1 : 0;
 }
 
 int plat_key_any(void)
@@ -953,6 +959,10 @@ static int pad_winmm(PAD_SLOT *ps, PLAT_PAD *out)
     if (j.dwYpos > 45535) out->down = 1;
     if (j.dwXpos < 20000) out->left = 1;
     if (j.dwXpos > 45535) out->right = 1;
+    {   /* the right stick across: Z on a Sony pad, U elsewhere */
+        DWORD r = (ps->vidpid & 0xffff) == 0x054c ? j.dwZpos : j.dwUpos;
+        out->rx = r < 12000 ? -1 : r > 53535 ? 1 : 0;
+    }
     snprintf(out->name, sizeof out->name, "%s", ps->name);
     out->kind = (ps->vidpid & 0xffff) == 0x054c                 /* Sony */
                 ? plat_pad_sony_kind(ps->vidpid >> 16)
@@ -997,6 +1007,7 @@ static int pad_xinput(PAD_SLOT *ps, PLAT_PAD *out)
     out->down  = (s.buttons & XI_DDOWN)  || s.ly < -10000;
     out->left  = (s.buttons & XI_DLEFT)  || s.lx < -10000;
     out->right = (s.buttons & XI_DRIGHT) || s.lx >  10000;
+    out->rx = s.rx < -20000 ? -1 : s.rx > 20000 ? 1 : 0;
     snprintf(out->name, sizeof out->name, "XInput pad %lu", i + 1);
     out->kind = 1;
     return out->connected = 1;

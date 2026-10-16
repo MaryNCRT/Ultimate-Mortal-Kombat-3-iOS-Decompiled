@@ -184,6 +184,9 @@ enum {
     PK_P2_5_P, PK_P2_5_B, PK_P2_5_K, PK_P2_5_R,
     /* the settings menu (Esc; settings_menu.c, port) */
     PK_SETTINGS,
+    /* player two's pause menu, moves list and ACCEPT on the menus, as
+     * player one's P, M and Enter (port) */
+    PK_P2_PAUSE, PK_P2_MOVES, PK_P2_OK,
     PK_COUNT
 };
 
@@ -210,6 +213,9 @@ void plat_bind_key(int code, int key);
  * menu's rebinding (settings_menu.c, port). */
 int plat_key_bound(int code);
 int plat_key_any(void);
+/* Backspace held: BACK on the game's menus from the keyboard (pad_nav.c,
+ * port). */
+int plat_key_backspace(void);
 
 /* The first attached gamepad, as the same ten bits the engine wants, or -1
  * when there is none. Bit order is the engine's: 0..3 directions, then HP, LP,
@@ -232,6 +238,7 @@ typedef struct {
     int      connected;
     int      up, down, left, right;
     unsigned buttons;                   /* 1 << PB_* */
+    int      rx;                        /* the right stick across: -1 0 1 */
     char     name[64];                  /* as the system names the pad */
     int      kind;                      /* 1 Xbox (XInput), 2 PlayStation 5,
                                            3 Nintendo, 4 PlayStation 4,

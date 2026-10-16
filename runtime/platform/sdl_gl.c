@@ -241,6 +241,9 @@ static SDL_Scancode g_scancode[PK_COUNT] = {
     SDL_SCANCODE_U, SDL_SCANCODE_O, SDL_SCANCODE_J, SDL_SCANCODE_L,
     SDL_SCANCODE_Q, SDL_SCANCODE_E,
     [PK_SETTINGS] = SDL_SCANCODE_ESCAPE,
+    [PK_P2_PAUSE] = SDL_SCANCODE_KP_DIVIDE,
+    [PK_P2_MOVES] = SDL_SCANCODE_KP_MULTIPLY,
+    [PK_P2_OK] = SDL_SCANCODE_KP_1,
 };
 
 void plat_key_label(int code, char *out, int n)
@@ -320,6 +323,11 @@ void plat_bind_key(int code, int key)
 int plat_key_bound(int code)
 {
     return code >= 0 && code < PK_COUNT ? (int)g_scancode[code] : 0;
+}
+
+int plat_key_backspace(void)
+{
+    return SDL_GetKeyboardState(NULL)[SDL_SCANCODE_BACKSPACE] ? 1 : 0;
 }
 
 int plat_key_any(void)
@@ -495,6 +503,8 @@ int plat_pad_read(PLAT_PAD *out)
         out->buttons |= 1u << PB_L2;
     if (SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 8000)
         out->buttons |= 1u << PB_R2;
+    i = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_RIGHTX);
+    out->rx = i < -20000 ? -1 : i > 20000 ? 1 : 0;
     i = plat_pad(0);
     out->up = (i >> 0) & 1;
     out->down = (i >> 1) & 1;

@@ -74,7 +74,7 @@ enum {
     R_DISPLAY, R_MONITOR, R_RES, R_APPLY, R_RRES, R_AA, R_TEXQ, R_ASPECT, R_UI, R_HIDE,
     R_PLAYER, R_LAYOUT, R_KEY, R_KRESET, R_DEVICE, R_PICONS, R_PADB, R_PRESET,
     R_PNAME, R_PICON, R_PCOLOR, R_PSHADE, R_PCOLOR2, R_PID, R_PRESET2,
-    R_CLOSE, R_QUIT, R_HEAD
+    R_CLOSE, R_QUIT, R_HEAD, R_CSUB
 };
 
 /* The profile icons' names, in CharacterNames order. */
@@ -122,6 +122,15 @@ static struct {
 static int g_n;
 
 static int g_open, g_want, g_page, g_sel, g_first, g_player, g_dirty;
+/* Opened as the game's button setup (set_menu_open_controls): the CONTROLS
+ * page alone, in the game's own panel (PortControlsPanel, FrontEnd.c). */
+static int g_framed;
+static int g_fsub;                      /* CONTROLS' page: 0 the keys, 1 the pad */
+void PortControlsPanel(const char *title, const char *const *label,
+                       const char *const *value, const int *enabled, int rows,
+                       int sel, const char *footer, float *bx, float *top,
+                       float *bw, float *rowh);
+extern int limeScreenHeight;
 static struct port_gfx g_gfx;           /* the menu's */
 static int g_disp_mode, g_disp_w, g_disp_h;   /* the window as applied */
 static int g_disp_mon;
@@ -192,6 +201,7 @@ static void save_ini(void);
 static void close_menu(void)
 {
     g_open = 0;
+    g_framed = 0;
     g_capture = 0;
     if (g_dirty)
         save_ini();
@@ -203,8 +213,22 @@ void set_menu_toggle(void)
 {
     if (g_open)
         close_menu();
-    else
+    else {
         g_want = 1;                     /* opened after the next frame */
+        g_framed = 0;
+    }
+}
+
+void set_menu_open_controls(void)
+{
+    if (g_open || g_want)
+        return;
+    g_want = 1;
+    g_framed = 1;
+    g_page = PAGE_CTL;
+    g_fsub = 0;
+    g_sel = 0;
+    g_first = 0;
 }
 
 void set_menu_after_frame(int vx, int vy, int vw, int vh)
@@ -284,6 +308,10 @@ static int p2_code(int code)
         return code - PK_5_P + PK_P2_5_P;
     if (code == PK_SPECIAL)
         return PK_P2_SPECIAL;
+    if (code == PK_PAUSE || code == PK_MOVES)
+        return code - PK_PAUSE + PK_P2_PAUSE;
+    if (code == PK_OK)
+        return PK_P2_OK;
     return code;
 }
 
@@ -305,6 +333,10 @@ static void reset_keys(int player)
     if (!player) {
         plat_bind_key(PK_PAUSE, 'P');
         plat_bind_key(PK_MOVES, 'M');
+    } else {
+        plat_bind_key(PK_P2_PAUSE, 0x6f);   /* the keypad's / * 1 */
+        plat_bind_key(PK_P2_MOVES, 0x6a);
+        plat_bind_key(PK_P2_OK, 0x61);
     }
 }
 
@@ -464,8 +496,10 @@ static void key_row(int code)
         add(R_KEY, code, tx(d->es, d->en), "%s", k);
     else if (code == PK_SPECIAL || code == PK_P2_SPECIAL)
         add(R_KEY, code, tx("ESPECIAL", "SPECIAL"), "%s", k);
-    else if (code == PK_PAUSE)
+    else if (code == PK_PAUSE || code == PK_P2_PAUSE)
         add(R_KEY, code, tx("PAUSA", "PAUSE"), "%s", k);
+    else if (code == PK_P2_OK)
+        add(R_KEY, code, tx("ACEPTAR", "ACCEPT"), "%s", k);
     else
         add(R_KEY, code, tx("LISTA DE MOVIMIENTOS", "MOVES LIST"), "%s", k);
 }
@@ -528,9 +562,14 @@ static void build(void)
         const char *dev = port_pad_device(g_player);
         const PLAT_PAD *p = &g_pad[g_player];
 
+        /* the keys and the pad on pages of their own */
+        add(R_CSUB, 0, tx("SECCION", "SECTION"), "< %s >",
+            g_fsub ? tx("MANDO", "GAMEPAD") : tx("TECLADO", "KEYBOARD"));
         add(R_PLAYER, 0, tx("JUGADOR", "PLAYER"), "%s", player_text());
         add(R_LAYOUT, 0, tx("BOTONES", "LAYOUT"), "< %d %s >", five ? 5 : 6,
             tx("BOTONES", "BUTTONS"));
+        if (g_fsub)                     /* the pad's page */
+            goto pad;
         head(tx("TECLADO", "KEYBOARD"));
         for (i = 0; i < 4; i++)
             key_row(k_dirs[i].code);
@@ -541,11 +580,13 @@ static void build(void)
             for (i = 0; i < 6; i++)
                 key_row(k_six[i].code);
         key_row(PK_SPECIAL);
-        if (!g_player) {
-            key_row(PK_PAUSE);
-            key_row(PK_MOVES);
-        }
+        key_row(PK_PAUSE);              /* player two's too */
+        key_row(PK_MOVES);
+        if (g_player)
+            key_row(PK_OK);             /* player one's is Enter */
         add(R_KRESET, 0, tx("RESTABLECER TECLAS", "RESET KEYS"), "");
+        break;                          /* the keys' page ends here */
+pad:
         head(tx("MANDO", "GAMEPAD"));
         snprintf(v, sizeof v, "%s", dev);
         for (i = 0; v[i]; i++)
@@ -603,6 +644,8 @@ static void build(void)
         break;
     }
     }
+    if (g_framed)                       /* the button setup: BACK leaves */
+        return;
     add(R_CLOSE, 0, tx("VOLVER AL JUEGO", "BACK TO THE GAME"), "");
     add(R_QUIT, 0, tx("SALIR DEL JUEGO", "QUIT THE GAME"), "");
 }
@@ -626,6 +669,9 @@ static void change(int kind, int d)
     int i;
 
     switch (kind) {
+    case R_CSUB:
+        g_fsub ^= 1;
+        return;
     case R_DISPLAY:
         g_gfx.mode = wrap(g_gfx.mode + d, 3);
         return;
@@ -1021,6 +1067,9 @@ static void drop_tick(int up, int down, int left, int right, int ok, int back,
 static void pick(int kind)
 {
     switch (kind) {
+    case R_CSUB:
+        g_fsub ^= 1;
+        break;
     case R_APPLY:
         port_gfx_set(&g_gfx, 1);
         port_gfx_get(&g_gfx);
@@ -1179,6 +1228,13 @@ static void capture(void)
 
 static void turn_page(int d)
 {
+    if (g_framed) {                     /* the button setup: keys, pad */
+        g_fsub ^= 1;
+        g_sel = 0;
+        g_first = 0;
+        build();
+        return;
+    }
     g_page = wrap(g_page + d, N_PAGES);
     g_sel = 0;
     g_first = 0;
@@ -1335,6 +1391,29 @@ void set_menu_draw(void)
                  ta, tb, tx("CATEGORIA", "CATEGORY"), ok, tx("ELIGE", "PICK"),
                  k, tx("CIERRA", "CLOSES"));
     {
+        if (g_framed) {                 /* the game's own panel */
+            float bx, top, bw, rh, km = 320.0f / (float)limeScreenHeight;
+            char ff[384];
+
+            char ft[64];
+
+            if (g_capture)
+                snprintf(ff, sizeof ff, "%s", footer);
+            else
+                snprintf(ff, sizeof ff, "%s%s %s   %s %s   %s %s", ta, tb,
+                         g_fsub ? tx("TECLADO", "KEYBOARD") : tx("MANDO", "GAMEPAD"),
+                         ok, tx("ELIGE", "PICK"), k, tx("VUELVE", "BACK"));
+            snprintf(ft, sizeof ft, "%s - %s", tx("CONFIG. BOTONES", "BUTTON SETUP"),
+                     g_fsub ? tx("MANDO", "GAMEPAD") : tx("TECLADO", "KEYBOARD"));
+            PortControlsPanel(ft, lp, vp, en,
+                              rows, g_sel - g_first, ff, &bx, &top, &bw, &rh);
+            g_geo.bx = bx * km;          /* the mouse's rows, in menu units */
+            g_geo.bw = bw * km;
+            g_geo.top = top * km;
+            g_geo.rowh = rh * km;
+            g_geo.srow = 0;
+            goto drop;
+        }
         /* the categories down the side panel, and under them the player's
          * icon, as wide as the panel */
         ui_menu_show(tx("AJUSTES", "SETTINGS"), tabs, -N_PAGES, g_page, lp, vp,
@@ -1355,6 +1434,7 @@ void set_menu_draw(void)
             ui_icon_draw(x, y, size);
         }
     }
+drop:
     if (g_drop) {                       /* the open list, over the menu */
         char df[384];
 
@@ -1529,6 +1609,9 @@ static void save_ini(void)
     put("key_pause", "%d", plat_key_bound(PK_PAUSE));
     put("key_moves", "%d", plat_key_bound(PK_MOVES));
     put("p2key_special", "%d", plat_key_bound(PK_P2_SPECIAL));
+    put("p2key_pause", "%d", plat_key_bound(PK_P2_PAUSE));
+    put("p2key_moves", "%d", plat_key_bound(PK_P2_MOVES));
+    put("p2key_ok", "%d", plat_key_bound(PK_P2_OK));
     for (i = 0; i < 4; i++) {
         snprintf(k, sizeof k, "key5_%s", n5[i]);
         put(k, "%d", plat_key_bound(PK_5_P + i));

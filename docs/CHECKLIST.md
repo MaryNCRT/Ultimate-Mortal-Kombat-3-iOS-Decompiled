@@ -126,6 +126,21 @@ only once Mary has checked it in game. What is known so far is under each one.
 - [ ] **Player profile** in the launcher and the game, badge on both.
 - [x] **Continue screens on 16:9 and 21:9** with Mary's pictures.
 
+## Pad and keyboard in the menus (0.1.3 beta)
+
+- [x] **The game's menus with the pad or the keyboard**: main menu, pages,
+  roster, tower, pause, moves list; the option lights yellow, cross /
+  Enter on release, circle / Backspace back. Checked by Mary with one pad.
+- [ ] **Both players at once on the VS select** with two pads, and player
+  two's keys (keypad 1 / / *): only one pad was at hand.
+- [x] **Right stick turns the palette** (XInput). DirectInput's axis for a
+  PlayStation pad without Steam is a guess.
+- [x] **Button setup in the game's frame** with the on-screen controls off
+  (Options, pause menu); KEYBOARD and GAMEPAD on pages of their own.
+- [x] **The launcher closes when the game opens.**
+- [ ] **Moves list with the on-screen controls:** a BACK in the left corner
+  to the previous page; Mary will say how it goes with a pad.
+
 ## Fight
 
 - [ ] **Models mixed after a round ends** (Ermac against Sub-Zero, round 2,

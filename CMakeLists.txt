@@ -340,6 +340,7 @@ if(UMK3_BINARY)
             runtime/game_main.c
             runtime/debug_menu.c
             runtime/settings_menu.c
+            runtime/pad_nav.c
             runtime/profiles.c
             runtime/draw_gl.c
             runtime/gamecode_globals.c
