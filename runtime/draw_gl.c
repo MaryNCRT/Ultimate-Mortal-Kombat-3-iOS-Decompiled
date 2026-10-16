@@ -574,6 +574,44 @@ TEXTURE *limeLoadTexture(const char *path, int a, int b)
     return &e->tex;
 }
 
+/* Port, not in the binary: a picture the player added for the wide screens
+ * (FrontEnd.c, the continue screens), from "aditional textures" beside the
+ * game's res folder. Loaded once and kept, as the game's own. NULL when it
+ * is not there. */
+TEXTURE *lime_load_extra_texture(const char *file)
+{
+    char key[300], full[1200];
+    TexEntry *e;
+    LimeImage img;
+    GLuint name = 0;
+
+    snprintf(key, sizeof key, "extra:%s", file);
+    e = tex_find(key);
+    if (e)
+        return &e->tex;
+    snprintf(full, sizeof full, "%s/../aditional textures/%s",
+             lime_platform_asset_root(), file);
+    memset(&img, 0, sizeof(img));
+    if (!try_one(full, &img))
+        return NULL;
+    glGenTextures(1, &name);
+    tex_upload(name, &img);
+    free(img.rgba);
+    e = (TexEntry *)malloc(sizeof(*e));
+    if (e == NULL)
+        return NULL;
+    memset(e, 0, sizeof(*e));
+    e->path = _strdup(key);
+    e->tex.name = name;
+    tex_set_name(&e->tex, file);
+    e->w = img.width;
+    e->h = img.height;
+    e->next = g_textures;
+    g_textures = e;
+    printf("extra texture: %s (%dx%d)\n", full, img.width, img.height);
+    return &e->tex;
+}
+
 /* Port, not in the binary: the settings menu's TEXTURES (settings_menu.c).
  * Every texture loaded so far is loaded again at the quality set now, into
  * the same GL object, so what the game holds stays valid. Where the game

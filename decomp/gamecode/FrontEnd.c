@@ -2623,6 +2623,10 @@ static void DrawHighlight(int x, int y, int w, int h, int thick,
 {
     float cx = (float)x + (float)w * 0.5f;
 
+    /* Port, not in the binary: the bars half as thick (the binary's 11
+     * looked too heavy on a monitor, Mary), never under 3 */
+    thick = thick / 2 > 3 ? thick / 2 : (thick < 3 ? thick : 3);
+
     limeFillRect(Highlight_X((float)x, cx), (float)FE_Y((float)y),
                  (float)FE_W((float)w), (float)FE_H((float)thick),
                  r, g, b, 1.0f);
@@ -5401,46 +5405,99 @@ int  sprintf(char *dst, const char *fmt, ...);
 
 
 /* Port, not in the binary: the continue screen and Arcade's continue / new
- * game (FE_Task_Continue_Screen, FE_Task_Single_Player) on 16:9. The device
- * spreads both sheets over the whole screen; 16:9 widened them and the
- * ULTIMATE logo and the frames came out stretched (Mary). There:
+ * game (FE_Task_Continue_Screen, FE_Task_Single_Player) on the wide screens.
+ * The device spreads its two sheets over the whole screen; wider shapes
+ * stretched them (Mary).
  *
- *   - the top: a picture made for 16:9 when the player has one,
- *     res/Textures/FE_GAMEOVER_TOP_169.PNG, over the whole screen -- made
- *     from the game's own art, so never shipped, only in the player's
- *     folder; else the sheet exactly as on 3:2, centred, no zoom;
- *   - the bottom, the two frames: as on 3:2, centred;
- *   - their texts and red boxes: centred with them (FE_X, Port16x9Centred).
+ *   - With the player's own picture for them -- in "aditional textures"
+ *     beside res: CONTINUE.png, the whole screen at 16:9, and
+ *     CONTINUE_21x9.png for 21:9, ULTIMATE, the band and both frames in one
+ *     (Mary's) -- that picture replaces both sheets, over the screen's
+ *     height, centred, never stretched (21:9 without its own takes the
+ *     16:9 one); the frames' texts and red boxes go where its frames are.
+ *   - Without it, on 16:9: the sheets as on 3:2, centred.
  *
  * Other shapes draw them as the device did. */
 void *limeLoadTexture(const char *name, long a, long b);
+TEXTURE *lime_load_extra_texture(const char *file);
+
+/* The pictures and where their frames are: x of the left and right frame,
+ * their widths, y and height, and the texts' centres, in the menus' 480 x
+ * 320 units (the picture is centred as the 480 are). CONTINUE.png, 1920 x
+ * 1080: frames x 240-910 and 1008-1684, y 589-956. CONTINUE_21x9.png, 1584
+ * x 672: x 366-762 and 822-1240, y 366-596. */
+static const struct {
+    const char *file;
+    float aspect;                       /* the picture's width / height */
+    int   lx, rx, lw, rw, y, h;
+    float tl, tr;
+} k_cart[2] = {
+    { "CONTINUE.png",      16.0f / 9.0f,   27, 254, 200, 200, 175, 109, 126.0f, 354.0f },
+    { "CONTINUE_21x9.png", 1584.0f / 672.0f, 37, 254, 189, 199, 174, 110, 131.0f, 354.0f },
+};
+static int g_cart;                      /* the one PortContinueArt gave */
+
+static TEXTURE *PortContinueArt(void)
+{
+    static TEXTURE *art[2];
+    static int      tried[2];
+    float a = (float)limeScreenWidth / (float)limeScreenHeight;
+    int i;
+
+    if (!PortWideMenus || a < 1.7f || (FE_CurrentTask != 2 && FE_CurrentTask != 29))
+        return NULL;
+    for (i = a > 2.1f ? 1 : 0; i >= 0; i--) {
+        if (!tried[i]) {
+            tried[i] = 1;
+            art[i] = lime_load_extra_texture(k_cart[i].file);
+        }
+        if (art[i]) {
+            g_cart = i;
+            return art[i];
+        }
+    }
+    return NULL;
+}
 
 int Port16x9Centred(void)
 {
     float a = (float)limeScreenWidth / (float)limeScreenHeight;
 
+    if (PortContinueArt())
+        return 1;
     return PortWideMenus && a > 1.7f && a < 1.8f
            && (FE_CurrentTask == 2 || FE_CurrentTask == 29);
 }
 
+/* Where the picture's frames are (1920x1080: x 240-910 and 1008-1684,
+ * y 589-956), in the menus' 480 x 320 units: the picture is 568.9 of them
+ * wide (320 x 16 / 9) and centred as the 480 are. */
+#define PC_ON      (PortContinueArt() != NULL)
+#define PC_LX(v)   (PC_ON ? k_cart[g_cart].lx : (v))
+#define PC_RX(v)   (PC_ON ? k_cart[g_cart].rx : (v))
+#define PC_Y(v)    (PC_ON ? k_cart[g_cart].y : (v))
+#define PC_LW(v)   (PC_ON ? k_cart[g_cart].lw : (v))
+#define PC_RW(v)   (PC_ON ? k_cart[g_cart].rw : (v))
+#define PC_H(v)    (PC_ON ? k_cart[g_cart].h : (v))
+#define PC_TL(v)   (PC_ON ? k_cart[g_cart].tl : (v))
+#define PC_TR(v)   (PC_ON ? k_cart[g_cart].tr : (v))
+
 static void PortDrawGameOverTop(const float *col)
 {
-    static TEXTURE *wide;
-    static int      tried;
+    TEXTURE *art = PortContinueArt();
     float W = (float)limeScreenWidth, H = (float)limeScreenHeight;
 
+    if (art) {                          /* the screen's height, centred */
+        float w = H * k_cart[g_cart].aspect;
+
+        limeDrawSprite(art, (W - w) * 0.5f, 0.0f, w, H, 0.0f, 0.0f, 1.0f, 1.0f, col);
+        return;
+    }
     if (Port16x9Centred()) {
         float wc = H * 1.5f;
 
-        if (!tried) {
-            tried = 1;
-            wide = (TEXTURE *)limeLoadTexture("FE_GAMEOVER_TOP_169.PNG", 0, 0);
-        }
-        if (wide)
-            limeDrawSprite(wide, 0.0f, 0.0f, W, H, 0.0f, 0.0f, 1.0f, 1.0f, col);
-        else
-            limeDrawSprite((TEXTURE *)GameOverTopTexture, (W - wc) * 0.5f, 0.0f,
-                           wc, H, 0.0f, 0.0f, 1.0f, 0.75f, col);
+        limeDrawSprite((TEXTURE *)GameOverTopTexture, (W - wc) * 0.5f, 0.0f,
+                       wc, H, 0.0f, 0.0f, 1.0f, 0.75f, col);
         return;
     }
     limeDrawSprite((TEXTURE *)GameOverTopTexture, 0.0f, 0.0f, W, H,
@@ -5451,6 +5508,8 @@ static void PortDrawGameOverBottom(float y, const float *col)
 {
     float W = (float)limeScreenWidth, H = (float)limeScreenHeight;
 
+    if (PortContinueArt())
+        return;                         /* the picture has the frames */
     if (Port16x9Centred()) {
         float wc = H * 1.5f;
         limeDrawSprite((TEXTURE *)GameOverBottomTexture, (W - wc) * 0.5f, y,
@@ -5484,11 +5543,11 @@ void FE_Task_Continue_Screen(void)
     PortDrawGameOverTop(col);
     PortDrawGameOverBottom((float)FE_Y(143.0f), col);
 
-    limeDrawFONT(&GameFont, GameText(0x51), (float)FE_X(120.0f),
+    limeDrawFONT(&GameFont, GameText(0x51), (float)FE_X(PC_TL(120.0f)),
                  (float)FE_Y(208.0f) + dy, 1, FE_WidthScale, fontcol);
-    limeDrawFONT(&GameFont, GameText(0x52), (float)FE_X(120.0f),
+    limeDrawFONT(&GameFont, GameText(0x52), (float)FE_X(PC_TL(120.0f)),
                  (float)FE_Y(224.0f) + dy, 1, FE_WidthScale, fontcol);
-    limeDrawFONT(&GameFont, GameText(0x5b), (float)FE_X(360.0f),
+    limeDrawFONT(&GameFont, GameText(0x5b), (float)FE_X(PC_TR(360.0f)),
                  (float)FE_Y(224.0f) + dy, 1, FE_WidthScale, fontcol);
 
     KontinueTime = (float)((double)KontinueTime
@@ -5498,17 +5557,17 @@ void FE_Task_Continue_Screen(void)
 
     action = 0;
 
-    yes = TouchAreaWH(0x10, 0xb8, 0xd0, bh);
+    yes = TouchAreaWH(PC_LX(0x10), PC_Y(0xb8), PC_LW(0xd0), PC_H(bh));
     if (yes == 2) {
-        DrawRedHighlight(0x10, 0xb8, 0xd0, bh, 0xb);
+        DrawRedHighlight(PC_LX(0x10), PC_Y(0xb8), PC_LW(0xd0), PC_H(bh), 0xb);
     } else if (yes == 1) {
         if (FE_FadeAdd == 0.0f)
             action = 1;
     }
 
-    no = TouchAreaWH(0x100, 0xb8, 0xd0, bh);
+    no = TouchAreaWH(PC_RX(0x100), PC_Y(0xb8), PC_RW(0xd0), PC_H(bh));
     if (no == 2)
-        DrawRedHighlight(0x100, 0xb8, 0xd0, bh, 0xb);
+        DrawRedHighlight(PC_RX(0x100), PC_Y(0xb8), PC_RW(0xd0), PC_H(bh), 0xb);
 
     if (no == 1 || KontinueTime == 0.0f) {
         if (FE_FadeAdd == 0.0f)
@@ -5517,10 +5576,10 @@ void FE_Task_Continue_Screen(void)
 
     if (KontinueTime != 0.0f) {
         sprintf(strBuf, "%d", (int)((long)KontinueTime + 1));
-        limeDrawFONT(&GameFont, strBuf, (float)FE_X(120.0f),
+        limeDrawFONT(&GameFont, strBuf, (float)FE_X(PC_TL(120.0f)),
                      (float)FE_Y(240.0f) + dy, 1, FE_WidthScale, fontcol);
     } else {
-        limeDrawFONT(&GameFont, "0", (float)FE_X(120.0f),
+        limeDrawFONT(&GameFont, "0", (float)FE_X(PC_TL(120.0f)),
                      (float)FE_Y(240.0f) + dy, 1, FE_WidthScale, fontcol);
     }
 
@@ -7624,13 +7683,13 @@ void FE_Task_Options(void)
  * `+ 0.0f` five times would suggest the value could be something else.
  */
 
-#define FESP_LEFT_X       0x10
-#define FESP_RIGHT_X      0x100
-#define FESP_HALF_Y       0xb8
+#define FESP_LEFT_X       PC_LX(0x10)
+#define FESP_RIGHT_X      PC_RX(0x100)
+#define FESP_HALF_Y       PC_Y(0xb8)
 #define FESP_HALF_W       0xd0
 /* the iPad build (0x18368 there) makes the boxes (int)(102 * limeScreenHeight
  * / 640) tall: 122 on its 768 */
-#define FESP_HALF_H       (PortIPadTall ? 122 : 0x66)
+#define FESP_HALF_H       PC_H(PortIPadTall ? 122 : 0x66)
 #define FESP_HALF_THICK   0xb
 #define FESP_TOUCH_HELD   2
 #define FESP_TOUCH_TAP    1
@@ -7666,35 +7725,35 @@ void FE_Task_Single_Player(void)
     PortDrawGameOverBottom(FE_Y(143.0f), col);
 
     limeDrawFONT(&GameFont, GameText(0x51),
-                 FE_X(120.0f), FE_Y(216.0f) + dy, 1, FE_WidthScale, fontcol);
+                 FE_X(PC_TL(120.0f)), FE_Y(216.0f) + dy, 1, FE_WidthScale, fontcol);
     limeDrawFONT(&GameFont, GameText(0x52),
-                 FE_X(120.0f), FE_Y(232.0f) + dy, 1, FE_WidthScale, fontcol);
+                 FE_X(PC_TL(120.0f)), FE_Y(232.0f) + dy, 1, FE_WidthScale, fontcol);
     limeDrawFONT(&GameFont, GameText(0x5c),
-                 FE_X(360.0f), FE_Y(216.0f) + dy, 1, FE_WidthScale, fontcol);
+                 FE_X(PC_TR(360.0f)), FE_Y(216.0f) + dy, 1, FE_WidthScale, fontcol);
     limeDrawFONT(&GameFont, GameText(0x5d),
-                 FE_X(360.0f), FE_Y(232.0f) + dy, 1, FE_WidthScale, fontcol);
+                 FE_X(PC_TR(360.0f)), FE_Y(232.0f) + dy, 1, FE_WidthScale, fontcol);
 
     back = DrawButtonNew(&BUTTON_BACK, 0x1a7, PortIPadTall ? 0x142 : 0x130, 1);
     limeDrawFONT(&GameFont, GameText(7),
                  FE_X(423.0f), FE_Y(296.0f) + dy, 1, FE_WidthScale, fontcol);
 
     /* ---- the left half ---- */
-    hit = TouchAreaWH(FESP_LEFT_X, FESP_HALF_Y, FESP_HALF_W, FESP_HALF_H);
+    hit = TouchAreaWH(FESP_LEFT_X, FESP_HALF_Y, PC_LW(0xd0), FESP_HALF_H);
     if (hit != 0) {
         JustWon = 0;
         if (hit == FESP_TOUCH_HELD)
-            DrawRedHighlight(FESP_LEFT_X, FESP_HALF_Y, FESP_HALF_W,
+            DrawRedHighlight(FESP_LEFT_X, FESP_HALF_Y, PC_LW(0xd0),
                              FESP_HALF_H, FESP_HALF_THICK);
         else if (hit == FESP_TOUCH_TAP && FE_FadeAdd == 0.0f)
             sel = hit;                  /* 1 */
     }
 
     /* ---- the right half, which acts here rather than through `sel` ---- */
-    hit = TouchAreaWH(FESP_RIGHT_X, FESP_HALF_Y, FESP_HALF_W, FESP_HALF_H);
+    hit = TouchAreaWH(FESP_RIGHT_X, FESP_HALF_Y, PC_RW(0xd0), FESP_HALF_H);
     if (hit != 0) {
         JustWon = 0;
         if (hit == FESP_TOUCH_HELD) {
-            DrawRedHighlight(FESP_RIGHT_X, FESP_HALF_Y, FESP_HALF_W,
+            DrawRedHighlight(FESP_RIGHT_X, FESP_HALF_Y, PC_RW(0xd0),
                              FESP_HALF_H, FESP_HALF_THICK);
         } else if (hit == FESP_TOUCH_TAP && FE_FadeAdd == 0.0f) {
             int result = (limeModalAreYouSure() != 0) ? 1 : 0;
