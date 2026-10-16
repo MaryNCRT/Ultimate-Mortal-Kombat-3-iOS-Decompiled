@@ -2109,6 +2109,8 @@ void AnimateIntroCharacterPlayers1Frame(long force)
 
 extern float JOUTERDIAL;                /* 0x00150598 */
 extern float JINNERDIAL;                /* 0x00150594, read only here */
+extern float ButtonSize;                /* 0x0014ff48 */
+extern float JSIZE;                     /* 0x0014e1dc */
 extern long  P2Controls;                /* 0x0014fec8 */
 extern long  JoystickStatePosX;         /* 0x0014fec0 */
 extern long  JoystickStatePosY;         /* 0x0014fec4 */
@@ -2177,6 +2179,9 @@ long CheckLeftDial(int player)
     JOUTERDIAL = FE_W(80.0f);
     if (P2Controls != 0)
         JOUTERDIAL = 96.0f;             /* unscaled, unlike the default */
+    /* Port, not in the binary: a custom stick as big as the editor made it */
+    else if (player == 0 && ButtonSize > 0.0f)
+        JOUTERDIAL *= JSIZE / ButtonSize;
 
     if (player == 0) {
         cx = (float)JoystickStatePosX;
@@ -4432,6 +4437,10 @@ void ReadControls(void)
             radius = (float)FE_W(40.0f);
             if (P2Controls == 0)
                 radius = (float)(long)radius;   /* truncated, only here */
+            /* Port, not in the binary: a custom button as big as the
+             * editor made it */
+            if (Settings[5] && P2Controls == 0 && ButtonSize > 0.0f)
+                radius *= (float)e[2] / ButtonSize;
 
             if (d >= radius)
                 continue;
@@ -8825,9 +8834,10 @@ static void CopyButtonLayout(long *dst, const long *src)
 /* One player's six buttons. `pos` is the live layout and `states` the pressed
  * flags that go with it. */
 static void DrawButtonRow(const long *pos, const long *states,
-                          float *colour)
+                          float *colour, const long *alpha)
 {
     long b;
+    float own[4];
 
     for (b = 0; b < DRAWCONTROLS_BUTTONS; b++) {
         const long *e    = &pos[b * (BUTTONPOS_STRIDE / 4)];
@@ -8844,6 +8854,10 @@ static void DrawButtonRow(const long *pos, const long *states,
         u = (cell & 3) * 2 + (states[id] ? 0 : 1);
         v = cell / BUTTON_ATLAS_ROWS;
 
+        /* Port, not in the binary: a custom button's own opacity */
+        own[0] = colour[0]; own[1] = colour[1]; own[2] = colour[2];
+        own[3] = alpha && alpha[b] > 0 ? alpha[b] / 100.0f : colour[3];
+
         limeDrawSprite(ButtonsTPage,
                        (float)(e[0] - size / 2), (float)(e[1] - size / 2),
                        (float)size, (float)size,
@@ -8851,7 +8865,7 @@ static void DrawButtonRow(const long *pos, const long *states,
                        (float)v / (float)BUTTON_ATLAS_ROWS,
                        1.0f / (float)BUTTON_ATLAS_COLS,
                        1.0f / (float)BUTTON_ATLAS_ROWS,
-                       colour);
+                       own);
     }
 }
 
@@ -8872,6 +8886,8 @@ static void DrawJoystick(long x, long y, long state,
 }
 
 int PortHideControls;                   /* port: see the end of DrawControls */
+extern long PortButtonAlpha[3][6];      /* port: FrontEnd.c, per button */
+extern long PortStick[3][4];            /* port: FrontEnd.c, the stick */
 void set_menu_open_controls(void);     /* port: runtime/settings_menu.c */
 
 void DrawControls(void)
@@ -8937,6 +8953,22 @@ void DrawControls(void)
         JoystickStatePosYP2 = (long)((float)limeScreenHeight - small);
     }
 
+    /* Port, not in the binary: a custom layout's stick where the editor put
+     * it, its size and opacity (FrontEnd.c, PortStick). */
+    if (Settings[5] && !P2Controls && Settings[4] >= 4 && Settings[4] <= 6) {
+        const long *st = PortStick[Settings[4] - 4];
+
+        if (st[2] > 0) {
+            JoystickStatePosX = st[0];
+            JoystickStatePosY = st[1];
+            JSIZE             = (float)st[2];
+        }
+        if (st[3] > 0) {
+            joyKnobCol[3] = st[3] / 100.0f;
+            joyBaseCol[3] = joyKnobCol[3] * 0.5f;
+        }
+    }
+
     /* A port option (hide_controls=1, the launcher's box): the layout above
      * is still worked out -- the touch code hit-tests against it -- but the
      * stick and the buttons are not drawn. Not in the binary. */
@@ -8950,10 +8982,12 @@ void DrawControls(void)
         DrawJoystick(JoystickStatePosXP2, JoystickStatePosYP2, JoystickStateP2,
                      joyBaseCol, joyKnobCol);
 
-    DrawButtonRow(ButtonsPos, ButtonStates, buttonCol);
+    DrawButtonRow(ButtonsPos, ButtonStates, buttonCol,
+                  Settings[5] && !P2Controls && Settings[4] >= 4
+                  && Settings[4] <= 6 ? PortButtonAlpha[Settings[4] - 4] : 0);
 
     if (P2Controls)
-        DrawButtonRow(ButtonsPosP2, ButtonStatesP2, buttonCol);
+        DrawButtonRow(ButtonsPosP2, ButtonStatesP2, buttonCol, 0);
 
 }
 

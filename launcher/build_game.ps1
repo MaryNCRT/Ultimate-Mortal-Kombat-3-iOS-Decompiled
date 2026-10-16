@@ -174,6 +174,12 @@ $running | ForEach-Object { $_.WaitForExit() }
 $bad = $running | Where-Object { $_.ExitCode -ne 0 }
 if ($bad) { Fail "fallo la compilacion de $(@($bad).Count) archivo(s); mira los mensajes de arriba" }
 
+# The game's icon (runtime\umk3_game.rc), linked in as one more object.
+$res = Join-Path $objdir 'umk3_game.res.o'
+& (Join-Path $llvm 'bin\i686-w64-mingw32-windres.exe') (Join-Path $Root 'runtime\umk3_game.rc') -O coff -o $res
+if ($LASTEXITCODE -ne 0) { Fail "umk3_game.rc" }
+$objs += $res
+
 $exe = Join-Path $Root 'umk3-game.exe'
 $rsp = Join-Path $Work 'link.rsp'
 # --large-address-aware: a 32-bit exe may use 4 GB instead of 2 on 64-bit

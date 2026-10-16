@@ -1,0 +1,3 @@
+/* The game's icon: the exe's in Explorer, the window's and the taskbar's
+ * (win32_gl.c loads it as resource 1). Port, not in the binary. */
+1 ICON "umk3_game.ico"

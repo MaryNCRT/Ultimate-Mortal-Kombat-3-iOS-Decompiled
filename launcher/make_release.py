@@ -33,6 +33,7 @@ RUNTIME_FILES = [
     "runtime/settings_menu.c", "runtime/settings_menu.h",
     "runtime/pad_nav.c", "runtime/pad_nav.h",
     "runtime/profiles.c", "runtime/profiles.h",
+    "runtime/umk3_game.rc", "runtime/umk3_game.ico",
     "runtime/gamecode_globals.c",
     "runtime/gamecode_globals.h", "runtime/gamecode_stubs.c",
     "runtime/lime_menu.c", "runtime/lime_platform.c", "runtime/lime_app.c",

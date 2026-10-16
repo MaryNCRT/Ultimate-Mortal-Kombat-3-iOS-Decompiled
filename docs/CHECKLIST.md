@@ -114,6 +114,20 @@ only once Mary has checked it in game. What is known so far is under each one.
   `pad5_<p|b|k|r>=` (PB_* names joined by "+"); `runtime/game_main.c` reads
   them over its by-position defaults. Checked by Mary.
 
+- [x] **The touch layout editor (custom layouts) without limits**: a button
+  or the stick goes wherever it is dropped (only kept on the screen, no red
+  area, no snap-back); the one picked is framed and two bars set its
+  OPACITY (10 to 100 %) and SIZE (50 to 200 %); RESET puts the layout back
+  to the game's. Saved beside the presets (`presetalpha`, `presetstick`),
+  the touch areas follow the sizes. For the Android build. Port, not in the
+  binary (`FrontEnd.c` EditButtons and PortAlphaBarDraw, `GameCode.c`
+  DrawControls). Checked by Mary.
+- [x] **Icons and name**: the game's exe has the iTunesArtwork icon
+  (`runtime/umk3_game.rc`, also the window's); the launcher has
+  iTunesArtwork2 and shows as UMK3 LAUNCHER (the files keep the name
+  UMK3-Launcher.exe, which the updater restarts). The launcher's logo ships
+  inside it (`renderer/logo.png`). Checked by Mary.
+
 - [ ] **Player two's controls for DUELO** (0.1.1): CONTROLS > PLAYER 2 in
   the launcher, keys and pad like player one's; the two never share a pad.
   Two pads at once not tested yet.

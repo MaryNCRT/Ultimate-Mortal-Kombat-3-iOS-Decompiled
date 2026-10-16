@@ -1476,11 +1476,8 @@ async function init() {
         });
     });
     const logo = await window.umk3.logo();
-    if (logo) {
+    if (logo)
         $('logoImg').src = logo;
-        $('logoImg').classList.remove('hidden');
-        $('logo').classList.add('img');
-    }
     window.addEventListener('keydown', onKey, true);
     $('play').addEventListener('click', doPlay);
     document.querySelectorAll('.btn').forEach(b => b.addEventListener('pointerenter', hoverBlip));

@@ -17,7 +17,8 @@
   },
   "build": {
     "appId": "com.umk3recomp.launcher",
-    "productName": "UMK3-Launcher",
+    "productName": "UMK3 LAUNCHER",
+    "executableName": "UMK3-Launcher",
     "files": [
       "main.js",
       "preload.js",

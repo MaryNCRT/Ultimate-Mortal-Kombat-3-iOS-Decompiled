@@ -81,7 +81,7 @@ async function resolveRoot() {
         r = savedRoot();
     if (!r) {
         const picked = await dialog.showOpenDialog({
-            title: 'UMK3 Launcher: elige la carpeta del juego',
+            title: 'UMK3 LAUNCHER: elige la carpeta del juego',
             properties: ['openDirectory'],
             message: 'Selecciona la carpeta que contiene launcher\\build_game.ps1 / umk3-game.exe (la carpeta del juego).',
         });
@@ -128,9 +128,8 @@ function createWindow() {
     });
     g_win.setMenu(null);
     /* The window and taskbar icon: icon.png in the game folder if the player
-     * put one there, else the game's own icon from their .ipa (res/Icon.png);
-     * the release ships only the drawn build/icon.ico. */
-    for (const f of ['icon.png', path.join('res', 'Icon.png')]) {
+     * put one there, else the launcher's own, build/icon.ico. */
+    for (const f of ['icon.png']) {
         const p = g_root ? path.join(g_root, f) : null;
         if (p && fs.existsSync(p)) {
             g_win.setIcon(nativeImage.createFromPath(p));
@@ -155,23 +154,13 @@ function createWindow() {
 
 /* ------------------------------------------------------------- ipc ---- */
 
-/* The title logo: logo.png in the game folder, if the player put one there;
- * else the game's own, cut from the player's compiled res (the main menu's
- * FE_TITLE_MAINLOGO.PNG atlas: the logo is its top 933 x 383 band). The
- * launcher ships no game art; with neither, null, and the drawn title stays. */
+/* The title logo ships inside the launcher (renderer/logo.png), so it is
+ * there the moment the window opens; logo.png in the game folder, if the
+ * player put one there, replaces it. */
 ipcMain.handle('logo:get', () => {
     try {
         const p = path.join(g_root, 'logo.png');
         return 'data:image/png;base64,' + fs.readFileSync(p).toString('base64');
-    } catch (err) { /* fall through */ }
-    try {
-        const p = path.join(g_root, 'res', 'Textures', 'FE_TITLE_MAINLOGO.PNG');
-        if (!fs.existsSync(p))
-            return null;
-        const img = nativeImage.createFromPath(p);
-        if (img.isEmpty())
-            return null;
-        return img.crop({ x: 0, y: 4, width: 933, height: 383 }).toDataURL();
     } catch (err) {
         return null;
     }
