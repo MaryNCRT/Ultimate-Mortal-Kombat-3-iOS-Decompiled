@@ -66,14 +66,15 @@ static const char *const k_pb[PB_COUNT] = {
     "SELECT", "START", "L3", "R3", "HOME",
 };
 
-/* GRAPHICS in three: the window, the textures, the interface */
-enum { PAGE_GFX, PAGE_TEX, PAGE_UI, PAGE_KEYS, PAGE_PAD, PAGE_PROF, N_PAGES };
+/* Three categories down the side panel; GRAPHICS holds VIDEO, TEXTURES and
+ * INTERFACE, CONTROLS the KEYBOARD and the GAMEPAD, each under its heading */
+enum { PAGE_GFX, PAGE_CTL, PAGE_PROF, N_PAGES };
 
 enum {
     R_DISPLAY, R_MONITOR, R_RES, R_APPLY, R_RRES, R_AA, R_TEXQ, R_ASPECT, R_UI, R_HIDE,
     R_PLAYER, R_LAYOUT, R_KEY, R_KRESET, R_DEVICE, R_PICONS, R_PADB, R_PRESET,
     R_PNAME, R_PICON, R_PCOLOR, R_PSHADE, R_PCOLOR2, R_PID, R_PRESET2,
-    R_CLOSE, R_QUIT
+    R_CLOSE, R_QUIT, R_HEAD
 };
 
 /* The profile icons' names, in CharacterNames order. */
@@ -111,8 +112,8 @@ static char g_edit[PROF_NAME_MAX * 4 + 1];     /* the name being typed */
 static int  g_del_armed;
 static int  g_icon_key = -1;                    /* icon and colour shown */
 
-#define MAX_ROWS 24
-#define VIS_ROWS 13
+#define MAX_ROWS 48
+#define VIS_ROWS 15
 static struct {
     int  kind, arg;
     char label[40], value[192];
@@ -406,6 +407,14 @@ static void add(int kind, int arg, const char *label, const char *fmt, ...)
     g_n++;
 }
 
+/* A section's heading: shown, never chosen (plat_ui_menu draws "\002"). */
+static void head(const char *name)
+{
+    add(R_HEAD, 0, "", "");
+    snprintf(g_rows[g_n - 1].label, sizeof g_rows[0].label, "\002%s", name);
+    g_rows[g_n - 1].en = 0;
+}
+
 /* A colour row: its name in the palette, or #RRGGBB for one the launcher's
  * picker chose. */
 static void add_colour(int kind, const char *label, unsigned rgb)
@@ -471,7 +480,10 @@ static void build(void)
     case PAGE_GFX: {
         static const char *mode_es[3] = { "VENTANA", "SIN BORDES", "PANTALLA COMPLETA" };
         static const char *mode_en[3] = { "WINDOW", "BORDERLESS", "FULLSCREEN" };
+        static const char *tq_es[3] = { "IPHONE", "IPAD", "SIN LIMITE" };
+        static const char *tq_en[3] = { "IPHONE", "IPAD", "NO LIMIT" };
 
+        head("VIDEO");
         add(R_DISPLAY, 0, tx("PANTALLA", "DISPLAY"), "< %s >",
             tx(mode_es[g_gfx.mode], mode_en[g_gfx.mode]));
         if (g_gfx.monitor) {
@@ -497,17 +509,10 @@ static void build(void)
             add(R_AA, 0, "ANTIALIASING", "< X%d >", g_gfx.aa);
         else
             add(R_AA, 0, "ANTIALIASING", "< %s >", tx("DESACTIVADO", "OFF"));
-        break;
-    }
-    case PAGE_TEX: {
-        static const char *tq_es[3] = { "IPHONE", "IPAD", "SIN LIMITE" };
-        static const char *tq_en[3] = { "IPHONE", "IPAD", "NO LIMIT" };
-
-        add(R_TEXQ, 0, tx("CALIDAD DE TEXTURAS", "TEXTURE QUALITY"), "< %s >",
+        head(tx("TEXTURAS", "TEXTURES"));
+        add(R_TEXQ, 0, tx("CALIDAD", "QUALITY"), "< %s >",
             tx(tq_es[g_gfx.texq], tq_en[g_gfx.texq]));
-        break;
-    }
-    case PAGE_UI:
+        head(tx("INTERFAZ", "INTERFACE"));
         add(R_ASPECT, 0, tx("RELACION DE ASPECTO", "ASPECT RATIO"), "< %s >",
             g_gfx.aspect);
         add(R_UI, 0, tx("TAMANO DE LA INTERFAZ", "INTERFACE SIZE"), "< %s >",
@@ -515,12 +520,18 @@ static void build(void)
         add(R_HIDE, 0, tx("CONTROLES EN PANTALLA", "ON-SCREEN CONTROLS"), "< %s >",
             g_gfx.hidectl ? tx("OCULTOS", "HIDDEN") : tx("VISIBLES", "SHOWN"));
         break;
-    case PAGE_KEYS: {
+    }
+    case PAGE_CTL: {
         int five = port_buttons() == 5;
+        const struct kdef *d = five ? k_pad5 : k_pad6;
+        int nd = five ? 8 : 10;
+        const char *dev = port_pad_device(g_player);
+        const PLAT_PAD *p = &g_pad[g_player];
 
         add(R_PLAYER, 0, tx("JUGADOR", "PLAYER"), "%s", player_text());
         add(R_LAYOUT, 0, tx("BOTONES", "LAYOUT"), "< %d %s >", five ? 5 : 6,
             tx("BOTONES", "BUTTONS"));
+        head(tx("TECLADO", "KEYBOARD"));
         for (i = 0; i < 4; i++)
             key_row(k_dirs[i].code);
         if (five)
@@ -535,17 +546,7 @@ static void build(void)
             key_row(PK_MOVES);
         }
         add(R_KRESET, 0, tx("RESTABLECER TECLAS", "RESET KEYS"), "");
-        break;
-    }
-    case PAGE_PAD: {
-        const struct kdef *d = port_buttons() == 5 ? k_pad5 : k_pad6;
-        int nd = port_buttons() == 5 ? 8 : 10;
-        const char *dev = port_pad_device(g_player);
-        const PLAT_PAD *p = &g_pad[g_player];
-
-        add(R_PLAYER, 0, tx("JUGADOR", "PLAYER"), "%s", player_text());
-        add(R_LAYOUT, 0, tx("BOTONES", "LAYOUT"), "< %d %s >",
-            port_buttons() == 5 ? 5 : 6, tx("BOTONES", "BUTTONS"));
+        head(tx("MANDO", "GAMEPAD"));
         snprintf(v, sizeof v, "%s", dev);
         for (i = 0; v[i]; i++)
             if (v[i] >= 'a' && v[i] <= 'z')
@@ -1181,6 +1182,9 @@ static void turn_page(int d)
     g_page = wrap(g_page + d, N_PAGES);
     g_sel = 0;
     g_first = 0;
+    build();
+    while (g_sel < g_n - 1 && !g_rows[g_sel].en)
+        g_sel++;
 }
 
 void set_menu_tick(void)
@@ -1191,6 +1195,8 @@ void set_menu_tick(void)
     build();
     if (g_sel >= g_n)
         g_sel = g_n - 1;
+    while (g_sel < g_n - 1 && g_rows[g_sel].kind == R_HEAD)
+        g_sel++;                        /* a heading is never the one chosen */
     if (g_capture) {
         capture();
         memcpy(g_pad_was, g_pad, sizeof g_pad_was);
@@ -1239,15 +1245,16 @@ void set_menu_tick(void)
         build();
     }
 
-    if (click && g_geo.rowh > 0 && g_mx >= g_geo.bx && g_mx < g_geo.bx + g_geo.bw) {
+    if (click && g_geo.srow > 0 && g_mx >= g_geo.sx && g_mx < g_geo.sx + g_geo.sw
+        && g_my >= g_geo.stop && g_my < g_geo.stop + N_PAGES * g_geo.srow) {
+        int t = (int)((g_my - g_geo.stop) / g_geo.srow);   /* a category */
+        if (t != g_page) {
+            turn_page(t - g_page);
+            build();
+        }
+    } else if (click && g_geo.rowh > 0 && g_mx >= g_geo.bx && g_mx < g_geo.bx + g_geo.bw) {
         float mid = g_geo.bx + g_geo.bw * 0.5f;
-        if (g_my >= g_geo.title0 && g_my < g_geo.top) {
-            int t = (int)((g_mx - g_geo.bx) * N_PAGES / g_geo.bw);
-            if (t >= 0 && t < N_PAGES && t != g_page) {
-                turn_page(t - g_page);
-                build();
-            }
-        } else if (g_my >= g_geo.top) {
+        if (g_my >= g_geo.top) {
             int i = g_first + (int)((g_my - g_geo.top) / g_geo.rowh);
             if (i < g_n && i - g_first < VIS_ROWS && g_rows[i].en) {
                 g_sel = i;
@@ -1290,12 +1297,11 @@ void set_menu_draw(void)
     if (g_first > g_n - VIS_ROWS)
         g_first = g_n - VIS_ROWS > 0 ? g_n - VIS_ROWS : 0;
     rows = g_n - g_first < VIS_ROWS ? g_n - g_first : VIS_ROWS;
-    tabs[PAGE_GFX] = "VIDEO";
-    tabs[PAGE_TEX] = tx("TEXTURAS", "TEXTURES");
-    tabs[PAGE_UI] = tx("INTERFAZ", "INTERFACE");
-    tabs[PAGE_KEYS] = tx("TECLADO", "KEYBOARD");
-    tabs[PAGE_PAD] = tx("MANDO", "GAMEPAD");
+    tabs[PAGE_GFX] = tx("GRAFICOS", "GRAPHICS");
+    tabs[PAGE_CTL] = tx("CONTROLES", "CONTROLS");
     tabs[PAGE_PROF] = tx("PERFIL", "PROFILE");
+    if (g_first > 0 && g_first == g_sel && g_rows[g_sel - 1].kind == R_HEAD)
+        g_first--;                      /* a row's heading stays in sight */
     for (i = 0; i < rows; i++) {
         lp[i] = g_rows[g_first + i].label;
         vp[i] = g_rows[g_first + i].value;
@@ -1322,30 +1328,23 @@ void set_menu_draw(void)
         snprintf(footer, sizeof footer, "%s %s", k, tx("CANCELA", "CANCELS"));
     else if (g_n > VIS_ROWS)
         snprintf(footer, sizeof footer, "%d-%d / %d   %s%s %s   %s %s   %s %s",
-                 g_first + 1, g_first + rows, g_n, ta, tb, tx("PESTANA", "TAB"),
+                 g_first + 1, g_first + rows, g_n, ta, tb, tx("CATEGORIA", "CATEGORY"),
                  ok, tx("ELIGE", "PICK"), k, tx("CIERRA", "CLOSES"));
     else
         snprintf(footer, sizeof footer, "%s%s %s   %s %s   %s %s",
-                 ta, tb, tx("PESTANA", "TAB"), ok, tx("ELIGE", "PICK"),
+                 ta, tb, tx("CATEGORIA", "CATEGORY"), ok, tx("ELIGE", "PICK"),
                  k, tx("CIERRA", "CLOSES"));
     {
-        /* on PROFILE the profile's icon goes beside the box, as big as the
-         * space leaves (up to 120 points), and the box moves right to make
-         * room for it */
-        float ow = g_geo.ow > 0 ? g_geo.ow : 480.0f;
-        float size = ow - 360.0f - 18.0f;
-
-        if (size > 120.0f)
-            size = 120.0f;
-        ui_menu_shift = (g_page == PAGE_PROF && prof_get() && size >= 40.0f)
-                        ? (size + 8.0f) * 0.5f : 0.0f;
-        ui_menu_show(tx("AJUSTES", "SETTINGS"), tabs, N_PAGES, g_page, lp, vp,
+        /* the categories down the side panel, and under them the player's
+         * icon, as wide as the panel */
+        ui_menu_show(tx("AJUSTES", "SETTINGS"), tabs, -N_PAGES, g_page, lp, vp,
                      en, rows, g_sel - g_first, footer, &g_geo);
-        if (ui_menu_shift > 0) {
+        if (prof_get() && g_geo.srow > 0) {
             const struct profile *p = prof_get();
             int key = (int)prof_look_key(p);
-            float x = g_geo.bx - 15.0f - 8.0f - size;
-            float y = g_geo.top;
+            float size = g_geo.sw - 6.0f;
+            float x = g_geo.sx + (g_geo.sw - size) * 0.5f - 2.0f;
+            float y = g_geo.stop + N_PAGES * g_geo.srow + 6.0f;
 
             if (key != g_icon_key) {
                 unsigned char *px = prof_icon_rgba(p->icon, p->color, p->dark, p->color2, 256);
@@ -1355,7 +1354,6 @@ void set_menu_draw(void)
             }
             ui_icon_draw(x, y, size);
         }
-        ui_menu_shift = 0.0f;
     }
     if (g_drop) {                       /* the open list, over the menu */
         char df[384];

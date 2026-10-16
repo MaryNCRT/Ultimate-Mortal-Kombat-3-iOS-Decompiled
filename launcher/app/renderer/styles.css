@@ -74,7 +74,9 @@ button, input, select { font: inherit; color: inherit; }
 }
 #ring .trace { fill: none; stroke: rgba(5, 3, 18, .55); stroke-width: 9; stroke-linejoin: round; }
 #ring .trace-lit { fill: none; stroke: rgba(170, 175, 255, .18); stroke-width: 1.5; stroke-linejoin: round; }
-#ring .seg-body { fill: #000; }
+#ring .seg-body { fill: url(#marble); }
+#ring .seg-glow2 { fill: none; stroke: #a9b8ff; stroke-width: 16; stroke-opacity: .10; stroke-linejoin: round; }
+#ring .seg-glow { fill: none; stroke: #d6dcff; stroke-width: 8; stroke-opacity: .28; stroke-linejoin: round; }
 #ring .seg-rim { fill: none; stroke: #f4f5ff; stroke-width: 3.5; stroke-linejoin: round; }
 #ring .ring-small .seg-rim { stroke-width: 2.4; }
 #ring .ring-small { opacity: .9; }
@@ -152,7 +154,8 @@ button, input, select { font: inherit; color: inherit; }
 /* ----------------------------------------------------------- menu */
 
 #menu {
-    grid-area: menu; position: relative; align-self: center;
+    grid-area: menu; position: relative; align-self: start;
+    margin-top: calc(var(--u) * 13);
     padding-left: calc(var(--u) * 9);
     display: flex; flex-direction: column; gap: calc(var(--u) * .5); z-index: 3;
 }
@@ -251,6 +254,14 @@ h3 { margin: 0 0 calc(var(--u) * .8); font-size: calc(var(--u) * 1.6); color: #a
 .field.wide { grid-column: 1 / -1; }
 /* PERFIL: the icon on the left, the fields beside it */
 .prof { display: flex; gap: calc(var(--u) * 2.5); align-items: flex-start; }
+/* the icon stays in sight while the page scrolls to the colours, so every
+ * change shows on it */
+section[data-sec="profile"] .prof {
+    position: sticky; top: calc(var(--u) * -2.2); z-index: 2;
+    margin: 0 calc(var(--u) * -2.6);
+    padding: calc(var(--u) * .8) calc(var(--u) * 2.6) calc(var(--u) * 1.2);
+    background: linear-gradient(rgba(14, 11, 40, .98) 85%, rgba(14, 11, 40, 0));
+}
 .prof .fields { flex: 1; }
 .proficon { width: calc(var(--u) * 16); height: calc(var(--u) * 16); flex: none; }
 .idcode {

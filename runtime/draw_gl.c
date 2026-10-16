@@ -49,6 +49,7 @@
 #include "platform/gl.h"
 #include "platform/platform.h"
 #include "lime/png.h"
+#include <stddef.h>
 #include "lime/pvr.h"
 #include "lime/par.h"
 
@@ -610,6 +611,15 @@ TEXTURE *lime_load_extra_texture(const char *file)
     g_textures = e;
     printf("extra texture: %s (%dx%d)\n", full, img.width, img.height);
     return &e->tex;
+}
+
+/* A texture lime_load_extra_texture gave: its picture's size. */
+void lime_extra_texture_size(const TEXTURE *t, int *w, int *h)
+{
+    const TexEntry *e = (const TexEntry *)((const char *)t - offsetof(TexEntry, tex));
+
+    *w = t ? e->w : 0;
+    *h = t ? e->h : 0;
 }
 
 /* Port, not in the binary: the settings menu's TEXTURES (settings_menu.c).

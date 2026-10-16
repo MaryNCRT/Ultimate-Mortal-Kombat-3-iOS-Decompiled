@@ -6710,6 +6710,52 @@ static const float MoveIconUV[16][2] = {
     { 0.75f, 0.75f }                    /* 15 */
 };
 
+/* Port, not in the binary: with the on-screen controls hidden the buttons
+ * are drawn as the player's own controls (PortMoveGlyph, game_main.c):
+ * one picture, or player one's and player two's with a "/" between. 0 when
+ * the letters stay. */
+int  PortMovePlayers(void);
+int  PortMoveGlyph(long value, int p, char *out, int n);
+TEXTURE *lime_load_extra_texture(const char *file);
+void lime_extra_texture_size(const TEXTURE *t, int *w, int *h);
+
+static long PortMoveListGlyphs(long value, long cursor, int right, float y)
+{
+    int who = PortMovePlayers(), p, k = 0, i;
+    TEXTURE *t[2] = { 0, 0 };
+    float w[2] = { 0, 0 }, total = 0, x0;
+    char file[160];
+
+    if (!who || value < 6 || value > 14)
+        return -1;
+    for (p = 0; p < 2; p++) {
+        int tw, th;
+        if (!(who & (1 << p)) || !PortMoveGlyph(value, p, file, sizeof file))
+            continue;
+        t[k] = lime_load_extra_texture(file);
+        if (!t[k])
+            continue;
+        lime_extra_texture_size(t[k], &tw, &th);
+        w[k] = th > 0 ? FE_WidthScale * 16.0f * (float)tw / (float)th : FE_WidthScale * 16.0f;
+        k++;
+    }
+    if (k == 0)
+        return -1;
+    total = w[0] + (k > 1 ? FE_WidthScale * 8.0f + w[1] : 0.0f);
+    x0 = right ? (float)(limeScreenWidth - cursor) - total : (float)cursor;
+    for (i = 0; i < k; i++) {
+        limeDrawSprite(t[i], x0, y + FE_HeightScale * -2.0f, w[i],
+                       FE_HeightScale * 16.0f, 0.0f, 0.0f, 1.0f, 1.0f, col);
+        x0 += w[i];
+        if (i == 0 && k > 1) {
+            limeDrawFONT(&GameFont, limeUC("/"), x0 + FE_WidthScale * 1.0f, y,
+                         0, 0.75f * FE_WidthScale, fontcol);
+            x0 += FE_WidthScale * 8.0f;
+        }
+    }
+    return (long)((float)cursor + total + FE_WidthScale * 1.0f);
+}
+
 /* Draw one entry and return the new cursor. The two directions differ only in
  * where the entry lands and how text is aligned, so they share this. */
 static long DrawMoveListEntry(long value, long cursor, int right, float y,
@@ -6717,6 +6763,12 @@ static long DrawMoveListEntry(long value, long cursor, int right, float y,
 {
     const char *text = 0;
     float       x = right ? (float)(limeScreenWidth - cursor) : (float)cursor;
+
+    {
+        long next = PortMoveListGlyphs(value, cursor, right, y);
+        if (next >= 0)
+            return next;
+    }
 
     if (value >= 16 && value <= 22) {
         switch (value) {
@@ -7613,6 +7665,7 @@ extern char *strBuf;                    /* pointer slot -> _str, 0x001f3cac */
 typedef struct BUTTONNEW BUTTONNEW;
 extern BUTTONNEW BUTTON_BACK;           /* 0x001007bc */
 long DrawButtonNew(BUTTONNEW *b, int x, int y, int interactive);
+void PortFERightEdgeSet(int on);
 
 extern long  MoveListPage;              /* 0x00150eb4 */
 extern long  Generic_Moves5[];          /* 0x001030d8 */
@@ -7737,6 +7790,9 @@ void MovesList(void)
     default: break;
     }
 
+    /* Port, not in the binary: on 16:9 and 21:9 NEXT and its label sit at
+     * the screen's right edge, as on the front end's screens */
+    PortFERightEdgeSet(1);
     if (DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1)) {
         MoveListPage = MoveListPage + 1;
         MoveListPage %= (GameMode == 6) ? 10 : 5;
@@ -7744,6 +7800,7 @@ void MovesList(void)
 
     limeDrawFONT(&GameFont, GameText(8), (float)FE_X(423.0f),
                  (float)FE_Y(296.0f), 1, FE_WidthScale, fontcol);
+    PortFERightEdgeSet(0);
 }
 
 

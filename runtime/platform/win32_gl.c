@@ -1655,11 +1655,12 @@ unsigned char *plat_ui_badge(const char *name, const unsigned char *icon,
 unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
                             int ntab, int tab, const char *const *label,
                             const char *const *value, const int *enabled,
-                            int n, int sel, const char *footer, float s,
-                            int *ow, int *oh)
+                            int n, int sel, const char *footer, float width,
+                            float s, int *ow, int *oh)
 {
     al_box b;
     float m = 6 * s, top, rowh = 15 * s, x0, x1;
+    int side = ntab < 0, nt = side ? -ntab : ntab;
     unsigned char *out;
     int i;
 
@@ -1667,9 +1668,11 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
     b.s = s;
     b.bx0 = m;
     b.by0 = m;
-    b.bx1 = m + 360 * s;
+    b.bx1 = m + (width > 0 ? width : 360) * s;
     top = b.by0 + 22 * s + (ntab > 0 ? 20 * s : 0) + 4 * s;  /* under the title and tabs */
     b.by1 = top + n * rowh + 26 * s;
+    if (side && b.by1 < top + (nt * 24 + 8 + UI_SIDE) * s + 26 * s)
+        b.by1 = top + (nt * 24 + 8 + UI_SIDE) * s + 26 * s;   /* room for the icon */
     b.w = (int)(b.bx1 + m + 1);
     b.h = (int)(b.by1 + m + 1);
     b.px = (al_px *)malloc(sizeof(al_px) * b.w * b.h);
@@ -1680,7 +1683,35 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
 
     x0 = b.bx0 + 9 * s;
     x1 = b.bx1 - 9 * s;
-    for (i = 0; i < ntab; i++) {            /* the tab strip */
+    if (side) {                             /* the side panel */
+        float px0 = b.bx0 + 6 * s, px1 = b.bx0 + (UI_SIDE - 4) * s;
+        float py0 = top, py1 = b.by1 - 24 * s;
+        int x, y;
+
+        for (y = (int)py0; y <= (int)py1; y++)
+            for (x = (int)px0; x <= (int)px1; x++) {
+                float c = al_rr((float)x, (float)y, px0, py0, px1, py1, 6 * s);
+                if (c > 0 && x >= 0 && x < b.w && y >= 0 && y < b.h)
+                    al_over(&b.px[y * b.w + x], 0, 0, 0.04f, c * 0.45f);
+            }
+        for (i = 0; i < nt; i++) {
+            float ty0 = top + (4 + i * 24) * s, ty1 = ty0 + 20 * s;
+            if (i == tab)
+                for (y = (int)ty0; y <= (int)ty1; y++)
+                    for (x = (int)px0 + 2; x <= (int)px1 - 2; x++) {
+                        float c = al_rr((float)x, (float)y, px0 + 3 * s, ty0, px1 - 3 * s, ty1, 5 * s);
+                        float t = (y + 0.5f - ty0) / (ty1 - ty0);
+                        if (c > 0 && x >= 0 && x < b.w && y >= 0 && y < b.h)
+                            al_over(&b.px[y * b.w + x], 0.02f + 0.03f * (1 - t),
+                                    0.36f + 0.20f * (1 - t), 0.90f + 0.06f * (1 - t), c * 0.95f);
+                    }
+            al_say(&b, tabs[i], (int)(10.5f * s), 1, px0 + 10 * s, (ty0 + ty1) * 0.5f,
+                   0, 1, 1, 1, i == tab ? 1.0f : 0.7f);
+        }
+        x0 = b.bx0 + (UI_SIDE + 6) * s;
+        nt = 0;
+    }
+    for (i = 0; i < nt; i++) {              /* the tab strip */
         float tw = (x1 - x0) / ntab, tx0 = x0 + i * tw + 1 * s,
               tx1 = x0 + (i + 1) * tw - 1 * s, ty0 = b.by0 + 22 * s,
               ty1 = ty0 + 18 * s;
@@ -1716,13 +1747,22 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
                                 0.90f + 0.06f * (1 - t), c * 0.92f);
                 }
         }
+        if (label[i][0] == 2) {             /* a section's heading */
+            int x, y = (int)(y0 + rowh - 2 * s);
+            al_say(&b, label[i] + 1, (int)(10 * s), 1, x0 + 4 * s, y0 + rowh * 0.55f,
+                   0, 0.55f, 0.75f, 1.0f, 1);
+            for (x = (int)(x0 + 4 * s); x < (int)(x1 - 4 * s) && y >= 0 && y < b.h; x++)
+                al_over(&b.px[y * b.w + x], 0.55f, 0.75f, 1.0f,
+                        0.45f * (1 - (x - x0) / (x1 - x0)));
+            continue;
+        }
         al_say(&b, label[i], (int)(11 * s), 1, x0 + 6 * s, y0 + rowh * 0.5f,
                0, 1, 1, 1, a);
         al_say(&b, value[i], (int)(11 * s), 0, x1 - 6 * s, y0 + rowh * 0.5f,
                2, 1, 1, 1, a);
     }
     al_say(&b, footer, (int)(9 * s), 0, (b.bx0 + b.bx1) * 0.5f,
-           top + n * rowh + 13 * s, 1, 0.80f, 0.84f, 0.92f, 1);
+           b.by1 - 13 * s, 1, 0.80f, 0.84f, 0.92f, 1);
 
     out = (unsigned char *)malloc((size_t)b.w * b.h * 4);
     for (i = 0; i < b.w * b.h; i++) {

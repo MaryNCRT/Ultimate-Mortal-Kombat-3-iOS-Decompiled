@@ -419,10 +419,59 @@ function moveMenuSel() {
 window.addEventListener('resize', moveMenuSel);
 
 /* ------------------------------------------------------------ ring --
- * The backdrop's rings: thick segments of dark blue marble (an SVG
- * turbulence, no picture) with white rims that glow, a big ring round the
- * whole window and a smaller one behind the title, and the circuit traces
- * under them. In a 1600 x 900 box the window crops to cover. */
+ * The backdrop's rings: thick segments of dark blue marble with white rims
+ * that glow, a big ring round the whole window and a smaller one behind the
+ * title, both turning slowly, and the circuit traces under them. In a
+ * 1600 x 900 box the window crops to cover. The marble is made once, here,
+ * as a picture (a tiling turbulence, no game art) and the segments are
+ * filled with it, so it turns with them and costs nothing per frame. */
+function marbleURL(S) {
+    let seed = 11;
+    const rnd = () => {                 /* mulberry32 */
+        seed = (seed + 0x6D2B79F5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const oct = [];
+    for (let o = 0, P = 4; o < 5; o++, P *= 2) {
+        const v = new Float32Array(P * P);
+        for (let i = 0; i < v.length; i++) v[i] = rnd();
+        oct.push({ P, v });
+    }
+    const sm = t => t * t * (3 - 2 * t);
+    const noise = ({ P, v }, x, y) => {     /* tiles: the lattice wraps */
+        const fx = x * P, fy = y * P, ix = Math.floor(fx), iy = Math.floor(fy);
+        const tx = sm(fx - ix), ty = sm(fy - iy);
+        const at = (a, b) => v[((b % P) + P) % P * P + ((a % P) + P) % P];
+        const a = at(ix, iy) + (at(ix + 1, iy) - at(ix, iy)) * tx;
+        const b = at(ix, iy + 1) + (at(ix + 1, iy + 1) - at(ix, iy + 1)) * tx;
+        return a + (b - a) * ty;
+    };
+    const TABLE = [0, 0.04, 0.1, 0.22, 0.55, 1];
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = S;
+    const g = cv.getContext('2d'), im = g.createImageData(S, S);
+    for (let y = 0; y < S; y++)
+        for (let x = 0; x < S; x++) {
+            let t = 0, w = 0.5;
+            for (const o of oct) {
+                t += Math.abs(noise(o, x / S, y / S) * 2 - 1) * w;
+                w *= 0.5;
+            }
+            t = Math.min(1, t * 1.05);
+            const k = t * (TABLE.length - 1), i = Math.min(TABLE.length - 2, Math.floor(k));
+            const v = TABLE[i] + (TABLE[i + 1] - TABLE[i]) * (k - i);
+            const p = (y * S + x) * 4;
+            im.data[p] = (0.55 * v + 0.02) * 255;
+            im.data[p + 1] = (0.62 * v + 0.05) * 255;
+            im.data[p + 2] = Math.min(1, 0.85 * v + 0.17) * 255;
+            im.data[p + 3] = 255;
+        }
+    g.putImageData(im, 0, 0);
+    return cv.toDataURL('image/png');
+}
+
 function buildRing() {
     const svg = $('ring'), NS = 'http://www.w3.org/2000/svg';
     const mk = (tag, attrs, parent) => {
@@ -432,27 +481,9 @@ function buildRing() {
         return n;
     };
     const defs = mk('defs', {});
-    const marble = mk('filter', { id: 'marble', x: '0', y: '0', width: '100%', height: '100%',
-                                  filterUnits: 'userSpaceOnUse',
-                                  'color-interpolation-filters': 'sRGB' }, defs);
-    mk('feTurbulence', { type: 'turbulence', baseFrequency: '0.006 0.011', numOctaves: '5',
-                         seed: '11', result: 't' }, marble);
-    /* grey from the noise, then mostly dark with bright veins, then blue */
-    mk('feColorMatrix', { in: 't', type: 'matrix', result: 'g', values:
-        '1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  0 0 0 0 1' }, marble);
-    const ct = mk('feComponentTransfer', { in: 'g', result: 'v' }, marble);
-    for (const ch of ['feFuncR', 'feFuncG', 'feFuncB'])
-        mk(ch, { type: 'table', tableValues: '0 0.04 0.1 0.22 0.55 1' }, ct);
-    mk('feColorMatrix', { in: 'v', type: 'matrix', result: 'c', values:
-        '0.55 0 0 0 0.02  0.62 0 0 0 0.05  0.85 0 0 0 0.17  0 0 0 0 1' }, marble);
-    mk('feComposite', { in: 'c', in2: 'SourceGraphic', operator: 'in' }, marble);
-    const glow = mk('filter', { id: 'rimglow', x: '-10%', y: '-10%', width: '120%', height: '120%',
-                                'color-interpolation-filters': 'sRGB' }, defs);
-    mk('feGaussianBlur', { in: 'SourceGraphic', stdDeviation: '5', result: 'b' }, glow);
-    const m = mk('feMerge', {}, glow);
-    mk('feMergeNode', { in: 'b' }, m);
-    mk('feMergeNode', { in: 'b' }, m);
-    mk('feMergeNode', { in: 'SourceGraphic' }, m);
+    const pat = mk('pattern', { id: 'marble', patternUnits: 'userSpaceOnUse',
+                                width: '512', height: '512' }, defs);
+    mk('image', { href: marbleURL(512), width: '512', height: '512' }, pat);
 
     /* the circuit traces: dark grooves with a faint light edge */
     const traces = ['M0 250 H260 L330 320 H640', 'M0 610 H180 L260 530 H560 L640 450',
@@ -475,12 +506,13 @@ function buildRing() {
     const ring = (cx, cy, r0, r1, spans, cls) => {
         const g = mk('g', { class: cls });
         g.style.transformOrigin = cx + 'px ' + cy + 'px';  /* it turns on its centre */
-        const body = mk('g', { filter: 'url(#marble)' }, g);
-        const rims = mk('g', { filter: 'url(#rimglow)' }, g);
         for (const [a0, a1] of spans) {
             const d = seg(cx, cy, r0, r1, a0, a1);
-            mk('path', { d, class: 'seg-body' }, body);
-            mk('path', { d, class: 'seg-rim' }, rims);
+            mk('path', { d, class: 'seg-body' }, g);
+            /* the rim's glow: wide faint strokes under the sharp one */
+            mk('path', { d, class: 'seg-glow2' }, g);
+            mk('path', { d, class: 'seg-glow' }, g);
+            mk('path', { d, class: 'seg-rim' }, g);
         }
     };
     /* the big ring: open at the top, where the title is, and at the bottom */
@@ -1458,6 +1490,8 @@ async function init() {
     setSection(SECTIONS.includes(want) && want !== 'quit' ? want : ready ? 'play' : 'build', false);
     if (sub && document.querySelector('.tab[data-c="' + sub + '"]'))
         document.querySelector('.tab[data-c="' + sub + '"]').click();
+    else if (sub === 'end')             /* scrolled to its foot */
+        setTimeout(() => { document.querySelector('.sec.active').scrollTop = 1e6; }, 300);
 
     /* an update just installed is compiled first; else ask GitHub, without
      * holding up the window */

@@ -40,7 +40,10 @@ void dbg_menu_draw(void);
  * where it went, in the menu's space (320 high, ow wide), for the mouse:
  * the tabs from title0 to top, the rows from top, rowh each, between bx
  * and bx + bw. */
-struct ui_geo { float bx, bw, title0, top, rowh, ow; };
+/* where the box went: the rows (bx, bw, top, rowh), the tabs' band
+ * (title0..top), and with the side panel its column (sx, sw), its first
+ * tab (stop) and the tabs' step (srow), all in the menu's space */
+struct ui_geo { float bx, bw, title0, top, rowh, ow, sx, sw, stop, srow; };
 void ui_grab(int vx, int vy, int vw, int vh);
 /* a picture beside the box: uploaded once, drawn at (x, y), size points */
 void ui_icon_set(const unsigned char *rgba, int w, int h);

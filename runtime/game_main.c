@@ -1001,6 +1001,11 @@ float FE_X(float v);
 static float g_ktap_x, g_ktap_y;
 static int   g_ktap_left;              /* ticks the synthetic finger stays down */
 
+/* Port, not in the binary: who opened the pause menu or the moves list --
+ * 1 player one (P / M or the first pad), 2 player two (the second pad), 0 a
+ * click or a tap. The moves list shows that player's controls (below). */
+static int   g_moves_who;
+
 static void hud_keys(void)
 {
     static int was[2];
@@ -1020,6 +1025,9 @@ static void hud_keys(void)
         was[k] = down;
         if (!hit || CurrentTask != 6 || g_ktap_left > 0)
             continue;
+        g_moves_who = (g_pad2.buttons & (k ? g_p2pad_moves : g_p2pad_pause))
+                      && !plat_key(PK_PAUSE + k)
+                      && !(g_pad.buttons & (k ? g_pad_moves : g_pad_pause)) ? 2 : 1;
         /* the right corner is the screen's own edge: on 16:9 and 21:9 the
          * surface is wider than 480 and TogglePauseMenu tests
          * x > limeScreenWidth - 80, so a tap at 470 missed it */
@@ -1042,6 +1050,97 @@ static void hud_keys(void)
         g_ktap_left = 3;
         lime_touch_began(g_ktap_x, g_ktap_y);
     }
+}
+
+/* Port, not in the binary: any pad button skips what a tap skips before a
+ * fight -- the fight's intro (DoIntro, GameCode.c) and Arcade's tower
+ * (FE_Task_Tower, 28) -- with the same three-tick tap, high in the middle
+ * of the screen, where nothing else is touched. */
+extern long DoIntro;
+
+static void pad_skip(void)
+{
+    static unsigned was;
+    unsigned now = (g_pad.connected ? g_pad.buttons : 0)
+                 | (g_pad2.connected ? g_pad2.buttons : 0);
+    unsigned hit = now & ~was;
+
+    was = now;
+    if (!hit || g_ktap_left > 0)
+        return;
+    if (!((CurrentTask == 6 && DoIntro) || (CurrentTask == 3 && FE_CurrentTask == 28)))
+        return;
+    g_ktap_x = (float)limeScreenWidth * 0.5f;
+    g_ktap_y = 100.0f * g_ui_k;
+    lime_touch_began(g_ktap_x, g_ktap_y);
+    g_ktap_left = 3;
+}
+
+/* Port, not in the binary: the moves list (DrawMoveListEntry, GameCode.c)
+ * with the on-screen controls hidden draws the player's own controls
+ * instead of the P K B R S letters: the pad's pictures when that player has
+ * a pad, else the keyboard's. In DUELO it shows the player who paused, both
+ * when it was opened with a click or a tap; elsewhere player one. With the
+ * on-screen controls showing it keeps the letters. */
+extern long Player1NumButtons, Player2NumButtons;
+
+int PortMovePlayers(void)
+{
+    if (!PortHideControls)
+        return 0;
+    if (GameMode != 6)
+        return 1;
+    return g_moves_who == 1 ? 1 : g_moves_who == 2 ? 2 : 3;
+}
+
+/* The picture for atlas value `value` (6..14, a button) for player p (0 or
+ * 1), as a file under "aditional textures/" in `out`; 0 when there is none. */
+int PortMoveGlyph(long value, int p, char *out, int n)
+{
+    /* the atlas's buttons: 6-button pad action and key, 5-button ones */
+    static const struct { int a6, k6, a5, k5; } m[9] = {
+        { 0, PK_HP, 7, PK_5_P },        /* 6  HP */
+        { 1, PK_LP, 7, PK_5_P },        /* 7  LP */
+        { 3, PK_HK, 10, PK_5_K },       /* 8  HK */
+        { 4, PK_LK, 10, PK_5_K },       /* 9  LK */
+        { 2, PK_BL, 9, PK_5_B },        /* 10 B  */
+        { 5, PK_RUN, 12, PK_5_R },      /* 11 R  */
+        { 6, PK_SPECIAL, 13, PK_SPECIAL },  /* 12 S */
+        { 4, PK_LK, 10, PK_5_K },       /* 13 K  */
+        { 1, PK_LP, 7, PK_5_P },        /* 14 P  */
+    };
+    const PLAT_PAD *pad = p ? &g_pad2 : &g_pad;
+    int six = (p ? Player2NumButtons : Player1NumButtons) == 6, i;
+    char tok[128], *a, *z;
+
+    if (value < 6 || value > 14 || n <= 0)
+        return 0;
+    i = (int)value - 6;
+    if (pad->connected) {
+        unsigned mask = *port_pad_action(p, six ? m[i].a6 : m[i].a5);
+        int pb;
+
+        for (pb = 0; pb < PB_COUNT && !(mask & (1u << pb)); pb++)
+            ;
+        if (pb == PB_COUNT)
+            return 0;
+        plat_pad_glyph(plat_pad_glyph_kind(p, pad->kind), pb, tok, sizeof tok);
+    } else {
+        int code = six ? m[i].k6 : m[i].k5;
+
+        if (p)                          /* player two's keys */
+            code = code == PK_SPECIAL ? PK_P2_SPECIAL
+                 : code >= PK_5_P && code <= PK_5_R ? PK_P2_5_P + (code - PK_5_P)
+                 : PK_P2_HP + (code - PK_HP);
+        plat_key_glyph(code, tok, sizeof tok);
+    }
+    a = strchr(tok, 1);
+    z = a ? strchr(a + 1, 1) : NULL;
+    if (!z)
+        return 0;
+    *z = 0;
+    snprintf(out, (size_t)n, "glyphs/%s.png", a + 1);
+    return 1;
 }
 
 /* A round is in play: past the intro, nobody down, not between rounds, no
@@ -2343,8 +2442,10 @@ int main(int argc, char **argv)
                 set_menu_mouse(tx / g_virt_w, ty / g_virt_h,
                                plat_mouse(&mx, &my) && g_ntaps == 0);
 
-            if (down && !was_down)
+            if (down && !was_down) {
                 lime_touch_began(tx, ty);
+                g_moves_who = 0;        /* a click: the moves list shows both */
+            }
             else if (down && (tx != prev_tx || ty != prev_ty))
                 lime_touch_moved(tx, ty, prev_tx, prev_ty);
             else if (!down && was_down)
@@ -2532,6 +2633,7 @@ int main(int argc, char **argv)
             lime_menu_advance_clock(1.0 / 60.0);
             keyboard_buttons();
             hud_keys();
+            pad_skip();
             if (g_cfg_debug_keys && dbg_keys_on()) {
                 debug_keys();
                 screen_keys();

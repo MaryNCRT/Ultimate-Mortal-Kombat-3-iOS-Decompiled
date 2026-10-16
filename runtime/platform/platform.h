@@ -118,8 +118,13 @@ int plat_ask(const unsigned short *msg, const unsigned short *ok,
 unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
                             int ntab, int tab, const char *const *label,
                             const char *const *value, const int *enabled,
-                            int n, int sel, const char *footer, float s,
-                            int *w, int *h);
+                            int n, int sel, const char *footer, float width,
+                            float s, int *w, int *h);
+/* plat_ui_menu with ntab < 0 (the settings menu, port): the -ntab tabs go
+ * down a side panel UI_SIDE points wide on the left instead of across the
+ * top, the rows beside it; `width` is the whole box's, in points (360 with
+ * the tabs on top). A label starting "\002" is a section's heading. */
+#define UI_SIDE 96
 
 /* A grid of pictures in the same dress (the settings menu's icons and
  * colours, port): the title, `n` cells of cpx x cpx straight RGBA, `cols`

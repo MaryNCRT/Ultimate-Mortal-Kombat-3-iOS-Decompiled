@@ -115,6 +115,8 @@ float PortFEExtraX;
  * label, so they go to the right edge like on every other screen while the
  * grid stays centred. */
 static int PortFERightEdge;
+/* the same for the moves list's NEXT, drawn from GameCode.c */
+void PortFERightEdgeSet(int on) { PortFERightEdge = on; }
 /* the centring offset for the sites that scale a position by
  * FE_WidthScale themselves instead of calling FE_X */
 #define FE_XC (PortFEExtraX * 0.5f)

@@ -339,6 +339,7 @@ static const char *const k_pal[3] = { "AUTO", "1", "2 (ALTERNATE)" };
 /* Where the box was last drawn, in the menu's space, for the mouse: the
  * tab strip from g_title0 to g_top, N_PAGES tabs from g_bx, g_bw wide. */
 static float g_bx, g_by, g_bw, g_top, g_rowh, g_title0;
+static float g_sx, g_sw, g_stop, g_srow;    /* the side panel, if any */
 static int   g_mouse_was;
 
 int dbg_menu_is_open(void) { return g_open; }
@@ -693,6 +694,17 @@ static void dim_all(void)
  * something in it changes; the 5x7 font when the backend has no such
  * drawing. `geo` gets where the box went, in the menu's space, for the
  * mouse. */
+/* The box's width in points: 360, or with the side panel as much as the
+ * screen gives up to 464 (the 4:3 screen is 427 wide). */
+static float ui_box_width(int ntabs)
+{
+    float w = g_ow - 12.0f;
+
+    if (ntabs >= 0)
+        return 360.0f;
+    return w > 464.0f ? 464.0f : w;
+}
+
 static int draw_ios(const char *title, const char *const *tabs, int ntabs,
                     int page, const char *const *lp, const char *const *vp,
                     const int *en, int rows, int sel, const char *footer)
@@ -726,7 +738,8 @@ static int draw_ios(const char *title, const char *const *tabs, int ntabs,
     if (!tex || strcmp(sig, last) != 0) {
         int w, h;
         unsigned char *px = plat_ui_menu(title, tabs, ntabs, page, lp, vp,
-                                         en, rows, sel, footer, s, &w, &h);
+                                         en, rows, sel, footer, ui_box_width(ntabs),
+                                         s, &w, &h);
         if (!px)
             return 0;
         if (!tex)
@@ -773,6 +786,15 @@ static int draw_ios(const char *title, const char *const *tabs, int ntabs,
         g_title0 = y + 6 + 22;
         g_top = y + 6 + 22 + (ntabs > 0 ? 20 + 4 : 4);
         g_rowh = 15;
+        g_sx = g_sw = g_stop = g_srow = 0;
+        if (ntabs < 0) {                /* the side panel's column */
+            g_bx = x + 6 + UI_SIDE + 6;
+            g_bw = ui_box_width(ntabs) - UI_SIDE - 6 - 9;
+            g_sx = x + 6 + 6;
+            g_sw = UI_SIDE - 10;
+            g_stop = g_top + 4;
+            g_srow = 24;
+        }
 
         glEnable(GL_TEXTURE_2D);
         glEnable(GL_BLEND);
@@ -864,6 +886,10 @@ void ui_menu_show(const char *title, const char *const *tabs, int ntabs,
         geo->top = g_top;
         geo->rowh = g_rowh;
         geo->ow = g_ow;
+        geo->sx = g_sx;
+        geo->sw = g_sw;
+        geo->stop = g_stop;
+        geo->srow = g_srow;
     }
 }
 
