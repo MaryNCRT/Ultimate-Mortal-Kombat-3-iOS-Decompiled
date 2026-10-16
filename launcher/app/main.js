@@ -179,7 +179,7 @@ ipcMain.handle('logo:get', () => {
 
 ipcMain.handle('root:get', () =>
     ({ root: g_root, ready: ini.gameReady(g_root),
-       builtAt: ini.gameBuiltAt(g_root) }));
+       builtAt: ini.gameBuiltAt(g_root), version: app.getVersion() }));
 
 ipcMain.handle('config:load', () => {
     g_cfg = ini.load(path.join(g_root, 'umk3.ini'));
@@ -364,6 +364,24 @@ ipcMain.handle('pads:list', () => new Promise(resolve => {
         });
 }));
 
+/* The monitors, as the game counts them: `umk3-game --list-monitors`
+ * prints "index<TAB>name" a line (monitor= in umk3.ini). */
+ipcMain.handle('monitors:list', () => new Promise(resolve => {
+    const exe = path.join(g_root, 'umk3-game.exe');
+    if (!fs.existsSync(exe))
+        return resolve([]);
+    require('child_process').execFile(exe, ['--list-monitors'],
+        { cwd: g_root, timeout: 10000, windowsHide: true }, (err, out) => {
+            const mons = [];
+            for (const line of String(out || '').split(/\r?\n/)) {
+                const m = line.match(/^(\d+)\t(.+)$/);
+                if (m)
+                    mons.push({ value: Number(m[1]), name: m[2].trim() });
+            }
+            resolve(mons);
+        });
+}));
+
 /* The player's profile (lib/profiles.js): profiles.ini beside the game,
  * which the game's settings menu edits too. One per installation; its id is
  * given the first time and never changes. */
@@ -372,10 +390,38 @@ ipcMain.handle('profile:update', (_ev, fields) => prof.update(g_root, fields || 
 ipcMain.handle('profile:reset', (_ev, name) => prof.reset(g_root, name));
 ipcMain.handle('profile:icon', (_ev, i) => prof.iconData(g_root, Number(i)));
 
+/* The key and button pictures (Julio Cacko's Free Input Prompts, CC0), the
+ * same the game's menus draw: "aditional textures/glyphs/<set>/<file>.png"
+ * beside the game, or the launcher's own copy before the first compile.
+ * Every one at once, as data: URLs by "<set>/<file>". */
+ipcMain.handle('glyphs:all', () => {
+    const dirs = [path.join(g_root || '', 'aditional textures', 'glyphs'),
+                  path.join(g_root || '', 'launcher', 'aditional textures', 'glyphs'),
+                  path.join(__dirname, '..', 'aditional textures', 'glyphs')];
+    const out = {};
+    for (const d of dirs) {
+        let sets;
+        try { sets = fs.readdirSync(d); } catch (err) { continue; }
+        for (const set of sets) {
+            let files;
+            try { files = fs.readdirSync(path.join(d, set)); } catch (err) { continue; }
+            for (const f of files)
+                if (f.toLowerCase().endsWith('.png') && !out[set + '/' + f.slice(0, -4)])
+                    out[set + '/' + f.slice(0, -4)] = 'data:image/png;base64,' +
+                        fs.readFileSync(path.join(d, set, f)).toString('base64');
+        }
+        if (Object.keys(out).length) break;
+    }
+    return out;
+});
+
 ipcMain.handle('play', () => {
     if (!ini.gameReady(g_root))
         return { ok: false };
     bld.play(g_root);
+    /* the game runs on its own (detached): the launcher steps aside, once
+     * the answer has reached the page */
+    setTimeout(() => app.quit(), 800);
     return { ok: true };
 });
 
@@ -415,7 +461,8 @@ ipcMain.handle('debug:layout', (_ev, payload) => {
 
 /* -------------------------------------------------------------- app ---- */
 
-const gotLock = app.requestSingleInstanceLock();
+/* the capture aid (UMK3_LAUNCHER_SHOT) runs beside a launcher already open */
+const gotLock = process.env.UMK3_LAUNCHER_SHOT ? true : app.requestSingleInstanceLock();
 if (!gotLock) {
     app.quit();
 } else {

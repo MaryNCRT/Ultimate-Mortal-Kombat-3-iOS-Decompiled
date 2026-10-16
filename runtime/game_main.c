@@ -56,6 +56,7 @@
  *   UMK3_DBG_STATE="t:s1;t:l1" save / load a state slot by script
  *   UMK3_SHOTS=<t,t,...>       write umk3-shot-<t>.ppm at each tick, go on
  *   UMK3_ARCADE=<destiny,stage> with --fight: that rung of an Arcade ladder
+ *   UMK3_PADS=<tick:buttons:hold;...>  player one's pad by script (scripted_pad)
  *   UMK3_SCREENS=<tick:n;...>  open front-end screen n at that tick, so one
  *                              session can walk the whole menu
  *
@@ -72,6 +73,7 @@
  * Debug, to skip the menus:
  *   umk3-game --fight <p1> <p2> [stage]     (or UMK3_FIGHT="p1,p2,stage")
  *   umk3-game --list-pads                   the pads attached (for the launcher)
+ *   umk3-game --list-monitors               the monitors (for the launcher)
  * goes straight from the main menu into a fight. A fighter is a name from
  * CharacterNames ("kitana", "kunglao", "sub-zero") or its number 0..25; the
  * stage is a Level_Info row, 0..15 (default 0). It sets what the select
@@ -93,6 +95,7 @@
 #include "debug_menu.h"
 #include "settings_menu.h"
 #include "profiles.h"
+#include "pad_nav.h"
 
 /* A scripted run (UMK3_SHOT) ignores the real keyboard, as it ignores the
  * mouse: a test window takes the focus when it opens, and whoever is typing
@@ -106,6 +109,59 @@ static long g_tick;                     /* the tick count, for UMK3_KEYS */
  * (the settings menu), ok (Enter) and tab (the next tab); held
  * for `hold` ticks (default 4).
  * Example, Scorpion's spear: "1000:left:4;1005:left:4;1010:lp:4". */
+/* UMK3_PADS="tick:buttons:hold;..." -- player one's pad by script, for
+ * testing the pad on the menus without one: up down left right and the
+ * PB_* names in lower case (south east west north l1 r1 ... home), joined
+ * with '+'; the pad counts as connected while the script runs. */
+static void scripted_pad(PLAT_PAD *p)
+{
+    static const char *const pb[PB_COUNT] = {
+        "south", "east", "west", "north", "l1", "r1", "l2", "r2",
+        "select", "start", "l3", "r3", "home",
+    };
+    const char *q = getenv("UMK3_PADS");
+
+    if (!q)
+        return;
+    memset(p, 0, sizeof *p);            /* the script's alone */
+    p->connected = 1;
+    p->kind = 2;
+    while (*q) {
+        long t = atol(q), hold = 4;
+        const char *a = strchr(q, ':'), *b, *end = strchr(q, ';');
+
+        if (!a || (end && a > end))
+            break;
+        a++;
+        b = strchr(a, ':');
+        if (b && (!end || b < end))
+            hold = atol(b + 1);
+        else
+            b = end ? end : a + strlen(a);
+        if (g_tick >= t && g_tick < t + hold) {
+            const char *s = a;
+            while (s < b) {
+                size_t i, n = strcspn(s, "+:;");
+                if (n == 2 && strncmp(s, "up", 2) == 0) p->up = 1;
+                if (n == 4 && strncmp(s, "down", 4) == 0) p->down = 1;
+                if (n == 4 && strncmp(s, "left", 4) == 0) p->left = 1;
+                if (n == 5 && strncmp(s, "right", 5) == 0) p->right = 1;
+                if (n == 5 && strncmp(s, "rleft", 5) == 0) p->rx = -1;
+                if (n == 6 && strncmp(s, "rright", 6) == 0) p->rx = 1;
+                for (i = 0; i < PB_COUNT; i++)
+                    if (strlen(pb[i]) == n && strncmp(s, pb[i], n) == 0)
+                        p->buttons |= 1u << i;
+                s += n;
+                if (*s == '+')
+                    s++;
+                else
+                    break;
+            }
+        }
+        q = end ? end + 1 : q + strlen(q);
+    }
+}
+
 static int scripted_key(int code)
 {
     static const struct { const char *n; int code; } k_names[] = {
@@ -303,6 +359,10 @@ static unsigned g_pad5[7] = {
     (1u << PB_L1) | (1u << PB_L2), 1u << PB_R2,
 };
 static unsigned g_pad_pause = 1u << PB_START;
+/* port: the pad's button for the settings menu (pad_settings=, HOME unless
+ * the player binds another) */
+static unsigned g_pad_settings = 1u << PB_HOME;
+static unsigned g_p2pad_settings = 1u << PB_HOME;
 static unsigned g_pad_moves = 1u << PB_SELECT;
 
 /* Player two's pad, the same actions and defaults: the launcher's GAMEPAD
@@ -773,7 +833,8 @@ static char g_cfg_aspect[8] = "3:2";
 static char g_cfg_pad[2][32] = { "auto", "auto" };
 
 /* Player two's lines, "p2" and then the name player one's would have:
- * p2pad=, p2pad_<action>=, p2pad5_<p|b|k|r>=, p2key_<up..run|special>=,
+ * p2pad=, p2pad_<action>=, p2pad5_<p|b|k|r>=,
+ * p2key_<up..run|special|pause|moves|ok>=,
  * p2key5_<p|b|k|r>= (the launcher's controls for player two, port). */
 static void read_config_p2(const char *n, const char *v)
 {
@@ -802,6 +863,8 @@ static void read_config_p2(const char *n, const char *v)
             g_p2pad_pause = pad_combo(v);
         else if (strcmp(n + 4, "moves") == 0)
             g_p2pad_moves = pad_combo(v);
+        else if (strcmp(n + 4, "settings") == 0)
+            g_p2pad_settings = pad_combo(v);
     } else if (strncmp(n, "key5_", 5) == 0) {
         for (i = 0; i < 4; i++)
             if (strcmp(n + 5, names5[i]) == 0)
@@ -812,6 +875,12 @@ static void read_config_p2(const char *n, const char *v)
                 plat_bind_key(PK_P2_UP + i, atoi(v));
         if (strcmp(n + 4, "special") == 0)
             plat_bind_key(PK_P2_SPECIAL, atoi(v));
+        else if (strcmp(n + 4, "pause") == 0)
+            plat_bind_key(PK_P2_PAUSE, atoi(v));
+        else if (strcmp(n + 4, "moves") == 0)
+            plat_bind_key(PK_P2_MOVES, atoi(v));
+        else if (strcmp(n + 4, "ok") == 0)
+            plat_bind_key(PK_P2_OK, atoi(v));
     }
 }
 
@@ -840,6 +909,8 @@ static void read_config(const char *dir)
             g_cfg_full = atoi(v) != 0;
         else if (strcmp(line, "borderless") == 0)
             g_cfg_borderless = atoi(v) != 0;
+        else if (strcmp(line, "monitor") == 0)     /* port: 0 auto, 1..n */
+            plat_monitor_select(atoi(v));
         else if (strcmp(line, "antialiasing") == 0)
             g_cfg_aa = atoi(v) >= 2 ? (atoi(v) > 16 ? 16 : atoi(v)) : 0;
         else if (strcmp(line, "render_width") == 0)
@@ -877,6 +948,12 @@ static void read_config(const char *dir)
             PortTextureQuality = _stricmp(v, "max") == 0 ? 2
                                : _stricmp(v, "ipad") == 0 ? 1 : 0;
         }
+        else if (strcmp(line, "pad_icons") == 0 || strcmp(line, "p2pad_icons") == 0)
+            /* port: the pictures of each player's pad */
+            plat_pad_glyph_style(line[1] == '2', strcmp(v, "xbox") == 0 ? 1
+                                 : strcmp(v, "ps5") == 0 ? 2
+                                 : strcmp(v, "nintendo") == 0 ? 3
+                                 : strcmp(v, "ps4") == 0 ? 4 : 0);
         else if (strncmp(line, "p2", 2) == 0)
             read_config_p2(line + 2, v);
         else if (strcmp(line, "pad_dbg_menu") == 0)
@@ -906,6 +983,8 @@ static void read_config(const char *dir)
                 g_pad_pause = pad_combo(v);
             else if (strcmp(line + 4, "moves") == 0)
                 g_pad_moves = pad_combo(v);
+            else if (strcmp(line + 4, "settings") == 0)
+                g_pad_settings = pad_combo(v);
         }
         else if (strcmp(line, "pad") == 0) {  /* auto, off, xinput, vvvv:pppp */
             plat_pad_select(v);
@@ -983,6 +1062,113 @@ float FE_X(float v);
 
 static float g_ktap_x, g_ktap_y;
 static int   g_ktap_left;              /* ticks the synthetic finger stays down */
+static int   g_ktap_nav;                /* it is the pad's: down while held */
+extern float limeLastTouchScreenX[10], limeLastTouchScreenY[10];
+
+/* Port, not in the binary: who opened the pause menu or the moves list --
+ * 1 player one (P / M or the first pad), 2 player two (the second pad), 0 a
+ * click or a tap. The moves list shows that player's controls (below). */
+static int   g_moves_who;
+
+/* Port, not in the binary (FrontEnd.c): which player's pad or keys made
+ * the tap in flight (0 a finger or the mouse), and the right stick's
+ * palette turns, one per side. */
+extern int PortNavPick, PortNavHover;
+extern int PortPadPalette[2];
+void PortNavDraw(const char *ok, const char *back, int left);
+void PortNavDrawLine(const char *s, int right);    /* FrontEnd.c */
+void PortPagesLine(char *line, int n, int sel);
+
+/* The right stick, left or right, turns the palette on the select screen:
+ * player one's side with the first pad, player two's with the second in
+ * VS, player one's with either elsewhere. */
+static void nav_stick(void)
+{
+    static int was[2];
+    int i;
+
+    for (i = 0; i < 2; i++) {
+        const PLAT_PAD *p = i ? &g_pad2 : &g_pad;
+        int now = p->connected ? p->rx : 0;
+
+        if (now && now != was[i] && CurrentTask == 3)
+            PortPadPalette[i && GameMode == 6 ? 1 : 0] = 1;
+        was[i] = now;
+    }
+}
+
+/* With the on-screen controls off: the pictures of ACCEPT and BACK in the
+ * corner, and of BACK beside the screen's BACK -- the pad's buttons or
+ * Enter and Backspace, whichever was used last. */
+static void nav_hints(void)
+{
+    char ok[160], back[160], tok[128], *a, *z;
+    int i;
+
+    /* the moves list has no buttons left for the pad, but its hints */
+    if (!PortHideControls
+        || (!pad_nav_on() && !(CurrentTask == 6 && GamePaused == 2)))
+        return;
+    if (pad_nav_device() == 1 && (g_pad.connected || g_pad2.connected)) {
+        const PLAT_PAD *p = g_pad.connected ? &g_pad : &g_pad2;
+
+        for (i = 0; i < 2; i++) {
+            plat_pad_glyph(plat_pad_glyph_kind(p == &g_pad2, p->kind),
+                           i ? PB_EAST : PB_SOUTH, tok, sizeof tok);
+            a = strchr(tok, 1);
+            z = a ? strchr(a + 1, 1) : NULL;
+            if (!z)
+                return;
+            *z = 0;
+            snprintf(i ? back : ok, 160, "glyphs/%s.png", a + 1);
+        }
+    } else {
+        snprintf(ok, sizeof ok, "glyphs/kb/T_Enter_Key_Vintage.png");
+        snprintf(back, sizeof back, "glyphs/kb/T_BackSpace_Key_Vintage.png");
+    }
+    /* the moves list: its pages (L1 R1, Q E) and the way out (select or
+     * circle, M or Backspace) in place of ACCEPT and BACK */
+    if (CurrentTask == 6 && GamePaused == 2) {
+        char line[600];
+
+        PortPagesLine(line, sizeof line, 1);
+        PortNavDrawLine(line, 0);
+        return;
+    }
+    /* the lost treasure won in Arcade has no way back: ACCEPT alone */
+    PortNavDraw(ok, CurrentTask == 3 && FE_CurrentTask == 36 ? "" : back,
+                CurrentTask == 6);
+}
+
+/* Port, not in the binary: the hints of a screen of pages with the
+ * on-screen controls off -- the moves list, the bios, the endings: its
+ * pages (L1 R1, Q E) and the way out (select or circle, M or Backspace),
+ * with the pad's pictures or the keys'. */
+void PortPagesLine(char *line, int n, int with_sel)
+{
+    {
+        char l1[128], r1[128], sel[128], east[128];
+
+        if (pad_nav_device() == 1 && (g_pad.connected || g_pad2.connected)) {
+            const PLAT_PAD *p = g_pad.connected ? &g_pad : &g_pad2;
+            int kind = plat_pad_glyph_kind(p == &g_pad2, p->kind);
+
+            plat_pad_glyph(kind, PB_L1, l1, sizeof l1);
+            plat_pad_glyph(kind, PB_R1, r1, sizeof r1);
+            plat_pad_glyph(kind, PB_SELECT, sel, sizeof sel);
+            plat_pad_glyph(kind, PB_EAST, east, sizeof east);
+        } else {
+            plat_key_glyph(PK_DBG_PAGE_PREV, l1, sizeof l1);
+            plat_key_glyph(PK_DBG_PAGE_NEXT, r1, sizeof r1);
+            plat_key_glyph(PK_MOVES, sel, sizeof sel);
+            snprintf(east, sizeof east, "\001kb/T_BackSpace_Key_Vintage\001");
+        }
+        snprintf(line, n, "%s%s %s   %s%s %s", l1, r1,
+                 Language[0] == 'E' && Language[1] == 'S' ? "P\xc1GINA" : "PAGE",
+                 with_sel ? sel : "", east,
+                 Language[0] == 'E' && Language[1] == 'S' ? "SALIR" : "EXIT");
+    }
+}
 
 static void hud_keys(void)
 {
@@ -994,15 +1180,25 @@ static void hud_keys(void)
 
     for (k = 0; k < 2; k++) {
         /* the pad: start is P, select (Back / Share / Create) is M */
-        int down = plat_key(PK_PAUSE + k)
+        int down = plat_key(PK_PAUSE + k) || plat_key(PK_P2_PAUSE + k)
                    || (g_pad.buttons & (k ? g_pad_moves : g_pad_pause))
-                   || (g_pad2.buttons & (k ? g_p2pad_moves : g_p2pad_pause));
+                   || (g_pad2.buttons & (k ? g_p2pad_moves : g_p2pad_pause))
+                   /* the moves list without NEXT (on-screen controls off):
+                    * circle or Backspace close it, as select does */
+                   || (k && PortHideControls && GamePaused == 2
+                       && ((g_pad.connected && (g_pad.buttons & (1u << PB_EAST)))
+                           || (g_pad2.connected && (g_pad2.buttons & (1u << PB_EAST)))
+                           || plat_key_backspace()));
         int hit = down && !was[k];
         float x = -1.0f, y = 10.0f;
 
         was[k] = down;
         if (!hit || CurrentTask != 6 || g_ktap_left > 0)
             continue;
+        g_moves_who = ((g_pad2.buttons & (k ? g_p2pad_moves : g_p2pad_pause))
+                       || plat_key(PK_P2_PAUSE + k))
+                      && !plat_key(PK_PAUSE + k)
+                      && !(g_pad.buttons & (k ? g_pad_moves : g_pad_pause)) ? 2 : 1;
         /* the right corner is the screen's own edge: on 16:9 and 21:9 the
          * surface is wider than 480 and TogglePauseMenu tests
          * x > limeScreenWidth - 80, so a tap at 470 missed it */
@@ -1025,6 +1221,184 @@ static void hud_keys(void)
         g_ktap_left = 3;
         lime_touch_began(g_ktap_x, g_ktap_y);
     }
+}
+
+/* Port, not in the binary: any pad button skips what a tap skips before a
+ * fight -- the fight's intro (DoIntro, GameCode.c) and Arcade's tower
+ * (FE_Task_Tower, 28) -- with the same three-tick tap, high in the middle
+ * of the screen, where nothing else is touched. */
+extern long DoIntro;
+
+static void pad_skip(void)
+{
+    static unsigned was;
+    unsigned now = (g_pad.connected ? g_pad.buttons : 0)
+                 | (g_pad2.connected ? g_pad2.buttons : 0);
+    unsigned hit = now & ~was;
+
+    was = now;
+    if (!hit || g_ktap_left > 0)
+        return;
+    if (!((CurrentTask == 6 && DoIntro) || (CurrentTask == 3 && FE_CurrentTask == 28)))
+        return;
+    /* the tower: while it offers its choices the highlight has them (cross
+     * picks, circle goes back); only its climb is skipped, and only with
+     * cross */
+    if (CurrentTask == 3 && (pad_nav_on() || !(hit & (1u << PB_SOUTH))))
+        return;
+    g_ktap_x = (float)limeScreenWidth * 0.5f;
+    g_ktap_y = 100.0f * g_ui_k;
+    lime_touch_began(g_ktap_x, g_ktap_y);
+    g_ktap_left = 3;
+}
+
+/* Port, not in the binary: the moves list (DrawMoveListEntry, GameCode.c)
+ * with the on-screen controls hidden draws the player's own controls
+ * instead of the P K B R S letters: the pad's pictures when that player has
+ * a pad, else the keyboard's. In DUELO it shows the player who paused, both
+ * when it was opened with a click or a tap; elsewhere player one. With the
+ * on-screen controls showing it keeps the letters. */
+extern long Player1NumButtons, Player2NumButtons;
+
+/* Who opened the moves list, for its fighter (GameCode.c MovesList): 2
+ * player two, in VS. Port only. */
+int PortMovesWho(void)
+{
+    return GameMode == 6 ? g_moves_who : 0;
+}
+
+int PortMovePlayers(void)
+{
+    if (!PortHideControls)
+        return 0;
+    if (GameMode != 6)
+        return 1;
+    return g_moves_who == 1 ? 1 : g_moves_who == 2 ? 2 : 3;
+}
+
+/* Port, not in the binary: the moves list's pages with the pad or the keys
+ * -- L1 / R1, left / right on the d-pad or either stick of either pad, the
+ * settings menu's page keys (Q / E) or the movement keys (A / D): -1 a
+ * page back, 1 forward. */
+int PortMovesTurn(void)
+{
+    static int was;
+    int l = (g_pad.connected && (g_pad.buttons & (1u << PB_L1)))
+            || (g_pad2.connected && (g_pad2.buttons & (1u << PB_L1)))
+            || plat_key(PK_DBG_PAGE_PREV)
+            || (g_pad.connected && (g_pad.left || g_pad.rx < 0))
+            || (g_pad2.connected && (g_pad2.left || g_pad2.rx < 0))
+            || plat_key(PK_LEFT) || plat_key(PK_P2_LEFT);
+    int r = (g_pad.connected && (g_pad.buttons & (1u << PB_R1)))
+            || (g_pad2.connected && (g_pad2.buttons & (1u << PB_R1)))
+            || plat_key(PK_DBG_PAGE_NEXT)
+            || (g_pad.connected && (g_pad.right || g_pad.rx > 0))
+            || (g_pad2.connected && (g_pad2.right || g_pad2.rx > 0))
+            || plat_key(PK_RIGHT) || plat_key(PK_P2_RIGHT);
+    int now = l | r << 1, hit = now & ~was;
+
+    was = now;
+    return hit & 1 ? -1 : hit & 2 ? 1 : 0;
+}
+
+/* Port, not in the binary: the way out of the bios and the endings with
+ * the on-screen controls off -- circle of either pad or Backspace -- once
+ * a press. */
+int PortPagesExit(void)
+{
+    static int was;
+    int now = (g_pad.connected && (g_pad.buttons & (1u << PB_EAST)))
+              || (g_pad2.connected && (g_pad2.buttons & (1u << PB_EAST)))
+              || plat_key_backspace();
+    int hit = now && !was;
+
+    was = now;
+    return hit;
+}
+
+/* Port, not in the binary: START of either pad or the pause keys, once a
+ * press -- the select screen's PLAY. */
+int PortStartPress(void)
+{
+    static int was;
+    int now = (g_pad.connected && (g_pad.buttons & (1u << PB_START)))
+              || (g_pad2.connected && (g_pad2.buttons & (1u << PB_START)))
+              || plat_key(PK_PAUSE) || plat_key(PK_P2_PAUSE);
+    int hit = now && !was;
+
+    was = now;
+    return hit;
+}
+
+/* START's picture ("glyphs/....png") for the device in use: the pad's, or
+ * the pause key's. 0 when there is none. */
+int PortStartGlyph(char *out, int n)
+{
+    char tok[128], *a, *z;
+
+    if (pad_nav_device() == 1 && (g_pad.connected || g_pad2.connected)) {
+        const PLAT_PAD *p = g_pad.connected ? &g_pad : &g_pad2;
+        plat_pad_glyph(plat_pad_glyph_kind(p == &g_pad2, p->kind), PB_START,
+                       tok, sizeof tok);
+    } else
+        plat_key_glyph(PK_PAUSE, tok, sizeof tok);
+    a = strchr(tok, 1);
+    z = a ? strchr(a + 1, 1) : NULL;
+    if (!z)
+        return 0;
+    *z = 0;
+    snprintf(out, n, "glyphs/%s.png", a + 1);
+    return 1;
+}
+
+/* The picture for atlas value `value` (6..14, a button) for player p (0 or
+ * 1), as a file under "aditional textures/" in `out`; 0 when there is none. */
+int PortMoveGlyph(long value, int p, char *out, int n)
+{
+    /* the atlas's buttons: 6-button pad action and key, 5-button ones */
+    static const struct { int a6, k6, a5, k5; } m[9] = {
+        { 0, PK_HP, 7, PK_5_P },        /* 6  HP */
+        { 1, PK_LP, 7, PK_5_P },        /* 7  LP */
+        { 3, PK_HK, 10, PK_5_K },       /* 8  HK */
+        { 4, PK_LK, 10, PK_5_K },       /* 9  LK */
+        { 2, PK_BL, 9, PK_5_B },        /* 10 B  */
+        { 5, PK_RUN, 12, PK_5_R },      /* 11 R  */
+        { 6, PK_SPECIAL, 13, PK_SPECIAL },  /* 12 S */
+        { 4, PK_LK, 10, PK_5_K },       /* 13 K  */
+        { 1, PK_LP, 7, PK_5_P },        /* 14 P  */
+    };
+    const PLAT_PAD *pad = p ? &g_pad2 : &g_pad;
+    int six = (p ? Player2NumButtons : Player1NumButtons) == 6, i;
+    char tok[128], *a, *z;
+
+    if (value < 6 || value > 14 || n <= 0)
+        return 0;
+    i = (int)value - 6;
+    if (pad->connected) {
+        unsigned mask = *port_pad_action(p, six ? m[i].a6 : m[i].a5);
+        int pb;
+
+        for (pb = 0; pb < PB_COUNT && !(mask & (1u << pb)); pb++)
+            ;
+        if (pb == PB_COUNT)
+            return 0;
+        plat_pad_glyph(plat_pad_glyph_kind(p, pad->kind), pb, tok, sizeof tok);
+    } else {
+        int code = six ? m[i].k6 : m[i].k5;
+
+        if (p)                          /* player two's keys */
+            code = code == PK_SPECIAL ? PK_P2_SPECIAL
+                 : code >= PK_5_P && code <= PK_5_R ? PK_P2_5_P + (code - PK_5_P)
+                 : PK_P2_HP + (code - PK_HP);
+        plat_key_glyph(code, tok, sizeof tok);
+    }
+    a = strchr(tok, 1);
+    z = a ? strchr(a + 1, 1) : NULL;
+    if (!z)
+        return 0;
+    *z = 0;
+    snprintf(out, (size_t)n, "glyphs/%s.png", a + 1);
+    return 1;
 }
 
 /* A round is in play: past the intro, nobody down, not between rounds, no
@@ -1972,6 +2346,7 @@ void port_gfx_get(struct port_gfx *g)
     g->ui = g_ui_k > 1.5f;
     g->hidectl = PortHideControls;
     snprintf(g->aspect, sizeof g->aspect, "%s", g_cfg_aspect);
+    g->monitor = plat_monitor();
 }
 
 void port_gfx_set(const struct port_gfx *g, int display)
@@ -1987,6 +2362,7 @@ void port_gfx_set(const struct port_gfx *g, int display)
         g_cfg_borderless = g->mode == 1;
         g_cfg_w = g->w;
         g_cfg_h = g->h;
+        plat_monitor_select(g->monitor);
         plat_display(g->mode, g->w, g->h);
         if (g->mode)
             load_frame();
@@ -2073,6 +2449,8 @@ unsigned *port_pad_action(int player, int i)
         return player ? &g_p2pad_pause : &g_pad_pause;
     if (i == 15)
         return player ? &g_p2pad_moves : &g_pad_moves;
+    if (i == 16)
+        return player ? &g_p2pad_settings : &g_pad_settings;
     none = 0;
     return &none;
 }
@@ -2116,6 +2494,12 @@ int main(int argc, char **argv)
      * out -- the launcher's CONTROLS > GAMEPAD list comes from here */
     if (argc > 1 && strcmp(argv[1], "--list-pads") == 0) {
         plat_pad_list();
+        return 0;
+    }
+    /* --list-monitors: the monitors, "index<TAB>name" a line (the launcher's
+     * GRAPHICS > MONITOR) */
+    if (argc > 1 && strcmp(argv[1], "--list-monitors") == 0) {
+        plat_monitor_list();
         return 0;
     }
 #ifdef _WIN32
@@ -2166,9 +2550,10 @@ int main(int argc, char **argv)
         g_cfg_skip_intro = 1;
     if (getenv("UMK3_HIDE_CONTROLS"))   /* 0 1, over hide_controls= */
         PortHideControls = atoi(getenv("UMK3_HIDE_CONTROLS")) != 0;
-    if (getenv("UMK3_ASPECT"))          /* 4:3 16:9 21:9, over aspect= */
+    if (getenv("UMK3_ASPECT")) {        /* 4:3 16:9 21:9, over aspect= */
         g_aspect = parse_aspect(getenv("UMK3_ASPECT"));
         snprintf(g_cfg_aspect, sizeof g_cfg_aspect, "%s", getenv("UMK3_ASPECT"));
+    }
     if (getenv("UMK3_UI"))              /* 0 1, over ui_size= */
         g_ui_k = atoi(getenv("UMK3_UI")) ? 2.0f : 1.0f;
     if (getenv("UMK3_TEXQ")) {          /* 0 1 2, over texture_quality= */
@@ -2315,8 +2700,11 @@ int main(int argc, char **argv)
                 set_menu_mouse(tx / g_virt_w, ty / g_virt_h,
                                plat_mouse(&mx, &my) && g_ntaps == 0);
 
-            if (down && !was_down)
+            if (down && !was_down) {
                 lime_touch_began(tx, ty);
+                g_moves_who = 0;        /* a click: the moves list shows both */
+                pad_nav_hide();         /* and the pad's highlight goes */
+            }
             else if (down && (tx != prev_tx || ty != prev_ty))
                 lime_touch_moved(tx, ty, prev_tx, prev_ty);
             else if (!down && was_down)
@@ -2409,6 +2797,7 @@ int main(int argc, char **argv)
                         q++;
                 }
             }
+            scripted_pad(&g_pad);       /* UMK3_PADS, a test's pad */
             /* a script ignores the pad too, unless UMK3_LOG_PAD asks to
              * watch it */
             if (!g_keys_off || getenv("UMK3_LOG_PAD")) {
@@ -2417,6 +2806,7 @@ int main(int argc, char **argv)
 
                 plat_pad_read(&g_pad);
                 plat_pad2_read(&g_pad2);
+                scripted_pad(&g_pad);
                 if (g_pad.connected != was_on)
                     printf(g_pad.connected ? "pad: %s\n" : "pad: none\n",
                            g_pad.name);
@@ -2427,9 +2817,14 @@ int main(int argc, char **argv)
                 was_b = g_pad.buttons;
             }
             {
-                /* Esc (key_settings=): the settings menu, port */
+                /* Esc (key_settings=) or either pad's pad_settings=
+                 * button: the settings menu, port */
                 static int was_esc;
-                int esc = plat_key(PK_SETTINGS);
+                int esc = plat_key(PK_SETTINGS)
+                          || (g_pad_settings && (g_pad.buttons & g_pad_settings)
+                                                == g_pad_settings)
+                          || (g_p2pad_settings && (g_pad2.buttons & g_p2pad_settings)
+                                                  == g_p2pad_settings);
                 if (esc && !was_esc && !set_menu_is_open()
                     && !dbg_menu_is_open())
                     set_menu_toggle();
@@ -2499,6 +2894,7 @@ int main(int argc, char **argv)
             lime_menu_advance_clock(1.0 / 60.0);
             keyboard_buttons();
             hud_keys();
+            pad_skip();
             if (g_cfg_debug_keys && dbg_keys_on()) {
                 debug_keys();
                 screen_keys();
@@ -2517,7 +2913,86 @@ int main(int argc, char **argv)
                 StaticMeshAmbient[1] = 0.65f * 255.0f;
                 StaticMeshAmbient[2] = 0.7f * 255.0f;
             }
-            GameCodeMain();
+            /* the pad drives the front end and the pause menu (pad_nav.c) */
+            pad_nav_begin(!set_menu_is_open() && !dbg_menu_is_open()
+                          && (CurrentTask == 3 || (CurrentTask == 6 && GamePaused)));
+            /* the pad's highlight lights its button as a resting finger
+             * does: the touch held there for this frame, neither a press
+             * (the last place is the same) nor a release, and lifted again
+             * after it. The frame after the highlight goes, the finger
+             * rests off every button, so none takes its going as a release.
+             * Only while no real finger is down. */
+            {
+                static int hovered;
+                float hx, hy;
+                int idle = limeTouchScreenX[0] == -1.0f && limeLastTouchScreenX[0] == -1.0f;
+                int on = idle && pad_nav_hover(&hx, &hy);
+
+                if (!on && hovered && idle) {
+                    hx = hy = -10000.0f;
+                    on = 1;
+                }
+                hovered = on && hx > -10000.0f;
+                nav_stick();
+                PortNavHover = on;
+                if (on) {
+                    limeTouchScreenX[0] = limeLastTouchScreenX[0] = hx;
+                    limeTouchScreenY[0] = limeLastTouchScreenY[0] = hy;
+                }
+                GameCodeMain();
+                PortPadPalette[0] = PortPadPalette[1] = 0;  /* off the select screen */
+                if (on) {
+                    limeTouchScreenX[0] = limeLastTouchScreenX[0] = -1.0f;
+                    limeTouchScreenY[0] = limeLastTouchScreenY[0] = -1.0f;
+                }
+            }
+            {
+                extern int limeScreenHeight;
+                float tx, ty, fx, fy, fw, fh;
+                struct nav_keys k1, k2;
+                int who;
+
+                /* the keyboard too: the movement keys, Enter, Backspace */
+                k1.dir = plat_key(PK_UP) ? 1 : plat_key(PK_DOWN) ? 2
+                       : plat_key(PK_LEFT) ? 3 : plat_key(PK_RIGHT) ? 4 : 0;
+                k1.ok = plat_key(PK_OK);
+                k1.back = plat_key_backspace();
+                k2.dir = plat_key(PK_P2_UP) ? 1 : plat_key(PK_P2_DOWN) ? 2
+                       : plat_key(PK_P2_LEFT) ? 3 : plat_key(PK_P2_RIGHT) ? 4 : 0;
+                /* player two's keys have no Enter or Backspace: their
+                 * punches accept and their block goes back */
+                k2.ok = plat_key(PK_P2_OK) || plat_key(PK_P2_HP)
+                        || plat_key(PK_P2_LP) || plat_key(PK_P2_5_P);
+                k2.back = plat_key(PK_P2_BL) || plat_key(PK_P2_5_B);
+                /* the moves list: left / right turn its pages
+                 * (PortMovesTurn), not the highlight */
+                PLAT_PAD q1 = g_pad, q2 = g_pad2;
+
+                if (CurrentTask == 6 && GamePaused == 2) {
+                    q1.left = q1.right = q2.left = q2.right = 0;
+                    q1.up = q1.down = q2.up = q2.down = 0;
+                    k1.dir = k2.dir = 0;
+                }
+                if (pad_nav_end(&q1, &q2, &k1, &k2, &tx, &ty, &who)
+                    && g_ktap_left == 0) {
+                    g_ktap_x = tx;      /* a finger's tap, there */
+                    g_ktap_y = ty;
+                    lime_touch_began(tx, ty);
+                    g_ktap_left = 3;
+                    g_ktap_nav = who;
+                    PortNavPick = who;  /* whose choice, on the VS select */
+                } else if (g_ktap_nav && g_ktap_left > 0 && pad_nav_held(g_ktap_nav)) {
+                    g_ktap_left = 2;    /* held: the finger stays down */
+                } else if (g_ktap_left == 0) {
+                    g_ktap_nav = 0;     /* let go: up within two frames */
+                    PortNavPick = 0;
+                }
+                if (pad_nav_focus(1, &fx, &fy, &fw, &fh))
+                    ui_nav_frame(fx, fy, fw, fh, (float)limeScreenHeight, 0);
+                if (pad_nav_focus(2, &fx, &fy, &fw, &fh))
+                    ui_nav_frame(fx, fy, fw, fh, (float)limeScreenHeight, 1);
+                nav_hints();
+            }
             /* skip_intro=1 (the launcher's box, or UMK3_SKIP_INTRO): once
              * Task_LoadSplashScreen's first frame has loaded both logos,
              * jump its counter to 491, the frame that deletes them and

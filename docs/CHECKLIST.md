@@ -126,6 +126,32 @@ only once Mary has checked it in game. What is known so far is under each one.
 - [ ] **Player profile** in the launcher and the game, badge on both.
 - [x] **Continue screens on 16:9 and 21:9** with Mary's pictures.
 
+## Pad and keyboard in the menus (0.1.3 beta)
+
+- [x] **The game's menus with the pad or the keyboard**: main menu, pages,
+  roster, tower, pause, moves list; the option lights yellow, cross /
+  Enter on release, circle / Backspace back. Checked by Mary with one pad.
+- [ ] **Both players at once on the VS select** with two pads, and player
+  two's keys (keypad 1 / / *): only one pad was at hand.
+- [x] **Right stick turns the palette** (XInput). DirectInput's axis for a
+  PlayStation pad without Steam is a guess.
+- [x] **Button setup in the game's frame** with the on-screen controls off
+  (Options, pause menu); KEYBOARD and GAMEPAD on pages of their own.
+- [x] **The launcher closes when the game opens.**
+- [x] **Moves list:** a BACK in the left corner to the previous page (on-screen
+  controls); with the pad or keys L1 / R1, left / right, Q / E, A / D turn
+  the pages, select or circle close it, no NEXT. Checked by Mary.
+- [x] **Continue screen:** circle / Backspace is GAME OVER. Checked by Mary.
+- [x] **Pages without buttons** (bios, endings, help, about, achievements,
+  stats) with the on-screen controls off: L1 / R1 and circle. Checked by Mary.
+- [x] **START is OK / PLAY** on the select screens. Checked by Mary.
+- [x] **Lost treasures** with the pad, as the roster; no BACK after Arcade.
+  Checked by Mary.
+- [x] **Shadows** under the key and button pictures and the hints' words.
+- [x] **TRAINING** (PLAY, under 2 PLAYER): both fighters picked, the bars
+  fill again at zero, the clock stops, the rival stands still. Checked by
+  Mary.
+
 ## Fight
 
 - [ ] **Models mixed after a round ends** (Ermac against Sub-Zero, round 2,

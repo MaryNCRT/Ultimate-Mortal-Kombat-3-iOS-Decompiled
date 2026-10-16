@@ -9,27 +9,12 @@
 </head>
 <body>
 
-<!-- The backdrop: a nebula, the big segmented ring and the title, after the
-     arcade-collection menu of the console release. Drawn here; no game art. -->
+<!-- The backdrop, after the console release's arcade menu: red and
+     purple light, a blue band, circuit traces, and two rings of marbled
+     segments with glowing white rims (built in renderer.js, buildRing).
+     Drawn here; no game art. -->
 <div id="space" aria-hidden="true"></div>
-<svg id="ring" viewBox="0 0 1000 1000" aria-hidden="true">
-  <defs>
-    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#9fb3c8"/>
-      <stop offset=".45" stop-color="#2a3442"/>
-      <stop offset="1" stop-color="#0c1016"/>
-    </linearGradient>
-    <radialGradient id="hole" cx=".5" cy=".5" r=".5">
-      <stop offset=".72" stop-color="#05070c" stop-opacity=".0"/>
-      <stop offset="1" stop-color="#05070c" stop-opacity=".85"/>
-    </radialGradient>
-  </defs>
-  <circle cx="500" cy="500" r="468" class="seg seg-outer"/>
-  <circle cx="500" cy="500" r="430" class="seg seg-blue"/>
-  <circle cx="500" cy="500" r="392" class="seg seg-red"/>
-  <circle cx="500" cy="500" r="356" class="seg seg-inner"/>
-  <circle cx="500" cy="500" r="340" fill="url(#hole)"/>
-</svg>
+<svg id="ring" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
 
 <header id="titlebar">
   <div class="drag"></div>
@@ -49,10 +34,11 @@
   <img id="logoImg" class="hidden" alt="Ultimate Mortal Kombat 3">
   <div class="l-ultimate">ULTIMATE</div>
   <div class="l-mk">MORTAL <span class="l-3">3</span> KOMBAT</div>
-  <div class="l-sub"><span data-t="ttlSub">PORT DE PC</span> &middot; <span id="ttl-ver">0.1.0 alpha</span></div>
+  <div class="l-sub"><span data-t="ttlSub">PORT DE PC</span> &middot; <span id="ttl-ver"></span></div>
 </div>
 
 <nav id="menu">
+  <div id="menuSel" aria-hidden="true"><i class="orb"></i></div>
   <button class="mi active" data-sec="build"><i class="orb"></i><span data-t="mBuild">COMPILAR TU .IPA</span></button>
   <button class="mi" data-sec="video"><i class="orb"></i><span data-t="mVideo">GRÁFICOS</span></button>
   <button class="mi" data-sec="controls"><i class="orb"></i><span data-t="mControls">CONTROLES</span></button>
@@ -81,6 +67,7 @@
       </div>
     </div>
     <pre id="console" class="hidden"></pre>
+    <h3 data-t="gUpdates">ACTUALIZACIONES</h3>
     <div class="updrow">
       <div id="updstate" class="state"></div>
       <button id="updcheck" class="btn" data-t="updCheck">BUSCAR ACTUALIZACIONES</button>
@@ -96,47 +83,76 @@
 
   <!-- 2. Graphics -->
   <section class="sec" data-sec="video">
-    <h2 data-t="hVideo">GRÁFICOS</h2>
-    <div class="fields">
-      <div class="field">
-        <label class="lbl" for="res" data-t="res">RESOLUCIÓN DE VENTANA</label>
-        <select id="res" class="sel"></select>
+    <div class="tabs">
+      <button class="tab" data-g="video" data-t="gVideo">VIDEO</button>
+      <button class="tab" data-g="tex" data-t="gTex">TEXTURAS</button>
+      <button class="tab" data-g="ui" data-t="gUi">INTERFAZ</button>
+    </div>
+    <!-- VIDEO: the window and what draws into it -->
+    <div class="gpage" data-g="video">
+      <h2 data-t="hGVideo">VIDEO</h2>
+      <h3 data-t="gScreen">PANTALLA</h3>
+      <div class="fields">
+        <div class="field">
+          <label class="lbl" for="mode" data-t="mode">MODO DE PANTALLA</label>
+          <select id="mode" class="sel"></select>
+        </div>
+        <div class="field">
+          <label class="lbl" for="monitor" data-t="monitorLbl">MONITOR</label>
+          <select id="monitor" class="sel"></select>
+        </div>
+        <div class="field">
+          <label class="lbl" for="res" data-t="res">RESOLUCIÓN DE VENTANA</label>
+          <select id="res" class="sel"></select>
+        </div>
       </div>
-      <div class="field">
-        <label class="lbl" for="rres" data-t="rres">RESOLUCIÓN 3D</label>
-        <select id="rres" class="sel"></select>
-      </div>
-      <div class="field">
-        <label class="lbl" for="mode" data-t="mode">MODO DE PANTALLA</label>
-        <select id="mode" class="sel"></select>
-      </div>
-      <div class="field">
-        <label class="lbl" for="aspect" data-t="aspect">RELACIÓN DE ASPECTO</label>
-        <select id="aspect" class="sel"></select>
-      </div>
-      <div class="field">
-        <label class="lbl" for="aa" data-t="aa">ANTIALIASING</label>
-        <select id="aa" class="sel"></select>
-      </div>
-      <div class="field">
-        <label class="lbl" for="texq" data-t="texq">CALIDAD DE TEXTURAS</label>
-        <select id="texq" class="sel"></select>
-      </div>
-      <div class="field">
-        <label class="lbl" for="uisize" data-t="uisize">TAMAÑO DE LA INTERFAZ</label>
-        <select id="uisize" class="sel"></select>
-      </div>
-      <label class="chk"><input type="checkbox" id="hidectl"><span data-t="hidectl">OCULTAR LOS CONTROLES EN PANTALLA (JOYSTICK Y BOTONES)</span></label>
-      <div class="field wide">
-        <label class="lbl" data-t="frame">MARCO (PANTALLA COMPLETA)</label>
-        <div class="row">
-          <input id="marco" class="edt" readonly spellcheck="false">
-          <button id="marcoBtn" class="btn" data-t="browse">BUSCAR…</button>
-          <button id="marcoClr" class="btn" data-t="clear">QUITAR</button>
+      <h3 data-t="gImage">IMAGEN</h3>
+      <div class="fields">
+        <div class="field">
+          <label class="lbl" for="rres" data-t="rres">RESOLUCIÓN 3D</label>
+          <select id="rres" class="sel"></select>
+        </div>
+        <div class="field">
+          <label class="lbl" for="aa" data-t="aa">ANTIALIASING</label>
+          <select id="aa" class="sel"></select>
+        </div>
+        <div class="field wide">
+          <label class="lbl" data-t="frame">MARCO (PANTALLA COMPLETA)</label>
+          <div class="row">
+            <input id="marco" class="edt" readonly spellcheck="false">
+            <button id="marcoBtn" class="btn" data-t="browse">BUSCAR…</button>
+            <button id="marcoClr" class="btn" data-t="clear">QUITAR</button>
+          </div>
         </div>
       </div>
     </div>
-    <p class="note" data-t="wsNote">PANTALLA ANCHA (16:9): EN DESARROLLO.</p>
+    <!-- TEXTURES -->
+    <div class="gpage hidden" data-g="tex">
+      <h2 data-t="hGTex">TEXTURAS</h2>
+      <div class="fields">
+        <div class="field">
+          <label class="lbl" for="texq" data-t="texq">CALIDAD DE TEXTURAS</label>
+          <select id="texq" class="sel"></select>
+        </div>
+      </div>
+      <p class="note" data-t="texNote"></p>
+    </div>
+    <!-- INTERFACE: the shape of the screen and what is drawn over the game -->
+    <div class="gpage hidden" data-g="ui">
+      <h2 data-t="hGUi">INTERFAZ</h2>
+      <div class="fields">
+        <div class="field">
+          <label class="lbl" for="aspect" data-t="aspect">RELACIÓN DE ASPECTO</label>
+          <select id="aspect" class="sel"></select>
+        </div>
+        <div class="field">
+          <label class="lbl" for="uisize" data-t="uisize">TAMAÑO DE LA INTERFAZ</label>
+          <select id="uisize" class="sel"></select>
+        </div>
+        <label class="chk wide"><input type="checkbox" id="hidectl"><span data-t="hidectl">OCULTAR LOS CONTROLES EN PANTALLA (JOYSTICK Y BOTONES)</span></label>
+      </div>
+      <p class="note" data-t="wsNote"></p>
+    </div>
   </section>
 
   <!-- 3. Controls -->
@@ -177,6 +193,10 @@
         <select id="pad" class="sel"></select>
         <span id="padSeen" class="hint"></span>
       </div>
+      <label class="lbl" for="padIcons" data-t="padIconsLbl">ICONOS DE BOTONES</label>
+      <div class="row">
+        <select id="padIcons" class="sel"></select>
+      </div>
     </div>
     <div id="padMap" class="kg hidden"><h3 data-t="gPad">BOTONES DEL MANDO</h3><div id="k-pad" class="keys padkeys"></div></div>
     <p class="note" data-t="padNote"></p>
@@ -190,9 +210,7 @@
     <div class="field devfield">
       <label class="lbl" data-t="padDbgLbl">MANDO: ABRIR EL MENÚ DEBUG (PULSAR A LA VEZ)</label>
       <div class="row">
-        <select id="padDbgA" class="sel"></select>
-        <span>+</span>
-        <select id="padDbgB" class="sel"></select>
+        <span id="padDbgSlots" class="padsels"></span>
       </div>
     </div>
     <p class="note" data-t="dbgKeysNote"></p>
@@ -207,36 +225,38 @@
     <div class="prof">
       <canvas id="profIcon" class="proficon" width="192" height="192"></canvas>
       <div class="fields">
-        <div class="field">
+        <div class="field wide">
           <label class="lbl" for="profName" data-t="profName">NOMBRE DE JUGADOR</label>
           <input id="profName" class="edt" maxlength="24" spellcheck="false">
         </div>
-        <div class="field">
+        <div class="field wide">
           <label class="lbl" data-t="profId">ID DE JUGADOR</label>
           <div id="profId" class="idcode"></div>
         </div>
-        <div class="field wide">
-          <label class="lbl" data-t="profColor">COLOR DE FONDO</label>
-          <div class="row">
-            <div id="profSwatches" class="swatches"></div>
-            <input id="profColor" type="color" class="colorpick">
-          </div>
-          <label class="lbl" data-t="profShadeLbl">DEGRADADO</label>
-          <span id="profShade" class="tabs sub">
-            <button class="tab" data-shade="0" data-t="profLight">CLARO (DESDE BLANCO)</button>
-            <button class="tab" data-shade="1" data-t="profDark">OSCURO (HACIA NEGRO)</button>
-          </span>
-        </div>
-        <div class="field wide">
-          <label class="lbl" data-t="profIconLbl">ICONO</label>
-          <div id="profIcons" class="icongrid"></div>
-        </div>
-        <div class="field wide">
-          <div class="row end">
-            <button id="profReset" class="btn" data-t="profReset">REINICIAR DATOS</button>
-          </div>
-        </div>
       </div>
+    </div>
+    <h3 data-t="profIconLbl">ICONO</h3>
+    <div id="profIcons" class="icongrid"></div>
+    <h3 data-t="profColor">COLOR DE FONDO</h3>
+    <div class="row top">
+      <div id="profSwatches" class="palette"></div>
+      <input id="profColor" type="color" class="colorpick" title="+">
+    </div>
+    <h3 data-t="profShadeLbl">DEGRADADO</h3>
+    <span id="profShade" class="tabs sub">
+      <button class="tab" data-shade="L" data-t="profLight">CLARO</button>
+      <button class="tab" data-shade="D" data-t="profDark">OSCURO</button>
+      <button class="tab" data-shade="C" data-t="profCustom">PERSONALIZADO</button>
+    </span>
+    <div id="profGrad2">
+      <label class="lbl" id="profColor2Lbl">HACIA EL COLOR</label>
+      <div class="row top">
+        <div id="profSwatches2" class="palette"></div>
+        <input id="profColor2" type="color" class="colorpick" title="+">
+      </div>
+    </div>
+    <div class="row end">
+      <button id="profReset" class="btn" data-t="profReset">REINICIAR DATOS</button>
     </div>
   </section>
 
@@ -257,9 +277,11 @@
 <div id="desc"></div>
 
 <footer id="cmdbar">
-  <span class="pad a">&#9166;</span><span data-t="cSelect">SELECCIONAR</span>
-  <span class="pad b">ESC</span><span data-t="cBack">ATRÁS</span>
-  <span class="pad y">F11</span><span data-t="cFull">PANTALLA COMPLETA</span>
+  <span class="cmds">
+    <span id="cgA" class="cg"></span><span data-t="cSelect">SELECCIONAR</span>
+    <span id="cgB" class="cg"></span><span data-t="cBack">ATRÁS</span>
+    <span id="cgF" class="cg"></span><span id="cgFl" data-t="cFull">PANTALLA COMPLETA</span>
+  </span>
   <span id="status"></span>
 </footer>
 

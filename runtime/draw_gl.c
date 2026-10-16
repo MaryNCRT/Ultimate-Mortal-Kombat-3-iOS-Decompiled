@@ -49,6 +49,7 @@
 #include "platform/gl.h"
 #include "platform/platform.h"
 #include "lime/png.h"
+#include <stddef.h>
 #include "lime/pvr.h"
 #include "lime/par.h"
 
@@ -574,6 +575,84 @@ TEXTURE *limeLoadTexture(const char *path, int a, int b)
     return &e->tex;
 }
 
+/* Port, not in the binary: a soft shadow under a key or button picture
+ * (glyphs/), so it does not melt into the background. In its own canvas:
+ * the picture a little smaller and up, the shadow below and right of it,
+ * blurred. The game's own textures are left alone. */
+void lime_glyph_shadow(uint8_t *px, int w, int h)
+{
+    const float s = 0.86f;
+    int cw = (int)(w * s), ch = (int)(h * s);
+    int ox = (w - cw) / 2 - w / 50, oy = (h - ch) / 2 - h / 30;
+    int dx = w * 3 / 100 + 1, dy = h * 5 / 100 + 1, r = w * 3 / 100 + 1;
+    float *src = (float *)calloc((size_t)w * h * 4, sizeof(float));
+    float *sa = (float *)calloc((size_t)w * h, sizeof(float));
+    float *tb = (float *)calloc((size_t)w * h, sizeof(float));
+    int x, y, i, pass;
+
+    if (!src || !sa || !tb || cw <= 0 || ch <= 0) {
+        free(src); free(sa); free(tb);
+        return;
+    }
+    /* The picture scaled into place, premultiplied, bilinear. */
+    for (y = 0; y < ch; y++)
+        for (x = 0; x < cw; x++) {
+            float fx = (x + 0.5f) * w / cw - 0.5f, fy = (y + 0.5f) * h / ch - 0.5f;
+            int x0 = (int)fx, y0 = (int)fy, X = x + ox, Y = y + oy, c;
+            float ax = fx - x0, ay = fy - y0, acc[4] = { 0, 0, 0, 0 };
+
+            if (fx < 0) { x0 = 0; ax = 0; }
+            if (fy < 0) { y0 = 0; ay = 0; }
+            if (X < 0 || X >= w || Y < 0 || Y >= h)
+                continue;
+            for (i = 0; i < 4; i++) {
+                int u = x0 + (i & 1), v = y0 + (i >> 1);
+                float wt = ((i & 1) ? ax : 1 - ax) * ((i >> 1) ? ay : 1 - ay);
+                const uint8_t *p;
+                if (u >= w) u = w - 1;
+                if (v >= h) v = h - 1;
+                p = px + ((size_t)v * w + u) * 4;
+                for (c = 0; c < 3; c++)
+                    acc[c] += wt * p[c] * p[3] / (255.0f * 255.0f);
+                acc[3] += wt * p[3] / 255.0f;
+            }
+            memcpy(src + ((size_t)Y * w + X) * 4, acc, sizeof acc);
+        }
+    /* Its alpha moved down and right, then a box blur three times. */
+    for (y = 0; y < h; y++)
+        for (x = 0; x < w; x++) {
+            int X = x - dx, Y = y - dy;
+            sa[y * w + x] = X >= 0 && Y >= 0 ? src[((size_t)Y * w + X) * 4 + 3] : 0;
+        }
+    for (pass = 0; pass < 3; pass++) {
+        for (y = 0; y < h; y++)
+            for (x = 0; x < w; x++) {
+                float t = 0;
+                for (i = -r; i <= r; i++)
+                    t += (x + i >= 0 && x + i < w) ? sa[y * w + x + i] : 0;
+                tb[y * w + x] = t / (2 * r + 1);
+            }
+        for (y = 0; y < h; y++)
+            for (x = 0; x < w; x++) {
+                float t = 0;
+                for (i = -r; i <= r; i++)
+                    t += (y + i >= 0 && y + i < h) ? tb[(y + i) * w + x] : 0;
+                sa[y * w + x] = t / (2 * r + 1);
+            }
+    }
+    /* The picture over a black shadow. */
+    for (i = 0; i < w * h; i++) {
+        const float *p = src + (size_t)i * 4;
+        float sh = sa[i] * 0.8f * (1 - p[3]), a = p[3] + sh;
+        uint8_t *o = px + (size_t)i * 4;
+        o[0] = (uint8_t)(a > 0 ? p[0] / a * 255.0f + 0.5f : 0);
+        o[1] = (uint8_t)(a > 0 ? p[1] / a * 255.0f + 0.5f : 0);
+        o[2] = (uint8_t)(a > 0 ? p[2] / a * 255.0f + 0.5f : 0);
+        o[3] = (uint8_t)(a * 255.0f + 0.5f);
+    }
+    free(src); free(sa); free(tb);
+}
+
 /* Port, not in the binary: a picture the player added for the wide screens
  * (FrontEnd.c, the continue screens), from "aditional textures" beside the
  * game's res folder. Loaded once and kept, as the game's own. NULL when it
@@ -594,6 +673,8 @@ TEXTURE *lime_load_extra_texture(const char *file)
     memset(&img, 0, sizeof(img));
     if (!try_one(full, &img))
         return NULL;
+    if (strncmp(file, "glyphs/", 7) == 0)
+        lime_glyph_shadow(img.rgba, img.width, img.height);
     glGenTextures(1, &name);
     tex_upload(name, &img);
     free(img.rgba);
@@ -610,6 +691,15 @@ TEXTURE *lime_load_extra_texture(const char *file)
     g_textures = e;
     printf("extra texture: %s (%dx%d)\n", full, img.width, img.height);
     return &e->tex;
+}
+
+/* A texture lime_load_extra_texture gave: its picture's size. */
+void lime_extra_texture_size(const TEXTURE *t, int *w, int *h)
+{
+    const TexEntry *e = (const TexEntry *)((const char *)t - offsetof(TexEntry, tex));
+
+    *w = t ? e->w : 0;
+    *h = t ? e->h : 0;
 }
 
 /* Port, not in the binary: the settings menu's TEXTURES (settings_menu.c).

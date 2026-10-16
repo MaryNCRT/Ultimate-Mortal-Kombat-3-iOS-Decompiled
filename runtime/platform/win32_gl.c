@@ -20,6 +20,7 @@
 
 static HWND      g_wnd;
 static DEVMODEA  g_mode;         /* see plat_fullscreen_exclusive */
+static char      g_mode_dev[32]; /* its monitor's device, "" the main one */
 static HDC       g_dc;
 static HGLRC     g_rc;
 static bool      g_quit;
@@ -75,10 +76,11 @@ static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         g_focused = LOWORD(wp) != WA_INACTIVE;
         if (g_mode.dmSize) {            /* exclusive fullscreen: see g_mode */
             if (!g_focused) {
-                ChangeDisplaySettingsA(NULL, 0);
+                ChangeDisplaySettingsExA(g_mode_dev[0] ? g_mode_dev : NULL, NULL, NULL, 0, NULL);
                 ShowWindow(h, SW_MINIMIZE);
             } else {
-                ChangeDisplaySettingsA(&g_mode, CDS_FULLSCREEN);
+                ChangeDisplaySettingsExA(g_mode_dev[0] ? g_mode_dev : NULL, &g_mode, NULL,
+                                         CDS_FULLSCREEN, NULL);
                 ShowWindow(h, SW_RESTORE);
                 plat_fullscreen();
             }
@@ -96,6 +98,85 @@ static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     default:
         return DefWindowProcA(h, msg, wp, lp);
     }
+}
+
+/* ------------------------------------------------------------ monitors */
+
+static int  g_monitor;                  /* monitor=: 0 the window's */
+
+struct mon_find { int want, at; HMONITOR found; };
+
+static BOOL CALLBACK mon_enum(HMONITOR m, HDC dc, LPRECT r, LPARAM lp)
+{
+    struct mon_find *f = (struct mon_find *)lp;
+
+    (void)dc;
+    (void)r;
+    if (++f->at == f->want)
+        f->found = m;
+    return TRUE;
+}
+
+/* Monitor i (1..n), or NULL. */
+static HMONITOR mon_nth(int i)
+{
+    struct mon_find f = { i, 0, NULL };
+
+    EnumDisplayMonitors(NULL, NULL, mon_enum, (LPARAM)&f);
+    return f.found;
+}
+
+int plat_monitor_count(void)
+{
+    struct mon_find f = { -1, 0, NULL };
+
+    EnumDisplayMonitors(NULL, NULL, mon_enum, (LPARAM)&f);
+    return f.at;
+}
+
+void plat_monitor_name(int i, char *out, int n)
+{
+    HMONITOR m = mon_nth(i);
+    MONITORINFOEXA mi;
+
+    if (n <= 0)
+        return;
+    mi.cbSize = sizeof mi;
+    if (!m || !GetMonitorInfoA(m, (MONITORINFO *)&mi)) {
+        snprintf(out, (size_t)n, "%d", i);
+        return;
+    }
+    snprintf(out, (size_t)n, "%d: %ldx%ld%s", i,
+             mi.rcMonitor.right - mi.rcMonitor.left,
+             mi.rcMonitor.bottom - mi.rcMonitor.top,
+             (mi.dwFlags & MONITORINFOF_PRIMARY) ? " *" : "");
+}
+
+void plat_monitor_list(void)
+{
+    int i, n = plat_monitor_count();
+    char name[64];
+
+    for (i = 1; i <= n; i++) {
+        plat_monitor_name(i, name, sizeof name);
+        printf("%d\t%s\n", i, name);
+    }
+}
+
+void plat_monitor_select(int i) { g_monitor = i >= 0 ? i : 0; }
+int  plat_monitor(void) { return g_monitor; }
+
+/* Where the game goes: the chosen monitor, else the window's (the main
+ * one before there is a window). */
+static HMONITOR mon_target(void)
+{
+    HMONITOR m = g_monitor ? mon_nth(g_monitor) : NULL;
+    POINT o = { 0, 0 };
+
+    if (m)
+        return m;
+    return g_wnd ? MonitorFromWindow(g_wnd, MONITOR_DEFAULTTOPRIMARY)
+                 : MonitorFromPoint(o, MONITOR_DEFAULTTOPRIMARY);
 }
 
 bool plat_open(const char *title, int width, int height)
@@ -118,19 +199,28 @@ bool plat_open(const char *title, int width, int height)
         /* born borderless and covering the monitor: never shown as a
          * window first (see plat_fullscreen for the extra row) */
         RECT m;
-        POINT o = { 0, 0 };
         MONITORINFO mi;
 
         mi.cbSize = sizeof mi;
-        GetMonitorInfoA(MonitorFromPoint(o, MONITOR_DEFAULTTOPRIMARY), &mi);
+        GetMonitorInfoA(mon_target(), &mi);
         m = mi.rcMonitor;
         g_wnd = CreateWindowA("LimeWindow", title, WS_POPUP,
                               m.left, m.top, m.right - m.left,
                               m.bottom - m.top + 1, NULL, NULL, inst, NULL);
     } else {
+        /* centred on the chosen monitor; Windows' own place without one */
+        int x = CW_USEDEFAULT, y = CW_USEDEFAULT;
+        MONITORINFO mi;
+
+        mi.cbSize = sizeof mi;
+        if (g_monitor && GetMonitorInfoA(mon_target(), &mi)) {
+            x = mi.rcWork.left + (mi.rcWork.right - mi.rcWork.left - (r.right - r.left)) / 2;
+            y = mi.rcWork.top + (mi.rcWork.bottom - mi.rcWork.top - (r.bottom - r.top)) / 2;
+            if (x < mi.rcWork.left) x = mi.rcWork.left;
+            if (y < mi.rcWork.top) y = mi.rcWork.top;
+        }
         g_wnd = CreateWindowA("LimeWindow", title, WS_OVERLAPPEDWINDOW,
-                              CW_USEDEFAULT, CW_USEDEFAULT,
-                              r.right - r.left, r.bottom - r.top,
+                              x, y, r.right - r.left, r.bottom - r.top,
                               NULL, NULL, inst, NULL);
     }
     if (!g_wnd) return false;
@@ -172,7 +262,7 @@ void plat_fullscreen(void)
     MONITORINFO mi;
 
     mi.cbSize = sizeof mi;
-    if (!GetMonitorInfoA(MonitorFromWindow(g_wnd, MONITOR_DEFAULTTOPRIMARY), &mi))
+    if (!GetMonitorInfoA(mon_target(), &mi))
         return;
     SetWindowLongA(g_wnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
     SetWindowPos(g_wnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top,
@@ -188,14 +278,20 @@ void plat_fullscreen(void)
 void plat_fullscreen_exclusive(void)
 {
     RECT r;
+    MONITORINFOEXA mi;
 
+    mi.cbSize = sizeof mi;
+    g_mode_dev[0] = 0;
+    if (GetMonitorInfoA(mon_target(), (MONITORINFO *)&mi))
+        snprintf(g_mode_dev, sizeof g_mode_dev, "%s", mi.szDevice);
     GetClientRect(g_wnd, &r);
     ZeroMemory(&g_mode, sizeof g_mode);
     g_mode.dmSize       = sizeof g_mode;
     g_mode.dmPelsWidth  = (DWORD)(r.right - r.left);
     g_mode.dmPelsHeight = (DWORD)(r.bottom - r.top);
     g_mode.dmFields     = DM_PELSWIDTH | DM_PELSHEIGHT;
-    if (ChangeDisplaySettingsA(&g_mode, CDS_FULLSCREEN) != DISP_CHANGE_SUCCESSFUL) {
+    if (ChangeDisplaySettingsExA(g_mode_dev[0] ? g_mode_dev : NULL, &g_mode, NULL,
+                                 CDS_FULLSCREEN, NULL) != DISP_CHANGE_SUCCESSFUL) {
         g_mode.dmSize = 0;
         plat_fullscreen();          /* no such mode: borderless instead */
         return;
@@ -206,7 +302,7 @@ void plat_fullscreen_exclusive(void)
 void plat_display(int mode, int w, int h)
 {
     if (g_mode.dmSize) {                /* out of exclusive fullscreen */
-        ChangeDisplaySettingsA(NULL, 0);
+        ChangeDisplaySettingsExA(g_mode_dev[0] ? g_mode_dev : NULL, NULL, NULL, 0, NULL);
         g_mode.dmSize = 0;
     }
     if (mode == 1) {
@@ -214,8 +310,16 @@ void plat_display(int mode, int w, int h)
         return;
     }
     if (mode == 2) {
+        MONITORINFO mi;
+        int x = 0, y = 0;
+
+        mi.cbSize = sizeof mi;
+        if (GetMonitorInfoA(mon_target(), &mi)) {
+            x = mi.rcMonitor.left;
+            y = mi.rcMonitor.top;
+        }
         SetWindowLongA(g_wnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
-        SetWindowPos(g_wnd, HWND_TOP, 0, 0, w, h,
+        SetWindowPos(g_wnd, HWND_TOP, x, y, w, h,
                      SWP_FRAMECHANGED | SWP_SHOWWINDOW);
         plat_fullscreen_exclusive();
         return;
@@ -229,7 +333,7 @@ void plat_display(int mode, int w, int h)
         ww = r.right - r.left;
         wh = r.bottom - r.top;
         mi.cbSize = sizeof mi;
-        GetMonitorInfoA(MonitorFromWindow(g_wnd, MONITOR_DEFAULTTOPRIMARY), &mi);
+        GetMonitorInfoA(mon_target(), &mi);
         x = mi.rcWork.left + (mi.rcWork.right - mi.rcWork.left - ww) / 2;
         y = mi.rcWork.top + (mi.rcWork.bottom - mi.rcWork.top - wh) / 2;
         if (x < mi.rcWork.left) x = mi.rcWork.left;
@@ -299,7 +403,7 @@ bool plat_poll(void)
 void plat_crash_restore(void)
 {
     if (g_mode.dmSize)
-        ChangeDisplaySettingsA(NULL, 0);
+        ChangeDisplaySettingsExA(g_mode_dev[0] ? g_mode_dev : NULL, NULL, NULL, 0, NULL);
     if (g_wnd)
         ShowWindow(g_wnd, SW_HIDE);
 }
@@ -381,6 +485,7 @@ static int g_vk[PK_COUNT] = {
     VK_NUMPAD7, VK_NUMPAD9,             /* P2 five buttons: P B */
     VK_NUMPAD4, VK_NUMPAD6,             /* P2 five buttons: K R */
     VK_ESCAPE,                          /* the settings menu */
+    VK_DIVIDE, VK_MULTIPLY, VK_NUMPAD1, /* P2: pause, moves list, accept */
 };
 
 void plat_key_label(int code, char *out, int n)
@@ -405,6 +510,159 @@ void plat_key_label(int code, char *out, int n)
             *p = (char)(*p - 32);
 }
 
+static int al_glyph_have(const char *name);
+
+/* The Vintage keyboard pictures' names (aditional textures/glyphs/kb). */
+static const char *key_glyph_file(int vk, char *tmp)
+{
+    if ((vk >= 'A' && vk <= 'Z') || (vk >= '0' && vk <= '9')) {
+        tmp[0] = (char)vk;
+        tmp[1] = 0;
+        return tmp;
+    }
+    if (vk >= VK_NUMPAD0 && vk <= VK_NUMPAD9) {
+        tmp[0] = (char)('0' + vk - VK_NUMPAD0);
+        tmp[1] = 0;
+        return tmp;
+    }
+    if (vk >= VK_F1 && vk <= VK_F12) {
+        snprintf(tmp, 8, "F%d", vk - VK_F1 + 1);
+        return tmp;
+    }
+    switch (vk) {
+    case VK_UP: return "Up";
+    case VK_DOWN: return "Down";
+    case VK_LEFT: return "Left";
+    case VK_RIGHT: return "Right";
+    case VK_RETURN: return "Enter";
+    case VK_ESCAPE: return "Esc";
+    case VK_SPACE: return "Space";
+    case VK_TAB: return "Tab";
+    case VK_BACK: return "BackSpace";
+    case VK_SHIFT: case VK_LSHIFT: case VK_RSHIFT: return "Shift";
+    case VK_CONTROL: case VK_LCONTROL: case VK_RCONTROL: return "Crtl";
+    case VK_MENU: case VK_LMENU: case VK_RMENU: return "Alt";
+    case VK_CAPITAL: return "CapsLock";
+    case VK_DELETE: case VK_DECIMAL: return "Del";
+    case VK_INSERT: return "Ins";
+    case VK_HOME: return "Home";
+    case VK_END: return "End";
+    case VK_PRIOR: return "PageUp";
+    case VK_NEXT: return "PageDown";
+    case VK_OEM_MINUS: case VK_SUBTRACT: return "Minus";
+    case VK_OEM_PLUS: case VK_ADD: return "Plus";
+    case VK_MULTIPLY: return "Asterisk";
+    case VK_OEM_1: return "Semicolon";
+    case VK_OEM_2: case VK_DIVIDE: return "Slash";
+    case VK_OEM_3: return "Tilde";
+    case VK_OEM_4: return "Brackets_L";
+    case VK_OEM_6: return "Brackets_R";
+    case VK_OEM_7: return "Quotation";
+    case VK_SNAPSHOT: return "PrtScrn";
+    case VK_NUMLOCK: return "NumLock";
+    }
+    return NULL;
+}
+
+void plat_key_glyph(int code, char *out, int n)
+{
+    int vk = (code >= 0 && code < PK_COUNT) ? g_vk[code] : 0;
+    char tmp[8], name[64];
+    const char *f = key_glyph_file(vk, tmp);
+
+    if (n <= 0)
+        return;
+    if (f) {
+        snprintf(name, sizeof name, "kb/T_%s_Key_Vintage", f);
+        if (al_glyph_have(name)) {
+            /* the keypad's digits are told from the row's by a NUM */
+            snprintf(out, (size_t)n, "%s\001%s\001",
+                     vk >= VK_NUMPAD0 && vk <= VK_DIVIDE ? "NUM " : "", name);
+            return;
+        }
+    }
+    plat_key_label(code, out, n);
+}
+
+static int g_glyph_style[2];
+
+int plat_pad_sony_kind(unsigned product)
+{
+    /* the DualShock 4 (both models) and its USB adaptor */
+    return product == 0x05c4 || product == 0x09cc || product == 0x0ba0 ? 4 : 2;
+}
+
+int plat_pad_glyph_style(int player, int style)
+{
+    player = player ? 1 : 0;
+    if (style >= 0 && style <= 4)
+        g_glyph_style[player] = style;
+    return g_glyph_style[player];
+}
+
+int plat_pad_glyph_kind(int player, int kind)
+{
+    int st = g_glyph_style[player ? 1 : 0];
+    return st ? st : kind;
+}
+
+/* Free Input Prompts' Retro pads (aditional textures/glyphs/xb, ps, ns). */
+void plat_pad_glyph(int kind, int pb, char *out, int n)
+{
+    static const char *const xb[PB_COUNT] = {
+        "T_X_A_Color_Retro", "T_X_B_Color_Retro", "T_X_X_Color_Retro",
+        "T_X_Y_Color_Retro", "T_X_LB_Retro", "T_X_RB_Retro", "T_X_LT_Retro",
+        "T_X_RT_Retro", "T_X_Share_Retro", NULL, "T_X_Left_Stick_Click_Retro",
+        "T_X_Right_Stick_Click_Retro", NULL,
+    };
+    static const char *const ps[PB_COUNT] = {
+        "T_P5_Cross_Color_Retro", "T_P5_Circle_Color_Retro",
+        "T_P5_Square_Color_Retro", "T_P5_Triangle_Color_Retro", "T_P5_L1_Retro",
+        "T_P5_R1_Retro", "T_P5_L2_Retro", "T_P5_R2_Retro", "T_P5_Share_Retro",
+        "T_P5_Options_Retro", "T_P5_L3_Retro", "T_P5_R3_Retro", NULL,
+    };
+    /* by position: the south button of a Nintendo pad is its B (the
+     * Default set, so they are not taken for the Xbox letters) */
+    static const char *const ns[PB_COUNT] = {
+        "T_S_B", "T_S_A", "T_S_Y", "T_S_X", "T_S_LB", "T_S_RB", "T_S_LT",
+        "T_S_RT", "T_S_Minus", "T_S_Plus", "T_S_L", "T_S_R", "T_S_Home",
+    };
+    static const char *const p4[PB_COUNT] = {
+        "T_P4_Cross_Color_Stylized", "T_P4_Circle_Color_Stylized",
+        "T_P4_Square_Color_Stylized", "T_P4_Triangle_Color_Stylized",
+        "T_P4_L1_Stylized", "T_P4_R1_Stylized", "T_P4_L2_Stylized",
+        "T_P4_R2_Stylized", "T_P4_Share_Stylized", "T_P4_Options_Stylized",
+        "T_P4_L3_Stylized", "T_P4_R3_Stylized", NULL,
+    };
+    static const char *const *const sets[5] = { xb, xb, ps, ns, p4 };
+    static const char *const dir[5] = { "xb", "xb", "ps", "ns", "p4" };
+    static const char *const names[PB_COUNT] = {
+        "SOUTH", "EAST", "WEST", "NORTH", "L1", "R1", "L2", "R2",
+        "SELECT", "START", "L3", "R3", "HOME",
+    };
+    char name[64];
+    const char *f;
+
+    if (n <= 0)
+        return;
+    if (pb < 0 || pb >= PB_COUNT) {
+        out[0] = 0;
+        return;
+    }
+    if (kind < 0 || kind > 4)
+        kind = 0;
+    f = sets[kind][pb];
+    if (f) {
+        snprintf(name, sizeof name, "%s/%s", dir[kind], f);
+        if (al_glyph_have(name)) {
+            snprintf(out, (size_t)n, "\001%s\001", name);
+            return;
+        }
+    }
+    snprintf(out, (size_t)n, "%s", (kind == 2 || kind == 4) && pb == PB_START ? "OPTIONS"
+                                   : kind <= 1 && pb == PB_START ? "MENU" : names[pb]);
+}
+
 void plat_bind_key(int code, int key)
 {
     if (code >= 0 && code < PK_COUNT && key > 0 && key < 256)
@@ -414,6 +672,11 @@ void plat_bind_key(int code, int key)
 int plat_key_bound(int code)
 {
     return code >= 0 && code < PK_COUNT ? g_vk[code] : 0;
+}
+
+int plat_key_backspace(void)
+{
+    return g_key[VK_BACK] ? 1 : 0;
 }
 
 int plat_key_any(void)
@@ -696,7 +959,14 @@ static int pad_winmm(PAD_SLOT *ps, PLAT_PAD *out)
     if (j.dwYpos > 45535) out->down = 1;
     if (j.dwXpos < 20000) out->left = 1;
     if (j.dwXpos > 45535) out->right = 1;
+    {   /* the right stick across: Z on a Sony pad, U elsewhere */
+        DWORD r = (ps->vidpid & 0xffff) == 0x054c ? j.dwZpos : j.dwUpos;
+        out->rx = r < 12000 ? -1 : r > 53535 ? 1 : 0;
+    }
     snprintf(out->name, sizeof out->name, "%s", ps->name);
+    out->kind = (ps->vidpid & 0xffff) == 0x054c                 /* Sony */
+                ? plat_pad_sony_kind(ps->vidpid >> 16)
+              : (ps->vidpid & 0xffff) == 0x057e ? 3 : 0;    /* Nintendo */
     return out->connected = 1;
 }
 
@@ -737,7 +1007,9 @@ static int pad_xinput(PAD_SLOT *ps, PLAT_PAD *out)
     out->down  = (s.buttons & XI_DDOWN)  || s.ly < -10000;
     out->left  = (s.buttons & XI_DLEFT)  || s.lx < -10000;
     out->right = (s.buttons & XI_DRIGHT) || s.lx >  10000;
+    out->rx = s.rx < -20000 ? -1 : s.rx > 20000 ? 1 : 0;
     snprintf(out->name, sizeof out->name, "XInput pad %lu", i + 1);
+    out->kind = 1;
     return out->connected = 1;
 }
 
@@ -1162,22 +1434,142 @@ static void al_put_line(al_box *b, const unsigned char *m, int tw, int th,
         }
 }
 
-/* align: 0 left at x, 1 centred on x, 2 right-aligned to x */
+/* ------------------------------------------------------------ glyphs
+ * Port, not in the binary: key and button pictures in the menus' text
+ * (plat_key_glyph, plat_pad_glyph). Read once from "aditional textures/
+ * glyphs/<name>.png" beside res -- Julio Cacko's Free Input Prompts, CC0 --
+ * and kept. */
+const char *lime_platform_asset_root(void);
+void lime_glyph_shadow(uint8_t *px, int w, int h); /* draw_gl.c */
+#include "lime/png.h"
+
+typedef struct { char name[64]; uint8_t *rgba; int w, h; } al_glyph;
+static al_glyph g_glyphs[128];
+static int g_nglyphs;
+
+static const al_glyph *al_glyph_get(const char *name, int len)
+{
+    char full[1200];
+    al_glyph *g;
+    int i;
+
+    if (len <= 0 || len >= (int)sizeof g_glyphs[0].name)
+        return NULL;
+    for (i = 0; i < g_nglyphs; i++)
+        if ((int)strlen(g_glyphs[i].name) == len
+            && memcmp(g_glyphs[i].name, name, (size_t)len) == 0)
+            return g_glyphs[i].rgba ? &g_glyphs[i] : NULL;
+    if (g_nglyphs == (int)(sizeof g_glyphs / sizeof g_glyphs[0]))
+        return NULL;
+    g = &g_glyphs[g_nglyphs++];
+    memcpy(g->name, name, (size_t)len);
+    g->name[len] = 0;
+    snprintf(full, sizeof full, "%s/../aditional textures/glyphs/%s.png",
+             lime_platform_asset_root(), g->name);
+    if (!lime_png_load(full, &g->rgba, &g->w, &g->h) || g->w <= 0 || g->h <= 0)
+        g->rgba = NULL;
+    else
+        lime_glyph_shadow(g->rgba, g->w, g->h);
+    return g->rgba ? g : NULL;
+}
+
+static int al_glyph_have(const char *name)
+{
+    return al_glyph_get(name, (int)strlen(name)) != NULL;
+}
+
+/* A glyph hp pixels tall at (x, y), averaged down from its picture. */
+static void al_put_glyph(al_box *b, const al_glyph *g, int x, int y, int hp,
+                         float a)
+{
+    int w = g->w * hp / g->h, i, j;
+
+    for (j = 0; j < hp; j++)
+        for (i = 0; i < w; i++) {
+            int sx0 = i * g->w / w, sx1 = (i + 1) * g->w / w;
+            int sy0 = j * g->h / hp, sy1 = (j + 1) * g->h / hp, u, v, k = 0;
+            float pr = 0, pg = 0, pb = 0, pa = 0;
+            int X = x + i, Y = y + j;
+
+            if (X < 0 || X >= b->w || Y < 0 || Y >= b->h)
+                continue;
+            if (sx1 <= sx0) sx1 = sx0 + 1;
+            if (sy1 <= sy0) sy1 = sy0 + 1;
+            for (v = sy0; v < sy1 && v < g->h; v++)
+                for (u = sx0; u < sx1 && u < g->w; u++) {
+                    const uint8_t *p = g->rgba + ((size_t)v * g->w + u) * 4;
+                    float al = p[3] / 255.0f;
+                    pr += p[0] / 255.0f * al;
+                    pg += p[1] / 255.0f * al;
+                    pb += p[2] / 255.0f * al;
+                    pa += al;
+                    k++;
+                }
+            if (k == 0 || pa <= 0)
+                continue;
+            al_over(&b->px[Y * b->w + X], pr / pa, pg / pa, pb / pa, pa / k * a);
+        }
+}
+
+/* align: 0 left at x, 1 centred on x, 2 right-aligned to x. "\001name\001"
+ * in s is a glyph, a little taller than the text. */
 static void al_say(al_box *b, const char *s, int fontpx, int bold, float x,
                    float ymid, int align, float r, float g, float bl, float a)
 {
-    int w, h;
-    unsigned char *m;
+    struct { unsigned char *m; const al_glyph *gl; int w, h; } pc[16];
+    int np = 0, tot = 0, gh = (int)(fontpx * 1.4f + 0.5f), gap = fontpx / 5, i;
+    const char *p = s;
+    float cx;
 
     if (!s || !s[0])
         return;
-    m = al_line(s, fontpx, bold, &w, &h);
-    if (align == 1)
-        x -= w * 0.5f;
-    else if (align == 2)
-        x -= w;
-    al_put_line(b, m, w, h, (int)x, (int)(ymid - h * 0.5f), r, g, bl, a);
-    free(m);
+    while (*p && np < 16) {
+        const char *q;
+        if (*p == 1) {
+            const al_glyph *gl;
+            q = strchr(p + 1, 1);
+            if (!q)
+                break;
+            gl = al_glyph_get(p + 1, (int)(q - p - 1));
+            if (gl) {
+                pc[np].m = NULL;
+                pc[np].gl = gl;
+                pc[np].h = gh;
+                pc[np].w = gl->w * gh / gl->h;
+                np++;
+            }
+            p = q + 1;
+        } else {
+            char t[256];
+            size_t len;
+            q = strchr(p, 1);
+            len = q ? (size_t)(q - p) : strlen(p);
+            if (len > sizeof t - 1)
+                len = sizeof t - 1;
+            memcpy(t, p, len);
+            t[len] = 0;
+            p += len;
+            pc[np].gl = NULL;
+            pc[np].m = al_line(t, fontpx, bold, &pc[np].w, &pc[np].h);
+            np++;
+        }
+    }
+    for (i = 0; i < np; i++)
+        tot += pc[i].w + (i ? gap : 0);
+    cx = align == 1 ? x - tot * 0.5f : align == 2 ? x - tot : x;
+    for (i = 0; i < np; i++) {
+        if (i)
+            cx += gap;
+        if (pc[i].gl)
+            al_put_glyph(b, pc[i].gl, (int)cx, (int)(ymid - pc[i].h * 0.5f),
+                         pc[i].h, a);
+        else {
+            al_put_line(b, pc[i].m, pc[i].w, pc[i].h, (int)cx,
+                        (int)(ymid - pc[i].h * 0.5f), r, g, bl, a);
+            free(pc[i].m);
+        }
+        cx += pc[i].w;
+    }
 }
 
 /* The player's badge (settings_menu.c, port): the profile's icon and name
@@ -1277,11 +1669,12 @@ unsigned char *plat_ui_badge(const char *name, const unsigned char *icon,
 unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
                             int ntab, int tab, const char *const *label,
                             const char *const *value, const int *enabled,
-                            int n, int sel, const char *footer, float s,
-                            int *ow, int *oh)
+                            int n, int sel, const char *footer, float width,
+                            float s, int *ow, int *oh)
 {
     al_box b;
     float m = 6 * s, top, rowh = 15 * s, x0, x1;
+    int side = ntab < 0, nt = side ? -ntab : ntab;
     unsigned char *out;
     int i;
 
@@ -1289,9 +1682,11 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
     b.s = s;
     b.bx0 = m;
     b.by0 = m;
-    b.bx1 = m + 360 * s;
-    top = b.by0 + 22 * s + 20 * s + 4 * s;  /* under the title and tabs */
+    b.bx1 = m + (width > 0 ? width : 360) * s;
+    top = b.by0 + 22 * s + (ntab > 0 ? 20 * s : 0) + 4 * s;  /* under the title and tabs */
     b.by1 = top + n * rowh + 26 * s;
+    if (side && b.by1 < top + (nt * 24 + 8 + UI_SIDE) * s + 26 * s)
+        b.by1 = top + (nt * 24 + 8 + UI_SIDE) * s + 26 * s;   /* room for the icon */
     b.w = (int)(b.bx1 + m + 1);
     b.h = (int)(b.by1 + m + 1);
     b.px = (al_px *)malloc(sizeof(al_px) * b.w * b.h);
@@ -1302,7 +1697,35 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
 
     x0 = b.bx0 + 9 * s;
     x1 = b.bx1 - 9 * s;
-    for (i = 0; i < ntab; i++) {            /* the tab strip */
+    if (side) {                             /* the side panel */
+        float px0 = b.bx0 + 6 * s, px1 = b.bx0 + (UI_SIDE - 4) * s;
+        float py0 = top, py1 = b.by1 - 24 * s;
+        int x, y;
+
+        for (y = (int)py0; y <= (int)py1; y++)
+            for (x = (int)px0; x <= (int)px1; x++) {
+                float c = al_rr((float)x, (float)y, px0, py0, px1, py1, 6 * s);
+                if (c > 0 && x >= 0 && x < b.w && y >= 0 && y < b.h)
+                    al_over(&b.px[y * b.w + x], 0, 0, 0.04f, c * 0.45f);
+            }
+        for (i = 0; i < nt; i++) {
+            float ty0 = top + (4 + i * 24) * s, ty1 = ty0 + 20 * s;
+            if (i == tab)
+                for (y = (int)ty0; y <= (int)ty1; y++)
+                    for (x = (int)px0 + 2; x <= (int)px1 - 2; x++) {
+                        float c = al_rr((float)x, (float)y, px0 + 3 * s, ty0, px1 - 3 * s, ty1, 5 * s);
+                        float t = (y + 0.5f - ty0) / (ty1 - ty0);
+                        if (c > 0 && x >= 0 && x < b.w && y >= 0 && y < b.h)
+                            al_over(&b.px[y * b.w + x], 0.02f + 0.03f * (1 - t),
+                                    0.36f + 0.20f * (1 - t), 0.90f + 0.06f * (1 - t), c * 0.95f);
+                    }
+            al_say(&b, tabs[i], (int)(10.5f * s), 1, px0 + 10 * s, (ty0 + ty1) * 0.5f,
+                   0, 1, 1, 1, i == tab ? 1.0f : 0.7f);
+        }
+        x0 = b.bx0 + (UI_SIDE + 6) * s;
+        nt = 0;
+    }
+    for (i = 0; i < nt; i++) {              /* the tab strip */
         float tw = (x1 - x0) / ntab, tx0 = x0 + i * tw + 1 * s,
               tx1 = x0 + (i + 1) * tw - 1 * s, ty0 = b.by0 + 22 * s,
               ty1 = ty0 + 18 * s;
@@ -1320,7 +1743,7 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
                 else
                     al_over(&b.px[y * b.w + x], 1, 1, 1, c * 0.12f);
             }
-        al_say(&b, tabs[i], (int)(10 * s), 1, (tx0 + tx1) * 0.5f,
+        al_say(&b, tabs[i], (int)((ntab > 4 ? 8.5f : 10) * s), 1, (tx0 + tx1) * 0.5f,
                (ty0 + ty1) * 0.5f, 1, 1, 1, 1, i == tab ? 1.0f : 0.75f);
     }
     for (i = 0; i < n; i++) {
@@ -1338,16 +1761,88 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
                                 0.90f + 0.06f * (1 - t), c * 0.92f);
                 }
         }
+        if (label[i][0] == 2) {             /* a section's heading */
+            int x, y = (int)(y0 + rowh - 2 * s);
+            al_say(&b, label[i] + 1, (int)(10 * s), 1, x0 + 4 * s, y0 + rowh * 0.55f,
+                   0, 0.55f, 0.75f, 1.0f, 1);
+            for (x = (int)(x0 + 4 * s); x < (int)(x1 - 4 * s) && y >= 0 && y < b.h; x++)
+                al_over(&b.px[y * b.w + x], 0.55f, 0.75f, 1.0f,
+                        0.45f * (1 - (x - x0) / (x1 - x0)));
+            continue;
+        }
         al_say(&b, label[i], (int)(11 * s), 1, x0 + 6 * s, y0 + rowh * 0.5f,
                0, 1, 1, 1, a);
         al_say(&b, value[i], (int)(11 * s), 0, x1 - 6 * s, y0 + rowh * 0.5f,
                2, 1, 1, 1, a);
     }
     al_say(&b, footer, (int)(9 * s), 0, (b.bx0 + b.bx1) * 0.5f,
-           top + n * rowh + 13 * s, 1, 0.80f, 0.84f, 0.92f, 1);
+           b.by1 - 13 * s, 1, 0.80f, 0.84f, 0.92f, 1);
 
     out = (unsigned char *)malloc((size_t)b.w * b.h * 4);
     for (i = 0; i < b.w * b.h; i++) {
+        al_px *p = &b.px[i];
+        out[i * 4 + 0] = (unsigned char)(p->r * 255 + 0.5f);
+        out[i * 4 + 1] = (unsigned char)(p->g * 255 + 0.5f);
+        out[i * 4 + 2] = (unsigned char)(p->b * 255 + 0.5f);
+        out[i * 4 + 3] = (unsigned char)(p->a * 255 + 0.5f);
+    }
+    free(b.px);
+    *ow = b.w;
+    *oh = b.h;
+    return out;
+}
+
+unsigned char *plat_ui_grid(const char *title,
+                            const unsigned char *const *cells, int n,
+                            int cols, int cpx, float cell, int sel,
+                            const char *footer, float s, int *ow, int *oh)
+{
+    al_box b;
+    float m = 6 * s, cs = cell * s, step = (cell + 4) * s, pad = 10 * s, top;
+    int rows = cols > 0 ? (n + cols - 1) / cols : 0, i, x, y;
+    unsigned char *out;
+
+    if (n <= 0 || cols <= 0)
+        return NULL;
+    memset(&b, 0, sizeof b);
+    b.s = s;
+    b.bx0 = m;
+    b.by0 = m;
+    b.bx1 = m + 2 * pad + (cols - 1) * step + cs;
+    top = b.by0 + 22 * s + 4 * s;
+    b.by1 = top + (rows - 1) * step + cs + 26 * s;
+    b.w = (int)(b.bx1 + m + 1);
+    b.h = (int)(b.by1 + m + 1);
+    b.px = (al_px *)malloc(sizeof(al_px) * b.w * b.h);
+    if (!b.px)
+        return NULL;
+    al_draw_bg(&b);
+    al_say(&b, title, (int)(13 * s), 1, (b.bx0 + b.bx1) * 0.5f,
+           b.by0 + 12 * s, 1, 1, 1, 1, 1);
+    for (i = 0; i < n; i++) {
+        float x0 = b.bx0 + pad + (i % cols) * step, y0 = top + (i / cols) * step;
+        al_glyph g;
+
+        if (i == sel)                   /* the selection blue round it */
+            for (y = (int)(y0 - 3 * s); y <= (int)(y0 + cs + 3 * s); y++)
+                for (x = (int)(x0 - 3 * s); x <= (int)(x0 + cs + 3 * s); x++) {
+                    float c = al_rr((float)x, (float)y, x0 - 2.5f * s, y0 - 2.5f * s,
+                                    x0 + cs + 2.5f * s, y0 + cs + 2.5f * s, cs * 0.24f);
+                    if (c > 0 && x >= 0 && x < b.w && y >= 0 && y < b.h)
+                        al_over(&b.px[y * b.w + x], 0.15f, 0.55f, 1.0f, c * 0.95f);
+                }
+        if (!cells[i])
+            continue;
+        memset(&g, 0, sizeof g);
+        g.rgba = (uint8_t *)cells[i];
+        g.w = g.h = cpx;
+        al_put_glyph(&b, &g, (int)x0, (int)y0, (int)cs, 1);
+    }
+    al_say(&b, footer, (int)(9 * s), 0, (b.bx0 + b.bx1) * 0.5f,
+           top + (rows - 1) * step + cs + 13 * s, 1, 0.80f, 0.84f, 0.92f, 1);
+
+    out = (unsigned char *)malloc((size_t)b.w * b.h * 4);
+    for (i = 0; out && i < b.w * b.h; i++) {
         al_px *p = &b.px[i];
         out[i * 4 + 0] = (unsigned char)(p->r * 255 + 0.5f);
         out[i * 4 + 1] = (unsigned char)(p->g * 255 + 0.5f);

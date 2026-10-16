@@ -7,8 +7,11 @@
  * One profile per installation: the id, the name (anything but "|" and line
  * breaks, up to 24 characters), the icon (a fighter, 0..23, the bio and
  * endings art: res/Textures/<NAME>_VERSUS.PNG), the colour behind it
- * (RRGGBB) and the gradient: L from white to the colour, D from black to it
- * (absent: L). UTF-8.
+ * (RRGGBB), the gradient -- L light: the second colour (white unless
+ * chosen) into the colour; D dark: the colour into the second (black); C
+ * custom: the colour to the second (blood red) -- and the second colour,
+ * RRGGBB (absent: L and its default; an older file's lone RRGGBB is C).
+ * UTF-8.
  *
  * The id is given once, when the installation first has no profile: 60
  * random bits from the system's cryptographic generator as twelve Crockford
@@ -24,7 +27,8 @@ const crypto = require('crypto');
 const ALPHA = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const NAME_MAX = 24;
 const ICONS = 24;
-const DEFAULTS = { name: 'PLAYER', icon: 18, color: '3A8EE6', dark: false };
+const DEFAULTS = { name: 'PLAYER', icon: 18, color: '3A8EE6', shade: 'L' };
+const SHADE_COLOR2 = { L: 'FFFFFF', D: '000000', C: '6E0B12' };
 
 /* The bio art, in CharacterNames order (Versus_Names, 0x000ffbf4). */
 const ICON_FILES = [
@@ -69,16 +73,27 @@ function read(root) {
         const icon = Number(f[2]);
         return { id: f[0], name: cleanName(f[1]),
                  icon: icon >= 0 && icon < ICONS ? icon : DEFAULTS.icon,
-                 color: cleanColor(f[3]), dark: (f[4] || '').trim().toUpperCase() === 'D' };
+                 color: cleanColor(f[3]), ...readShade(f[4], f[5]) };
     }
     return null;
+}
+
+function readShade(a, b) {
+    a = String(a || '').trim().toUpperCase();
+    if (/^[0-9A-F]{6}/.test(a))
+        return { shade: 'C', color2: a.slice(0, 6) };
+    const shade = a === 'D' ? 'D' : a === 'C' ? 'C' : 'L';
+    b = String(b || '').trim().toUpperCase();
+    return { shade, color2: /^[0-9A-F]{6}$/.test(b) ? b : SHADE_COLOR2[shade] };
 }
 
 function save(root, p) {
     const lines = ['; UMK3 player profile: the launcher and the game both edit this;',
                    '; the id belongs to this installation and never changes',
                    'profile=' + [p.id, cleanName(p.name), p.icon | 0, cleanColor(p.color),
-                                 p.dark ? 'D' : 'L'].join('|')];
+                                 SHADE_COLOR2[p.shade] ? p.shade : 'L',
+                                 /^[0-9A-F]{6}$/i.test(p.color2 || '') ? p.color2.toUpperCase()
+                                     : SHADE_COLOR2[p.shade] || 'FFFFFF'].join('|')];
     fs.writeFileSync(path.join(root, 'profiles.ini'), lines.join('\n') + '\n', 'utf8');
 }
 
@@ -87,7 +102,7 @@ function load(root, defaultName) {
     let p = read(root);
     if (!p) {
         p = { id: newId(), name: defaultName || DEFAULTS.name,
-              icon: DEFAULTS.icon, color: DEFAULTS.color, dark: DEFAULTS.dark };
+              icon: DEFAULTS.icon, color: DEFAULTS.color, shade: 'L', color2: SHADE_COLOR2.L };
         save(root, p);
     }
     return p;
@@ -99,7 +114,8 @@ function reset(root, defaultName) {
     p.name = defaultName || DEFAULTS.name;
     p.icon = DEFAULTS.icon;
     p.color = DEFAULTS.color;
-    p.dark = DEFAULTS.dark;
+    p.shade = 'L';
+    p.color2 = SHADE_COLOR2.L;
     save(root, p);
     return p;
 }
@@ -110,7 +126,12 @@ function update(root, fields) {
     if (fields.name !== undefined) p.name = cleanName(fields.name);
     if (fields.icon !== undefined && fields.icon >= 0 && fields.icon < ICONS) p.icon = fields.icon | 0;
     if (fields.color !== undefined) p.color = cleanColor(fields.color);
-    if (fields.dark !== undefined) p.dark = !!fields.dark;
+    if (fields.shade && SHADE_COLOR2[fields.shade]) {
+        p.shade = fields.shade;
+        p.color2 = SHADE_COLOR2[p.shade];
+    }
+    if (fields.color2 && /^#?[0-9A-F]{6}$/i.test(fields.color2))
+        p.color2 = fields.color2.replace('#', '').toUpperCase();
     save(root, p);
     return p;
 }

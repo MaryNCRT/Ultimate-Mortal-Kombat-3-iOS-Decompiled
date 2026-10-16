@@ -37,6 +37,19 @@ void plat_fullscreen_exclusive(void);
  * inside is w x h centred on the monitor, 1 borderless over the monitor,
  * 2 exclusive fullscreen at w x h. And leaving the game. */
 void plat_display(int mode, int w, int h);
+
+/* The monitor the game goes to (umk3.ini monitor=, port): 0 the one the
+ * window is on (the main one at the start), 1..n one of them in Windows'
+ * order. Set before plat_open, or before plat_display to move there. */
+void plat_monitor_select(int i);
+int  plat_monitor(void);
+/* How many monitors, and one's name for the menus ("2: 2560x1440"), with
+ * " *" after the main one. */
+int  plat_monitor_count(void);
+void plat_monitor_name(int i, char *out, int n);
+/* Print them for the launcher, `umk3-game --list-monitors`: one
+ * "index<TAB>name" a line. */
+void plat_monitor_list(void);
 void plat_quit(void);
 
 /* Typed text, for a player's name (settings_menu.c, port): the next
@@ -105,8 +118,24 @@ int plat_ask(const unsigned short *msg, const unsigned short *ok,
 unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
                             int ntab, int tab, const char *const *label,
                             const char *const *value, const int *enabled,
-                            int n, int sel, const char *footer, float s,
-                            int *w, int *h);
+                            int n, int sel, const char *footer, float width,
+                            float s, int *w, int *h);
+/* plat_ui_menu with ntab < 0 (the settings menu, port): the -ntab tabs go
+ * down a side panel UI_SIDE points wide on the left instead of across the
+ * top, the rows beside it; `width` is the whole box's, in points (360 with
+ * the tabs on top). A label starting "\002" is a section's heading. */
+#define UI_SIDE 96
+
+/* A grid of pictures in the same dress (the settings menu's icons and
+ * colours, port): the title, `n` cells of cpx x cpx straight RGBA, `cols`
+ * across, the chosen one on the selection blue, the footer. In points: a 6
+ * margin, the title band 22 and 4 more, 10 inside at the sides, cells
+ * `cell` big every cell + 4, 26 for the footer. NULL where the backend has
+ * no such drawing. */
+unsigned char *plat_ui_grid(const char *title,
+                            const unsigned char *const *cells, int n,
+                            int cols, int cpx, float cell, int sel,
+                            const char *footer, float s, int *w, int *h);
 
 /* The user's interface language as an ISO 639-1 code ("es", "en", ...) in
  * `out`, at least 3 bytes; "" when it cannot be told. The iPhone's
@@ -155,6 +184,9 @@ enum {
     PK_P2_5_P, PK_P2_5_B, PK_P2_5_K, PK_P2_5_R,
     /* the settings menu (Esc; settings_menu.c, port) */
     PK_SETTINGS,
+    /* player two's pause menu, moves list and ACCEPT on the menus, as
+     * player one's P, M and Enter (port) */
+    PK_P2_PAUSE, PK_P2_MOVES, PK_P2_OK,
     PK_COUNT
 };
 
@@ -164,6 +196,12 @@ int plat_key(int code);
 /* The key a code is bound to, as the platform names it ("F2", "Q"), in
  * `out` of `n` bytes, upper case. */
 void plat_key_label(int code, char *out, int n);
+
+/* The same, as a picture of the key when there is one: "\001kb/<file>\001",
+ * which plat_ui_menu draws from "aditional textures/glyphs/" beside res
+ * (Julio Cacko's Free Input Prompts, CC0); else plat_key_label's name.
+ * Port only. */
+void plat_key_glyph(int code, char *out, int n);
 
 /* Rebind a code to a platform key (a Windows virtual-key code on win32; the
  * SDL backend takes an SDL scancode). umk3.ini's key_* lines, written by the
@@ -175,6 +213,9 @@ void plat_bind_key(int code, int key);
  * menu's rebinding (settings_menu.c, port). */
 int plat_key_bound(int code);
 int plat_key_any(void);
+/* Backspace held: BACK on the game's menus from the keyboard (pad_nav.c,
+ * port). */
+int plat_key_backspace(void);
 
 /* The first attached gamepad, as the same ten bits the engine wants, or -1
  * when there is none. Bit order is the engine's: 0..3 directions, then HP, LP,
@@ -197,8 +238,29 @@ typedef struct {
     int      connected;
     int      up, down, left, right;
     unsigned buttons;                   /* 1 << PB_* */
+    int      rx;                        /* the right stick across: -1 0 1 */
     char     name[64];                  /* as the system names the pad */
+    int      kind;                      /* 1 Xbox (XInput), 2 PlayStation 5,
+                                           3 Nintendo, 4 PlayStation 4,
+                                           0 other */
 } PLAT_PAD;
+
+/* A pad button (PB_*) as a picture for plat_ui_menu: the Xbox, PlayStation
+ * or Nintendo one by `kind` (PLAT_PAD's; 0 draws the Xbox ones), or its
+ * name when there is none. Port only. */
+void plat_pad_glyph(int kind, int pb, char *out, int n);
+
+/* Which pictures a player's pad shows whatever the pad: 0 the pad's own
+ * (auto), 1 Xbox, 2 PlayStation 5, 3 Nintendo, 4 PlayStation 4 -- umk3.ini
+ * pad_icons= and p2pad_icons= (auto xbox ps5 nintendo ps4). A negative `style` only asks. Returns the style in force.
+ * Port only. */
+int plat_pad_glyph_style(int player, int style);
+
+/* The kind plat_pad_glyph should draw for a player whose pad is `kind`. */
+int plat_pad_glyph_kind(int player, int kind);
+
+/* A Sony pad's kind by its USB product: 4 the PlayStation 4's, else 2. */
+int plat_pad_sony_kind(unsigned product);
 
 /* Which pad: "auto" (the first one found, XInput first), "off", "xinput"
  * (an Xbox pad or anything shown as one), or "vvvv:pppp", the USB vendor

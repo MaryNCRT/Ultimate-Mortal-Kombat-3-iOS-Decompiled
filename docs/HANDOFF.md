@@ -1,6 +1,6 @@
 # Handoff
 
-> **The first two sections were rewritten on 2026-10-15 for alpha 0.1.2.**
+> **The first two sections were rewritten on 2026-10-16 for beta 0.1.3.**
 > Everything after them is a dated diary of what each finished module
 > settled; it is kept because the facts in it are still true, but its counts
 > ("1,752 of 2,172" and the like) and its "next steps" are history. The live
@@ -15,8 +15,9 @@ Read this, then [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md) and
 
 ## Releases
 
-The current build is **0.1.2 alpha** ([notes](RELEASE-0.1.2-alpha.md)),
-published on GitHub as a pre-release with `UMK3-PC-0.1.2-alpha.zip`. 0.1.1 back
+The current build is **0.1.3 beta** ([notes](RELEASE-0.1.3-beta.md)), the
+first beta, published on GitHub as a pre-release with
+`UMK3-PC-0.1.3-beta.zip`. 0.1.2 back
 to 0.0.4 are still published; 0.0.1-0.0.3 were deleted from GitHub when the
 history was rewritten on 2026-10-09 (their notes stay in `docs/`). What each
 release fixed, with addresses, is in PROGRESS.md.
@@ -28,9 +29,9 @@ release fixed, with addresses, is in PROGRESS.md.
 2. Run `npm run dist` in `launcher/app`.
 3. Run `python launcher/make_release.py <win-unpacked> <out> --zip`.
 4. Compile the result once from scratch with the `.ipa`.
-5. Run `gh release create vX.Y.Z-alpha <zip> --prerelease --notes-file docs/RELEASE-X.Y.Z-alpha.md`.
+5. Run `gh release create vX.Y.Z-beta <zip> --prerelease --notes-file docs/RELEASE-X.Y.Z-beta.md` (`-alpha` before 0.1.3).
 
-## Where the project stands (2026-10-15, alpha 0.1.2)
+## Where the project stands (2026-10-16, beta 0.1.3)
 
 - **Done:** every function is decompiled (2,572 of 2,572). The game plays the
   menus, Arcade to the end (treasure screen) and whole fights with every
@@ -71,10 +72,40 @@ release fixed, with addresses, is in PROGRESS.md.
   FrontEnd.c has their frames). Red highlight half as thick (port). New
   sources: `runtime/settings_menu.c`, `runtime/profiles.c` -- in
   build_game.ps1, CMakeLists.txt and make_release.py.
+- **New in 0.1.3 beta** (all Port, not in the binary): the game's own
+  menus with the pad or the keyboard, `runtime/pad_nav.c`. The front end's
+  touch tests also register their rectangles (`PortNavTarget` from
+  TouchAreaWH, DrawButtonNew, BasicMenuMod, DrawOptionAsButton, the roster,
+  the colour box, the tower's four columns and the moves list's cancel); the
+  d-pad moves to the nearest one that way, a resting finger is held on it
+  for the frame (touch and last touch the same, so it lights like a finger
+  and neither presses nor releases), south puts the finger down and lifts it
+  when let go, east taps the screen's BACK or the page's own main-menu entry
+  (`NAV_TABBACK`). The main menu's entries beside a page are dropped
+  (`PortNavTab`). VS: two highlights, `PortNavPick` says whose tap it is.
+  The right stick (`PLAT_PAD.rx`) turns the select screen's palette
+  (`PortPadPalette`). Hints: `PortNavDraw` (FrontEnd.c). With the on-screen
+  controls off, the settings menu's CONTROLS page in the game's own frame is
+  the button setup (`set_menu_open_controls`, `PortControlsPanel`), from
+  Options and from the pause menu's LAYOUT row. Player two's keys
+  `PK_P2_PAUSE`, `PK_P2_MOVES`, `PK_P2_OK` (`p2key_pause/moves/ok=`); their
+  moves list shows their fighter (`PortMovesWho`). Palettes: `PortPalette`
+  for VS only, `PortSoloPalette` elsewhere, the computer's at random but
+  Motaro and Kahn (`cpu_palette`). Free Input Prompts pictures (Julio
+  Cacko, CC0) in `launcher/aditional textures/glyphs/`. The launcher in the
+  console release's style, monitor choice, closes when the game opens. New
+  source: `runtime/pad_nav.c` -- in build_game.ps1, CMakeLists.txt and
+  make_release.py.
+- **Training** (Port, not in the binary): PLAY's sixth row, GameText(0xc2)
+  "TRAINING" (in every language's text). `PortPractice` (FrontEnd.c) on top
+  of GameMode 6: the pad's first cross picks player one, later ones the
+  rival; `bar_reducer` (other.c) puts a bar at 0 back to 0xa6, `t_clock4`
+  keeps the clock still, and GameCode.c clears player two's input. START
+  presses the select screen's PLAY (`PortStartPress`, `PortNavSkip`).
+  The pages without buttons: `PortPagesLine`, `PortPagesExit`,
+  `PortNavDrawLine(s, 1)`. Glyph shadows: `lime_glyph_shadow` (draw_gl.c).
 - **Open list:** the README's *Known problems*. Mary's list goes on with:
-  - monitor choice in the launcher;
   - a render backend option (DirectX 12 / Vulkan / OpenGL, a large job);
-  - pad-driven menus;
   - the remaining texture errors, fatality animations and crashes in modes other than Arcade.
 - **Wide menus:** many front-end sites scale a position by `FE_WidthScale`
   themselves instead of calling `FE_X`. On 16:9/21:9 such an element sits off

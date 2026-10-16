@@ -71,6 +71,11 @@ cooperative process scheduler in `gamecode/logic/other.c` — `StartThreadAt`,
 dispatch tables — plus an independent run of the differential tests on Linux,
 which confirmed they pass outside the machine they were written on.
 
+The key and button pictures since 0.1.3 are Julio Cacko's
+[Free Input Prompts](https://juliocacko.itch.io/free-input-prompts) (CC0,
+credited in `launcher/aditional textures/glyphs/CREDITS.txt` anyway): drawn by
+a person, not generated.
+
 **Devin** (Cognition) joined the relay on 2026-08-20 and wrote the SDL2 backend
 for the vertical slice, which is hand-written port code rather than anything
 derived from the binary.

@@ -5,6 +5,9 @@
 
 int  set_menu_is_open(void);
 void set_menu_toggle(void);
+/* The game's button setup with the on-screen controls off: the CONTROLS
+ * page alone, in the game's own panel. */
+void set_menu_open_controls(void);
 /* After GameCodeMain: a pending open grabs the frame just drawn. */
 void set_menu_after_frame(int vx, int vy, int vw, int vh);
 /* Each frame the menu is open, instead of the game's tick: the pointer as
@@ -29,6 +32,7 @@ struct port_gfx {
     int  ui;                    /* ui_size=: 0 iphone, 1 ipad */
     int  hidectl;               /* hide_controls= */
     char aspect[8];             /* aspect=: 3:2 4:3 16:9 21:9 */
+    int  monitor;               /* monitor=: 0 the window's, 1..n */
 };
 void port_gfx_get(struct port_gfx *g);
 /* Applies it now; `display` also the window mode and size. */

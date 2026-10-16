@@ -1,0 +1,9 @@
+Key and button pictures: "Free Input Prompts" by Julio Cacko
+https://juliocacko.itch.io/free-input-prompts
+License: CC0 1.0 Universal (no attribution required; given with thanks).
+
+kb  Keyboard_Mouse / Vintage
+xb  XGamepad / Retro
+ps  P5Gamepad / Retro
+p4  P4Gamepad / Stylized
+ns  SGamepad / Default

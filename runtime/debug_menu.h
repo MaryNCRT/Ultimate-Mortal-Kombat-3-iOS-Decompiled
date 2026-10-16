@@ -40,16 +40,34 @@ void dbg_menu_draw(void);
  * where it went, in the menu's space (320 high, ow wide), for the mouse:
  * the tabs from title0 to top, the rows from top, rowh each, between bx
  * and bx + bw. */
-struct ui_geo { float bx, bw, title0, top, rowh, ow; };
+/* where the box went: the rows (bx, bw, top, rowh), the tabs' band
+ * (title0..top), and with the side panel its column (sx, sw), its first
+ * tab (stop) and the tabs' step (srow), all in the menu's space */
+struct ui_geo { float bx, bw, title0, top, rowh, ow, sx, sw, stop, srow; };
 void ui_grab(int vx, int vy, int vw, int vh);
 /* a picture beside the box: uploaded once, drawn at (x, y), size points */
 void ui_icon_set(const unsigned char *rgba, int w, int h);
 void ui_icon_draw(float x, float y, float size);
-/* the player's badge, bottom right; rebuilt when `key` changes */
+/* the player's badge, top right; rebuilt when `key` changes */
 void ui_badge(const char *name, const unsigned char *icon, int icon_px,
               unsigned key);
 /* points the box is moved right by (a picture beside it), 0 centred */
 extern float ui_menu_shift;
+/* 1: the next box goes over the one already drawn (a list it opened):
+ * that one dimmed instead of the frozen frame */
+extern int ui_menu_layer;
+/* The pad's highlight on the game's own menus (pad_nav.c): a glowing frame
+ * round a box given in the touch's units, `sh` of them to the screen's
+ * height. */
+void ui_nav_frame(float x, float y, float w, float h, float sh, int p2);
+
+/* A grid of pictures over the menu (plat_ui_grid), the menu dimmed; made
+ * again when `key` or `sel` change. geo: the first cell's corner, the step
+ * and the cell's size, in the menu's space. */
+struct ui_grid_geo { float x0, y0, step, cell; int cols, n; };
+void ui_grid_show(const char *title, const unsigned char *const *cells,
+                  int n, int cols, int cpx, float cell, int sel,
+                  const char *footer, unsigned key, struct ui_grid_geo *geo);
 void ui_menu_show(const char *title, const char *const *tabs, int ntabs,
                   int page, const char *const *label,
                   const char *const *value, const int *enabled, int rows,
