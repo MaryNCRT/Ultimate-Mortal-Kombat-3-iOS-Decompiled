@@ -145,6 +145,19 @@ void plat_text_clear(void)
 {
 }
 
+int plat_clipboard_text(char *out, int n)
+{
+    if (n > 0)
+        out[0] = 0;
+    return 0;
+}
+
+int plat_clipboard_set(const char *utf8)
+{
+    (void)utf8;
+    return 0;
+}
+
 void *plat_gl_proc(const char *name)
 {
     return SDL_GL_GetProcAddress(name);

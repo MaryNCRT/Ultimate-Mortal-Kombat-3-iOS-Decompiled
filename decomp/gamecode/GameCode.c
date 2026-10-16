@@ -3790,8 +3790,14 @@ long DrawAnimAsSprite(long x, long y, float scale, long ax,
     /* The sixth argument IS the texture array (sp+0x54, loaded at 0x1c900
      * and indexed by record[6] at 0x1c956). This read `frames[record[6]]`,
      * a word of the sprite definition, and handed it to limeDrawSprite as a
-     * texture -- the crash in every screen that draws the spotlights. */
-    tex = ((void *P32 const *)(uintptr_t)textures)[r[6]];
+     * texture -- the crash in every screen that draws the spotlights.
+     *
+     * Both arrays it is given (SpotlightTextures, HUDFatalsTexture) are
+     * arrays of the port's own pointers, so they are read as such. Read as
+     * 32-bit words (P32), the x64 build took entry 1 from the upper half of
+     * entry 0 -- NULL -- and every frame on the second sheet drew nothing:
+     * the versus screens' spotlights blinked and the FATALITY sign broke. */
+    tex = ((void *const *)(uintptr_t)textures)[r[6]];
 
     /* record[0..1] is the cell's corner in the atlas and record[2..3] its
      * size; limeDrawSprite takes a corner and an EXTENT in UV. Read from
@@ -6005,8 +6011,13 @@ void Task_GameInit(void)
     *lastTimestamp = 0;
 
     if (GameMode == 1) {
-        CurrentTask = 6 + 8;            /* 14 */
-        syncGame(1);
+        /* 0x2e806-0x2e9c6: r3 is GameMode, compared with 1, and
+         * `adds r3, #8` makes 9 -- Task_MultiplayerSync, the last of the
+         * ten tasks; r0 is the 0 stored just before, so syncGame starts
+         * from its reset. Read as 6 + 8 and syncGame(1) this jumped to an
+         * empty task slot and crashed. */
+        CurrentTask = 1 + 8;            /* 9 */
+        syncGame(0);
     } else if (Settings[2] != 0) {
         limePlayTune(LevelMusic[*LevelSelectP],
                      (long)MusicVol[Settings[2]], 1);
@@ -9308,13 +9319,13 @@ void Task_GameDestroy(void)
  * arrived, in a loop:
  *
  *      while (setNextSpritesAndEvents()) {
- *          GameObjects[0] = &mpSpriteList[i * 160];
+ *          GameObjects = &mpSpriteList[i * 160];
  *          Player1Pos, Player2Pos memcpy'd out of the packet
  *          MKEventQueue  memcpy'd out of the packet, 0x54 bytes
  *          the packet's event block memset to zero
  *          AnimateBG / AddNewGameEvents / RunGameEvents / LIME_UpdateEvents
  *      }
- *      if (!SpritelistReceived) GameObjects[0] = dummyObjects;
+ *      if (!SpritelistReceived) GameObjects = dummyObjects;
  *
  * so a guest that fell behind catches up by running every queued list in one
  * display frame rather than one a frame. And a guest that has never received
@@ -9422,7 +9433,8 @@ void UpdateArcadeCode(int *joy1, int *joy2)
                 long k = currentMPSpriteList;
                 char *pkt = mpEventQueue + k * MP_EVENTQUEUE_STRIDE;
 
-                GameObjects[0] = &mpSpriteList[k * MP_SPRITELIST_STRIDE];
+                /* 0x222d2: the list's ADDRESS into GameObjects, as below */
+                GameObjects = (void **)&mpSpriteList[k * MP_SPRITELIST_STRIDE];
                 lastSpritelistIndex = k;
 
                 memcpy(Player1Pos, pkt,        12);
@@ -9436,7 +9448,7 @@ void UpdateArcadeCode(int *joy1, int *joy2)
                 LIME_UpdateEvents();
             }
             if (!SpritelistReceived)
-                GameObjects[0] = dummyObjects;   /* nothing has ever arrived */
+                GameObjects = (void **)dummyObjects;   /* nothing has ever arrived */
             stepped = 0;
         } else if (GameMode != 1 && !isParentBasedOnSpeed()) {
             /* the caller's pair goes straight through */
@@ -9463,7 +9475,7 @@ void UpdateArcadeCode(int *joy1, int *joy2)
                     printf("## MAX EVENT QUEUE NUM = %d\n", (int)highestQueueNum);
                     puts("#########################");
                 }
-                sendSpriteListPacket(GameObjects[0], 0, 0);
+                sendSpriteListPacket(GameObjects, 0, 0);   /* 0x223c0: the value */
                 FrameCount = FrameCount + 1.0f;
             }
 

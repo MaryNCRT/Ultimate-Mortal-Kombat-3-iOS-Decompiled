@@ -4,7 +4,9 @@ Current state of the project. Written so that someone can pick it up with no pri
 
 **Last updated:** 2026-10-16 -- see [HANDOFF.md](HANDOFF.md) for the route.
 
-## Current state (beta 0.1.4, 2026-10-16)
+## Current state (alpha 0.1.5, 2026-10-16)
+
+**2026-10-16, 0.1.5 alpha, the online update (notes: [RELEASE-0.1.5-alpha.md](RELEASE-0.1.5-alpha.md)):** PLAY > ONLINE. The binary's own multiplayer layer, `limeMPGameSpecific.m` (armv7 0xaf938-0xb20d8, 48 functions: the fourteen packet types, the heartbeat, the start sync, the 120-entry sprite-list queue), is transcribed in `decomp/gamecode/limeMPGameSpecific.c` (**draft**: checked by playing two games against each other, no differential test -- most of it is message sends to the session). What the binary did over GKSession (limeMPSession.m, Bluetooth) is `runtime/mp_net.c` (Port, not in the binary): UDP with its own reliable channel, and finding a player by the code in their profiles.ini on the same PC or the LAN; Epic Online Services goes under the same calls next (Mary's choice, modelled on Saints Reborn; needs the EOS SDK and the project's Epic IDs). The ONLINE screen is FE task 51, `FE_Task_Online` in FrontEnd.c (Port); from a connection on it is the binary's flow: GameMode 1, the multiplayer select (0x2a), versus (0x2b), Task_MultiplayerSync, the fight (the host steps the engine and streams the sprite list, the guest sends its stick), the summary with REMATCH. Badges: `runtime/online_ui.c`. Binary readings fixed on the way, none of which had run before: UpdateArcadeCode's guest and host paths stored and sent `GameObjects[0]` where the binary uses `GameObjects` (0x222d2, 0x223c0); Task_GameInit's online branch set CurrentTask 6 + 8 = 14 (an empty slot: a crash) where 0x2e9c2 adds 8 to GameMode, 9 = Task_MultiplayerSync, and called syncGame(1) where r0 is 0; dummyObjects' first link holds an iPhone address (0x0010de94) and is relinked at startMP. The 64-bit build's DrawAnimAsSprite read its texture table as 32-bit words: the versus spotlights blinked and the FATALITY sign broke. Port, at Mary's request: no pause on a focus loss, no debug menu or debug keys in an online fight, the online versus logo centred, the PLAY rows 40 apart from y 30. Test aids: UMK3_WINDOW=WxH, UMK3_PROFILES=<file>, UMK3_SCREEN=online, UMK3_ONLINE_FIND=<code>.
 
 **2026-10-16, 0.1.4 beta (notes: [RELEASE-0.1.4-beta.md](RELEASE-0.1.4-beta.md)):** the 64-bit build (Port, not in the binary: `UMK3_LOW32`, `P32` 32-bit pointer words, exe and heaps below 2 GB, `arch=` in the launcher). The crash on winning in Arcade and on leaving stage 14: `runtime/gamecode_globals.c` gave 15 scene handles (SLDie1Scene, TrainScene, Scene_FIGHT...) a dummy store, so Task_GameDestroy's FreeSceneHandle freed it; in the binary they are `__common`, zero, and now start NULL (tools/mkglobals.py not yet fixed). Classic Sub-Zero's elbow combo: RPCOMBO6..9 missing from OLDSUBZEROFRAMES.bin (as in the .ipa) drawn with his skinanim's frames 12..15, bone for bone Reptile's (port, GameCode.c RenderLevelPlayers); Mary sees it still not quite right. Touch layout editor, icons, pause menu on 21:9, Karnage / Survival summaries with BACK alone (port).
 
@@ -35,7 +37,7 @@ Current state of the project. Written so that someone can pick it up with no pri
 - **The game is playable on Windows by the real path.**
   - Everything the retail game does runs in `umk3-game.exe` (i686): the front end, Arcade to Shao Kahn and the treasure screen, the tower, and whole fights with every finisher, Continue and the next fight.
   - The launcher compiles it from the player's own iPhone 1.2.59 `.ipa`.
-  - **0.1.4 beta is the current published build** ([notes](RELEASE-0.1.4-beta.md)): the 64-bit build, the Arcade-win crash fixed. 0.1.3 added the menus with the pad or the keyboard, the console-style launcher, key and button pictures. 0.1.2 added the settings menu (Esc), the player profile, the wide continue screens. 0.1.0 added 3:2 / 4:3 / 16:9 / 21:9, the iPad UI size, texture quality, faster loading and launcher updates; 0.1.0b adds the iPad build's layout, DUELO, pad binding and wide-screen fixes.
+  - **0.1.5 alpha is the current published build** ([notes](RELEASE-0.1.5-alpha.md)): ONLINE (same PC or LAN). 0.1.4 added the 64-bit build and fixed the Arcade-win crash. 0.1.3 added the menus with the pad or the keyboard, the console-style launcher, key and button pictures. 0.1.2 added the settings menu (Esc), the player profile, the wide continue screens. 0.1.0 added 3:2 / 4:3 / 16:9 / 21:9, the iPad UI size, texture quality, faster loading and launcher updates; 0.1.0b adds the iPad build's layout, DUELO, pad binding and wide-screen fixes.
   - Every release's notes are in `docs/RELEASE-*.md`. The GitHub releases of 0.0.1-0.0.3 were deleted on 2026-10-09 when the history was rewritten.
 - **Every function is decompiled** (2,572 of 2,572) and the fight engine is
   behaviourally tested file by file (table below). The figure is
@@ -45,7 +47,8 @@ Current state of the project. Written so that someone can pick it up with no pri
   - The menus are incomplete, and modes other than Arcade can crash.
   - Texture errors remain on some stages and fighters, and some fatalities miss animations.
   - Every bug found since the game first ran was a transcription that did not quite match armv7, so each new symptom starts by re-reading the binary.
-- **No pull requests are open** once the 0.1.4 pass is merged (2026-10-16).
+- **No pull requests are open** once the 0.1.5 pass is merged (2026-10-16).
+- **Next for ONLINE:** the EOS backend in `runtime/mp_net.c` (Mary sets up the Epic product, the SDK in `TOOLS/eos/SDK`, `TOOLS/eos/eos.ini`); measure the wait before a fight; a differential test for what of limeMPGameSpecific.c the oracle can run.
 - **New contributors:** [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md) explains how
   the game runs, the code map, the bug method and the test tools.
 

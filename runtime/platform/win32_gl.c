@@ -376,6 +376,48 @@ void plat_text_clear(void)
     g_text_n = 0;
 }
 
+int plat_clipboard_text(char *out, int n)
+{
+    HANDLE h;
+    const wchar_t *w;
+    int len = 0;
+
+    if (n <= 0)
+        return 0;
+    out[0] = 0;
+    if (!OpenClipboard(NULL))
+        return 0;
+    h = GetClipboardData(CF_UNICODETEXT);
+    if (h && (w = (const wchar_t *)GlobalLock(h)) != NULL) {
+        len = WideCharToMultiByte(CP_UTF8, 0, w, -1, out, n, NULL, NULL);
+        len = len > 0 ? len - 1 : 0;
+        out[len] = 0;
+        GlobalUnlock(h);
+    }
+    CloseClipboard();
+    return len;
+}
+
+int plat_clipboard_set(const char *utf8)
+{
+    int n = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, NULL, 0);
+    HGLOBAL h;
+    wchar_t *w;
+
+    if (n <= 0 || !OpenClipboard(NULL))
+        return 0;
+    EmptyClipboard();
+    h = GlobalAlloc(GMEM_MOVEABLE, (SIZE_T)n * sizeof(wchar_t));
+    if (h && (w = (wchar_t *)GlobalLock(h)) != NULL) {
+        MultiByteToWideChar(CP_UTF8, 0, utf8, -1, w, n);
+        GlobalUnlock(h);
+        if (!SetClipboardData(CF_UNICODETEXT, h))
+            GlobalFree(h);
+    }
+    CloseClipboard();
+    return 1;
+}
+
 void *plat_gl_proc(const char *name)
 {
     PROC p = wglGetProcAddress(name);

@@ -48,6 +48,12 @@ void ui_grab(int vx, int vy, int vw, int vh);
 /* a picture beside the box: uploaded once, drawn at (x, y), size points */
 void ui_icon_set(const unsigned char *rgba, int w, int h);
 void ui_icon_draw(float x, float y, float size);
+void ui_badge_at(int slot, const char *name, const unsigned char *icon,
+                 int icon_px, unsigned key, float x, float y, int align,
+                 float size);
+float ui_space_width(void);
+void ui_rect_outline(float x, float y, float w, float h, float t,
+                     float r, float g, float b, float a);
 /* the player's badge, top right; rebuilt when `key` changes */
 void ui_badge(const char *name, const unsigned char *icon, int icon_px,
               unsigned key);

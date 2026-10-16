@@ -1080,6 +1080,97 @@ void ui_badge(const char *name, const unsigned char *icon, int icon_px,
     end_2d();
 }
 
+/* A badge as ui_badge draws it, anywhere (port: the ONLINE screens,
+ * online_ui.c). Four slots, each with its own picture, made again when its
+ * `key` changes. (x, y) in the 320-high menu space; `align` 0 puts the left
+ * edge at x, 1 the centre, 2 the right edge; `size` scales it. */
+void ui_badge_at(int slot, const char *name, const unsigned char *icon,
+                 int icon_px, unsigned key, float x, float y, int align,
+                 float size)
+{
+    static GLuint tex[4];
+    static unsigned last[4];
+    static int tw[4], th[4];
+    static float ts[4];
+    GLint view[4];
+    float s, w, h;
+
+    if (slot < 0 || slot > 3)
+        return;
+    glGetIntegerv(GL_VIEWPORT, view);
+    s = view[3] / 320.0f * size;
+    if (s <= 0)
+        return;
+    key ^= (unsigned)(s * 1000.0f);
+    if (!tex[slot] || key != last[slot]) {
+        unsigned char *px = plat_ui_badge(name, icon, icon_px, s,
+                                          &tw[slot], &th[slot]);
+        if (!px)
+            return;
+        if (!tex[slot])
+            glGenTextures(1, &tex[slot]);
+        glBindTexture(GL_TEXTURE_2D, tex[slot]);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tw[slot], th[slot], 0, GL_RGBA,
+                     GL_UNSIGNED_BYTE, px);
+        free(px);
+        ts[slot] = s / size;
+        last[slot] = key;
+    }
+    begin_2d();
+    w = tw[slot] / ts[slot];
+    h = th[slot] / ts[slot];
+    if (align == 1)
+        x -= w * 0.5f;
+    else if (align == 2)
+        x -= w;
+    glEnable(GL_TEXTURE_2D);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);        /* premultiplied */
+    glBindTexture(GL_TEXTURE_2D, tex[slot]);
+    glColor4f(1, 1, 1, 1);
+    glBegin(GL_QUADS);
+    glTexCoord2f(0, 0); glVertex2f(x, y);
+    glTexCoord2f(1, 0); glVertex2f(x + w, y);
+    glTexCoord2f(1, 1); glVertex2f(x + w, y + h);
+    glTexCoord2f(0, 1); glVertex2f(x, y + h);
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+    end_2d();
+}
+
+/* A rectangle's outline, `t` thick, in the 320-high menu space (port: the
+ * ONLINE screen's code box). */
+void ui_rect_outline(float x, float y, float w, float h, float t,
+                     float r, float g, float b, float a)
+{
+    begin_2d();
+    glColor4f(r, g, b, a);
+    glBegin(GL_QUADS);
+    glVertex2f(x, y);         glVertex2f(x + w, y);
+    glVertex2f(x + w, y + t); glVertex2f(x, y + t);
+    glVertex2f(x, y + h - t); glVertex2f(x + w, y + h - t);
+    glVertex2f(x + w, y + h); glVertex2f(x, y + h);
+    glVertex2f(x, y);         glVertex2f(x + t, y);
+    glVertex2f(x + t, y + h); glVertex2f(x, y + h);
+    glVertex2f(x + w - t, y); glVertex2f(x + w, y);
+    glVertex2f(x + w, y + h); glVertex2f(x + w - t, y + h);
+    glEnd();
+    end_2d();
+}
+
+/* The menu space's width (320 high, the view's shape). */
+float ui_space_width(void)
+{
+    GLint view[4];
+
+    glGetIntegerv(GL_VIEWPORT, view);
+    return view[3] > 0 ? 320.0f * view[2] / view[3] : 480.0f;
+}
+
 void ui_icon_draw(float x, float y, float size)
 {
     if (!g_icon)

@@ -140,7 +140,7 @@ $src = @(
     'runtime\gamecode_stubs.c', 'runtime\lime_menu.c', 'runtime\lime_platform.c',
     'runtime\lime_app.c', 'runtime\wav.c', 'runtime\fight_runtime.c',
     'runtime\debug_menu.c', 'runtime\savestate.c',
-    'runtime\settings_menu.c', 'runtime\profiles.c', 'runtime\pad_nav.c',
+    'runtime\settings_menu.c', 'runtime\profiles.c', 'runtime\pad_nav.c', 'runtime\mp_net.c', 'runtime\online_ui.c',
     'runtime\platform\win32_gl.c', 'runtime\platform\win32_gl_cdecl.c',
     'runtime\platform\win32_audio.c'
 ) | ForEach-Object { Join-Path $Root $_ }
@@ -219,7 +219,7 @@ $ldArch = if ($Arch -eq 'x64') {
     @('-Wl,--image-base,0x400000', '-Wl,--disable-dynamicbase', '-Wl,--disable-high-entropy-va')
 } else { @('-Wl,--large-address-aware') }
 (($objs | ForEach-Object { Quote $_ }) + @('-o', (Quote $exe), '-mwindows') + $ldArch +
-    @('-lopengl32', '-lgdi32', '-lwinmm', '-lmsacm32', '-lm')) -join "`n" |
+    @('-lopengl32', '-lgdi32', '-lwinmm', '-lmsacm32', '-lws2_32', '-lm')) -join "`n" |
     Set-Content -Encoding ascii $rsp
 if (Test-Path $exe) { Remove-Item $exe -Force }
 & $cc "@$rsp"

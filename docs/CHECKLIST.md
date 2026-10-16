@@ -140,6 +140,16 @@ only once Mary has checked it in game. What is known so far is under each one.
 - [ ] **Player profile** in the launcher and the game, badge on both.
 - [x] **Continue screens on 16:9 and 21:9** with Mary's pictures.
 
+## 0.1.5 alpha (online)
+
+- [x] **PLAY > ONLINE**: two windows on one PC find each other by code,
+  select, versus, fight on both, pause in sync (Mary saw it work).
+- [x] **Versus spotlights** no longer blink in 64 bits (Mary).
+- [ ] **FATALITY sign** in 64 bits: same fix; to confirm by Mary.
+- [ ] **REMATCH / another fighter / exit** after an online fight; to play
+  through.
+- [ ] Two PCs on one LAN.
+
 ## 0.1.4 beta
 
 - [x] **64-bit build** (`umk3-game64.exe`), compiled and played from the

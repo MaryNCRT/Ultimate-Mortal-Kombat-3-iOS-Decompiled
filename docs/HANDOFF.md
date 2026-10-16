@@ -1,6 +1,6 @@
 # Handoff
 
-> **The first two sections were rewritten on 2026-10-16 for beta 0.1.4.**
+> **The first two sections were rewritten on 2026-10-16 for alpha 0.1.5.**
 > Everything after them is a dated diary of what each finished module
 > settled; it is kept because the facts in it are still true, but its counts
 > ("1,752 of 2,172" and the like) and its "next steps" are history. The live
@@ -15,9 +15,9 @@ Read this, then [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md) and
 
 ## Releases
 
-The current build is **0.1.4 beta** ([notes](RELEASE-0.1.4-beta.md)),
-published on GitHub as a pre-release with `UMK3-PC-0.1.4-beta.zip`; it adds
-the 64-bit build. 0.1.3 back
+The current build is **0.1.5 alpha** ([notes](RELEASE-0.1.5-alpha.md)),
+published on GitHub as a pre-release with `UMK3-PC-0.1.5-alpha.zip`; it adds
+PLAY > ONLINE. 0.1.4 back
 to 0.0.4 are still published; 0.0.1-0.0.3 were deleted from GitHub when the
 history was rewritten on 2026-10-09 (their notes stay in `docs/`). What each
 release fixed, with addresses, is in PROGRESS.md.
@@ -31,8 +31,15 @@ release fixed, with addresses, is in PROGRESS.md.
 4. Compile the result once from scratch with the `.ipa`.
 5. Run `gh release create vX.Y.Z-beta <zip> --prerelease --notes-file docs/RELEASE-X.Y.Z-beta.md` (`-alpha` before 0.1.3).
 
-## Where the project stands (2026-10-16, beta 0.1.4)
+## Where the project stands (2026-10-16, alpha 0.1.5)
 
+- **New in 0.1.5 alpha, ONLINE:** see PROGRESS.md's first entry. In short:
+  `decomp/gamecode/limeMPGameSpecific.c` is the binary's multiplayer layer
+  (draft), `runtime/mp_net.c` the session in place of GKSession (UDP,
+  same PC / LAN; EOS next), `FE_Task_Online` (FE task 51) the screen,
+  `runtime/online_ui.c` the badges. Two games on one PC:
+  `WORK/online/two.ps1` in a worktree, or UMK3_PROFILES / UMK3_WINDOW by
+  hand. The shared protocol notes are in the PROGRESS entry.
 - **Done:** every function is decompiled (2,572 of 2,572). The game plays the
   menus, Arcade to the end (treasure screen) and whole fights with every
   finisher on Windows. Input comes from the keyboard, a gamepad or the mouse.

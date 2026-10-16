@@ -14,6 +14,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#include "mp_net.h"     /* port: ONLINE */
+#include "profiles.h"
 
 /* Both live in the slice's data and both hold 1.0f as shipped. */
 extern float FE_WidthScale;             /* 0x000ff9b8 */
@@ -1826,12 +1828,14 @@ void dumpStack(void)
 
     puts("STACK:");
 
+    /* port: 51 is the ONLINE screen, past the end of FETaskNames */
+#define PORT_TASK_NAME(t) ((t) == 51 ? "FE_Task_Online" : FETaskNames[t])
     for (i = 0; i < FE_TaskStackPointer; i++)
         printf("#%d:%s(%d)\n", i,
-               FETaskNames[FE_CurrentTaskStack[i]], FE_CurrentTaskStack[i]);
+               PORT_TASK_NAME(FE_CurrentTaskStack[i]), FE_CurrentTaskStack[i]);
 
     printf("######################### (%s)(%d)\n",
-           FETaskNames[FE_CurrentTask], FE_CurrentTask);
+           PORT_TASK_NAME(FE_CurrentTask), FE_CurrentTask);
 }
 
 
@@ -7411,6 +7415,7 @@ extern float  averageScaleFactor;       /* 0x001017b0 */
 extern long   averageScaleFactorCnt;    /* 0x001017b4 */
 extern float  averageScaleFactorOutput; /* 0x001017b8 -- written, never read */
 extern void (*const FETaskFunctionList[])(void);   /* 0x0017d51c */
+void FE_Task_Online(void);              /* port */
 
 void limeSetColourMask(long r, long g, long b, long a);
 void heartbeatUpdate(void);
@@ -7460,7 +7465,8 @@ void Task_FEMain(void)
     }
 
     /* ---- run the current screen ---- */
-    fn = FETaskFunctionList[FE_CurrentTask];
+    /* port: the ONLINE screen, after the binary's 51 (FE_Task_Online) */
+    fn = FE_CurrentTask == 51 ? FE_Task_Online : FETaskFunctionList[FE_CurrentTask];
     hideTicker = (fn == FE_Task_Main_Menu) ? 0 : 1;
     (*fn)();                            /* the table entry, not a named call */
 
@@ -10155,10 +10161,10 @@ void DrawTower3D(void)
  * has the first four, 64 apart from y 48; the port shows the iPad's five
  * with every interface size (Mary). */
 /* Port, not in the binary: a sixth, TRAINING (GameText 0xc2, the game's
- * own word in every language), under 2 PLAYER -- so the six are 47 apart
- * from y 36 to fit. */
-#define PLAY_ROW0          36.0f
-#define PLAY_ROW_PITCH     47.0f
+ * own word in every language), under 2 PLAYER, and a seventh, ONLINE
+ * (FE_Task_Online, below) -- so the seven are 40 apart from y 30 to fit. */
+#define PLAY_ROW0          30.0f
+#define PLAY_ROW_PITCH     40.0f
 #define PLAY_TASK_RESUME   2
 #define PLAY_TASK_LOBBY    3
 #define PLAY_TASK_START    0x1b
@@ -10183,6 +10189,10 @@ static long Touch_PlayDuel, LastTouch_PlayDuel;
  * the clock stops (Players.c, other.c). */
 static long Touch_PlayTrain, LastTouch_PlayTrain;
 int PortPractice;
+/* Port, not in the binary: ONLINE, play against someone by their code. */
+static long Touch_PlayOnline, LastTouch_PlayOnline;
+char *PortOnlineTitle(void);            /* FE_Task_Online's file part */
+#define PORT_TASK_ONLINE   51           /* after the binary's 51 screens */
 
 void FE_Task_Play(void)
 {
@@ -10322,6 +10332,19 @@ void FE_Task_Play(void)
             && limeTouchScreenX[0] == -1.0f)
             sel = 11;
     }
+    {                                   /* port: online */
+        LastTouch_PlayOnline = Touch_PlayOnline;
+        Touch_PlayOnline = DrawOptionAsButton(PortOnlineTitle(),
+                                              FESlideOffset * PLAY_SLIDE_SPAN
+                                                  + PLAY_OPTION_X,
+                                              PLAY_ROW0 + 6 * PLAY_ROW_PITCH,
+                                              PLAY_OPTION_SCALE,
+                                              &mmfontcol[(LastTouch_PlayOnline + 1) * 4],
+                                              FE_W(PLAY_OPTION_WIDTH));
+        if (LastTouch_PlayOnline != 0 && Touch_PlayOnline == 0
+            && limeTouchScreenX[0] == -1.0f)
+            sel = 12;
+    }
 
     MaintainFESlide();
 
@@ -10336,6 +10359,13 @@ void FE_Task_Play(void)
             PortPractice = 1;           /* port: 2 PLAYER as training */
             GameMode = PLAY_MODE_TWOUP;
             PushFETaskDeferred(PLAY_TASK_START);
+        } else if (sel == 12) {
+            /* port: ONLINE, the session up before the screen, as
+             * MULTIPLAYER does for the lobby */
+            PortPractice = 0;
+            GameMode = PLAY_MODE_ARCADE;
+            PushFETaskDeferred(PORT_TASK_ONLINE);
+            startMP();
         } else if (sel == 1) {
             GameMode = PLAY_MODE_ARCADE;
             if (GameStarted != 0) {
@@ -11897,6 +11927,307 @@ void FE_Task_Multiplayer(void)
 }
 
 
+
+/* ----------------------------------------------------------- FE_Task_Online
+ *
+ * Port, not in the binary: the ONLINE screen (PLAY > ONLINE). The iPhone game
+ * found its opponent over Bluetooth in FE_Task_Multiplayer above; this finds
+ * them by their code -- the id in their profiles.ini, shown here for the
+ * player to give out -- through runtime/mp_net.c. The Arcade select screen's
+ * background without the roster, the menu's music (FEMain plays MainMenu.mp3
+ * for every screen it does not name).
+ *
+ *   left    the player's badge (icon and name, drawn over the frame by
+ *           runtime/online_ui.c), YOUR CODE and COPY (to the clipboard)
+ *   right   the box for the other player's code -- always listening: typed
+ *           or pasted (Ctrl+V); a click on it listens again after a search
+ *           -- and FIND MATCH
+ *
+ * Once the other game answers, it goes on exactly as the lobby does when a
+ * peer connects: GameMode 1, the multiplayer select screen (0x2a), and from
+ * there the binary's own versus screen, fight and summary (REMATCH, another
+ * fighter, or out).
+ *
+ * Every string here is the port's: they go through PortUC, UTF-8 to the
+ * UTF-16 (with the FF FE mark) the game's text functions take -- the button
+ * code reads nothing else. ONLINE is in every language the game ships; the
+ * rest in the Latin ones, English in Korean, Chinese and Japanese.
+ */
+
+int  plat_text_take(char *out, int n);
+void plat_text_clear(void);
+int  plat_clipboard_text(char *out, int n);
+int  plat_clipboard_set(const char *utf8);
+
+/* the box, for online_ui.c (it draws the frame over the finished frame) */
+int  PortOnlineBoxActive;
+const float PortOnlineBox[4] = { 250.0f, 92.0f, 220.0f, 34.0f };   /* x y w h */
+
+static char  PortOnlineCode[16];        /* what was typed, dashes included */
+static int   PortOnlineListening = 1;
+static long  Touch_OnlineFind, LastTouch_OnlineFind;
+static long  Touch_OnlineCopy, LastTouch_OnlineCopy;
+static float PortOnlineBlink, PortOnlineCopied;
+
+/* UTF-8 to the game's UTF-16LE, the FF FE mark first; eight buffers in turn. */
+static char *PortUC(const char *s)
+{
+    static char buf[8][256];
+    static int k;
+    char *o = buf[k = (k + 1) & 7];
+    const unsigned char *p = (const unsigned char *)s;
+    int n = 2;
+
+    o[0] = (char)0xff;
+    o[1] = (char)0xfe;
+    while (*p && n < 250) {
+        unsigned c = *p++;
+        if (c >= 0xe0 && p[0] && p[1]) {
+            c = (c & 0x0f) << 12 | (p[0] & 0x3f) << 6 | (p[1] & 0x3f);
+            p += 2;
+        } else if (c >= 0xc0 && p[0]) {
+            c = (c & 0x1f) << 6 | (p[0] & 0x3f);
+            p++;
+        }
+        o[n++] = (char)(c & 0xff);
+        o[n++] = (char)(c >> 8);
+    }
+    o[n] = o[n + 1] = 0;
+    return o;
+}
+
+enum { OT_ONLINE, OT_YOURCODE, OT_COPY, OT_COPIED, OT_OTHER, OT_FIND, OT_HINT,
+       OT_SEARCHING, OT_NOTFOUND, OT_BUSY, OT_LOST, OT_CONNECTED, OT_N };
+
+/* EN ES FR DE IT KO ZH JA */
+static const char *const PortOnlineText[OT_N][8] = {
+    { "ONLINE", "EN L\xc3\x8dNEA", "EN LIGNE", "ONLINE", "ONLINE",
+      "\xec\x98\xa8\xeb\x9d\xbc\xec\x9d\xb8", "\xe5\x9c\xa8\xe7\xba\xbf",
+      "\xe3\x82\xaa\xe3\x83\xb3\xe3\x83\xa9\xe3\x82\xa4\xe3\x83\xb3" },
+    { "YOUR CODE", "TU C\xc3\x93" "DIGO", "TON CODE", "DEIN CODE", "IL TUO CODICE" },
+    { "COPY", "COPIAR", "COPIER", "KOPIEREN", "COPIA" },
+    { "COPIED", "COPIADO", "COPI\xc3\x89", "KOPIERT", "COPIATO" },
+    { "THE OTHER PLAYER'S CODE", "C\xc3\x93" "DIGO DEL OTRO JUGADOR",
+      "CODE DE L'AUTRE JOUEUR", "CODE DES ANDEREN SPIELERS",
+      "CODICE DELL'ALTRO GIOCATORE" },
+    { "FIND MATCH", "BUSCAR PARTIDA", "TROUVER UN MATCH", "MATCH SUCHEN",
+      "TROVA PARTITA" },
+    { "TYPE OR PASTE IT (CTRL+V)", "ESCR\xc3\x8d" "BELO O P\xc3\x89GALO (CTRL+V)",
+      "TAPE-LE OU COLLE-LE (CTRL+V)", "TIPPEN ODER EINF\xc3\x9cGEN (STRG+V)",
+      "SCRIVILO O INCOLLALO (CTRL+V)" },
+    { "SEARCHING...", "BUSCANDO...", "RECHERCHE...", "SUCHE...", "RICERCA..." },
+    { "NOT FOUND: THEIR ONLINE SCREEN MUST BE OPEN",
+      "NO ENCONTRADO: DEBE TENER ABIERTA SU PANTALLA EN L\xc3\x8dNEA",
+      "INTROUVABLE : SON \xc3\x89" "CRAN EN LIGNE DOIT \xc3\x8aTRE OUVERT",
+      "NICHT GEFUNDEN: SEIN ONLINE-BILDSCHIRM MUSS OFFEN SEIN",
+      "NON TROVATO: LA SUA SCHERMATA ONLINE DEVE ESSERE APERTA" },
+    { "THAT PLAYER IS IN ANOTHER MATCH", "ESE JUGADOR EST\xc3\x81 EN OTRA PARTIDA",
+      "CE JOUEUR EST DANS UN AUTRE MATCH", "DIESER SPIELER SPIELT GERADE",
+      "QUEL GIOCATORE \xc3\x88 IN UN'ALTRA PARTITA" },
+    { "THE CONNECTION WAS LOST", "SE PERDI\xc3\x93 LA CONEXI\xc3\x93N",
+      "LA CONNEXION A \xc3\x89T\xc3\x89 PERDUE", "VERBINDUNG GETRENNT",
+      "CONNESSIONE PERSA" },
+    { "CONNECTED", "CONECTADO", "CONNECT\xc3\x89", "VERBUNDEN", "CONNESSO" },
+};
+
+/* The word for `id` in the game's language (Language, "EN", "ES"...). */
+const char *PortOnlineWord(int id)
+{
+    static const char codes[8][3] = { "EN", "ES", "FR", "DE", "IT", "KO", "ZH", "JA" };
+    int i, l = 0;
+
+    for (i = 0; i < 8; i++)
+        if (Language[0] == codes[i][0] && Language[1] == codes[i][1])
+            l = i;
+    return PortOnlineText[id][l] ? PortOnlineText[id][l] : PortOnlineText[id][0];
+}
+
+/* One typed character into the code: letters and digits only, upper case,
+ * the dashes put in as the profile id has them (XXXX-XXXX-XXXX). */
+static void PortOnlineType(int c)
+{
+    size_t n = strlen(PortOnlineCode);
+
+    if (c >= 'a' && c <= 'z')
+        c -= 32;
+    if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z')) || n >= 14)
+        return;
+    if (n == 4 || n == 9)
+        PortOnlineCode[n++] = '-';
+    PortOnlineCode[n++] = (char)c;
+    PortOnlineCode[n] = 0;
+}
+
+static void PortOnlinePaste(void)
+{
+    char clip[64];
+    int i;
+
+    if (plat_clipboard_text(clip, sizeof clip) > 0) {
+        PortOnlineCode[0] = 0;
+        for (i = 0; clip[i]; i++)
+            PortOnlineType((unsigned char)clip[i]);
+    }
+}
+
+static void PortOnlineFind(void)
+{
+    if (strlen(PortOnlineCode) == 14) {
+        mpnet_find(PortOnlineCode);
+        PortOnlineListening = 0;
+    }
+}
+
+void FE_Task_Online(void)
+{
+    const struct profile *me = prof_get();
+    const char *status = NULL;
+    char line[64];
+    long back;
+    int searching = mpnet_status() == MPNET_SEARCHING;
+
+    if (!mpnet_session_exists())        /* back here after a disconnection */
+        startMP();
+    {
+        /* a test aid: UMK3_ONLINE_FIND=<code> presses FIND MATCH with that
+         * code once, for two games driven by script */
+        static int asked;
+        const char *e = getenv("UMK3_ONLINE_FIND");
+        if (e && !asked && mpnet_session_exists()) {
+            asked = 1;
+            mpnet_find(e);
+        }
+    }
+
+    limeEnableAlphaBlending_Basic();
+    limeSet2DDrawing();
+    limeDrawSprite((TEXTURE *)((&SelectBGTexture)[BGRandomised]
+                               ? (&SelectBGTexture)[BGRandomised]
+                               : *FEBackground),
+                   0.0f, 0.0f, (float)limeScreenWidth, (float)limeScreenHeight,
+                   0.0f, 0.0f, 0.9375f, 0.625f, col);
+
+    limeDrawFONT(&GameFont, PortUC(PortOnlineWord(OT_ONLINE)),
+                 FE_WidthScale * 240.0f + FE_XC, FE_HeightScale * 8.0f, 1,
+                 FE_WidthScale, fontcol);
+
+    /* ---- the left: this player, and COPY ---- */
+    limeDrawFONT(&GameFont, PortUC(PortOnlineWord(OT_YOURCODE)), FE_X(120.0f),
+                 FE_Y(176.0f), 1, FE_WidthScale, fontcol);
+    limeDrawFONT(&GameFont, PortUC(me ? me->id : ""), FE_X(120.0f),
+                 FE_Y(198.0f), 1, FE_WidthScale * 1.25f, fontcol);
+    LastTouch_OnlineCopy = Touch_OnlineCopy;
+    Touch_OnlineCopy = DrawOptionAsButton(
+        PortUC(PortOnlineWord(PortOnlineCopied > 0.0f ? OT_COPIED : OT_COPY)),
+        120.0f, 236.0f, 1.0f, &mmfontcol[(LastTouch_OnlineCopy + 1) * 4],
+        FE_W(160.0f));
+    if (LastTouch_OnlineCopy != 0 && Touch_OnlineCopy == 0
+        && limeTouchScreenX[0] == -1.0f && me) {
+        plat_clipboard_set(me->id);
+        PortOnlineCopied = 120.0f;
+    }
+    if (PortOnlineCopied > 0.0f)
+        PortOnlineCopied -= 1.0f / limeFPSScaleFactor;
+
+    /* ---- the right: the box and FIND MATCH ---- */
+    limeDrawFONT(&GameFont, PortUC(PortOnlineWord(OT_OTHER)), FE_X(360.0f),
+                 FE_Y(72.0f), 1, FE_WidthScale * 0.7f, fontcol);
+
+    if (TouchAreaWH((int)PortOnlineBox[0], (int)PortOnlineBox[1],
+                    (int)PortOnlineBox[2], (int)PortOnlineBox[3]) & 1) {
+        if (!searching)
+            PortOnlineListening = 1;
+    }
+    PortOnlineBoxActive = PortOnlineListening && !searching;
+
+    if (PortOnlineBoxActive) {
+        char ch[8];
+        int n;
+
+        while ((n = plat_text_take(ch, sizeof ch)) > 0) {
+            if (ch[0] == 8) {           /* Backspace */
+                size_t k = strlen(PortOnlineCode);
+                if (k > 0)
+                    PortOnlineCode[--k] = 0;
+                if (k > 0 && PortOnlineCode[k - 1] == '-')
+                    PortOnlineCode[--k] = 0;
+            } else if (ch[0] == 13) {   /* Enter */
+                PortOnlineFind();
+            } else if (ch[0] == 22) {   /* Ctrl+V */
+                PortOnlinePaste();
+            } else if (n == 1) {
+                PortOnlineType((unsigned char)ch[0]);
+            }
+        }
+    } else {
+        plat_text_clear();
+    }
+
+    PortOnlineBlink += 0.025f / limeFPSScaleFactor;
+    if (PortOnlineBlink > 2.0f)
+        PortOnlineBlink -= 2.0f;
+    snprintf(line, sizeof line, "%s%s", PortOnlineCode,
+             PortOnlineBoxActive && PortOnlineBlink > 1.0f
+             && strlen(PortOnlineCode) < 14 ? "_" : "");
+    limeDrawFONT(&GameFont, PortUC(line), FE_X(360.0f), FE_Y(98.0f), 1,
+                 FE_WidthScale * 1.1f, fontcol);
+    limeDrawFONT(&GameFont, PortUC(PortOnlineWord(OT_HINT)), FE_X(360.0f),
+                 FE_Y(132.0f), 1, FE_WidthScale * 0.55f, fontcol);
+
+    LastTouch_OnlineFind = Touch_OnlineFind;
+    Touch_OnlineFind = DrawOptionAsButton(PortUC(PortOnlineWord(OT_FIND)),
+                                          360.0f, 160.0f, 1.25f,
+                                          &mmfontcol[(LastTouch_OnlineFind + 1) * 4],
+                                          FE_W(220.0f));
+    if (LastTouch_OnlineFind != 0 && Touch_OnlineFind == 0
+        && limeTouchScreenX[0] == -1.0f && !searching) {
+        PortOnlineListening = 1;
+        PortOnlineFind();
+    }
+
+    switch (mpnet_status()) {
+    case MPNET_SEARCHING: status = PortOnlineWord(OT_SEARCHING); break;
+    case MPNET_NOT_FOUND: status = PortOnlineWord(OT_NOTFOUND); break;
+    case MPNET_BUSY:      status = PortOnlineWord(OT_BUSY); break;
+    case MPNET_LOST:      status = PortOnlineWord(OT_LOST); break;
+    case MPNET_CONNECTED: status = PortOnlineWord(OT_CONNECTED); break;
+    }
+    if (status)
+        limeDrawFONT(&GameFont, PortUC(status), FE_X(360.0f), FE_Y(206.0f), 1,
+                     FE_WidthScale * 0.55f, fontcol);
+    if (mpnet_status() != MPNET_SEARCHING && !PortOnlineListening)
+        PortOnlineListening = 1;        /* the search ended: listen again */
+
+    back = DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1);
+    limeDrawFONT(&GameFont, GameText(7),
+                 FE_X(423.0f), FE_Y(296.0f), 1, FE_WidthScale, fontcol);
+    if (back) {
+        mpnet_cancel_find();
+        endMP();
+        PopFETaskDeferred();
+    }
+
+    /* ---- connected: on as the lobby goes on (FE_Task_Multiplayer) ---- */
+    Character_SelectWait  = 0;
+    CharacterConfirmed    = -1;
+    CharacterSelected     = -1;
+    opponentCharacter     = -1;
+    playerCharacter       = -1;
+    syncCharacters        = 0;
+    syncCharactersOpponent = 0;
+    if (GameMode != 1 && isMPConnected()) {
+        GameMode = 1;
+        PushFETask(0x2a);
+    }
+}
+
+/* The PLAY menu's ONLINE, in the game's language (FE_Task_Play). */
+char *PortOnlineTitle(void)
+{
+    return PortUC(PortOnlineWord(OT_ONLINE));
+}
+
+
 /* ------------------------------------------------------ drawCharacterSelection
  *
  * armv7 0x000099a0, 3,116 bytes.  **Complete.**
@@ -13442,8 +13773,12 @@ void FE_Task_Multiplayer_Versus_Screen(void)
                    (float)limeScreenWidth, (float)limeScreenHeight,
                    0.0f, 0.0f, 1.0f, 1.0f, col);
 
+    /* the binary puts it at FE_WidthScale * 208, the middle of a 480-wide
+     * screen only; centred on the screen as FE_Task_VS_Screen does (port,
+     * Mary) */
     limeDrawSprite((TEXTURE *)VSTexture,
-                   FE_WidthScale * 208.0f, FE_HeightScale * 80.0f,
+                   ((float)limeScreenWidth + FE_WidthScale * -64.0f) * 0.5f,
+                   FE_HeightScale * 80.0f,
                    FE_WidthScale * 64.0f, FE_HeightScale * 128.0f,
                    0.0f, 0.0f, 1.0f, 1.0f, col);
 

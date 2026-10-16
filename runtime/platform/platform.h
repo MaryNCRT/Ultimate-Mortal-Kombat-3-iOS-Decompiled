@@ -58,6 +58,11 @@ void plat_quit(void);
  * what was typed before the field opened. */
 int  plat_text_take(char *out, int n);
 void plat_text_clear(void);
+/* The clipboard's text as UTF-8 in `out` (port: Ctrl+V on the ONLINE
+ * screen pastes a code); its length, 0 for none. */
+int  plat_clipboard_text(char *out, int n);
+/* `utf8` onto the clipboard (port: COPY beside YOUR CODE); 1 when done. */
+int  plat_clipboard_set(const char *utf8);
 
 /* A GL entry point beyond 1.1 (the framebuffer objects the render
  * resolution draws into), or NULL. Same calling convention as GL's own. */
