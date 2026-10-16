@@ -117,10 +117,17 @@ void prof_load(const char *ini_path, const char *default_name)
     sl = strrchr(g_path, '\\');
     if (!sl || (strrchr(g_path, '/') && strrchr(g_path, '/') > sl))
         sl = strrchr(g_path, '/');
-    if (sl)
-        snprintf(sl + 1, sizeof g_path - (size_t)(sl + 1 - g_path), "profiles.ini");
-    else
-        snprintf(g_path, sizeof g_path, "profiles.ini");
+    {
+        /* UMK3_PROFILES: another file name in the same folder, so a second
+         * game on this computer is another player (testing ONLINE) */
+        const char *name = getenv("UMK3_PROFILES");
+        if (!name || !*name || strchr(name, '/') || strchr(name, '\\'))
+            name = "profiles.ini";
+        if (sl)
+            snprintf(sl + 1, sizeof g_path - (size_t)(sl + 1 - g_path), "%s", name);
+        else
+            snprintf(g_path, sizeof g_path, "%s", name);
+    }
 
     g_have = 0;
     f = fopen(g_path, "rb");

@@ -95,6 +95,8 @@
 #include "debug_menu.h"
 #include "settings_menu.h"
 #include "profiles.h"
+#include "mp_net.h"
+#include "online_ui.h"
 #include "pad_nav.h"
 
 /* A scripted run (UMK3_SHOT) ignores the real keyboard, as it ignores the
@@ -1747,6 +1749,8 @@ static int parse_screen(const char *s)
 
     if (s[0] >= '0' && s[0] <= '9')
         return atoi(s) < DBG_SCREENS ? atoi(s) : -1;
+    if (_stricmp(s, "online") == 0)     /* the port's ONLINE screen */
+        return 51;
     for (i = 0; i < DBG_SCREENS; i++)   /* "treasure" -> FE_Task_Treasure */
         if (_stricmp(FETaskNames[i] + 8, s) == 0
             || _stricmp(FETaskNames[i], s) == 0)
@@ -1766,7 +1770,8 @@ static void leave_fight(int task)
 
 static void jump_screen(int task)
 {
-    printf("debug: screen %d %s\n", task, FETaskNames[task]);
+    printf("debug: screen %d %s\n", task,
+           task < DBG_SCREENS ? FETaskNames[task] : "FE_Task_Online");
     if (CurrentTask == 6)
         leave_fight(task);
     else if (CurrentTask == 3)
@@ -2584,6 +2589,18 @@ int main(int argc, char **argv)
 #endif
     if (getenv("UMK3_DEBUG_KEYS"))
         g_cfg_debug_keys = 1;
+    if (getenv("UMK3_WINDOW")) {        /* WxH: a window of that size, over
+                                         * umk3.ini (two games side by side,
+                                         * to test ONLINE) */
+        int w = 0, h = 0;
+        if (sscanf(getenv("UMK3_WINDOW"), "%dx%d", &w, &h) == 2
+            && w >= VIRT_W && h >= VIRT_H) {
+            g_cfg_w = w;
+            g_cfg_h = h;
+            g_cfg_full = 0;
+            g_cfg_borderless = 0;
+        }
+    }
     if (getenv("UMK3_SKIP_INTRO"))
         g_cfg_skip_intro = 1;
     if (getenv("UMK3_HIDE_CONTROLS"))   /* 0 1, over hide_controls= */
@@ -2682,7 +2699,13 @@ int main(int argc, char **argv)
 
         /* The window's focus is the app's foreground; see runtime/lime_app.c. */
         {
-            int f = shot_at ? 1 : plat_focused();
+            /* port: no pause on a focus loss (Mary). The game keeps running
+             * behind another window -- an online opponent's game waits for
+             * this one, and a window in the background is not an iPhone
+             * going to the background. The keys still let go when the
+             * focus goes (win32_gl.c). */
+            int f = 1;
+            (void)plat_focused;
             if (f != focused) {
                 focused = f;
                 if (f) {
@@ -2882,7 +2905,13 @@ int main(int argc, char **argv)
                 g_tick = ++ticks;       /* UMK3_KEYS' clock goes on */
                 continue;               /* the game does not tick */
             }
-            if (g_cfg_debug_keys && !set_menu_is_open()) {
+            /* port: no debug menu or debug keys in an online fight (Mary):
+             * the other player's game would not see what they change */
+            if (GameMode == 1 && (CurrentTask == 6 || CurrentTask == 9)
+                && dbg_menu_is_open())
+                dbg_menu_toggle();
+            if (g_cfg_debug_keys && !set_menu_is_open()
+                && !(GameMode == 1 && (CurrentTask == 6 || CurrentTask == 9))) {
                 static int was_f2, was_f3;
                 /* the pad's combination (pad_dbg_menu=, L3+R3 unless the
                  * launcher set another) opens and closes the menu too */
@@ -2933,7 +2962,8 @@ int main(int argc, char **argv)
             keyboard_buttons();
             hud_keys();
             pad_skip();
-            if (g_cfg_debug_keys && dbg_keys_on()) {
+            if (g_cfg_debug_keys && dbg_keys_on()
+                && !(GameMode == 1 && (CurrentTask == 6 || CurrentTask == 9))) {
                 debug_keys();
                 screen_keys();
             }
@@ -2977,6 +3007,7 @@ int main(int argc, char **argv)
                     limeTouchScreenX[0] = limeLastTouchScreenX[0] = hx;
                     limeTouchScreenY[0] = limeLastTouchScreenY[0] = hy;
                 }
+                mpnet_poll();       /* ONLINE: the other game's packets (port) */
                 GameCodeMain();
                 PortPadPalette[0] = PortPadPalette[1] = 0;  /* off the select screen */
                 if (on) {
@@ -3006,6 +3037,17 @@ int main(int argc, char **argv)
                  * (PortMovesTurn), not the highlight */
                 PLAT_PAD q1 = g_pad, q2 = g_pad2;
 
+                {
+                    /* port: the ONLINE screen's code box takes the keyboard
+                     * while it listens -- Backspace deletes a character
+                     * there, it does not go back, and W A S D are letters */
+                    extern int PortOnlineBoxActive;
+                    if (CurrentTask == 3 && FE_CurrentTask == 51
+                        && PortOnlineBoxActive) {
+                        memset(&k1, 0, sizeof k1);
+                        memset(&k2, 0, sizeof k2);
+                    }
+                }
                 if (CurrentTask == 6 && GamePaused == 2) {
                     q1.left = q1.right = q2.left = q2.right = 0;
                     q1.up = q1.down = q2.up = q2.down = 0;
@@ -3042,6 +3084,7 @@ int main(int argc, char **argv)
             /* the player's badge on the main menu (port) */
             if (CurrentTask == 3 && FE_CurrentTask == 0)
                 set_menu_badge();
+            online_after_frame();   /* the ONLINE screens' badges (port) */
             render_resolve();
             if (g_cfg_debug_keys) {
                 if (dbg_info_on()) {

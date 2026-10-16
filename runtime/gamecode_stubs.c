@@ -10,11 +10,8 @@
  *                    The project's plan was always to delete this layer rather
  *                    than decompile it, and these are that deletion.
  *
- *   multiplayer      ~30 calls. GKSession peer-to-peer over Bluetooth. A native
- *                    port needs a real transport and it is not this one, so the
- *                    lobby answers "no peers, not connected" -- the state the
- *                    game already handles, because it is what a device with the
- *                    radio off reports.
+ *   multiplayer      was ~30 calls here; now decomp/gamecode/limeMPGameSpecific.c
+ *                    (the game's packets) over runtime/mp_net.c (the session).
  *
  *   mk3_*            7 calls into gamecode/logic, the fight engine, which is
  *                    3 of 2,172 written. The front end only reaches these on
@@ -23,12 +20,10 @@
  *
  * ## Every answer here is a state the original could produce
  *
- * That is the rule this file follows and it is worth stating. `isMPConnected`
- * returns 0 because a device with no peer nearby returns 0; `getNumberOfPeers`
- * returns 0 for the same reason. The front end has real code for both -- the
- * blinking "looking for players" line in FE_Task_Multiplayer is exactly that
- * path -- so the menus behave like the retail game with the radio off, not like
- * a game running against a broken library.
+ * That is the rule this file follows and it is worth stating. The store and
+ * the leaderboards answer as a device with no network does, a state the front
+ * end has real code for, so the menus behave like the retail game offline,
+ * not like a game running against a broken library.
  *
  * Where an answer would be a lie, the call does nothing and returns nothing
  * instead. `EASOC_FBGetFriendName` returns an empty string rather than a name.
@@ -42,10 +37,8 @@
 /* ---- counters, so a test can assert a call happened without a server ---- */
 
 static long g_ea_events;
-static long g_mp_packets;
 
 long gamecode_stub_ea_events(void)  { return g_ea_events; }
-long gamecode_stub_mp_packets(void) { return g_mp_packets; }
 
 
 /* ------------------------------------------------------------- EA_SDK ---- */
@@ -114,60 +107,8 @@ long EASOC_MayhemGetLeaderBoard(long page, long count, long period, void *cb)
 
 /* -------------------------------------------------------- multiplayer ---- */
 
-/* No radio. Every one of these is the answer a device gives with Bluetooth off,
- * which is a path the front end already has code for. */
-long isMPConnected(void)        { return 0; }
-long isParent(void)             { return 0; }
-long isParentBasedOnSpeed(void) { return 0; }
-long isWorking(void)            { return 0; }
-long isHeartbeatOn(void)        { return 0; }
-long getNumberOfPeers(void)     { return 0; }
-
-long getPeerNumber(long index, char *out, long size)
-{
-    (void)index;
-    /* An empty name, terminated. The lobby draws whatever is in the row, so a
-     * buffer left untouched would draw uninitialised bytes as text. */
-    if (out && size > 0)
-        out[0] = 0;
-    return 0;
-}
-
-void startMP(void)                  { }
-void endMP(void)                    { }
-void restartConnection(void)        { }
-void connectToPeer(long index)      { (void)index; }
-void updateLobbyHeartBeat(void)     { }
-void enableHeartbeat(long mode)     { (void)mode; }
-void disableHeartbeat(void)         { }
-void heartbeatSetIncoming(long s)   { (void)s; }
-void heartbeatSend(void)            { }
-void heartbeatUpdate(void)          { }
-void doFPSExchange(void)            { }
-long syncGame(long frame)           { (void)frame; return frame; }
-
-void sendCharacterPacket(long who)      { (void)who; g_mp_packets++; }
-void sendMenuPacket(long which)         { (void)which; g_mp_packets++; }
-void sendFEMenuPacket(long item)        { (void)item; g_mp_packets++; }
-void sendGenericPacket(long a, long b)  { (void)a; (void)b; g_mp_packets++; }
-void sendLevelPacket(void)              { g_mp_packets++; }
-void sendPlayPacket(void)               { g_mp_packets++; }
-void sendQuit(void)                     { g_mp_packets++; }
-void sendPause(long state)              { (void)state; g_mp_packets++; }
-
-void sendKodePacket(const int *digits, long index)
-{ (void)digits; (void)index; g_mp_packets++; }
-
-void sendTimerPacket(long timer, long wait)
-{ (void)timer; (void)wait; g_mp_packets++; }
-
-void sendJoystickInputPacket(long a, long bits)
-{ (void)a; (void)bits; g_mp_packets++; }
-
-void sendSpriteListPacket(void *objects, long a, long b)
-{ (void)objects; (void)a; (void)b; g_mp_packets++; }
-
-long setNextSpritesAndEvents(void) { return 0; }
+/* Not stubbed any more: decomp/gamecode/limeMPGameSpecific.c is the game's
+ * own multiplayer code and runtime/mp_net.c the session under it. */
 
 
 /* ------------------------------------------- gamecode/logic, the fight ---- */

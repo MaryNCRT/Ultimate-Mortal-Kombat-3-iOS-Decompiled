@@ -33,6 +33,8 @@ add_executable(umk3-menu
     runtime/draw_gl.c
     runtime/gamecode_globals.c
     runtime/gamecode_stubs.c
+    runtime/mp_net.c
+    runtime/profiles.c
     runtime/lime_menu.c
     runtime/lime_platform.c
     runtime/lime_app.c
@@ -90,6 +92,8 @@ add_executable(umk3-test
     runtime/draw_gl.c
     runtime/gamecode_globals.c
     runtime/gamecode_stubs.c
+    runtime/mp_net.c
+    runtime/profiles.c
     runtime/lime_menu.c
     runtime/lime_platform.c
     runtime/lime_app.c
@@ -189,13 +193,13 @@ elseif(UMK3_BACKEND STREQUAL "win32")
     target_link_libraries(umk3 PRIVATE opengl32 gdi32)
     target_sources(umk3-menu PRIVATE runtime/platform/win32_gl.c
                                     runtime/platform/win32_audio.c)
-    target_link_libraries(umk3-menu PRIVATE opengl32 gdi32 winmm msacm32)
+    target_link_libraries(umk3-menu PRIVATE opengl32 gdi32 winmm msacm32 ws2_32)
     target_sources(umk3-fight PRIVATE runtime/platform/win32_gl.c
                                      runtime/platform/win32_audio.c)
     target_link_libraries(umk3-fight PRIVATE opengl32 gdi32 winmm msacm32)
     target_sources(umk3-test PRIVATE runtime/platform/win32_gl.c
                                     runtime/platform/win32_audio.c)
-    target_link_libraries(umk3-test PRIVATE opengl32 gdi32 winmm msacm32 m)
+    target_link_libraries(umk3-test PRIVATE opengl32 gdi32 winmm msacm32 m ws2_32)
 elseif(UMK3_BACKEND STREQUAL "sdl2")
     find_package(SDL2 REQUIRED)
     find_package(OpenGL REQUIRED)
@@ -345,6 +349,8 @@ if(UMK3_BINARY)
             runtime/draw_gl.c
             runtime/gamecode_globals.c
             runtime/gamecode_stubs.c
+            runtime/mp_net.c
+            runtime/online_ui.c
             runtime/lime_menu.c
             runtime/lime_platform.c
             runtime/lime_app.c
@@ -391,7 +397,7 @@ if(UMK3_BINARY)
                 runtime/platform/win32_gl_cdecl.c
                 runtime/platform/win32_audio.c
                 runtime/umk3_game.rc)
-            target_link_libraries(umk3-game PRIVATE opengl32 gdi32 winmm msacm32)
+            target_link_libraries(umk3-game PRIVATE opengl32 gdi32 winmm msacm32 ws2_32)
         endif()
         if(NOT MSVC)
             target_link_libraries(umk3-game PRIVATE m)
