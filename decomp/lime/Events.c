@@ -382,7 +382,7 @@ void LIME_FreeEvents(SCENEEVENTS *events)
 
     for (i = 0; i < events->numTracks; i++) {
         char *track = (char *)events->tracks + i * 216;
-        SCENEINFO *scene = *(SCENEINFO **)(track + 4);
+        SCENEINFO *scene = *(SCENEINFO *P32 *)(track + 4);
 
         if (LIME_SceneExists(scene) != NULL)
             LIME_FreeScene(scene);
@@ -443,7 +443,7 @@ void LIME_TriggerEventsFromScene(SCENEINFO *scene, int frame,
         SCENEEVENTTRACK *track = (SCENEEVENTTRACK *)
             ((char *)events->tracks + i * SCENEEVENTTRACK_STRIDE);
         const char *t = (const char *)track;
-        const char *key = *(char *const *)(t + 0xd4);
+        const char *key = *(char *P32 const *)(t + 0xd4);
 
         for (k = 0; k < *(const int32_t *)t; k++, key += 0x44) {
             float mtx[16];
@@ -455,7 +455,7 @@ void LIME_TriggerEventsFromScene(SCENEINFO *scene, int frame,
             printf("     - EVENT %s (fr %d) triggered event %s "
                    "(FromGround %d, spd %02.02f...\n ",
                    scene->name, (int)f,
-                   track->scene ? track->scene->name : "(null)",
+                   track->scene ? (const char *)track->scene->name : "(null)",
                    *(const int32_t *)(t + 0x78), (double)spd);
             ConvertDSMatrixtoPCMatrix((const int32_t *)(key + 8), mtx);
             LIME_TriggerEvent(track, m, (limeMATRIX44 *)mtx, a4, offsetId2,
@@ -1055,7 +1055,7 @@ EVENTSINFO *LIME_LoadEvents(const char *filename, long arg1, long arg2)
 
         nkeys = *(const int32_t *)(src + 0x108);
         keys = (char *)limeMalloc("sceneevents_events", (size_t)nkeys * 0x44);
-        *(char **)(t + 0xd4) = keys;
+        *(char *P32 *)(t + 0xd4) = keys;
         *(int32_t *)t = nkeys;
         if (keys == NULL)
             return NULL;
@@ -1073,7 +1073,7 @@ EVENTSINFO *LIME_LoadEvents(const char *filename, long arg1, long arg2)
             LIME_printf(9, "");
         }
 
-        *(SCENEINFO **)(t + 4) = NULL;
+        *(SCENEINFO *P32 *)(t + 4) = NULL;
         if (want) {
             SCENEINFO *sc = LIME_LoadScene(sceneName, 1,
                                            (const char *)(uintptr_t)arg1, 0);
@@ -1082,7 +1082,7 @@ EVENTSINFO *LIME_LoadEvents(const char *filename, long arg1, long arg2)
                         "hangs here\n", sceneName);
                 for (;;) { }
             }
-            *(SCENEINFO **)(t + 4) = sc;
+            *(SCENEINFO *P32 *)(t + 4) = sc;
             LIME_LoadMeshSetTextures(sc->meshset,
                                      (const char *)(uintptr_t)arg1);
         }
@@ -1459,7 +1459,7 @@ long LIME_TriggerEventsFromSceneOffsetIfFollowing(long player, long printed,
         SCENEEVENTTRACK *track = (SCENEEVENTTRACK *)
             ((char *)events->tracks + i * SCENEEVENTTRACK_STRIDE);
         const char *t = (const char *)track;
-        const char *key = *(char *const *)(t + 0xd4);
+        const char *key = *(char *P32 const *)(t + 0xd4);
 
         for (k = 0; k < *(const int32_t *)t; k++, key += 0x44) {
             float mtx[16];
@@ -1474,7 +1474,7 @@ long LIME_TriggerEventsFromSceneOffsetIfFollowing(long player, long printed,
             }
             printf("     - player %d (fr %d-%s) triggered event %s...\n ",
                    (int)player, (int)frame, scene->name,
-                   track->scene ? track->scene->name : "(null)");
+                   track->scene ? (const char *)track->scene->name : "(null)");
             if (frame == 0x116)
                 puts("got ya");
             LIME_TriggerEvent(track,

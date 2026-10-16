@@ -42,7 +42,7 @@ uint32_t get_csound(long index, long character)
 
 
 typedef struct SOUNDENTRY {             /* 8 bytes: the walk advances by 8 */
-    const char *name;                   /* 0x00 */
+    const char *P32 name;                   /* 0x00 */
     long        id;                     /* 0x04, -1 when not loaded */
 } SOUNDENTRY;
 

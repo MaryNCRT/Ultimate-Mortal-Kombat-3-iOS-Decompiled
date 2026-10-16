@@ -25,12 +25,12 @@
 /* The cooperative thread. Its fields are the ones StartThreadAt writes and
  * t_self_terminate reads; the eight-byte array they index sits at the thread's
  * own address and overlaps them, which is why `frame` is never small. */
-typedef void (*MK3THREADFUNC)(void);
+typedef void (*P32 MK3THREADFUNC)(void);   /* a 32-bit word, as every pointer here (P32) */
 
 /* The thread, as its writers and readers establish it. Only the offsets that
  * appear in this file are named. */
 typedef struct MK3THREAD {
-    struct MK3THREAD *next;      /* 0x00  FindThread walks this */
+    struct MK3THREAD *P32 next;      /* 0x00  FindThread walks this */
     MK3THREADFUNC func;          /* 0x04  what StartThreadAt puts there */
     uint32_t      field08;       /* 0x08  cleared with it */
     uint8_t       _pad0c[0x98];
@@ -46,7 +46,7 @@ typedef struct MK3THREAD {
     uint32_t      player;        /* 0x100 getobjectinsert multiplies it by
                                   *       PLYR_STRIDE to index Plyr */
     uint32_t      pid;           /* 0x104 NewThreadProcPid sets it */
-    void         *proc;          /* 0x108 FindThreadProc and NewThreadProc
+    void         *P32 proc;          /* 0x108 FindThreadProc and NewThreadProc
                                   *       return it */
 } MK3THREAD;
 
@@ -100,7 +100,7 @@ typedef struct MK3OBJPROC {
      * already taken by 0x04 below, on the authority of a function name that
      * says so just as plainly. One of the two readings is incomplete and
      * nothing here settles which. */
-    struct MK3OBJ *field00;
+    struct MK3OBJ *P32 field00;  /* 0x00 */
     uint32_t him;                /* 0x04  the opponent, per f_set_a10_to_him */
     uint32_t field08;            /* 0x08  the strength index, and what
                                   *       lights_on_hit passes on */
@@ -169,7 +169,7 @@ typedef struct MK3OBJPROC {
                                   *       hands it to KillProc */
     uint32_t slave;              /* 0x68  per f_set_a10_to_slave */
     uint8_t  _pad6c[0x0c];
-    struct MK3OBJ *field78;      /* 0x78  the object t_rocket_explode hands to
+    struct MK3OBJ *P32 field78;      /* 0x78  the object t_rocket_explode hands to
                                   *       KillProc on both of its paths. Not
                                   *       the slave -- that is 0x64. Written
                                   *       by t_rocket2_proc's free launch:
@@ -182,7 +182,7 @@ typedef struct MK3OBJPROC {
                                   *       stick get_char_stk resolved, and what
                                   *       create_proj_proc clears. Two writers
                                   *       measured; no reader is in the tree. */
-    struct MK3OBJ *field88;      /* 0x88  a second object t_double_shaker moves
+    struct MK3OBJ *P32 field88;      /* 0x88  a second object t_double_shaker moves
                                   *       alongside `him`. Which object is not
                                   *       settled -- nothing writes it yet. */
 } MK3OBJPROC;
@@ -217,12 +217,12 @@ typedef struct MK3OBJPROC {
                     | ((uint32_t)(uint16_t)(v) << 16))
 
 typedef struct MK3OBJ {
-    MK3OBJPROC *field00;         /* 0x00  ldr r2, [r4] */
+    MK3OBJPROC *P32 field00;         /* 0x00  ldr r2, [r4] */
     /* 0x04  the object's thread. KillProc and StartProcAt both take it out of
      * here and hand it to KillSThread / StartThreadAt, which is what makes the
      * pair the object-level spelling of the thread-level calls. */
-    MK3THREAD  *thread;          /* 0x04 */
-    struct MK3OBJ *field08;      /* 0x08  another object: player_swpal writes
+    MK3THREAD  *P32 thread;          /* 0x04 */
+    struct MK3OBJ *P32 field08;      /* 0x08  another object: player_swpal writes
                                   *       through it and ani2 passes it on */
     uint32_t    field0c;         /* 0x0c  a horizontal position; is_he_right
                                   *       compares two of them */
@@ -326,7 +326,7 @@ void disable_all_buttons(MK3OBJ *obj);
 #define SWITCH_QUEUE_SLOTS  20
 
 typedef struct SWITCHQUEUE {
-    uint32_t *head;                        /* +0x00 */
+    uint32_t *P32 head;                        /* +0x00 */
     uint32_t  slots[SWITCH_QUEUE_SLOTS];   /* +0x04 .. +0x53 */
 } SWITCHQUEUE;
 

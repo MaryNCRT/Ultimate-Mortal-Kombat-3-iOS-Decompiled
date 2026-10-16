@@ -263,6 +263,7 @@ def main(argv):
     out = []
     rep = []
     fn_refs, data_defs = set(), []
+    fixups = []                         # (object, word, target, offset)
     nrel = 0
     for a, size, cname, bname, s, zf in emitted:
         raw = read(a, size) + b"\0" * (-size % 4)
@@ -295,11 +296,8 @@ def main(argv):
             orel += 1
             if kind == "fn":
                 fn_refs.add(tname)
-                items.append("(uintptr_t)%s" % tname)
-            elif off:
-                items.append("(uintptr_t)%s + 0x%x" % (tname, off))
-            else:
-                items.append("(uintptr_t)%s" % tname)
+            items.append("UMK3_REL(%s, 0x%x)" % (tname, off))
+            fixups.append((cname, k, tname, off))
             if report:
                 rep.append("%-5s %-28s +0x%04x %08x -> %s%s"
                            % (kind, cname, k * 4, v, tname,
@@ -321,8 +319,17 @@ def main(argv):
                else " * Every data object of src/gamecode/logic, read at build time.")
     out.append(" * %d objects, %d relocated words. */" % (len(data_defs), nrel))
     out.append("#include <stdint.h>")
+    out.append("/* A word is 32 bits, as on the device. A 64-bit build keeps the game")
+    out.append(" * below 4 GB (UMK3_LOW32): its words are uint32_t (runtime/savestate.h")
+    out.append(" * makes uintptr_t one there) and the addresses, which C cannot put in")
+    out.append(" * a 32-bit initializer, are written by umk3_logic_tables_fixup(). */")
+    out.append("#ifdef UMK3_LOW32")
+    out.append("#define UMK3_REL(p, o) 0")
+    out.append("#else")
     out.append("typedef char umk3_logic_tables_need_32bit_pointers"
                "[sizeof(void *) == 4 ? 1 : -1];")
+    out.append("#define UMK3_REL(p, o) ((uintptr_t)(p) + (o))")
+    out.append("#endif")
     out.append("")
     out.append("/* One section, binary order: see Layout in tools/logic_tables.py. */")
     out.append("#if defined(__APPLE__)")
@@ -371,6 +378,21 @@ def main(argv):
         else:
             out.append("unsigned char %s[%d] UMK3_LOGIC = {0};  /* %s 0x%08x, %d bytes */"
                        % (cname, size, bname, a, size))
+    out.append("")
+    out.append("void umk3_logic_tables_fixup(void)")
+    out.append("{")
+    out.append("#ifdef UMK3_LOW32")
+    out.append("    static const struct { uint32_t *at; const char *to; } fix[] = {")
+    for cname, k, tname, off in fixups:
+        out.append("        { (uint32_t *)%s + %d, (const char *)%s + 0x%x },"
+                   % (cname, k, tname, off))
+    out.append("    };")
+    out.append("    unsigned i;")
+    out.append("")
+    out.append("    for (i = 0; i < sizeof fix / sizeof fix[0]; i++)")
+    out.append("        *fix[i].at = (uint32_t)(uintptr_t)fix[i].to;")
+    out.append("#endif")
+    out.append("}")
     with open(outpath, "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(out) + "\n")
     if report:

@@ -4,7 +4,9 @@ Current state of the project. Written so that someone can pick it up with no pri
 
 **Last updated:** 2026-10-16 -- see [HANDOFF.md](HANDOFF.md) for the route.
 
-## Current state (beta 0.1.3, 2026-10-16)
+## Current state (beta 0.1.4, 2026-10-16)
+
+**2026-10-16, 0.1.4 beta (notes: [RELEASE-0.1.4-beta.md](RELEASE-0.1.4-beta.md)):** the 64-bit build (Port, not in the binary: `UMK3_LOW32`, `P32` 32-bit pointer words, exe and heaps below 2 GB, `arch=` in the launcher). The crash on winning in Arcade and on leaving stage 14: `runtime/gamecode_globals.c` gave 15 scene handles (SLDie1Scene, TrainScene, Scene_FIGHT...) a dummy store, so Task_GameDestroy's FreeSceneHandle freed it; in the binary they are `__common`, zero, and now start NULL (tools/mkglobals.py not yet fixed). Classic Sub-Zero's elbow combo: RPCOMBO6..9 missing from OLDSUBZEROFRAMES.bin (as in the .ipa) drawn with his skinanim's frames 12..15, bone for bone Reptile's (port, GameCode.c RenderLevelPlayers); Mary sees it still not quite right. Touch layout editor, icons, pause menu on 21:9, Karnage / Survival summaries with BACK alone (port).
 
 **2026-10-16, 0.1.3 beta, the first beta (notes: [RELEASE-0.1.3-beta.md](RELEASE-0.1.3-beta.md)):** all Port, not in the binary. The game's own menus with the pad or the keyboard (`runtime/pad_nav.c`: the touch tests register their buttons, a resting finger lights the one highlighted, south presses and releases, east is BACK; both players at once on the VS select; the right stick turns the palette; the tower's columns; circle closes the moves list). With the on-screen controls off: ACCEPT / BACK hints with the device's pictures, and the button setup in the game's frame (Options and the pause menu). Player two's pause, moves list and accept keys; their own moves list. Free Input Prompts pictures (CC0) for keys and buttons everywhere, icons per player, a pad button for the settings menu (`pad_settings=`), the settings menu with a side panel, drop-down lists and grids, monitor choice (`monitor=`), the full colour palette for the profile. Palettes kept for VS only; the computer's fighters take either at random but Motaro and Shao Kahn. The launcher in the console release's style, closing when the game opens. Fixes: `aspect=(null)` after a settings change, pad bindings written as pictures, the badge over the logo (top right; smaller on 3:2 and 4:3), the page panel short of the edge on 21:9.
 
@@ -33,7 +35,7 @@ Current state of the project. Written so that someone can pick it up with no pri
 - **The game is playable on Windows by the real path.**
   - Everything the retail game does runs in `umk3-game.exe` (i686): the front end, Arcade to Shao Kahn and the treasure screen, the tower, and whole fights with every finisher, Continue and the next fight.
   - The launcher compiles it from the player's own iPhone 1.2.59 `.ipa`.
-  - **0.1.3 beta is the current published build** ([notes](RELEASE-0.1.3-beta.md)): the menus with the pad or the keyboard, the console-style launcher, key and button pictures. 0.1.2 added the settings menu (Esc), the player profile, the wide continue screens. 0.1.0 added 3:2 / 4:3 / 16:9 / 21:9, the iPad UI size, texture quality, faster loading and launcher updates; 0.1.0b adds the iPad build's layout, DUELO, pad binding and wide-screen fixes.
+  - **0.1.4 beta is the current published build** ([notes](RELEASE-0.1.4-beta.md)): the 64-bit build, the Arcade-win crash fixed. 0.1.3 added the menus with the pad or the keyboard, the console-style launcher, key and button pictures. 0.1.2 added the settings menu (Esc), the player profile, the wide continue screens. 0.1.0 added 3:2 / 4:3 / 16:9 / 21:9, the iPad UI size, texture quality, faster loading and launcher updates; 0.1.0b adds the iPad build's layout, DUELO, pad binding and wide-screen fixes.
   - Every release's notes are in `docs/RELEASE-*.md`. The GitHub releases of 0.0.1-0.0.3 were deleted on 2026-10-09 when the history was rewritten.
 - **Every function is decompiled** (2,572 of 2,572) and the fight engine is
   behaviourally tested file by file (table below). The figure is
@@ -43,7 +45,7 @@ Current state of the project. Written so that someone can pick it up with no pri
   - The menus are incomplete, and modes other than Arcade can crash.
   - Texture errors remain on some stages and fighters, and some fatalities miss animations.
   - Every bug found since the game first ran was a transcription that did not quite match armv7, so each new symptom starts by re-reading the binary.
-- **No pull requests are open** once the 0.1.3 pass is merged (2026-10-16).
+- **No pull requests are open** once the 0.1.4 pass is merged (2026-10-16).
 - **New contributors:** [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md) explains how
   the game runs, the code map, the bug method and the test tools.
 

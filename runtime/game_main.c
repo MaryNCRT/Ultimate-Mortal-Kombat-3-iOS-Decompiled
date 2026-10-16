@@ -796,6 +796,10 @@ static void parse_taps(const char *s)
 }
 
 void umk3_relocate_level_info(void);   /* build/level_info.c */
+void umk3_logic_tables_fixup(void);    /* build/logic_tables.c */
+void st_init(void);                    /* savestate.c */
+void umk3_globals_fixup(void);         /* the 64-bit build's gamecode_globals.c */
+void lime_low_init(void);              /* lime_platform.c */
 extern int PortHideControls;           /* GameCode.c: hide_controls=1 */
 
 /* umk3.ini beside the exe, written by the launcher (tools/launcher):
@@ -1135,6 +1139,9 @@ static void nav_hints(void)
         PortNavDrawLine(line, 0);
         return;
     }
+    /* the Karnage and Survival summaries draw their own BACK */
+    if (CurrentTask == 3 && (FE_CurrentTask == 38 || FE_CurrentTask == 39))
+        return;
     /* the lost treasure won in Arcade has no way back: ACCEPT alone */
     PortNavDraw(ok, CurrentTask == 3 && FE_CurrentTask == 36 ? "" : back,
                 CurrentTask == 6);
@@ -1168,6 +1175,25 @@ void PortPagesLine(char *line, int n, int with_sel)
                  with_sel ? sel : "", east,
                  Language[0] == 'E' && Language[1] == 'S' ? "SALIR" : "EXIT");
     }
+}
+
+/* Port, not in the binary: the way out alone -- circle or Backspace and
+ * BACK -- for the Karnage and Survival summaries with the on-screen
+ * controls off. */
+void PortBackLine(char *line, int n)
+{
+    char east[128];
+
+    if (pad_nav_device() == 1 && (g_pad.connected || g_pad2.connected)) {
+        const PLAT_PAD *p = g_pad.connected ? &g_pad : &g_pad2;
+
+        plat_pad_glyph(plat_pad_glyph_kind(p == &g_pad2, p->kind), PB_EAST,
+                       east, sizeof east);
+    } else {
+        snprintf(east, sizeof east, "\001kb/T_BackSpace_Key_Vintage\001");
+    }
+    snprintf(line, n, "%s %s", east,
+             Language[0] == 'E' && Language[1] == 'S' ? "ATR\xc1S" : "BACK");
 }
 
 static void hud_keys(void)
@@ -1879,7 +1905,7 @@ static int g_hb_next;
 struct hb_def {
     long id;
     float scale, posOffsetX, height, renderOffsetX, renderOffsetZ;
-    const char *names[7];
+    const char *P32 names[7];
 };
 extern const struct hb_def PlayerDefs[26];
 
@@ -2488,6 +2514,18 @@ int main(int argc, char **argv)
     long   ticks = 0;
     int    focused = 1, was_down = 0, last_task = -1, last_fe = -1;
     double last, acc = 0.0;
+
+    /* The tables' addresses, first of all: in the 64-bit build they are
+     * written here (tools/logic_tables.py); a no-op in the 32-bit one. */
+    umk3_logic_tables_fixup();
+#ifdef UMK3_LOW32
+    /* the 32-bit pointers of the runtime's static tables (tools/
+     * low32_static.py), and the game's two heaps reserved below 2 GB before
+     * anything else (the graphics driver) takes the room */
+    umk3_globals_fixup();
+    st_init();
+    lime_low_init();
+#endif
 
     setvbuf(stdout, NULL, _IONBF, 0);
     /* --list-pads: the pads attached, one "pad=value<TAB>name" a line, and

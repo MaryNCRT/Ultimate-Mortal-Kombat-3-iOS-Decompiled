@@ -29,8 +29,8 @@ typedef struct TEXTURE {
     int      field50;            /* 0x50 */
 } TEXTURE;
 typedef struct TEXTURETOLOAD {
-    const char *name;            /* 0x00  NULL ends the list */
-    TEXTURE   **dest;            /* 0x04  where the handle goes */
+    const char *P32 name;            /* 0x00  NULL ends the list */
+    TEXTURE   *P32 *P32 dest;            /* 0x04  where the handle goes */
 } TEXTURETOLOAD;
 
 /* The engine's font object, laid out to match FONT in decomp/lime/lime.h.
@@ -72,9 +72,9 @@ typedef struct GAMEFONT {
      * it divides them BY on the way to limeDrawSprite: atlasU and glyphWidth are
      * both normalised by +0x34, atlasV by +0x38. Two share a divisor, so two
      * share an axis. */
-    int16_t  *atlasU;            /* 0x1c  x position in the atlas */
-    int16_t  *atlasV;            /* 0x20  y position in the atlas */
-    int16_t  *glyphWidth;        /* 0x24  per-glyph width, and the advance
+    int16_t  *P32 atlasU;            /* 0x1c  x position in the atlas */
+    int16_t  *P32 atlasV;            /* 0x20  y position in the atlas */
+    int16_t  *P32 glyphWidth;        /* 0x24  per-glyph width, and the advance
                                   *       limeGetStringWidth accumulates */
     /* Optional per-glyph kerning, one SIGNED byte each, added to the width when
      * the pointer is non-null. limeGetStringWidth is the only reader:
@@ -84,7 +84,7 @@ typedef struct GAMEFONT {
      *     addne   r8, r8, r3
      * Nothing in limeCreateFONT was seen to allocate it, so a font that does not
      * carry kerning leaves it null and every glyph keeps its plain width. */
-    int8_t   *kerning;           /* 0x28 */
+    int8_t   *P32 kerning;           /* 0x28 */
     int       defaultAdvance;    /* 0x2c  simple fonts only */
     uint8_t   _pad30[4];
     /* The atlas dimensions, and they are the OPPOSITE way round from an earlier
@@ -105,10 +105,10 @@ typedef struct GAMEFONT {
      * alignment 3. The earlier 12-byte pad here put `codes` at 0x4c. */
     int       extraAtCount;      /* 0x40 */
     int       countForExtra;     /* 0x44 */
-    uint8_t  *codes;             /* 0x48  one byte per glyph */
-    int16_t  *codesW;            /* 0x4c  the same codes widened to 16 bits */
-    TEXTURE  *texture0;          /* 0x50 */
-    TEXTURE  *texture1;          /* 0x54 */
+    uint8_t  *P32 codes;             /* 0x48  one byte per glyph */
+    int16_t  *P32 codesW;            /* 0x4c  the same codes widened to 16 bits */
+    TEXTURE  *P32 texture0;          /* 0x50 */
+    TEXTURE  *P32 texture1;          /* 0x54 */
 } GAMEFONT;
 
 void LoadSomeTextures(TEXTURETOLOAD *list);
@@ -1391,13 +1391,13 @@ typedef struct PLAYERDEF {
     float       height;         /* 0x0c  added to Z in ArcadePosTo3dPos */
     float       renderOffsetX;  /* 0x10  glTranslatef x, times +/-2.15 */
     float       renderOffsetZ;  /* 0x14  glTranslatef z, times 0.65 */
-    const char *lighting;       /* 0x18  "KANO" */
-    const char *frameList;      /* 0x1c  "kanoframes.txt" */
-    const char *bones;          /* 0x20  "KANO_STANDARD.bones" */
-    const char *skin;           /* 0x24  "KANO_STANDARD.skin" */
-    const char *skinAnim;       /* 0x28  "KANO_STANDARD.skinanim" */
-    const char *texBase;        /* 0x2c  "KANO" */
-    const char *scene;          /* 0x30  "KANO_STANDARD.scene" */
+    const char *P32 lighting;       /* 0x18  "KANO" */
+    const char *P32 frameList;      /* 0x1c  "kanoframes.txt" */
+    const char *P32 bones;          /* 0x20  "KANO_STANDARD.bones" */
+    const char *P32 skin;           /* 0x24  "KANO_STANDARD.skin" */
+    const char *P32 skinAnim;       /* 0x28  "KANO_STANDARD.skinanim" */
+    const char *P32 texBase;        /* 0x2c  "KANO" */
+    const char *P32 scene;          /* 0x30  "KANO_STANDARD.scene" */
 } PLAYERDEF;
 
 /* 52 bytes an entry IN THE IMAGE, where a pointer is four bytes. Kept because
@@ -2109,6 +2109,8 @@ void AnimateIntroCharacterPlayers1Frame(long force)
 
 extern float JOUTERDIAL;                /* 0x00150598 */
 extern float JINNERDIAL;                /* 0x00150594, read only here */
+extern float ButtonSize;                /* 0x0014ff48 */
+extern float JSIZE;                     /* 0x0014e1dc */
 extern long  P2Controls;                /* 0x0014fec8 */
 extern long  JoystickStatePosX;         /* 0x0014fec0 */
 extern long  JoystickStatePosY;         /* 0x0014fec4 */
@@ -2177,6 +2179,9 @@ long CheckLeftDial(int player)
     JOUTERDIAL = FE_W(80.0f);
     if (P2Controls != 0)
         JOUTERDIAL = 96.0f;             /* unscaled, unlike the default */
+    /* Port, not in the binary: a custom stick as big as the editor made it */
+    else if (player == 0 && ButtonSize > 0.0f)
+        JOUTERDIAL *= JSIZE / ButtonSize;
 
     if (player == 0) {
         cx = (float)JoystickStatePosX;
@@ -2983,22 +2988,22 @@ void GetReal6ButtonJoyBits(int dir, const int *buttons, Mk3Obj_t *unused,
  */
 typedef struct ANIMATEDCHARACTER {
     long        meshCount;      /* 0x00 */
-    void       *meshes;         /* 0x04  meshCount records of 0x58 */
+    void       *P32 meshes;         /* 0x04  meshCount records of 0x58 */
     long        id;             /* 0x08  the character, for the frame gates */
     long        field0c;        /* 0x0c  nothing reads it */
-    void       *scene;          /* 0x10 */
-    void       *diffuse;        /* 0x14 */
-    void       *diffuseIce;     /* 0x18 */
-    void       *jadeGreen;      /* 0x1c  JADE only */
-    void       *sindelHair;     /* 0x20  SINDEL only */
-    void       *diffuse2;       /* 0x24  the lite path's second sheet */
-    void       *babality;       /* 0x28  may stay NULL */
-    void       *frameList;      /* 0x2c */
-    void       *skin;           /* 0x30 */
-    void       *bones;          /* 0x34 */
-    const long *meshbase;       /* 0x38  kept so it can be freed */
-    const long *meshTable;      /* 0x3c */
-    const long *meshNames;      /* 0x40 */
+    void       *P32 scene;          /* 0x10 */
+    void       *P32 diffuse;        /* 0x14 */
+    void       *P32 diffuseIce;     /* 0x18 */
+    void       *P32 jadeGreen;      /* 0x1c  JADE only */
+    void       *P32 sindelHair;     /* 0x20  SINDEL only */
+    void       *P32 diffuse2;       /* 0x24  the lite path's second sheet */
+    void       *P32 babality;       /* 0x28  may stay NULL */
+    void       *P32 frameList;      /* 0x2c */
+    void       *P32 skin;           /* 0x30 */
+    void       *P32 bones;          /* 0x34 */
+    const long *P32 meshbase;       /* 0x38  kept so it can be freed */
+    const long *P32 meshTable;      /* 0x3c */
+    const long *P32 meshNames;      /* 0x40 */
 } ANIMATEDCHARACTER;            /* 0x44 = 68 bytes, the size limeMalloc asks */
 
 typedef struct PLAYER PLAYER;
@@ -3786,7 +3791,7 @@ long DrawAnimAsSprite(long x, long y, float scale, long ax,
      * and indexed by record[6] at 0x1c956). This read `frames[record[6]]`,
      * a word of the sprite definition, and handed it to limeDrawSprite as a
      * texture -- the crash in every screen that draws the spotlights. */
-    tex = ((void *const *)(uintptr_t)textures)[r[6]];
+    tex = ((void *P32 const *)(uintptr_t)textures)[r[6]];
 
     /* record[0..1] is the cell's corner in the atlas and record[2..3] its
      * size; limeDrawSprite takes a corner and an EXTENT in UV. Read from
@@ -4432,6 +4437,10 @@ void ReadControls(void)
             radius = (float)FE_W(40.0f);
             if (P2Controls == 0)
                 radius = (float)(long)radius;   /* truncated, only here */
+            /* Port, not in the binary: a custom button as big as the
+             * editor made it */
+            if (Settings[5] && P2Controls == 0 && ButtonSize > 0.0f)
+                radius *= (float)e[2] / ButtonSize;
 
             if (d >= radius)
                 continue;
@@ -6563,7 +6572,7 @@ void RenderLevelBG(void)
         const char *rec = Level_Info + *LevelSelectP * LEVEL_INFO_STRIDE;
 
         if (*(const long *)(rec + 0xd4 + i * 4) != 0
-            && ((const char *const *)(rec + 0x74))[i][0] != 0)
+            && ((const char *P32 const *)(rec + 0x74))[i][0] != 0)
             RenderLevelExtra(rec, i);
 
         /* Slot 0 on level 1 is followed by the glass, whether or not the slot
@@ -7249,26 +7258,26 @@ long GameInit_LoadABit(long step)
         BGSceneController[2] = -1;
         BGSceneController[5] = -1;
 
-        name = *(const char *const *)(rec + 0x1c);
+        name = *(const char *P32 const *)(rec + 0x1c);
         if (name == 0)
             return 0;
 
         BGSceneHandle = LIME_LoadScene(name, 0, 0, 0);
         if (BGSceneHandle != 0)
-            LIME_LoadMeshSetTextures(((void **)BGSceneHandle)[0x80 / 4], NULL);
+            LIME_LoadMeshSetTextures(((void *P32 *)BGSceneHandle)[0x80 / 4], NULL);
         BGSceneLoops[0] = *(const long *)(rec + 0x20);
         return 0;
     }
 
     case 28: {
-        const char *name = *(const char *const *)(rec + 0x50);
+        const char *name = *(const char *P32 const *)(rec + 0x50);
 
         if (name == 0)
             return 0;
 
         BGSceneHandle2 = LIME_LoadScene(name, 0, 0, 0);
         if (BGSceneHandle2 != 0)
-            LIME_LoadMeshSetTextures(((void **)BGSceneHandle2)[0x80 / 4], NULL);
+            LIME_LoadMeshSetTextures(((void *P32 *)BGSceneHandle2)[0x80 / 4], NULL);
         BGSceneLoops[1] = *(const long *)(rec + 0x54);
         return 0;
     }
@@ -7276,7 +7285,7 @@ long GameInit_LoadABit(long step)
     case 29:
         /* All eight layer textures in one step, empty names skipped. */
         for (i = 0; i < 8; i++) {
-            const char *name = ((const char *const *)(rec + 0x94))[i];
+            const char *name = ((const char *P32 const *)(rec + 0x94))[i];
 
             if (name[0] != 0)
                 LevelBGTexture[i] = limeLoadTexture(name, 0, 0);
@@ -7285,7 +7294,7 @@ long GameInit_LoadABit(long step)
 
     case 30:
         for (i = 0; i < 8; i++) {
-            const char *name = ((const char *const *)(rec + 0x74))[i];
+            const char *name = ((const char *P32 const *)(rec + 0x74))[i];
 
             if (name[0] != 0)
                 *MeshSetLayers[i] = LIME_LoadMeshSet(name, 0);
@@ -8825,9 +8834,10 @@ static void CopyButtonLayout(long *dst, const long *src)
 /* One player's six buttons. `pos` is the live layout and `states` the pressed
  * flags that go with it. */
 static void DrawButtonRow(const long *pos, const long *states,
-                          float *colour)
+                          float *colour, const long *alpha)
 {
     long b;
+    float own[4];
 
     for (b = 0; b < DRAWCONTROLS_BUTTONS; b++) {
         const long *e    = &pos[b * (BUTTONPOS_STRIDE / 4)];
@@ -8844,6 +8854,10 @@ static void DrawButtonRow(const long *pos, const long *states,
         u = (cell & 3) * 2 + (states[id] ? 0 : 1);
         v = cell / BUTTON_ATLAS_ROWS;
 
+        /* Port, not in the binary: a custom button's own opacity */
+        own[0] = colour[0]; own[1] = colour[1]; own[2] = colour[2];
+        own[3] = alpha && alpha[b] > 0 ? alpha[b] / 100.0f : colour[3];
+
         limeDrawSprite(ButtonsTPage,
                        (float)(e[0] - size / 2), (float)(e[1] - size / 2),
                        (float)size, (float)size,
@@ -8851,7 +8865,7 @@ static void DrawButtonRow(const long *pos, const long *states,
                        (float)v / (float)BUTTON_ATLAS_ROWS,
                        1.0f / (float)BUTTON_ATLAS_COLS,
                        1.0f / (float)BUTTON_ATLAS_ROWS,
-                       colour);
+                       own);
     }
 }
 
@@ -8872,6 +8886,8 @@ static void DrawJoystick(long x, long y, long state,
 }
 
 int PortHideControls;                   /* port: see the end of DrawControls */
+extern long PortButtonAlpha[3][6];      /* port: FrontEnd.c, per button */
+extern long PortStick[3][4];            /* port: FrontEnd.c, the stick */
 void set_menu_open_controls(void);     /* port: runtime/settings_menu.c */
 
 void DrawControls(void)
@@ -8937,6 +8953,22 @@ void DrawControls(void)
         JoystickStatePosYP2 = (long)((float)limeScreenHeight - small);
     }
 
+    /* Port, not in the binary: a custom layout's stick where the editor put
+     * it, its size and opacity (FrontEnd.c, PortStick). */
+    if (Settings[5] && !P2Controls && Settings[4] >= 4 && Settings[4] <= 6) {
+        const long *st = PortStick[Settings[4] - 4];
+
+        if (st[2] > 0) {
+            JoystickStatePosX = st[0];
+            JoystickStatePosY = st[1];
+            JSIZE             = (float)st[2];
+        }
+        if (st[3] > 0) {
+            joyKnobCol[3] = st[3] / 100.0f;
+            joyBaseCol[3] = joyKnobCol[3] * 0.5f;
+        }
+    }
+
     /* A port option (hide_controls=1, the launcher's box): the layout above
      * is still worked out -- the touch code hit-tests against it -- but the
      * stick and the buttons are not drawn. Not in the binary. */
@@ -8950,10 +8982,12 @@ void DrawControls(void)
         DrawJoystick(JoystickStatePosXP2, JoystickStatePosYP2, JoystickStateP2,
                      joyBaseCol, joyKnobCol);
 
-    DrawButtonRow(ButtonsPos, ButtonStates, buttonCol);
+    DrawButtonRow(ButtonsPos, ButtonStates, buttonCol,
+                  Settings[5] && !P2Controls && Settings[4] >= 4
+                  && Settings[4] <= 6 ? PortButtonAlpha[Settings[4] - 4] : 0);
 
     if (P2Controls)
-        DrawButtonRow(ButtonsPosP2, ButtonStatesP2, buttonCol);
+        DrawButtonRow(ButtonsPosP2, ButtonStatesP2, buttonCol, 0);
 
 }
 
@@ -9071,7 +9105,7 @@ void disableHeartbeat(void);
 static void FreeSceneHandle(void **h)
 {
     if (*h) {
-        LIME_FreeMeshSetTextures(((void **)*h)[0x80 / 4]);
+        LIME_FreeMeshSetTextures(((void *P32 *)*h)[0x80 / 4]);
         LIME_FreeScene(*h);
     }
     *h = NULL;
@@ -9130,8 +9164,8 @@ void Task_GameDestroy(void)
 
     /* ---- the background layers this level actually has ---- */
     for (i = 0; i < GAMEDESTROY_LAYERS; i++) {
-        const char *const *names =
-            (const char *const *)(Level_Info
+        const char *P32 const *names =
+            (const char *P32 const *)(Level_Info
                                   + *LevelSelectPtr * LEVEL_INFO_STRIDE
                                   + LEVELINFO_LAYERNAMES);
         if (names[i] == NULL || names[i][0] == '\0')
@@ -10620,7 +10654,7 @@ void  LIME_TriggerEventsFromSceneOffsetIfFollowing(long slot, long follow,
                                                    void *skin, long e,
                                                    long inToggleRange);
 
-#define RLP_NEXT(o)     (*(Mk3Obj_t **)(o))
+#define RLP_NEXT(o)     (*(Mk3Obj_t *P32 *)(o))
 #define RLP_PLAYER(i)   ((long *)(Players + (long)(i) * ARCADE_PLAYER_STRIDE))
 #define RLP_PTR(x)      ((long *)(uintptr_t)(unsigned long)(x))
 #define RLP_DEF(c)      (&PlayerDefs[c])
@@ -10778,6 +10812,33 @@ void RenderLevelPlayers(void)
                 else
                     w[0x14 / 4] = ((const short *)RLP_PTR(RLP_PTR(owner[4 / 4])
                                    [0x2c / 4]))[oi[GOBJ_FRAME / 2]];
+
+                /* Port, not in the binary: an animation id missing from the
+                 * fighter's frame list (-1) draws nothing at all, and the
+                 * binary's own tables ask for some. Classic Sub-Zero's elbow
+                 * combo (ct_osz_elbow3, 0x8004: nj_ani_data's ani2 #0, part
+                 * 4) plays the ninjas' RPCOMBO6..10, ids 3288..3291 and 2637.
+                 * OLDSUBZEROFRAMES.bin has -1 for all five, yet his
+                 * OLDSUBZERO_STANDARD.skinanim carries the poses: its frames
+                 * 12..15 are Reptile's 12..15 bone for bone (within 2e-4),
+                 * and REPTILEFRAMES.bin maps 3288..3291 to exactly those.
+                 * So the ids take those frames. RPCOMBO10 is in nobody's
+                 * list, Reptile's included; it and anything else missing
+                 * hold the last pose drawn. */
+                if (slot <= 1) {
+                    static long port_pose[2] = { -1, -1 }, port_chr[2];
+
+                    if (w[0x14 / 4] == -1 && chr == 21
+                        && (unsigned short)(oi[GOBJ_FRAME / 2] - 3288) <= 3)
+                        w[0x14 / 4] = 12 + (oi[GOBJ_FRAME / 2] - 3288);
+
+                    if (w[0x14 / 4] != -1) {
+                        port_pose[slot] = w[0x14 / 4];
+                        port_chr[slot]  = chr;
+                    } else if (port_pose[slot] != -1 && port_chr[slot] == chr) {
+                        w[0x14 / 4] = port_pose[slot];
+                    }
+                }
 
                 w[0] = chr;
 
@@ -11267,7 +11328,20 @@ static void PauseClick(void)
                       MusicVol[Settings[3]] / 100.0f, 1.0f, 0);
 }
 
+/* Port, not in the binary: on 16:9 and 21:9 the pause menu, panel and
+ * options, sits against the screen's right edge (FE_X's right edge), as
+ * the front end's pages do, not half way out. */
+void PortFERightEdgeSet(int on);
+static void UpdateInGamePauseMenu_(void);
+
 void UpdateInGamePauseMenu(void)
+{
+    PortFERightEdgeSet(1);
+    UpdateInGamePauseMenu_();
+    PortFERightEdgeSet(0);
+}
+
+static void UpdateInGamePauseMenu_(void)
 {
     char text[256];                     /* sp+0x18, to the top of the frame */
     long sel;                           /* the option released this frame */
@@ -11346,7 +11420,11 @@ void UpdateInGamePauseMenu(void)
                        HUD_Scale * CANCEL_SIZE, HUD_Scale * CANCEL_SIZE,
                        0.0f, 0.0f, 1.0f, 1.0f, col);
         limeEnableAlphaBlending_Basic();
+        /* port: the moves list keeps its own layout, centred as before the
+         * pause menu went to the right edge (it sets its edges itself) */
+        PortFERightEdgeSet(0);
         MovesList();
+        PortFERightEdgeSet(1);
         /* port: the corner's cancel is the pad's circle (BACK, not a stop) */
         PortNavTarget((float)limeScreenWidth - HUD_Scale * CANCEL_HIT, 0.0f,
                       HUD_Scale * CANCEL_HIT, HUD_Scale * CANCEL_HIT, 5);

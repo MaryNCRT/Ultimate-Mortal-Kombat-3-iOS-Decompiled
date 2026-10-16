@@ -33,6 +33,7 @@ RUNTIME_FILES = [
     "runtime/settings_menu.c", "runtime/settings_menu.h",
     "runtime/pad_nav.c", "runtime/pad_nav.h",
     "runtime/profiles.c", "runtime/profiles.h",
+    "runtime/umk3_game.rc", "runtime/umk3_game.ico",
     "runtime/gamecode_globals.c",
     "runtime/gamecode_globals.h", "runtime/gamecode_stubs.c",
     "runtime/lime_menu.c", "runtime/lime_platform.c", "runtime/lime_app.c",
@@ -45,7 +46,7 @@ RUNTIME_FILES = [
 ]
 SOURCE_DIRS = ["decomp/gamecode", "decomp/gamecode/logic", "decomp/lime",
                "runtime/lime"]
-TOOLS = ["tools/logic_tables.py", "tools/logic_tables.map", "tools/macho.py",
+TOOLS = ["tools/logic_tables.py", "tools/logic_tables.map", "tools/macho.py", "tools/low32_static.py",
          "tools/level_info.py", "tools/seq_data.py"]
 LAUNCHER = ["launcher/build_game.ps1", "launcher/setup_res.ps1",
             "launcher/check_binary.py", "launcher/launcher.c",

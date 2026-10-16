@@ -212,7 +212,7 @@ void LIME_SetSceneTextures(MESHSETINFO *set, const void *table, TEXTURE **out)
     for (; e[0] != 0; e += 2) {
         int index = LIME_FindMeshByName(set, (const char *)(uintptr_t)e[0]);
         if (index != -1)
-            out[index] = *(TEXTURE **)(uintptr_t)e[1];
+            out[index] = *(TEXTURE *P32 *)(uintptr_t)e[1];
     }
 }
 
@@ -495,8 +495,8 @@ SCENEINFO *LIME_LoadScene(const char *filename, int arg1,
     scene->field4c = limeMalloc("scene_names", nodes << 6);
     if (scene->field4c == NULL)
         return NULL;
-    scene->nodeKeys   = (SCENENODEKEY **)limeMalloc("scene_nodes", nodes << 2);
-    scene->nodeStream = (uint16_t **)limeMalloc("crunchedI_container",
+    scene->nodeKeys   = (SCENENODEKEY *P32 *)limeMalloc("scene_nodes", nodes << 2);
+    scene->nodeStream = (uint16_t *P32 *)limeMalloc("crunchedI_container",
                                                 nodes << 2);
     NumTotalNodes += nodes * frames;
 

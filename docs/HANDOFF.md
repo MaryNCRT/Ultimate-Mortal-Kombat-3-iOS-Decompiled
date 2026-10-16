@@ -1,6 +1,6 @@
 # Handoff
 
-> **The first two sections were rewritten on 2026-10-16 for beta 0.1.3.**
+> **The first two sections were rewritten on 2026-10-16 for beta 0.1.4.**
 > Everything after them is a dated diary of what each finished module
 > settled; it is kept because the facts in it are still true, but its counts
 > ("1,752 of 2,172" and the like) and its "next steps" are history. The live
@@ -15,9 +15,9 @@ Read this, then [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md) and
 
 ## Releases
 
-The current build is **0.1.3 beta** ([notes](RELEASE-0.1.3-beta.md)), the
-first beta, published on GitHub as a pre-release with
-`UMK3-PC-0.1.3-beta.zip`. 0.1.2 back
+The current build is **0.1.4 beta** ([notes](RELEASE-0.1.4-beta.md)),
+published on GitHub as a pre-release with `UMK3-PC-0.1.4-beta.zip`; it adds
+the 64-bit build. 0.1.3 back
 to 0.0.4 are still published; 0.0.1-0.0.3 were deleted from GitHub when the
 history was rewritten on 2026-10-09 (their notes stay in `docs/`). What each
 release fixed, with addresses, is in PROGRESS.md.
@@ -31,7 +31,7 @@ release fixed, with addresses, is in PROGRESS.md.
 4. Compile the result once from scratch with the `.ipa`.
 5. Run `gh release create vX.Y.Z-beta <zip> --prerelease --notes-file docs/RELEASE-X.Y.Z-beta.md` (`-alpha` before 0.1.3).
 
-## Where the project stands (2026-10-16, beta 0.1.3)
+## Where the project stands (2026-10-16, beta 0.1.4)
 
 - **Done:** every function is decompiled (2,572 of 2,572). The game plays the
   menus, Arcade to the end (treasure screen) and whole fights with every
@@ -72,6 +72,32 @@ release fixed, with addresses, is in PROGRESS.md.
   FrontEnd.c has their frames). Red highlight half as thick (port). New
   sources: `runtime/settings_menu.c`, `runtime/profiles.c` -- in
   build_game.ps1, CMakeLists.txt and make_release.py.
+- **New in 0.1.4 beta:**
+  - **64-bit build** (Port, not in the binary): `build_game.ps1 -Arch x64`
+    builds `umk3-game64.exe` with `UMK3_LOW32`. The game's structures keep
+    32-bit pointer words (`P32` = `__ptr32 __uptr`, runtime/savestate.h),
+    the exe sits at 0x400000 without ASLR and its heaps are reserved below
+    2 GB (`umk3_reserve_low`). Static `__ptr32` initialisers move into
+    `umk3_globals_fixup()` (tools/low32_static.py), the logic tables'
+    into `umk3_logic_tables_fixup()`. The launcher's `arch=` picks which
+    exe COMPILE builds and PLAY opens.
+  - **Arcade-win / stage 14 crash:** gamecode_globals.c pointed the fight's
+    scene handles (SLDie1Scene and 14 more) at a one-word dummy store, so
+    Task_GameDestroy's FreeSceneHandle freed garbage. They are `__common`
+    (zero) in the binary and now start NULL. **tools/mkglobals.py still
+    generates the dummy store**: regenerating the file brings the crash
+    back until the generator is fixed.
+  - **Classic Sub-Zero (chr 21) vanishing:** ct_osz_elbow3 (0x8004:
+    nj_ani_data's ani2 #0, part 4) plays RPCOMBO6..10 (ids 3288..3291,
+    2637); OLDSUBZEROFRAMES.bin has -1 for them, so nothing was drawn, as
+    in the original. His skinanim's frames 12..15 are Reptile's 12..15,
+    which REPTILEFRAMES.bin maps those ids to; RenderLevelPlayers now uses
+    them (port). Mary still sees the combo not quite right: next to check.
+    Ermac (chr 20) has the same gap and the same frames, untouched.
+  - Not fixed, found on the way: LoadAnimatedCharacter's dropped-finisher
+    branch writes -1 into the list and then clears WantFrames[0x7fff]
+    instead of the original frame (the binary, 0x5c44a, uses the value
+    still in r3).
 - **New in 0.1.3 beta** (all Port, not in the binary): the game's own
   menus with the pad or the keyboard, `runtime/pad_nav.c`. The front end's
   touch tests also register their rectangles (`PortNavTarget` from

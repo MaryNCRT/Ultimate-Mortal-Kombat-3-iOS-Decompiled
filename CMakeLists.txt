@@ -385,10 +385,12 @@ if(UMK3_BINARY)
             if(CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT MSVC)
                 target_link_options(umk3-game PRIVATE -Wl,--large-address-aware)
             endif()
+            enable_language(RC)
             target_sources(umk3-game PRIVATE
                 runtime/platform/win32_gl.c
                 runtime/platform/win32_gl_cdecl.c
-                runtime/platform/win32_audio.c)
+                runtime/platform/win32_audio.c
+                runtime/umk3_game.rc)
             target_link_libraries(umk3-game PRIVATE opengl32 gdi32 winmm msacm32)
         endif()
         if(NOT MSVC)

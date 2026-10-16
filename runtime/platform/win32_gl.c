@@ -189,6 +189,7 @@ bool plat_open(const char *title, int width, int height)
     wc.lpfnWndProc   = wndproc;
     wc.hInstance     = inst;
     wc.hCursor       = LoadCursorA(NULL, IDC_ARROW);
+    wc.hIcon         = LoadIconA(inst, MAKEINTRESOURCEA(1));   /* umk3_game.rc */
     wc.lpszClassName = "LimeWindow";
     if (!RegisterClassA(&wc)) return false;
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy"
       content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:">
-<title>UMK3 Launcher</title>
+<title>UMK3 LAUNCHER</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -30,8 +30,8 @@
 <!-- the player's profile, top right: its icon and name; a click opens PERFIL -->
 <button id="profBadge" class="hidden"><canvas id="profBadgeIcon" width="96" height="96"></canvas><span id="profBadgeName"></span></button>
 
-<div id="logo" aria-label="Ultimate Mortal Kombat 3">
-  <img id="logoImg" class="hidden" alt="Ultimate Mortal Kombat 3">
+<div id="logo" class="img" aria-label="Ultimate Mortal Kombat 3">
+  <img id="logoImg" src="logo.png" alt="Ultimate Mortal Kombat 3">
   <div class="l-ultimate">ULTIMATE</div>
   <div class="l-mk">MORTAL <span class="l-3">3</span> KOMBAT</div>
   <div class="l-sub"><span data-t="ttlSub">PORT DE PC</span> &middot; <span id="ttl-ver"></span></div>
@@ -57,6 +57,10 @@
     <div class="row">
       <input id="ipa" class="edt" readonly spellcheck="false" placeholder="UMK3.ipa">
       <button id="browse" class="btn" data-t="browse">BUSCAR…</button>
+    </div>
+    <label class="lbl" for="arch" data-t="archLbl">WINDOWS</label>
+    <div class="row">
+      <select id="arch" class="sel"></select>
     </div>
     <div class="row">
       <button id="build" class="btn hot" data-t="build">COMPILAR</button>
@@ -266,6 +270,10 @@
     <div class="field">
       <label class="lbl" for="lang" data-t="lang">IDIOMA DEL JUEGO</label>
       <select id="lang" class="sel"></select>
+    </div>
+    <div id="playarchf" class="field hidden">
+      <label class="lbl" for="playarch" data-t="playArchLbl">VERSIÓN A ABRIR</label>
+      <select id="playarch" class="sel"></select>
     </div>
     <label class="chk"><input type="checkbox" id="dbg"><span data-t="dbg">MODO DEBUG</span></label>
     <label class="chk"><input type="checkbox" id="skip"><span data-t="skip">SALTAR LAS INTROS (LOGOS DEL INICIO)</span></label>

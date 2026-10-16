@@ -73,7 +73,7 @@ long  t_local_reaction_exit(MK3THREAD *thread);   /* joy.c, already decompiled *
 /* Per-character text, indexed by the roster id `get_winner_ochar` resolves
  * into `obj->field1c`. One pointer per character; the roster size is not
  * established by this file. */
-extern const char *ochar_winner_text[];
+extern const char *P32 ochar_winner_text[];
 
 /* The bonus-round fatality-style effect, indexed by a G+0x450/0x458 value
  * minus one and handed straight to `create_fx` through `obj->field1c`. Same
@@ -84,7 +84,7 @@ extern const uint32_t fatality_animations[];
 /* `_txt_tie` -- the string `_do_winner_text` shows when nobody won. A plain
  * `extern char *`, read through one more `ldr` the way `G`/`GrObj`/`Plyr` are:
  * the literal names the SLOT, and the slot holds the string pointer. */
-extern char *txt_tie;
+extern char *P32 txt_tie;
 
 long t_bonus_count_draw(MK3THREAD *thread);
 void get_winner_ochar(MK3OBJ *obj);

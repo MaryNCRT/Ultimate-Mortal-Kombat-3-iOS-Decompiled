@@ -294,7 +294,7 @@ extern TEXTURE *HSceneTextures[32];
 extern TEXTURETOLOAD HUDANIM_ttl[20];
 extern void *HUDFatalsTexture[10];
 extern void *HUDTPage;
-extern TEXTURE *HUDTextures[32];
+extern TEXTURE *P32 HUDTextures[32];
 extern float HUD_Scale;
 extern int Health[2];
 extern long HelpPage;
@@ -820,7 +820,7 @@ extern long winningStryk;
 extern long workingInd;
 extern float zoomedoutweight;
 extern void *BloodScene;
-extern void **BloodTextures;
+extern void *P32 *BloodTextures;
 extern void *ButtonsTPage;
 extern float *CameraLookAt;
 extern int *Character1Ptr;
@@ -3701,19 +3701,22 @@ long BioText[BIOS_PAGES] = {
 float BlendMode = 0.5f;
 float BloodGravity = 0.00499999989f;  /* 0x0016f74c */
 float BloodSize = 5.5f;  /* 0x0016f744 */
+/* The slot BloodTextures points at; the table fills the array, not the
+ * slot (it wrote over BloodTextures and the eleven words after it). */
+static void *P32 BloodTextures__store[12];
 TEXTURETOLOAD BloodTexturesToLoad[13] = {
-    { "MKBLOOD-BLUDGLOB_000.PNG", (void *)&BloodTextures },
-    { "MKBLOOD-BLUDGLOB_001.PNG", (void *)((char *)&BloodTextures + 4) },
-    { "MKBLOOD-BLUDGLOB_002.PNG", (void *)((char *)&BloodTextures + 8) },
-    { "MKBLOOD-BLUDGLOB_003.PNG", (void *)((char *)&BloodTextures + 12) },
-    { "MKBLOOD-BLUDGLOB_004.PNG", (void *)((char *)&BloodTextures + 16) },
-    { "MKBLOOD-BLUDGLOB_005.PNG", (void *)((char *)&BloodTextures + 20) },
-    { "MKBLOOD-BLUDGLOB_006.PNG", (void *)((char *)&BloodTextures + 24) },
-    { "MKBLOOD-BLUDGLOB_007.PNG", (void *)((char *)&BloodTextures + 28) },
-    { "MKBLOOD-BLUDGLOB_008.PNG", (void *)((char *)&BloodTextures + 32) },
-    { "MKBLOOD-BLUDGLOB_009.PNG", (void *)((char *)&BloodTextures + 36) },
-    { "MKBLOOD-BLUDGLOB_010.PNG", (void *)((char *)&BloodTextures + 40) },
-    { "MKBLOOD-BLUDGLOB_011.PNG", (void *)((char *)&BloodTextures + 44) },
+    { "MKBLOOD-BLUDGLOB_000.PNG", (void *)&BloodTextures__store[0] },
+    { "MKBLOOD-BLUDGLOB_001.PNG", (void *)&BloodTextures__store[1] },
+    { "MKBLOOD-BLUDGLOB_002.PNG", (void *)&BloodTextures__store[2] },
+    { "MKBLOOD-BLUDGLOB_003.PNG", (void *)&BloodTextures__store[3] },
+    { "MKBLOOD-BLUDGLOB_004.PNG", (void *)&BloodTextures__store[4] },
+    { "MKBLOOD-BLUDGLOB_005.PNG", (void *)&BloodTextures__store[5] },
+    { "MKBLOOD-BLUDGLOB_006.PNG", (void *)&BloodTextures__store[6] },
+    { "MKBLOOD-BLUDGLOB_007.PNG", (void *)&BloodTextures__store[7] },
+    { "MKBLOOD-BLUDGLOB_008.PNG", (void *)&BloodTextures__store[8] },
+    { "MKBLOOD-BLUDGLOB_009.PNG", (void *)&BloodTextures__store[9] },
+    { "MKBLOOD-BLUDGLOB_010.PNG", (void *)&BloodTextures__store[10] },
+    { "MKBLOOD-BLUDGLOB_011.PNG", (void *)&BloodTextures__store[11] },
 };  /* 0x00150e1c */
 float BloodVelMul = -51.0f;  /* 0x0016f748 */
 void *BricksTexture;  /* 0x00183efc */
@@ -18096,7 +18099,7 @@ TEXTURETOLOAD HUDANIM_ttl[20] = {
 };  /* 0x00174e4c */
 void *HUDFatalsTexture[10];
 void *HUDTPage;
-TEXTURE *HUDTextures[32];
+TEXTURE *P32 HUDTextures[32];
 float HUD_Scale = 1.0f;  /* 0x000ff9c4 */
 int Health[2] = {
     100, 100,
@@ -21043,10 +21046,9 @@ float zoomedoutweight;  /* 0x001f44a4 */
 
 /* ---- 78 pointer slots: storage, then a pointer at it ---- */
 
-static void *BloodScene__store[1];
-void *BloodScene = BloodScene__store;
-static void *BloodTextures__store[12];
-void **BloodTextures = BloodTextures__store;
+void *BloodScene = 0;  /* NULL until loaded, as in __common */
+static void *P32 BloodTextures__store[12];
+void *P32 *BloodTextures = BloodTextures__store;
 static void *ButtonsTPage__store[1];
 void *ButtonsTPage = ButtonsTPage__store;
 static float CameraLookAt__store[3];
@@ -21054,8 +21056,7 @@ float *CameraLookAt = CameraLookAt__store;
 int *Character1Ptr = (int *)(void *)&Character1;  /* the slot holding &Character1 */
 int *ClassicSubZeroUnlockedPtr = (int *)(void *)&ClassicSubZeroUnlocked;  /* the slot holding &ClassicSubZeroUnlocked */
 int *CurrentTaskPtr = (int *)(void *)&CurrentTask;  /* the slot holding &CurrentTask */
-static void *CyraxSelfDestructScene__store[1];
-void *CyraxSelfDestructScene = CyraxSelfDestructScene__store;
+void *CyraxSelfDestructScene = 0;  /* NULL until loaded, as in __common */
 static const char *DestinyNamesLoss__store[27] = {
     "Novice - Loss", "Warrior - Loss", "Master - Loss", "Grand Master - Loss",
     "Grand Master - Loss",
@@ -21119,11 +21120,9 @@ long *LevelSelectP = (long *)(void *)&LevelSelect;  /* the slot holding &LevelSe
 int *LevelSelectPtr = (int *)(void *)&LevelSelect;  /* the slot holding &LevelSelect */
 static unsigned char MKEventQueue__store[84] __attribute__((aligned(16)));
 MKEVENTQUEUE *MKEventQueue = (MKEVENTQUEUE *)(void *)MKEventQueue__store;
-static void *MeshSet_FIGHT__store[1];
-void *MeshSet_FIGHT = MeshSet_FIGHT__store;
+void *MeshSet_FIGHT = 0;  /* NULL until loaded, as in __common */
 int *MileenaUnlockedPtr = (int *)(void *)&MileenaUnlocked;  /* the slot holding &MileenaUnlocked */
-static void *PitDeathScene__store[1];
-void *PitDeathScene = PitDeathScene__store;
+void *PitDeathScene = 0;  /* NULL until loaded, as in __common */
 long *Player2NumButtonsP = (long *)(void *)&Player2NumButtons;  /* the slot holding &Player2NumButtons */
 unsigned char PlayerZPos[4] __attribute__((aligned(4))) = { 174, 71, 225, 190 };
 float *PlayerZPosPtr = (float *)(void *)PlayerZPos;  /* the slot holding &PlayerZPos */
@@ -21136,20 +21135,14 @@ static unsigned char RenderUVs__store[120000] __attribute__((aligned(16)));
 limeVECTOR2 *RenderUVs = (limeVECTOR2 *)(void *)RenderUVs__store;
 static unsigned char RenderVerts__store[180000] __attribute__((aligned(16)));
 limeVECTOR3 *RenderVerts = (limeVECTOR3 *)(void *)RenderVerts__store;
-static void *RocksScene__store[1];
-void *RocksScene = RocksScene__store;
+void *RocksScene = 0;  /* NULL until loaded, as in __common */
 static long RoundParam__store[17];
 long *RoundParam = RoundParam__store;
-static void *SKEffectScene__store[1];
-void *SKEffectScene = SKEffectScene__store;
-static void *SLDie1Scene__store[1];
-void *SLDie1Scene = SLDie1Scene__store;
-static void *SLDie2Scene__store[1];
-void *SLDie2Scene = SLDie2Scene__store;
-static void *SZEffectScene__store[1];
-void *SZEffectScene = SZEffectScene__store;
-static void *Scene_FIGHT__store[1];
-void *Scene_FIGHT = Scene_FIGHT__store;
+void *SKEffectScene = 0;  /* NULL until loaded, as in __common */
+void *SLDie1Scene = 0;  /* NULL until loaded, as in __common */
+void *SLDie2Scene = 0;  /* NULL until loaded, as in __common */
+void *SZEffectScene = 0;  /* NULL until loaded, as in __common */
+void *Scene_FIGHT = 0;  /* NULL until loaded, as in __common */
 static long SizeofIntroLists__store[26] = {
     860, 1120, 1160, 1008, 732, 692, 1268, 900,
     864, 2512, 1264, 1340, 1584, 1188, 864, 1000,
@@ -21161,14 +21154,10 @@ static void *SmokeTexture__store[1];
 void **SmokeTexture = SmokeTexture__store;
 long *SurvivalStageP2 = (long *)(void *)&SurvivalStage;  /* the slot holding &SurvivalStage */
 int *SurvivalStagePtr = (int *)(void *)&SurvivalStage;  /* the slot holding &SurvivalStage */
-static void *SwatEffectScene__store[1];
-void *SwatEffectScene = SwatEffectScene__store;
-static void *TrainDie1Scene__store[1];
-void *TrainDie1Scene = TrainDie1Scene__store;
-static void *TrainDie2Scene__store[1];
-void *TrainDie2Scene = TrainDie2Scene__store;
-static void *TrainScene__store[1];
-void *TrainScene = TrainScene__store;
+void *SwatEffectScene = 0;  /* NULL until loaded, as in __common */
+void *TrainDie1Scene = 0;  /* NULL until loaded, as in __common */
+void *TrainDie2Scene = 0;  /* NULL until loaded, as in __common */
+void *TrainScene = 0;  /* NULL until loaded, as in __common */
 long *TrainingCatagoryP = (long *)(void *)&TrainingCatagory;  /* the slot holding &TrainingCatagory */
 static long UpperLowerTxt__store[2] = {
     1380460, 1380468,
@@ -21178,8 +21167,7 @@ static long WantDoingFatalFrames__store[1] = {
     1,
 };
 long *WantDoingFatalFrames = WantDoingFatalFrames__store;
-static void *XeroxScene__store[1];
-void *XeroxScene = XeroxScene__store;
+void *XeroxScene = 0;  /* NULL until loaded, as in __common */
 static float endingsOffsetY__store[1];
 float *endingsOffsetY = endingsOffsetY__store;
 static long endurancerand1__store[1];

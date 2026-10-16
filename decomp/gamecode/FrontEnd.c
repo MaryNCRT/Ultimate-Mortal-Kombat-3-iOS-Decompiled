@@ -149,6 +149,8 @@ extern int PortHideControls;            /* GameCode.c: hide_controls=1 */
 int  PortMovesTurn(void);                /* game_main.c, port */
 int  PortPagesExit(void);
 void PortPagesLine(char *line, int n, int sel);
+void PortBackLine(char *line, int n);
+int PortPagesExit(void);
 void PortNavDrawLine(const char *s, int right);
 void set_menu_open_controls(void);      /* runtime/settings_menu.c */
 int PortNavHover;
@@ -718,13 +720,13 @@ typedef struct PLAYERDEF {
     float       height;         /* 0x0c  added to Z in ArcadePosTo3dPos */
     float       renderOffsetX;  /* 0x10  glTranslatef x, times +/-2.15 */
     float       renderOffsetZ;  /* 0x14  glTranslatef z, times 0.65 */
-    const char *lighting;       /* 0x18  "KANO" */
-    const char *frameList;      /* 0x1c  "kanoframes.txt" */
-    const char *bones;          /* 0x20  "KANO_STANDARD.bones" */
-    const char *skin;           /* 0x24  "KANO_STANDARD.skin" */
-    const char *skinAnim;       /* 0x28  "KANO_STANDARD.skinanim" */
-    const char *texBase;        /* 0x2c  "KANO" */
-    const char *scene;          /* 0x30  "KANO_STANDARD.scene" */
+    const char *P32 lighting;       /* 0x18  "KANO" */
+    const char *P32 frameList;      /* 0x1c  "kanoframes.txt" */
+    const char *P32 bones;          /* 0x20  "KANO_STANDARD.bones" */
+    const char *P32 skin;           /* 0x24  "KANO_STANDARD.skin" */
+    const char *P32 skinAnim;       /* 0x28  "KANO_STANDARD.skinanim" */
+    const char *P32 texBase;        /* 0x2c  "KANO" */
+    const char *P32 scene;          /* 0x30  "KANO_STANDARD.scene" */
 } PLAYERDEF;
 
 /* 52 bytes an entry IN THE IMAGE, where a pointer is four bytes. Kept because
@@ -1087,6 +1089,18 @@ void PushFETaskDeferred(int task)
 extern char CustomButtonsPos4[0x78];    /* 0x00150294 */
 extern char CustomButtonsPos5[0x78];    /* 0x0015030c */
 extern char CustomButtonsPos6[0x78];    /* 0x00150384 */
+/* Port, not in the binary: each custom button's opacity in percent (0: the
+ * BUTTON OPACITY setting's), the 4, 5 and 6 layouts' six each, saved to
+ * presetalpha; the twin is the editor's Cancel snapshot. PortEditSel is the
+ * button last picked up in the editor, whose opacity its bar sets. */
+long PortButtonAlpha[3][6];
+long PortButtonAlphaCancel[3][6];
+long PortEditSel = -1;
+/* The stick likewise, per layout: x, y and size in pixels (size 0: the
+ * game's place and size) and the opacity in percent (0: the game's);
+ * saved to presetstick. PortEditSel 6 is the stick. */
+long PortStick[3][4];
+long PortStickCancel[3][4];
 void achievementsReset(void);
 extern int achievementTracker[24];       /* 0x00379c60, see achievements.c */
 void Write_AchievementsData(void);
@@ -1150,6 +1164,8 @@ void Write_PresetButtonData(void)
         surf[1] = limeScreenHeight;
         limeWriteFile("presetsurf", surf, sizeof surf, 0);
     }
+    limeWriteFile("presetalpha", PortButtonAlpha, sizeof PortButtonAlpha, 0);
+    limeWriteFile("presetstick", PortStick, sizeof PortStick, 0);
 }
 
 /* Port, not in the binary: a layout of six CUSTOMBUTTON records (x, y, size,
@@ -1178,6 +1194,21 @@ void PortRemapButtons(char *layout, long ow, long oh, long nw, long nh)
     }
 }
 
+
+/* Port, not in the binary: the stick's place and size (PortStick) moved
+ * the same way as a button's. */
+void PortRemapStick(long *st, long ow, long oh, long nw, long nh)
+{
+    float ob = (float)(ow < oh * 3 / 2 ? ow : oh * 3 / 2);
+    float nb = (float)(nw < nh * 3 / 2 ? nw : nh * 3 / 2);
+    float k = ob > 0 ? nb / ob : 1.0f;
+
+    if (ow <= 0 || oh <= 0 || (ow == nw && oh == nh) || st[2] <= 0)
+        return;
+    st[0] = st[0] > ow / 2 ? (long)(nw - (ow - st[0]) * k) : (long)(st[0] * k);
+    st[1] = (long)(nh - (oh - st[1]) * k);
+    st[2] = (long)(st[2] * k);
+}
 
 extern int  FE_TaskStackPointer;        /* 0x001008ac */
 extern int  FE_CurrentTaskStack[];      /* 0x00183f30 */
@@ -1651,6 +1682,19 @@ void Load_PresetButtonData(void)
     long *src;
     int i;
 
+    /* Port, not in the binary: the buttons' own opacities (see
+     * PortButtonAlpha); none saved, all 0, the setting's. */
+    src = (long *)limeLoadSaveFile("presetalpha");
+    if (src) {
+        memcpy(PortButtonAlpha, src, sizeof PortButtonAlpha);
+        limeFree(src);
+    }
+    src = (long *)limeLoadSaveFile("presetstick");
+    if (src) {
+        memcpy(PortStick, src, sizeof PortStick);
+        limeFree(src);
+    }
+
     src = (long *)limeLoadSaveFile("preset4data");
     if (src == 0)
         goto reset;
@@ -1694,6 +1738,11 @@ void Load_PresetButtonData(void)
             else
                 PortRemapButtons(lay[k], surf[0], surf[1],
                                  limeScreenWidth, limeScreenHeight);
+            if (surf == 0)
+                PortStick[k][2] = 0;
+            else
+                PortRemapStick(PortStick[k], surf[0], surf[1],
+                               limeScreenWidth, limeScreenHeight);
         }
         if (surf == 0 || surf[0] != limeScreenWidth
             || surf[1] != limeScreenHeight)
@@ -1720,6 +1769,13 @@ void Load_PresetButtonData(void)
                     bad = 1;
             if (bad) {
                 memcpy(live[k], dflt[k], 0x78);
+                fixed = 1;
+            }
+            if (PortStick[k][2] > 0                 /* port: the stick */
+                && (PortStick[k][0] < 0 || PortStick[k][0] > limeScreenWidth
+                    || PortStick[k][1] < 0
+                    || PortStick[k][1] > limeScreenHeight)) {
+                PortStick[k][2] = 0;
                 fixed = 1;
             }
         }
@@ -3769,6 +3825,7 @@ extern BUTTONNEW BUTTON_CANCEL;         /* 0x0010085c */
 
 void EditButtons(void);
 void DrawControls(void);
+void PortAlphaBarDraw(void);
 void Write_PresetButtonData(void);
 void Write_SettingsData(void);
 void PopFETaskDeferred(void);
@@ -3825,6 +3882,7 @@ void FE_Task_Button_Edit(void)
     EditButtons();
     P2Controls = 0;                    /* always the player-one preview */
     DrawControls();
+    PortAlphaBarDraw();                /* port: the chosen button's opacity */
 
     save = DrawButtonNew(&BUTTON_SAVE, 0x26, 0x10, 1);
     limeDrawFONT(&GameFont, GameText(0x57),
@@ -3849,6 +3907,8 @@ void FE_Task_Button_Edit(void)
                     *(const long *)&CancelCustomButtonsPos6[row + k];
             }
         }
+        memcpy(PortButtonAlpha, PortButtonAlphaCancel, sizeof PortButtonAlpha);
+        memcpy(PortStick, PortStickCancel, sizeof PortStick);
         PopFETaskDeferred();
     }
 
@@ -5016,7 +5076,7 @@ void RenderFECharacters(long slot0, long slot1)
     for (i = 0; i < 2; i++) {
         char  *ch;
         const PLAYERDEF *def;
-        void **anim;
+        void *P32 *anim;
         float  scale;
         long   which;
 
@@ -5080,19 +5140,19 @@ void RenderFECharacters(long slot0, long slot1)
         *(float *)(ch + 0x5dc) = 0.65f;
         *(float *)(ch + 0x5e0) = 0.7f;
 
-        anim = *(void ***)(ch + 4);
-        *(void **)(ch + 0x528) = anim[0x14 / 4];
+        anim = *(void *P32 *P32 *)(ch + 4);
+        *(void *P32 *)(ch + 0x528) = anim[0x14 / 4];
         *(long *)(ch + 0x52c) = 0;
 
         if (GameMode == 1) {
             if (slot0 == slot1 && (isParent() ? i != 0 : i == 0))
-                *(void **)(ch + 0x528) = anim[0x24 / 4];
+                *(void *P32 *)(ch + 0x528) = anim[0x24 / 4];
         } else {
             if (i != 0 && slot0 == slot1)
-                *(void **)(ch + 0x528) = anim[0x24 / 4];
+                *(void *P32 *)(ch + 0x528) = anim[0x24 / 4];
             /* Port, not in the binary: the select screen's colour picker.
              * With nothing picked it gives the same answer as above. */
-            *(void **)(ch + 0x528) =
+            *(void *P32 *)(ch + 0x528) =
                 anim[PortPaletteOf(i, slot0, slot1) == 2 ? 0x24 / 4 : 0x14 / 4];
         }
 
@@ -6101,6 +6161,14 @@ void FE_Task_Karnage_Summary(void)
                                  1, FE_WidthScale, fontcol);
             }
         }
+    } else if (PortHideControls) {
+        /* Port, not in the binary: with the on-screen controls off, no
+         * EXIT button, only BACK (circle or Backspace) in the corner */
+        char line[300];
+
+        exiting = PortPagesExit() ? 0 : -1;
+        PortBackLine(line, sizeof line);
+        PortNavDrawLine(line, 1);
     } else {
         exiting = DrawButtonNew(&BUTTON_EXITBIG, 0x1a7, 0x130, 1) ? 0 : -1;
 
@@ -6825,6 +6893,13 @@ void FE_Task_Survival_Summary(void)
                                  1, FE_WidthScale, fontcol);
             }
         }
+    } else if (PortHideControls) {
+        /* Port, not in the binary: as the Karnage summary, BACK alone */
+        char line[300];
+
+        exiting = PortPagesExit() ? 0 : -1;
+        PortBackLine(line, sizeof line);
+        PortNavDrawLine(line, 1);
     } else {
         ready = 1;
 
@@ -7220,6 +7295,10 @@ void FE_Task_Button_Config(void)
                 *(long *)&CancelCustomButtonsPos6[row + k] =
                     *(const long *)&CustomButtonsPos6[row + k];
             }
+        /* Port, not in the binary: the opacities too, none chosen yet */
+        memcpy(PortButtonAlphaCancel, PortButtonAlpha, sizeof PortButtonAlpha);
+        memcpy(PortStickCancel, PortStick, sizeof PortStick);
+        PortEditSel = -1;
         PushFETaskDeferred(BTNCFG_TASK_EDIT);
         break;
     default:
@@ -12502,6 +12581,219 @@ static CUSTOMBUTTON *EB_Layout(long layout)
     return 0;
 }
 
+/* Port, not in the binary: the editor's controls for the chosen button or
+ * the stick (PortEditSel 6), top centre between SAVE and CANCEL: RESET, and
+ * two bars, k 0 the opacity and k 1 the size. */
+extern float JSIZE;
+extern long  JoystickStatePosX, JoystickStatePosY;
+static int   PortStickDrag;
+
+/* This layout's stick record, filled with the game's place and size the
+ * first time it is touched. */
+static long *PortEditStick(void)
+{
+    long *st;
+
+    if (Settings[4] < 4 || Settings[4] > 6)
+        return 0;
+    st = PortStick[Settings[4] - 4];
+    if (st[2] <= 0) {
+        st[0] = (long)ButtonSize;
+        st[1] = (long)((float)limeScreenHeight - ButtonSize);
+        st[2] = (long)ButtonSize;
+    }
+    return st;
+}
+
+static int PortEditBar(int k, float *x, float *y, float *w, float *h)
+{
+    CUSTOMBUTTON *b = EB_Layout(Settings[4]);
+
+    *x = (float)FE_X(150.0f);
+    *y = (float)FE_Y(62.0f + 36.0f * k);
+    *w = (float)FE_W(180.0f);
+    *h = (float)FE_H(8.0f);
+    if (b == 0)
+        return 0;
+    if (PortEditSel == 6)
+        return 1;
+    return PortEditSel >= 0 && PortEditSel < EB_BUTTONS
+        && b[PortEditSel].id != -1 && b[PortEditSel].x != -1;
+}
+
+static void PortEditReset(float *x, float *y, float *w, float *h)
+{
+    *w = (float)FE_W(110.0f);
+    *h = (float)FE_H(26.0f);
+    *x = (float)FE_X(240.0f) - *w * 0.5f;
+    *y = (float)FE_Y(4.0f);
+}
+
+/* Which bar (0 or 1) the point is on, 2 for RESET, -1 for none. */
+static int PortEditBarAt(float tx, float ty)
+{
+    float x, y, w, h;
+    int k;
+
+    for (k = 0; k < 2; k++)
+        if (PortEditBar(k, &x, &y, &w, &h)
+            && tx >= x - FE_W(10.0f) && tx <= x + w + FE_W(10.0f)
+            && ty >= y - FE_H(12.0f) && ty <= y + h + FE_H(12.0f))
+            return k;
+    PortEditReset(&x, &y, &w, &h);
+    if (tx >= x && tx <= x + w && ty >= y && ty <= y + h)
+        return 2;
+    return -1;
+}
+
+static int PortAlphaBarHit(float tx, float ty)
+{
+    return PortEditBarAt(tx, ty) != -1;
+}
+
+/* The stick in the editor: picked up where no button is, moved while held,
+ * kept whole on the screen when let go. Runs after the buttons' sweep. */
+static void PortEditStickDrag(long held, float tx, float ty)
+{
+    long *st;
+    float dx, dy;
+
+    if (tx == -1.0f) {
+        if (PortStickDrag && (st = PortEditStick()) != 0) {
+            long h2 = st[2];
+            if (st[0] < h2) st[0] = h2;
+            if (st[0] > limeScreenWidth - h2) st[0] = limeScreenWidth - h2;
+            if (st[1] < h2) st[1] = h2;
+            if (st[1] > limeScreenHeight - h2) st[1] = limeScreenHeight - h2;
+        }
+        PortStickDrag = 0;
+        return;
+    }
+    if (!PortStickDrag) {
+        if (held != -1 || LastDraggingButton != -1 || PortAlphaBarHit(tx, ty))
+            return;
+        st = PortEditStick();
+        if (st == 0)
+            return;
+        dx = tx - (float)st[0];
+        dy = ty - (float)st[1];
+        if (sqrtf(dx * dx + dy * dy) >= (float)st[2])
+            return;
+        PortStickDrag = 1;
+        PortEditSel = 6;
+    }
+    st = PortEditStick();
+    st[0] = (long)tx;
+    st[1] = (long)ty;
+}
+
+/* One bar at fraction f, with its label and value above it. */
+static void PortEditBarDraw(int k, float f, const char *label, long pct)
+{
+    float x, y, w, h;
+    char s[32];
+
+    PortEditBar(k, &x, &y, &w, &h);
+    limeFillRect(x, y, w, h, 0.0f, 0.0f, 0.0f, 0.6f);
+    limeFillRect(x, y, w * f, h, 1.0f, 0.85f, 0.0f, 1.0f);
+    limeFillRect(x + w * f - FE_W(2.0f), y - FE_H(3.0f),
+                 FE_W(4.0f), h + FE_H(6.0f), 1.0f, 1.0f, 1.0f, 1.0f);
+    limeDrawFONT(&GameFont, label, (float)FE_X(236.0f),
+                 y - FE_H(22.0f), 2, FE_WidthScale, fontcol);
+    snprintf(s, sizeof s, "%d%%", (int)pct);
+    limeDrawFONT(&GameFont, s, (float)FE_X(244.0f),
+                 y - FE_H(22.0f), 0, FE_WidthScale, fontcol);
+}
+
+/* RESET (this layout back to the game's: places, sizes, opacities, the
+ * stick), the chosen button or stick framed, and its two bars: the opacity
+ * (the game's OPACITY word), 10 to 100 %, and the size, 50 to 200 % of the
+ * game's. A press or a drag on a bar sets it. */
+void PortAlphaBarDraw(void)
+{
+    static const char *const def[3] = { DEFAULT_CustomButtonsPos4,
+                                        DEFAULT_CustomButtonsPos5,
+                                        DEFAULT_CustomButtonsPos6 };
+    CUSTOMBUTTON *b = EB_Layout(Settings[4]);
+    int es = Language[0] == 'E' && Language[1] == 'S';
+    float x, y, w, h, hs, k, f, cx, cy;
+    long *a, *sz, v, pct, l = Settings[4] - 4;
+    int on;
+
+    if (b == 0)
+        return;
+
+    PortEditReset(&x, &y, &w, &h);
+    limeFillRect(x, y, w, h, 0.0f, 0.0f, 0.0f, 0.6f);
+    limeDrawFONT(&GameFont, es ? "REINICIAR" : "RESET", (float)FE_X(240.0f),
+                 y + FE_H(3.0f), 1, FE_WidthScale, fontcol);
+    if (limeTouchScreenX[0] == -1.0f && LastDraggingButton == -1
+        && !PortStickDrag
+        && PortEditBarAt(limeLastTouchScreenX[0], limeLastTouchScreenY[0]) == 2
+        && limeLastTouchScreenX[0] != -1.0f) {
+        memcpy(b, def[l], 0x78);
+        memset(PortButtonAlpha[l], 0, sizeof PortButtonAlpha[l]);
+        memset(PortStick[l], 0, sizeof PortStick[l]);
+        PortEditSel = -1;
+        limeLastTouchScreenX[0] = -1.0f;    /* once a release */
+    }
+
+    if (!PortEditBar(0, &x, &y, &w, &h))
+        return;
+    if (PortEditSel == 6) {
+        long *st = PortEditStick();
+        a  = &st[3];
+        sz = &st[2];
+        cx = (float)st[0];
+        cy = (float)st[1];
+        hs = (float)st[2] + 2.0f;
+    } else {
+        a  = &PortButtonAlpha[l][PortEditSel];
+        sz = &b[PortEditSel].size;
+        cx = (float)b[PortEditSel].x;
+        cy = (float)b[PortEditSel].y;
+        hs = b[PortEditSel].size * 0.5f + 2.0f;
+    }
+    on = limeTouchScreenX[0] != -1.0f && DraggingButton == -1 && !PortStickDrag
+       ? PortEditBarAt(limeTouchScreenX[0], limeTouchScreenY[0]) : -1;
+    if (on == 0 || on == 1) {
+        PortEditBar(on, &x, &y, &w, &h);
+        f = (limeTouchScreenX[0] - x) / w;
+        f = f < 0.0f ? 0.0f : f > 1.0f ? 1.0f : f;
+        if (on == 0)
+            *a = 10 + (long)(f * 18.0f + 0.5f) * 5;
+        else {
+            long *px = PortEditSel == 6 ? PortEditStick()
+                     : &b[PortEditSel].x;   /* x, y: the first two words */
+            long h2;
+
+            *sz = (long)(ButtonSize * (50 + (long)(f * 30.0f + 0.5f) * 5)
+                         / 100.0f);
+            h2 = PortEditSel == 6 ? *sz : *sz / 2;     /* kept on the screen */
+            if (px[0] < h2) px[0] = h2;
+            if (px[0] > limeScreenWidth - h2) px[0] = limeScreenWidth - h2;
+            if (px[1] < h2) px[1] = h2;
+            if (px[1] > limeScreenHeight - h2) px[1] = limeScreenHeight - h2;
+            cx = (float)px[0];
+            cy = (float)px[1];
+            hs = (PortEditSel == 6 ? (float)*sz : *sz * 0.5f) + 2.0f;
+        }
+    }
+    v   = *a ? *a : PortEditSel == 6 ? 100
+        : Settings[6] == 1 ? 75 : Settings[6] == 2 ? 100 : 50;
+    pct = ButtonSize > 0.0f ? (long)(*sz * 20.0f / ButtonSize + 0.5f) * 5 : 100;
+
+    k = FE_W(1.5f);
+    limeFillRect(cx - hs, cy - hs, hs * 2, k, 1.0f, 0.85f, 0.0f, 1.0f);
+    limeFillRect(cx - hs, cy + hs - k, hs * 2, k, 1.0f, 0.85f, 0.0f, 1.0f);
+    limeFillRect(cx - hs, cy - hs, k, hs * 2, 1.0f, 0.85f, 0.0f, 1.0f);
+    limeFillRect(cx + hs - k, cy - hs, k, hs * 2, 1.0f, 0.85f, 0.0f, 1.0f);
+
+    PortEditBarDraw(0, (v - 10) / 90.0f, GameText(0xe6), v);
+    PortEditBarDraw(1, (pct < 50 ? 0 : pct > 200 ? 150 : pct - 50) / 150.0f,
+                    es ? "TAMA\xd1O" : "SIZE", pct);
+}
+
 static long EB_OutOfBounds(const CUSTOMBUTTON *b)
 {
     long half = b->size / 2;
@@ -12536,8 +12828,24 @@ void EditButtons(void)
     if (touchX == -1.0f)
         DraggingButton = -1;
 
-    /* ---- the drop: validate, and snap back if anything objects ---- */
+    /* Port, not in the binary: a button goes wherever it is dropped, only
+     * kept whole on the screen; no snap-back, no red area (the binary's
+     * check is kept below, unused). */
     if (LastDraggingButton != -1 && DraggingButton == -1) {
+        b    = EB_Layout(Settings[4]);
+        held = LastDraggingButton;
+        if (b != 0) {
+            long h2 = b[held].size / 2;
+
+            if (b[held].x < h2) b[held].x = h2;
+            if (b[held].x > limeScreenWidth - h2) b[held].x = limeScreenWidth - h2;
+            if (b[held].y < h2) b[held].y = h2;
+            if (b[held].y > limeScreenHeight - h2) b[held].y = limeScreenHeight - h2;
+        }
+    }
+
+    /* ---- the drop: validate, and snap back if anything objects ---- */
+    if (0 && LastDraggingButton != -1 && DraggingButton == -1) {
         long reject = 0;
 
         layout = Settings[4];
@@ -12579,7 +12887,7 @@ void EditButtons(void)
     pickedX = LastButtonPosX;
     pickedY = LastButtonPosY;
     touchY  = limeTouchScreenY[0];
-    if (b != 0) {
+    if (b != 0 && !PortStickDrag) {     /* port: not while the stick moves */
         for (i = 0; i < EB_BUTTONS; i++) {
             float dx, dy;
 
@@ -12589,14 +12897,20 @@ void EditButtons(void)
             if (touchX == -1.0f)
                 continue;
 
+            /* port: a press on the opacity bar is the bar's, not a pick-up */
+            if (held == -1 && PortAlphaBarHit(touchX, touchY))
+                continue;
+
             dx = (float)b[i].x - touchX;
             dy = (float)b[i].y - touchY;
 
-            if (sqrtf(dx * dx + dy * dy) < half) {
+            /* port: each button by its own size (the editor resizes) */
+            if (sqrtf(dx * dx + dy * dy) < b[i].size * 0.5f) {
                 if (held == -1) {
                     pickedX = b[i].x;       /* where it came from */
                     pickedY = b[i].y;
                     held    = i;
+                    PortEditSel = i;    /* port: the bar's button */
                 }
             } else if (held != i) {
                 continue;
@@ -12610,9 +12924,10 @@ void EditButtons(void)
     LastButtonPosY = pickedY;
     LastButtonPosX = pickedX;
     DraggingButton = held;
+    PortEditStickDrag(held, touchX, touchY);    /* port: the stick too */
 
     /* ---- the forbidden area, while a button is held outside it ---- */
-    if (held == -1 || b == 0)
+    if (held == -1 || b == 0 || 1)      /* port: no forbidden area, see above */
         return;
 
     if (!EB_OutOfBounds(&b[held]))

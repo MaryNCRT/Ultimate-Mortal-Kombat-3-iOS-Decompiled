@@ -38,6 +38,38 @@ void *st_calloc(size_t n, size_t size);
 void *st_realloc(void *p, size_t n);
 void  st_free(void *p);
 
+#if defined(UMK3_LOW32) && defined(UMK3_STATE_FILE)
+/* The 64-bit build (UMK3_LOW32): the game's words stay 32 bits, as on the
+ * device. Its code spells a word holding an address uintptr_t; here that is
+ * a uint32_t, which holds every address of the game, since the build keeps
+ * the exe, its data and the game's heaps below 2 GB. The library's headers
+ * come first, with the real type. */
+#include <stdint.h>
+#include <stdio.h>
+#include <math.h>
+#include <time.h>
+#include <ctype.h>
+#include <stdarg.h>
+#define uintptr_t uint32_t
+#define intptr_t  int32_t
+#endif
+
+/* P32 marks a pointer the game keeps in a 32-bit word: a field of one of
+ * its structures at the binary's layout, or a cast reading such a word
+ * (`*(void *P32 *)(base + 0x10)`, `(char *P32 *)c`). In the 64-bit build it
+ * is clang's 32-bit pointer (__ptr32, zero-extended), so the structures keep
+ * the device's offsets and the code that indexes them by word still lands
+ * on the right field; elsewhere it is nothing. Every file of that build
+ * sees it, so a structure has one shape everywhere. mingw's headers define
+ * __ptr32 away, hence the #undef. */
+#if defined(UMK3_LOW32)
+#undef __ptr32
+#undef __uptr
+#define P32 __ptr32 __uptr
+#else
+#define P32
+#endif
+
 #ifdef UMK3_STATE_FILE
 #pragma clang section data=".umkstd" bss=".umkstb"
 #define malloc(n)      st_malloc(n)

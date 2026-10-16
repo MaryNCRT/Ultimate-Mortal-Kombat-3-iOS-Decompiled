@@ -63,8 +63,8 @@ typedef struct MKEVENTQUEUE {
 #define MKEVENT_MAX  10
 
 extern MKEVENTQUEUE *MKEventQueue;         /* slot 0x00165664 -> 0x0038cf80 */
-extern MK3THREAD    *TList;                /* slot 0x00165684 -> 0x0038ed48 */
-extern MK3THREAD    *TList_Free;           /* slot 0x00165674 -> 0x0038ed4c */
+extern MK3THREAD    *P32 TList;                /* slot 0x00165684 -> 0x0038ed48 */
+extern MK3THREAD    *P32 TList_Free;           /* slot 0x00165674 -> 0x0038ed4c */
 extern MK3THREAD    *mytc;                 /* slot 0x0016566c -> 0x0038ef3c */
 
 /* `Plyr` and `Pp` are declared in mk3logic.h as `char *` with their strides as
@@ -239,7 +239,7 @@ void mk3_set_four_button(long player, long value)
 MK3THREAD *TList_Get(void)
 {
     MK3THREAD  *t = TList_Free;
-    MK3THREAD **tail;
+    MK3THREAD *P32 *tail;
 
     if (t == NULL)
         return NULL;
@@ -304,7 +304,7 @@ MK3THREAD *TList_GetFront(void)
  */
 void TList_Release(MK3THREAD *t)
 {
-    MK3THREAD **prev;
+    MK3THREAD *P32 *prev;
     MK3THREAD  *n;
 
     if (t == NULL)
@@ -776,14 +776,16 @@ void mk3_dizzy(void)
  * stack; the other four are in registers. Five arguments is the widest call in
  * this directory so far.
  */
-extern void (*mk3_getbbox_cb)(long ani, int *left, int *top,
+extern void (*P32 mk3_getbbox_cb)(long ani, int *left, int *top,
                               int *right, int *bottom);
 
 #define MK3_BBOX_PATCHED_ANI  0x12be
 
 void mk3_getbbox(long ani, int *left, int *top, int *right, int *bottom)
 {
-    mk3_getbbox_cb(ani, left, top, right, bottom);
+    /* through a plain pointer: clang cannot call a 32-bit one (P32) */
+    ((void (*)(long, int *, int *, int *, int *))mk3_getbbox_cb)
+        (ani, left, top, right, bottom);
 
     if (ani == MK3_BBOX_PATCHED_ANI) {
         int v = ~0x1f;                     /* -0x20, and the chain starts here */
@@ -1281,9 +1283,9 @@ long mk3_init(long p1, long p2, void (*bbox_cb)(void), long unused)
     /* the four parallel arrays, wired together thirty times */
     for (n = 0; n < MK3_SLOTS; n++) {
         char *plyr = Plyr + n * PLYR_STRIDE;
-        *(void **)(void *)(plyr + 0x00) = Pp    + n * PP_STRIDE;
-        *(void **)(void *)(plyr + 0x04) = &mytc[n];
-        *(void **)(void *)(plyr + 0x08) = GrObj + n * GROBJ_STRIDE;
+        *(void *P32 *)(void *)(plyr + 0x00) = Pp    + n * PP_STRIDE;
+        *(void *P32 *)(void *)(plyr + 0x04) = &mytc[n];
+        *(void *P32 *)(void *)(plyr + 0x08) = GrObj + n * GROBJ_STRIDE;
     }
 
     mk3_getbbox_cb = (void (*)(long, int *, int *, int *, int *))
@@ -1306,8 +1308,8 @@ long mk3_init(long p1, long p2, void (*bbox_cb)(void), long unused)
     }
 
     /* again, and on purpose: init_players damages these two. */
-    *(void **)(void *)(Plyr + 0x04)               = &mytc[0];
-    *(void **)(void *)(Plyr + PLYR_STRIDE + 0x04) = &mytc[1];
+    *(void *P32 *)(void *)(Plyr + 0x04)               = &mytc[0];
+    *(void *P32 *)(void *)(Plyr + PLYR_STRIDE + 0x04) = &mytc[1];
 
     Playback_Init(Playback);
     Playback_Init(Playback + 0x10);
@@ -1315,7 +1317,7 @@ long mk3_init(long p1, long p2, void (*bbox_cb)(void), long unused)
     *(uint32_t *)(void *)(G_BYTES + 0xa8) = 0;
 
     *(uint32_t *)(void *)(mo + 0x10) = 0;
-    *(void **)(void *)mo             = mo + 0x10;
+    *(void *P32 *)(void *)mo             = mo + 0x10;
 
     /* the referee: at the FRONT, so it runs first and gets no physics */
     t = TList_GetFront();
@@ -1655,13 +1657,13 @@ long mk3_update(const long *joy, void **out)
         next = t->next;
 
         if (r == MK3_THREAD_DONE) {
-            char *p0 = *(char **)(void *)(Plyr + 0x00);
-            char *p1 = *(char **)(void *)(Plyr + PLYR_STRIDE + 0x00);
+            char *p0 = *(char *P32 *)(void *)(Plyr + 0x00);
+            char *p1 = *(char *P32 *)(void *)(Plyr + PLYR_STRIDE + 0x00);
             long  k;
 
-            if (*(void **)(void *)(p0 + 0x64) == t->proc)
+            if (*(void *P32 *)(void *)(p0 + 0x64) == t->proc)
                 k = 0;
-            else if (*(void **)(void *)(p1 + 0x64) == t->proc)
+            else if (*(void *P32 *)(void *)(p1 + 0x64) == t->proc)
                 k = 1;
             else
                 k = -1;
@@ -1670,7 +1672,7 @@ long mk3_update(const long *joy, void **out)
                 char *pk = k ? p1 : p0;
 
                 *(uint32_t *)(void *)(pk + 0x64) = 0;
-                pk = *(char **)(void *)(Plyr + k * PLYR_STRIDE + 0x00);
+                pk = *(char *P32 *)(void *)(Plyr + k * PLYR_STRIDE + 0x00);
                 *(uint32_t *)(void *)(pk + 0x68) = 0;
             }
             TList_Release(t);
@@ -1694,8 +1696,8 @@ long mk3_update(const long *joy, void **out)
 
         e = mo + n * 0x10;
         if (n > 0)
-            *(void **)(void *)(e - 0x10) = e;        /* link the previous one */
-        *(void **)(void *)e = NULL;
+            *(void *P32 *)(void *)(e - 0x10) = e;        /* link the previous one */
+        *(void *P32 *)(void *)e = NULL;
 
         /* 0x0e is a scratch slot: the number goes in, comes back out, and is
          * replaced by the real value four instructions later. */
@@ -1738,7 +1740,7 @@ long mk3_update(const long *joy, void **out)
 
         /* through Plyr[n].field00 -- which mk3_init proved is &Pp[n] */
         {
-            char *proc = *(char **)(void *)(Plyr + t->player * PLYR_STRIDE);
+            char *proc = *(char *P32 *)(void *)(Plyr + t->player * PLYR_STRIDE);
             *(uint8_t *)(void *)(e + 0x0d) =
                 (uint8_t)(t->player * 2 + *(uint8_t *)(void *)(proc + 0x08));
         }

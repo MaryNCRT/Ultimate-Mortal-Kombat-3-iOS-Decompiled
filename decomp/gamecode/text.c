@@ -428,7 +428,7 @@ typedef struct FOUNDTOKEN {
     long        type;                   /* 0x00  0 none, 1 's', 2 'd', 4 'f' */
     long        index;                  /* 0x04  0..7 from the digit, -1 if none */
     long        unknown;                /* 0x08 */
-    const char *at;                     /* 0x0c  the unit the type char sits on */
+    const char *P32 at;                     /* 0x0c  the unit the type char sits on */
 } FOUNDTOKEN;
 
 extern FOUNDTOKEN foundToken;           /* 0x003877e0 */
@@ -637,6 +637,29 @@ long usprintf(char *dst, const char *fmt, ...)
 
     len = strLenUnicode(fmt);
     n   = processString(dst, fmt, len, args, 1);
+#ifdef UMK3_LOW32
+    /* Port, not in the binary: the 64-bit build passes each argument in an
+     * eight-byte slot, not the device's words. The first pass has typed the
+     * tokens, so the slots are repacked into the device's layout: one word
+     * for a string or a number, two for a double (its two halves). Every
+     * address of the game fits the low word. */
+    {
+        static long words[2 * TOKEN_SLOTS];
+        va_list ap;
+        long w = 0;
+
+        va_start(ap, fmt);
+        for (i = 0; i < n && i < TOKEN_SLOTS; i++) {
+            unsigned long long v = va_arg(ap, unsigned long long);
+
+            words[w++] = (long)(uint32_t)v;
+            if (listOfTokens[i].type == 4)
+                words[w++] = (long)(uint32_t)(v >> 32);
+        }
+        va_end(ap);
+        args = words;
+    }
+#endif
     initArguments(n, args);
     processString(dst, fmt, len, args, 0);
 

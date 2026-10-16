@@ -107,7 +107,10 @@ void q_am_i_cornered(MK3OBJ *obj);
 /* Eight function pointers, called as (obj, other). The extent is
  * what check_tsl allows -- an index above 7 is reset to 0 -- not a
  * measured array size. */
-extern void (*xfer_types_table[])(MK3OBJ *obj, MK3OBJ *other);
+extern void (*P32 xfer_types_table[])(MK3OBJ *obj, MK3OBJ *other);
+/* A call goes through a plain function pointer: clang cannot call through a
+ * 32-bit one (P32) in the 64-bit build. The same pointer elsewhere. */
+typedef void (*XFER_FN)(MK3OBJ *obj, MK3OBJ *other);
 extern uint32_t scom_robo_zap1[];        /* 0x0016a278 */
 extern uint32_t scom_robo_zap2[];        /* 0x0016a2ac */
 extern MK3THREAD *mytc;  /* slot 0x0016566c -> 0x0038ef3c; the host variable holds the slot's contents, as in mk3.c */
@@ -4985,7 +4988,7 @@ void check_tsl(MK3OBJ *obj, MK3OBJ *other)
     if (obj->field34 > 7)
         obj->field34 = 0;
 
-    xfer_types_table[obj->field34](obj, other);
+    ((XFER_FN)xfer_types_table[obj->field34])(obj, other);
 }
 
 /* q_mercy_req_ez -- armv7 0x000502e0, 60 bytes.  **Complete.**
@@ -6623,7 +6626,7 @@ long secret_move_search(MK3OBJ *obj, uint32_t arg, uint32_t *table)
         /* four conditional stores of this same value precede the
          * unconditional one in the binary; see the note above */
         obj->field38 = e[4];
-        xfer_types_table[e[2]](obj, (MK3OBJ *)(uintptr_t)arg);
+        ((XFER_FN)xfer_types_table[e[2]])(obj, (MK3OBJ *)(uintptr_t)arg);
         return 0;
     }
 

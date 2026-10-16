@@ -50,14 +50,45 @@ static int      g_failed;               /* the arena ran out once: no states */
 
 static struct st_head *head(void) { return (struct st_head *)g_base; }
 
+#ifdef UMK3_LOW32
+/* The 64-bit build: the game keeps its pointers in 32-bit words, and in
+ * longs, which sign-extend, so its memory has to sit below 2 GB. Reserves
+ * `size` bytes in the first free range there big enough; 0 if none.
+ * Shared with limeMalloc's region (lime_platform.c). */
+void *umk3_reserve_low(size_t size)
+{
+    MEMORY_BASIC_INFORMATION mi;
+    uintptr_t q = 0x10000;
+
+    while (q < 0x7FFF0000u && VirtualQuery((void *)q, &mi, sizeof mi)) {
+        uintptr_t at = ((uintptr_t)mi.BaseAddress + 0xFFFF) & ~(uintptr_t)0xFFFF;
+        uintptr_t end = (uintptr_t)mi.BaseAddress + mi.RegionSize;
+
+        if (mi.State == MEM_FREE && at + size <= end && at + size <= 0x7FFF0000u) {
+            void *p = VirtualAlloc((void *)at, size, MEM_RESERVE, PAGE_READWRITE);
+            if (p)
+                return p;
+        }
+        q = end;
+    }
+    return 0;
+}
+#endif
+
 static int arena_init(void)
 {
     if (g_base)
         return 1;
     if (g_failed)
         return 0;
+#ifdef UMK3_LOW32
+    g_base = (uint8_t *)umk3_reserve_low(ST_RESERVE);
+    if (!g_base)
+        fprintf(stderr, "savestate: no room below 2 GB for the arena\n");
+#else
     g_base = (uint8_t *)VirtualAlloc(NULL, ST_RESERVE, MEM_RESERVE,
                                      PAGE_READWRITE);
+#endif
     if (!g_base) {
         g_failed = 1;
         return 0;
@@ -237,6 +268,13 @@ static struct {
     uint8_t *buf;
     uint32_t cap, used, arena;
 } g_slot[ST_SLOTS];
+
+/* The arena reserved now rather than at the first block: the 64-bit build
+ * calls this first thing, before the graphics driver takes the low memory. */
+void st_init(void)
+{
+    arena_init();
+}
 
 int st_available(void)
 {

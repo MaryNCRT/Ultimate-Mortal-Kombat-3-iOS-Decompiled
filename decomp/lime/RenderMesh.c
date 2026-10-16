@@ -161,7 +161,7 @@ MESHSETINFO *LIME_LoadMeshSet(const char *filename, int useLighting)
     int32_t count;
     memcpy(&count, data, 4);
     set->numMeshes = count;
-    set->meshes = (MESHINFO **)limeMalloc("meshset_meshes",
+    set->meshes = (MESHINFO *P32 *)limeMalloc("meshset_meshes",
                                           (size_t)(count > 0 ? count : 1) *
                                           sizeof(MESHINFO *));
     if (set->meshes)
@@ -956,17 +956,17 @@ void LIME_RenderMeshSingleIndexed(void *rec, TEXTURE *tex, float alpha,
     glShadeModel(0x1d01);               /* GL_SMOOTH, before the fifth argument */
 
     if (second == 0) {
-        light   = *(const uint8_t * const *)(r + 0x24);
-        uvs     = *(const void * const *)(r + 0x20);
+        light   = *(const uint8_t *P32 const *)(r + 0x24);
+        uvs     = *(const void *P32 const *)(r + 0x20);
         nfaces  = *(const long *)(r + 0x04);
         nverts  = *(const long *)(r + 0x00);
-        indices = *(const void * const *)(r + 0x1c);
+        indices = *(const void *P32 const *)(r + 0x1c);
     } else {
-        light   = *(const uint8_t * const *)(r + 0x34);
-        uvs     = *(const void * const *)(r + 0x30);
+        light   = *(const uint8_t *P32 const *)(r + 0x34);
+        uvs     = *(const void *P32 const *)(r + 0x30);
         nfaces  = *(const long *)(r + 0x0c);
         nverts  = *(const long *)(r + 0x08);
-        indices = *(const void * const *)(r + 0x2c);
+        indices = *(const void *P32 const *)(r + 0x2c);
     }
 
     limeRenderedPolyCount += nfaces;

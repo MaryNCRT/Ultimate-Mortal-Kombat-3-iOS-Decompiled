@@ -94,22 +94,22 @@ typedef struct limeVECTOR2 limeVECTOR2;
 
 typedef struct ANIMATEDCHARACTER {
     long        meshCount;      /* 0x00 */
-    void       *meshes;         /* 0x04  meshCount records of 0x58 */
+    void       *P32 meshes;         /* 0x04  meshCount records of 0x58 */
     long        id;             /* 0x08  the character, for the frame gates */
     long        field0c;        /* 0x0c  nothing reads it */
-    void       *scene;          /* 0x10 */
-    void       *diffuse;        /* 0x14 */
-    void       *diffuseIce;     /* 0x18 */
-    void       *jadeGreen;      /* 0x1c  JADE only */
-    void       *sindelHair;     /* 0x20  SINDEL only */
-    void       *diffuse2;       /* 0x24  the lite path's second sheet */
-    void       *babality;       /* 0x28  may stay NULL */
-    void       *frameList;      /* 0x2c */
-    void       *skin;           /* 0x30 */
-    void       *bones;          /* 0x34 */
-    const long *meshbase;       /* 0x38  kept so it can be freed */
-    const long *meshTable;      /* 0x3c */
-    const long *meshNames;      /* 0x40 */
+    void       *P32 scene;          /* 0x10 */
+    void       *P32 diffuse;        /* 0x14 */
+    void       *P32 diffuseIce;     /* 0x18 */
+    void       *P32 jadeGreen;      /* 0x1c  JADE only */
+    void       *P32 sindelHair;     /* 0x20  SINDEL only */
+    void       *P32 diffuse2;       /* 0x24  the lite path's second sheet */
+    void       *P32 babality;       /* 0x28  may stay NULL */
+    void       *P32 frameList;      /* 0x2c */
+    void       *P32 skin;           /* 0x30 */
+    void       *P32 bones;          /* 0x34 */
+    const long *P32 meshbase;       /* 0x38  kept so it can be freed */
+    const long *P32 meshTable;      /* 0x3c */
+    const long *P32 meshNames;      /* 0x40 */
 } ANIMATEDCHARACTER;            /* 0x44 = 68 bytes, the size limeMalloc asks */
 
 struct BUTTONNEW {
@@ -135,8 +135,8 @@ typedef struct CSOUNDENTRY {
 
 typedef struct EDITVAR {
     long        pad;                    /* 0x00 */
-    const char *label;                  /* 0x04 */
-    void       *target;                 /* 0x08 */
+    const char *P32 label;                  /* 0x04 */
+    void       *P32 target;                 /* 0x08 */
     float       lower;                  /* 0x0c */
     float       step;                   /* 0x10 */
     long        type;                   /* 0x14, 0 = heading */
@@ -153,7 +153,7 @@ typedef struct FOUNDTOKEN {
     long        type;                   /* 0x00  0 none, 1 's', 2 'd', 4 'f' */
     long        index;                  /* 0x04  0..7 from the digit, -1 if none */
     long        unknown;                /* 0x08 */
-    const char *at;                     /* 0x0c  the unit the type char sits on */
+    const char *P32 at;                     /* 0x0c  the unit the type char sits on */
 } FOUNDTOKEN;
 
 typedef struct GAMEEVENT {
@@ -232,17 +232,17 @@ typedef struct PLAYERDEF {
     float       height;         /* 0x0c  added to Z in ArcadePosTo3dPos */
     float       renderOffsetX;  /* 0x10  glTranslatef x, times +/-2.15 */
     float       renderOffsetZ;  /* 0x14  glTranslatef z, times 0.65 */
-    const char *lighting;       /* 0x18  "KANO" */
-    const char *frameList;      /* 0x1c  "kanoframes.txt" */
-    const char *bones;          /* 0x20  "KANO_STANDARD.bones" */
-    const char *skin;           /* 0x24  "KANO_STANDARD.skin" */
-    const char *skinAnim;       /* 0x28  "KANO_STANDARD.skinanim" */
-    const char *texBase;        /* 0x2c  "KANO" */
-    const char *scene;          /* 0x30  "KANO_STANDARD.scene" */
+    const char *P32 lighting;       /* 0x18  "KANO" */
+    const char *P32 frameList;      /* 0x1c  "kanoframes.txt" */
+    const char *P32 bones;          /* 0x20  "KANO_STANDARD.bones" */
+    const char *P32 skin;           /* 0x24  "KANO_STANDARD.skin" */
+    const char *P32 skinAnim;       /* 0x28  "KANO_STANDARD.skinanim" */
+    const char *P32 texBase;        /* 0x2c  "KANO" */
+    const char *P32 scene;          /* 0x30  "KANO_STANDARD.scene" */
 } PLAYERDEF;
 
 typedef struct SOUNDENTRY {             /* 8 bytes: the walk advances by 8 */
-    const char *name;                   /* 0x00 */
+    const char *P32 name;                   /* 0x00 */
     long        id;                     /* 0x04, -1 when not loaded */
 } SOUNDENTRY;
 
@@ -254,8 +254,8 @@ typedef struct TEXTURE {
 } TEXTURE;
 
 typedef struct TEXTURETOLOAD {
-    const char *name;            /* 0x00  NULL ends the list */
-    TEXTURE   **dest;            /* 0x04  where the handle goes */
+    const char *P32 name;            /* 0x00  NULL ends the list */
+    TEXTURE   *P32 *P32 dest;            /* 0x04  where the handle goes */
 } TEXTURETOLOAD;
 
 typedef struct TOKEN {
@@ -268,15 +268,15 @@ typedef struct TOKEN {
 } TOKEN;
 
 typedef struct TRAININGMOVE {
-    const char *name;                   /* 0x00  NULL ends the category */
-    const char *notation4;              /* 0x04  the 4-button layout */
-    const char *notation5;              /* 0x08  the 5-button layout */
-    const char *notation6;              /* 0x0c  the 6-button layout */
+    const char *P32 name;                   /* 0x00  NULL ends the category */
+    const char *P32 notation4;              /* 0x04  the 4-button layout */
+    const char *P32 notation5;              /* 0x08  the 5-button layout */
+    const char *P32 notation6;              /* 0x0c  the 6-button layout */
     long        pad10;                  /* 0x10 */
     /* 0x14 -- a pointer to the flag the move raises, or NULL. The table holds
      * 0x0014fb30 on the fatality row and 0x0014fb2c on the animality one, which
      * are `FatalityMessage` and `AnimalityMessage`; every other row is zero. */
-    long       *messageFlag;            /* 0x14 */
+    long       *P32 messageFlag;            /* 0x14 */
 } TRAININGMOVE;
 
 typedef struct limeVECTOR3 { float x, y, z; } limeVECTOR3;
@@ -304,9 +304,9 @@ typedef struct GAMEFONT {
      * it divides them BY on the way to limeDrawSprite: atlasU and glyphWidth are
      * both normalised by +0x34, atlasV by +0x38. Two share a divisor, so two
      * share an axis. */
-    int16_t  *atlasU;            /* 0x1c  x position in the atlas */
-    int16_t  *atlasV;            /* 0x20  y position in the atlas */
-    int16_t  *glyphWidth;        /* 0x24  per-glyph width, and the advance
+    int16_t  *P32 atlasU;            /* 0x1c  x position in the atlas */
+    int16_t  *P32 atlasV;            /* 0x20  y position in the atlas */
+    int16_t  *P32 glyphWidth;        /* 0x24  per-glyph width, and the advance
                                   *       limeGetStringWidth accumulates */
     /* Optional per-glyph kerning, one SIGNED byte each, added to the width when
      * the pointer is non-null. limeGetStringWidth is the only reader:
@@ -316,7 +316,7 @@ typedef struct GAMEFONT {
      *     addne   r8, r8, r3
      * Nothing in limeCreateFONT was seen to allocate it, so a font that does not
      * carry kerning leaves it null and every glyph keeps its plain width. */
-    int8_t   *kerning;           /* 0x28 */
+    int8_t   *P32 kerning;           /* 0x28 */
     int       defaultAdvance;    /* 0x2c  simple fonts only */
     uint8_t   _pad30[4];
     /* The atlas dimensions, and they are the OPPOSITE way round from an earlier
@@ -337,15 +337,15 @@ typedef struct GAMEFONT {
      * alignment 3. The earlier 12-byte pad here put `codes` at 0x4c. */
     int       extraAtCount;      /* 0x40 */
     int       countForExtra;     /* 0x44 */
-    uint8_t  *codes;             /* 0x48  one byte per glyph */
-    int16_t  *codesW;            /* 0x4c  the same codes widened to 16 bits */
-    TEXTURE  *texture0;          /* 0x50 */
-    TEXTURE  *texture1;          /* 0x54 */
+    uint8_t  *P32 codes;             /* 0x48  one byte per glyph */
+    int16_t  *P32 codesW;            /* 0x4c  the same codes widened to 16 bits */
+    TEXTURE  *P32 texture0;          /* 0x50 */
+    TEXTURE  *P32 texture1;          /* 0x54 */
 } GAMEFONT;
 
 typedef struct MESHANDTEXTURE {
-    const char *mesh;                   /* 0x00 */
-    TEXTURE   **texture;                /* 0x04 */
+    const char *P32 mesh;                   /* 0x00 */
+    TEXTURE   *P32 *P32 texture;                /* 0x04 */
 } MESHANDTEXTURE;
 
 typedef struct {

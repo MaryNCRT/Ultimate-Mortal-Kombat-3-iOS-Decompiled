@@ -507,7 +507,7 @@ extern float  PGrav;                    /* 0x0016f764 -- negative in the data */
 extern float  ShadowOffset;             /* pointer slot -> 0x0014dfc8, the floor */
 extern float  limeFPSScaleFactor;       /* pointer slot -> 0x00171acc */
 extern float  FaceMeMatrix[];           /* 0x0016f700 */
-extern void **BloodTextures;            /* pointer slot -> 0x001f4460 */
+extern void *P32 *BloodTextures;            /* pointer slot -> 0x001f4460 */
 extern void *NewBloodTexture;          /* pointer slot -> 0x001f4490 */
 extern void *NewGreenBloodTexture;     /* pointer slot -> 0x001f4494 */
 extern void *NewBlackBloodTexture;     /* pointer slot -> 0x001f4498 */

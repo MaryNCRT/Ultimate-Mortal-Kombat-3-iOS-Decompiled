@@ -7303,7 +7303,7 @@ long t_r_combo5(MK3THREAD *thread)
     {
         /* obj->field00->field04->field24 -- field04 is not a struct field
          * anywhere else in this file, so read raw rather than invent one. */
-        uint8_t *inner = *(uint8_t **)((uint8_t *)obj->field00 + 4);
+        uint8_t *inner = *(uint8_t *P32 *)((uint8_t *)obj->field00 + 4);
         obj->field1c = *(uint32_t *)(inner + 0x24);  /* str r3,[r4,#0x1c] (difftest) */
         if (obj->field1c == 0xd)
             set_quarter_damage(obj);
@@ -7388,7 +7388,7 @@ long t_r_combo0(MK3THREAD *thread)
 
     if (token == 0xc27) {
         if ((int32_t)obj->field00->p_hit > 5) {
-            uint8_t *inner = *(uint8_t **)((uint8_t *)obj->field00 + 4);
+            uint8_t *inner = *(uint8_t *P32 *)((uint8_t *)obj->field00 + 4);
             if (*(uint32_t *)(inner + 0x24) == 4) {
                 MK3OBJ *other = obj->field08;
                 other->field30 = other->field30 & ~4u;

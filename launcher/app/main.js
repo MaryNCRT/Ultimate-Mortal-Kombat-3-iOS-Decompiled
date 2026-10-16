@@ -81,7 +81,7 @@ async function resolveRoot() {
         r = savedRoot();
     if (!r) {
         const picked = await dialog.showOpenDialog({
-            title: 'UMK3 Launcher: elige la carpeta del juego',
+            title: 'UMK3 LAUNCHER: elige la carpeta del juego',
             properties: ['openDirectory'],
             message: 'Selecciona la carpeta que contiene launcher\\build_game.ps1 / umk3-game.exe (la carpeta del juego).',
         });
@@ -108,7 +108,7 @@ function createWindow() {
     g_win = new BrowserWindow({
         /* 4:3 by default; the page scales with the window (styles.css --u),
          * any size or fullscreen (F11). UMK3_LAUNCHER_SIZE=WxH: dev aid. */
-        width: Number((process.env.UMK3_LAUNCHER_SIZE || '').split('x')[0]) || 1024,
+        width: Number((process.env.UMK3_LAUNCHER_SIZE || '').split('x')[0]) || 1280,
         height: Number((process.env.UMK3_LAUNCHER_SIZE || '').split('x')[1]) || 768,
         minWidth: 640,
         minHeight: 480,
@@ -128,9 +128,8 @@ function createWindow() {
     });
     g_win.setMenu(null);
     /* The window and taskbar icon: icon.png in the game folder if the player
-     * put one there, else the game's own icon from their .ipa (res/Icon.png);
-     * the release ships only the drawn build/icon.ico. */
-    for (const f of ['icon.png', path.join('res', 'Icon.png')]) {
+     * put one there, else the launcher's own, build/icon.ico. */
+    for (const f of ['icon.png']) {
         const p = g_root ? path.join(g_root, f) : null;
         if (p && fs.existsSync(p)) {
             g_win.setIcon(nativeImage.createFromPath(p));
@@ -155,31 +154,38 @@ function createWindow() {
 
 /* ------------------------------------------------------------- ipc ---- */
 
-/* The title logo: logo.png in the game folder, if the player put one there;
- * else the game's own, cut from the player's compiled res (the main menu's
- * FE_TITLE_MAINLOGO.PNG atlas: the logo is its top 933 x 383 band). The
- * launcher ships no game art; with neither, null, and the drawn title stays. */
+/* The title logo ships inside the launcher (renderer/logo.png), so it is
+ * there the moment the window opens; logo.png in the game folder, if the
+ * player put one there, replaces it. */
 ipcMain.handle('logo:get', () => {
     try {
         const p = path.join(g_root, 'logo.png');
         return 'data:image/png;base64,' + fs.readFileSync(p).toString('base64');
-    } catch (err) { /* fall through */ }
-    try {
-        const p = path.join(g_root, 'res', 'Textures', 'FE_TITLE_MAINLOGO.PNG');
-        if (!fs.existsSync(p))
-            return null;
-        const img = nativeImage.createFromPath(p);
-        if (img.isEmpty())
-            return null;
-        return img.crop({ x: 0, y: 4, width: 933, height: 383 }).toDataURL();
     } catch (err) {
         return null;
     }
 });
 
+/* arch= in umk3.ini: which exe is built and played (x86 or x64). */
+function arch() {
+    return (g_cfg || ini.load(path.join(g_root, 'umk3.ini'))).arch;
+}
+
+/* The exe asked for its pads and monitors: the chosen one, else the other. */
+function anyExe() {
+    for (const a of [arch(), arch() === 'x64' ? 'x86' : 'x64']) {
+        const exe = path.join(g_root, ini.gameExe(a));
+        if (fs.existsSync(exe))
+            return exe;
+    }
+    return null;
+}
+
 ipcMain.handle('root:get', () =>
-    ({ root: g_root, ready: ini.gameReady(g_root),
-       builtAt: ini.gameBuiltAt(g_root), version: app.getVersion() }));
+    ({ root: g_root, ready: ini.gameReady(g_root, arch()),
+       builtAt: ini.gameBuiltAt(g_root, arch()), version: app.getVersion(),
+       /* both compiled: JUGAR offers the choice */
+       both: ini.gameReady(g_root, 'x86') && ini.gameReady(g_root, 'x64') }));
 
 ipcMain.handle('config:load', () => {
     g_cfg = ini.load(path.join(g_root, 'umk3.ini'));
@@ -287,8 +293,8 @@ ipcMain.handle('build:start', async (_ev, ipa) => {
         return { ok: false, code: -2 };
     if (!fs.existsSync(ipa))
         return { ok: false, code: -3 };
-    const code = await bld.build(g_root, ipa, msg => send('build:data', msg));
-    const ok = code === 0 && ini.gameReady(g_root);
+    const code = await bld.build(g_root, ipa, arch(), msg => send('build:data', msg));
+    const ok = code === 0 && ini.gameReady(g_root, arch());
     return { ok, code };
 });
 
@@ -348,8 +354,8 @@ ipcMain.handle('update:result', () => {
  * "pad=value<TAB>name" a line (the game's own search, WinMM and XInput).
  * Empty before the game is compiled. */
 ipcMain.handle('pads:list', () => new Promise(resolve => {
-    const exe = path.join(g_root, 'umk3-game.exe');
-    if (!fs.existsSync(exe))
+    const exe = anyExe();
+    if (!exe)
         return resolve([]);
     require('child_process').execFile(exe, ['--list-pads'],
         { cwd: g_root, timeout: 10000, windowsHide: true }, (err, out) => {
@@ -367,8 +373,8 @@ ipcMain.handle('pads:list', () => new Promise(resolve => {
 /* The monitors, as the game counts them: `umk3-game --list-monitors`
  * prints "index<TAB>name" a line (monitor= in umk3.ini). */
 ipcMain.handle('monitors:list', () => new Promise(resolve => {
-    const exe = path.join(g_root, 'umk3-game.exe');
-    if (!fs.existsSync(exe))
+    const exe = anyExe();
+    if (!exe)
         return resolve([]);
     require('child_process').execFile(exe, ['--list-monitors'],
         { cwd: g_root, timeout: 10000, windowsHide: true }, (err, out) => {
@@ -416,9 +422,9 @@ ipcMain.handle('glyphs:all', () => {
 });
 
 ipcMain.handle('play', () => {
-    if (!ini.gameReady(g_root))
+    if (!ini.gameReady(g_root, arch()))
         return { ok: false };
-    bld.play(g_root);
+    bld.play(g_root, ini.gameExe(arch()));
     /* the game runs on its own (detached): the launcher steps aside, once
      * the answer has reached the page */
     setTimeout(() => app.quit(), 800);

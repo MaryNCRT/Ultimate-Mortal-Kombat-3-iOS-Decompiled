@@ -28,6 +28,7 @@ const T = {
         dPlay: 'Arranca Ultimate Mortal Kombat 3: idioma del juego, intros y modo debug.',
         dQuit: 'Cierra el launcher.',
         hBuild: 'COMPILAR TU .IPA', ipaLbl: 'TU .IPA DE UMK3 (IPHONE 1.2.59)',
+        archLbl: 'WINDOWS', arches: ['32 BITS (UMK3-GAME.EXE)', '64 BITS (UMK3-GAME64.EXE)'], playArchLbl: 'VERSIÓN A ABRIR',
         updCheck: 'BUSCAR ACTUALIZACIONES', updGet: 'DESCARGAR E INSTALAR', notesLbl: 'NOVEDADES DE LA ÚLTIMA VERSIÓN',
         updLooking: 'BUSCANDO ACTUALIZACIONES…', updNone: 'ESTÁS EN LA ÚLTIMA VERSIÓN', updNew: 'NUEVA VERSIÓN DISPONIBLE',
         updFail: 'NO SE PUDO CONSULTAR GITHUB', updYours: 'TU VERSIÓN', updDl: 'DESCARGANDO', updInst: 'INSTALANDO: EL LAUNCHER SE CERRARÁ Y VOLVERÁ A ABRIRSE…',
@@ -88,6 +89,7 @@ const T = {
         dPlay: 'Starts Ultimate Mortal Kombat 3: game language, intros and debug mode.',
         dQuit: 'Closes the launcher.',
         hBuild: 'COMPILE YOUR .IPA', ipaLbl: 'YOUR UMK3 .IPA (IPHONE 1.2.59)',
+        archLbl: 'WINDOWS', arches: ['32 BITS (UMK3-GAME.EXE)', '64 BITS (UMK3-GAME64.EXE)'], playArchLbl: 'VERSION TO OPEN',
         updCheck: 'CHECK FOR UPDATES', updGet: 'DOWNLOAD AND INSTALL', notesLbl: 'WHAT IS NEW IN THE LATEST VERSION',
         updLooking: 'CHECKING FOR UPDATES…', updNone: 'YOU HAVE THE LATEST VERSION', updNew: 'NEW VERSION AVAILABLE',
         updFail: 'COULD NOT REACH GITHUB', updYours: 'YOUR VERSION', updDl: 'DOWNLOADING', updInst: 'INSTALLING: THE LAUNCHER WILL CLOSE AND OPEN AGAIN…',
@@ -590,6 +592,9 @@ const ASPECT = ['3:2', '4:3', '16:9', '21:9'];
 /* texture_quality= in umk3.ini: IPHONE = the _LOW sheets the 480-wide phone loads, IPAD = the full
  * sheets, NO LIMIT = full sheets, PNG before PVRTC, mipmaps and anisotropic filtering */
 const TEXQ = ['iphone', 'ipad', 'max'];
+/* arch= in umk3.ini: which game COMPILAR builds and JUGAR opens, 32 bits
+ * (umk3-game.exe) or 64 bits (umk3-game64.exe); both can be kept */
+const ARCH = ['x86', 'x64'];
 /* ui_size= in umk3.ini: IPAD lays the game out on 960x640, where it draws the HUD at 1.75 of 2 */
 const UISIZE = ['iphone', 'ipad'];
 
@@ -652,7 +657,7 @@ const el = (tag, cls, text) => {
     return n;
 };
 
-let cfg = null, ready = false, builtAt = null, building = false;
+let cfg = null, ready = false, builtAt = null, building = false, both = false;
 let ui = 'ES', waitingKey = null, sec = 'build';
 
 /* ------------------------------------------------------------- sounds -- */
@@ -707,6 +712,7 @@ function paintState() {
     }
     $('build').textContent = ready ? T[ui].rebuild : T[ui].build;
     $('play').disabled = !ready || building;
+    $('arch').disabled = building;          /* the build in progress keeps its exe */
     if (building) setStatus('building', T[ui].statusBuilding);
     else setStatus(ready ? 'ready' : 'need', ready ? T[ui].statusReady : T[ui].statusNeed);
 }
@@ -800,6 +806,10 @@ function fillSelects() {
     T[ui].aspects.forEach(a => $('aspect').appendChild(el('option', null, a)));
     $('aa').innerHTML = '';
     AA.forEach(n => $('aa').appendChild(el('option', null, n ? 'x' + n : T[ui].aaOff)));
+    $('playarch').innerHTML = '';
+    T[ui].arches.forEach(n => $('playarch').appendChild(el('option', null, n)));
+    $('arch').innerHTML = '';
+    T[ui].arches.forEach(n => $('arch').appendChild(el('option', null, n)));
     $('texq').innerHTML = '';
     T[ui].texqs.forEach(n => $('texq').appendChild(el('option', null, n)));
     $('uisize').innerHTML = '';
@@ -844,6 +854,8 @@ function applyConfig() {
     $('aspect').selectedIndex = Math.max(0, ASPECT.indexOf(cfg.aspect || '3:2'));
     $('aa').selectedIndex = Math.max(0, AA.indexOf(cfg.antialiasing || 0));
     $('texq').selectedIndex = Math.max(0, TEXQ.indexOf(cfg.textureQuality || 'iphone'));
+    $('arch').selectedIndex = Math.max(0, ARCH.indexOf(cfg.arch || 'x86'));
+    $('playarch').selectedIndex = $('arch').selectedIndex;
     $('uisize').selectedIndex = Math.max(0, UISIZE.indexOf(cfg.uiSize || 'iphone'));
     $('dbg').checked = !!cfg.debug;
     $('skip').checked = !!cfg.skipIntro;
@@ -897,6 +909,9 @@ async function refreshRoot() {
     const info = await window.umk3.root();
     ready = info.ready;
     builtAt = info.builtAt;
+    both = !!info.both;
+    /* both builds compiled: JUGAR picks which one opens */
+    $('playarchf').classList.toggle('hidden', !both);
     if (info.version)                   /* 0.1.3-beta: "0.1.3 beta" */
         $('ttl-ver').textContent = info.version.replace('-', ' ');
     paintState();
@@ -1369,6 +1384,14 @@ async function init() {
     $('rres').addEventListener('change', () => save({ rres: $('rres').selectedIndex }));
     $('aa').addEventListener('change', () => save({ antialiasing: AA[$('aa').selectedIndex] }));
     $('texq').addEventListener('change', () => save({ textureQuality: TEXQ[$('texq').selectedIndex] }));
+    /* one arch= for both: COMPILAR builds it, JUGAR opens it */
+    for (const id of ['arch', 'playarch'])
+        $(id).addEventListener('change', async () => {
+            const i = $(id).selectedIndex;
+            $('arch').selectedIndex = $('playarch').selectedIndex = i;
+            await save({ arch: ARCH[i] });
+            await refreshRoot();      /* compiled or not: that exe's state */
+        });
     $('aspect').addEventListener('change', () => save({ aspect: ASPECT[$('aspect').selectedIndex] }));
     $('uisize').addEventListener('change', () => save({ uiSize: UISIZE[$('uisize').selectedIndex] }));
     $('mode').addEventListener('change', () => {
@@ -1476,11 +1499,8 @@ async function init() {
         });
     });
     const logo = await window.umk3.logo();
-    if (logo) {
+    if (logo)
         $('logoImg').src = logo;
-        $('logoImg').classList.remove('hidden');
-        $('logo').classList.add('img');
-    }
     window.addEventListener('keydown', onKey, true);
     $('play').addEventListener('click', doPlay);
     document.querySelectorAll('.btn').forEach(b => b.addEventListener('pointerenter', hoverBlip));

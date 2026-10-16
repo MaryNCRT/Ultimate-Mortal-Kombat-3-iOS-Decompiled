@@ -9556,7 +9556,7 @@ long t_standard_zap_counter(MK3THREAD *thread)
  * t_drfp1 and t_d_beware. Batch 24.
  * ====================================================================== */
 
-extern const uint32_t *const ochar_cat_tables[];
+extern const uint32_t *P32 const ochar_cat_tables[];
 long t_drfp2(struct MK3THREAD *thread);
 long t_drfp3(struct MK3THREAD *thread);
 long t_drfp1(struct MK3THREAD *thread);

@@ -31,15 +31,15 @@
 #define TRAINING_CATEGORIES   3
 
 typedef struct TRAININGMOVE {
-    const char *name;                   /* 0x00  NULL ends the category */
-    const char *notation4;              /* 0x04  the 4-button layout */
-    const char *notation5;              /* 0x08  the 5-button layout */
-    const char *notation6;              /* 0x0c  the 6-button layout */
+    const char *P32 name;                   /* 0x00  NULL ends the category */
+    const char *P32 notation4;              /* 0x04  the 4-button layout */
+    const char *P32 notation5;              /* 0x08  the 5-button layout */
+    const char *P32 notation6;              /* 0x0c  the 6-button layout */
     long        pad10;                  /* 0x10 */
     /* 0x14 -- a pointer to the flag the move raises, or NULL. The table holds
      * 0x0014fb30 on the fatality row and 0x0014fb2c on the animality one, which
      * are `FatalityMessage` and `AnimalityMessage`; every other row is zero. */
-    long       *messageFlag;            /* 0x14 */
+    long       *P32 messageFlag;            /* 0x14 */
 } TRAININGMOVE;
 
 /* character-major, then category, then move */
@@ -221,7 +221,7 @@ void TrainingMessages(void)
         const TRAININGMOVE *m =
             &TrainingData[(Character1 * TRAINING_CATEGORIES * TRAINING_MOVES)
                           + cat * TRAINING_MOVES + TrainingMoveCount];
-        const char *const *notation = &m->name;   /* [1]..[3] by layout */
+        const char *P32 const *notation = &m->name;   /* [1]..[3] by layout */
 
         sprintf(buf, "%s : %s", m->name, notation[layout - 3]);
 
