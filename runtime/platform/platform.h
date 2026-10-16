@@ -33,6 +33,19 @@ extern int plat_open_borderless;
  * "pantalla completa" (fullscreen=1). */
 void plat_fullscreen_exclusive(void);
 
+/* The settings menu (port): the window as it is now, 0 a window whose
+ * inside is w x h centred on the monitor, 1 borderless over the monitor,
+ * 2 exclusive fullscreen at w x h. And leaving the game. */
+void plat_display(int mode, int w, int h);
+void plat_quit(void);
+
+/* Typed text, for a player's name (settings_menu.c, port): the next
+ * character typed as UTF-8 in `out` (n >= 5 bytes), its length, 0 for none;
+ * Backspace, Enter and Esc come as 8, 13 and 27. plat_text_clear drops
+ * what was typed before the field opened. */
+int  plat_text_take(char *out, int n);
+void plat_text_clear(void);
+
 /* A GL entry point beyond 1.1 (the framebuffer objects the render
  * resolution draws into), or NULL. Same calling convention as GL's own. */
 void *plat_gl_proc(const char *name);
@@ -100,6 +113,12 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
  * [NSLocale preferredLanguages][0]. */
 void plat_language(char *out, int n);
 
+/* The player's badge (port): an icon (icon_px square, straight RGBA) and
+ * a name in a small black box of the same dress; NULL where there is no
+ * such drawing. */
+unsigned char *plat_ui_badge(const char *name, const unsigned char *icon,
+                             int icon_px, float s, int *w, int *h);
+
 /* ------------------------------------------------------------------ input
  *
  * The fight engine takes ONE TEN-BIT WORD PER PLAYER and nothing else -- see
@@ -134,6 +153,8 @@ enum {
     /* player two's keys for the five-button layout: P B K R (S is
      * PK_P2_SPECIAL) */
     PK_P2_5_P, PK_P2_5_B, PK_P2_5_K, PK_P2_5_R,
+    /* the settings menu (Esc; settings_menu.c, port) */
+    PK_SETTINGS,
     PK_COUNT
 };
 
@@ -148,6 +169,12 @@ void plat_key_label(int code, char *out, int n);
  * SDL backend takes an SDL scancode). umk3.ini's key_* lines, written by the
  * launcher, come through here. Out-of-range codes are ignored. */
 void plat_bind_key(int code, int key);
+
+/* The platform key a code is bound to now (what plat_bind_key takes), and
+ * the first platform key held down right now, 0 for none: the settings
+ * menu's rebinding (settings_menu.c, port). */
+int plat_key_bound(int code);
+int plat_key_any(void);
 
 /* The first attached gamepad, as the same ten bits the engine wants, or -1
  * when there is none. Bit order is the engine's: 0..3 directions, then HP, LP,

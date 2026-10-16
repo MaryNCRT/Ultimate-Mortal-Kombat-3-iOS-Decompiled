@@ -1,6 +1,6 @@
 # Handoff
 
-> **The first two sections were rewritten on 2026-10-15 for alpha 0.1.1.**
+> **The first two sections were rewritten on 2026-10-15 for alpha 0.1.2.**
 > Everything after them is a dated diary of what each finished module
 > settled; it is kept because the facts in it are still true, but its counts
 > ("1,752 of 2,172" and the like) and its "next steps" are history. The live
@@ -15,8 +15,8 @@ Read this, then [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md) and
 
 ## Releases
 
-The current build is **0.1.1 alpha** ([notes](RELEASE-0.1.1-alpha.md)),
-published on GitHub as a pre-release with `UMK3-PC-0.1.1-alpha.zip`. 0.1.0b back
+The current build is **0.1.2 alpha** ([notes](RELEASE-0.1.2-alpha.md)),
+published on GitHub as a pre-release with `UMK3-PC-0.1.2-alpha.zip`. 0.1.1 back
 to 0.0.4 are still published; 0.0.1-0.0.3 were deleted from GitHub when the
 history was rewritten on 2026-10-09 (their notes stay in `docs/`). What each
 release fixed, with addresses, is in PROGRESS.md.
@@ -30,7 +30,7 @@ release fixed, with addresses, is in PROGRESS.md.
 4. Compile the result once from scratch with the `.ipa`.
 5. Run `gh release create vX.Y.Z-alpha <zip> --prerelease --notes-file docs/RELEASE-X.Y.Z-alpha.md`.
 
-## Where the project stands (2026-10-15, alpha 0.1.1)
+## Where the project stands (2026-10-15, alpha 0.1.2)
 
 - **Done:** every function is decompiled (2,572 of 2,572). The game plays the
   menus, Arcade to the end (treasure screen) and whole fights with every
@@ -54,6 +54,23 @@ release fixed, with addresses, is in PROGRESS.md.
   size; the select camera and the tower's pulled-back camera are the iPad's
   on 4:3 only (`PortIPadTall`), and `Tower_X` scales by the camera distance
   there; the JUGADORES frame is centred (`FE_XC`).
+- **New in 0.1.2:** the settings menu (Esc, `runtime/settings_menu.c`):
+  graphics applied live (`port_gfx_set` in game_main.c; texture quality
+  reloads every texture, `lime_textures_requality` in draw_gl.c; a change
+  of surface runs `InitAllGameData` again from `ButtonSize` 80 and moves the
+  player's button layouts, `PortRemapButtons`, with `presetsurf`), keys and
+  pad rebinding, quit; every change rewrites umk3.ini at once and the
+  launcher reloads it on focus. The player profile (`runtime/profiles.c`,
+  launcher `lib/profiles.js`, `profiles.ini`): one per installation, id from
+  `rand_s` / `crypto.randomBytes`, icon = `<NAME>_VERSUS.PNG` over a light or
+  dark gradient, the same numbers in C and JS; badge on the main menu
+  (`plat_ui_badge`) and in the launcher. Sounds: one sound one voice, as
+  `-[Sound play]` (0xada08) stops a playing sound first. The continue
+  screens on 16:9 and 21:9 use Mary's own pictures, `launcher/aditional
+  textures/` (copied beside the game by build_game.ps1; `k_cart` in
+  FrontEnd.c has their frames). Red highlight half as thick (port). New
+  sources: `runtime/settings_menu.c`, `runtime/profiles.c` -- in
+  build_game.ps1, CMakeLists.txt and make_release.py.
 - **Open list:** the README's *Known problems*. Mary's list goes on with:
   - monitor choice in the launcher;
   - a render backend option (DirectX 12 / Vulkan / OpenGL, a large job);

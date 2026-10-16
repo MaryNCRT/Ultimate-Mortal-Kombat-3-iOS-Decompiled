@@ -67,8 +67,9 @@ only once Mary has checked it in game. What is known so far is under each one.
   Identical in both and nothing to do: `drawCharacterSelection`,
   `RenderFECharacters`, `FE_Task_Play`'s code apart from the rows, and every
   other menu screen. Still to read: `DrawTower3D` and `FE_Task_About_Help`.
-- [ ] **The red press highlight looks too big** (Mary's capture of the
-  1P screen): `DrawRedHighlight` bars are 11 units thick by the binary.
+- [x] **The red press highlight looks too big** (Mary's capture of the
+  1P screen): `DrawRedHighlight` bars are 11 units thick by the binary;
+  half as thick since 0.1.2 (port).
 - [ ] **OPTIONS on the main menu (16:9):** when the submenu opens, the main
   buttons slide out of place and the submenu texts (SETTINGS, BUTTON CONFIG,
   SOCIAL) are not centred in their panel. The slabs are fixed. The texts
@@ -118,6 +119,13 @@ only once Mary has checked it in game. What is known so far is under each one.
   Two pads at once not tested yet.
 - [ ] **JUGADORES frame centred** on wide screens (0.1.1, `FE_XC`).
 
+## Settings menu and profile (0.1.2)
+
+- [ ] **Settings menu (Esc)**: graphics live, keys and pad, quit. Checked on
+  captures; rebinding by hand and APPLY DISPLAY to test.
+- [ ] **Player profile** in the launcher and the game, badge on both.
+- [x] **Continue screens on 16:9 and 21:9** with Mary's pictures.
+
 ## Fight
 
 - [ ] **Models mixed after a round ends** (Ermac against Sub-Zero, round 2,
@@ -126,6 +134,14 @@ only once Mary has checked it in game. What is known so far is under each one.
   them. Cause to be found.
 
 ## Sound
+
+- [x] **Screams repeated in some fatalities** (0.1.2): one sound one voice,
+  as `-[Sound play]` restarts a playing sound.
+- [x] **Reptile's tongue fatality without sound:** the original has none
+  either (Mary checked).
+- [ ] **Mercy's sound sometimes does not play.** `Mercy.mp3` lasts 2.19 s and
+  the banner puts the level music back at 2.5 s, so it is not cut there;
+  still to reproduce.
 
 - [ ] **Reptile's specials have sound errors.**
 - [ ] **Reptile's fatalities: the audio does not sound as it should** (sound

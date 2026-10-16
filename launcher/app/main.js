@@ -18,6 +18,7 @@ const ini = require('./lib/ini');
 const rootm = require('./lib/root');
 const bld = require('./lib/build');
 const upd = require('./lib/update');
+const prof = require('./lib/profiles');
 
 let g_win = null;
 let g_root = null;
@@ -362,6 +363,14 @@ ipcMain.handle('pads:list', () => new Promise(resolve => {
             resolve(pads);
         });
 }));
+
+/* The player's profile (lib/profiles.js): profiles.ini beside the game,
+ * which the game's settings menu edits too. One per installation; its id is
+ * given the first time and never changes. */
+ipcMain.handle('profile:load', (_ev, name) => prof.load(g_root, name));
+ipcMain.handle('profile:update', (_ev, fields) => prof.update(g_root, fields || {}));
+ipcMain.handle('profile:reset', (_ev, name) => prof.reset(g_root, name));
+ipcMain.handle('profile:icon', (_ev, i) => prof.iconData(g_root, Number(i)));
 
 ipcMain.handle('play', () => {
     if (!ini.gameReady(g_root))

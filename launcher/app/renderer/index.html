@@ -42,6 +42,9 @@
   </div>
 </header>
 
+<!-- the player's profile, top right: its icon and name; a click opens PERFIL -->
+<button id="profBadge" class="hidden"><canvas id="profBadgeIcon" width="96" height="96"></canvas><span id="profBadgeName"></span></button>
+
 <div id="logo" aria-label="Ultimate Mortal Kombat 3">
   <img id="logoImg" class="hidden" alt="Ultimate Mortal Kombat 3">
   <div class="l-ultimate">ULTIMATE</div>
@@ -53,6 +56,7 @@
   <button class="mi active" data-sec="build"><i class="orb"></i><span data-t="mBuild">COMPILAR TU .IPA</span></button>
   <button class="mi" data-sec="video"><i class="orb"></i><span data-t="mVideo">GRÁFICOS</span></button>
   <button class="mi" data-sec="controls"><i class="orb"></i><span data-t="mControls">CONTROLES</span></button>
+  <button class="mi" data-sec="profile"><i class="orb"></i><span data-t="mProfile">PERFIL</span></button>
   <button class="mi" data-sec="play"><i class="orb"></i><span data-t="mPlay">JUGAR</span></button>
   <button class="mi" data-sec="quit"><i class="orb"></i><span data-t="mQuit">SALIR</span></button>
 </nav>
@@ -196,6 +200,46 @@
   </section>
 
   <!-- 4. Play -->
+  <!-- The player's profile: profiles.ini, which the game's settings menu
+       edits too. One per installation; the id never changes. -->
+  <section class="sec" data-sec="profile">
+    <h2 data-t="hProfile">PERFIL DE JUGADOR</h2>
+    <div class="prof">
+      <canvas id="profIcon" class="proficon" width="192" height="192"></canvas>
+      <div class="fields">
+        <div class="field">
+          <label class="lbl" for="profName" data-t="profName">NOMBRE DE JUGADOR</label>
+          <input id="profName" class="edt" maxlength="24" spellcheck="false">
+        </div>
+        <div class="field">
+          <label class="lbl" data-t="profId">ID DE JUGADOR</label>
+          <div id="profId" class="idcode"></div>
+        </div>
+        <div class="field wide">
+          <label class="lbl" data-t="profColor">COLOR DE FONDO</label>
+          <div class="row">
+            <div id="profSwatches" class="swatches"></div>
+            <input id="profColor" type="color" class="colorpick">
+          </div>
+          <label class="lbl" data-t="profShadeLbl">DEGRADADO</label>
+          <span id="profShade" class="tabs sub">
+            <button class="tab" data-shade="0" data-t="profLight">CLARO (DESDE BLANCO)</button>
+            <button class="tab" data-shade="1" data-t="profDark">OSCURO (HACIA NEGRO)</button>
+          </span>
+        </div>
+        <div class="field wide">
+          <label class="lbl" data-t="profIconLbl">ICONO</label>
+          <div id="profIcons" class="icongrid"></div>
+        </div>
+        <div class="field wide">
+          <div class="row end">
+            <button id="profReset" class="btn" data-t="profReset">REINICIAR DATOS</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="sec" data-sec="play">
     <h2 data-t="hPlay">JUGAR</h2>
     <div id="playstate" class="state"></div>

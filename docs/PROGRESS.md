@@ -4,7 +4,9 @@ Current state of the project. Written so that someone can pick it up with no pri
 
 **Last updated:** 2026-10-15 -- see [HANDOFF.md](HANDOFF.md) for the route.
 
-## Current state (alpha 0.1.1, 2026-10-15)
+## Current state (alpha 0.1.2, 2026-10-15)
+
+**2026-10-15, 0.1.2 (notes: [RELEASE-0.1.2-alpha.md](RELEASE-0.1.2-alpha.md)):** all Port, not in the binary unless said. The settings menu, Esc (`PK_SETTINGS`, `runtime/settings_menu.c`, drawn with the debug menu's box, `ui_menu_show` in debug_menu.c): GRAPHICS applied live (`port_gfx_set`, `plat_display`, `render_reconfig`; texture quality through `lime_textures_requality`, which reloads every texture into its GL object and swaps `_LOW` / `_LITE` files), KEYBOARD and GAMEPAD rebinding for both players (`plat_key_any`, `port_pad_action`), PROFILE, QUIT; umk3.ini rewritten in place on every change, and the launcher reloads it on focus. On-screen controls after a change of surface: `InitAllGameData` again with `ButtonSize` reset to its __data 80 (it scales itself, so a second call grew the stick), and the player's layouts moved by `PortRemapButtons` (presetsurf saves the surface they were made on). The player profile: `runtime/profiles.c` and the launcher's `lib/profiles.js` share `profiles.ini` (`profile=ID|name|icon|RRGGBB|L/D`), one per installation, the id 60 random bits never changed, the icon built from the player's `<NAME>_VERSUS.PNG` over a light or dark gradient with the same numbers in both; a badge on the main menu (`plat_ui_badge`) and in the launcher. Sound: `-[Sound play]` (0xada08) stops a sound that is playing before `alSourcePlay`, so `plat_audio_play_at` now restarts a voice already on the same PCM instead of mixing a second one -- the repeated fatality screams (Mary). Reptile's tongue fatality has no sound in the original either (Mary checked). The continue screens on 16:9 and 21:9 draw Mary's own pictures (`launcher/aditional textures`, CONTINUE.png and CONTINUE_21x9.png; `k_cart` in FrontEnd.c holds their frames in menu units) and red highlights are half as thick. Debug: a forced finisher calls `stop_him` first (Mary found the loser kept running into it). Checked on captures: the menu, live aspect and texture changes, the profile tab and badge, the stick after a live 4:3 -> 16:9 change, both continue pictures. Not checked: two pads at once, key and pad rebinding by hand, APPLY DISPLAY.
 
 **2026-10-15, 0.1.1 (notes: [RELEASE-0.1.1-alpha.md](RELEASE-0.1.1-alpha.md)):** player two's controls for DUELO, all Port, not in the binary. The launcher's CONTROLS has PLAYER 1 / PLAYER 2 tabs; umk3.ini gains `p2key_<up..run|special>=`, `p2key5_<p|b|k|r>=`, `p2pad=`, `p2pad_<action>=`, `p2pad5_<p|b|k|r>=` (read by `read_config_p2`, `runtime/game_main.c`). `win32_gl.c` keeps a pad slot per player (`plat_pad2_read`); a WinMM id or XInput slot one player holds is skipped for the other. `PK_P2_5_P..R` are player two's five-button keys (keypad 7 9 4 6). PLAY shows DUELO with every interface size, on the iPad's rows (40 + 56 n). Mary's 16:9 reports with the iPad interface: the select camera x 2.3 and the tower's y -2.739 now apply on 4:3 only (`PortIPadTall`); there `Tower_X` scales by 2.239 / 2.739 so the labels and torches follow the farther camera (not checked on a capture). `FE_Task_Multiplayer`'s frame takes `FE_XC` (checked on a 16:9 capture). Two pads at once were not tested.
 
@@ -29,7 +31,7 @@ Current state of the project. Written so that someone can pick it up with no pri
 - **The game is playable on Windows by the real path.**
   - Everything the retail game does runs in `umk3-game.exe` (i686): the front end, Arcade to Shao Kahn and the treasure screen, the tower, and whole fights with every finisher, Continue and the next fight.
   - The launcher compiles it from the player's own iPhone 1.2.59 `.ipa`.
-  - **0.1.1 is the current published build** ([notes](RELEASE-0.1.1-alpha.md)); 0.1.1 gives player two their own keys and pad for DUELO. 0.1.0 added 3:2 / 4:3 / 16:9 / 21:9, the iPad UI size, texture quality, faster loading and launcher updates; 0.1.0b adds the iPad build's layout, DUELO, pad binding and wide-screen fixes.
+  - **0.1.2 is the current published build** ([notes](RELEASE-0.1.2-alpha.md)): the settings menu (Esc), the player profile, the wide continue screens. 0.1.0 added 3:2 / 4:3 / 16:9 / 21:9, the iPad UI size, texture quality, faster loading and launcher updates; 0.1.0b adds the iPad build's layout, DUELO, pad binding and wide-screen fixes.
   - Every release's notes are in `docs/RELEASE-*.md`. The GitHub releases of 0.0.1-0.0.3 were deleted on 2026-10-09 when the history was rewritten.
 - **Every function is decompiled** (2,572 of 2,572) and the fight engine is
   behaviourally tested file by file (table below). The figure is
@@ -39,7 +41,7 @@ Current state of the project. Written so that someone can pick it up with no pri
   - The menus are incomplete, and modes other than Arcade can crash.
   - Texture errors remain on some stages and fighters, and some fatalities miss animations.
   - Every bug found since the game first ran was a transcription that did not quite match armv7, so each new symptom starts by re-reading the binary.
-- **No pull requests are open** once the 0.1.1 pass is merged (2026-10-15).
+- **No pull requests are open** once the 0.1.2 pass is merged (2026-10-15).
 - **New contributors:** [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md) explains how
   the game runs, the code map, the bug method and the test tools.
 

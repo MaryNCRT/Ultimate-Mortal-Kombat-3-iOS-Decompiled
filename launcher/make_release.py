@@ -30,6 +30,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 RUNTIME_FILES = [
     "runtime/game_main.c", "runtime/debug_menu.c", "runtime/draw_gl.c",
+    "runtime/settings_menu.c", "runtime/settings_menu.h",
+    "runtime/profiles.c", "runtime/profiles.h",
     "runtime/gamecode_globals.c",
     "runtime/gamecode_globals.h", "runtime/gamecode_stubs.c",
     "runtime/lime_menu.c", "runtime/lime_platform.c", "runtime/lime_app.c",
@@ -97,6 +99,11 @@ def main(argv):
     shutil.copy2(os.path.join(ROOT, "launcher", "LEEME.txt"),
                  os.path.join(out, "LEEME.txt"))
     shutil.copytree(launcher_exe, os.path.join(out, "launcher", "bin"))
+    # Mary's own pictures for the wide screens (FrontEnd.c, the continue
+    # screens): under launcher\ so an update copies them, and build_game.ps1
+    # puts them beside the game
+    shutil.copytree(os.path.join(ROOT, "launcher", "aditional textures"),
+                    os.path.join(out, "launcher", "aditional textures"))
     build_stub(os.path.join(out, "UMK3-Launcher.exe"))
 
     # Every quoted include of every copied source has to resolve in the copy.

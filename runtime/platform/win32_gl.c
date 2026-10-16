@@ -31,6 +31,9 @@ static unsigned char g_key[256];
 /* A key pressed since the game last ticked: a tap shorter than one tick
  * (down and up in the same frame) still reaches the game once. */
 static unsigned char g_tap[256];
+/* Typed characters, UTF-16 as WM_CHAR gives them, for plat_text_take. */
+static wchar_t g_text[64];
+static int     g_text_n;
 
 static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -41,6 +44,10 @@ static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_KEYDOWN:
         if (wp < 256) g_key[wp] = g_tap[wp] = 1;
+        return 0;
+    case WM_CHAR:                       /* typed text: plat_text_take */
+        if (g_text_n < (int)(sizeof g_text / sizeof g_text[0]))
+            g_text[g_text_n++] = (wchar_t)wp;
         return 0;
     case WM_KEYUP:
         if (wp < 256) g_key[wp] = 0;
@@ -196,6 +203,74 @@ void plat_fullscreen_exclusive(void)
     plat_fullscreen();              /* now the monitor is the window's size */
 }
 
+void plat_display(int mode, int w, int h)
+{
+    if (g_mode.dmSize) {                /* out of exclusive fullscreen */
+        ChangeDisplaySettingsA(NULL, 0);
+        g_mode.dmSize = 0;
+    }
+    if (mode == 1) {
+        plat_fullscreen();
+        return;
+    }
+    if (mode == 2) {
+        SetWindowLongA(g_wnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+        SetWindowPos(g_wnd, HWND_TOP, 0, 0, w, h,
+                     SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+        plat_fullscreen_exclusive();
+        return;
+    }
+    {
+        RECT r = { 0, 0, w, h };
+        MONITORINFO mi;
+        int ww, wh, x, y;
+
+        AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
+        ww = r.right - r.left;
+        wh = r.bottom - r.top;
+        mi.cbSize = sizeof mi;
+        GetMonitorInfoA(MonitorFromWindow(g_wnd, MONITOR_DEFAULTTOPRIMARY), &mi);
+        x = mi.rcWork.left + (mi.rcWork.right - mi.rcWork.left - ww) / 2;
+        y = mi.rcWork.top + (mi.rcWork.bottom - mi.rcWork.top - wh) / 2;
+        if (x < mi.rcWork.left) x = mi.rcWork.left;
+        if (y < mi.rcWork.top) y = mi.rcWork.top;
+        SetWindowLongA(g_wnd, GWL_STYLE, WS_OVERLAPPEDWINDOW | WS_VISIBLE);
+        SetWindowPos(g_wnd, HWND_NOTOPMOST, x, y, ww, wh,
+                     SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+    }
+}
+
+void plat_quit(void)
+{
+    g_quit = true;
+}
+
+int plat_text_take(char *out, int n)
+{
+    wchar_t w[2];
+    int k = 1, len;
+
+    if (g_text_n == 0 || n < 5)
+        return 0;
+    w[0] = g_text[0];
+    if (w[0] >= 0xd800 && w[0] < 0xdc00 && g_text_n > 1) {
+        w[1] = g_text[1];               /* a surrogate pair */
+        k = 2;
+    }
+    g_text_n -= k;
+    memmove(g_text, g_text + k, (size_t)g_text_n * sizeof g_text[0]);
+    len = WideCharToMultiByte(CP_UTF8, 0, w, k, out, n - 1, NULL, NULL);
+    if (len < 0)
+        len = 0;
+    out[len] = 0;
+    return len;
+}
+
+void plat_text_clear(void)
+{
+    g_text_n = 0;
+}
+
 void *plat_gl_proc(const char *name)
 {
     PROC p = wglGetProcAddress(name);
@@ -305,6 +380,7 @@ static int g_vk[PK_COUNT] = {
     'Q', 'E',                           /* debug menu: page back / on */
     VK_NUMPAD7, VK_NUMPAD9,             /* P2 five buttons: P B */
     VK_NUMPAD4, VK_NUMPAD6,             /* P2 five buttons: K R */
+    VK_ESCAPE,                          /* the settings menu */
 };
 
 void plat_key_label(int code, char *out, int n)
@@ -333,6 +409,21 @@ void plat_bind_key(int code, int key)
 {
     if (code >= 0 && code < PK_COUNT && key > 0 && key < 256)
         g_vk[code] = key;
+}
+
+int plat_key_bound(int code)
+{
+    return code >= 0 && code < PK_COUNT ? g_vk[code] : 0;
+}
+
+int plat_key_any(void)
+{
+    int vk;
+
+    for (vk = 8; vk < 256; vk++)        /* not the mouse buttons */
+        if (g_key[vk])
+            return vk;
+    return 0;
 }
 
 int plat_key(int code)
@@ -1011,8 +1102,14 @@ static unsigned char *al_line(const char *s8, int fontpx, int bold,
     SIZE sz;
     int i, n;
 
-    for (n = 0; s8[n] && n < 255; n++)
-        ws[n] = (unsigned char)s8[n];
+    /* UTF-8 (a player's name, settings_menu.c); anything that is not
+     * valid UTF-8 is read as Latin-1, as before */
+    n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, s8, -1, ws, 255);
+    if (n > 0)
+        n--;
+    else
+        for (n = 0; s8[n] && n < 255; n++)
+            ws[n] = (unsigned char)s8[n];
     ws[n] = 0;
     GetTextMetricsW(dc, &tm);
     GetTextExtentPoint32W(dc, ws, n, &sz);
@@ -1081,6 +1178,92 @@ static void al_say(al_box *b, const char *s, int fontpx, int bold, float x,
         x -= w;
     al_put_line(b, m, w, h, (int)x, (int)(ymid - h * 0.5f), r, g, bl, a);
     free(m);
+}
+
+/* The player's badge (settings_menu.c, port): the profile's icon and name
+ * in a small box of the alerts' dress -- the border ring, the gloss, the
+ * drop shadow -- but black instead of blue, darker at the bottom. `icon` is
+ * icon_px square, straight RGBA; `s` pixels per point. Returns RGBA8,
+ * premultiplied, *w x *h, malloc'd. */
+unsigned char *plat_ui_badge(const char *name, const unsigned char *icon,
+                             int icon_px, float s, int *ow, int *oh)
+{
+    al_box b;
+    float m = 4 * s, h = 30 * s, isz = 24 * s, pad = 3 * s, rad = 8 * s,
+          bw = 1.5f * s;
+    int tw = 0, th = 0, x, y;
+    unsigned char *tm = al_line(name && name[0] ? name : "-", (int)(12 * s), 1,
+                                &tw, &th);
+    unsigned char *out;
+
+    memset(&b, 0, sizeof b);
+    b.s = s;
+    b.bx0 = m;
+    b.by0 = m;
+    b.bx1 = m + pad + isz + 6 * s + tw + 8 * s;
+    b.by1 = m + h;
+    b.w = (int)(b.bx1 + m + 1);
+    b.h = (int)(b.by1 + m + 1);
+    b.px = (al_px *)calloc((size_t)b.w * b.h, sizeof(al_px));
+    if (!b.px) {
+        free(tm);
+        return NULL;
+    }
+    for (y = 0; y < b.h; y++)
+        for (x = 0; x < b.w; x++) {
+            al_px *d = &b.px[y * b.w + x];
+            float sh = al_rr((float)x, (float)y - 2 * s, b.bx0, b.by0,
+                             b.bx1, b.by1, rad + 2 * s);
+            float out_ = al_rr((float)x, (float)y, b.bx0, b.by0, b.bx1,
+                               b.by1, rad);
+            float in = al_rr((float)x, (float)y, b.bx0 + bw, b.by0 + bw,
+                             b.bx1 - bw, b.by1 - bw, rad - bw);
+            float t = (y + 0.5f - b.by0) / (b.by1 - b.by0), ex, ey;
+
+            if (sh > 0)
+                al_over(d, 0, 0, 0, sh * 0.3f);         /* the drop shadow */
+            if (out_ <= 0)
+                continue;
+            al_over(d, 0.86f, 0.88f, 0.93f, (out_ - in > 0 ? out_ - in : 0) * 0.85f);
+            if (in <= 0)
+                continue;
+            /* black, a dark grey at the top */
+            al_over(d, 0.16f * (1 - t), 0.16f * (1 - t), 0.18f * (1 - t),
+                    in * (0.80f + 0.12f * t));
+            ex = (x + 0.5f - (b.bx0 + b.bx1) * 0.5f) / ((b.bx1 - b.bx0) * 0.75f);
+            ey = (y + 0.5f - (b.by0 - h * 0.35f)) / (h * 0.8f);
+            if (ex * ex + ey * ey < 1)                  /* the gloss */
+                al_over(d, 1, 1, 1, in * 0.18f);
+        }
+    if (icon && icon_px > 0) {                          /* the icon, scaled */
+        int ix0 = (int)(b.bx0 + pad), iy0 = (int)(b.by0 + (h - isz) * 0.5f);
+        int n = (int)isz;
+        for (y = 0; y < n; y++)
+            for (x = 0; x < n; x++) {
+                int X = ix0 + x, Y = iy0 + y;
+                const unsigned char *p = icon + ((size_t)(y * icon_px / n) * icon_px
+                                                 + (size_t)(x * icon_px / n)) * 4;
+                if (X >= 0 && X < b.w && Y >= 0 && Y < b.h && p[3])
+                    al_over(&b.px[Y * b.w + X], p[0] / 255.0f, p[1] / 255.0f,
+                            p[2] / 255.0f, p[3] / 255.0f);
+            }
+    }
+    al_put_line(&b, tm, tw, th, (int)(b.bx0 + pad + isz + 6 * s),
+                (int)((b.by0 + b.by1) * 0.5f - th * 0.5f), 1, 1, 1, 1);
+    free(tm);
+
+    out = (unsigned char *)malloc((size_t)b.w * b.h * 4);
+    if (out)
+        for (x = 0; x < b.w * b.h; x++) {
+            out[x * 4 + 0] = (unsigned char)(b.px[x].r * 255 + 0.5f);
+            out[x * 4 + 1] = (unsigned char)(b.px[x].g * 255 + 0.5f);
+            out[x * 4 + 2] = (unsigned char)(b.px[x].b * 255 + 0.5f);
+            out[x * 4 + 3] = (unsigned char)(b.px[x].a * 255 + 0.5f);
+        }
+    free(b.px);
+    *ow = b.w;
+    *oh = b.h;
+    return out;
 }
 
 /* The debug menu (runtime/debug_menu.c) in the alerts' iPhone OS 3 dress:

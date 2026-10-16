@@ -1,4 +1,4 @@
-ULTIMATE MORTAL KOMBAT 3 - PORT DE PC - 0.1.1 ALPHA
+ULTIMATE MORTAL KOMBAT 3 - PORT DE PC - 0.1.2 ALPHA
 ====================================================
 
 Port nativo para Windows de la version de iOS (1.2.59), hecho por
@@ -111,6 +111,20 @@ NUEVO EN 0.0.9
   memoria). Una pelea del debug ya no deja sus luchadores, escenario ni
   paletas para los demas modos.
 - Launcher: botones mas pequenos.
+
+NUEVO EN 0.1.2
+- MENU DE AJUSTES DENTRO DEL JUEGO: pulsa Esc. Graficos (ventana o
+  pantalla completa, resolucion, resolucion 3D, antialiasing, texturas,
+  aspecto, interfaz, controles en pantalla) sin reiniciar el juego;
+  teclado y mando de los dos jugadores; SALIR DEL JUEGO. Todo se guarda
+  en umk3.ini y el launcher lo muestra.
+- PERFIL DE JUGADOR: nombre, ID unico de tu instalacion e icono (el arte
+  de un luchador sobre un degradado claro u oscuro del color que elijas).
+  Se edita en el launcher (PERFIL) y en el juego (Esc > PERFIL).
+- Pantallas de continuar en 16:9 y 21:9 con arte nuevo hecho para ellas.
+- Un sonido ya no se repite encima de si mismo (gritos de fatalities).
+- Los controles en pantalla siguen el cambio de aspecto o de interfaz.
+- El recuadro rojo al pulsar es mas fino.
 
 NUEVO EN 0.1.1
 - CONTROLES: pestanas JUGADOR 1 / JUGADOR 2 en TECLADO y MANDO. El
@@ -263,7 +277,7 @@ ARREGLADO EN 0.0.2
 - La melena de Sindel aparece, con su textura.
 - El joystick en pantalla se mueve.
 
-ERRORES CONOCIDOS EN 0.1.1
+ERRORES CONOCIDOS EN 0.1.2
 - Algunos objetos aparte de los luchadores aun pueden no verse.
 - Faltan animaciones en algunos fatalities (el de Sonya no se ve bien).
 - Siguen apareciendo errores de texturas en algunos escenarios y
@@ -272,8 +286,7 @@ ERRORES CONOCIDOS EN 0.1.1
   completo y faltan modos.
 - Al pausar a veces la pelea se ve encogida.
 - Los menus no se manejan con el mando (raton).
-- Algunos ataques especiales (sobre todo proyectiles) no tienen sonido;
-  a Reptile le faltan sonidos en fatalities y especiales.
+- Algunos ataques especiales (sobre todo proyectiles) no tienen sonido.
 - Tras un round un luchador puede verse con el modelo de otro.
 - Solo Windows. Linux y macOS todavia no tienen launcher.
 - Si el juego falla, mira logs\ junto a umk3-game.exe y reportalo
@@ -298,7 +311,9 @@ picker on the select screen ("< COLOR 1 >", saved), no input lag, crash
 reports, the Kombat Kode loading tip fixed, debug TOOLS (hitboxes, fight
 speed, save states), smaller launcher buttons. New in 0.1.0b: the iPad build's menus on 4:3,
 PLAY > DUELO (two players, one PC), free gamepad binding, a tabbed debug
-menu, wide-screen fixes. New in 0.1.1: player two's own keys and gamepad
+menu, wide-screen fixes. New in 0.1.2: an in-game settings menu (Esc:
+graphics and controls without restarting, quit), a player profile (name,
+ID, icon), new continue screens for 16:9 and 21:9. New in 0.1.1: player two's own keys and gamepad
 for DUELO (CONTROLS > PLAYER 2), DUELO with every interface size, select
 and tower screens fixed on wide screens with the iPad interface. New in 0.0.7: BABALITY banner and tune (and animality, mercy, friendship
 banners), Kung Lao's hat on the select screen, Sub-Zero's ice (frozen

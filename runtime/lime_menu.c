@@ -508,6 +508,8 @@ long limeLoadSound(const char *name)
         if (getenv("UMK3_LOG_SOUND"))
             printf("limeLoadSound: %s did not load (slot %ld)\n", name, i);
     }
+    if (getenv("UMK3_LOG_SOUND"))
+        printf("limeLoadSound: %s -> slot %ld\n", name, i);
     return i;
 }
 
@@ -523,8 +525,11 @@ void limeDeleteSound(long h)
 void limePlaySound(long h, float v, float p, long f)
 {
     (void)p; (void)f;                   /* not read by the original either */
-    if (h == -1)
+    if (h == -1) {
+        if (getenv("UMK3_LOG_SOUND"))
+            printf("limePlaySound: -1 (a sound never loaded)\n");
         return;
+    }
     g_sounds_played++;
     if (h < 0 || h >= LIME_SOUNDS || !g_sound[h].pcm) {
         if (getenv("UMK3_LOG_SOUND"))
