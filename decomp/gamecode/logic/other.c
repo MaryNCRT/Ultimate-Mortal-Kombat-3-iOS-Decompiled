@@ -8994,6 +8994,8 @@ long t_back_to_shang_form(MK3THREAD *thread)
  * count back into 0x3c. Whatever does is elsewhere, and it is left as a gap
  * rather than assumed.
  */
+extern int PortPractice;                /* FrontEnd.c, port: training */
+
 long t_clock4(MK3THREAD *thread)
 {
     MK3OBJ  *obj   = (MK3OBJ *)thread->proc;
@@ -9014,7 +9016,8 @@ long t_clock4(MK3THREAD *thread)
     if ((int32_t)*(const uint32_t *)(G_BYTES + 0x368) <= 0 ||
         (int32_t)*(const uint32_t *)(G_BYTES + 0x36c) <= 0) {
         next = (MK3THREADFUNC)t_round_is_over;
-    } else if ((((const uint32_t *)RoundParam)[0x2c / 4] & 1) != 0) {
+    } else if ((((const uint32_t *)RoundParam)[0x2c / 4] & 1) != 0
+               || PortPractice) {       /* port: training stops it too */
         next = (MK3THREADFUNC)t_clock4;         /* the clock is frozen */
     } else {
         obj->field3c = obj->field3c - 1;
@@ -9886,6 +9889,7 @@ long t_gravity_ani(MK3THREAD *thread)
  * plain assignment, not an OR, so setting one clears the other.
  */
 long MotaroPunchDamage(void);
+extern int PortPractice;                /* FrontEnd.c, port: training */
 
 void bar_reducer(MK3OBJ *obj)
 {
@@ -9930,6 +9934,8 @@ void bar_reducer(MK3OBJ *obj)
     h = (int32_t)*(const uint32_t *)(uintptr_t)obj->field38 - dmg;
     if (h < 0)
         h = 0;
+    if (PortPractice && h <= 0)
+        h = 0xa6;                       /* port: training, full again */
     obj->field20 = (uint32_t)h;
     *(uint32_t *)(uintptr_t)obj->field38 = (uint32_t)h;
 

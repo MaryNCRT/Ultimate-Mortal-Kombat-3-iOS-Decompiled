@@ -4335,6 +4335,7 @@ int PortKeyDial;
  * one device, the iPad's DUELO), applied as the P2 touches are. */
 int PortKeyButtonsP2[7];
 int PortKeyDialP2;
+extern int PortPractice;                /* FrontEnd.c, port: training */
 
 
 /* -------------------------------------------------------------- ReadControls
@@ -4502,6 +4503,13 @@ void ReadControls(void)
             ButtonStatesP2[i] = 1;
     if (PortKeyDialP2 != 0)
         JoystickStateP2 = PortKeyDialP2;
+
+    /* Port, not in the binary: in training player two stands still. */
+    if (PortPractice) {
+        JoystickStateP2 = 0;
+        for (i = 0; i < 7; i++)
+            ButtonStatesP2[i] = 0;
+    }
 }
 
 

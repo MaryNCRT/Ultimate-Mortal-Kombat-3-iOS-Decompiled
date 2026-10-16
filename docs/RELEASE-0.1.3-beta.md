@@ -1,6 +1,6 @@
 ## Ultimate Mortal Kombat 3 — PC port 0.1.3 beta (Windows)
 
-**The first beta.** New on top of 0.1.2: **the game's own menus with the pad or the keyboard**, a launcher in the style of the console release, key and button pictures everywhere, a button setup for keys and pads, and more colours for the profile. As before, **no game executable is included**: you compile the game from **your own** `.ipa` of UMK3 **1.2.59 for iPhone** with `UMK3-Launcher.exe`.
+**The first beta.** New on top of 0.1.2: **the game's own menus with the pad or the keyboard**, a **TRAINING** mode, a launcher in the style of the console release, key and button pictures everywhere, a button setup for keys and pads, and more colours for the profile. As before, **no game executable is included**: you compile the game from **your own** `.ipa` of UMK3 **1.2.59 for iPhone** with `UMK3-Launcher.exe`.
 
 **Coming from 0.1.1 or 0.1.2:** the launcher offers this update itself (COMPILE YOUR .IPA > DOWNLOAD AND INSTALL).
 
@@ -13,7 +13,15 @@
 - **Any pad button** skips the fight intro. On the tower the stick moves between the four, NOVICE first, and only cross chooses.
 - In the **moves list** L1 / R1 or left / right (Q / E, A / D) turn the pages, and select or circle close it; with the on-screen controls on, a BACK in the left corner goes to the previous page.
 - On the **continue screen** circle (or Backspace) is GAME OVER, back to the main menu.
+- With the on-screen controls off, **BIOS, ENDINGS, HELP, ABOUT, ACHIEVEMENTS and STATS** have no buttons: L1 / R1 or left / right (Q / E, A / D) turn the pages, circle (or Backspace) goes back, the hints at the bottom right.
+- On every **select screen** START (or the pause key) presses OK / PLAY at once; cross only picks the fighter.
+- The **lost treasures** (after Arcade and in EXTRAS) are picked like a fighter on the roster; after Arcade there is no BACK.
+- The key and button pictures and the hints' words have a soft shadow, so they stand out from the background.
 - With the on-screen controls off, **ACCEPT and BACK** show at the bottom right with your pad's buttons (or Enter and Backspace), and inside the OK and BACK buttons.
+
+### Training
+- **PLAY > TRAINING**, under 2 PLAYER (the game's own word in every language): pick your fighter and the rival, then START.
+- The health bars fill again when they reach zero, so there is no FINISH HIM; the clock stops; the rival stands still.
 
 ### Button setup with the on-screen controls off
 - **Options > BUTTON SETUP** and the pause menu's **BUTTON SETUP** (in place of LAYOUT) open the keys and pad setup in the game's own frame: KEYBOARD and GAMEPAD on pages of their own (L1 / R1, Q / E).

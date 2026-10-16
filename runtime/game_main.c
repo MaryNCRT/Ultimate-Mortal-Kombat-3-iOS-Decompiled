@@ -1076,7 +1076,8 @@ static int   g_moves_who;
 extern int PortNavPick, PortNavHover;
 extern int PortPadPalette[2];
 void PortNavDraw(const char *ok, const char *back, int left);
-void PortNavDrawLine(const char *s);    /* FrontEnd.c */
+void PortNavDrawLine(const char *s, int right);    /* FrontEnd.c */
+void PortPagesLine(char *line, int n, int sel);
 
 /* The right stick, left or right, turns the palette on the select screen:
  * player one's side with the first pad, player two's with the second in
@@ -1128,7 +1129,25 @@ static void nav_hints(void)
     /* the moves list: its pages (L1 R1, Q E) and the way out (select or
      * circle, M or Backspace) in place of ACCEPT and BACK */
     if (CurrentTask == 6 && GamePaused == 2) {
-        char l1[128], r1[128], sel[128], east[128], line[600];
+        char line[600];
+
+        PortPagesLine(line, sizeof line, 1);
+        PortNavDrawLine(line, 0);
+        return;
+    }
+    /* the lost treasure won in Arcade has no way back: ACCEPT alone */
+    PortNavDraw(ok, CurrentTask == 3 && FE_CurrentTask == 36 ? "" : back,
+                CurrentTask == 6);
+}
+
+/* Port, not in the binary: the hints of a screen of pages with the
+ * on-screen controls off -- the moves list, the bios, the endings: its
+ * pages (L1 R1, Q E) and the way out (select or circle, M or Backspace),
+ * with the pad's pictures or the keys'. */
+void PortPagesLine(char *line, int n, int with_sel)
+{
+    {
+        char l1[128], r1[128], sel[128], east[128];
 
         if (pad_nav_device() == 1 && (g_pad.connected || g_pad2.connected)) {
             const PLAT_PAD *p = g_pad.connected ? &g_pad : &g_pad2;
@@ -1144,14 +1163,11 @@ static void nav_hints(void)
             plat_key_glyph(PK_MOVES, sel, sizeof sel);
             snprintf(east, sizeof east, "\001kb/T_BackSpace_Key_Vintage\001");
         }
-        snprintf(line, sizeof line, "%s%s %s   %s%s %s", l1, r1,
+        snprintf(line, n, "%s%s %s   %s%s %s", l1, r1,
                  Language[0] == 'E' && Language[1] == 'S' ? "P\xc1GINA" : "PAGE",
-                 sel, east,
+                 with_sel ? sel : "", east,
                  Language[0] == 'E' && Language[1] == 'S' ? "SALIR" : "EXIT");
-        PortNavDrawLine(line);
-        return;
     }
-    PortNavDraw(ok, back, CurrentTask == 6);
 }
 
 static void hud_keys(void)
@@ -1283,6 +1299,56 @@ int PortMovesTurn(void)
 
     was = now;
     return hit & 1 ? -1 : hit & 2 ? 1 : 0;
+}
+
+/* Port, not in the binary: the way out of the bios and the endings with
+ * the on-screen controls off -- circle of either pad or Backspace -- once
+ * a press. */
+int PortPagesExit(void)
+{
+    static int was;
+    int now = (g_pad.connected && (g_pad.buttons & (1u << PB_EAST)))
+              || (g_pad2.connected && (g_pad2.buttons & (1u << PB_EAST)))
+              || plat_key_backspace();
+    int hit = now && !was;
+
+    was = now;
+    return hit;
+}
+
+/* Port, not in the binary: START of either pad or the pause keys, once a
+ * press -- the select screen's PLAY. */
+int PortStartPress(void)
+{
+    static int was;
+    int now = (g_pad.connected && (g_pad.buttons & (1u << PB_START)))
+              || (g_pad2.connected && (g_pad2.buttons & (1u << PB_START)))
+              || plat_key(PK_PAUSE) || plat_key(PK_P2_PAUSE);
+    int hit = now && !was;
+
+    was = now;
+    return hit;
+}
+
+/* START's picture ("glyphs/....png") for the device in use: the pad's, or
+ * the pause key's. 0 when there is none. */
+int PortStartGlyph(char *out, int n)
+{
+    char tok[128], *a, *z;
+
+    if (pad_nav_device() == 1 && (g_pad.connected || g_pad2.connected)) {
+        const PLAT_PAD *p = g_pad.connected ? &g_pad : &g_pad2;
+        plat_pad_glyph(plat_pad_glyph_kind(p == &g_pad2, p->kind), PB_START,
+                       tok, sizeof tok);
+    } else
+        plat_key_glyph(PK_PAUSE, tok, sizeof tok);
+    a = strchr(tok, 1);
+    z = a ? strchr(a + 1, 1) : NULL;
+    if (!z)
+        return 0;
+    *z = 0;
+    snprintf(out, n, "glyphs/%s.png", a + 1);
+    return 1;
 }
 
 /* The picture for atlas value `value` (6..14, a button) for player p (0 or

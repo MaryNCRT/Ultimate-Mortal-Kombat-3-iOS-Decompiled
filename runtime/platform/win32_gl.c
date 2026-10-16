@@ -1440,6 +1440,7 @@ static void al_put_line(al_box *b, const unsigned char *m, int tw, int th,
  * glyphs/<name>.png" beside res -- Julio Cacko's Free Input Prompts, CC0 --
  * and kept. */
 const char *lime_platform_asset_root(void);
+void lime_glyph_shadow(uint8_t *px, int w, int h); /* draw_gl.c */
 #include "lime/png.h"
 
 typedef struct { char name[64]; uint8_t *rgba; int w, h; } al_glyph;
@@ -1467,6 +1468,8 @@ static const al_glyph *al_glyph_get(const char *name, int len)
              lime_platform_asset_root(), g->name);
     if (!lime_png_load(full, &g->rgba, &g->w, &g->h) || g->w <= 0 || g->h <= 0)
         g->rgba = NULL;
+    else
+        lime_glyph_shadow(g->rgba, g->w, g->h);
     return g->rgba ? g : NULL;
 }
 

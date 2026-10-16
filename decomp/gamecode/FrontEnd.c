@@ -128,6 +128,12 @@ static int PortNavTab, PortNavTabN, PortNavTabSelf;
 /* Set around a touch area that is its screen's BACK (the continue
  * screen's GAME OVER): the pad's east taps it. Port. */
 static int PortNavAreaKind;
+/* Port: a button the pad's highlight does not stop on (the select screen's
+ * PLAY / OK, which START presses). */
+static int PortNavSkip;
+int  PortStartPress(void);              /* game_main.c, port */
+int  PortStartGlyph(char *out, int n);
+static float nav_glyph(const char *file, float x, float y, float h);
 void PortNavDual(void);
 int  pad_nav_back(float *x, float *y, float *w, float *h);
 int  pad_nav_ok(float *x, float *y, float *w, float *h);
@@ -140,6 +146,10 @@ int PortNavPick;
  * page back, so the pad's east still closes the list). Port. */
 int PortNavAsOk;
 extern int PortHideControls;            /* GameCode.c: hide_controls=1 */
+int  PortMovesTurn(void);                /* game_main.c, port */
+int  PortPagesExit(void);
+void PortPagesLine(char *line, int n, int sel);
+void PortNavDrawLine(const char *s, int right);
 void set_menu_open_controls(void);      /* runtime/settings_menu.c */
 int PortNavHover;
 int PortPadPalette[2];
@@ -3711,6 +3721,7 @@ long DrawButtonNew(BUTTONNEW *b, int x, int y, int interactive)
 
     if (interactive != 1)
         return 0;
+    if (!PortNavSkip)
     PortNavTarget(px, py, pw, ph, PortNavAsOk == 2 ? 0 : PortNavAsOk ? 6 : b == &BUTTON_BACK ? 1
                   : b == &BUTTON_OK || b == &BUTTON_PLAY ? 6 : 0);
 
@@ -6354,6 +6365,14 @@ void FE_Task_Achievements(void)
                    (float)FE_W(468.0f) + PortFEExtraX, (float)FE_H(256.0f),
                    0.0f, 0.4296875f, 0.9140625f, 0.5f, col);
 
+    /* Port, not in the binary: as the bios, with the on-screen controls
+     * off: no buttons, the pages with L1 / R1 (no further than the ends),
+     * out with circle, the hints in the bottom right corner. */
+    if (PortHideControls) {
+        int d = PortMovesTurn();
+
+        sel = d < 0 ? 1 : d > 0 ? 3 : PortPagesExit() ? 2 : 0;
+    } else {
     sel = DrawButtonNew(&BUTTON_MINI_1, 0x52, 0x12e, (int)prevEnabled) ? 1 : 0;
     if (DrawButtonNew(&BUTTON_MINI_2, 0xf0, 0x12e, 1))
         sel = 2;
@@ -6362,6 +6381,7 @@ void FE_Task_Achievements(void)
 
     limeDrawFONT(&GameFont, GameText(7), (float)FE_X(240.0f),
                  (float)FE_Y(294.0f), 1, FE_WidthScale, rowcol);
+    }
 
     y = 40;
     for (row = 0; row < 6; row++) {
@@ -6397,6 +6417,12 @@ void FE_Task_Achievements(void)
         y += 40;
     }
 
+    if (PortHideControls) {
+        char line[600];
+
+        PortPagesLine(line, sizeof line, 0);
+        PortNavDrawLine(line, 1);
+    } else
     /* The two arrows' labels, dimmed by the same number that disabled them. */
     {
         float shade = 1.0f / (float)nextEnabled;
@@ -6408,7 +6434,7 @@ void FE_Task_Achievements(void)
                      (float)(long)FE_X(398.0f), (float)(long)FE_Y(294.0f),
                      1, FE_WidthScale, rowcol);
     }
-    {
+    if (!PortHideControls) {
         float shade = 1.0f / (float)prevEnabled;
 
         rowcol[0] = shade;
@@ -6610,6 +6636,20 @@ void FE_Task_Stats(void)
         limeDrawFONT(&GameFont, limeUC(strBuf),
                      (float)(limeScreenWidth / 2), (float)FE_Y((float)y),
                      1, FE_WidthScale, fontcol);
+    }
+
+    /* Port, not in the binary: as the bios, with the on-screen controls
+     * off. */
+    if (PortHideControls) {
+        char line[600];
+
+        if (PortMovesTurn())
+            StatsPage ^= 1;
+        if (PortPagesExit())
+            PopFETaskDeferred();
+        PortPagesLine(line, sizeof line, 0);
+        PortNavDrawLine(line, 1);
+        return;
     }
 
     if (DrawButtonNew(&BUTTON_NEXTSTATS, 0x39, 0x130, 1))
@@ -6895,6 +6935,20 @@ void EASDK_LogEventEnumEnumStringNum(long id, long a, const char *s,
 long drawCharacterSelection(long sel);
 int  GetNextLevel(int cur);
 
+/* Port: START's picture inside the select screen's PLAY, with the
+ * on-screen controls off. */
+static void start_glyph(void)
+{
+    char file[200];
+    float w = (float)FE_W((float)BUTTON_PLAY.w);
+    float h = (float)FE_H((float)BUTTON_PLAY.h), g = h * 0.5f;
+
+    if (!PortHideControls || !PortStartGlyph(file, sizeof file))
+        return;
+    nav_glyph(file, (float)FE_X(240.0f) - w * 0.5f + w * 0.1f,
+              (float)FE_Y((float)(0x130 - BUTTON_PLAY.h / 2)) + (h - g) * 0.5f, g);
+}
+
 void FE_Task_Character_Select(void)
 {
     long back = 0;
@@ -6941,24 +6995,30 @@ void FE_Task_Character_Select(void)
         }
     }
 
+    /* Port, not in the binary: the pad's highlight passes PLAY by and
+     * START (or the pause key) presses it, at once; its picture inside it. */
+    PortNavSkip = 1;
     if (GameMode == 6) {
         /* Both sides have to have chosen before Play appears. */
         if (CharacterSelected != -1 && opponentCharacter != -1) {
-            if (DrawButtonNew(&BUTTON_PLAY, 0xf0, 0x130, 1))
+            if (DrawButtonNew(&BUTTON_PLAY, 0xf0, 0x130, 1) | PortStartPress())
                 CharacterConfirmed = CharacterSelected;
 
             limeDrawFONT(&GameFont, GameText(0xc), (float)FE_X(240.0f),
                          (float)FE_Y(296.0f), 1, FE_WidthScale, fontcol);
+            start_glyph();
         }
     } else {
         if (CharacterSelected != -1) {
-            if (DrawButtonNew(&BUTTON_PLAY, 0xf0, 0x130, 1))
+            if (DrawButtonNew(&BUTTON_PLAY, 0xf0, 0x130, 1) | PortStartPress())
                 CharacterConfirmed = CharacterSelected;
 
             limeDrawFONT(&GameFont, GameText(0xc), (float)FE_X(240.0f),
                          (float)FE_Y(296.0f), 1, FE_WidthScale, fontcol);
+            start_glyph();
         }
     }
+    PortNavSkip = 0;
 
     if (CharacterConfirmed == -1)
         return;
@@ -9425,6 +9485,28 @@ void FE_Task_Bios(void)
                  (float)(limeScreenWidth * 3 / 4 - 0x20), pitch,
                  1, textScale, fontcol);
 
+    /* Port, not in the binary: with the on-screen controls off, no
+     * buttons -- the pages with L1 / R1 or left / right, out with circle,
+     * and the hints for them in the bottom right corner. */
+    if (PortHideControls) {
+        int d = PortMovesTurn();
+        char line[600];
+
+        if (d && currentBiosProgress == 0.0f) {
+            p = BioPage;
+            do
+                p = (p + BIOS_PAGES + d) % BIOS_PAGES;
+            while (BioText[p] == -1);
+            nextBiosPage        = p;
+            currentBiosProgress = BIOS_START;
+        }
+        if (PortPagesExit())
+            PopFETaskDeferred();
+        PortPagesLine(line, sizeof line, 0);
+        PortNavDrawLine(line, 1);
+        goto turn;
+    }
+
     /* ---- Next ---- */
     if (DrawButtonNew(&BUTTON_NEXT, 0x15f, 0x130,
                       currentBiosProgress == 0.0f)) {
@@ -9466,6 +9548,7 @@ void FE_Task_Bios(void)
     limeDrawFONT(&GameFont, GameText(9),
                  FE_X(442.0f), FE_Y(296.0f), 1, FE_WidthScale, fontcol);
 
+turn:
     /* ---- advance the turn, and swap the page under the cover ---- */
     if (currentBiosProgress > 0.0f) {
         float was = currentBiosProgress;
@@ -9655,6 +9738,21 @@ void FE_Task_About_About(void)
                      FE_Y((float)((line + 3) * ABOUTABOUT_PITCH) * cjk
                           + ABOUTABOUT_TOP),
                      1, FE_WidthScale * cjk, fontcol);
+    }
+
+    /* Port, not in the binary: as the bios, with the on-screen controls
+     * off. */
+    if (PortHideControls) {
+        int d = PortMovesTurn();
+        char line[600];
+
+        if (d)
+            AboutPage = (AboutPage + ABOUTABOUT_PAGES + d) % ABOUTABOUT_PAGES;
+        if (PortPagesExit())
+            PopFETaskDeferred();
+        PortPagesLine(line, sizeof line, 0);
+        PortNavDrawLine(line, 1);
+        return;
     }
 
     back = DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1);
@@ -9977,8 +10075,11 @@ void DrawTower3D(void)
  * two players on one device (iPad _FE_Task_Play 0x1a854). The iPhone build
  * has the first four, 64 apart from y 48; the port shows the iPad's five
  * with every interface size (Mary). */
-#define PLAY_ROW0          40.0f
-#define PLAY_ROW_PITCH     56.0f
+/* Port, not in the binary: a sixth, TRAINING (GameText 0xc2, the game's
+ * own word in every language), under 2 PLAYER -- so the six are 47 apart
+ * from y 36 to fit. */
+#define PLAY_ROW0          36.0f
+#define PLAY_ROW_PITCH     47.0f
 #define PLAY_TASK_RESUME   2
 #define PLAY_TASK_LOBBY    3
 #define PLAY_TASK_START    0x1b
@@ -9998,6 +10099,11 @@ extern long LastTouch_PlaySurvival;     /* 0x00100e78 */
 extern long LastTouch_PlaySK;           /* 0x00100e7c */
 /* the iPad's fifth option (DUELO); globals of the iPad build only */
 static long Touch_PlayDuel, LastTouch_PlayDuel;
+/* Port, not in the binary: training, 2 PLAYER with one player -- player one
+ * picks both fighters, player two stands still, the bars fill again at 0,
+ * the clock stops (Players.c, other.c). */
+static long Touch_PlayTrain, LastTouch_PlayTrain;
+int PortPractice;
 
 void FE_Task_Play(void)
 {
@@ -10124,6 +10230,19 @@ void FE_Task_Play(void)
             && limeTouchScreenX[0] == -1.0f)
             sel = 5;
     }
+    {                                   /* port: training */
+        LastTouch_PlayTrain = Touch_PlayTrain;
+        Touch_PlayTrain = DrawOptionAsButton(GameText(0xc2),
+                                             FESlideOffset * PLAY_SLIDE_SPAN
+                                                 + PLAY_OPTION_X,
+                                             PLAY_ROW0 + 5 * PLAY_ROW_PITCH,
+                                             PLAY_OPTION_SCALE,
+                                             &mmfontcol[(LastTouch_PlayTrain + 1) * 4],
+                                             FE_W(PLAY_OPTION_WIDTH));
+        if (LastTouch_PlayTrain != 0 && Touch_PlayTrain == 0
+            && limeTouchScreenX[0] == -1.0f)
+            sel = 11;
+    }
 
     MaintainFESlide();
 
@@ -10132,7 +10251,13 @@ void FE_Task_Play(void)
             limePlaySound(SFXHandle[PLAY_SFX_CLICK],
                           MusicVol[Settings[3]] / 100.0f, 1.0f, 0);
 
-        if (sel == 1) {
+        if (sel >= 1 && sel <= 5)
+            PortPractice = 0;           /* port: see PortPractice */
+        if (sel == 11) {
+            PortPractice = 1;           /* port: 2 PLAYER as training */
+            GameMode = PLAY_MODE_TWOUP;
+            PushFETaskDeferred(PLAY_TASK_START);
+        } else if (sel == 1) {
             GameMode = PLAY_MODE_ARCADE;
             if (GameStarted != 0) {
                 PushFETaskDeferred(PLAY_TASK_RESUME);
@@ -10421,6 +10546,32 @@ void FE_Task_Endings(void)
         if (EndingsGained[i] != 0)
             n++;
 
+    /* Port, not in the binary: as the bios, with the on-screen controls
+     * off. */
+    if (PortHideControls) {
+        int d = n > 1 ? PortMovesTurn() : 0;
+        char line[600];
+
+        if (d && currentEndingProgress == 0.0f) {
+            EndingWrapDone = 0;
+            p = EndingsPage;
+            do
+                p = (p + ENDINGS_PAGES + d) % ENDINGS_PAGES;
+            while (EndingsText[p] == -1 || EndingsGained[p] == 0);
+            nextEndingsPage       = p;
+            currentEndingProgress = ENDINGS_START;
+            *endingsOffsetY       = FE_HeightScale * ENDINGS_RESET_Y;
+        }
+        if (PortPagesExit()) {
+            PopFETaskDeferred();
+            currentEndingProgress = ENDINGS_START;
+            EndingWrapDone        = 0;
+        }
+        PortPagesLine(line, sizeof line, 0);
+        PortNavDrawLine(line, 1);
+        goto turn;
+    }
+
     if (n > 1) {
         /* ---- Next ---- */
         if (DrawButtonNew(&BUTTON_NEXT, 0x15f, 0x130,
@@ -10474,6 +10625,7 @@ void FE_Task_Endings(void)
     limeDrawFONT(&GameFont, GameText(9),
                  FE_X(442.0f), FE_Y(296.0f), 1, FE_WidthScale, fontcol);
 
+turn:
     /* ---- advance the turn, and swap the page under the cover ---- */
     if (currentEndingProgress > 0.0f) {
         float was = currentEndingProgress;
@@ -10928,6 +11080,12 @@ void FE_Task_Treasure(void)
         /* ---- the tap, for the tiles that answer to one ---- */
         if (i != 0 && i != 2 && i != 3 && gained != 0) {
             shown++;
+
+            /* port: the pad's highlight, as FE_Task_Select_Treasure's */
+            PortNavTarget(FE_XC + FE_WidthScale * (float)(x + 2),
+                          FE_HeightScale * (TREASURE_ROW_Y + 6.0f),
+                          FE_WidthScale * 44.0f,
+                          FE_HeightScale * 36.0f, 4);
 
             if (limeLastTouchScreenX[0] == -1.0f
                 && limeTouchScreenY[0] >= FE_HeightScale * TREASURE_BAND_TOP
@@ -12052,14 +12210,19 @@ long drawCharacterSelection(long sel)
                 || limeTouchScreenX[0] > FE_X((float)(cx * CS_COL_STEP + 108)))
                 continue;
 
-            if (GameMode == 6 && PortNavPick == 1) {
+            if (GameMode == 6 && PortNavPick == 1 && !PortPractice) {
                 /* port: player one's pad or keys pick player one */
                 if (c != CharacterSelected)
                     FEPlayer1Offset = CS_SLIDE_START;
                 CharacterSelected = c;
                 PlayerSelectToggle = 0;
-            } else if (GameMode == 6 && PortNavPick == 2) {
+            } else if (GameMode == 6 && PortNavPick == 2 && !PortPractice) {
                 opponentCharacter = c;  /* port: and player two's, two */
+                PlayerSelectToggle = 1;
+            } else if (GameMode == 6 && PortPractice && PortNavPick
+                       && CharacterSelected != -1) {
+                opponentCharacter = c;  /* port: training, the pad's cross
+                                         * after the first is the rival */
                 PlayerSelectToggle = 1;
             } else if (GameMode == 6) {
                 if (CharacterSelected == -1) {
@@ -12076,6 +12239,9 @@ long drawCharacterSelection(long sel)
                         CharacterSelected = c;
                     }
                 }
+            } else if (CharacterSelected == c && PortNavPick) {
+                c = -1;                 /* port: the pad's cross only picks;
+                                         * START plays */
             } else if (CharacterSelected == c) {
                 CharacterConfirmed = c;
 
@@ -12646,6 +12812,14 @@ void FE_Task_Select_Treasure(void)
         if (TreasureSelected == -1) {
             if (gained)
                 claimed++;
+
+            /* port: the pad's highlight stops on the tiles on offer, as on
+             * the roster, framing the picture (x 2..46, y 6..42 of a cell) */
+            if (i < count && gained == 0)
+                PortNavTarget(FE_XC + FE_WidthScale * (float)(x + 2),
+                              FE_HeightScale * (ST_ROW_Y + 6.0f),
+                              FE_WidthScale * 44.0f,
+                              FE_HeightScale * 36.0f, 4);
 
             /* ---- the tap, for the tiles this run actually offers ---- */
             if (i < count && gained == 0
@@ -14210,6 +14384,21 @@ void FE_Task_About_Help(void)
         break;
     }
 
+    /* Port, not in the binary: as the bios, with the on-screen controls
+     * off. */
+    if (PortHideControls) {
+        int d = PortMovesTurn();
+        char line[600];
+
+        if (d)
+            HelpPage = (HelpPage + HELP_PAGES + d) % HELP_PAGES;
+        if (PortPagesExit())
+            PopFETaskDeferred();
+        PortPagesLine(line, sizeof line, 0);
+        PortNavDrawLine(line, 1);
+        return;
+    }
+
     if (DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1))
         PopFETaskDeferred();            /* deferred: the labels still draw */
 
@@ -14250,6 +14439,20 @@ static float nav_glyph(const char *file, float x, float y, float h)
     return w;
 }
 
+/* The hints' words with a soft dark shadow under them, so they do not melt
+ * into the background. Port. */
+static void nav_text(const char *t, float x, float y, float sc, const float *c)
+{
+    static const float sh[4] = { 0.0f, 0.0f, 0.0f, 0.35f };
+    float d = sc * 2.2f;
+    int i;
+
+    for (i = 0; i < 4; i++)
+        limeDrawFONT(&GameFont, t, x + d * (0.6f + (i & 1) * 0.8f),
+                     y + d * (0.8f + (i >> 1) * 0.8f), 0, sc, sh);
+    limeDrawFONT(&GameFont, t, x, y, 0, sc, c);
+}
+
 void PortNavDraw(const char *ok, const char *back, int left)
 {
     int es = Language[0] == 'E' && Language[1] == 'S';
@@ -14284,21 +14487,23 @@ void PortNavDraw(const char *ok, const char *back, int left)
     if (left) {
         x = k * 10.0f;
         x += nav_glyph(ok, x, y, g) + k * 3.0f;
-        limeDrawFONT(&GameFont, a, x, y + k * 2.0f, 0, sc, fontcol);
+        nav_text(a, x, y + k * 2.0f, sc, fontcol);
         x += (float)limeGetStringWidth(&GameFont, a) * sc + k * 12.0f;
         x += nav_glyph(back, x, y, g) + k * 3.0f;
-        limeDrawFONT(&GameFont, b, x, y + k * 2.0f, 0, sc, fontcol);
+        nav_text(b, x, y + k * 2.0f, sc, fontcol);
         return;
     }
+    if (back[0]) {                      /* "": no BACK (port) */
     w = (float)limeGetStringWidth(&GameFont, b) * sc;
     x -= w;
-    limeDrawFONT(&GameFont, b, x, y + k * 2.0f, 0, sc, fontcol);
+    nav_text(b, x, y + k * 2.0f, sc, fontcol);
     x -= g * 1.6f + k * 3.0f;
     nav_glyph(back, x, y, g);
     x -= k * 12.0f;
+    }
     w = (float)limeGetStringWidth(&GameFont, a) * sc;
     x -= w;
-    limeDrawFONT(&GameFont, a, x, y + k * 2.0f, 0, sc, fontcol);
+    nav_text(a, x, y + k * 2.0f, sc, fontcol);
     x -= g * 1.6f + k * 3.0f;
     nav_glyph(ok, x, y, g);
 }
@@ -14368,20 +14573,23 @@ static void rich_draw(const char *s, float x, float y, float h, float sc,
         while (*s && *s != 1 && n < (int)sizeof buf - 1)
             buf[n++] = *s++;
         buf[n] = 0;
-        limeDrawFONT(&GameFont, buf, x, y, 0, sc, colour);
+        nav_text(buf, x, y, sc, colour);
         x += limeGetStringWidth(&GameFont, buf) * sc;
     }
 }
 
-/* The bottom left corner's hints as one line with pictures
- * ("\001set/name\001"), the size of PortNavDraw's: the moves list's. Port. */
-void PortNavDrawLine(const char *s)
+/* The bottom corner's hints as one line with pictures
+ * ("\001set/name\001"), the size of PortNavDraw's: the moves list's at the
+ * left, the bios' and the endings' at the right. Port. */
+void PortNavDrawLine(const char *s, int right)
 {
     float k = FE_HeightScale * (8.0f / 9.0f);
+    float x = right ? (float)limeScreenWidth - k * 10.0f
+                      - rich_width(s, k * 16.0f, 0.7f * k) : k * 10.0f;
 
     limeSet2DDrawing();
     limeEnableAlphaBlending_Basic();
-    rich_draw(s, k * 10.0f, (float)limeScreenHeight - k * 20.0f, k * 16.0f,
+    rich_draw(s, x, (float)limeScreenHeight - k * 20.0f, k * 16.0f,
               0.7f * k, fontcol);
 }
 

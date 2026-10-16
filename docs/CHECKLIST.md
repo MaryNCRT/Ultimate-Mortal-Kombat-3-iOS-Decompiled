@@ -142,6 +142,15 @@ only once Mary has checked it in game. What is known so far is under each one.
   controls); with the pad or keys L1 / R1, left / right, Q / E, A / D turn
   the pages, select or circle close it, no NEXT. Checked by Mary.
 - [x] **Continue screen:** circle / Backspace is GAME OVER. Checked by Mary.
+- [x] **Pages without buttons** (bios, endings, help, about, achievements,
+  stats) with the on-screen controls off: L1 / R1 and circle. Checked by Mary.
+- [x] **START is OK / PLAY** on the select screens. Checked by Mary.
+- [x] **Lost treasures** with the pad, as the roster; no BACK after Arcade.
+  Checked by Mary.
+- [x] **Shadows** under the key and button pictures and the hints' words.
+- [x] **TRAINING** (PLAY, under 2 PLAYER): both fighters picked, the bars
+  fill again at zero, the clock stops, the rival stands still. Checked by
+  Mary.
 
 ## Fight
 

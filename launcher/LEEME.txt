@@ -113,6 +113,9 @@ NUEVO EN 0.0.9
 - Launcher: botones mas pequenos.
 
 NUEVO EN 0.1.3 BETA (la primera beta)
+- MODO ENTRENAMIENTO (JUGAR, bajo DUELO): eliges tu luchador y el rival; la
+  vida se rellena al llegar a cero, el reloj se para y el rival no se mueve.
+- START pulsa OK en la seleccion de personaje; equis solo elige.
 - LOS MENUS DEL JUEGO CON EL MANDO O EL TECLADO: la cruceta, la palanca
   izquierda o las flechas mueven; la opcion se pone en amarillo; equis / A
   o Enter eligen (al soltar), circulo / B o Retroceso vuelven. En VS los

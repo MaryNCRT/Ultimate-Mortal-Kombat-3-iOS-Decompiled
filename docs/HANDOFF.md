@@ -96,6 +96,14 @@ release fixed, with addresses, is in PROGRESS.md.
   console release's style, monitor choice, closes when the game opens. New
   source: `runtime/pad_nav.c` -- in build_game.ps1, CMakeLists.txt and
   make_release.py.
+- **Training** (Port, not in the binary): PLAY's sixth row, GameText(0xc2)
+  "TRAINING" (in every language's text). `PortPractice` (FrontEnd.c) on top
+  of GameMode 6: the pad's first cross picks player one, later ones the
+  rival; `bar_reducer` (other.c) puts a bar at 0 back to 0xa6, `t_clock4`
+  keeps the clock still, and GameCode.c clears player two's input. START
+  presses the select screen's PLAY (`PortStartPress`, `PortNavSkip`).
+  The pages without buttons: `PortPagesLine`, `PortPagesExit`,
+  `PortNavDrawLine(s, 1)`. Glyph shadows: `lime_glyph_shadow` (draw_gl.c).
 - **Open list:** the README's *Known problems*. Mary's list goes on with:
   - a render backend option (DirectX 12 / Vulkan / OpenGL, a large job);
   - the remaining texture errors, fatality animations and crashes in modes other than Arcade.
