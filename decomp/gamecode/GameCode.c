@@ -11267,7 +11267,20 @@ static void PauseClick(void)
                       MusicVol[Settings[3]] / 100.0f, 1.0f, 0);
 }
 
+/* Port, not in the binary: on 16:9 and 21:9 the pause menu, panel and
+ * options, sits against the screen's right edge (FE_X's right edge), as
+ * the front end's pages do, not half way out. */
+void PortFERightEdgeSet(int on);
+static void UpdateInGamePauseMenu_(void);
+
 void UpdateInGamePauseMenu(void)
+{
+    PortFERightEdgeSet(1);
+    UpdateInGamePauseMenu_();
+    PortFERightEdgeSet(0);
+}
+
+static void UpdateInGamePauseMenu_(void)
 {
     char text[256];                     /* sp+0x18, to the top of the frame */
     long sel;                           /* the option released this frame */
