@@ -7667,6 +7667,8 @@ extern BUTTONNEW BUTTON_BACK;           /* 0x001007bc */
 long DrawButtonNew(BUTTONNEW *b, int x, int y, int interactive);
 void PortFERightEdgeSet(int on);
 extern int PortNavAsOk;                 /* port: FrontEnd.c */
+extern int PortHideControls;            /* port: defined below */
+int  PortMovesTurn(void);               /* port: game_main.c */
 void PortNavTarget(float x, float y, float w, float h, int kind);  /* port */
 
 extern long  MoveListPage;              /* 0x00150eb4 */
@@ -7784,6 +7786,16 @@ void MovesList(void)
     if (PortMovesWho() == 2)
         character = PLAYER2MODEL;
 
+    /* Port, not in the binary: L1 / R1, left / right (Q / E, A / D) turn
+     * the pages */
+    {
+        long n = (GameMode == 6) ? 10 : 5;
+        int  d = PortMovesTurn();
+
+        if (d)
+            MoveListPage = (MoveListPage + n + d) % n;
+    }
+
     page   = MoveListPage;
     header = (page == 3 || page == 4 || page == 8 || page == 9) ? 0xef : 0xee;
 
@@ -7805,13 +7817,31 @@ void MovesList(void)
      * the screen's right edge, as on the front end's screens */
     PortFERightEdgeSet(1);
     PortNavAsOk = 1;                    /* port: NEXT is the pad's cross */
-    if (DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1)) {
-        MoveListPage = MoveListPage + 1;
-        MoveListPage %= (GameMode == 6) ? 10 : 5;
+    /* Port, not in the binary: with the on-screen controls off the pages
+     * turn with L1 / R1 and there is no NEXT */
+    if (!PortHideControls) {
+        if (DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1)) {
+            MoveListPage = MoveListPage + 1;
+            MoveListPage %= (GameMode == 6) ? 10 : 5;
+        }
+
+        limeDrawFONT(&GameFont, GameText(8), (float)FE_X(423.0f),
+                     (float)FE_Y(296.0f), 1, FE_WidthScale, fontcol);
     }
 
-    limeDrawFONT(&GameFont, GameText(8), (float)FE_X(423.0f),
-                 (float)FE_Y(296.0f), 1, FE_WidthScale, fontcol);
+    /* Port, not in the binary: with the on-screen controls, BACK in the
+     * left corner, NEXT's mirror, turns to the previous page */
+    if (!PortHideControls) {
+        PortFERightEdgeSet(2);
+        PortNavAsOk = 2;
+        if (DrawButtonNew(&BUTTON_BACK, 480 - 0x1a7, 0x130, 1)) {
+            long n = (GameMode == 6) ? 10 : 5;
+
+            MoveListPage = (MoveListPage + n - 1) % n;
+        }
+        limeDrawFONT(&GameFont, GameText(7), (float)FE_X(480.0f - 423.0f),
+                     (float)FE_Y(296.0f), 1, FE_WidthScale, fontcol);
+    }
     PortNavAsOk = 0;
     PortFERightEdgeSet(0);
 }

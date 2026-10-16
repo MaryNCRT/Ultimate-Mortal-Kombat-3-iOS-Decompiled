@@ -125,6 +125,9 @@ void PortNavTarget(float x, float y, float w, float h, int kind);
  * entry (PortNavTabSelf, counted in PortNavTabN) closes it, so it is the
  * page's BACK for the pad's east button. */
 static int PortNavTab, PortNavTabN, PortNavTabSelf;
+/* Set around a touch area that is its screen's BACK (the continue
+ * screen's GAME OVER): the pad's east taps it. Port. */
+static int PortNavAreaKind;
 void PortNavDual(void);
 int  pad_nav_back(float *x, float *y, float *w, float *h);
 int  pad_nav_ok(float *x, float *y, float *w, float *h);
@@ -133,7 +136,8 @@ int  pad_nav_ok(float *x, float *y, float *w, float *h);
  * this frame's touch, and a right-stick turn of each side's palette. */
 int PortNavPick;
 /* Set around a button drawn with BACK's picture that is not BACK (the moves
- * list's NEXT): it is the pad's ACCEPT. Port. */
+ * list's NEXT): it is the pad's ACCEPT; 2, a plain button (the moves list's
+ * page back, so the pad's east still closes the list). Port. */
 int PortNavAsOk;
 extern int PortHideControls;            /* GameCode.c: hide_controls=1 */
 void set_menu_open_controls(void);      /* runtime/settings_menu.c */
@@ -154,7 +158,8 @@ float FE_X(float v)
         float off = PortFEExtraX * 0.5f;
 
         if (PortFERightEdge) {
-            off = PortFEExtraX;
+            /* 2: the left edge (the moves list's BACK) */
+            off = PortFERightEdge == 2 ? 0.0f : PortFEExtraX;
         } else if (FE_CurrentTask == 0) {
             if (v < 220.0f)
                 off = 0.0f;
@@ -2953,7 +2958,8 @@ long TouchAreaWH(int x, int y, int w, int h)
 
     PortNavTarget(x0, (float)FE_Y((float)y), (float)FE_W((float)w),
                   (float)FE_H((float)h),
-                  !PortNavTab ? 3 : PortNavTabN++ == PortNavTabSelf ? 5 : 2);
+                  PortNavAreaKind ? PortNavAreaKind
+                  : !PortNavTab ? 3 : PortNavTabN++ == PortNavTabSelf ? 5 : 2);
 
     if (tx >= x0
         && tx <= x0 + (float)FE_W((float)w)) {
@@ -3705,7 +3711,7 @@ long DrawButtonNew(BUTTONNEW *b, int x, int y, int interactive)
 
     if (interactive != 1)
         return 0;
-    PortNavTarget(px, py, pw, ph, PortNavAsOk ? 6 : b == &BUTTON_BACK ? 1
+    PortNavTarget(px, py, pw, ph, PortNavAsOk == 2 ? 0 : PortNavAsOk ? 6 : b == &BUTTON_BACK ? 1
                   : b == &BUTTON_OK || b == &BUTTON_PLAY ? 6 : 0);
 
     /* released inside? */
@@ -5630,7 +5636,9 @@ void FE_Task_Continue_Screen(void)
             action = 1;
     }
 
+    PortNavAreaKind = 1;                /* port: circle is GAME OVER */
     no = TouchAreaWH(PC_RX(0x100), PC_Y(0xb8), PC_RW(0xd0), PC_H(bh));
+    PortNavAreaKind = 0;
     if (no == 2)
         DrawRedHighlight(PC_RX(0x100), PC_Y(0xb8), PC_RW(0xd0), PC_H(bh), 0xb);
 
@@ -14263,7 +14271,8 @@ void PortNavDraw(const char *ok, const char *back, int left)
 
         nav_glyph(ok, bx + bw * 0.1f, by + (bh - h) * 0.5f, h);
     }
-    if (pad_nav_back(&bx, &by, &bw, &bh)) {
+    /* (not in the continue screen's GAME OVER, a big box: the corner) */
+    if (FE_CurrentTask != 29 && pad_nav_back(&bx, &by, &bw, &bh)) {
         float h = bh * 0.5f;
 
         nav_glyph(back, bx + bw * 0.1f, by + (bh - h) * 0.5f, h);
@@ -14362,6 +14371,18 @@ static void rich_draw(const char *s, float x, float y, float h, float sc,
         limeDrawFONT(&GameFont, buf, x, y, 0, sc, colour);
         x += limeGetStringWidth(&GameFont, buf) * sc;
     }
+}
+
+/* The bottom left corner's hints as one line with pictures
+ * ("\001set/name\001"), the size of PortNavDraw's: the moves list's. Port. */
+void PortNavDrawLine(const char *s)
+{
+    float k = FE_HeightScale * (8.0f / 9.0f);
+
+    limeSet2DDrawing();
+    limeEnableAlphaBlending_Basic();
+    rich_draw(s, k * 10.0f, (float)limeScreenHeight - k * 20.0f, k * 16.0f,
+              0.7f * k, fontcol);
 }
 
 void PortControlsPanel(const char *title, const char *const *label,

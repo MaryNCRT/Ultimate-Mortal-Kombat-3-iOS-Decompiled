@@ -98,8 +98,6 @@ release fixed, with addresses, is in PROGRESS.md.
   make_release.py.
 - **Open list:** the README's *Known problems*. Mary's list goes on with:
   - a render backend option (DirectX 12 / Vulkan / OpenGL, a large job);
-  - the moves list with the on-screen controls: a BACK in the left corner
-    to the previous page (Mary will say how it goes with a pad);
   - the remaining texture errors, fatality animations and crashes in modes other than Arcade.
 - **Wide menus:** many front-end sites scale a position by `FE_WidthScale`
   themselves instead of calling `FE_X`. On 16:9/21:9 such an element sits off

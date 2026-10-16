@@ -1076,6 +1076,7 @@ static int   g_moves_who;
 extern int PortNavPick, PortNavHover;
 extern int PortPadPalette[2];
 void PortNavDraw(const char *ok, const char *back, int left);
+void PortNavDrawLine(const char *s);    /* FrontEnd.c */
 
 /* The right stick, left or right, turns the palette on the select screen:
  * player one's side with the first pad, player two's with the second in
@@ -1103,7 +1104,9 @@ static void nav_hints(void)
     char ok[160], back[160], tok[128], *a, *z;
     int i;
 
-    if (!PortHideControls || !pad_nav_on())
+    /* the moves list has no buttons left for the pad, but its hints */
+    if (!PortHideControls
+        || (!pad_nav_on() && !(CurrentTask == 6 && GamePaused == 2)))
         return;
     if (pad_nav_device() == 1 && (g_pad.connected || g_pad2.connected)) {
         const PLAT_PAD *p = g_pad.connected ? &g_pad : &g_pad2;
@@ -1122,6 +1125,32 @@ static void nav_hints(void)
         snprintf(ok, sizeof ok, "glyphs/kb/T_Enter_Key_Vintage.png");
         snprintf(back, sizeof back, "glyphs/kb/T_BackSpace_Key_Vintage.png");
     }
+    /* the moves list: its pages (L1 R1, Q E) and the way out (select or
+     * circle, M or Backspace) in place of ACCEPT and BACK */
+    if (CurrentTask == 6 && GamePaused == 2) {
+        char l1[128], r1[128], sel[128], east[128], line[600];
+
+        if (pad_nav_device() == 1 && (g_pad.connected || g_pad2.connected)) {
+            const PLAT_PAD *p = g_pad.connected ? &g_pad : &g_pad2;
+            int kind = plat_pad_glyph_kind(p == &g_pad2, p->kind);
+
+            plat_pad_glyph(kind, PB_L1, l1, sizeof l1);
+            plat_pad_glyph(kind, PB_R1, r1, sizeof r1);
+            plat_pad_glyph(kind, PB_SELECT, sel, sizeof sel);
+            plat_pad_glyph(kind, PB_EAST, east, sizeof east);
+        } else {
+            plat_key_glyph(PK_DBG_PAGE_PREV, l1, sizeof l1);
+            plat_key_glyph(PK_DBG_PAGE_NEXT, r1, sizeof r1);
+            plat_key_glyph(PK_MOVES, sel, sizeof sel);
+            snprintf(east, sizeof east, "\001kb/T_BackSpace_Key_Vintage\001");
+        }
+        snprintf(line, sizeof line, "%s%s %s   %s%s %s", l1, r1,
+                 Language[0] == 'E' && Language[1] == 'S' ? "P\xc1GINA" : "PAGE",
+                 sel, east,
+                 Language[0] == 'E' && Language[1] == 'S' ? "SALIR" : "EXIT");
+        PortNavDrawLine(line);
+        return;
+    }
     PortNavDraw(ok, back, CurrentTask == 6);
 }
 
@@ -1137,7 +1166,13 @@ static void hud_keys(void)
         /* the pad: start is P, select (Back / Share / Create) is M */
         int down = plat_key(PK_PAUSE + k) || plat_key(PK_P2_PAUSE + k)
                    || (g_pad.buttons & (k ? g_pad_moves : g_pad_pause))
-                   || (g_pad2.buttons & (k ? g_p2pad_moves : g_p2pad_pause));
+                   || (g_pad2.buttons & (k ? g_p2pad_moves : g_p2pad_pause))
+                   /* the moves list without NEXT (on-screen controls off):
+                    * circle or Backspace close it, as select does */
+                   || (k && PortHideControls && GamePaused == 2
+                       && ((g_pad.connected && (g_pad.buttons & (1u << PB_EAST)))
+                           || (g_pad2.connected && (g_pad2.buttons & (1u << PB_EAST)))
+                           || plat_key_backspace()));
         int hit = down && !was[k];
         float x = -1.0f, y = 10.0f;
 
@@ -1223,6 +1258,31 @@ int PortMovePlayers(void)
     if (GameMode != 6)
         return 1;
     return g_moves_who == 1 ? 1 : g_moves_who == 2 ? 2 : 3;
+}
+
+/* Port, not in the binary: the moves list's pages with the pad or the keys
+ * -- L1 / R1, left / right on the d-pad or either stick of either pad, the
+ * settings menu's page keys (Q / E) or the movement keys (A / D): -1 a
+ * page back, 1 forward. */
+int PortMovesTurn(void)
+{
+    static int was;
+    int l = (g_pad.connected && (g_pad.buttons & (1u << PB_L1)))
+            || (g_pad2.connected && (g_pad2.buttons & (1u << PB_L1)))
+            || plat_key(PK_DBG_PAGE_PREV)
+            || (g_pad.connected && (g_pad.left || g_pad.rx < 0))
+            || (g_pad2.connected && (g_pad2.left || g_pad2.rx < 0))
+            || plat_key(PK_LEFT) || plat_key(PK_P2_LEFT);
+    int r = (g_pad.connected && (g_pad.buttons & (1u << PB_R1)))
+            || (g_pad2.connected && (g_pad2.buttons & (1u << PB_R1)))
+            || plat_key(PK_DBG_PAGE_NEXT)
+            || (g_pad.connected && (g_pad.right || g_pad.rx > 0))
+            || (g_pad2.connected && (g_pad2.right || g_pad2.rx > 0))
+            || plat_key(PK_RIGHT) || plat_key(PK_P2_RIGHT);
+    int now = l | r << 1, hit = now & ~was;
+
+    was = now;
+    return hit & 1 ? -1 : hit & 2 ? 1 : 0;
 }
 
 /* The picture for atlas value `value` (6..14, a button) for player p (0 or
@@ -2838,7 +2898,16 @@ int main(int argc, char **argv)
                 k2.ok = plat_key(PK_P2_OK) || plat_key(PK_P2_HP)
                         || plat_key(PK_P2_LP) || plat_key(PK_P2_5_P);
                 k2.back = plat_key(PK_P2_BL) || plat_key(PK_P2_5_B);
-                if (pad_nav_end(&g_pad, &g_pad2, &k1, &k2, &tx, &ty, &who)
+                /* the moves list: left / right turn its pages
+                 * (PortMovesTurn), not the highlight */
+                PLAT_PAD q1 = g_pad, q2 = g_pad2;
+
+                if (CurrentTask == 6 && GamePaused == 2) {
+                    q1.left = q1.right = q2.left = q2.right = 0;
+                    q1.up = q1.down = q2.up = q2.down = 0;
+                    k1.dir = k2.dir = 0;
+                }
+                if (pad_nav_end(&q1, &q2, &k1, &k2, &tx, &ty, &who)
                     && g_ktap_left == 0) {
                     g_ktap_x = tx;      /* a finger's tap, there */
                     g_ktap_y = ty;

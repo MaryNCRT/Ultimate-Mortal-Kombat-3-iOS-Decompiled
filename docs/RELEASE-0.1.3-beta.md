@@ -11,7 +11,8 @@
 - In **VS (duel)** each player has a highlight (player two's is green) and both choose at once: player one with the first pad or the keyboard, player two with the second pad or their own keys.
 - **Right stick** left or right: the fighter's colour (palette) on the select screen.
 - **Any pad button** skips the fight intro. On the tower the stick moves between the four, NOVICE first, and only cross chooses.
-- In the **moves list** cross is NEXT and circle closes it.
+- In the **moves list** L1 / R1 or left / right (Q / E, A / D) turn the pages, and select or circle close it; with the on-screen controls on, a BACK in the left corner goes to the previous page.
+- On the **continue screen** circle (or Backspace) is GAME OVER, back to the main menu.
 - With the on-screen controls off, **ACCEPT and BACK** show at the bottom right with your pad's buttons (or Enter and Backspace), and inside the OK and BACK buttons.
 
 ### Button setup with the on-screen controls off

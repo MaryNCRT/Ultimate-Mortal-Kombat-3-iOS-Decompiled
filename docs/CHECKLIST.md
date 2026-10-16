@@ -138,8 +138,10 @@ only once Mary has checked it in game. What is known so far is under each one.
 - [x] **Button setup in the game's frame** with the on-screen controls off
   (Options, pause menu); KEYBOARD and GAMEPAD on pages of their own.
 - [x] **The launcher closes when the game opens.**
-- [ ] **Moves list with the on-screen controls:** a BACK in the left corner
-  to the previous page; Mary will say how it goes with a pad.
+- [x] **Moves list:** a BACK in the left corner to the previous page (on-screen
+  controls); with the pad or keys L1 / R1, left / right, Q / E, A / D turn
+  the pages, select or circle close it, no NEXT. Checked by Mary.
+- [x] **Continue screen:** circle / Backspace is GAME OVER. Checked by Mary.
 
 ## Fight
 
