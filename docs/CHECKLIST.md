@@ -140,6 +140,15 @@ only once Mary has checked it in game. What is known so far is under each one.
 - [ ] **Player profile** in the launcher and the game, badge on both.
 - [x] **Continue screens on 16:9 and 21:9** with Mary's pictures.
 
+## 0.1.4 beta
+
+- [x] **64-bit build** (`umk3-game64.exe`), compiled and played from the
+  launcher (WINDOWS: 32 / 64 BITS).
+- [ ] **Winning in Arcade no longer closes the game** (scene handles NULL);
+  to confirm by Mary.
+- [ ] **Classic Sub-Zero's elbow combo:** he no longer vanishes; Mary sees
+  it still not quite right.
+
 ## Pad and keyboard in the menus (0.1.3 beta)
 
 - [x] **The game's menus with the pad or the keyboard**: main menu, pages,

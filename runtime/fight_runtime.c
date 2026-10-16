@@ -56,10 +56,10 @@ char      *Playback = (char *)umk3_common_Playback;  /* slot 0x00165660 -> 0x003
 MK3THREAD *mytc     = (MK3THREAD *)umk3_common_mytc; /* slot 0x0016566c -> 0x0038ef3c */
 
 /* other.c: `table = flag ? SwitchTableA : SwitchTableB` */
-void      **SwitchTableA   = (void **)switch_close_jumps; /* slot 0x000f3204 -> 0x0016eb04 */
-void      **SwitchTableB   = (void **)switch_open_jumps;  /* slot 0x000f3210 -> 0x0016edd4 */
+void *P32  *SwitchTableA   = (void *P32 *)switch_close_jumps; /* slot 0x000f3204 -> 0x0016eb04 */
+void *P32  *SwitchTableB   = (void *P32 *)switch_open_jumps;  /* slot 0x000f3210 -> 0x0016edd4 */
 /* other.c walks the list from the head word itself, as if it were a node */
-MK3THREAD **ThreadListHead = (MK3THREAD **)TList;         /* slot 0x000f3220 -> 0x0038ed48 */
+MK3THREAD *P32 *ThreadListHead = (MK3THREAD *P32 *)TList;         /* slot 0x000f3220 -> 0x0038ed48 */
 
 /* mkstat.c flushes it between uppercut frames; the slot at 0x000f3180 is the
  * non-lazy pointer to the C library's `___stdoutp`. */

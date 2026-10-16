@@ -1,6 +1,10 @@
 # Builds umk3-game.exe from the player's own UMK3 .ipa.
 #
-#   powershell -ExecutionPolicy Bypass -File launcher\build_game.ps1 -Ipa <file.ipa>
+#   powershell -ExecutionPolicy Bypass -File launcher\build_game.ps1 -Ipa <file.ipa> [-Arch x86|x64]
+#
+# -Arch x86 (the default) builds umk3-game.exe, 32 bits; -Arch x64 builds
+# umk3-game64.exe, 64 bits. Both can sit side by side; the launcher's
+# arch= in umk3.ini picks which one it builds and plays.
 #
 # UMK3-Launcher.exe runs this when the player picks an .ipa and presses
 # "Compilar". Everything lands in the folder above launcher\ (the release or
@@ -16,7 +20,8 @@
 # extracted from the player's binary by tools/logic_tables.py, level_info.py
 # and seq_data.py at this step, exactly as the CMake build does.
 param(
-    [Parameter(Mandatory = $true)][string]$Ipa
+    [Parameter(Mandatory = $true)][string]$Ipa,
+    [ValidateSet('x86', 'x64')][string]$Arch = 'x86'
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'   # Invoke-WebRequest is 10x slower with it
@@ -69,7 +74,12 @@ New-Item -ItemType Directory -Force -Path $Tools, $Work | Out-Null
 # --- 1. The toolchain -------------------------------------------------------
 Step "1/5 Compilador (llvm-mingw) y Python"
 $llvm = Join-Path $Tools $LlvmName
-$cc   = Join-Path $llvm 'bin\i686-w64-mingw32-clang.exe'
+# The 64-bit build (Port, not in the binary): the game's structures keep
+# their 32-bit pointer words, so it is built with UMK3_LOW32, every pointer
+# the game stores is a __ptr32 (P32 in runtime/savestate.h), and the exe
+# and its heaps live below 2 GB.
+$triple = if ($Arch -eq 'x64') { 'x86_64-w64-mingw32' } else { 'i686-w64-mingw32' }
+$cc   = Join-Path $llvm "bin\$triple-clang.exe"
 if (-not (Test-Path $cc)) {
     $z = Join-Path $Tools "$LlvmName.zip"
     Fetch $LlvmUrl $z 'SHA256' $LlvmSha
@@ -111,11 +121,20 @@ if ($LASTEXITCODE -ne 0) { Fail "logic_tables.py" }
 if ($LASTEXITCODE -ne 0) { Fail "level_info.py" }
 & $py -I (Join-Path $t 'seq_data.py') $bin (Join-Path $Work 'seq_data.c')
 if ($LASTEXITCODE -ne 0) { Fail "seq_data.py" }
+# x64: runtime\gamecode_globals.c with its __ptr32 initialisers moved into
+# umk3_globals_fixup() (clang cannot initialise them statically).
+$globals64 = Join-Path $Work 'gamecode_globals64.c'
+if ($Arch -eq 'x64') {
+    & $py -I (Join-Path $t 'low32_static.py') (Join-Path $Root 'runtime\gamecode_globals.h') -- `
+        (Join-Path $Root 'runtime\gamecode_globals.c') $globals64 umk3_globals_fixup | Out-Null
+    if ($LASTEXITCODE -ne 0) { Fail "low32_static.py" }
+}
 
 # --- 4. Compile -------------------------------------------------------------
 # The same sources, defines and libraries as the umk3-game target in
 # CMakeLists.txt; keep the two in step.
-Step "4/5 Compilando umk3-game.exe (tarda unos minutos)"
+$exeName = if ($Arch -eq 'x64') { 'umk3-game64.exe' } else { 'umk3-game.exe' }
+Step "4/5 Compilando $exeName (tarda unos minutos)"
 $src = @(
     'runtime\game_main.c', 'runtime\draw_gl.c', 'runtime\gamecode_globals.c',
     'runtime\gamecode_stubs.c', 'runtime\lime_menu.c', 'runtime\lime_platform.c',
@@ -129,12 +148,21 @@ foreach ($d in 'decomp\gamecode', 'decomp\lime', 'runtime\lime', 'decomp\gamecod
     $src += Get-ChildItem -Path (Join-Path $Root $d) -Filter *.c | ForEach-Object { $_.FullName }
 }
 $src += 'logic_tables.c', 'level_info.c', 'seq_data.c' | ForEach-Object { Join-Path $Work $_ }
+if ($Arch -eq 'x64') {
+    $g = Join-Path $Root 'runtime\gamecode_globals.c'
+    $src = $src | ForEach-Object { if ($_ -eq $g) { $globals64 } else { $_ } }
+}
 
-$objdir = Join-Path $Work 'obj'
+$objdir = Join-Path $Work $(if ($Arch -eq 'x64') { 'obj64' } else { 'obj' })
 New-Item -ItemType Directory -Force -Path $objdir | Out-Null
 $flags = @('-std=gnu11', '-w', '-DUMK3_HAVE_MK3', '-DUMK3_REAL_GL', '-DUMK3_SHELL',
            '-I', (Join-Path $Root 'runtime'), '-I', (Join-Path $Root 'decomp\lime'),
            '-I', (Join-Path $Root 'decomp\gamecode\logic'))
+if ($Arch -eq 'x64') {
+    # -fno-jump-tables: clang cannot build its lookup tables of __ptr32
+    # function pointers
+    $flags += '-DUMK3_LOW32', '-fms-extensions', '-O2', '-fno-strict-aliasing', '-fno-jump-tables'
+}
 function Quote($s) { '"' + ($s -replace '\\', '/') + '"' }
 # Save states (runtime/savestate.h): every file sees the header; the game's
 # own files -- decomp\, runtime\lime\, the generated tables and the runtime
@@ -176,17 +204,22 @@ if ($bad) { Fail "fallo la compilacion de $(@($bad).Count) archivo(s); mira los 
 
 # The game's icon (runtime\umk3_game.rc), linked in as one more object.
 $res = Join-Path $objdir 'umk3_game.res.o'
-& (Join-Path $llvm 'bin\i686-w64-mingw32-windres.exe') (Join-Path $Root 'runtime\umk3_game.rc') -O coff -o $res
+& (Join-Path $llvm "bin\$triple-windres.exe") (Join-Path $Root 'runtime\umk3_game.rc') -O coff -o $res
 if ($LASTEXITCODE -ne 0) { Fail "umk3_game.rc" }
 $objs += $res
 
-$exe = Join-Path $Root 'umk3-game.exe'
+$exe = Join-Path $Root $exeName
 $rsp = Join-Path $Work 'link.rsp'
 # --large-address-aware: a 32-bit exe may use 4 GB instead of 2 on 64-bit
 # Windows. The heap fills from the bottom, so addresses above 2 GB only come
 # when the lower 2 GB are full -- the case that would otherwise run out.
-(($objs | ForEach-Object { Quote $_ }) + @('-o', (Quote $exe), '-mwindows',
-    '-Wl,--large-address-aware', '-lopengl32', '-lgdi32', '-lwinmm', '-lmsacm32', '-lm')) -join "`n" |
+# x64: the exe at 0x400000, no ASLR, so the code and its data sit below
+# 2 GB where a 32-bit pointer word reaches them.
+$ldArch = if ($Arch -eq 'x64') {
+    @('-Wl,--image-base,0x400000', '-Wl,--disable-dynamicbase', '-Wl,--disable-high-entropy-va')
+} else { @('-Wl,--large-address-aware') }
+(($objs | ForEach-Object { Quote $_ }) + @('-o', (Quote $exe), '-mwindows') + $ldArch +
+    @('-lopengl32', '-lgdi32', '-lwinmm', '-lmsacm32', '-lm')) -join "`n" |
     Set-Content -Encoding ascii $rsp
 if (Test-Path $exe) { Remove-Item $exe -Force }
 & $cc "@$rsp"

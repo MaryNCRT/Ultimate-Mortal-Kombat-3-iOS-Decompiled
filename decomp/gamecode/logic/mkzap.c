@@ -2311,7 +2311,7 @@ void make_dragon_explode(MK3OBJ *obj)
  */
 void q_yes(MK3OBJ *obj);
 void q_no(MK3OBJ *obj);
-extern MK3THREAD *TList;                         /* 0x0038ed48 */
+extern MK3THREAD *P32 TList;                         /* 0x0038ed48 */
 
 void is_jade_protected(MK3OBJ *obj)
 {
@@ -2320,7 +2320,7 @@ void is_jade_protected(MK3OBJ *obj)
     if (((MK3OBJ *)(void *)(uintptr_t)obj->field00->him)->field24 != 0x10)
         goto no;                                 /* not Jade */
 
-    for (th = TList; th != NULL; th = *(MK3THREAD **)(void *)th) {
+    for (th = TList; th != NULL; th = *(MK3THREAD *P32 *)(void *)th) {
         if (th->pid != 0x11f)
             continue;
 

@@ -1,4 +1,4 @@
-ULTIMATE MORTAL KOMBAT 3 - PORT DE PC - 0.1.3 BETA
+ULTIMATE MORTAL KOMBAT 3 - PORT DE PC - 0.1.4 BETA
 ===================================================
 
 Port nativo para Windows de la version de iOS (1.2.59), hecho por
@@ -111,6 +111,17 @@ NUEVO EN 0.0.9
   memoria). Una pelea del debug ya no deja sus luchadores, escenario ni
   paletas para los demas modos.
 - Launcher: botones mas pequenos.
+
+NUEVO EN 0.1.4 BETA
+- VERSION DE 64 BITS: en el launcher, WINDOWS elige 32 BITS
+  (umk3-game.exe) o 64 BITS (umk3-game64.exe). Se pueden tener las dos;
+  con las dos compiladas, VERSION A ABRIR elige cual abre JUGAR.
+- Ganar en Arcade ya no cierra el juego (con cualquier luchador).
+- Sub-Zero clasico ya no desaparece en su combo del codo.
+- Editor de controles tactiles sin limites: mover, tamano y opacidad de
+  cada boton y del joystick; RESET los devuelve.
+- El menu de pausa llega al borde derecho en 16:9 y 21:9.
+- UMK3 LAUNCHER con su icono y el logo; el juego tiene icono.
 
 NUEVO EN 0.1.3 BETA (la primera beta)
 - MODO ENTRENAMIENTO (JUGAR, bajo DUELO): eliges tu luchador y el rival; la
@@ -300,7 +311,8 @@ ARREGLADO EN 0.0.2
 - La melena de Sindel aparece, con su textura.
 - El joystick en pantalla se mueve.
 
-ERRORES CONOCIDOS EN 0.1.3
+ERRORES CONOCIDOS EN 0.1.4
+- El combo del codo de Sub-Zero clasico aun no se ve del todo bien.
 - Algunos objetos aparte de los luchadores aun pueden no verse.
 - Faltan animaciones en algunos fatalities (el de Sonya no se ve bien).
 - Siguen apareciendo errores de texturas en algunos escenarios y
@@ -333,7 +345,8 @@ picker on the select screen ("< COLOR 1 >", saved), no input lag, crash
 reports, the Kombat Kode loading tip fixed, debug TOOLS (hitboxes, fight
 speed, save states), smaller launcher buttons. New in 0.1.0b: the iPad build's menus on 4:3,
 PLAY > DUELO (two players, one PC), free gamepad binding, a tabbed debug
-menu, wide-screen fixes. New in 0.1.3 beta: the game's menus with the pad or
+menu, wide-screen fixes. New in 0.1.4 beta: a 64-bit build (WINDOWS in the launcher), winning in
+Arcade no longer closes the game. New in 0.1.3 beta: the game's menus with the pad or
 the keyboard, a console-style launcher that closes when the game opens, key
 and button pictures (Free Input Prompts by Julio Cacko, CC0), player two's
 pause, moves list and accept keys. New in 0.1.2: an in-game settings menu (Esc:

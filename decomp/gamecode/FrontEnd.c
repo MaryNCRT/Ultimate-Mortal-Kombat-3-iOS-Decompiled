@@ -149,6 +149,8 @@ extern int PortHideControls;            /* GameCode.c: hide_controls=1 */
 int  PortMovesTurn(void);                /* game_main.c, port */
 int  PortPagesExit(void);
 void PortPagesLine(char *line, int n, int sel);
+void PortBackLine(char *line, int n);
+int PortPagesExit(void);
 void PortNavDrawLine(const char *s, int right);
 void set_menu_open_controls(void);      /* runtime/settings_menu.c */
 int PortNavHover;
@@ -718,13 +720,13 @@ typedef struct PLAYERDEF {
     float       height;         /* 0x0c  added to Z in ArcadePosTo3dPos */
     float       renderOffsetX;  /* 0x10  glTranslatef x, times +/-2.15 */
     float       renderOffsetZ;  /* 0x14  glTranslatef z, times 0.65 */
-    const char *lighting;       /* 0x18  "KANO" */
-    const char *frameList;      /* 0x1c  "kanoframes.txt" */
-    const char *bones;          /* 0x20  "KANO_STANDARD.bones" */
-    const char *skin;           /* 0x24  "KANO_STANDARD.skin" */
-    const char *skinAnim;       /* 0x28  "KANO_STANDARD.skinanim" */
-    const char *texBase;        /* 0x2c  "KANO" */
-    const char *scene;          /* 0x30  "KANO_STANDARD.scene" */
+    const char *P32 lighting;       /* 0x18  "KANO" */
+    const char *P32 frameList;      /* 0x1c  "kanoframes.txt" */
+    const char *P32 bones;          /* 0x20  "KANO_STANDARD.bones" */
+    const char *P32 skin;           /* 0x24  "KANO_STANDARD.skin" */
+    const char *P32 skinAnim;       /* 0x28  "KANO_STANDARD.skinanim" */
+    const char *P32 texBase;        /* 0x2c  "KANO" */
+    const char *P32 scene;          /* 0x30  "KANO_STANDARD.scene" */
 } PLAYERDEF;
 
 /* 52 bytes an entry IN THE IMAGE, where a pointer is four bytes. Kept because
@@ -5074,7 +5076,7 @@ void RenderFECharacters(long slot0, long slot1)
     for (i = 0; i < 2; i++) {
         char  *ch;
         const PLAYERDEF *def;
-        void **anim;
+        void *P32 *anim;
         float  scale;
         long   which;
 
@@ -5138,19 +5140,19 @@ void RenderFECharacters(long slot0, long slot1)
         *(float *)(ch + 0x5dc) = 0.65f;
         *(float *)(ch + 0x5e0) = 0.7f;
 
-        anim = *(void ***)(ch + 4);
-        *(void **)(ch + 0x528) = anim[0x14 / 4];
+        anim = *(void *P32 *P32 *)(ch + 4);
+        *(void *P32 *)(ch + 0x528) = anim[0x14 / 4];
         *(long *)(ch + 0x52c) = 0;
 
         if (GameMode == 1) {
             if (slot0 == slot1 && (isParent() ? i != 0 : i == 0))
-                *(void **)(ch + 0x528) = anim[0x24 / 4];
+                *(void *P32 *)(ch + 0x528) = anim[0x24 / 4];
         } else {
             if (i != 0 && slot0 == slot1)
-                *(void **)(ch + 0x528) = anim[0x24 / 4];
+                *(void *P32 *)(ch + 0x528) = anim[0x24 / 4];
             /* Port, not in the binary: the select screen's colour picker.
              * With nothing picked it gives the same answer as above. */
-            *(void **)(ch + 0x528) =
+            *(void *P32 *)(ch + 0x528) =
                 anim[PortPaletteOf(i, slot0, slot1) == 2 ? 0x24 / 4 : 0x14 / 4];
         }
 
@@ -6159,6 +6161,14 @@ void FE_Task_Karnage_Summary(void)
                                  1, FE_WidthScale, fontcol);
             }
         }
+    } else if (PortHideControls) {
+        /* Port, not in the binary: with the on-screen controls off, no
+         * EXIT button, only BACK (circle or Backspace) in the corner */
+        char line[300];
+
+        exiting = PortPagesExit() ? 0 : -1;
+        PortBackLine(line, sizeof line);
+        PortNavDrawLine(line, 1);
     } else {
         exiting = DrawButtonNew(&BUTTON_EXITBIG, 0x1a7, 0x130, 1) ? 0 : -1;
 
@@ -6883,6 +6893,13 @@ void FE_Task_Survival_Summary(void)
                                  1, FE_WidthScale, fontcol);
             }
         }
+    } else if (PortHideControls) {
+        /* Port, not in the binary: as the Karnage summary, BACK alone */
+        char line[300];
+
+        exiting = PortPagesExit() ? 0 : -1;
+        PortBackLine(line, sizeof line);
+        PortNavDrawLine(line, 1);
     } else {
         ready = 1;
 

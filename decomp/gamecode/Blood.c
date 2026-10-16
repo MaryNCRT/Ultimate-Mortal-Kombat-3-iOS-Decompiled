@@ -517,13 +517,13 @@ typedef struct PLAYERDEF {
     float       height;         /* 0x0c  added to Z in ArcadePosTo3dPos */
     float       renderOffsetX;  /* 0x10  glTranslatef x, times +/-2.15 */
     float       renderOffsetZ;  /* 0x14  glTranslatef z, times 0.65 */
-    const char *lighting;       /* 0x18  "KANO" */
-    const char *frameList;      /* 0x1c  "kanoframes.txt" */
-    const char *bones;          /* 0x20  "KANO_STANDARD.bones" */
-    const char *skin;           /* 0x24  "KANO_STANDARD.skin" */
-    const char *skinAnim;       /* 0x28  "KANO_STANDARD.skinanim" */
-    const char *texBase;        /* 0x2c  "KANO" */
-    const char *scene;          /* 0x30  "KANO_STANDARD.scene" */
+    const char *P32 lighting;       /* 0x18  "KANO" */
+    const char *P32 frameList;      /* 0x1c  "kanoframes.txt" */
+    const char *P32 bones;          /* 0x20  "KANO_STANDARD.bones" */
+    const char *P32 skin;           /* 0x24  "KANO_STANDARD.skin" */
+    const char *P32 skinAnim;       /* 0x28  "KANO_STANDARD.skinanim" */
+    const char *P32 texBase;        /* 0x2c  "KANO" */
+    const char *P32 scene;          /* 0x30  "KANO_STANDARD.scene" */
 } PLAYERDEF;
 
 /* 52 bytes an entry IN THE IMAGE, where a pointer is four bytes. Kept because
@@ -701,7 +701,7 @@ void AddNewGameEvents(void)
                 GAMEEVENT *ge  = GetNewEvent(ev->subtype);
                 Mk3Obj_t  *obj = (Mk3Obj_t *)((char *)GameObjects + p * 16);
 
-                *(Mk3Obj_t **)((char *)ge + 8)  = obj;
+                *(Mk3Obj_t *P32 *)((char *)ge + 8)  = obj;
                 ArcadePosTo3dPos(obj, (float *)((char *)ge + 0xc), 0);
                 *(long *)((char *)ge + 0x24) = 0;
             }
@@ -951,7 +951,7 @@ void AddNewGameEvents(void)
                 {
                     char *pl = Players + sceneSide * PLAYER_STRIDE;
                     LIME_TriggerEventsFromScene(
-                        *(void **)(*(char **)(pl + 4) + 0x10),
+                        *(void *P32 *)(*(char *P32 *)(pl + 4) + 0x10),
                         FrameRemapTable[0xd5a4 / 4],
                         (const float *)(pl + PLAYER_MATRIX),
                         *(long *)(pl + 0x540),

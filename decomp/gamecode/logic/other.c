@@ -2513,8 +2513,8 @@ void frame_a9(MK3OBJ *obj)
  * index and `borrow_ochar_sound` lends: a character number.
  * ======================================================================== */
 
-extern uint32_t *character_anitabs1[];  /* 0x0016ee34 */
-extern uint32_t *character_anitabs2[];  /* 0x0016ee9c */
+extern uint32_t *P32 character_anitabs1[];  /* 0x0016ee34 */
+extern uint32_t *P32 character_anitabs2[];  /* 0x0016ee9c */
 
 void get_char_ani(MK3OBJ *obj)
 {
@@ -2744,7 +2744,7 @@ void ochar_sound_n(MK3OBJ *obj, uint32_t n)
  * The list head is not named here: one read of a slot is not a global worth
  * declaring, and nothing else in this file touches it.
  */
-extern MK3THREAD **ThreadListHead;      /* pointer slot -> 0x000f3220 */
+extern MK3THREAD *P32 *ThreadListHead;      /* pointer slot -> 0x000f3220 */
 
 MK3THREAD *FindThread(uint32_t pid)
 {
@@ -2996,7 +2996,7 @@ void find_part_a14(MK3OBJ *obj)
  * written twice and the first value is not read in between -- kept, because
  * the store is in the instruction stream.
  */
-extern uint32_t *strike_tables[];       /* 0x00169fbc */
+extern uint32_t *P32 strike_tables[];       /* 0x00169fbc */
 
 void get_char_stk(MK3OBJ *obj)
 {
@@ -6903,19 +6903,19 @@ long t_print_timeout_msg(MK3THREAD *thread)
  * be relying on not to exist.
  */
 typedef struct SWITCHFRAME {
-    char    *pp;                /* 0x00  &Pp[player] */
+    char    *P32 pp;                /* 0x00  &Pp[player] */
     uint32_t uninitialised;     /* 0x04  never written -- see above */
-    char    *grobj;             /* 0x08  &GrObj[player] */
+    char    *P32 grobj;             /* 0x08  &GrObj[player] */
     uint8_t  rest[0x6c - 12];   /* the frame is 0x6c bytes; nothing fills it */
 } SWITCHFRAME;
 
-extern void **SwitchTableA;             /* slot 0x000f3204 */
-extern void **SwitchTableB;             /* slot 0x000f3210 */
+extern void *P32 *SwitchTableA;             /* slot 0x000f3204 */
+extern void *P32 *SwitchTableB;             /* slot 0x000f3210 */
 
 void DoSwitchJump(long flag, uint32_t player, uint32_t index)
 {
-    void **table = flag ? SwitchTableA : SwitchTableB;
-    void **row = (void **)table[index];
+    void *P32 *table = flag ? SwitchTableA : SwitchTableB;
+    void *P32 *row = (void *P32 *)table[index];
     SWITCHFRAME frame;
     uint32_t c;
     void (*fn)(SWITCHFRAME *, char *);
@@ -6927,7 +6927,7 @@ void DoSwitchJump(long flag, uint32_t player, uint32_t index)
     frame.grobj = GrObj + player * GROBJ_STRIDE;
 
     c = *(const uint32_t *)
-        (*(char **)(Plyr + player * PLYR_STRIDE + 8) + 0x24);
+        (*(char *P32 *)(Plyr + player * PLYR_STRIDE + 8) + 0x24);
 
     fn = (void (*)(SWITCHFRAME *, char *))row[c];
     if (fn == NULL)
@@ -10135,7 +10135,7 @@ long t_one_on_one(MK3THREAD *thread)
  * only when `Pp[who].field7e` is zero. That is a fifth place a handler comes
  * out of data.
  */
-extern uint16_t *last_switch_ram[];     /* 0x0016f50c */
+extern uint16_t *P32 last_switch_ram[];     /* 0x0016f50c */
 long t_do_shake(MK3THREAD *thread);
 long t_do_fatality_1(MK3THREAD *thread);
 long t_do_fatality_2(MK3THREAD *thread);
@@ -10153,7 +10153,7 @@ void QueueAndJump(const uint32_t *e, uint32_t unused)
     r = (uint16_t)SwitchQueue((uint16_t)id, (SWITCHQUEUE *)(uintptr_t)e[1]);
 
     if (e[3] != 0) {
-        MK3THREADFUNC *h = *(MK3THREADFUNC **)(plyr + 0x60);
+        MK3THREADFUNC *h = *(MK3THREADFUNC *P32 *)(plyr + 0x60);
 
 
         if (h != NULL && h[id] != NULL &&
@@ -10176,7 +10176,7 @@ void QueueAndJump(const uint32_t *e, uint32_t unused)
         last_switch_ram[id * 2 + 1][who] = r;
     }
 
-    if (*(const int16_t *)((char *)(*(MK3OBJPROC **)plyr) + 0x7c) != 0) {
+    if (*(const int16_t *)((char *)(*(MK3OBJPROC *P32 *)plyr) + 0x7c) != 0) {
         if (id == 0)                            /* the four-button scheme */
             DoSwitchJump((long)e[3], who, 1);
         else if (id == 3)
@@ -10293,7 +10293,7 @@ static MK3THREAD *mk3_clone(MK3OBJ *owner, MK3THREAD *th,
     *(uint32_t *)(plyr + 0x48) = owner->field48;
 
     if (how & MK3_CLONE_CLEAR_ANI)
-        (*(MK3OBJ **)(plyr + 8))->field2c = 0xffffffffu;    /* nothing yet */
+        (*(MK3OBJ *P32 *)(plyr + 8))->field2c = 0xffffffffu;    /* nothing yet */
 
     return th;
 }
@@ -11665,18 +11665,18 @@ void init_players(uint32_t a, uint32_t b)
         char *plyr_o = Plyr + (1 - n) * PLYR_STRIDE;
         char *pp     = Pp + n * PP_STRIDE;
 
-        *(char **)(plyr + 8)    = grobj;
-        *(char **)(plyr)        = pp;
+        *(char *P32 *)(plyr + 8)    = grobj;
+        *(char *P32 *)(plyr)        = pp;
         *(uint32_t *)(pp + 8)   = n;
-        *(char **)(plyr + 0x3c) = *(char **)(plyr + 8);
-        *(char **)(pp + 4)      = other;        /* the other fighter */
-        *(char **)(pp)          = plyr_o;
+        *(char *P32 *)(plyr + 0x3c) = *(char *P32 *)(plyr + 8);
+        *(char *P32 *)(pp + 4)      = other;        /* the other fighter */
+        *(char *P32 *)(pp)          = plyr_o;
 
         if (n == 0) {
             MK3_SET_FIELD0E((MK3OBJ *)grobj, 0x60);
             ground_ochar_ob((MK3OBJ *)grobj);
 
-            *(uint32_t *)(*(char **)plyr + 0x40) =
+            *(uint32_t *)(*(char *P32 *)plyr + 0x40) =
                 (uint16_t)MK3_FIELD12((MK3OBJ *)grobj);
             *(uint32_t *)(plyr + 0x40) = 0;
 
@@ -11685,7 +11685,7 @@ void init_players(uint32_t a, uint32_t b)
             MK3_SET_FIELD0E((MK3OBJ *)grobj, 0x12f);
             ground_ochar_ob((MK3OBJ *)grobj);
 
-            *(uint32_t *)(*(char **)plyr + 0x40) =
+            *(uint32_t *)(*(char *P32 *)plyr + 0x40) =
                 (uint16_t)MK3_FIELD12((MK3OBJ *)grobj);
             *(uint32_t *)(plyr + 0x40) = 0;
 

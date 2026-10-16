@@ -4,6 +4,8 @@
  *     width=960      height=640      fullscreen=0   borderless=0
  *     hide_controls=1   (no on-screen stick and buttons)
  *     texture_quality=iphone|ipad|max
+ *     arch=x86|x64   (the launcher's own: which game it builds and plays,
+ *       umk3-game.exe, 32 bits, or umk3-game64.exe, 64 bits)
  *     ui_size=iphone|ipad   (ipad: the game lays out on 960x640, a smaller HUD)
  *     antialiasing=0|2|4|8|16   aspect=3:2|4:3|16:9|21:9 (3:2 the iPhone's, 4:3 the iPad's;
  *       wider: the fight fills it, the menus stay 3:2)
@@ -136,6 +138,7 @@ function defaultConfig() {
         borderless: false,           /* fullscreen without a border, at the desktop's mode */
         antialiasing: 0,             /* 0, 2, 4, 8 or 16 samples */
         uiSize: 'iphone',            /* ui_size=: iphone (480x320) or ipad (960x640: HUD at 1.75 of 2) */
+        arch: 'x86',                 /* arch=: x86 (umk3-game.exe) or x64 (umk3-game64.exe) */
         textureQuality: 'iphone',    /* texture_quality=: iphone (the _LOW sheets), ipad (full sheets) or max (full sheets, PNG first, mipmaps) */
         aspect: '3:2',               /* aspect=: 3:2, 4:3, 16:9 or 21:9 */
         widescreen: false,           /* native: widen the 3D view, no stretch */
@@ -241,6 +244,8 @@ function load(p) {
                 ? val.toLowerCase() : 'auto';
         } else if (key === 'ui_size') {
             cfg.uiSize = /^(iphone|ipad)$/i.test(val) ? val.toLowerCase() : 'iphone';
+        } else if (key === 'arch') {
+            cfg.arch = /^x64$/i.test(val) ? 'x64' : 'x86';
         } else if (key === 'texture_quality') {
             cfg.textureQuality = /^(iphone|ipad|max)$/i.test(val) ? val.toLowerCase() : 'iphone';
         } else if (key === 'pad_dbg_menu') {
@@ -292,6 +297,7 @@ function save(p, cfg) {
         'hide_controls=' + (cfg.hideControls ? 1 : 0),
         'buttons=' + (cfg.buttons === 6 ? 6 : 5),
         'pad=' + (cfg.pad || 'auto'),
+        'arch=' + (cfg.arch === 'x64' ? 'x64' : 'x86'),
         'texture_quality=' + (cfg.textureQuality || 'iphone'),
         'ui_size=' + (cfg.uiSize || 'iphone'),
         'pad_dbg_menu=' + (cfg.padDbgMenu === undefined ? 'L3+R3' : cfg.padDbgMenu),
@@ -331,17 +337,22 @@ function save(p, cfg) {
     fs.writeFileSync(p, lines.join('\n') + '\n', 'utf8');
 }
 
+/* The game's exe for arch= (x86 or x64). */
+function gameExe(arch) {
+    return arch === 'x64' ? 'umk3-game64.exe' : 'umk3-game.exe';
+}
+
 /* When the game was last compiled: the exe's time, or null. */
-function gameBuiltAt(root) {
+function gameBuiltAt(root, arch) {
     try {
-        return fs.statSync(path.join(root, 'umk3-game.exe')).mtimeMs;
+        return fs.statSync(path.join(root, gameExe(arch))).mtimeMs;
     } catch (err) {
         return null;
     }
 }
 
-function gameReady(root) {
-    const exe = path.join(root, 'umk3-game.exe');
+function gameReady(root, arch) {
+    const exe = path.join(root, gameExe(arch));
     const plist = path.join(root, 'res', 'Info.plist');
     return fs.existsSync(exe) && fs.existsSync(plist);
 }
@@ -349,4 +360,4 @@ function gameReady(root) {
 module.exports = { RES, LANGS, KEY_NAMES, KEY_DEFAULTS, KEY5_NAMES, KEY5_DEFAULTS,
                    PAD_NAMES, PAD_DEFAULTS, PAD5_NAMES, PAD5_DEFAULTS,
                    P2_KEY_NAMES, P2_KEY_DEFAULTS, P2_KEY5_DEFAULTS, defaultConfig,
-                   load, save, gameReady, gameBuiltAt };
+                   load, save, gameExe, gameReady, gameBuiltAt };

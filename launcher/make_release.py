@@ -46,7 +46,7 @@ RUNTIME_FILES = [
 ]
 SOURCE_DIRS = ["decomp/gamecode", "decomp/gamecode/logic", "decomp/lime",
                "runtime/lime"]
-TOOLS = ["tools/logic_tables.py", "tools/logic_tables.map", "tools/macho.py",
+TOOLS = ["tools/logic_tables.py", "tools/logic_tables.map", "tools/macho.py", "tools/low32_static.py",
          "tools/level_info.py", "tools/seq_data.py"]
 LAUNCHER = ["launcher/build_game.ps1", "launcher/setup_res.ps1",
             "launcher/check_binary.py", "launcher/launcher.c",

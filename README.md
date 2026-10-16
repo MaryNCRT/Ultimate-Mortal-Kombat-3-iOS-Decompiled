@@ -26,18 +26,18 @@ You need a legally obtained copy of *Ultimate Mortal Kombat 3* for iOS (version 
 
 ---
 
-## Where the project stands — 16 October 2026 (beta 0.1.3)
+## Where the project stands — 16 October 2026 (beta 0.1.4)
 
 | | |
 |---|---|
 | **Decompiled** | ✅ **All of it.** 2,572 of 2,572 game functions have hand-written C: the LIME engine core (109), the game logic (291) and the fight engine (2,172). Nothing is left to transcribe. |
 | **Verified** | ✅ The engine core passes differential tests against the recompiled original with zero divergences. The fight engine passes a behavioural differential test file by file, with the exceptions listed in [Verification](#how-much-of-it-is-verified) — every one of them a known limit of the test harness, not a known bug. |
 | **Runs natively** | ✅ The real game runs natively on Windows (Linux/macOS from source): the front end with its 51 screens, Arcade to Shao Kahn and the treasure screen, whole fights with every finisher, sound, music and saves. How it fits together: [docs/HOW-THE-GAME-WORKS.md](docs/HOW-THE-GAME-WORKS.md). |
-| **Playable** | ✅ **Beta 0.1.3** ([release](https://github.com/MaryNCRT/Ultimate-Mortal-Kombat-3-iOS-Recomp/releases)): 100% playable. It can still have bugs, which are being fixed. You can play with the keyboard (rebindable), a gamepad (Xbox, PlayStation, Switch and others) or the mouse as the finger. The screen can be **3:2, 4:3 (the iPad's view), 16:9 or 21:9**. Texture quality goes up to uncompressed, and an iPad-size HUD is optional; 4:3 uses the iPad build's menus. PLAY > DUELO is two players on one PC, each with their own keys and gamepad; PLAY > TRAINING is a practice fight against a rival who stands still. Esc opens a settings menu in the game (graphics and controls without restarting, quit), there is a player profile (name, ID, icon) for the leaderboards to come, a debug menu (hitboxes, fight speed, save states), and the launcher updates itself. Still wrong: see *Known problems*. The fight engine's 229 data tables are extracted from the player's own binary at build time and verified against it. |
+| **Playable** | ✅ **Beta 0.1.4** ([release](https://github.com/MaryNCRT/Ultimate-Mortal-Kombat-3-iOS-Recomp/releases)): 100% playable. It can still have bugs, which are being fixed. You can play with the keyboard (rebindable), a gamepad (Xbox, PlayStation, Switch and others) or the mouse as the finger. The screen can be **3:2, 4:3 (the iPad's view), 16:9 or 21:9**. Texture quality goes up to uncompressed, and an iPad-size HUD is optional; 4:3 uses the iPad build's menus. PLAY > DUELO is two players on one PC, each with their own keys and gamepad; PLAY > TRAINING is a practice fight against a rival who stands still. Esc opens a settings menu in the game (graphics and controls without restarting, quit), there is a player profile (name, ID, icon) for the leaderboards to come, a debug menu (hitboxes, fight speed, save states), and the launcher updates itself. Still wrong: see *Known problems*. The fight engine's 229 data tables are extracted from the player's own binary at build time and verified against it. |
 
-### How to play (beta 0.1.3, Windows)
+### How to play (beta 0.1.4, Windows)
 
-**Beta 0.1.3** ([notes](docs/RELEASE-0.1.3-beta.md); earlier: [0.1.2](docs/RELEASE-0.1.2-alpha.md), [0.1.1](docs/RELEASE-0.1.1-alpha.md), [0.1.0b](docs/RELEASE-0.1.0b-alpha.md), [0.1.0](docs/RELEASE-0.1.0-alpha.md), [0.0.9](docs/RELEASE-0.0.9-alpha.md), [0.0.8](docs/RELEASE-0.0.8-alpha.md), [0.0.7b](docs/RELEASE-0.0.7b-alpha.md), [0.0.7](docs/RELEASE-0.0.7-alpha.md), [0.0.6c](docs/RELEASE-0.0.6c-alpha.md), [0.0.6b](docs/RELEASE-0.0.6b-alpha.md), [0.0.6](docs/RELEASE-0.0.6-alpha.md), [0.0.5](docs/RELEASE-0.0.5-alpha.md), [0.0.4](docs/RELEASE-0.0.4-alpha.md), [0.0.3](docs/RELEASE-0.0.3-alpha.md), [0.0.2](docs/RELEASE-0.0.2-alpha.md), [0.0.1](docs/RELEASE-0.0.1-alpha.md)).
+**Beta 0.1.4** ([notes](docs/RELEASE-0.1.4-beta.md); earlier: [0.1.3](docs/RELEASE-0.1.3-beta.md), [0.1.2](docs/RELEASE-0.1.2-alpha.md), [0.1.1](docs/RELEASE-0.1.1-alpha.md), [0.1.0b](docs/RELEASE-0.1.0b-alpha.md), [0.1.0](docs/RELEASE-0.1.0-alpha.md), [0.0.9](docs/RELEASE-0.0.9-alpha.md), [0.0.8](docs/RELEASE-0.0.8-alpha.md), [0.0.7b](docs/RELEASE-0.0.7b-alpha.md), [0.0.7](docs/RELEASE-0.0.7-alpha.md), [0.0.6c](docs/RELEASE-0.0.6c-alpha.md), [0.0.6b](docs/RELEASE-0.0.6b-alpha.md), [0.0.6](docs/RELEASE-0.0.6-alpha.md), [0.0.5](docs/RELEASE-0.0.5-alpha.md), [0.0.4](docs/RELEASE-0.0.4-alpha.md), [0.0.3](docs/RELEASE-0.0.3-alpha.md), [0.0.2](docs/RELEASE-0.0.2-alpha.md), [0.0.1](docs/RELEASE-0.0.1-alpha.md)).
 [Releases](https://github.com/MaryNCRT/Ultimate-Mortal-Kombat-3-iOS-Recomp/releases)
 has the launcher and only the sources the build needs, no game data.
 
@@ -112,14 +112,15 @@ F3 and F6-F12 are the *direct keys*; the F2 menu turns them off and on.
 - **Logs:** every session started by double-click writes `logs/umk3-<date>-<time>.log` beside the exe. It holds the task changes and loading steps.
 - **Crashes:** a crash writes `logs/crash-<date>-<time>.log` and shows it in a message box. It names the function, the stack, the task, the screen and the fighters. Attach it to an issue.
 
-### Known problems (16 October 2026, beta 0.1.3)
+### Known problems (16 October 2026, beta 0.1.4)
 
 What a player can still see. Everything fixed is in the release notes
-([0.1.3](docs/RELEASE-0.1.3-beta.md) and earlier) and in
+([0.1.4](docs/RELEASE-0.1.4-beta.md) and earlier) and in
 [docs/PROGRESS.md](docs/PROGRESS.md).
 
 | Symptom | What is known |
 |---|---|
+| Classic Sub-Zero's elbow combo does not look quite right yet. | He no longer vanishes: RPCOMBO6..9, missing from OLDSUBZEROFRAMES.bin as in the original, are drawn with his skinanim's frames 12..15 (Reptile's bones). Mary sees more to fix. |
 | Some objects besides the fighters may not show. | Scorpion's spear and the stage effects are fixed; other props to check one by one. |
 | Some fatalities lack animation (Sonya's does not show properly). | Not investigated. |
 | Texture errors on some stages and fighters (parts of Kung Lao's hat black in a fight). | Not investigated stage by stage; report each with the stage and fighter. |

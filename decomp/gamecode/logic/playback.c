@@ -53,7 +53,7 @@ typedef struct MK3PLAYBACK {
      * `Playback_Begin` is handed a word and stores it; `Playback_Update`
      * fetches halfwords through it and writes the advanced pointer back. 0 is
      * "nothing is playing", which is what `mk3_update` tests. */
-    const uint16_t *seq;
+    const uint16_t *P32 seq;
     uint16_t field04;            /* 0x04 */
     uint16_t field06;            /* 0x06 */
     uint16_t field08;            /* 0x08 */

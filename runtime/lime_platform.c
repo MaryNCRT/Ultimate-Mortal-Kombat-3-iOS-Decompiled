@@ -267,9 +267,20 @@ static unsigned char *g_low_base, *g_low_top, *g_low_committed, *g_low_end;
 static void          *g_low_free[LOW_CLASSES];
 static int            g_low_state;      /* 0 untried, 1 low, -1 malloc */
 
+#ifdef UMK3_LOW32
+void *umk3_reserve_low(size_t size);    /* savestate.c */
+#endif
+
 static void low_reserve(void)
 {
+#ifdef UMK3_LOW32
+    /* the 64-bit build: below 2 GB (longs sign-extend), beside the save
+     * states' 768 MB arena (runtime/savestate.c) */
+    static const size_t sizes[] = { 512u << 20, 256u << 20, 128u << 20 };
+#else
     static const size_t sizes[] = { 1u << 30, 512u << 20, 256u << 20 };
+    const uintptr_t lim = 0xFFFF0000u;
+#endif
     size_t s;
 
     g_low_state = -1;
@@ -280,11 +291,14 @@ static void low_reserve(void)
     if (sizeof(void *) <= 4)
         return;
     for (s = 0; s < sizeof(sizes) / sizeof(sizes[0]); s++) {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(UMK3_LOW32)
+        /* the first free range below 2 GB that holds it (savestate.c) */
+        g_low_base = (unsigned char *)umk3_reserve_low(sizes[s]);
+#elif defined(_WIN32)
         uintptr_t at;
         /* Above the first 256 MB, where the loader and the CRT sit, and
          * wholly under 4 GB. */
-        for (at = 0x10000000u; at + sizes[s] <= 0xFFFF0000u; at += 0x4000000u) {
+        for (at = 0x10000000u; at + sizes[s] <= lim; at += 0x4000000u) {
             void *p = VirtualAlloc((void *)at, sizes[s], LOW_MEM_RESERVE,
                                    LOW_PAGE_RW);
             if (p) {
@@ -309,6 +323,14 @@ static void low_reserve(void)
     }
     fprintf(stderr, "lime_heap: no memory below 4 GB; pointers stored in "
                     "32-bit slots will be truncated\n");
+}
+
+/* The region reserved now rather than at the first block: the 64-bit
+ * build calls this first thing (game_main.c). */
+void lime_low_init(void)
+{
+    if (g_low_state == 0)
+        low_reserve();
 }
 
 static int low_class(size_t total)

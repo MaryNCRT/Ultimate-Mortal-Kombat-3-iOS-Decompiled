@@ -23,8 +23,8 @@
 
 typedef struct EDITVAR {
     long        pad;                    /* 0x00 */
-    const char *label;                  /* 0x04 */
-    void       *target;                 /* 0x08 */
+    const char *P32 label;                  /* 0x04 */
+    void       *P32 target;                 /* 0x08 */
     float       lower;                  /* 0x0c */
     float       step;                   /* 0x10 */
     long        type;                   /* 0x14, 0 = heading */

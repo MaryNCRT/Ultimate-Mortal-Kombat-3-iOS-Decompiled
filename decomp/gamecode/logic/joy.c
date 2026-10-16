@@ -753,11 +753,11 @@ void stuff_buttons(MK3OBJ *obj, uint32_t table)
  * `disable_his_buttons` reaches the opponent through `obj->field00->field00`,
  * the two-hop that mk3logic.h documents as "him".
  */
-extern const void *bt_null;        /* 0x00165584 */
-extern const void *bt_angle_jump;  /* 0x001655ac */
-extern const void *bt_duck;        /* 0x001655d4 */
-extern const void *bt_stance;      /* 0x001655fc */
-extern const void *bt_jump;        /* 0x00165624 */
+extern const void *P32 bt_null;        /* 0x00165584 */
+extern const void *P32 bt_angle_jump;  /* 0x001655ac */
+extern const void *P32 bt_duck;        /* 0x001655d4 */
+extern const void *P32 bt_stance;      /* 0x001655fc */
+extern const void *P32 bt_jump;        /* 0x00165624 */
 
 void enable_all_buttons(MK3OBJ *obj)
 {
@@ -1864,7 +1864,7 @@ long t_joy_punch_mth1(struct MK3THREAD *thread);
 void group_sound(MK3OBJ *obj);
 /* rsnd_func is declared in mk3logic.h */
 
-extern const void *bt_duck;                /* 0x001655d4 */
+extern const void *P32 bt_duck;                /* 0x001655d4 */
 
 
 /* ------------------------------------------------------------ shang_begin

@@ -16,7 +16,7 @@ void limeDeleteTexture(TEXTURE *tex);
 /* Only the one field this file touches is named. */
 typedef struct PLAYER {
     uint8_t  _pad000[0x530];
-    TEXTURE *altCostume;         /* 0x530 */
+    TEXTURE *P32 altCostume;         /* 0x530 */
 } PLAYER;
 
 void DumpAltCostume(PLAYER *p);
@@ -203,22 +203,22 @@ void PreloadGameCharacters(const EPLAYER *list, long arg)
 
 typedef struct ANIMATEDCHARACTER {
     long        meshCount;      /* 0x00 */
-    void       *meshes;         /* 0x04  meshCount records of 0x58 */
+    void       *P32 meshes;         /* 0x04  meshCount records of 0x58 */
     long        id;             /* 0x08  the character, for the frame gates */
     long        field0c;        /* 0x0c  nothing reads it */
-    void       *scene;          /* 0x10 */
-    void       *diffuse;        /* 0x14 */
-    void       *diffuseIce;     /* 0x18 */
-    void       *jadeGreen;      /* 0x1c  JADE only */
-    void       *sindelHair;     /* 0x20  SINDEL only */
-    void       *diffuse2;       /* 0x24  the lite path's second sheet */
-    void       *babality;       /* 0x28  may stay NULL */
-    void       *frameList;      /* 0x2c */
-    void       *skin;           /* 0x30 */
-    void       *bones;          /* 0x34 */
-    const long *meshbase;       /* 0x38  kept so it can be freed */
-    const long *meshTable;      /* 0x3c */
-    const long *meshNames;      /* 0x40 */
+    void       *P32 scene;          /* 0x10 */
+    void       *P32 diffuse;        /* 0x14 */
+    void       *P32 diffuseIce;     /* 0x18 */
+    void       *P32 jadeGreen;      /* 0x1c  JADE only */
+    void       *P32 sindelHair;     /* 0x20  SINDEL only */
+    void       *P32 diffuse2;       /* 0x24  the lite path's second sheet */
+    void       *P32 babality;       /* 0x28  may stay NULL */
+    void       *P32 frameList;      /* 0x2c */
+    void       *P32 skin;           /* 0x30 */
+    void       *P32 bones;          /* 0x34 */
+    const long *P32 meshbase;       /* 0x38  kept so it can be freed */
+    const long *P32 meshTable;      /* 0x3c */
+    const long *P32 meshNames;      /* 0x40 */
 } ANIMATEDCHARACTER;            /* 0x44 = 68 bytes, the size limeMalloc asks */
 
 int  FreeAnimatedCharacter(ANIMATEDCHARACTER *c);
@@ -251,15 +251,15 @@ void FreeFrontEndCharacters(void)
     int i;
 
     for (i = 0; i < FE_CHARACTER_SLOTS; i++) {
-        void **slot = (void **)(TheFECharacters[i] + 4);
-        void **c = (void **)*slot;
+        void *P32 *slot = (void *P32 *)(TheFECharacters[i] + 4);
+        void *P32 *c = (void *P32 *)*slot;
 
         if (c == 0)
             continue;
 
         if (c[0x10 / 4] != 0) {
             LIME_FreeScene(c[0x10 / 4]);
-            ((void **)*slot)[0x10 / 4] = 0;
+            ((void *P32 *)*slot)[0x10 / 4] = 0;
         }
         FreeAnimatedCharacter((ANIMATEDCHARACTER *)*slot);
     }
@@ -273,13 +273,13 @@ typedef struct PLAYERDEF {
     float       height;         /* 0x0c  added to Z in ArcadePosTo3dPos */
     float       renderOffsetX;  /* 0x10  glTranslatef x, times +/-2.15 */
     float       renderOffsetZ;  /* 0x14  glTranslatef z, times 0.65 */
-    const char *lighting;       /* 0x18  "KANO" */
-    const char *frameList;      /* 0x1c  "kanoframes.txt" */
-    const char *bones;          /* 0x20  "KANO_STANDARD.bones" */
-    const char *skin;           /* 0x24  "KANO_STANDARD.skin" */
-    const char *skinAnim;       /* 0x28  "KANO_STANDARD.skinanim" */
-    const char *texBase;        /* 0x2c  "KANO" */
-    const char *scene;          /* 0x30  "KANO_STANDARD.scene" */
+    const char *P32 lighting;       /* 0x18  "KANO" */
+    const char *P32 frameList;      /* 0x1c  "kanoframes.txt" */
+    const char *P32 bones;          /* 0x20  "KANO_STANDARD.bones" */
+    const char *P32 skin;           /* 0x24  "KANO_STANDARD.skin" */
+    const char *P32 skinAnim;       /* 0x28  "KANO_STANDARD.skinanim" */
+    const char *P32 texBase;        /* 0x2c  "KANO" */
+    const char *P32 scene;          /* 0x30  "KANO_STANDARD.scene" */
 } PLAYERDEF;
 
 /* 52 bytes an entry IN THE IMAGE, where a pointer is four bytes. Kept because
@@ -377,7 +377,7 @@ void FreePreloadedCharacters(void)
         return;
 
     for (i = 0; i != NumPreloadedCharacters; i++)
-        FreeAnimatedCharacter(*(ANIMATEDCHARACTER **)
+        FreeAnimatedCharacter(*(ANIMATEDCHARACTER *P32 *)
                               (PreloadedCharacters[i] + 8));
 
     NumPreloadedCharacters = 0;
@@ -404,7 +404,7 @@ ANIMATEDCHARACTER *HavePreloadedCharacter(EPLAYER who)
 
     for (i = 0; i < NumPreloadedCharacters; i++)
         if (*(const long *)PreloadedCharacters[i] == (long)who)
-            return *(ANIMATEDCHARACTER **)(PreloadedCharacters[i] + 8);
+            return *(ANIMATEDCHARACTER *P32 *)(PreloadedCharacters[i] + 8);
 
     return 0;
 }
@@ -605,7 +605,7 @@ long DrawSkinnedMesh2(SKININFO *skin, unsigned a, unsigned b, long c,
 void GenerateFrameVertsBySkinning(ANIMATEDCHARACTER *c, long a, long b,
                                   float t, limeVECTOR3 *out)
 {
-    char **w = (char **)c;
+    char *P32 *w = (char *P32 *)c;
     const long *n = (const long *)c;
 
     GenerateMatrices(w[0x3c / 4], (BONESINFO *)w[0x34 / 4], a, b, t,
@@ -619,13 +619,13 @@ void GenerateFrameVertsBySkinning(ANIMATEDCHARACTER *c, long a, long b,
 void GenerateFrameVertsBySkinningSKIN2(ANIMATEDCHARACTER *c, long a, long b,
                                        float t, limeVECTOR3 *out)
 {
-    char **w = (char **)c;
+    char *P32 *w = (char *P32 *)c;
 
     (void)a;
     (void)b;
     (void)t;                            /* no pose: SKIN2 skips GenerateMatrices */
 
-    DrawSkinnedMesh2(*(SKININFO **)w[0x30 / 4], 0, 0, 0, out,
+    DrawSkinnedMesh2(*(SKININFO *P32 *)w[0x30 / 4], 0, 0, 0, out,
                      RenderUVs, RenderRGBs,
                      ((const long *)w[4 / 4])[2], 0);
 }
@@ -678,45 +678,45 @@ int FreeAnimatedCharacter(ANIMATEDCHARACTER *c)
     for (i = 0; n != 1 && i < n - 1; i++) {
         char *e;
 
-        e = *(char **)(base + 4) + i * ANIM_ENTRY_STRIDE;
-        if (*(void **)(e + 0x24)) limeFree(*(void **)(e + 0x24));
+        e = *(char *P32 *)(base + 4) + i * ANIM_ENTRY_STRIDE;
+        if (*(void *P32 *)(e + 0x24)) limeFree(*(void *P32 *)(e + 0x24));
 
         if (i == 0) {                   /* entry zero owns these two */
-            e = *(char **)(base + 4) + i * ANIM_ENTRY_STRIDE;
-            if (*(void **)(e + 0x1c)) limeFree(*(void **)(e + 0x1c));
-            e = *(char **)(base + 4) + i * ANIM_ENTRY_STRIDE;
-            if (*(void **)(e + 0x20)) limeFree(*(void **)(e + 0x20));
+            e = *(char *P32 *)(base + 4) + i * ANIM_ENTRY_STRIDE;
+            if (*(void *P32 *)(e + 0x1c)) limeFree(*(void *P32 *)(e + 0x1c));
+            e = *(char *P32 *)(base + 4) + i * ANIM_ENTRY_STRIDE;
+            if (*(void *P32 *)(e + 0x20)) limeFree(*(void *P32 *)(e + 0x20));
         }
 
-        e = *(char **)(base + 4) + i * ANIM_ENTRY_STRIDE;
-        if (*(void **)(e + 0x34)) limeFree(*(void **)(e + 0x34));
+        e = *(char *P32 *)(base + 4) + i * ANIM_ENTRY_STRIDE;
+        if (*(void *P32 *)(e + 0x34)) limeFree(*(void *P32 *)(e + 0x34));
 
         if (i == 0) {                   /* and these two */
-            e = *(char **)(base + 4) + i * ANIM_ENTRY_STRIDE;
-            if (*(void **)(e + 0x2c)) limeFree(*(void **)(e + 0x2c));
-            e = *(char **)(base + 4) + i * ANIM_ENTRY_STRIDE;
-            if (*(void **)(e + 0x30)) limeFree(*(void **)(e + 0x30));
+            e = *(char *P32 *)(base + 4) + i * ANIM_ENTRY_STRIDE;
+            if (*(void *P32 *)(e + 0x2c)) limeFree(*(void *P32 *)(e + 0x2c));
+            e = *(char *P32 *)(base + 4) + i * ANIM_ENTRY_STRIDE;
+            if (*(void *P32 *)(e + 0x30)) limeFree(*(void *P32 *)(e + 0x30));
         }
     }
 
-    if (*(void **)(base + 0x2c)) limeFree(*(void **)(base + 0x2c));
-    LIME_FreeSkin(*(void **)(base + 0x30));
-    LIME_FreeBones(*(void **)(base + 0x34));
-    limeFree(*(void **)(base + 0x38));
-    limeFree(*(void **)(base + 4));
+    if (*(void *P32 *)(base + 0x2c)) limeFree(*(void *P32 *)(base + 0x2c));
+    LIME_FreeSkin(*(void *P32 *)(base + 0x30));
+    LIME_FreeBones(*(void *P32 *)(base + 0x34));
+    limeFree(*(void *P32 *)(base + 0x38));
+    limeFree(*(void *P32 *)(base + 4));
 
     /* six textures, each only if present */
-    if (*(TEXTURE **)(base + 0x14)) limeDeleteTexture(*(TEXTURE **)(base + 0x14));
-    if (*(TEXTURE **)(base + 0x18)) limeDeleteTexture(*(TEXTURE **)(base + 0x18));
-    if (*(TEXTURE **)(base + 0x1c)) limeDeleteTexture(*(TEXTURE **)(base + 0x1c));
-    if (*(TEXTURE **)(base + 0x20)) limeDeleteTexture(*(TEXTURE **)(base + 0x20));
-    if (*(TEXTURE **)(base + 0x24)) limeDeleteTexture(*(TEXTURE **)(base + 0x24));
-    if (*(TEXTURE **)(base + 0x28)) limeDeleteTexture(*(TEXTURE **)(base + 0x28));
+    if (*(TEXTURE *P32 *)(base + 0x14)) limeDeleteTexture(*(TEXTURE *P32 *)(base + 0x14));
+    if (*(TEXTURE *P32 *)(base + 0x18)) limeDeleteTexture(*(TEXTURE *P32 *)(base + 0x18));
+    if (*(TEXTURE *P32 *)(base + 0x1c)) limeDeleteTexture(*(TEXTURE *P32 *)(base + 0x1c));
+    if (*(TEXTURE *P32 *)(base + 0x20)) limeDeleteTexture(*(TEXTURE *P32 *)(base + 0x20));
+    if (*(TEXTURE *P32 *)(base + 0x24)) limeDeleteTexture(*(TEXTURE *P32 *)(base + 0x24));
+    if (*(TEXTURE *P32 *)(base + 0x28)) limeDeleteTexture(*(TEXTURE *P32 *)(base + 0x28));
 
-    if (LIME_SceneExists(*(void **)(base + 0x10))) {
+    if (LIME_SceneExists(*(void *P32 *)(base + 0x10))) {
         LIME_FreeMeshSetTextures(
-            *(void **)(*(char **)(base + 0x10) + 0x80));
-        LIME_FreeScene(*(void **)(base + 0x10));
+            *(void *P32 *)(*(char *P32 *)(base + 0x10) + 0x80));
+        LIME_FreeScene(*(void *P32 *)(base + 0x10));
     }
 
     limeFree(c);
@@ -786,7 +786,7 @@ int IsAFrameVisible(ANIMATEDCHARACTER *c, long frame)
     if (f[0x18 / 4] == 1)
         return 1;
 
-    if (*(void **)(uintptr_t)(unsigned long)a[0x30 / 4] == 0)
+    if (*(void *P32 *)(uintptr_t)(unsigned long)a[0x30 / 4] == 0)
         return 0;
 
     return f[0x28 / 4] == 1;
@@ -898,7 +898,7 @@ void LoadGameCharacterCheckCache(PLAYER *p, const PLAYERDEF *def,
     const long *dw = (const long *)def;
     ANIMATEDCHARACTER *c;
 
-    printf("loading character %s...\n", ((char *const *)def)[0x18 / 4]);
+    printf("loading character %s...\n", ((char *P32 const *)def)[0x18 / 4]);
 
     if (OrigLoadedPlayers[1] != 0 &&
         dw[0] == ((const long *)OrigLoadedPlayers[1])[2]) {
@@ -1417,7 +1417,7 @@ void RenderAnimatedCharacter(char *name, ANIMATEDCHARACTER *c,
 
     /* ---- the second skin ---- */
     glPushMatrix();
-    if (*(void **)(uintptr_t)(unsigned long)a[0x30 / 4] != 0 && vis) {
+    if (*(void *P32 *)(uintptr_t)(unsigned long)a[0x30 / 4] != 0 && vis) {
         if (f[0x28 / 4] == 1 || (idxA == 365 && a[2] == 6)) {
             GenerateFrameVertsBySkinningSKIN2(c, idxA, idxB, t, RenderVerts);
             LIME_RenderMeshSingleIndexed(frame,
@@ -1775,13 +1775,13 @@ typedef struct MESHREC {
     long   field0c;                     /* 0x0c  faces, half 1 (skin2 +8) */
     uint8_t _pad10[8];                  /* 0x10 */
     long   hasCols;                     /* 0x18  half 0 drawn */
-    void  *indexes;                     /* 0x1c  animatedcharacter_indexes */
-    void  *uvs;                         /* 0x20  animatedcharacter_UV */
-    void  *cols;                        /* 0x24  animatedcharacter_cols */
+    void  *P32 indexes;                     /* 0x1c  animatedcharacter_indexes */
+    void  *P32 uvs;                         /* 0x20  animatedcharacter_UV */
+    void  *P32 cols;                        /* 0x24  animatedcharacter_cols */
     long   hasCols2;                    /* 0x28  half 1 drawn */
-    void  *indexes2;                    /* 0x2c */
-    void  *uvs2;                        /* 0x30 */
-    void  *cols2;                       /* 0x34  animatedcharacter_cols2 */
+    void  *P32 indexes2;                    /* 0x2c */
+    void  *P32 uvs2;                        /* 0x30 */
+    void  *P32 cols2;                       /* 0x34  animatedcharacter_cols2 */
     uint8_t _pad38[MESHREC_BYTES - 0x38];
 } MESHREC;
 
@@ -1940,7 +1940,7 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
 
         /* SKININFO is opaque here: +0x00 is the second skin, +0x08 the
          * face count (lime.h names it numVerts). */
-#define SKIN_NEXT(s)  (*(SKININFO **)(void *)(s))
+#define SKIN_NEXT(s)  (*(SKININFO *P32 *)(void *)(s))
 #define SKIN_FACES(s) (((const int *)(const void *)(s))[2])
         /* ---- one record a frame (armv7 0x5c530..0x5c78a) ----
          *

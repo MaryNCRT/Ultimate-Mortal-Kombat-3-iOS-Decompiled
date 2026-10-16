@@ -23,7 +23,7 @@ const STEPS = [
     { lo: 0,  hi: 18, title: '' },         /* 1 toolchain (downloads) */
     { lo: 18, hi: 24, title: 'Leyendo el binario del .ipa' },
     { lo: 24, hi: 42, title: 'Extrayendo las tablas del juego' },
-    { lo: 42, hi: 90, title: 'Compilando umk3-game.exe' },
+    { lo: 42, hi: 90, title: 'Compilando el juego' },
     { lo: 90, hi: 100, title: 'Copiando res desde el .ipa' },
 ];
 
@@ -56,12 +56,12 @@ function parseProgress(text) {
 /* Runs the compile.  Calls onData({ text, pct, step, phase }) per chunk (one
  * chunk per write line, because the script writes whole lines per Write-Host)
  * and resolves with the exit code. */
-function build(root, ipa, onData) {
+function build(root, ipa, arch, onData) {
     return new Promise(resolve => {
         const ps1 = path.join(root, 'launcher', 'build_game.ps1');
         const cmd =
             "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; " +
-            "& '" + sq(ps1) + "' -Ipa '" + sq(ipa) + "'";
+            "& '" + sq(ps1) + "' -Ipa '" + sq(ipa) + "' -Arch " + (arch === 'x64' ? 'x64' : 'x86');
         const child = spawn('powershell.exe',
             ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', cmd],
             { cwd: root, windowsHide: true });
@@ -117,8 +117,8 @@ function cancelBuild() {
     }
 }
 
-function play(root) {
-    const exe = path.join(root, 'umk3-game.exe');
+function play(root, exe) {
+    exe = path.join(root, exe);
     const child = spawn(exe, [], {
         cwd: root,
         detached: true,

@@ -15,8 +15,8 @@
 
 typedef struct TEXTURE TEXTURE;
 typedef struct TEXTURETOLOAD {
-    const char *name;
-    TEXTURE   **dest;
+    const char *P32 name;
+    TEXTURE   *P32 *P32 dest;
 } TEXTURETOLOAD;
 
 void FreeSomeTextures(TEXTURETOLOAD *list);
@@ -174,8 +174,8 @@ extern float  finishsize;               /* 0x00175184 */
  * one at the same entry of HUDTextures: [0] FIGHT, [1] FINISH HER, [2]
  * FINISH HIM -- the order HUDANIM_ttl loads them in. */
 typedef struct MESHANDTEXTURE {
-    const char *mesh;                   /* 0x00 */
-    TEXTURE   **texture;                /* 0x04 */
+    const char *P32 mesh;                   /* 0x00 */
+    TEXTURE   *P32 *P32 texture;                /* 0x04 */
 } MESHANDTEXTURE;
 
 extern MESHANDTEXTURE Fight_MeshAndTexture[];      /* 0x00174eec */
@@ -183,7 +183,7 @@ extern MESHANDTEXTURE Finishher_MeshAndTexture[];  /* 0x00174ff4 */
 extern MESHANDTEXTURE Finishim_MeshAndTexture[];   /* 0x001750fc */
 /* 0x00371464 in __common: FIGHT, FINISH HER, FINISH HIM, filled by
  * LoadSomeTextures(HUDANIM_ttl). Only the tables name it. */
-extern TEXTURE *HUDTextures[];
+extern TEXTURE *P32 HUDTextures[];
 extern TEXTURE *HSceneTextures[];       /* 0x006bc0a0, one per FIGHT mesh */
 
 extern long GameMode;                   /* 0x0014faa4 */

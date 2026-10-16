@@ -71,14 +71,14 @@ typedef struct MESHINFO {
     uint8_t     _pad08[8];       /* 0x08 */
     float       boundsRadius;    /* 0x10 */
     uint8_t     _pad14[4];       /* 0x14 */
-    LIMEVERTEX *verts;           /* 0x18  numVerts * 16 bytes */
-    uint16_t   *indices;         /* 0x1c  numFaces * 3 uint16 */
+    LIMEVERTEX *P32 verts;           /* 0x18  numVerts * 16 bytes */
+    uint16_t   *P32 indices;         /* 0x1c  numFaces * 3 uint16 */
     uint8_t     _pad20[4];       /* 0x20 */
-    uint8_t    *vertLight;       /* 0x24  un byte de luz por vertice */
+    uint8_t    *P32 vertLight;       /* 0x24  un byte de luz por vertice */
     uint8_t     _pad28[20];      /* 0x28 */
-    char       *meshName;        /* 0x3c  buffer de 64 */
-    char       *textureName;     /* 0x40  buffer de 64 */
-    TEXTURE    *texture;         /* 0x44  LIME_FreeMeshSetTextures reads this
+    char       *P32 meshName;        /* 0x3c  buffer de 64 */
+    char       *P32 textureName;     /* 0x40  buffer de 64 */
+    TEXTURE    *P32 texture;         /* 0x44  LIME_FreeMeshSetTextures reads this
                                   *       and passes it to limeDeleteTexture */
     int         field48;        /* 0x48  FlushTranspMeshList: nonzero means
                                   *       use the CALLER{}s texture, zero means
@@ -95,7 +95,7 @@ typedef struct MESHSETINFO {
     char       name[64];         /* 0x00  se copia el nombre del archivo */
     int        texturesLoaded;   /* 0x40 */
     int        numMeshes;        /* 0x44 */
-    MESHINFO **meshes;           /* 0x48  tag "meshset_meshes" */
+    MESHINFO *P32 *P32 meshes;           /* 0x48  tag "meshset_meshes" */
 } MESHSETINFO;
 
 
@@ -169,11 +169,11 @@ typedef struct BONE {
     int32_t       numChildren;   /* 0x00 */
     float         x, y, z;       /* 0x04  offset from the parent */
     uint8_t       _pad10[4];     /* 0x10  the disk record holds the indices here */
-    struct BONE  *children[9];   /* 0x14  nine slots, NULL where the index was -1 */
+    struct BONE  *P32 children[9];   /* 0x14  nine slots, NULL where the index was -1 */
 } BONE;
 
 typedef struct BONESINFO {
-    BONE *bones;                 /* 0x00 */
+    BONE *P32 bones;                 /* 0x00 */
     int   numBones;              /* 0x04 */
 } BONESINFO;
 
@@ -185,16 +185,16 @@ typedef struct BONESINFO {
  * second to +0x28, but the loader ALLOCATES +0x14 first and +0x28 second.
  * Reading allocation order as storage order gets these backwards. */
 typedef struct SKININFO {
-    struct SKININFO *next;       /* 0x00  a second block, or NULL */
+    struct SKININFO *P32 next;       /* 0x00  a second block, or NULL */
     int           numMatrices;   /* 0x04  N */
     int           numVerts;      /* 0x08  M */
     uint8_t       _pad0c[8];     /* 0x0c */
-    SKINMATRIX43 *matricesA;     /* 0x14  N x 48 */
-    void         *vertExtra;     /* 0x18  M x 6 */
-    void         *uvs;           /* 0x1c  M x 24 */
-    int32_t      *indexes;       /* 0x20  N x 4 */
-    float        *weights;       /* 0x24  N x 16 */
-    SKINMATRIX43 *matricesB;     /* 0x28  N x 48 */
+    SKINMATRIX43 *P32 matricesA;     /* 0x14  N x 48 */
+    void         *P32 vertExtra;     /* 0x18  M x 6 */
+    void         *P32 uvs;           /* 0x1c  M x 24 */
+    int32_t      *P32 indexes;       /* 0x20  N x 4 */
+    float        *P32 weights;       /* 0x24  N x 16 */
+    SKINMATRIX43 *P32 matricesB;     /* 0x28  N x 48 */
 } SKININFO;
 
 /* One live effect in the runtime pool: 192 slots of 248 bytes, confirmed three
@@ -229,9 +229,9 @@ typedef struct EVENT {
     float            cursor;     /* 0x04 */
     int              frameA;     /* 0x08 */
     int              frameB;     /* 0x0c */
-    struct SCENEINFO *scene;     /* 0x10  `ldr ip, [r4, #0x10]` then
+    struct SCENEINFO *P32 scene;     /* 0x10  `ldr ip, [r4, #0x10]` then
                                   *       `ldr r3, [ip, #0x44]` for count2 */
-    SCENEEVENTTRACK *track;      /* 0x14 */
+    SCENEEVENTTRACK *P32 track;      /* 0x14 */
     float            color[4];   /* 0x18  track +0x08..+0x14, RGBA */
     float            step;       /* 0x28  added to the cursor each frame;
                                   *       track +0xc4 */
@@ -259,7 +259,7 @@ typedef struct EVENT {
     int              offsetId;   /* 0x5c  track +0xc0, a MasterEventOffsets row */
     int              offsetId2;  /* 0x60  trigger argument 6, a second row
                                   *       added in, -1 for none */
-    float           *follow;     /* 0x64  trigger argument 3, the matrix the
+    float           *P32 follow;     /* 0x64  trigger argument 3, the matrix the
                                   *       event follows */
     float            world[16];  /* 0x68  limeMatrixMult(m2, m1); its last
                                   *       element, +0xa4, is set on a kill */
@@ -267,11 +267,11 @@ typedef struct EVENT {
     /* Both handed to LIME_RenderScene, and the call site names them: +0xe8
      * lands in argument 9, which FlushTranspMeshList takes as its TEXTURE *,
      * and +0xec lands in argument 10, which nothing reads. */
-    TEXTURE         *flushTexture; /* 0xe8  trigger argument 9 */
+    TEXTURE         *P32 flushTexture; /* 0xe8  trigger argument 9 */
     long             fieldEC;      /* 0xec  trigger argument 10 */
     int              isWhirlwind; /* 0xf0  IsWhirlwindScene(scene), decided once
                                    *       at spawn */
-    void            *obj;        /* 0xf4  LastGObj at spawn: the fight object
+    void            *P32 obj;        /* 0xf4  LastGObj at spawn: the fight object
                                   *       KillIllegalWhirlwinds tests */
 } EVENT;
 
@@ -293,7 +293,7 @@ typedef char event_size_0xf8[sizeof(EVENT) == EVENT_STRIDE ? 1 : -1];
 
 struct SCENEEVENTTRACK {
     uint8_t _pad00[4];
-    struct SCENEINFO *scene;     /* 0x04  read as one by LIME_FreeEvents and by
+    struct SCENEINFO *P32 scene;     /* 0x04  read as one by LIME_FreeEvents and by
                                   *       LIME_TriggerEvent -- two functions */
     float   f08, f0c, f10, f14;  /* 0x08  set to 1.0f by LIME_PlayFBXAtPos */
     uint8_t _pad18[4];
@@ -309,13 +309,13 @@ struct SCENEEVENTTRACK {
     float   fc4;                 /* 0xc4  set to 1.0f */
     uint8_t _padc8[8];
     int     maxInstances;        /* 0xd0  -1 disables the cap */
-    void   *arrayD4;             /* 0xd4  field9c x 68 bytes */
+    void   *P32 arrayD4;             /* 0xd4  field9c x 68 bytes */
     uint8_t _padd8[SCENEEVENTTRACK_STRIDE - 0xd8];
 };
 
 typedef struct EVENTSINFO {
     int              count;      /* 0x00 */
-    SCENEEVENTTRACK *tracks;     /* 0x04 */
+    SCENEEVENTTRACK *P32 tracks;     /* 0x04 */
 } EVENTSINFO;
 
 /* Deferred transparent draws: 48 bytes, written as index*64 - index*16 and
@@ -333,7 +333,7 @@ typedef struct TRANSPMESH {
     uint8_t      field05;        /* 0x05  ldrb r3, [r6, #5]; cbnz -> 0x5f704 */
     uint8_t      _pad06[2];      /* 0x06 */
     QSTMATRIX    qst;            /* 0x08  32 bytes, copied verbatim */
-    void        *meshset;        /* 0x28 */
+    void        *P32 meshset;        /* 0x28 */
     long         meshIndex;      /* 0x2c  ldr r2, [r3, r1, lsl #2] */
 } TRANSPMESH;
 
@@ -426,7 +426,7 @@ typedef struct SCENENODEKEY {
  * two names come from different call sites in the original. */
 typedef struct SCENEEVENTS {
     long  numTracks;             /* 0x00 */
-    void *tracks;                /* 0x04  numTracks x 216 bytes */
+    void *P32 tracks;                /* 0x04  numTracks x 216 bytes */
 } SCENEEVENTS;
 
 /* A game object. Only the frame number is established here -- IsOnWWFrame reads
@@ -441,8 +441,8 @@ typedef struct Mk3Obj_t {
  * A module lists what it needs and where to put it, and one call fills them in.
  * The stride shows up as a pre-indexed load with writeback, `ldr r0, [r4, #8]!`. */
 typedef struct TEXTURETOLOAD {
-    const char *name;            /* 0x00  NULL ends the list */
-    TEXTURE   **dest;            /* 0x04  where the handle goes */
+    const char *P32 name;            /* 0x00  NULL ends the list */
+    TEXTURE   *P32 *P32 dest;            /* 0x04  where the handle goes */
 } TEXTURETOLOAD;
 
 /* A font: two texture atlases and a metrics file. See docs/FONT-FORMAT.md --
@@ -470,9 +470,9 @@ typedef struct FONT {
      * it divides them BY on the way to limeDrawSprite: atlasU and glyphWidth are
      * both normalised by +0x34, atlasV by +0x38. Two share a divisor, so two
      * share an axis. */
-    int16_t  *atlasU;            /* 0x1c  x position in the atlas */
-    int16_t  *atlasV;            /* 0x20  y position in the atlas */
-    int16_t  *glyphWidth;        /* 0x24  per-glyph width, and the advance
+    int16_t  *P32 atlasU;            /* 0x1c  x position in the atlas */
+    int16_t  *P32 atlasV;            /* 0x20  y position in the atlas */
+    int16_t  *P32 glyphWidth;        /* 0x24  per-glyph width, and the advance
                                   *       limeGetStringWidth accumulates */
     /* Optional per-glyph kerning, one SIGNED byte each, added to the width when
      * the pointer is non-null. limeGetStringWidth is the only reader:
@@ -482,7 +482,7 @@ typedef struct FONT {
      *     addne   r8, r8, r3
      * Nothing in limeCreateFONT was seen to allocate it, so a font that does not
      * carry kerning leaves it null and every glyph keeps its plain width. */
-    int8_t   *kerning;           /* 0x28 */
+    int8_t   *P32 kerning;           /* 0x28 */
     int       defaultAdvance;    /* 0x2c  simple fonts only */
     uint8_t   _pad30[4];
     /* The atlas dimensions, and they are the OPPOSITE way round from an earlier
@@ -503,10 +503,10 @@ typedef struct FONT {
      * alignment 3. The earlier 12-byte pad here put `codes` at 0x4c. */
     int       extraAtCount;      /* 0x40 */
     int       countForExtra;     /* 0x44 */
-    uint8_t  *codes;             /* 0x48  one byte per glyph */
-    int16_t  *codesW;            /* 0x4c  the same codes widened to 16 bits */
-    TEXTURE  *texture0;          /* 0x50 */
-    TEXTURE  *texture1;          /* 0x54 */
+    uint8_t  *P32 codes;             /* 0x48  one byte per glyph */
+    int16_t  *P32 codesW;            /* 0x4c  the same codes widened to 16 bits */
+    TEXTURE  *P32 texture0;          /* 0x50 */
+    TEXTURE  *P32 texture1;          /* 0x54 */
 } FONT;
 
 /* ------------------------------------------------------------------ */
@@ -703,7 +703,7 @@ typedef struct SCENEINFO {
                                   *       takes frame numbers against */
     long         nodeCount;      /* 0x48  the scene's node count, walked by
                                   *       both renderers */
-    void        *field4c;        /* 0x4c  limeMalloc sized from 0x44 and 0x48 */
+    void        *P32 field4c;        /* 0x4c  limeMalloc sized from 0x44 and 0x48 */
     uint8_t      _pad50[4];      /* 0x50 */
     float        posX;           /* 0x54  fed straight to glTranslatef by     */
     float        posY;           /* 0x58  LIME_RenderEvents -- the scene origin */
@@ -713,13 +713,13 @@ typedef struct SCENEINFO {
     int          field68;        /* 0x68 */
     int          field6c;        /* 0x6c */
     int          field70;        /* 0x70 */
-    void        *field74;        /* 0x74 */
+    void        *P32 field74;        /* 0x74 */
     int          field78;        /* 0x78 */
-    void        *tail;           /* 0x7c  GetMatrixFromPalette indexes this at
+    void        *P32 tail;           /* 0x7c  GetMatrixFromPalette indexes this at
                                   *       32 bytes a step */
-    MESHSETINFO *meshset;        /* 0x80  LIME_LoadMeshSet result -- confirmed
+    MESHSETINFO *P32 meshset;        /* 0x80  LIME_LoadMeshSet result -- confirmed
                                   *       independently by RenderDebugCube */
-    void        *events;         /* 0x84  LIME_LoadEvents result */
+    void        *P32 events;         /* 0x84  LIME_LoadEvents result */
 
     /* **The scene's animation, and it is a compressed two-level table.**
      *
@@ -740,9 +740,9 @@ typedef struct SCENEINFO {
      *
      * The cursor over both arrays steps FOUR bytes per node, so each is an array
      * of pointers indexed by node. */
-    SCENENODEKEY **nodeKeys;     /* 0x88  [node] -> the key array */
-    uint16_t     **nodeStream;   /* 0x8c  [node] -> one uint16 per frame */
-    struct SCENEINFO *next;      /* 0x90  the scene cache is a linked list --
+    SCENENODEKEY *P32 *P32 nodeKeys;     /* 0x88  [node] -> the key array */
+    uint16_t     *P32 *P32 nodeStream;   /* 0x8c  [node] -> one uint16 per frame */
+    struct SCENEINFO *P32 next;      /* 0x90  the scene cache is a linked list --
                                   *       AddScene and LIME_GetSceneFromFilename
                                   *       both walk this offset */
 } SCENEINFO;
