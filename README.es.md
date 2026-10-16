@@ -26,14 +26,14 @@ Necesitas una copia obtenida legalmente de *Ultimate Mortal Kombat 3* para iOS (
 
 ---
 
-## Dónde está el proyecto — 15 de octubre de 2026 (alpha 0.1.1)
+## Dónde está el proyecto — 15 de octubre de 2026 (alpha 0.1.2)
 
 | | |
 |---|---|
 | **Decompilado** | ✅ **Todo.** Las 2.572 funciones del juego tienen C escrito a mano: el núcleo del motor LIME (109), la lógica de juego (291) y el motor de combate (2.172). No queda nada por transcribir. |
 | **Verificado** | ✅ El núcleo del motor pasa tests diferenciales contra el original recompilado con cero divergencias. El motor de combate pasa un test diferencial de comportamiento fichero a fichero, con las excepciones listadas en [Verificación](#cuánto-está-verificado): todas son límites conocidos del arnés de pruebas, no fallos conocidos. |
 | **Funciona en nativo** | ✅ El juego real funciona en nativo en Windows (Linux/macOS desde el código): el front end con sus 51 pantallas, el Arcade hasta Shao Kahn y la pantalla de tesoros, peleas completas con todos los finishers, sonido, música y partidas guardadas. Cómo encaja todo: [docs/HOW-THE-GAME-WORKS.md](docs/HOW-THE-GAME-WORKS.md). |
-| **Jugable** | ✅ **Alpha 0.1.1** ([release](https://github.com/MaryNCRT/Ultimate-Mortal-Kombat-3-iOS-Recomp/releases)): 100% jugable. Puede tener fallos, que se irán arreglando. Se juega con el teclado (configurable), un mando (Xbox, PlayStation, Switch y otros) o el ratón como dedo. La pantalla puede ser **3:2, 4:3 (la vista del iPad), 16:9 o 21:9**. La calidad de texturas llega hasta sin compresión, y hay un HUD opcional del tamaño del iPad; en 4:3 los menús son los del iPad. JUGAR > DUELO es para dos jugadores en un PC, cada uno con sus teclas y su mando. Tiene menú debug (hitboxes, velocidad, save states), y el launcher se actualiza solo. Lo que falla: *Problemas conocidos*. |
+| **Jugable** | ✅ **Alpha 0.1.2** ([release](https://github.com/MaryNCRT/Ultimate-Mortal-Kombat-3-iOS-Recomp/releases)): 100% jugable. Puede tener fallos, que se irán arreglando. Se juega con el teclado (configurable), un mando (Xbox, PlayStation, Switch y otros) o el ratón como dedo. La pantalla puede ser **3:2, 4:3 (la vista del iPad), 16:9 o 21:9**. La calidad de texturas llega hasta sin compresión, y hay un HUD opcional del tamaño del iPad; en 4:3 los menús son los del iPad. JUGAR > DUELO es para dos jugadores en un PC, cada uno con sus teclas y su mando. Esc abre un menú de ajustes dentro del juego (gráficos y controles sin reiniciar, salir), hay perfil de jugador (nombre, ID, icono) para las clasificaciones que vendrán, menú debug (hitboxes, velocidad, save states), y el launcher se actualiza solo. Lo que falla: *Problemas conocidos*. |
 
 **Qué significa aquí «decompilado» y qué no.** Significa que cada función que
 ejecuta el juego tiene un cuerpo escrito contra el disassembly y comprobado
@@ -44,9 +44,9 @@ La [sección de progreso](#progreso-general) pone números y dice qué dejan fue
 
 ---
 
-## Cómo jugar (alpha 0.1.1, Windows)
+## Cómo jugar (alpha 0.1.2, Windows)
 
-**Alpha 0.1.1** ([notas](docs/RELEASE-0.1.1-alpha.md); anteriores en `docs/RELEASE-*.md`).
+**Alpha 0.1.2** ([notas](docs/RELEASE-0.1.2-alpha.md); anteriores en `docs/RELEASE-*.md`).
 [Releases](https://github.com/MaryNCRT/Ultimate-Mortal-Kombat-3-iOS-Recomp/releases)
 trae el launcher y solo el código que necesita la compilación, ningún dato del juego.
 
@@ -91,7 +91,7 @@ el menú debug. Desde ahí se puede:
 Si el juego falla, `logs\` junto al exe guarda el informe del crash.
 Adjúntalo en un issue.
 
-### Problemas conocidos (15 de octubre de 2026, alpha 0.1.1)
+### Problemas conocidos (15 de octubre de 2026, alpha 0.1.2)
 
 Lo que aún puede ver un jugador. Todo lo arreglado está en las notas de
 cada versión y en [docs/PROGRESS.md](docs/PROGRESS.md).
@@ -103,12 +103,11 @@ cada versión y en [docs/PROGRESS.md](docs/PROGRESS.md).
 - Algunos modos aparte del Arcade pueden cerrarse; el menú no está completo
   y faltan modos.
 - Los menús del juego se manejan con el ratón, no con el mando.
-- Algunos ataques especiales, sobre todo proyectiles, no tienen sonido;
-  a los fatalities y especiales de Reptile les faltan sonidos.
+- Algunos ataques especiales, sobre todo proyectiles, no tienen sonido
+  (el fatality de la lengua de Reptile tampoco lo tiene en el original).
 - Tras un round un luchador puede verse con el modelo de otro (Ermac
   contra Sub-Zero).
 - Algunos golpes parecen conectar desde demasiado lejos.
-- El resaltado rojo al pulsar se ve demasiado grueso.
 - Al pausar, a veces la pelea se ve encogida en una esquina.
 - En 16:9 y 21:9, alguna pantalla aún no revisada puede tener un elemento
   descentrado; mándalo con captura.

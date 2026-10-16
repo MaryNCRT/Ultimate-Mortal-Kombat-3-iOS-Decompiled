@@ -121,6 +121,7 @@ $src = @(
     'runtime\gamecode_stubs.c', 'runtime\lime_menu.c', 'runtime\lime_platform.c',
     'runtime\lime_app.c', 'runtime\wav.c', 'runtime\fight_runtime.c',
     'runtime\debug_menu.c', 'runtime\savestate.c',
+    'runtime\settings_menu.c', 'runtime\profiles.c',
     'runtime\platform\win32_gl.c', 'runtime\platform\win32_gl_cdecl.c',
     'runtime\platform\win32_audio.c'
 ) | ForEach-Object { Join-Path $Root $_ }
@@ -189,6 +190,16 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path $exe)) { Fail "fallo el enlazado" }
 Step "5/5 Copiando res desde tu .ipa"
 & (Join-Path $PSScriptRoot 'setup_res.ps1') -Ipa $Ipa -Dest $Root
 if ($LASTEXITCODE -ne 0) { Fail "setup_res.ps1" }
+
+# Mary's own pictures for the wide screens (the continue screens on 16:9
+# and 21:9): from launcherditional textures, which updates bring, to the
+# folder beside res the game reads them from.
+$addSrc = Join-Path $PSScriptRoot 'aditional textures'
+if (Test-Path $addSrc) {
+    $addDst = Join-Path $Root 'aditional textures'
+    New-Item -ItemType Directory -Force -Path $addDst | Out-Null
+    Copy-Item -Path (Join-Path $addSrc '*') -Destination $addDst -Force
+}
 
 $ini = Join-Path $Root 'umk3.ini'
 if (-not (Test-Path $ini)) {
