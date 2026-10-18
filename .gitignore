@@ -113,5 +113,4 @@ dist/
 # The Electron launcher: dependencies and packaged output stay local.
 launcher/app/node_modules/
 launcher/app/dist/
-/executables/
 
