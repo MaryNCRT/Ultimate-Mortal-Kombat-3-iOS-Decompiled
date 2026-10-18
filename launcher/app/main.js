@@ -81,15 +81,15 @@ async function resolveRoot() {
         r = savedRoot();
     if (!r) {
         const picked = await dialog.showOpenDialog({
-            title: 'UMK3 LAUNCHER: elige la carpeta del juego',
+            title: 'UMK3 LAUNCHER: Select game folder',
             properties: ['openDirectory'],
-            message: 'Selecciona la carpeta que contiene el juego (la carpeta con src o umk3-game).',
+            message: 'Select the folder containing the game (the folder with src or umk3-game).',
         });
         r = picked.canceled ? null : picked.filePaths[0];
         if (r && !rootm.looksLikeRoot(r)) {
             dialog.showMessageBox({
                 type: 'error',
-                message: 'Esa carpeta no parece una instalación del port (falta la carpeta src o el ejecutable del juego).',
+                message: 'That folder does not look like a game installation (missing src folder or game executable).',
             });
             r = null;
         }
@@ -260,11 +260,11 @@ ipcMain.handle('ipa:browse', async () => {
     if (!g_win)
         return null;
     const r = await pickFile({
-        title: 'Elige tu UMK3 .ipa',
+        title: 'Choose your UMK3 .ipa',
         properties: ['openFile'],
         filters: [
             { name: 'UMK3 .ipa', extensions: ['ipa'] },
-            { name: 'Todos los archivos', extensions: ['*'] },
+            { name: 'All files', extensions: ['*'] },
         ],
         defaultPath: g_cfg && g_cfg.ipa && fs.existsSync(path.dirname(g_cfg.ipa))
             ? g_cfg.ipa : undefined,
@@ -279,7 +279,7 @@ ipcMain.handle('frame:browse', async () => {
     if (!g_win)
         return null;
     const r = await pickFile({
-        title: 'Imagen para el marco / Frame picture',
+        title: 'Frame picture',
         properties: ['openFile'],
         filters: [{ name: 'PNG', extensions: ['png'] }],
     });
@@ -303,7 +303,7 @@ ipcMain.handle('build:cancel', () => bld.cancelBuild());
 /* ---------------------------------------------------------- updates ---- */
 
 /* The newest release on GitHub and its notes (lib/update.js). The page asks
- * once when it opens and again on BUSCAR ACTUALIZACIONES; a newer one also
+ * once when it opens and again on CHECK FOR UPDATES; a newer one also
  * gets a Windows notification, once per launch. */
 let g_rel = null, g_notified = false;
 
@@ -316,8 +316,8 @@ ipcMain.handle('update:check', async () => {
     if (g_rel && g_rel.newer && !g_notified && Notification.isSupported()) {
         g_notified = true;
         new Notification({
-            title: 'UMK3 — actualización disponible',
-            body: g_rel.name + ' (' + g_rel.tag + '). Ábrela en COMPILAR TU .IPA.',
+            title: 'UMK3 — Update available',
+            body: g_rel.name + ' (' + g_rel.tag + '). Open it in COMPILE YOUR .IPA.',
         }).show();
     }
     return { ok: true, rel: g_rel, current: app.getVersion() };
@@ -327,7 +327,7 @@ ipcMain.handle('update:check', async () => {
  * the files once this launcher is closed and starts it again. */
 ipcMain.handle('update:install', async () => {
     if (!g_rel || !g_rel.newer)
-        return { ok: false, error: 'no hay una versión más nueva' };
+        return { ok: false, error: 'no newer version available' };
     try {
         const zip = await upd.download(net.fetch, g_rel, path.join(g_root, 'update'),
             (got, total) => send('update:progress', { got, total }));

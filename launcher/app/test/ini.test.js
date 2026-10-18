@@ -19,7 +19,7 @@ test('defaults match launcher.c', () => {
     assert.equal(c.widescreen, false);
     assert.equal(c.debug, false);
     assert.equal(c.language, 0);
-    assert.equal(c.ui, 'ES');
+    assert.equal(c.ui, 'EN');
     assert.equal(c.ipa, '');
     assert.equal(c.keys.up, 0x57);
     assert.equal(c.keys.down, 0x53);
@@ -39,7 +39,7 @@ test('missing file keeps defaults', () => {
     const p = tmpIni();
     const c = ini.load(p);
     assert.equal(c.res, 1);
-    assert.equal(c.ui, 'ES');
+    assert.equal(c.ui, 'EN');
     assert.equal(c.keys.moves, 0x4d);
     assert.ok(!fs.existsSync(p));
 });

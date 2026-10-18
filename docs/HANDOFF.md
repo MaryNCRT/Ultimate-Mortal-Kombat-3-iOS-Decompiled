@@ -33,9 +33,14 @@
    - Added support for launching the native Linux binary (`umk3-game`) when clicking "JUGAR".
    - Removed legacy Windows-only PowerShell scripts (`launcher/build_game.ps1` and `launcher/setup_res.ps1`).
 
-5. **Packaging Configured (`launcher/app/package.json`)**:
+5. **Packaging & Release**:
    - Linux: `.tar.gz` and `.AppImage` via `npm run dist:linux`.
    - Windows: `.zip` and portable `.exe` via `npm run dist:win`.
+   - GitHub Release `v0.2.1` published with all 4 packages attached.
+
+6. **English Localization**:
+   - All launcher progress, build errors, extraction statuses, and system dialogs translated into English.
+   - Default UI language initialized to English (`EN`) with persistent configuration support.
 
 ---
 

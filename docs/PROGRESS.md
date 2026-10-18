@@ -33,10 +33,15 @@
    - Successful build and link of native 64-bit Linux binary (`umk3-game`) with `-DUMK3_LOW32`, `-no-pie`, and low-pointer memory mapping.
    - Verified native execution on Linux: `UMK3_SHOT=10 ./umk3-game` executed cleanly, producing valid PPM frame capture (`851x1413`).
 
-3. **Packaging Configuration**:
+3. **Packaging Configuration & Release**:
    - Linux: `.tar.gz` portable archive and `.AppImage` standalone executable via `electron-builder`.
    - Windows: `.zip` archive and portable executable (`UMK3-Launcher-Windows.exe`).
+   - Packaged and published GitHub Release `v0.2.1` with all 4 release binaries attached.
    - Removed legacy `build_game.ps1` and `setup_res.ps1`.
+
+4. **Full English Localization**:
+   - All build stages, progress bars, compiler messages, dialog boxes, and update alerts localized to English.
+   - Default UI language set to English (`EN`) while keeping the multi-language toggle for Spanish.
 
 ---
 

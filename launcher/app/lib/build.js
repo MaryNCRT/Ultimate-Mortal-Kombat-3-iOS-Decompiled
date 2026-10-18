@@ -11,11 +11,11 @@ let g_isCancelled = false;
 
 /* Step boundaries as percentages of the build */
 const STEPS = [
-    { lo: 0,  hi: 18, title: 'Preparando compilador' },
-    { lo: 18, hi: 25, title: 'Leyendo el binario del .ipa' },
-    { lo: 25, hi: 42, title: 'Extrayendo tablas y recursos' },
-    { lo: 42, hi: 90, title: 'Compilando el juego' },
-    { lo: 90, hi: 100, title: 'Enlazando ejecutable final' },
+    { lo: 0,  hi: 18, title: 'Preparing compiler toolchain' },
+    { lo: 18, hi: 25, title: 'Reading iOS binary from .ipa' },
+    { lo: 25, hi: 42, title: 'Extracting data tables and assets' },
+    { lo: 42, hi: 90, title: 'Compiling game sources' },
+    { lo: 90, hi: 100, title: 'Linking final executable' },
 ];
 
 /**
@@ -31,7 +31,7 @@ async function build(root, ipa, arch = 'x64', onData = () => {}) {
     try {
         // Step 1: Ensure toolchain
         onData({
-            text: '== 1/5 Preparando compilador...',
+            text: '== 1/5 Preparing compiler toolchain...',
             step: 1,
             phase: STEPS[0].title,
             pct: 5,
@@ -48,13 +48,13 @@ async function build(root, ipa, arch = 'x64', onData = () => {}) {
         });
 
         if (g_isCancelled) {
-            onData({ text: 'Compilación cancelada por el usuario.', pct: -1 });
+            onData({ text: 'Build cancelled by user.', pct: -1 });
             return -1;
         }
 
         // Step 2 & 3: Extract IPA & Generate Tables & Extract Assets
         onData({
-            text: '== 2/5 Inspeccionando .ipa y extrayendo recursos...',
+            text: '== 2/5 Inspecting .ipa and extracting assets...',
             step: 2,
             phase: STEPS[1].title,
             pct: 20,
@@ -88,13 +88,13 @@ async function build(root, ipa, arch = 'x64', onData = () => {}) {
         });
 
         if (g_isCancelled) {
-            onData({ text: 'Compilación cancelada por el usuario.', pct: -1 });
+            onData({ text: 'Build cancelled by user.', pct: -1 });
             return -1;
         }
 
         // Step 4 & 5: Compile & Link
         onData({
-            text: '== 4/5 Compilando fuentes en paralelo...',
+            text: '== 4/5 Compiling sources in parallel...',
             step: 4,
             phase: STEPS[3].title,
             pct: 45,
@@ -129,15 +129,15 @@ async function build(root, ipa, arch = 'x64', onData = () => {}) {
         });
 
         onData({
-            text: '¡Compilación terminada con éxito! El juego está listo.',
+            text: 'Build finished successfully! The game is ready.',
             step: 5,
-            phase: 'Completado',
+            phase: 'Completed',
             pct: 100,
         });
         return 0;
     } catch (err) {
         onData({
-            text: `Error en la compilación: ${err.message}`,
+            text: `Build failed: ${err.message}`,
             pct: -1,
             phase: 'Error',
         });

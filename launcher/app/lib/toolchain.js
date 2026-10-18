@@ -102,7 +102,7 @@ function downloadFile(url, destPath, expectedSha, onProgress = () => {}) {
                 if (res.statusCode !== 200) {
                     fileStream.close();
                     fs.unlinkSync(destPath);
-                    return reject(new Error(`Error descargando toolchain: HTTP ${res.statusCode}`));
+                    return reject(new Error(`Error downloading toolchain: HTTP ${res.statusCode}`));
                 }
 
                 const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
@@ -116,7 +116,7 @@ function downloadFile(url, destPath, expectedSha, onProgress = () => {}) {
                     if (totalBytes > 0) {
                         const pct = Math.round((downloadedBytes / totalBytes) * 100);
                         onProgress({
-                            phase: `Descargando Zig ${ZIG_VERSION} (${Math.round(downloadedBytes / 1048576)} MB / ${Math.round(totalBytes / 1048576)} MB)`,
+                            phase: `Downloading Zig ${ZIG_VERSION} (${Math.round(downloadedBytes / 1048576)} MB / ${Math.round(totalBytes / 1048576)} MB)`,
                             pct,
                             downloaded: downloadedBytes,
                             total: totalBytes,
@@ -129,7 +129,7 @@ function downloadFile(url, destPath, expectedSha, onProgress = () => {}) {
                         const actualSha = hash.digest('hex');
                         if (expectedSha && actualSha.toLowerCase() !== expectedSha.toLowerCase()) {
                             fs.unlinkSync(destPath);
-                            return reject(new Error(`Fallo de suma SHA-256 de Zig: esperado ${expectedSha}, obtenido ${actualSha}`));
+                            return reject(new Error(`Zig SHA-256 checksum mismatch: expected ${expectedSha}, got ${actualSha}`));
                         }
                         resolve(destPath);
                     });
@@ -169,7 +169,7 @@ function extractArchive(archivePath, targetDir, format) {
     } else if (format === 'tar.xz') {
         execSync(`tar -xf "${archivePath}" -C "${targetDir}"`, { stdio: 'inherit' });
     } else {
-        throw new Error(`Formato de archivo no soportado: ${format}`);
+        throw new Error(`Unsupported archive format: ${format}`);
     }
 }
 
@@ -180,24 +180,24 @@ function extractArchive(archivePath, targetDir, format) {
 async function ensureToolchain(onProgress = () => {}) {
     const existing = findExistingZig();
     if (existing) {
-        onProgress({ phase: 'Compilador listo', pct: 10 });
+        onProgress({ phase: 'Compiler ready', pct: 10 });
         return existing;
     }
 
     const platformKey = getPlatformKey();
     const info = TOOLCHAINS[platformKey];
     if (!info) {
-        throw new Error(`Plataforma ${process.platform} (${process.arch}) no soportada automáticamente.`);
+        throw new Error(`Platform ${process.platform} (${process.arch}) is not automatically supported.`);
     }
 
     const baseDir = getToolchainBaseDir();
     const archiveName = path.basename(info.url);
     const archivePath = path.join(baseDir, archiveName);
 
-    onProgress({ phase: `Iniciando descarga de compilador Zig ${ZIG_VERSION}`, pct: 2 });
+    onProgress({ phase: `Starting download of Zig ${ZIG_VERSION} compiler`, pct: 2 });
     await downloadFile(info.url, archivePath, info.sha256, onProgress);
 
-    onProgress({ phase: 'Extrayendo compilador...', pct: 8 });
+    onProgress({ phase: 'Extracting compiler...', pct: 8 });
     extractArchive(archivePath, baseDir, info.format);
 
     // Delete archive after extraction to save disk space
@@ -207,14 +207,14 @@ async function ensureToolchain(onProgress = () => {}) {
 
     const zigExe = path.join(baseDir, info.folderName, info.exeName);
     if (!fs.existsSync(zigExe)) {
-        throw new Error(`No se encontró el ejecutable de Zig tras la extracción: ${zigExe}`);
+        throw new Error(`Zig executable not found after extraction: ${zigExe}`);
     }
 
     if (process.platform !== 'win32') {
         fs.chmodSync(zigExe, 0o755);
     }
 
-    onProgress({ phase: 'Compilador instalado con éxito', pct: 10 });
+    onProgress({ phase: 'Compiler installed successfully', pct: 10 });
     return zigExe;
 }
 

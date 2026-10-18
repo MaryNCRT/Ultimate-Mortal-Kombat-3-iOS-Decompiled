@@ -146,7 +146,7 @@ function defaultConfig() {
         skipIntro: false,            /* skip_intro=1: no publisher logos */
         hideControls: false,         /* hide_controls=1: no on-screen stick and buttons */
         language: 0,                 /* "" = follow Windows */
-        ui: 'ES',                    /* the launcher's own language */
+        ui: 'EN',                    /* the launcher's own language */
         ipa: '',
         marco: '',                   /* fullscreen bars picture, optional */
         buttons: 5,                  /* the layout the game starts with (its factory default, Settings[4] = 5) */
@@ -212,7 +212,7 @@ function load(p) {
             if (i >= 0)
                 cfg.language = i;
         } else if (key === 'ui') {
-            cfg.ui = val.toUpperCase() === 'EN' ? 'EN' : 'ES';
+            cfg.ui = val.toUpperCase() === 'ES' ? 'ES' : 'EN';
         } else if (key === 'ipa') {
             cfg.ipa = val;
         } else if (key === 'marco') {
@@ -290,7 +290,7 @@ function save(p, cfg) {
         'aspect=' + (cfg.aspect || '3:2'),
         'widescreen=' + (cfg.widescreen ? 1 : 0),
         'language=' + lang,
-        'ui=' + (cfg.ui === 'EN' ? 'EN' : 'ES'),
+        'ui=' + (cfg.ui === 'ES' ? 'ES' : 'EN'),
         'ipa=' + cfg.ipa,
         'debug_keys=' + (cfg.debug ? 1 : 0),
         'skip_intro=' + (cfg.skipIntro ? 1 : 0),

@@ -63,10 +63,10 @@ class MachO {
 
         const magic = data.readUInt32LE(base);
         if (magic === MH_MAGIC_64) {
-            throw new Error('Mach-O de 64 bits: no soportado');
+            throw new Error('64-bit Mach-O: not supported');
         }
         if (magic !== MH_MAGIC) {
-            throw new Error(`Magic Mach-O inesperado: 0x${magic.toString(16)}`);
+            throw new Error(`Unexpected Mach-O magic: 0x${magic.toString(16)}`);
         }
 
         this.magic = magic;

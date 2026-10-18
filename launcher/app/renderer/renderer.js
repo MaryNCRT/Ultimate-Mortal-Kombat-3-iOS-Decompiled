@@ -658,7 +658,7 @@ const el = (tag, cls, text) => {
 };
 
 let cfg = null, ready = false, builtAt = null, building = false, both = false;
-let ui = 'ES', waitingKey = null, sec = 'build';
+let ui = 'EN', waitingKey = null, sec = 'build';
 
 /* ------------------------------------------------------------- sounds -- */
 
@@ -1321,7 +1321,7 @@ function navKey(key) {
 
 async function init() {
     cfg = await window.umk3.loadConfig();
-    ui = cfg.ui === 'EN' ? 'EN' : 'ES';
+    ui = cfg.ui === 'ES' ? 'ES' : 'EN';
     await refreshRoot();
     buildRing();
     GLYPH = (await window.umk3.glyphs()) || {};

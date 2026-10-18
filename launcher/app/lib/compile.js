@@ -267,7 +267,7 @@ async function compileGame({
             const pct = Math.round(42 + (completedCount / totalTasks) * 48);
             const fileName = path.basename(sources[idx] || 'icon');
             onProgress({
-                phase: `Compilando [${completedCount}/${totalTasks}] ${fileName}`,
+                phase: `Compiling [${completedCount}/${totalTasks}] ${fileName}`,
                 pct,
                 done: completedCount,
                 total: totalTasks,
@@ -277,7 +277,7 @@ async function compileGame({
     });
 
     // 3. Linking
-    onProgress({ phase: 'Enlazando ejecutable final...', pct: 92 });
+    onProgress({ phase: 'Linking final executable...', pct: 92 });
     const exeName = isWindows ? (isLow32 ? 'umk3-game64.exe' : 'umk3-game.exe') : 'umk3-game';
     const outExe = path.join(destDir, exeName);
 
@@ -326,14 +326,14 @@ async function compileGame({
                 }
                 resolve();
             } else {
-                reject(new Error(`Fallo en el enlace: ${linkErr || 'código ' + code}`));
+                reject(new Error(`Link failed: ${linkErr || 'code ' + code}`));
             }
         });
 
         linkChild.on('error', reject);
     });
 
-    onProgress({ phase: 'Compilación completada', pct: 100 });
+    onProgress({ phase: 'Compilation completed', pct: 100 });
     return {
         success: true,
         exePath: outExe,

@@ -35,7 +35,7 @@ function inspectIpa(ipaPath) {
         }
 
         if (!appPrefix || !binEntry) {
-            throw new Error(`${path.basename(ipaPath)} no contiene Payload/UMK3.app/UMK3`);
+            throw new Error(`${path.basename(ipaPath)} does not contain Payload/UMK3.app/UMK3`);
         }
 
         let version = 'unknown';
@@ -93,10 +93,10 @@ async function extractIpaPipeline({
     onProgress = () => {},
 }) {
     if (!fs.existsSync(ipaPath)) {
-        throw new Error(`.ipa no encontrado: ${ipaPath}`);
+        throw new Error(`.ipa not found: ${ipaPath}`);
     }
 
-    onProgress({ phase: 'Inspeccionando .ipa', pct: 20 });
+    onProgress({ phase: 'Inspecting .ipa', pct: 20 });
     const zip = openZip(ipaPath);
 
     try {
@@ -114,41 +114,41 @@ async function extractIpaPipeline({
         }
 
         if (!appPrefix || !binEntry) {
-            throw new Error(`${path.basename(ipaPath)} no contiene Payload/UMK3.app/UMK3`);
+            throw new Error(`${path.basename(ipaPath)} does not contain Payload/UMK3.app/UMK3`);
         }
 
-        onProgress({ phase: 'Verificando binario iOS', pct: 22 });
+        onProgress({ phase: 'Verifying iOS binary', pct: 22 });
         const rawBin = zip.read(binEntry);
         const { m } = loadMachO(rawBin);
         const cryptid = m.encryption ? m.encryption[2] : 0;
 
         if (cryptid !== 0) {
-            throw new Error(`El binario está cifrado por FairPlay (cryptid=${cryptid}). Se requiere un .ipa desencriptado.`);
+            throw new Error(`The binary is FairPlay encrypted (cryptid=${cryptid}). A decrypted .ipa is required.`);
         }
 
         if (m.uuid !== WANT_UUID && !allowMismatch) {
-            throw new Error(`El UUID del binario es ${m.uuid}, pero el decompilador requiere la versión 1.2.59 (${WANT_UUID}).`);
+            throw new Error(`The binary UUID is ${m.uuid}, but the decompiler requires version 1.2.59 (${WANT_UUID}).`);
         }
 
         // 1. Generate logic_tables.c
-        onProgress({ phase: 'Generando logic_tables.c', pct: 25 });
+        onProgress({ phase: 'Generating logic_tables.c', pct: 25 });
         const mapPath = path.join(rootDir, 'tools/build/logic_tables.map');
         const outLogicC = path.join(buildDir, 'logic_tables.c');
         extractLogicTables(rawBin, outLogicC, mapPath);
 
         // 2. Generate level_info.c
-        onProgress({ phase: 'Generando level_info.c', pct: 30 });
+        onProgress({ phase: 'Generating level_info.c', pct: 30 });
         const outLevelC = path.join(buildDir, 'level_info.c');
         extractLevelInfo(rawBin, outLevelC, 'UMK3');
 
         // 3. Generate seq_data.c
-        onProgress({ phase: 'Generando seq_data.c', pct: 35 });
+        onProgress({ phase: 'Generating seq_data.c', pct: 35 });
         const outSeqC = path.join(buildDir, 'seq_data.c');
         extractSeqData(rawBin, outSeqC, 'UMK3');
 
         // 4. Generate gamecode_globals64.c if Low32
         if (isLow32) {
-            onProgress({ phase: 'Generando gamecode_globals64.c', pct: 38 });
+            onProgress({ phase: 'Generating gamecode_globals64.c', pct: 38 });
             const globalsH = path.join(rootDir, 'src/runtime/gamecode_globals.h');
             const globalsC = path.join(rootDir, 'src/runtime/gamecode_globals.c');
             const outGlobalsC = path.join(buildDir, 'gamecode_globals64.c');
@@ -156,7 +156,7 @@ async function extractIpaPipeline({
         }
 
         // 5. Extract assets: res/* and Info.plist
-        onProgress({ phase: 'Extrayendo recursos del juego', pct: 40 });
+        onProgress({ phase: 'Extracting game assets', pct: 40 });
         const resDir = path.join(destDir, 'res');
         fs.mkdirSync(resDir, { recursive: true });
 
@@ -186,7 +186,7 @@ async function extractIpaPipeline({
             if (extractedCount % 100 === 0 || extractedCount === totalAssets) {
                 const pct = Math.round(40 + (extractedCount / totalAssets) * 50);
                 onProgress({
-                    phase: `Extrayendo recursos (${extractedCount}/${totalAssets})`,
+                    phase: `Extracting assets (${extractedCount}/${totalAssets})`,
                     pct,
                     done: extractedCount,
                     total: totalAssets,

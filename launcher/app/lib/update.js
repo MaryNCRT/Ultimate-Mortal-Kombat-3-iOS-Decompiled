@@ -83,13 +83,13 @@ async function check(fetchFn, current) {
 /* Streams the zip to dir/<file>; resolves with its path. */
 async function download(fetchFn, rel, dir, onProgress) {
     if (!/^[\w.\-]+\.zip$/i.test(rel.file))
-        throw new Error('nombre de archivo inesperado');
+        throw new Error('unexpected file name');
     fs.mkdirSync(dir, { recursive: true });
     const out = path.join(dir, rel.file);
     const part = out + '.part';
     const r = await fetchFn(rel.url, { headers: { 'User-Agent': 'UMK3-Launcher' } });
     if (!r.ok || !r.body)
-        throw new Error('descarga: HTTP ' + r.status);
+        throw new Error('download: HTTP ' + r.status);
     const total = Number(r.headers.get('content-length')) || rel.size || 0;
     const hash = crypto.createHash('sha256');
     const fd = fs.openSync(part, 'w');
@@ -110,7 +110,7 @@ async function download(fetchFn, rel, dir, onProgress) {
     const sum = hash.digest('hex');
     if (rel.sha256 && sum !== rel.sha256) {
         fs.rmSync(part, { force: true });
-        throw new Error('el SHA-256 de la descarga no coincide con el de GitHub');
+        throw new Error('download SHA-256 does not match GitHub digest');
     }
     fs.renameSync(part, out);
     return out;
@@ -132,14 +132,14 @@ function unpack(root, zip) {
             'Expand-Archive -LiteralPath ' + psq(zip) + ' -DestinationPath ' + psq(dest) + ' -Force'],
             { windowsHide: true });
     if (r.status !== 0)
-        throw new Error('no se pudo descomprimir la actualización');
+        throw new Error('could not unpack the update');
     /* the zip holds one folder, UMK3-PC-<version>; up to 0.0.9 the launcher
      * was one portable UMK3-Launcher.exe, since then a stub over launcher\bin */
     const cands = [dest].concat(fs.readdirSync(dest).map(n => path.join(dest, n)));
     const src = cands.find(d => (fs.existsSync(path.join(d, 'launcher')) || fs.existsSync(path.join(d, 'src')))
                              && (fs.existsSync(path.join(d, 'UMK3-Launcher.exe')) || fs.existsSync(path.join(d, 'UMK3-Launcher'))));
     if (!src)
-        throw new Error('la actualización no tiene la forma esperada');
+        throw new Error('the update archive structure is unexpected');
     return src;
 }
 
