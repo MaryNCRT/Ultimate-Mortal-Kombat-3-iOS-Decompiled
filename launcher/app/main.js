@@ -414,7 +414,8 @@ ipcMain.handle('profile:icon', (_ev, i) => prof.iconData(g_root, Number(i)));
 ipcMain.handle('glyphs:all', () => {
     const dirs = [path.join(g_root || '', 'aditional textures', 'glyphs'),
                   path.join(g_root || '', 'launcher', 'aditional textures', 'glyphs'),
-                  path.join(__dirname, '..', 'aditional textures', 'glyphs')];
+                  process.resourcesPath ? path.join(process.resourcesPath, 'launcher', 'aditional textures', 'glyphs') : '',
+                  path.join(__dirname, '..', 'aditional textures', 'glyphs')].filter(Boolean);
     const out = {};
     for (const d of dirs) {
         let sets;

@@ -31,6 +31,14 @@
       {
         "from": "../../src",
         "to": "src"
+      },
+      {
+        "from": "../../tools/build",
+        "to": "tools/build"
+      },
+      {
+        "from": "../aditional textures",
+        "to": "launcher/aditional textures"
       }
     ],
     "directories": {

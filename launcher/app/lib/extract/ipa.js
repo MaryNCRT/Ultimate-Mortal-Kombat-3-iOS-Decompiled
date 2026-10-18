@@ -208,7 +208,7 @@ async function extractIpaPipeline({
             fs.writeFileSync(iniPath, 'width=960\nheight=640\nfullscreen=0\nlanguage=\n', 'ascii');
         }
 
-        onProgress({ phase: 'Extracción completada', pct: 90 });
+        onProgress({ phase: 'Extraction completed', pct: 90 });
         return {
             success: true,
             version: WANT_VERSION,
