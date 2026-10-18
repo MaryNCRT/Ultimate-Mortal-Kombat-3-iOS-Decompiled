@@ -44,10 +44,21 @@ process.on('unhandledRejection', err => {
     dbg('unhandledRejection: ' + (err && err.stack || err));
 });
 
+function getWritableExeDir() {
+    if (process.env.APPIMAGE)
+        return path.dirname(process.env.APPIMAGE);
+    if (process.env.PORTABLE_EXECUTABLE_DIR)
+        return process.env.PORTABLE_EXECUTABLE_DIR;
+    return path.dirname(process.execPath);
+}
+
 function findRoot() {
-    const exeDir = path.dirname(process.execPath);
+    if (process.env.UMK3_ROOT)
+        return path.resolve(process.env.UMK3_ROOT);
+    if (app.isPackaged)
+        return getWritableExeDir();
+    const exeDir = getWritableExeDir();
     return rootm.findRoot([
-        process.env.UMK3_ROOT || null,
         process.cwd(),
         exeDir,
     ]);

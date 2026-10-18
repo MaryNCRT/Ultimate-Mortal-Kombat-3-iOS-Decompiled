@@ -27,6 +27,12 @@
       "renderer/**",
       "build/icon.ico"
     ],
+    "extraResources": [
+      {
+        "from": "../../src",
+        "to": "src"
+      }
+    ],
     "directories": {
       "output": "dist"
     },

@@ -18,6 +18,20 @@ const STEPS = [
     { lo: 90, hi: 100, title: 'Linking final executable' },
 ];
 
+function resolveSourceRoot(root) {
+    if (fs.existsSync(path.join(root, 'src', 'runtime'))) {
+        return root;
+    }
+    if (process.resourcesPath && fs.existsSync(path.join(process.resourcesPath, 'src', 'runtime'))) {
+        return process.resourcesPath;
+    }
+    const repoFallback = path.resolve(__dirname, '../../..');
+    if (fs.existsSync(path.join(repoFallback, 'src', 'runtime'))) {
+        return repoFallback;
+    }
+    return root;
+}
+
 /**
  * Runs the complete build pipeline: toolchain -> extraction -> compilation.
  * Calls onData({ text, pct, step, phase }) per event.
@@ -25,6 +39,7 @@ const STEPS = [
 async function build(root, ipa, arch = 'x64', onData = () => {}) {
     g_isCancelled = false;
 
+    const srcRoot = resolveSourceRoot(root);
     const buildDir = path.join(root, 'build');
     fs.mkdirSync(buildDir, { recursive: true });
 
@@ -65,7 +80,7 @@ async function build(root, ipa, arch = 'x64', onData = () => {}) {
             ipaPath: ipa,
             destDir: root,
             buildDir,
-            rootDir: root,
+            rootDir: srcRoot,
             isLow32,
             onProgress: p => {
                 let mappedPct;
@@ -102,7 +117,7 @@ async function build(root, ipa, arch = 'x64', onData = () => {}) {
 
         const targetOs = process.platform === 'win32' ? 'windows' : 'linux';
         await compileGame({
-            rootDir: root,
+            rootDir: srcRoot,
             buildDir,
             destDir: root,
             targetArch: arch,
