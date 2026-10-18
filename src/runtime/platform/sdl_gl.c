@@ -30,8 +30,26 @@ static bool          g_focused = true;
 static Uint64        g_start, g_freq;
 static SDL_GameController *g_controller;
 
+static int g_monitor;
+static char g_typed[64];
+static int  g_ntyped;
+int plat_open_borderless;
+
+static int monitor_idx(void)
+{
+    int n = SDL_GetNumVideoDisplays();
+    if (n <= 0)
+        return 0;
+    if (g_monitor >= 1 && g_monitor <= n)
+        return g_monitor - 1;
+    return 0;
+}
+
 bool plat_open(const char *title, int width, int height)
 {
+    Uint32 flags;
+    int disp;
+
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0) {
         SDL_Log("SDL_Init: %s", SDL_GetError());
         return false;
@@ -53,11 +71,17 @@ bool plat_open(const char *title, int width, int height)
     SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
 
+    disp = monitor_idx();
+    flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
+    if (plat_open_borderless)
+        flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+    else
+        flags |= SDL_WINDOW_RESIZABLE;
+
     g_wnd = SDL_CreateWindow(title,
-                             SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                             width, height,
-                             SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
-                             SDL_WINDOW_ALLOW_HIGHDPI);
+                             SDL_WINDOWPOS_CENTERED_DISPLAY(disp),
+                             SDL_WINDOWPOS_CENTERED_DISPLAY(disp),
+                             width, height, flags);
     if (!g_wnd) {
         SDL_Log("SDL_CreateWindow: %s", SDL_GetError());
         SDL_Quit();
@@ -94,24 +118,42 @@ bool plat_focused(void)
 
 void plat_fullscreen(void)
 {
+    if (!g_wnd)
+        return;
+    SDL_SetWindowFullscreen(g_wnd, 0);
+    SDL_SetWindowPosition(g_wnd,
+                          SDL_WINDOWPOS_CENTERED_DISPLAY(monitor_idx()),
+                          SDL_WINDOWPOS_CENTERED_DISPLAY(monitor_idx()));
     SDL_SetWindowFullscreen(g_wnd, SDL_WINDOW_FULLSCREEN_DESKTOP);
 }
 
-int plat_open_borderless;
-
 void plat_fullscreen_exclusive(void)
 {
+    if (!g_wnd)
+        return;
+    SDL_SetWindowFullscreen(g_wnd, 0);
+    SDL_SetWindowPosition(g_wnd,
+                          SDL_WINDOWPOS_CENTERED_DISPLAY(monitor_idx()),
+                          SDL_WINDOWPOS_CENTERED_DISPLAY(monitor_idx()));
     if (SDL_SetWindowFullscreen(g_wnd, SDL_WINDOW_FULLSCREEN) != 0)
         plat_fullscreen();
 }
 
 void plat_display(int mode, int w, int h)
 {
+    int disp;
+
+    if (!g_wnd)
+        return;
+    disp = monitor_idx();
     if (mode == 0) {
         SDL_SetWindowFullscreen(g_wnd, 0);
+        SDL_SetWindowBordered(g_wnd, SDL_TRUE);
+        SDL_SetWindowResizable(g_wnd, SDL_TRUE);
         SDL_SetWindowSize(g_wnd, w, h);
-        SDL_SetWindowPosition(g_wnd, SDL_WINDOWPOS_CENTERED,
-                              SDL_WINDOWPOS_CENTERED);
+        SDL_SetWindowPosition(g_wnd,
+                              SDL_WINDOWPOS_CENTERED_DISPLAY(disp),
+                              SDL_WINDOWPOS_CENTERED_DISPLAY(disp));
     } else if (mode == 1)
         plat_fullscreen();
     else {
@@ -132,30 +174,50 @@ unsigned char *plat_ui_badge(const char *name, const unsigned char *icon,
     return NULL;
 }
 
-/* No typed text in the SDL backend yet: profile names come from the
- * launcher there. */
 int plat_text_take(char *out, int n)
 {
-    if (n > 0)
-        out[0] = 0;
-    return 0;
+    int k = g_ntyped;
+
+    if (n <= 0)
+        return 0;
+    if (k >= n)
+        k = n - 1;
+    memcpy(out, g_typed, (size_t)k);
+    out[k] = 0;
+    g_ntyped = 0;
+    return k;
 }
 
 void plat_text_clear(void)
 {
+    g_ntyped = 0;
 }
 
 int plat_clipboard_text(char *out, int n)
 {
-    if (n > 0)
-        out[0] = 0;
-    return 0;
+    char *s;
+    int k = 0;
+
+    if (n <= 0)
+        return 0;
+    out[0] = 0;
+    if (!SDL_HasClipboardText())
+        return 0;
+    s = SDL_GetClipboardText();
+    if (!s)
+        return 0;
+    k = (int)snprintf(out, (size_t)n, "%s", s);
+    if (k >= n)
+        k = n - 1;
+    SDL_free(s);
+    return k > 0 ? k : 0;
 }
 
 int plat_clipboard_set(const char *utf8)
 {
-    (void)utf8;
-    return 0;
+    if (!utf8)
+        return 0;
+    return SDL_SetClipboardText(utf8) == 0 ? 1 : 0;
 }
 
 void *plat_gl_proc(const char *name)
@@ -173,6 +235,14 @@ bool plat_poll(void)
         case SDL_QUIT:
             g_quit = true;
             break;
+        case SDL_TEXTINPUT: {
+            size_t len = strlen(ev.text.text);
+            if (g_ntyped + (int)len < (int)sizeof(g_typed) - 1) {
+                memcpy(g_typed + g_ntyped, ev.text.text, len);
+                g_ntyped += (int)len;
+            }
+            break;
+        }
         case SDL_KEYDOWN:
             break;
         case SDL_WINDOWEVENT:
@@ -237,6 +307,226 @@ int plat_mouse(int *x, int *y)
     return (buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;
 }
 
+/* Windows VK_* codes used in umk3.ini and settings_menu.c */
+enum {
+    WVK_BACK       = 0x08,
+    WVK_TAB        = 0x09,
+    WVK_RETURN     = 0x0D,
+    WVK_SHIFT      = 0x10,
+    WVK_CONTROL    = 0x11,
+    WVK_MENU       = 0x12,
+    WVK_PAUSE      = 0x13,
+    WVK_CAPITAL    = 0x14,
+    WVK_ESCAPE     = 0x1B,
+    WVK_SPACE      = 0x20,
+    WVK_PRIOR      = 0x21,
+    WVK_NEXT       = 0x22,
+    WVK_END        = 0x23,
+    WVK_HOME       = 0x24,
+    WVK_LEFT       = 0x25,
+    WVK_UP         = 0x26,
+    WVK_RIGHT      = 0x27,
+    WVK_DOWN       = 0x28,
+    WVK_SNAPSHOT   = 0x2C,
+    WVK_INSERT     = 0x2D,
+    WVK_DELETE     = 0x2E,
+    WVK_NUMPAD0    = 0x60,
+    WVK_NUMPAD1    = 0x61,
+    WVK_NUMPAD2    = 0x62,
+    WVK_NUMPAD3    = 0x63,
+    WVK_NUMPAD4    = 0x64,
+    WVK_NUMPAD5    = 0x65,
+    WVK_NUMPAD6    = 0x66,
+    WVK_NUMPAD7    = 0x67,
+    WVK_NUMPAD8    = 0x68,
+    WVK_NUMPAD9    = 0x69,
+    WVK_MULTIPLY   = 0x6A,
+    WVK_ADD        = 0x6B,
+    WVK_SEPARATOR  = 0x6C,
+    WVK_SUBTRACT   = 0x6D,
+    WVK_DECIMAL    = 0x6E,
+    WVK_DIVIDE     = 0x6F,
+    WVK_F1         = 0x70,
+    WVK_F2         = 0x71,
+    WVK_F3         = 0x72,
+    WVK_F4         = 0x73,
+    WVK_F5         = 0x74,
+    WVK_F6         = 0x75,
+    WVK_F7         = 0x76,
+    WVK_F8         = 0x77,
+    WVK_F9         = 0x78,
+    WVK_F10        = 0x79,
+    WVK_F11        = 0x7A,
+    WVK_F12        = 0x7B,
+    WVK_NUMLOCK    = 0x90,
+    WVK_SCROLL     = 0x91,
+    WVK_LSHIFT     = 0xA0,
+    WVK_RSHIFT     = 0xA1,
+    WVK_LCONTROL   = 0xA2,
+    WVK_RCONTROL   = 0xA3,
+    WVK_LMENU      = 0xA4,
+    WVK_RMENU      = 0xA5,
+    WVK_OEM_1      = 0xBA,
+    WVK_OEM_PLUS   = 0xBB,
+    WVK_OEM_COMMA  = 0xBC,
+    WVK_OEM_MINUS  = 0xBD,
+    WVK_OEM_PERIOD = 0xBE,
+    WVK_OEM_2      = 0xBF,
+    WVK_OEM_3      = 0xC0,
+    WVK_OEM_4      = 0xDB,
+    WVK_OEM_5      = 0xDC,
+    WVK_OEM_6      = 0xDD,
+    WVK_OEM_7      = 0xDE,
+};
+
+static SDL_Scancode vk_to_scancode(int vk)
+{
+    if (vk >= 'A' && vk <= 'Z')
+        return (SDL_Scancode)(SDL_SCANCODE_A + (vk - 'A'));
+    if (vk == '0')
+        return SDL_SCANCODE_0;
+    if (vk >= '1' && vk <= '9')
+        return (SDL_Scancode)(SDL_SCANCODE_1 + (vk - '1'));
+    if (vk == WVK_NUMPAD0)
+        return SDL_SCANCODE_KP_0;
+    if (vk >= WVK_NUMPAD1 && vk <= WVK_NUMPAD9)
+        return (SDL_Scancode)(SDL_SCANCODE_KP_1 + (vk - WVK_NUMPAD1));
+    if (vk >= WVK_F1 && vk <= WVK_F12)
+        return (SDL_Scancode)(SDL_SCANCODE_F1 + (vk - WVK_F1));
+    switch (vk) {
+    case WVK_UP:         return SDL_SCANCODE_UP;
+    case WVK_DOWN:       return SDL_SCANCODE_DOWN;
+    case WVK_LEFT:       return SDL_SCANCODE_LEFT;
+    case WVK_RIGHT:      return SDL_SCANCODE_RIGHT;
+    case WVK_RETURN:     return SDL_SCANCODE_RETURN;
+    case WVK_ESCAPE:     return SDL_SCANCODE_ESCAPE;
+    case WVK_SPACE:      return SDL_SCANCODE_SPACE;
+    case WVK_TAB:        return SDL_SCANCODE_TAB;
+    case WVK_BACK:       return SDL_SCANCODE_BACKSPACE;
+    case WVK_SHIFT:
+    case WVK_LSHIFT:     return SDL_SCANCODE_LSHIFT;
+    case WVK_RSHIFT:     return SDL_SCANCODE_RSHIFT;
+    case WVK_CONTROL:
+    case WVK_LCONTROL:   return SDL_SCANCODE_LCTRL;
+    case WVK_RCONTROL:   return SDL_SCANCODE_RCTRL;
+    case WVK_MENU:
+    case WVK_LMENU:      return SDL_SCANCODE_LALT;
+    case WVK_RMENU:      return SDL_SCANCODE_RALT;
+    case WVK_CAPITAL:    return SDL_SCANCODE_CAPSLOCK;
+    case WVK_INSERT:     return SDL_SCANCODE_INSERT;
+    case WVK_DELETE:     return SDL_SCANCODE_DELETE;
+    case WVK_HOME:       return SDL_SCANCODE_HOME;
+    case WVK_END:        return SDL_SCANCODE_END;
+    case WVK_PRIOR:      return SDL_SCANCODE_PAGEUP;
+    case WVK_NEXT:       return SDL_SCANCODE_PAGEDOWN;
+    case WVK_MULTIPLY:   return SDL_SCANCODE_KP_MULTIPLY;
+    case WVK_ADD:        return SDL_SCANCODE_KP_PLUS;
+    case WVK_SUBTRACT:   return SDL_SCANCODE_KP_MINUS;
+    case WVK_DECIMAL:    return SDL_SCANCODE_KP_PERIOD;
+    case WVK_DIVIDE:     return SDL_SCANCODE_KP_DIVIDE;
+    case WVK_NUMLOCK:    return SDL_SCANCODE_NUMLOCKCLEAR;
+    case WVK_SCROLL:     return SDL_SCANCODE_SCROLLLOCK;
+    case WVK_PAUSE:      return SDL_SCANCODE_PAUSE;
+    case WVK_SNAPSHOT:   return SDL_SCANCODE_PRINTSCREEN;
+    case WVK_OEM_1:      return SDL_SCANCODE_SEMICOLON;
+    case WVK_OEM_PLUS:   return SDL_SCANCODE_EQUALS;
+    case WVK_OEM_COMMA:  return SDL_SCANCODE_COMMA;
+    case WVK_OEM_MINUS:  return SDL_SCANCODE_MINUS;
+    case WVK_OEM_PERIOD: return SDL_SCANCODE_PERIOD;
+    case WVK_OEM_2:      return SDL_SCANCODE_SLASH;
+    case WVK_OEM_3:      return SDL_SCANCODE_GRAVE;
+    case WVK_OEM_4:      return SDL_SCANCODE_LEFTBRACKET;
+    case WVK_OEM_5:      return SDL_SCANCODE_BACKSLASH;
+    case WVK_OEM_6:      return SDL_SCANCODE_RIGHTBRACKET;
+    case WVK_OEM_7:      return SDL_SCANCODE_APOSTROPHE;
+    default:             return SDL_SCANCODE_UNKNOWN;
+    }
+}
+
+static int scancode_to_vk(SDL_Scancode sc)
+{
+    if (sc >= SDL_SCANCODE_A && sc <= SDL_SCANCODE_Z)
+        return 'A' + (sc - SDL_SCANCODE_A);
+    if (sc == SDL_SCANCODE_0)
+        return '0';
+    if (sc >= SDL_SCANCODE_1 && sc <= SDL_SCANCODE_9)
+        return '1' + (sc - SDL_SCANCODE_1);
+    if (sc == SDL_SCANCODE_KP_0)
+        return WVK_NUMPAD0;
+    if (sc >= SDL_SCANCODE_KP_1 && sc <= SDL_SCANCODE_KP_9)
+        return WVK_NUMPAD1 + (sc - SDL_SCANCODE_KP_1);
+    if (sc >= SDL_SCANCODE_F1 && sc <= SDL_SCANCODE_F12)
+        return WVK_F1 + (sc - SDL_SCANCODE_F1);
+    switch (sc) {
+    case SDL_SCANCODE_UP:           return WVK_UP;
+    case SDL_SCANCODE_DOWN:         return WVK_DOWN;
+    case SDL_SCANCODE_LEFT:         return WVK_LEFT;
+    case SDL_SCANCODE_RIGHT:        return WVK_RIGHT;
+    case SDL_SCANCODE_RETURN:
+    case SDL_SCANCODE_KP_ENTER:     return WVK_RETURN;
+    case SDL_SCANCODE_ESCAPE:       return WVK_ESCAPE;
+    case SDL_SCANCODE_SPACE:        return WVK_SPACE;
+    case SDL_SCANCODE_TAB:          return WVK_TAB;
+    case SDL_SCANCODE_BACKSPACE:    return WVK_BACK;
+    case SDL_SCANCODE_LSHIFT:
+    case SDL_SCANCODE_RSHIFT:       return WVK_SHIFT;
+    case SDL_SCANCODE_LCTRL:
+    case SDL_SCANCODE_RCTRL:        return WVK_CONTROL;
+    case SDL_SCANCODE_LALT:
+    case SDL_SCANCODE_RALT:         return WVK_MENU;
+    case SDL_SCANCODE_CAPSLOCK:     return WVK_CAPITAL;
+    case SDL_SCANCODE_INSERT:       return WVK_INSERT;
+    case SDL_SCANCODE_DELETE:       return WVK_DELETE;
+    case SDL_SCANCODE_HOME:         return WVK_HOME;
+    case SDL_SCANCODE_END:          return WVK_END;
+    case SDL_SCANCODE_PAGEUP:       return WVK_PRIOR;
+    case SDL_SCANCODE_PAGEDOWN:     return WVK_NEXT;
+    case SDL_SCANCODE_KP_MULTIPLY:  return WVK_MULTIPLY;
+    case SDL_SCANCODE_KP_PLUS:      return WVK_ADD;
+    case SDL_SCANCODE_KP_MINUS:     return WVK_SUBTRACT;
+    case SDL_SCANCODE_KP_PERIOD:    return WVK_DECIMAL;
+    case SDL_SCANCODE_KP_DIVIDE:    return WVK_DIVIDE;
+    case SDL_SCANCODE_NUMLOCKCLEAR: return WVK_NUMLOCK;
+    case SDL_SCANCODE_SCROLLLOCK:   return WVK_SCROLL;
+    case SDL_SCANCODE_PAUSE:        return WVK_PAUSE;
+    case SDL_SCANCODE_PRINTSCREEN:  return WVK_SNAPSHOT;
+    case SDL_SCANCODE_SEMICOLON:    return WVK_OEM_1;
+    case SDL_SCANCODE_EQUALS:       return WVK_OEM_PLUS;
+    case SDL_SCANCODE_COMMA:        return WVK_OEM_COMMA;
+    case SDL_SCANCODE_MINUS:        return WVK_OEM_MINUS;
+    case SDL_SCANCODE_PERIOD:       return WVK_OEM_PERIOD;
+    case SDL_SCANCODE_SLASH:        return WVK_OEM_2;
+    case SDL_SCANCODE_GRAVE:        return WVK_OEM_3;
+    case SDL_SCANCODE_LEFTBRACKET:  return WVK_OEM_4;
+    case SDL_SCANCODE_BACKSLASH:    return WVK_OEM_5;
+    case SDL_SCANCODE_RIGHTBRACKET: return WVK_OEM_6;
+    case SDL_SCANCODE_APOSTROPHE:   return WVK_OEM_7;
+    default:                        return 0;
+    }
+}
+
+static int g_vk[PK_COUNT] = {
+    'W', 'S', 'A', 'D',
+    'U', 'I', 'O', 'J', 'K', 'L',
+    WVK_UP, WVK_DOWN, WVK_LEFT, WVK_RIGHT,
+    WVK_NUMPAD7, WVK_NUMPAD8, WVK_NUMPAD9,
+    WVK_NUMPAD4, WVK_NUMPAD5, WVK_NUMPAD6,
+    WVK_F5,
+    WVK_F1, WVK_RETURN, WVK_RIGHT, WVK_LEFT,
+    WVK_F3,
+    WVK_F2,
+    WVK_F9, WVK_F10, WVK_F11, WVK_F12,
+    'P', 'M',
+    WVK_F6, WVK_F7, WVK_F8,
+    'H', WVK_NUMPAD0,
+    'U', 'O', 'J', 'L',
+    'Q', 'E',
+    WVK_NUMPAD7, WVK_NUMPAD9,
+    WVK_NUMPAD4, WVK_NUMPAD6,
+    WVK_ESCAPE,
+    WVK_DIVIDE, WVK_MULTIPLY, WVK_NUMPAD1,
+};
+
 static SDL_Scancode g_scancode[PK_COUNT] = {
     SDL_SCANCODE_W, SDL_SCANCODE_S, SDL_SCANCODE_A, SDL_SCANCODE_D,
     SDL_SCANCODE_U, SDL_SCANCODE_I, SDL_SCANCODE_O,
@@ -253,6 +543,8 @@ static SDL_Scancode g_scancode[PK_COUNT] = {
     SDL_SCANCODE_H, SDL_SCANCODE_KP_0,
     SDL_SCANCODE_U, SDL_SCANCODE_O, SDL_SCANCODE_J, SDL_SCANCODE_L,
     SDL_SCANCODE_Q, SDL_SCANCODE_E,
+    SDL_SCANCODE_KP_7, SDL_SCANCODE_KP_9,
+    SDL_SCANCODE_KP_4, SDL_SCANCODE_KP_6,
     [PK_SETTINGS] = SDL_SCANCODE_ESCAPE,
     [PK_P2_PAUSE] = SDL_SCANCODE_KP_DIVIDE,
     [PK_P2_MOVES] = SDL_SCANCODE_KP_MULTIPLY,
@@ -278,11 +570,14 @@ void plat_key_glyph(int code, char *out, int n)
     plat_key_label(code, out, n);
 }
 
+static int g_glyph_style[2];
+
 int plat_pad_glyph_style(int player, int style)
 {
-    (void)player;
-    (void)style;
-    return 0;
+    player = player ? 1 : 0;
+    if (style >= 0 && style <= 4)
+        g_glyph_style[player] = style;
+    return g_glyph_style[player];
 }
 
 unsigned char *plat_ui_grid(const char *title,
@@ -295,15 +590,59 @@ unsigned char *plat_ui_grid(const char *title,
     return NULL;
 }
 
-void plat_monitor_select(int i) { (void)i; }
-int  plat_monitor(void) { return 0; }
-int  plat_monitor_count(void) { return 1; }
+void plat_monitor_select(int i)
+{
+    g_monitor = i >= 1 ? i : 0;
+}
+
+int plat_monitor(void)
+{
+    return g_monitor;
+}
+
+int plat_monitor_count(void)
+{
+    int n;
+    if (SDL_WasInit(SDL_INIT_VIDEO) == 0)
+        SDL_InitSubSystem(SDL_INIT_VIDEO);
+    n = SDL_GetNumVideoDisplays();
+    return n > 0 ? n : 1;
+}
+
 void plat_monitor_name(int i, char *out, int n)
 {
-    if (n > 0)
-        snprintf(out, (size_t)n, "%d", i);
+    const char *name;
+    int count;
+
+    if (n <= 0)
+        return;
+    count = plat_monitor_count();
+    if (i >= 1 && i <= count) {
+        name = SDL_GetDisplayName(i - 1);
+        if (name && *name) {
+            snprintf(out, (size_t)n, "%d: %s", i, name);
+            return;
+        }
+    }
+    snprintf(out, (size_t)n, "%d", i);
 }
-void plat_monitor_list(void) { printf("1\t1\n"); }
+
+void plat_monitor_list(void)
+{
+    int i, count = plat_monitor_count();
+
+    for (i = 1; i <= count; i++) {
+        SDL_Rect r;
+        const char *name = SDL_GetDisplayName(i - 1);
+        if (SDL_GetDisplayBounds(i - 1, &r) == 0)
+            printf("%d\t%d: %s (%dx%d)\n", i, i,
+                   name && *name ? name : "Display", r.w, r.h);
+        else
+            printf("%d\t%d: %s\n", i, i,
+                   name && *name ? name : "Display");
+    }
+    fflush(stdout);
+}
 
 int plat_pad_sony_kind(unsigned product)
 {
@@ -312,8 +651,8 @@ int plat_pad_sony_kind(unsigned product)
 
 int plat_pad_glyph_kind(int player, int kind)
 {
-    (void)player;
-    return kind;
+    int st = g_glyph_style[player ? 1 : 0];
+    return st ? st : kind;
 }
 
 void plat_pad_glyph(int kind, int pb, char *out, int n)
@@ -329,13 +668,17 @@ void plat_pad_glyph(int kind, int pb, char *out, int n)
 
 void plat_bind_key(int code, int key)
 {
-    if (code >= 0 && code < PK_COUNT && key > 0 && key < SDL_NUM_SCANCODES)
-        g_scancode[code] = (SDL_Scancode)key;
+    if (code >= 0 && code < PK_COUNT && key > 0 && key < 256) {
+        SDL_Scancode sc = vk_to_scancode(key);
+        g_vk[code] = key;
+        if (sc != SDL_SCANCODE_UNKNOWN)
+            g_scancode[code] = sc;
+    }
 }
 
 int plat_key_bound(int code)
 {
-    return code >= 0 && code < PK_COUNT ? (int)g_scancode[code] : 0;
+    return code >= 0 && code < PK_COUNT ? g_vk[code] : 0;
 }
 
 int plat_key_backspace(void)
@@ -345,12 +688,15 @@ int plat_key_backspace(void)
 
 int plat_key_any(void)
 {
-    int count, i;
+    int count, i, vk;
     const Uint8 *keys = SDL_GetKeyboardState(&count);
 
     for (i = 1; i < count; i++)
-        if (keys[i])
-            return i;
+        if (keys[i]) {
+            vk = scancode_to_vk((SDL_Scancode)i);
+            if (vk > 0)
+                return vk;
+        }
     return 0;
 }
 

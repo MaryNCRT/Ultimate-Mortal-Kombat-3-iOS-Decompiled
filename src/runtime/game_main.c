@@ -775,6 +775,8 @@ static int open_session_log(void)
            t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
     return 1;
 }
+#else
+#include <unistd.h>
 #endif
 
 /* UMK3_TAPS: "120:240,160;300:100,40" taps (240,160) at tick 120, and so on.
@@ -2586,6 +2588,25 @@ int main(int argc, char **argv)
     SetUnhandledExceptionFilter(on_crash);
     if (open_session_log())
         log_tasks = 1;
+#else
+    static char exe_res[4096];
+    if (argc <= 1 || argv[1][0] == '-') {
+        ssize_t len = readlink("/proc/self/exe", exe_res, sizeof(exe_res) - 8);
+        char *slash = (len > 0) ? (exe_res[len] = 0, strrchr(exe_res, '/')) : NULL;
+        if (slash) {
+            slash[1] = 0;
+            read_config(exe_res);
+            strcpy(slash + 1, "res");
+            root = exe_res;
+        } else {
+            read_config("");
+        }
+    } else {
+        read_config("");
+    }
+    if (g_cfg_lang[0] && !getenv("UMK3_LANG")) {
+        setenv("UMK3_LANG", g_cfg_lang, 0);
+    }
 #endif
     if (getenv("UMK3_DEBUG_KEYS"))
         g_cfg_debug_keys = 1;

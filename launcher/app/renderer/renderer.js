@@ -865,9 +865,28 @@ function applyConfig() {
     paintMonitors();
 }
 
+let saving = 0, lastUiInteract = 0;
+
 async function save(delta) {
-    const next = await window.umk3.saveConfig(delta);
-    if (next) cfg = next;
+    lastUiInteract = Date.now();
+    if (cfg && delta && typeof delta === 'object') {
+        for (const [k, v] of Object.entries(delta)) {
+            if (['keys', 'keys5', 'padKeys', 'padKeys5', 'p2Keys', 'p2Keys5',
+                 'p2PadKeys', 'p2PadKeys5'].includes(k) && v && typeof v === 'object') {
+                cfg[k] = Object.assign({}, cfg[k], v);
+            } else {
+                cfg[k] = v;
+            }
+        }
+    }
+    saving++;
+    try {
+        const next = await window.umk3.saveConfig(delta);
+        if (next) cfg = next;
+    } finally {
+        saving--;
+        lastUiInteract = Date.now();
+    }
 }
 
 /* -------------------------------------------------------------- build -- */
@@ -1332,10 +1351,17 @@ async function init() {
     applyTexts();
     initProfile();
     refreshProfile();
+    document.addEventListener('pointerdown', () => { lastUiInteract = Date.now(); }, true);
+    document.addEventListener('mousedown', () => { lastUiInteract = Date.now(); }, true);
+    document.addEventListener('change', () => { lastUiInteract = Date.now(); }, true);
+
     /* The game's settings menu (Esc) writes umk3.ini and profiles.ini too:
      * read them again whenever the launcher comes back to the front. */
     window.addEventListener('focus', async () => {
-        if (waitingKey || building)
+        if (waitingKey || building || saving > 0 || Date.now() - lastUiInteract < 1500)
+            return;
+        const tag = (document.activeElement && document.activeElement.tagName) || '';
+        if (tag === 'SELECT' || tag === 'INPUT')
             return;
         cfg = await window.umk3.loadConfig();
         applyConfig();

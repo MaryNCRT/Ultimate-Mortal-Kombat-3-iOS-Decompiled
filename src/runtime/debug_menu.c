@@ -848,16 +848,21 @@ void ui_menu_show(const char *title, const char *const *tabs, int ntabs,
         glBegin(GL_QUADS);
         glColor4f(0.0f, 0.0f, 0.0f, 0.75f);
         rect(x0 - 12, y0 - 40, bw, rows * lh + 66);
-        for (i = 0; i < ntabs; i++) {           /* the tabs */
-            float tw = bw / ntabs, tx = x0 - 12 + i * tw;
-            if (i == page)
-                glColor4f(0.8f, 0.1f, 0.1f, 0.9f);
-            else
-                glColor4f(0.25f, 0.25f, 0.25f, 0.9f);
-            rect(tx + 1, y0 - 22, tw - 2, 14);
-            glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-            text(tx + (tw - (float)strlen(tabs[i]) * CH_W) * 0.5f,
-                 y0 - 19, px, tabs[i]);
+        {
+            int nt = ntabs < 0 ? -ntabs : ntabs;
+            g_sx = 0;
+            g_sw = 0;
+            for (i = 0; i < nt; i++) {          /* the tabs */
+                float tw = bw / nt, tx = x0 - 12 + i * tw;
+                if (i == page)
+                    glColor4f(0.8f, 0.1f, 0.1f, 0.9f);
+                else
+                    glColor4f(0.25f, 0.25f, 0.25f, 0.9f);
+                rect(tx + 1, y0 - 22, tw - 2, 14);
+                glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+                text(tx + (tw - (float)strlen(tabs[i]) * CH_W) * 0.5f,
+                     y0 - 19, px, tabs[i]);
+            }
         }
         glColor4f(0.8f, 0.1f, 0.1f, 0.9f);
         rect(x0 - 8, y0 + sel * lh - 4, bw - 8, lh - 1);

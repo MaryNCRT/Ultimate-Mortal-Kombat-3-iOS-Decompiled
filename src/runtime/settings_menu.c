@@ -1310,7 +1310,13 @@ void set_menu_tick(void)
         }
     } else if (click && g_geo.rowh > 0 && g_mx >= g_geo.bx && g_mx < g_geo.bx + g_geo.bw) {
         float mid = g_geo.bx + g_geo.bw * 0.5f;
-        if (g_my >= g_geo.top) {
+        if (g_geo.srow <= 0 && g_my >= g_geo.title0 && g_my < g_geo.top) {
+            int t = (int)((g_mx - g_geo.bx) * N_PAGES / g_geo.bw);
+            if (t >= 0 && t < N_PAGES && t != g_page) {
+                turn_page(t - g_page);
+                build();
+            }
+        } else if (g_my >= g_geo.top) {
             int i = g_first + (int)((g_my - g_geo.top) / g_geo.rowh);
             if (i < g_n && i - g_first < VIS_ROWS && g_rows[i].en) {
                 g_sel = i;
