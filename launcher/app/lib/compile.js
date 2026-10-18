@@ -249,7 +249,7 @@ async function compileGame({
         const resObj = path.join(objDir, 'umk3_game.res');
         objFiles.push(resObj);
         tasks.push(async () => {
-            execSync(`"${zigExe}" rc /fo "${resObj}" "${rcPath}"`, { stdio: 'pipe' });
+            execSync(`"${zigExe}" rc -- "${rcPath}" "${resObj}"`, { stdio: 'pipe' });
         });
     }
 
@@ -288,12 +288,10 @@ async function compileGame({
     if (isWindows) {
         linkArgs.push(
             `-target`, isLow32 ? 'x86_64-windows-gnu' : 'x86-windows-gnu',
-            '-lopengl32', '-lwinmm', '-lgdi32', '-luser32', '-lkernel32', '-lws2_32'
+            '-lopengl32', '-lwinmm', '-lmsacm32', '-lgdi32', '-luser32', '-lkernel32', '-lws2_32'
         );
         if (isLow32) {
-            linkArgs.push('-Wl,--image-base,0x400000', '-Wl,--disable-dynamicbase', '-Wl,--disable-high-entropy-va');
-        } else {
-            linkArgs.push('-Wl,--large-address-aware');
+            linkArgs.push('-Wl,--image-base,0x400000', '-Wl,--no-dynamicbase');
         }
     } else {
         if (process.platform !== 'linux') {
@@ -324,7 +322,26 @@ async function compileGame({
 
         linkChild.on('close', code => {
             if (code === 0) {
-                if (!isWindows) {
+                if (isWindows) {
+                    try {
+                        const buf = fs.readFileSync(outExe);
+                        if (buf.length >= 0x40 && buf.readUInt16LE(0) === 0x5A4D) {
+                            const peOff = buf.readUInt32LE(0x3C);
+                            if (peOff + 96 <= buf.length && buf.readUInt32LE(peOff) === 0x00004550) {
+                                if (isLow32) {
+                                    const dllCharOff = peOff + 94;
+                                    const dllChar = buf.readUInt16LE(dllCharOff);
+                                    buf.writeUInt16LE(dllChar & ~(0x0020 | 0x0040), dllCharOff);
+                                } else {
+                                    const charOff = peOff + 22;
+                                    const ch = buf.readUInt16LE(charOff);
+                                    buf.writeUInt16LE(ch | 0x0020, charOff);
+                                }
+                                fs.writeFileSync(outExe, buf);
+                            }
+                        }
+                    } catch (_) {}
+                } else {
                     try { fs.chmodSync(outExe, 0o755); } catch (_) {}
                 }
                 resolve();

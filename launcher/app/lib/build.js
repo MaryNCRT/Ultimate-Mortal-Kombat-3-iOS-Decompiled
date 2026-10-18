@@ -135,7 +135,7 @@ async function build(root, ipa, arch = 'x64', onData = () => {}) {
                 }
 
                 onData({
-                    text: p.phase + (p.file ? ` [${p.done}/${p.total}] ${p.file}` : ''),
+                    text: p.phase,
                     step,
                     phase: p.phase,
                     pct: mappedPct,
