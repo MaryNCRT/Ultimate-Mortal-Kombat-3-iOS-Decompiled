@@ -96,8 +96,13 @@ dist/
 
 # The launcher's output in a release or repository root: built from the
 # player's own .ipa, never committed.
+/umk3-game
 /umk3-game.exe
+/umk3-game64.exe
 /umk3.ini
+/profiles.ini
+/profiles-*.ini
+/aditional textures/
 /res/
 /save/
 /logs/
