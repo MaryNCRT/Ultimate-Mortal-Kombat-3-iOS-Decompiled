@@ -186,6 +186,10 @@ async function compileGame({
     const baseFlags = [
         '-std=gnu11',
         '-w',
+        '-O2',
+        '-fno-strict-aliasing',
+        '-fno-sanitize=undefined',
+        '-fwrapv',
         '-DUMK3_HAVE_MK3',
         '-DUMK3_REAL_GL',
         '-DUMK3_SHELL',
@@ -196,7 +200,7 @@ async function compileGame({
     ];
 
     if (isWindows) {
-        baseFlags.push(`-target`, isLow32 ? 'x86_64-windows-gnu' : 'x86-windows-gnu');
+        baseFlags.push(`-target`, isLow32 ? 'x86_64-windows-gnu' : 'x86-windows-gnu', '-fms-extensions');
     } else {
         if (process.platform !== 'linux') {
             baseFlags.push(`-target`, isLow32 ? 'x86_64-linux-gnu' : 'x86-linux-gnu');
@@ -214,8 +218,6 @@ async function compileGame({
         baseFlags.push(
             '-DUMK3_LOW32',
             '-fms-extensions',
-            '-O2',
-            '-fno-strict-aliasing',
             '-fno-jump-tables'
         );
     }
@@ -288,6 +290,7 @@ async function compileGame({
     if (isWindows) {
         linkArgs.push(
             `-target`, isLow32 ? 'x86_64-windows-gnu' : 'x86-windows-gnu',
+            '-Wl,--subsystem,windows',
             '-lopengl32', '-lwinmm', '-lmsacm32', '-lgdi32', '-luser32', '-lkernel32', '-lws2_32'
         );
         if (isLow32) {

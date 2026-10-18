@@ -80,7 +80,13 @@ void  st_free(void *p);
 #endif
 
 #ifdef UMK3_STATE_FILE
+#ifdef _WIN32
+__asm__(".section .umkstb,\"bw\"");
+#pragma data_seg(".umkstd")
+#pragma bss_seg(".umkstb")
+#else
 #pragma clang section data=".umkstd" bss=".umkstb"
+#endif
 #define malloc(n)      st_malloc(n)
 #define calloc(n, s)   st_calloc(n, s)
 #define realloc(p, n)  st_realloc(p, n)
