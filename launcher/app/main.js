@@ -83,13 +83,13 @@ async function resolveRoot() {
         const picked = await dialog.showOpenDialog({
             title: 'UMK3 LAUNCHER: elige la carpeta del juego',
             properties: ['openDirectory'],
-            message: 'Selecciona la carpeta que contiene launcher\\build_game.ps1 / umk3-game.exe (la carpeta del juego).',
+            message: 'Selecciona la carpeta que contiene el juego (la carpeta con src o umk3-game).',
         });
         r = picked.canceled ? null : picked.filePaths[0];
         if (r && !rootm.looksLikeRoot(r)) {
             dialog.showMessageBox({
                 type: 'error',
-                message: 'Esa carpeta no parece una instalación del port (falta launcher\\build_game.ps1 o umk3-game.exe).',
+                message: 'Esa carpeta no parece una instalación del port (falta la carpeta src o el ejecutable del juego).',
             });
             r = null;
         }

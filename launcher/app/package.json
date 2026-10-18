@@ -7,8 +7,9 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win dir --x64",
-    "portable": "electron-builder --win portable --x64",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win zip portable --x64",
+    "dist:linux": "electron-builder --linux tar.gz AppImage --x64",
     "test": "node --test test/*.js"
   },
   "devDependencies": {
@@ -31,13 +32,22 @@
     },
     "win": {
       "target": [
-        "dir"
+        "zip",
+        "portable"
       ],
       "icon": "build/icon.ico",
       "signAndEditExecutable": false
     },
     "portable": {
-      "artifactName": "UMK3-Launcher.exe"
+      "artifactName": "UMK3-Launcher-Windows.exe"
+    },
+    "linux": {
+      "target": [
+        "tar.gz",
+        "AppImage"
+      ],
+      "category": "Game",
+      "icon": "build/icon.png"
     }
   }
 }

@@ -32,7 +32,7 @@
  */
 #include "arm_runtime.h"
 #include "renderskinned.h"
-#include "../decomp/lime/lime.h"
+#include "../src/decomp/lime/lime.h"
 
 #include <stdio.h>
 #include <stdlib.h>

@@ -12,8 +12,11 @@ const fs = require('fs');
 const path = require('path');
 
 function looksLikeRoot(dir) {
-    return fs.existsSync(path.join(dir, 'launcher', 'build_game.ps1'))
-        || fs.existsSync(path.join(dir, 'umk3-game.exe'));
+    return fs.existsSync(path.join(dir, 'src', 'runtime'))
+        || fs.existsSync(path.join(dir, 'tools', 'build'))
+        || fs.existsSync(path.join(dir, 'umk3-game'))
+        || fs.existsSync(path.join(dir, 'umk3-game.exe'))
+        || fs.existsSync(path.join(dir, 'res', 'Info.plist'));
 }
 
 function walkUp(start) {

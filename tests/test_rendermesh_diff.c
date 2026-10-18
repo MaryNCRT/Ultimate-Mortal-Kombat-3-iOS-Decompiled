@@ -23,7 +23,7 @@
 
 #include "arm_runtime.h"
 #include "rendermesh.h"
-#include "../decomp/lime/lime.h"
+#include "../src/decomp/lime/lime.h"
 
 void lime_platform_set_asset_root(const char *path);
 

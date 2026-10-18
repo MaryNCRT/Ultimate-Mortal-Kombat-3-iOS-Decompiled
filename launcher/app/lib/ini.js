@@ -337,24 +337,31 @@ function save(p, cfg) {
     fs.writeFileSync(p, lines.join('\n') + '\n', 'utf8');
 }
 
-/* The game's exe for arch= (x86 or x64). */
+/* The game's executable for arch= (x86 or x64) across platforms. */
 function gameExe(arch) {
+    if (process.platform !== 'win32') {
+        return arch === 'x86' ? 'umk3-game32' : 'umk3-game';
+    }
     return arch === 'x64' ? 'umk3-game64.exe' : 'umk3-game.exe';
 }
 
 /* When the game was last compiled: the exe's time, or null. */
 function gameBuiltAt(root, arch) {
-    try {
-        return fs.statSync(path.join(root, gameExe(arch))).mtimeMs;
-    } catch (err) {
-        return null;
+    for (const name of [gameExe(arch), 'umk3-game.exe', 'umk3-game']) {
+        try {
+            return fs.statSync(path.join(root, name)).mtimeMs;
+        } catch (_) {}
     }
+    return null;
 }
 
 function gameReady(root, arch) {
     const exe = path.join(root, gameExe(arch));
     const plist = path.join(root, 'res', 'Info.plist');
-    return fs.existsSync(exe) && fs.existsSync(plist);
+    const hasExe = fs.existsSync(exe)
+        || fs.existsSync(path.join(root, 'umk3-game.exe'))
+        || fs.existsSync(path.join(root, 'umk3-game'));
+    return hasExe && fs.existsSync(plist);
 }
 
 module.exports = { RES, LANGS, KEY_NAMES, KEY_DEFAULTS, KEY5_NAMES, KEY5_DEFAULTS,

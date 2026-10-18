@@ -34,7 +34,7 @@
 
 #include "arm_runtime.h"
 #include "events.h"                     /* oracle: tools/armrecomp */
-#include "../decomp/lime/lime.h"        /* clean C */
+#include "../src/decomp/lime/lime.h"        /* clean C */
 
 #include <stdio.h>
 #include <string.h>

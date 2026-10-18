@@ -12,7 +12,7 @@
 
 #include "arm_runtime.h"
 #include "matrix.h"                 /* oraculo: tools/armrecomp */
-#include "../decomp/lime/lime.h"    /* C limpio */
+#include "../src/decomp/lime/lime.h"    /* C limpio */
 
 #include <math.h>
 #include <stdio.h>

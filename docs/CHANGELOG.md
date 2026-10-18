@@ -1,0 +1,52 @@
+# Changelog
+
+Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59).
+
+---
+
+## 2026-10-18 — Repository Reorganization & Unified `.ipa` Build
+
+- **Directory layout:** Separated source into `src/decomp/` (1:1 decompiled C) and `src/runtime/` (PC port layer), and tools into `tools/build/` (build-time `.ipa` & table extractors) and `tools/decomp/` (reverse engineering, Ghidra, `armrecomp`, `difftest`).
+- **Single-command `.ipa` build (`build.py`):** Added `build.py` and `tools/build/unpack_ipa.py` + `CMakeLists.txt` (`-DUMK3_IPA=<path.ipa>`) to validate the 1.2.59 `.ipa`, unpack `res/`, extract the 229 data tables, and compile `umk3-game` and `umk3-fight-headless`.
+- **Removed dead code:** Removed unused legacy prototype executables (`umk3-menu`, `umk3-fight`, `umk3-test`), old Win32 `launcher.c`, experimental `web/` wrapper, and one-off scaffolding scripts.
+
+## 0.1.5-alpha (2026-10-16) — Online Update
+
+- **PLAY > ONLINE:** Transcribed `limeMPGameSpecific.c` (48 functions, 14 packet types, 120-entry sprite-list queue) and added `src/runtime/mp_net.c` (UDP + LAN discovery) and `FE_Task_Online` (FE task 51).
+- **Fixes:** Fixed `UpdateArcadeCode` guest/host `GameObjects` pointer, `Task_GameInit` online task transition (`Task_MultiplayerSync`), `dummyObjects` head pointer relink, and 64-bit `DrawAnimAsSprite` texture table width.
+
+## 0.1.4-beta (2026-10-16) — 64-Bit Build & Arcade Crash Fix
+
+- **64-bit build (`UMK3_LOW32`):** Added 32-bit pointer support (`__ptr32`) keeping game heaps and static data below 2 GB.
+- **Fixes:** Fixed crash on winning Arcade / leaving stage 14 caused by non-NULL initial scene handles in `gamecode_globals.c`; added fallback animation frames for Classic Sub-Zero's elbow combo (`RPCOMBO6..9`).
+
+## 0.1.3-beta (2026-10-16) — Controller Menu Navigation & Console Launcher
+
+- **Menu navigation (`src/runtime/pad_nav.c`):** Full gamepad and keyboard navigation across all 51 front-end screens, two-player simultaneous character select, right-stick palette switching, and input prompt icons.
+- **Settings & Launcher:** Added monitor selection (`monitor=`), player 2 pause/moves-list keys, and redesigned Electron launcher.
+
+## 0.1.2-alpha (2026-10-15) — In-Game Settings & Player Profiles
+
+- **In-game settings menu (`Esc`, `src/runtime/settings_menu.c`):** Live graphics reconfiguration (resolution, aspect ratio, texture quality) and live keyboard/gamepad rebinding without restarting.
+- **Player profiles (`src/runtime/profiles.c`):** Persistent player ID, name, and customizable fighter badge (`profiles.ini`).
+
+## 0.1.1-alpha (2026-10-15) — Player 2 Controls for Local Versus
+
+- **Two-player controls:** Added Player 2 keyboard and gamepad bindings (`p2key_*`, `p2pad_*`) and dual-controller polling (`plat_pad2_read`).
+
+## 0.1.0 / 0.1.0b-alpha (2026-10-15) — Widescreen, iPad Layout, HD Textures & Auto-Updater
+
+- **Aspect ratios:** Added `3:2`, `4:3` (iPad camera projection), `16:9`, and `21:9` support.
+- **iPad UI & DUELO mode:** Added `ui_size=ipad` (960×640 virtual layout) and local 2-player `DUELO` mode (`GameMode 6`).
+- **Texture quality & fast loading:** Added `IPHONE`, `IPAD`, and `MAX` (4× Catmull-Rom upscale) texture modes, parallel PVRTC decoding (`src/runtime/lime/par.c`), and fast table-driven PNG inflate (`src/runtime/lime/png.c`).
+- **Auto-updater:** Added GitHub release checker and in-place updater to the launcher.
+
+## 0.0.8 / 0.0.9-alpha (2026-10-10 – 2026-10-15) — Gamepads, Save States, Hitboxes & All Finishers
+
+- **Controls & zero input lag:** Added XInput/WinMM gamepad support, fixed hold-and-release special moves (`QueueAndJump`), and removed frame smoothing lag during fights.
+- **Debug tools (`F2`):** Added hitbox viewer, fight speed control (10%–400%), and 4 in-memory save-state slots (`src/runtime/savestate.c`).
+- **Finishers:** Fixed `MERCY` banner timing and verified all Fatalities, Animalities, Babalities, and Friendships.
+
+## 0.0.1 – 0.0.7b-alpha (2026-10-08 – 2026-10-09) — Initial Playable Native Port
+
+- **Full decompilation & integration:** Connected all 2,572 decompiled functions (`lime/`, `gamecode/`, `gamecode/logic/`) with the cooperative coroutine scheduler (`src/runtime/fight_runtime.c`) and the 229 extracted binary data tables (`tools/build/logic_tables.py`).

@@ -12,7 +12,7 @@
 
 #include "arm_runtime.h"
 #include "limevector.h"      /* oraculo: salida de tools/armrecomp */
-#include "../decomp/lime/lime.h"   /* C limpio decompilado */
+#include "../src/decomp/lime/lime.h"   /* C limpio decompilado */
 
 #include <math.h>
 #include <stdio.h>

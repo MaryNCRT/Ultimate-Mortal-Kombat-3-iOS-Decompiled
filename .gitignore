@@ -28,8 +28,8 @@ Payload/
 recompiled/
 
 # Raw Ghidra output (derivative work, and regenerable).
-# Produced by tools/decomp_driver.py from YOUR copy.
-decomp/**/_raw/
+# Produced by tools/decomp/decomp_driver.py from YOUR copy.
+src/decomp/**/_raw/
 
 # Everything derived from the retail binary lands here by default.
 # Override the location with the UMK3_WORK environment variable.
@@ -83,7 +83,7 @@ Thumbs.db
 # build directories
 build/
 build_*/
-build-web/
+build-*/
 dist/
 
 # Raw disassembly / transcripts of the retail binary (derivative work).

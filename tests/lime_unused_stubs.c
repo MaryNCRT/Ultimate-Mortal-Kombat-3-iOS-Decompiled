@@ -5,7 +5,7 @@
  * here that runs is a test bug, so each one says so and stops.
  */
 #include "arm_runtime.h"
-#include "../decomp/lime/lime.h"
+#include "../src/decomp/lime/lime.h"
 
 #include <stdio.h>
 #include <stdlib.h>

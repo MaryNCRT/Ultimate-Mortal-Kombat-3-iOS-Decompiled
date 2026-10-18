@@ -28,7 +28,7 @@ const { spawn, spawnSync } = require('child_process');
 
 const REPO = 'MaryNCRT/Ultimate-Mortal-Kombat-3-iOS-Recomp';
 const API = 'https://api.github.com/repos/' + REPO + '/releases?per_page=10';
-const MIRROR = ['decomp', 'runtime', 'tools', 'launcher'];
+const MIRROR = ['src', 'decomp', 'runtime', 'tools', 'launcher'];
 
 /* "v0.0.10-alpha", "0.0.7b-alpha" -> [[0,''],[0,''],[10,'']] / [..,[7,'b']] */
 function parseVersion(v) {
@@ -136,8 +136,8 @@ function unpack(root, zip) {
     /* the zip holds one folder, UMK3-PC-<version>; up to 0.0.9 the launcher
      * was one portable UMK3-Launcher.exe, since then a stub over launcher\bin */
     const cands = [dest].concat(fs.readdirSync(dest).map(n => path.join(dest, n)));
-    const src = cands.find(d => fs.existsSync(path.join(d, 'launcher', 'build_game.ps1'))
-                             && fs.existsSync(path.join(d, 'UMK3-Launcher.exe')));
+    const src = cands.find(d => (fs.existsSync(path.join(d, 'launcher')) || fs.existsSync(path.join(d, 'src')))
+                             && (fs.existsSync(path.join(d, 'UMK3-Launcher.exe')) || fs.existsSync(path.join(d, 'UMK3-Launcher'))));
     if (!src)
         throw new Error('la actualización no tiene la forma esperada');
     return src;

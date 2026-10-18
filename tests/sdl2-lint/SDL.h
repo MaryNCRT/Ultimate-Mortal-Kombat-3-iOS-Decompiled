@@ -127,20 +127,42 @@ Uint32 SDL_GetMouseState(int *x, int *y);
 
 /* SDL2 numbers scancodes by USB HID usage ID; only the ones used are listed */
 typedef enum {
-    SDL_SCANCODE_A = 4,  SDL_SCANCODE_D = 7,  SDL_SCANCODE_I = 12,
+    SDL_SCANCODE_A = 4,  SDL_SCANCODE_D = 7,  SDL_SCANCODE_E = 8,
+    SDL_SCANCODE_H = 11, SDL_SCANCODE_I = 12,
     SDL_SCANCODE_J = 13, SDL_SCANCODE_K = 14, SDL_SCANCODE_L = 15,
-    SDL_SCANCODE_O = 18, SDL_SCANCODE_S = 22, SDL_SCANCODE_U = 24,
+    SDL_SCANCODE_M = 16, SDL_SCANCODE_O = 18, SDL_SCANCODE_P = 19,
+    SDL_SCANCODE_Q = 20, SDL_SCANCODE_S = 22, SDL_SCANCODE_U = 24,
     SDL_SCANCODE_W = 26,
-    SDL_SCANCODE_RETURN = 40,
+    SDL_SCANCODE_RETURN = 40, SDL_SCANCODE_ESCAPE = 41, SDL_SCANCODE_BACKSPACE = 42,
     SDL_SCANCODE_F1 = 58, SDL_SCANCODE_F2 = 59, SDL_SCANCODE_F3 = 60,
-    SDL_SCANCODE_F5 = 62,
+    SDL_SCANCODE_F5 = 62, SDL_SCANCODE_F6 = 63, SDL_SCANCODE_F7 = 64,
+    SDL_SCANCODE_F8 = 65, SDL_SCANCODE_F9 = 66, SDL_SCANCODE_F10 = 67,
+    SDL_SCANCODE_F11 = 68, SDL_SCANCODE_F12 = 69,
     SDL_SCANCODE_RIGHT = 79, SDL_SCANCODE_LEFT = 80,
     SDL_SCANCODE_DOWN = 81,  SDL_SCANCODE_UP = 82,
+    SDL_SCANCODE_KP_DIVIDE = 84, SDL_SCANCODE_KP_MULTIPLY = 85,
+    SDL_SCANCODE_KP_1 = 89,
     SDL_SCANCODE_KP_4 = 92, SDL_SCANCODE_KP_5 = 93, SDL_SCANCODE_KP_6 = 94,
     SDL_SCANCODE_KP_7 = 95, SDL_SCANCODE_KP_8 = 96, SDL_SCANCODE_KP_9 = 97,
+    SDL_SCANCODE_KP_0 = 98,
     SDL_NUM_SCANCODES = 512
 } SDL_Scancode;
 const Uint8 *SDL_GetKeyboardState(int *numkeys);
+const char  *SDL_GetScancodeName(SDL_Scancode scancode);
+
+#define SDL_WINDOW_FULLSCREEN         0x00000001u
+#define SDL_WINDOW_FULLSCREEN_DESKTOP (SDL_WINDOW_FULLSCREEN | 0x00001000u)
+typedef struct {
+    Uint32 format;
+    int w, h, refresh_rate;
+    void *driverdata;
+} SDL_DisplayMode;
+int   SDL_SetWindowFullscreen(SDL_Window *window, Uint32 flags);
+void  SDL_SetWindowSize(SDL_Window *window, int w, int h);
+void  SDL_SetWindowPosition(SDL_Window *window, int x, int y);
+int   SDL_GetWindowDisplayMode(SDL_Window *window, SDL_DisplayMode *mode);
+void *SDL_GL_GetProcAddress(const char *proc);
+void  SDL_Delay(Uint32 ms);
 
 typedef struct _SDL_Joystick SDL_Joystick;
 typedef Sint32 SDL_JoystickID;
@@ -187,6 +209,9 @@ Sint16              SDL_GameControllerGetAxis(SDL_GameController *gamecontroller
                                               SDL_GameControllerAxis axis);
 Uint8               SDL_GameControllerGetButton(SDL_GameController *gamecontroller,
                                                 SDL_GameControllerButton button);
+uint16_t            SDL_GameControllerGetVendor(SDL_GameController *gamecontroller);
+uint16_t            SDL_GameControllerGetProduct(SDL_GameController *gamecontroller);
+const char         *SDL_GameControllerName(SDL_GameController *gamecontroller);
 
 /* ---- audio: what runtime/platform/sdl_audio.c uses, from the documented
  *      SDL2 API (SDL_audio.h). Same caveat as everything above. */

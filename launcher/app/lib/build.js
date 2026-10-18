@@ -1,125 +1,168 @@
-/* Compile (launcher\build_game.ps1) and Play (umk3-game.exe), the same
- * two actions launcher.c performed with CreateProcess -- only the output
- * is captured here and streamed to the renderer instead of a console.
- *
- * Progress is pieced together from what the script prints:
- *   "== N/5 <name>"           the five steps
- *   "  [i/total] file.c"      one clang per source during step 4
- * and mapped onto a 0..100 scale the renderer shows as a block bar.
- */
 'use strict';
 
-const { spawn } = require('child_process');
+const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
+const { ensureToolchain } = require('./toolchain');
+const { extractIpaPipeline } = require('./extract/ipa');
+const { compileGame } = require('./compile');
 
-let g_child = null;
+let g_isCancelled = false;
 
-function sq(s) {
-    return s.replace(/'/g, "''");
-}
-
-/* Step boundaries as percentages of the build (5 steps from the script). */
+/* Step boundaries as percentages of the build */
 const STEPS = [
-    { lo: 0,  hi: 18, title: '' },         /* 1 toolchain (downloads) */
-    { lo: 18, hi: 24, title: 'Leyendo el binario del .ipa' },
-    { lo: 24, hi: 42, title: 'Extrayendo las tablas del juego' },
+    { lo: 0,  hi: 18, title: 'Preparando compilador' },
+    { lo: 18, hi: 25, title: 'Leyendo el binario del .ipa' },
+    { lo: 25, hi: 42, title: 'Extrayendo tablas y recursos' },
     { lo: 42, hi: 90, title: 'Compilando el juego' },
-    { lo: 90, hi: 100, title: 'Copiando res desde el .ipa' },
+    { lo: 90, hi: 100, title: 'Enlazando ejecutable final' },
 ];
 
-function parseProgress(text) {
-    let pct = null;
-    let step = null;
-    let phase = '';
-    const stepMatch = text.match(/^\s*==\s*(\d+)\/(\d+)\b/);
-    if (stepMatch) {
-        step = parseInt(stepMatch[1], 10);
-        const s = STEPS[step - 1];
-        if (s)
-            phase = s.title;
-    }
-    const fileMatch = text.match(/^\s*\[\s*(\d+)\s*\/\s*(\d+)\s*\]/);
-    if (fileMatch) {
-        const done = parseInt(fileMatch[1], 10);
-        const total = parseInt(fileMatch[2], 10);
-        if (total > 0) {
-            const s = STEPS[3];
-            pct = Math.round(s.lo + (done / total) * (s.hi - s.lo));
+/**
+ * Runs the complete build pipeline: toolchain -> extraction -> compilation.
+ * Calls onData({ text, pct, step, phase }) per event.
+ */
+async function build(root, ipa, arch = 'x64', onData = () => {}) {
+    g_isCancelled = false;
+
+    const buildDir = path.join(root, 'build');
+    fs.mkdirSync(buildDir, { recursive: true });
+
+    try {
+        // Step 1: Ensure toolchain
+        onData({
+            text: '== 1/5 Preparando compilador...',
+            step: 1,
+            phase: STEPS[0].title,
+            pct: 5,
+        });
+
+        const zigExe = await ensureToolchain(p => {
+            const pct = Math.round(STEPS[0].lo + (p.pct / 100) * (STEPS[0].hi - STEPS[0].lo));
+            onData({
+                text: p.phase,
+                step: 1,
+                phase: p.phase,
+                pct,
+            });
+        });
+
+        if (g_isCancelled) {
+            onData({ text: 'Compilación cancelada por el usuario.', pct: -1 });
+            return -1;
         }
-    } else if (step) {
-        const s = STEPS[step - 1];
-        pct = Math.round(s.lo + (s.hi - s.lo) * 0.5);
+
+        // Step 2 & 3: Extract IPA & Generate Tables & Extract Assets
+        onData({
+            text: '== 2/5 Inspeccionando .ipa y extrayendo recursos...',
+            step: 2,
+            phase: STEPS[1].title,
+            pct: 20,
+        });
+
+        const isLow32 = arch === 'x64';
+        await extractIpaPipeline({
+            ipaPath: ipa,
+            destDir: root,
+            buildDir,
+            rootDir: root,
+            isLow32,
+            onProgress: p => {
+                let mappedPct;
+                let step = 3;
+                if (p.pct < 40) {
+                    step = 2;
+                    mappedPct = Math.round(STEPS[1].lo + ((p.pct - 20) / 20) * (STEPS[1].hi - STEPS[1].lo));
+                } else {
+                    step = 3;
+                    mappedPct = Math.round(STEPS[2].lo + ((p.pct - 40) / 60) * (STEPS[2].hi - STEPS[2].lo));
+                }
+
+                onData({
+                    text: p.phase + (p.file ? ` (${p.file})` : ''),
+                    step,
+                    phase: p.phase,
+                    pct: mappedPct,
+                });
+            },
+        });
+
+        if (g_isCancelled) {
+            onData({ text: 'Compilación cancelada por el usuario.', pct: -1 });
+            return -1;
+        }
+
+        // Step 4 & 5: Compile & Link
+        onData({
+            text: '== 4/5 Compilando fuentes en paralelo...',
+            step: 4,
+            phase: STEPS[3].title,
+            pct: 45,
+        });
+
+        const targetOs = process.platform === 'win32' ? 'windows' : 'linux';
+        await compileGame({
+            rootDir: root,
+            buildDir,
+            destDir: root,
+            targetArch: arch,
+            targetOs,
+            zigExe,
+            onProgress: p => {
+                let mappedPct;
+                let step = 4;
+                if (p.pct < 92) {
+                    step = 4;
+                    mappedPct = Math.round(STEPS[3].lo + ((p.pct - 42) / 50) * (STEPS[3].hi - STEPS[3].lo));
+                } else {
+                    step = 5;
+                    mappedPct = Math.round(STEPS[4].lo + ((p.pct - 92) / 8) * (STEPS[4].hi - STEPS[4].lo));
+                }
+
+                onData({
+                    text: p.phase + (p.file ? ` [${p.done}/${p.total}] ${p.file}` : ''),
+                    step,
+                    phase: p.phase,
+                    pct: mappedPct,
+                });
+            },
+        });
+
+        onData({
+            text: '¡Compilación terminada con éxito! El juego está listo.',
+            step: 5,
+            phase: 'Completado',
+            pct: 100,
+        });
+        return 0;
+    } catch (err) {
+        onData({
+            text: `Error en la compilación: ${err.message}`,
+            pct: -1,
+            phase: 'Error',
+        });
+        return -1;
     }
-    return { pct, step, phase };
-}
-
-/* Runs the compile.  Calls onData({ text, pct, step, phase }) per chunk (one
- * chunk per write line, because the script writes whole lines per Write-Host)
- * and resolves with the exit code. */
-function build(root, ipa, arch, onData) {
-    return new Promise(resolve => {
-        const ps1 = path.join(root, 'launcher', 'build_game.ps1');
-        const cmd =
-            "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; " +
-            "& '" + sq(ps1) + "' -Ipa '" + sq(ipa) + "' -Arch " + (arch === 'x64' ? 'x64' : 'x86');
-        const child = spawn('powershell.exe',
-            ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', cmd],
-            { cwd: root, windowsHide: true });
-        g_child = child;
-
-        /* Line-split a raw stream, emitting whole lines (partial chunks are
-         * buffered until their newline arrives). */
-        const reader = buf => {
-            let i;
-            while ((i = buf.indexOf('\n')) >= 0) {
-                const line = buf.slice(0, i).replace(/\r$/, '');
-                buf = buf.slice(i + 1);
-                if (line)
-                    onData({ text: line, ...parseProgress(line) });
-            }
-            if (buf.length > 8192) {          /* unremitting \r output (curl) */
-                onData({ text: buf, ...parseProgress(buf) });
-                buf = '';
-            }
-            return buf;
-        };
-        let out = '', err = '';
-        child.stdout.on('data', d => { out = reader(out + d.toString('utf8')); });
-        child.stderr.on('data', d => { err = reader(err + d.toString('utf8')); });
-        const flush = () => {
-            if (out) onData({ text: out, ...parseProgress(out) });
-            if (err) onData({ text: err, ...parseProgress(err) });
-        };
-        child.on('error', errEv => {
-            g_child = null;
-            onData({ text: 'Error al iniciar PowerShell: ' + errEv.message, pct: -1 });
-            resolve(-1);
-        });
-        child.on('close', code => {
-            g_child = null;
-            flush();
-            onData({ text: 'Proceso terminado (código ' + code + ')', pct: 100 });
-            resolve(code);
-        });
-    });
 }
 
 function cancelBuild() {
-    const child = g_child;
-    if (!child)
-        return false;
-    try {
-        spawn('taskkill.exe', ['/pid', String(child.pid), '/T', '/F'],
-            { windowsHide: true });
-        return true;
-    } catch (err) {
-        return false;
-    }
+    g_isCancelled = true;
+    return true;
 }
 
-function play(root, exe) {
-    exe = path.join(root, exe);
-    const child = spawn(exe, [], {
+function play(root, exeName) {
+    const exePath = path.join(root, exeName);
+    if (!fs.existsSync(exePath)) {
+        return false;
+    }
+
+    if (process.platform !== 'win32') {
+        try {
+            fs.chmodSync(exePath, 0o755);
+        } catch (_) {}
+    }
+
+    const child = spawn(exePath, [], {
         cwd: root,
         detached: true,
         stdio: 'ignore',
@@ -129,4 +172,9 @@ function play(root, exe) {
     return true;
 }
 
-module.exports = { build, cancelBuild, play, parseProgress, STEPS };
+module.exports = {
+    build,
+    cancelBuild,
+    play,
+    STEPS,
+};

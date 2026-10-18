@@ -1,3 +1,3 @@
 #!/bin/sh
-# Refuse a commit that adds a banned word (tools/check_banned_words.py).
-exec python tools/check_banned_words.py --staged
+# Refuse a commit that adds a banned word (tools/decomp/check_banned_words.py).
+exec python3 tools/decomp/check_banned_words.py --staged

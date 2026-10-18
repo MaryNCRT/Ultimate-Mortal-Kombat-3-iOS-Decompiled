@@ -53,7 +53,7 @@
 #include "arm_runtime.h"
 #include "gl_trace.h"
 #include "limedsmisc.h"                 /* oracle: tools/armrecomp */
-#include "../decomp/lime/lime.h"        /* clean C */
+#include "../src/decomp/lime/lime.h"        /* clean C */
 
 #include <math.h>
 #include <stdio.h>

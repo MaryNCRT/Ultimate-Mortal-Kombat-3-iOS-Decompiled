@@ -33,7 +33,7 @@
 
 #include "arm_runtime.h"
 #include "renderscene.h"                /* oracle: tools/armrecomp */
-#include "../decomp/lime/lime.h"        /* clean C */
+#include "../src/decomp/lime/lime.h"        /* clean C */
 
 #include <stdio.h>
 #include <string.h>

@@ -29,32 +29,31 @@ import zipfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 RUNTIME_FILES = [
-    "runtime/game_main.c", "runtime/debug_menu.c", "runtime/draw_gl.c",
-    "runtime/settings_menu.c", "runtime/settings_menu.h",
-    "runtime/pad_nav.c", "runtime/pad_nav.h",
-    "runtime/profiles.c", "runtime/profiles.h",
-    "runtime/mp_net.c", "runtime/mp_net.h",
-    "runtime/online_ui.c", "runtime/online_ui.h",
-    "runtime/umk3_game.rc", "runtime/umk3_game.ico",
-    "runtime/gamecode_globals.c",
-    "runtime/gamecode_globals.h", "runtime/gamecode_stubs.c",
-    "runtime/lime_menu.c", "runtime/lime_platform.c", "runtime/lime_app.c",
-    "runtime/wav.c", "runtime/wav.h", "runtime/fight_runtime.c",
-    "runtime/fight_runtime.h", "runtime/arm_runtime.h", "runtime/debug_menu.h",
-    "runtime/savestate.c", "runtime/savestate.h",
-    "runtime/platform/platform.h", "runtime/platform/gl.h",
-    "runtime/platform/win32_gl.c", "runtime/platform/win32_gl_cdecl.c",
-    "runtime/platform/win32_audio.c",
+    "src/runtime/game_main.c", "src/runtime/debug_menu.c", "src/runtime/draw_gl.c",
+    "src/runtime/settings_menu.c", "src/runtime/settings_menu.h",
+    "src/runtime/pad_nav.c", "src/runtime/pad_nav.h",
+    "src/runtime/profiles.c", "src/runtime/profiles.h",
+    "src/runtime/mp_net.c", "src/runtime/mp_net.h",
+    "src/runtime/online_ui.c", "src/runtime/online_ui.h",
+    "src/runtime/umk3_game.rc", "src/runtime/umk3_game.ico",
+    "src/runtime/gamecode_globals.c",
+    "src/runtime/gamecode_globals.h", "src/runtime/gamecode_stubs.c",
+    "src/runtime/lime_menu.c", "src/runtime/lime_platform.c", "src/runtime/lime_app.c",
+    "src/runtime/wav.c", "src/runtime/wav.h", "src/runtime/fight_runtime.c",
+    "src/runtime/fight_runtime.h", "src/runtime/arm_runtime.h", "src/runtime/debug_menu.h",
+    "src/runtime/savestate.c", "src/runtime/savestate.h",
+    "src/runtime/platform/platform.h", "src/runtime/platform/gl.h",
+    "src/runtime/platform/win32_gl.c", "src/runtime/platform/win32_gl_cdecl.c",
+    "src/runtime/platform/win32_audio.c",
 ]
-SOURCE_DIRS = ["decomp/gamecode", "decomp/gamecode/logic", "decomp/lime",
-               "runtime/lime"]
-TOOLS = ["tools/logic_tables.py", "tools/logic_tables.map", "tools/macho.py", "tools/low32_static.py",
-         "tools/level_info.py", "tools/seq_data.py"]
+SOURCE_DIRS = ["src/decomp/gamecode", "src/decomp/gamecode/logic", "src/decomp/lime",
+               "src/runtime/lime"]
+TOOLS = ["tools/build/logic_tables.py", "tools/build/logic_tables.map", "tools/build/macho.py", "tools/build/low32_static.py",
+         "tools/build/level_info.py", "tools/build/seq_data.py", "tools/build/check_binary.py", "tools/build/unpack_ipa.py"]
 LAUNCHER = ["launcher/build_game.ps1", "launcher/setup_res.ps1",
-            "launcher/check_binary.py", "launcher/launcher.c",
             "launcher/LEEME.txt", "launcher/stub/umk3_launcher_stub.c",
             "launcher/stub/umk3_launcher_stub.rc"]
-TOP = ["LICENSE", "AI-DISCLOSURE.md"]
+TOP = ["LICENSE", "docs/AI-DISCLOSURE.md", "CMakeLists.txt", "build.py"]
 
 
 def find_mingw():
@@ -111,7 +110,7 @@ def main(argv):
     build_stub(os.path.join(out, "UMK3-Launcher.exe"))
 
     # Every quoted include of every copied source has to resolve in the copy.
-    inc_dirs = ["runtime", "decomp/lime", "decomp/gamecode/logic"]
+    inc_dirs = ["src/runtime", "src/decomp/lime", "src/decomp/gamecode/logic"]
     missing = set()
     for rel in files:
         if not rel.endswith((".c", ".h")):
