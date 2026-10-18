@@ -10,6 +10,8 @@
  */
 'use strict';
 
+const isWin = (window.umk3 && window.umk3.platform) ? window.umk3.platform === 'win32' : true;
+
 const T = {
     ES: {
         ui: 'ENGLISH', ttlSub: 'PORT DE PC',
@@ -28,7 +30,7 @@ const T = {
         dPlay: 'Arranca Ultimate Mortal Kombat 3: idioma del juego, intros y modo debug.',
         dQuit: 'Cierra el launcher.',
         hBuild: 'COMPILAR TU .IPA', ipaLbl: 'TU .IPA DE UMK3 (IPHONE 1.2.59)',
-        archLbl: 'WINDOWS', arches: ['32 BITS (UMK3-GAME.EXE)', '64 BITS (UMK3-GAME64.EXE)'], playArchLbl: 'VERSIÓN A ABRIR',
+        archLbl: isWin ? 'WINDOWS' : 'LINUX', arches: isWin ? ['32 BITS (UMK3-GAME.EXE)', '64 BITS (UMK3-GAME64.EXE)'] : ['64 BITS (UMK3-GAME)'], playArchLbl: 'VERSIÓN A ABRIR',
         updCheck: 'BUSCAR ACTUALIZACIONES', updGet: 'DESCARGAR E INSTALAR', notesLbl: 'NOVEDADES DE LA ÚLTIMA VERSIÓN',
         updLooking: 'BUSCANDO ACTUALIZACIONES…', updNone: 'ESTÁS EN LA ÚLTIMA VERSIÓN', updNew: 'NUEVA VERSIÓN DISPONIBLE',
         updFail: 'NO SE PUDO CONSULTAR GITHUB', updYours: 'TU VERSIÓN', updDl: 'DESCARGANDO', updInst: 'INSTALANDO: EL LAUNCHER SE CERRARÁ Y VOLVERÁ A ABRIRSE…',
@@ -52,7 +54,7 @@ const T = {
         hint: 'CLIC EN UNA ACCIÓN Y PULSA LA TECLA',
         hPlay: 'JUGAR', play: 'JUGAR', skip: 'SALTAR LAS INTROS (LOGOS DEL INICIO)',
         cSelect: 'SELECCIONAR', cBack: 'ATRÁS', cFull: 'PANTALLA COMPLETA',
-        auto: 'Automático (Windows)', original: '(IPHONE)',
+        auto: isWin ? 'Automático (Windows)' : 'Automático (Linux)', original: '(IPHONE)',
         keys: { up: 'Arriba', down: 'Abajo', left: 'Izquierda', right: 'Derecha',
                 hp: 'Puño alto', lp: 'Puño bajo', block: 'Bloqueo', hk: 'Patada alta',
                 lk: 'Patada baja', run: 'Correr', special: 'Especial (S)',
@@ -63,12 +65,12 @@ const T = {
                 dbg_scr_prev: 'Pantalla anterior', dbg_scr_next: 'Pantalla siguiente', dbg_scr_menu: 'Menú principal' },
         statusNeed: 'FALTA COMPILAR', statusReady: 'JUEGO LISTO',
         statusBuilding: 'COMPILANDO…', statusPlaying: 'JUGANDO…',
-        needIpa: 'Primero elige tu archivo .ipa de UMK3.', playFail: 'No se pudo iniciar umk3-game.exe.',
+        needIpa: 'Primero elige tu archivo .ipa de UMK3.', playFail: isWin ? 'No se pudo iniciar umk3-game.exe.' : 'No se pudo iniciar umk3-game.',
         buildDone: 'JUEGO COMPILADO. YA PUEDES JUGAR.', buildFail: 'FALLÓ LA COMPILACIÓN: MIRA EL REGISTRO.',
         notIpa: 'El archivo elegido no existe.',
         padDbgLbl: 'MANDO: ABRIR EL MENÚ DEBUG (PULSAR A LA VEZ)', padLbl: 'MANDO A USAR', gPad: 'BOTONES DEL MANDO',
         padOff: 'Ninguno (solo teclado)', padAuto: 'Mando: el primero que se conecte', padX: 'Mando de Xbox (XInput)',
-        padSeen: 'NINGÚN MANDO CONECTADO EN WINDOWS', padLook: 'BUSCANDO MANDOS…', padNow: 'CONECTADO', padGone: '(no conectado)',
+        padSeen: isWin ? 'NINGÚN MANDO CONECTADO EN WINDOWS' : 'NINGÚN MANDO CONECTADO EN LINUX', padLook: 'BUSCANDO MANDOS…', padNow: 'CONECTADO', padGone: '(no conectado)',
         padNote: 'EL TECLADO SIGUE FUNCIONANDO CON EL MANDO. LOS MENÚS SE USAN CON EL RATÓN.',
         pads: { dir: 'Moverse', start: 'Pausa', select: 'Combos', settings: 'Abrir ajustes' },
     },
@@ -89,7 +91,7 @@ const T = {
         dPlay: 'Starts Ultimate Mortal Kombat 3: game language, intros and debug mode.',
         dQuit: 'Closes the launcher.',
         hBuild: 'COMPILE YOUR .IPA', ipaLbl: 'YOUR UMK3 .IPA (IPHONE 1.2.59)',
-        archLbl: 'WINDOWS', arches: ['32 BITS (UMK3-GAME.EXE)', '64 BITS (UMK3-GAME64.EXE)'], playArchLbl: 'VERSION TO OPEN',
+        archLbl: isWin ? 'WINDOWS' : 'LINUX', arches: isWin ? ['32 BITS (UMK3-GAME.EXE)', '64 BITS (UMK3-GAME64.EXE)'] : ['64 BITS (UMK3-GAME)'], playArchLbl: 'VERSION TO OPEN',
         updCheck: 'CHECK FOR UPDATES', updGet: 'DOWNLOAD AND INSTALL', notesLbl: 'WHAT IS NEW IN THE LATEST VERSION',
         updLooking: 'CHECKING FOR UPDATES…', updNone: 'YOU HAVE THE LATEST VERSION', updNew: 'NEW VERSION AVAILABLE',
         updFail: 'COULD NOT REACH GITHUB', updYours: 'YOUR VERSION', updDl: 'DOWNLOADING', updInst: 'INSTALLING: THE LAUNCHER WILL CLOSE AND OPEN AGAIN…',
@@ -113,7 +115,7 @@ const T = {
         hint: 'CLICK AN ACTION, THEN PRESS A KEY',
         hPlay: 'PLAY', play: 'PLAY', skip: 'SKIP THE INTROS (STARTUP LOGOS)',
         cSelect: 'SELECT', cBack: 'BACK', cFull: 'FULLSCREEN',
-        auto: 'Automatic (Windows)', original: '(IPHONE)',
+        auto: isWin ? 'Automatic (Windows)' : 'Automatic (Linux)', original: '(IPHONE)',
         keys: { up: 'Up', down: 'Down', left: 'Left', right: 'Right',
                 hp: 'High punch', lp: 'Low punch', block: 'Block', hk: 'High kick',
                 lk: 'Low kick', run: 'Run', special: 'Special (S)',
@@ -124,12 +126,12 @@ const T = {
                 dbg_scr_prev: 'Previous screen', dbg_scr_next: 'Next screen', dbg_scr_menu: 'Main menu' },
         statusNeed: 'NOT COMPILED', statusReady: 'GAME READY',
         statusBuilding: 'COMPILING…', statusPlaying: 'PLAYING…',
-        needIpa: 'Choose your UMK3 .ipa file first.', playFail: 'Could not start umk3-game.exe.',
+        needIpa: 'Choose your UMK3 .ipa file first.', playFail: isWin ? 'Could not start umk3-game.exe.' : 'Could not start umk3-game.',
         buildDone: 'GAME COMPILED. YOU CAN PLAY NOW.', buildFail: 'BUILD FAILED: SEE THE LOG.',
         notIpa: 'The chosen file does not exist.',
         padDbgLbl: 'GAMEPAD: OPEN THE DEBUG MENU (HOLD TOGETHER)', padLbl: 'GAMEPAD TO USE', gPad: 'GAMEPAD BUTTONS',
         padOff: 'None (keyboard only)', padAuto: 'Gamepad: the first one connected', padX: 'Xbox pad (XInput)',
-        padSeen: 'NO GAMEPAD CONNECTED TO WINDOWS', padLook: 'LOOKING FOR GAMEPADS…', padNow: 'CONNECTED', padGone: '(not connected)',
+        padSeen: isWin ? 'NO GAMEPAD CONNECTED TO WINDOWS' : 'NO GAMEPAD CONNECTED TO LINUX', padLook: 'LOOKING FOR GAMEPADS…', padNow: 'CONNECTED', padGone: '(not connected)',
         padNote: 'THE KEYBOARD STILL WORKS WITH A PAD. THE MENUS ARE USED WITH THE MOUSE.',
         pads: { dir: 'Move', start: 'Pause', select: 'Moves', settings: 'Open settings' },
     },
@@ -594,7 +596,7 @@ const ASPECT = ['3:2', '4:3', '16:9', '21:9'];
 const TEXQ = ['iphone', 'ipad', 'max'];
 /* arch= in umk3.ini: which game COMPILAR builds and JUGAR opens, 32 bits
  * (umk3-game.exe) or 64 bits (umk3-game64.exe); both can be kept */
-const ARCH = ['x86', 'x64'];
+const ARCH = isWin ? ['x86', 'x64'] : ['x64'];
 /* ui_size= in umk3.ini: IPAD lays the game out on 960x640, where it draws the HUD at 1.75 of 2 */
 const UISIZE = ['iphone', 'ipad'];
 
@@ -854,7 +856,7 @@ function applyConfig() {
     $('aspect').selectedIndex = Math.max(0, ASPECT.indexOf(cfg.aspect || '3:2'));
     $('aa').selectedIndex = Math.max(0, AA.indexOf(cfg.antialiasing || 0));
     $('texq').selectedIndex = Math.max(0, TEXQ.indexOf(cfg.textureQuality || 'iphone'));
-    $('arch').selectedIndex = Math.max(0, ARCH.indexOf(cfg.arch || 'x86'));
+    $('arch').selectedIndex = Math.max(0, ARCH.indexOf(cfg.arch || (isWin ? 'x86' : 'x64')));
     $('playarch').selectedIndex = $('arch').selectedIndex;
     $('uisize').selectedIndex = Math.max(0, UISIZE.indexOf(cfg.uiSize || 'iphone'));
     $('dbg').checked = !!cfg.debug;

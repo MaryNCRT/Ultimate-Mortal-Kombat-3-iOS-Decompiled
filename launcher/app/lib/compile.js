@@ -60,7 +60,7 @@ function compileSingleFile(zigExe, args, rspPath) {
             if (code === 0) {
                 resolve();
             } else {
-                reject(new Error(`Error compilando ${path.basename(rspPath, '.rsp')}: ${stderr || 'código ' + code}`));
+                reject(new Error(`Error compiling ${path.basename(rspPath, '.rsp')}: ${stderr || 'code ' + code}`));
             }
         });
 
@@ -235,6 +235,9 @@ async function compileGame({
         if (isStateFile(src, buildDir)) {
             fileFlags.push('-DUMK3_STATE_FILE');
         }
+        if (baseName === 'text') {
+            fileFlags.push('-DUMK3_NO_LONG_REMAP');
+        }
 
         const compileArgs = [...fileFlags, '-c', src, '-o', objPath];
         tasks.push(() => compileSingleFile(zigExe, compileArgs, rspPath));
@@ -255,7 +258,7 @@ async function compileGame({
     const concurrency = Math.max(1, os.cpus().length);
 
     onProgress({
-        phase: `Compilando código del juego (0/${totalTasks})`,
+        phase: `Compiling game code (0/${totalTasks})`,
         pct: 42,
         done: 0,
         total: totalTasks,

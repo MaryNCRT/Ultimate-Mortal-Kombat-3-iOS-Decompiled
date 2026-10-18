@@ -184,8 +184,8 @@ function anyExe() {
 ipcMain.handle('root:get', () =>
     ({ root: g_root, ready: ini.gameReady(g_root, arch()),
        builtAt: ini.gameBuiltAt(g_root, arch()), version: app.getVersion(),
-       /* both compiled: JUGAR offers the choice */
-       both: ini.gameReady(g_root, 'x86') && ini.gameReady(g_root, 'x64') }));
+       /* both compiled: JUGAR offers the choice (Windows only) */
+       both: process.platform === 'win32' && ini.gameReady(g_root, 'x86') && ini.gameReady(g_root, 'x64') }));
 
 ipcMain.handle('config:load', () => {
     g_cfg = ini.load(path.join(g_root, 'umk3.ini'));

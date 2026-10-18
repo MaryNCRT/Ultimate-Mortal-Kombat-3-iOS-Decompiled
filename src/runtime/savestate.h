@@ -105,4 +105,24 @@ int  st_load(int slot, const char **why);
 /* What a state holds, in bytes (for the menu and the log). */
 unsigned long st_size(int slot);
 
+#if defined(UMK3_LOW32) && defined(UMK3_STATE_FILE) && !defined(_WIN32)
+/*
+ * Linux 64-bit (LP64) adaptation for 1:1 ARMv7 decompiled gamecode:
+ * In ARMv7 iOS and Win32/Win64 (LLP64), sizeof(long) == 4.
+ * On LP64 Linux, sizeof(long) == 8, which breaks 32-bit word offsets,
+ * mesh loading, and binary file parsing.
+ * Include POSIX and platform GL headers before remapping long to int.
+ */
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include "platform/gl.h"
+#ifndef UMK3_NO_LONG_REMAP
+#define long int
 #endif
+#endif
+
+#endif
+

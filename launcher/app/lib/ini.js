@@ -138,7 +138,7 @@ function defaultConfig() {
         borderless: false,           /* fullscreen without a border, at the desktop's mode */
         antialiasing: 0,             /* 0, 2, 4, 8 or 16 samples */
         uiSize: 'iphone',            /* ui_size=: iphone (480x320) or ipad (960x640: HUD at 1.75 of 2) */
-        arch: 'x86',                 /* arch=: x86 (umk3-game.exe) or x64 (umk3-game64.exe) */
+        arch: process.platform === 'win32' ? 'x86' : 'x64',
         textureQuality: 'iphone',    /* texture_quality=: iphone (the _LOW sheets), ipad (full sheets) or max (full sheets, PNG first, mipmaps) */
         aspect: '3:2',               /* aspect=: 3:2, 4:3, 16:9 or 21:9 */
         widescreen: false,           /* native: widen the 3D view, no stretch */
@@ -340,7 +340,7 @@ function save(p, cfg) {
 /* The game's executable for arch= (x86 or x64) across platforms. */
 function gameExe(arch) {
     if (process.platform !== 'win32') {
-        return arch === 'x86' ? 'umk3-game32' : 'umk3-game';
+        return 'umk3-game';
     }
     return arch === 'x64' ? 'umk3-game64.exe' : 'umk3-game.exe';
 }

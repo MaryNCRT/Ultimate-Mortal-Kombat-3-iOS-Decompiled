@@ -3,6 +3,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('umk3', {
+    platform: process.platform,
     root: () => ipcRenderer.invoke('root:get'),
     logo: () => ipcRenderer.invoke('logo:get'),
     loadConfig: () => ipcRenderer.invoke('config:load'),
