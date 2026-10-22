@@ -9,6 +9,7 @@
 #define RB_PKT_INPUT  20                /* unreliable, every frame */
 #define RB_PKT_HELLO  21                /* reliable, once a fight */
 #define RB_PKT_HASH   22                /* reliable, once a second */
+#define PORT_PKT_PALETTE 23             /* reliable: a side's colour pick (FrontEnd.c) */
 
 /* 1 from an online fight's Task_GameInit to its Task_GameDestroy: both
  * machines run the fight engine, from both players' inputs. */

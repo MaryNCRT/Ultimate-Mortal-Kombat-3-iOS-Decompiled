@@ -566,6 +566,16 @@ void sendMenuPacket(long which)
 }
 
 /* armv7 0x000b0784 */
+/* Port, not in the binary: this machine's colour pick (FrontEnd.c,
+ * PortNetPalette), 0 for none. */
+void sendPalettePacket(int pick)
+{
+    int32_t w = pick;
+
+    if (mpnet_session_exists())
+        mpnet_send(PORT_PKT_PALETTE, &w, 4, 1);
+}
+
 void sendCharacterPacket(long who)
 {
     sendPacket(1, (float)who, 0.0f, NULL);
@@ -1019,6 +1029,12 @@ void processPacket(const void *payload, long len, long type)
         thisSessionId = w[2];
         if (!isParentBasedOnSpeed())
             *requestedLevel = w[3];
+        break;
+    }
+    case PORT_PKT_PALETTE: {            /* port: the other side's colour */
+        extern int PortNetPalette[2];
+        if (len == 4 && w[0] >= 0 && w[0] <= 2)
+            PortNetPalette[1] = w[0];
         break;
     }
     case RB_PKT_INPUT:                  /* port: rollback netcode */

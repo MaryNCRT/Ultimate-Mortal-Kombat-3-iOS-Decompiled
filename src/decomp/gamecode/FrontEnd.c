@@ -5056,6 +5056,9 @@ void LIME_GLAPI glLoadIdentity(void);
 void LIME_GLAPI glRotatef(float angle, float x, float y, float z);
 long RenderPlayer(void *player, long a, long b);
 int  PortPaletteOf(int side, long c1, long c2);  /* port: the colour picker */
+int  PortNetPaletteOf(int local, long c_this, long c_other);   /* port */
+extern int PortNetPalette[2];
+void sendPalettePacket(int pick);       /* limeMPGameSpecific.c, port */
 
 void RenderFECharacters(long slot0, long slot1)
 {
@@ -5151,6 +5154,11 @@ void RenderFECharacters(long slot0, long slot1)
         if (GameMode == 1) {
             if (slot0 == slot1 && (isParent() ? i != 0 : i == 0))
                 *(void *P32 *)(ch + 0x528) = anim[0x24 / 4];
+            /* Port, not in the binary: the two sides' colour picks; slot 0
+             * is this machine's fighter. Nothing picked: the line above. */
+            *(void *P32 *)(ch + 0x528) =
+                anim[PortNetPaletteOf(i == 0, i == 0 ? slot0 : slot1,
+                                 i == 0 ? slot1 : slot0) == 2 ? 0x24 / 4 : 0x14 / 4];
         } else {
             if (i != 0 && slot0 == slot1)
                 *(void *P32 *)(ch + 0x528) = anim[0x24 / 4];
@@ -8840,6 +8848,7 @@ void FE_Task_Multiplayer_Character_Select(void)
     if (sendInd % MPCS_CHAR_PERIOD == MPCS_CHAR_PHASE
         && playerCharacter != -1) {
         sendCharacterPacket(playerCharacter);
+        sendPalettePacket(PortNetPalette[0]);   /* port: the colour pick */
         if ((unsigned long)(syncCharacters - 1) <= 3)
             syncCharacters++;
         puts("sending character packet");
@@ -12396,7 +12405,8 @@ void sendCharacterPacket(long which);
  * in save/palette.txt across sessions. VS only (GameMode 6): elsewhere
  * player one's pick lasts the session (PortSoloPalette) and the computer's
  * fighter takes either palette by chance, but Motaro and Shao Kahn, who have
- * only theirs. A network match keeps the binary's rule on both machines. */
+ * only theirs. In a network match each side picks its own fighter's
+ * (PortNetPalette) and the other machine is told (sendPalettePacket). */
 int PortPalette[2];
 int PortSoloPalette;
 
@@ -12426,6 +12436,27 @@ static int cpu_palette(long c1, long c2, int p0)
     return pick;
 }
 
+/* A network match: [0] this machine's pick, [1] the other's (packet 23,
+ * limeMPGameSpecific.c); 0 none. With none, the binary's rule: the guest
+ * takes the second palette in a mirror match. Two equal picks in a mirror
+ * match leave the guest the other one. */
+int PortNetPalette[2];
+
+/* The palette of this machine's fighter (local) or the other's, c_this
+ * against c_other. */
+int PortNetPaletteOf(int local, long c_this, long c_other)
+{
+    int host_pick = isParent() ? PortNetPalette[0] : PortNetPalette[1];
+    int guest_pick = isParent() ? PortNetPalette[1] : PortNetPalette[0];
+    int mirror = c_this == c_other;
+    int host = host_pick ? host_pick : 1;
+    int guest = guest_pick ? guest_pick : (mirror ? 2 : 1);
+
+    if (mirror && guest == host)
+        guest = 3 - host;
+    return (local ? isParent() : !isParent()) ? host : guest;
+}
+
 /* The palette player one confirmed an Arcade ladder with (0 = none yet).
  * Every Arcade fight uses it -- also a ladder continued after a restart,
  * which never passes the select screen -- and game_main.c keeps it in
@@ -12437,8 +12468,9 @@ int PortPaletteOf(int side, long c1, long c2)
 {
     int p0 = PortPalette[0] ? PortPalette[0] : 1;
 
-    if (GameMode == 1)
-        return (side == 1 && c1 == c2) ? 2 : 1;
+    if (GameMode == 1)                  /* side 0 is the host's fighter */
+        return PortNetPaletteOf((side == 0) == (isParent() != 0),
+                           side == 0 ? c1 : c2, side == 0 ? c2 : c1);
     if (GameMode != 6) {
         p0 = PortSoloPalette ? PortSoloPalette : 1;
         return side == 0 ? p0 : cpu_palette(c1, c2, p0);
@@ -12477,7 +12509,7 @@ static int palette_box(int side, int y, long c1, long c2)
                         : (float)limeScreenWidth - FE_W(8.0f) - w;
     float mid = L + w * 0.5f;
     float T = FE_Y((float)y), H = FE_H((float)PP_H);
-    int hit;
+    int hit, shown;
 
     limeFillRect(L, T, w, H, 0.0f, 0.0f, 0.0f, 0.6f);
     limeFillRect(L, T, w, FE_H(2.0f), 1.0f, 0.0f, 0.0f, 1.0f);
@@ -12485,7 +12517,9 @@ static int palette_box(int side, int y, long c1, long c2)
     limeFillRect(L, T, t, H, 1.0f, 0.0f, 0.0f, 1.0f);
     limeFillRect(L + w - t, T, t, H, 1.0f, 0.0f, 0.0f, 1.0f);
 
-    snprintf(buf, sizeof buf, "COLOR %d", PortPaletteOf(side, c1, c2));
+    /* a network match's box is this machine's fighter, c1 */
+    shown = GameMode == 1 ? PortNetPaletteOf(1, c1, c2) : PortPaletteOf(side, c1, c2);
+    snprintf(buf, sizeof buf, "COLOR %d", shown);
     limeDrawFONT(&GameFont, "<", L + FE_W(8.0f), FE_Y((float)(y + 3)),
                  1, FE_WidthScale, fontcol);
     limeDrawFONT(&GameFont, buf, mid, FE_Y((float)(y + 3)),
@@ -12501,9 +12535,12 @@ static int palette_box(int side, int y, long c1, long c2)
         hit = 1;                        /* port: the right stick */
     PortPadPalette[side] = 0;
     if (hit) {
-        int to = PortPaletteOf(side, c1, c2) == 2 ? 1 : 2;
+        int to = shown == 2 ? 1 : 2;
 
-        if (GameMode == 6)
+        if (GameMode == 1) {
+            PortNetPalette[0] = to;
+            sendPalettePacket(to);
+        } else if (GameMode == 6)
             PortPalette[side] = to;
         else
             PortSoloPalette = to;
@@ -12519,8 +12556,11 @@ static void palette_picker(void)
                                          : CharacterSelected;
     long p2 = opponentCharacter;
 
-    if (GameMode == 1)
+    if (GameMode == 1) {                /* this machine's fighter only */
+        if (playerCharacter != -1)
+            palette_box(0, 290, playerCharacter, opponentCharacter);
         return;
+    }
     if (GameMode == 0 && CharacterConfirmed != -1)    /* a new ladder */
         PortArcadePalette = PortPaletteOf(0, CharacterConfirmed, -1);
     if (p1 != -1)
@@ -13811,14 +13851,18 @@ void FE_Task_Multiplayer_Versus_Screen(void)
     /* The binary draws them through FE_X / FE_W / FE_H, inside the middle
      * 480 of a wide screen; at the screen's edges as FE_Task_VS_Screen has
      * them (port, Mary) */
-    limeDrawSprite((TEXTURE *)CharacterVSTexture[left],
+    limeDrawSprite((TEXTURE *)(PortPaletteOf(0, Character1, Character2) == 2
+                               ? CharacterVSTexture2[left]
+                               : CharacterVSTexture[left]),
                    0.0f - FE_WidthScale * VSScroll,
                    (float)limeScreenHeight + FE_HeightScale * -256.0f,
                    FE_WidthScale * 256.0f, FE_HeightScale * 256.0f,
                    0.0f, 0.0f, 1.0f, 1.0f, col);
 
-    limeDrawSprite((TEXTURE *)(left == right ? CharacterVSTexture2[right]
-                                             : CharacterVSTexture[right]),
+    /* (port: the colour picks; the binary's own rule with none) */
+    limeDrawSprite((TEXTURE *)(PortPaletteOf(1, Character1, Character2) == 2
+                               ? CharacterVSTexture2[right]
+                               : CharacterVSTexture[right]),
                    (float)limeScreenWidth + FE_WidthScale * VSScroll
                    + FE_WidthScale * -256.0f,
                    (float)limeScreenHeight + FE_HeightScale * -256.0f,
