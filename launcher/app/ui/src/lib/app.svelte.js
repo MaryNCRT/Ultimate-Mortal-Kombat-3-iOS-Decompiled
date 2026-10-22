@@ -14,14 +14,15 @@ import { api, isWin } from './platform.js';
 import { T } from './i18n.js';
 import { PAD_SETS, padMake, livePad } from './glyphs.js';
 import { hoverBlip, selectBlip, doneChord, failChord } from './sound.js';
+import { ms, MODS_TABS } from './mods/store.svelte.js';
 
 /* ------------------------------------------------------------ tables -- */
 
 /* the menu, in order; QUIT closes */
-export const SECTIONS = ['build', 'play', 'video', 'controls', 'profile', 'quit'];
+export const SECTIONS = ['build', 'play', 'video', 'controls', 'profile', 'mods', 'quit'];
 /* each section's name in the menu and its full-screen header */
-export const TITLE = { build: 'mBuild', play: 'mPlay', video: 'mVideo', controls: 'mControls', profile: 'mProfile', quit: 'mQuit' };
-export const DESC = { build: 'dBuild', video: 'dVideo', controls: 'dControls', profile: 'dProfile', play: 'dPlay', quit: 'dQuit' };
+export const TITLE = { build: 'mBuild', play: 'mPlay', video: 'mVideo', controls: 'mControls', profile: 'mProfile', mods: 'mMods', quit: 'mQuit' };
+export const DESC = { build: 'dBuild', video: 'dVideo', controls: 'dControls', profile: 'dProfile', play: 'dPlay', mods: 'dMods', quit: 'dQuit' };
 /* the pages of GRAPHICS and CONTROLS, in their second row */
 export const GFX_TABS = [['video', 'gVideo'], ['tex', 'gTex'], ['ui', 'gUi']];
 export const CTL_TABS = [['p', 'tabKb'], ['pad', 'tabPad'], ['dbg', 'tabDbg']];
@@ -195,13 +196,14 @@ export function stepSection(d) {
 
 /* left / right / the second row's arrows: the section's next page */
 export function stepPage(d) {
-    const tabs = app.sec === 'video' ? GFX_TABS : app.sec === 'controls' ? CTL_TABS : null;
+    const tabs = app.sec === 'video' ? GFX_TABS : app.sec === 'controls' ? CTL_TABS : app.sec === 'mods' ? MODS_TABS : null;
     if (!tabs) return;
-    const cur = app.sec === 'video' ? app.gfxTab : app.ctlTab;
+    const cur = app.sec === 'video' ? app.gfxTab : app.sec === 'mods' ? ms.tab : app.ctlTab;
     const i = Math.max(0, tabs.findIndex(t => t[0] === cur));
     const next = tabs[(i + d + tabs.length) % tabs.length][0];
     selectBlip();
     if (app.sec === 'video') app.gfxTab = next;
+    else if (app.sec === 'mods') ms.tab = next;
     else setCtlTab(next);
 }
 
@@ -683,7 +685,9 @@ export async function init() {
     const [want, sub] = (new URLSearchParams(location.search).get('sec') || '').split(':');
     const open = SECTIONS.includes(want) && want !== 'quit';
     setSection(open ? want : app.ready ? 'play' : 'build', open);
-    if (sub && CTL_TABS.some(t => t[0] === sub))
+    if (sub && MODS_TABS.some(t => t[0] === sub))
+        ms.tab = sub;
+    else if (sub && CTL_TABS.some(t => t[0] === sub))
         setCtlTab(sub);
     else if (sub && GFX_TABS.some(t => t[0] === sub))
         app.gfxTab = sub;
@@ -693,6 +697,8 @@ export async function init() {
     if (!(await afterUpdate()))
         setTimeout(checkUpdate, 800);
 
-    /* development aid: UMK3_LAUNCHER_SHOT=<png> captures the window */
-    setTimeout(() => api.shot(), 600);
+    /* development aid: UMK3_LAUNCHER_SHOT=<png> captures the window (the
+     * MODS viewer, given something to open, captures once it is open) */
+    if (!new URLSearchParams(location.search).get('pick'))
+        setTimeout(() => api.shot(), 600);
 }

@@ -215,6 +215,7 @@ if(UMK3_BINARY)
                 src/runtime/settings_menu.c
                 src/runtime/pad_nav.c
                 src/runtime/profiles.c
+                src/runtime/mods.c
                 src/runtime/draw_gl.c
                 ${UMK3_GAMECODE_GLOBALS}
                 src/runtime/gamecode_stubs.c

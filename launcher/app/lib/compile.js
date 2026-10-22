@@ -166,6 +166,7 @@ async function compileGame({
         path.join(rootDir, 'src/runtime/settings_menu.c'),
         path.join(rootDir, 'src/runtime/pad_nav.c'),
         path.join(rootDir, 'src/runtime/profiles.c'),
+        path.join(rootDir, 'src/runtime/mods.c'),
         path.join(rootDir, 'src/runtime/draw_gl.c'),
         path.join(rootDir, 'src/runtime/gamecode_stubs.c'),
         path.join(rootDir, 'src/runtime/mp_net.c'),
@@ -245,6 +246,12 @@ async function compileGame({
         if (fs.existsSync('/usr/include/SDL2')) {
             baseFlags.push('-I', '/usr/include/SDL2');
         }
+        /* The OpenGL and SDL2 headers come with the game too
+         * (src/runtime/platform/linux-include): a desktop without the
+         * -dev packages has the libraries but not their headers. Searched
+         * after the system's own, which win when they are there. */
+        const inc = path.join(rootDir, 'src/runtime/platform/linux-include');
+        baseFlags.push('-idirafter', inc, '-idirafter', path.join(inc, 'SDL2'));
     }
 
     // EOS: 64 bits only (the SDK has no 32-bit Windows or Linux library)
@@ -352,7 +359,20 @@ async function compileGame({
                 linkArgs.push(`-L${dir}`);
             }
         }
-        linkArgs.push('-lSDL2', '-lGL', '-lm', '-ldl');
+        /* libSDL2.so and libGL.so are the -dev packages' names for the
+         * libraries; without them, the libraries themselves by their
+         * versioned names, which every desktop has */
+        const sysLib = (base, sonames) => {
+            for (const dir of libDirs)
+                if (fs.existsSync(path.join(dir, `lib${base}.so`)))
+                    return `-l${base}`;
+            for (const so of sonames)
+                for (const dir of libDirs)
+                    if (fs.existsSync(path.join(dir, so)))
+                        return path.join(dir, so);
+            return `-l${base}`;
+        };
+        linkArgs.push(sysLib('SDL2', ['libSDL2-2.0.so.0', 'libSDL2-2.0.so']), sysLib('GL', ['libGL.so.1', 'libOpenGL.so.0']), '-lm', '-ldl');
     }
 
     const linkRsp = path.join(buildDir, 'link.rsp');

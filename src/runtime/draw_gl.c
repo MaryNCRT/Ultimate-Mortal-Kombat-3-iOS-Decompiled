@@ -46,6 +46,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "mods.h"
 #include "platform/gl.h"
 #include "platform/platform.h"
 #include "lime/png.h"
@@ -191,6 +192,10 @@ static int load_rgba(const char *path, LimeImage *out)
         return 0;
     memcpy(stem, path, n);
     stem[n] = 0;
+
+    /* Port: a mod's picture of the same name, .png or .pvr (mods.c) */
+    if (mods_find_texture(stem, full, sizeof(full)) && try_one(full, out))
+        return 1;
 
     if (PortTextureQuality >= 1) {
         const char *base = strrchr(stem, '/') ? strrchr(stem, '/') + 1 : stem;
