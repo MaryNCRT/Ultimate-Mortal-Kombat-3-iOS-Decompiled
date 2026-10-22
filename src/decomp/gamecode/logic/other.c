@@ -2185,6 +2185,10 @@ void get_char_stk(MK3OBJ *obj);
 long strike_check_a0_core(MK3OBJ *obj, long test_only)
 {
     get_char_stk(obj);
+    if (obj->field1c == 0) {            /* Port: a boss's missing strike */
+        obj->field5c = 0;
+        return 0;
+    }
     return strike_check_ptr(obj, obj->field1c, test_only);
 }
 
@@ -2516,21 +2520,38 @@ void frame_a9(MK3OBJ *obj)
 extern uint32_t *P32 character_anitabs1[];  /* 0x0016ee34 */
 extern uint32_t *P32 character_anitabs2[];  /* 0x0016ee9c */
 
+/* Port: Motaro's and Shao Kahn's tables (24, 25) hold 38 animations where
+ * the others hold 73, and Motaro's second table is not a table at all. The
+ * game asks them only for what a CPU boss does; played from the debug menu
+ * they ask for the rest -- a flip read frame data as an animation and
+ * crashed. A boss's missing animation is its stance (entry 0). */
+static uint32_t ani_fetch(uint32_t *P32 const *tab, uint32_t c, uint32_t i)
+{
+    if (c >= 24) {
+        uint32_t a;
+
+        tab = character_anitabs1;
+        a = i < 38 ? tab[c][i] : 0;
+        return a ? a : tab[c][0];
+    }
+    return tab[c][i];
+}
+
 void get_char_ani(MK3OBJ *obj)
 {
-    obj->field40 = character_anitabs1[obj->field08->field24][obj->field40];
+    obj->field40 = ani_fetch(character_anitabs1, obj->field08->field24, obj->field40);
 }
 
 void get_char_ani2(MK3OBJ *obj)
 {
-    obj->field40 = character_anitabs2[obj->field08->field24][obj->field40];
+    obj->field40 = ani_fetch(character_anitabs2, obj->field08->field24, obj->field40);
 }
 
 void get_his_char_ani(MK3OBJ *obj)
 {
     const MK3OBJ *him = (const MK3OBJ *)(uintptr_t)obj->field00->him;
 
-    obj->field40 = character_anitabs1[him->field24][obj->field40];
+    obj->field40 = ani_fetch(character_anitabs1, him->field24, obj->field40);
 }
 
 
@@ -2545,7 +2566,7 @@ void get_his_char_ani2(MK3OBJ *obj)
 {
     const MK3OBJ *him = (const MK3OBJ *)(uintptr_t)obj->field00->him;
 
-    obj->field40 = character_anitabs2[him->field24][obj->field40];
+    obj->field40 = ani_fetch(character_anitabs2, him->field24, obj->field40);
 }
 
 
@@ -3006,6 +3027,13 @@ void get_char_stk(MK3OBJ *obj)
     obj->field20 = chr;
     row = strike_tables[chr];
     obj->field20 = (uint32_t)(uintptr_t)row;
+    /* Port: Motaro's row holds 7 strikes and Shao Kahn's 6, against 22 to
+     * 27; played from the debug menu they ask for the others, which would
+     * read the next table. None: no strike (strike_check_a0_core). */
+    if (chr >= 24 && obj->field1c >= (chr == 24 ? 7u : 6u)) {
+        obj->field1c = 0;
+        return;
+    }
     obj->field1c = row[obj->field1c];
 }
 
@@ -6130,6 +6158,11 @@ void strike_check_box(MK3OBJ *obj)
     obj->field18 = 0;
 
     get_char_stk(obj);
+    if (obj->field1c == 0) {            /* Port: a boss's missing strike */
+        obj->field20 = saved20;
+        obj->field5c = 0;
+        return;
+    }
 
     saved1c   = obj->field1c;
     obj->field20 = saved20;
@@ -6929,7 +6962,14 @@ void DoSwitchJump(long flag, uint32_t player, uint32_t index)
     c = *(const uint32_t *)
         (*(char *P32 *)(Plyr + player * PLYR_STRIDE + 8) + 0x24);
 
-    fn = (void (*)(SWITCHFRAME *, char *))row[c];
+    /* Port: the rows stop at the roster (24 or 25 words); the game never
+     * hands Motaro (24) or Shao Kahn (25) to a player, so a boss's buttons
+     * read past a row and Shao Kahn's jumped into the next table (Mary:
+     * crash with a boss picked in the debug menu). No handler for them. */
+    if (c >= 24)
+        return;
+
+    fn =(void (*)(SWITCHFRAME *, char *))row[c];
     if (fn == NULL)
         return;
 

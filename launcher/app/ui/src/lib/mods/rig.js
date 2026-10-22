@@ -98,7 +98,7 @@ export function axisAngle(k, ang) {
 }
 
 /* Horn: the rotation R (row form) minimising sum w |p R + t - q|^2 */
-function fitRigid(P, Q, W) {
+export function fitRigid(P, Q, W) {
     let sw = 0;
     const cp = [0, 0, 0], cq = [0, 0, 0];
     for (let i = 0; i < W.length; i++) {

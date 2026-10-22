@@ -11,8 +11,10 @@
  *     category=textures          textures, audio, music, models, mixed
  *     description=...
  *
- * and preview.png, optional, is its picture in the list. Every other file
- * replaces the game file of the same name. */
+ * cover.png (or .jpg; preview.* from before), optional, is its picture in
+ * the list, and data.ini the numbers it changes in the fight engine (the
+ * CHARACTER EDITOR; runtime/mods.c). Every other file replaces the game file
+ * of the same name. */
 'use strict';
 
 const fs = require('fs');
@@ -95,6 +97,9 @@ function resIndex(root) {
 
 /* The list, in priority order: the named mods first as mods.ini has them,
  * then any folder it does not name (on, as the game takes them). */
+/* a mod's own files at its top: never laid over the game */
+const isOwn = rel => /^(mod\.ini|data\.ini|(cover|preview)\.(png|jpe?g))$/i.test(rel);
+
 function list(root) {
     const dir = modsDir(root);
     fs.mkdirSync(dir, { recursive: true });
@@ -110,7 +115,7 @@ function list(root) {
         const info = readIni(path.join(base, 'mod.ini'));
         const files = walk(base).filter(p => {
             const rel = path.relative(base, p);
-            return !(rel === 'mod.ini' || /^preview\.(png|jpe?g)$/i.test(rel));
+            return !isOwn(rel);
         });
         const kinds = {};
         let unknown = 0, lost = 0;
@@ -137,7 +142,7 @@ function list(root) {
         const category = CATEGORIES.includes(info.category) ? info.category
             : kindList.length === 1 ? kindList[0] : kindList.length ? 'mixed' : 'mixed';
         let preview = null;
-        for (const p of ['preview.png', 'preview.jpg']) {
+        for (const p of ['cover.png', 'cover.jpg', 'cover.jpeg', 'preview.png', 'preview.jpg']) {
             const f = path.join(base, p);
             if (fs.existsSync(f) && fs.statSync(f).size < 4 << 20) {
                 preview = 'data:image/' + (p.endsWith('png') ? 'png' : 'jpeg') + ';base64,' + fs.readFileSync(f).toString('base64');
@@ -219,20 +224,112 @@ function modPath(root, folder) {
     return path.join(modsDir(root), name || '');
 }
 
+/* the picture the player picked, as the mod's cover */
+function setCover(root, folder, file) {
+    const name = safeName(folder);
+    const ext = path.extname(file || '').toLowerCase();
+    if (!name || !['.png', '.jpg', '.jpeg'].includes(ext)) return false;
+    const base = path.join(modsDir(root), name);
+    for (const old of ['cover.png', 'cover.jpg', 'cover.jpeg', 'preview.png', 'preview.jpg'])
+        fs.rmSync(path.join(base, old), { force: true });
+    fs.copyFileSync(file, path.join(base, 'cover' + ext));
+    return true;
+}
+
+/* ------------------------------------------------------------ data.ini --
+ * `table[word] = value` lines, the CHARACTER EDITOR's changes, as a map. */
+function dataRead(root, folder) {
+    const name = safeName(folder);
+    const out = {};
+    if (!name) return out;
+    let text = '';
+    try { text = fs.readFileSync(path.join(modsDir(root), name, 'data.ini'), 'utf8'); } catch { return out; }
+    for (const line of text.split(/\r?\n/)) {
+        const m = /^\s*([A-Za-z_]\w*)\[(\d+)\]\s*=\s*(0x[0-9a-f]+|-?\d+)/i.exec(line);
+        if (m) out[m[1] + '[' + m[2] + ']'] = Number(m[3]) >>> 0;
+    }
+    return out;
+}
+
+function dataWrite(root, folder, entries) {
+    const name = safeName(folder);
+    if (!name || !entries || typeof entries !== 'object') return false;
+    const base = path.join(modsDir(root), name);
+    fs.mkdirSync(base, { recursive: true });
+    const lines = ['; The CHARACTER EDITOR\'s numbers (UMK3 launcher): table[word] = value,',
+        '; applied by the game at start over its fight tables.'];
+    for (const [k, v] of Object.entries(entries))
+        if (/^[A-Za-z_]\w*\[\d+\]$/.test(k) && Number.isFinite(v))
+            lines.push(k + ' = 0x' + (v >>> 0).toString(16));
+    fs.writeFileSync(path.join(base, 'data.ini'), lines.join('\n') + '\n');
+    return true;
+}
+
 /* ------------------------------------------------------- game files -- */
+
+/* The mods over res/ for the viewer, as the game lays them: every mod that
+ * is on (layer '*') or one mod (its folder), by file name and pictures by
+ * stem. */
+function modIndex(root, layer) {
+    const folders = layer === '*'
+        ? list(root).mods.filter(m => m.on).map(m => m.folder)
+        : [safeName(layer)].filter(Boolean);
+    const byName = new Map(), byStem = new Map();
+    for (const folder of folders) {
+        const base = path.join(modsDir(root), folder);
+        for (const p of walk(base)) {
+            if (isOwn(path.relative(base, p))) continue;
+            const n = path.basename(p).toLowerCase();
+            if (!byName.has(n)) byName.set(n, p);
+            if (/\.(png|pvr)$/.test(n) && !byStem.has(n.slice(0, -4))) byStem.set(n.slice(0, -4), p);
+        }
+    }
+    return { byName, byStem };
+}
 
 function resFiles(root) {
     g_resCache = null;
     return resIndex(root).files;
 }
 
-/* one file of res/, or null; nothing outside it */
-function resRead(root, rel) {
+/* one file of res/, or null; nothing outside it. With a layer, a mod's file
+ * of that name comes first (a picture by stem, so a .png stands for a .pvr:
+ * the window tells them apart by their bytes). */
+let g_layer = null;
+function resRead(root, rel, layer) {
     if (typeof rel !== 'string') return null;
+    if (layer) {
+        if (!g_layer || g_layer.key !== root + '|' + layer || Date.now() - g_layer.at > 3000)
+            g_layer = { key: root + '|' + layer, at: Date.now(), ...modIndex(root, layer) };
+        const n = path.posix.basename(rel).toLowerCase();
+        let hit = g_layer.byName.get(n);
+        if (!hit && /\.(png|pvr)$/.test(n)) {
+            const stem = n.slice(0, -4);
+            hit = g_layer.byStem.get(stem) || (stem.endsWith('_low') && g_layer.byStem.get(stem.slice(0, -4)));
+        }
+        if (hit) try { return new Uint8Array(fs.readFileSync(hit)); } catch { /* the game's, then */ }
+    }
     const base = path.resolve(resDir(root));
     const p = path.resolve(base, rel);
     if (!p.startsWith(base + path.sep)) return null;
     try { return new Uint8Array(fs.readFileSync(p)); } catch { return null; }
+}
+
+/* The fight engine's tables as the build extracted them from the player's
+ * binary (build/logic_tables.c): every word table by name, each word a
+ * number or the name of what it points at ("stk_kano_hikick", "x+0x10"). */
+function gameTables(root) {
+    let text;
+    try { text = fs.readFileSync(path.join(root, 'build', 'logic_tables.c'), 'utf8'); } catch { return null; }
+    const tables = {};
+    const re = /^uintptr_t (\w+)\[(\d+)\] UMK3_LOGIC[^{]*= \{\r?\n([\s\S]*?)\r?\n\};/gm;
+    let m;
+    while ((m = re.exec(text))) {
+        const body = m[3].replace(/UMK3_REL\((\w+), (0x[0-9a-f]+)\)/g, (_, t, o) => '@' + t + (o === '0x0' ? '' : '+' + o));
+        tables[m[1]] = body.split(',').map(t => t.trim()).filter(Boolean)
+            .map(t => t[0] === '@' ? t.slice(1) : Number(t));
+    }
+    return tables;
 }
 
 /* --------------------------------------------------------- exports -- */
@@ -249,4 +346,5 @@ function exportSave(root, sub, files) {
     return dir;
 }
 
-module.exports = { list, save, create, setInfo, addFiles, putFile, modPath, resFiles, resRead, exportSave, CATEGORIES };
+module.exports = { list, save, create, setInfo, addFiles, putFile, modPath, setCover, dataRead, dataWrite,
+    resFiles, resRead, gameTables, exportSave, CATEGORIES };

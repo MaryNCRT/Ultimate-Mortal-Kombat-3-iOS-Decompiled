@@ -394,6 +394,14 @@ def main(argv):
     out.append("        *fix[i].at = (uint32_t)(uintptr_t)fix[i].to;")
     out.append("#endif")
     out.append("}")
+    out.append("")
+    out.append("/* The word tables by name, for a mod's data.ini (runtime/mods.c). */")
+    out.append("const struct { const char *name; void *at; unsigned n; } umk3_logic_names[] = {")
+    for cname, bname, a, s, items, size, raw in data_defs:
+        if raw is None:
+            out.append('    { "%s", %s, %d },' % (cname, cname, len(items)))
+    out.append("};")
+    out.append("const unsigned umk3_logic_nnames = sizeof umk3_logic_names / sizeof umk3_logic_names[0];")
     with open(outpath, "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(out) + "\n")
     if report:

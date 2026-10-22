@@ -32,6 +32,7 @@
 #include "mods.h"
 
 #include <ctype.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -60,6 +61,7 @@ typedef struct Map {
 static Map g_files;             /* "kano.skin" -> path */
 static Map g_tex;               /* "kano_diffuse" -> path, pictures only */
 static int g_mods_on;
+static char g_on[MOD_MAX][PATH_MAX_];   /* the mods that are on, highest first */
 
 static void lower(char *s)
 {
@@ -151,7 +153,8 @@ static void add_file(const char *dir, const char *name, int top)
     strcpy(key, name);
     lower(key);
     /* the mod's own card: its description and its picture in the launcher */
-    if (top && (strcmp(key, "mod.ini") == 0 || strncmp(key, "preview.", 8) == 0))
+    if (top && (strcmp(key, "mod.ini") == 0 || strcmp(key, "data.ini") == 0
+                || strncmp(key, "preview.", 8) == 0 || strncmp(key, "cover.", 6) == 0))
         return;
     snprintf(path, sizeof(path), "%s/%s", dir, name);
     map_put(&g_files, key, path);
@@ -291,7 +294,7 @@ void mods_init(const char *res_root)
             continue;
         snprintf(path, sizeof(path), "%s/%s", root, named[i] + 1);
         walk(path, 1, 0);
-        g_mods_on++;
+        snprintf(g_on[g_mods_on++], PATH_MAX_, "%s", path);
     }
     /* folders the file does not name: on, after the named ones */
     ndirs = list_dirs(root, dirs, MOD_MAX);
@@ -303,7 +306,8 @@ void mods_init(const char *res_root)
             continue;
         snprintf(path, sizeof(path), "%s/%s", root, dirs[i]);
         walk(path, 1, 0);
-        g_mods_on++;
+        if (g_mods_on < MOD_MAX)
+            snprintf(g_on[g_mods_on++], PATH_MAX_, "%s", path);
     }
     if (g_mods_on)
         printf("mods: %d on, %d files\n", g_mods_on, (int)g_files.used);
@@ -361,4 +365,79 @@ int mods_count(int *files)
     if (files)
         *files = (int)g_files.used;
     return g_mods_on;
+}
+
+/* ------------------------------------------------------------ data.ini
+ *
+ * A mod's numbers: the launcher's CHARACTER EDITOR writes them, one per line,
+ *
+ *     ; Kano's high kick: full damage 24 -> 30, chip 5
+ *     stk_kano_hikick[5] = 0x1e05
+ *
+ * a table of the fight engine by its name in the binary (the registry
+ * logic_tables.c ends with) and a word in it. Applied once at start, lowest
+ * priority first so the highest wins. A word that holds an address is never
+ * written: the editor offers only the number fields. Words are 32 bits in
+ * both builds (the 64-bit one keeps the tables' words 32-bit, UMK3_LOW32). */
+struct umk3_logic_name { const char *name; void *at; unsigned n; };
+extern const struct umk3_logic_name umk3_logic_names[];
+extern const unsigned umk3_logic_nnames;
+
+static const struct umk3_logic_name *logic_name(const char *name)
+{
+    unsigned i;
+
+    for (i = 0; i < umk3_logic_nnames; i++)
+        if (strcmp(umk3_logic_names[i].name, name) == 0)
+            return &umk3_logic_names[i];
+    return NULL;
+}
+
+int mods_apply_data(void)
+{
+    char path[PATH_MAX_ + 16], line[512];
+    int m, done = 0;
+
+    for (m = g_mods_on - 1; m >= 0; m--) {
+        FILE *f;
+
+        snprintf(path, sizeof(path), "%s/data.ini", g_on[m]);
+        f = fopen(path, "r");
+        if (!f)
+            continue;
+        while (fgets(line, sizeof(line), f)) {
+            char name[96], *p = line;
+            const struct umk3_logic_name *t;
+            unsigned long idx;
+            long long v;
+            int k = 0;
+
+            while (*p == ' ' || *p == '\t')
+                p++;
+            if (*p == ';' || *p == '#' || !*p)
+                continue;
+            while (*p && *p != '[' && k < (int)sizeof(name) - 1)
+                name[k++] = *p++;
+            name[k] = 0;
+            while (k && name[k - 1] == ' ')
+                name[--k] = 0;
+            if (*p != '[')
+                continue;
+            idx = strtoul(p + 1, &p, 0);
+            if (*p != ']' || !(p = strchr(p, '=')))
+                continue;
+            v = strtoll(p + 1, NULL, 0);
+            t = logic_name(name);
+            if (!t || idx >= t->n) {
+                printf("mods: %s: no %s[%lu]\n", path, name, idx);
+                continue;
+            }
+            ((uint32_t *)t->at)[idx] = (uint32_t)v;
+            done++;
+        }
+        fclose(f);
+    }
+    if (done)
+        printf("mods: %d numbers changed\n", done);
+    return done;
 }

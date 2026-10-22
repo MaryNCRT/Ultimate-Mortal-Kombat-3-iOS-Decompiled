@@ -75,10 +75,13 @@ export function textureFile(files, stem) {
 
 /* { width, height, rgba } for a .pvr; a .png is decoded by the caller's
  * `decodePng` (the window's own decoder) */
+/* by its bytes: a mod's .png can stand where the game has a .pvr */
+export const isPng = b => b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47;
+
 export async function loadPicture(src, file, decodePng) {
     const b = await src.read(file);
     if (!b) return null;
-    if (/\.pvr$/i.test(file)) return decodePvr(b);
+    if (!isPng(b)) return decodePvr(b);
     return decodePng ? decodePng(b) : null;
 }
 
@@ -86,7 +89,7 @@ export async function loadPicture(src, file, decodePng) {
 export async function pngBytes(src, file) {
     const b = await src.read(file);
     if (!b) return null;
-    if (/\.png$/i.test(file)) return b;
+    if (isPng(b)) return b;
     const img = decodePvr(b);
     return img ? encodePng(img.width, img.height, img.rgba) : null;
 }

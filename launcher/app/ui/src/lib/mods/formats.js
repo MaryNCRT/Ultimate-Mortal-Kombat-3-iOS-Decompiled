@@ -157,12 +157,12 @@ export function parseSkin(b) {
                 blocks.push(r.block);
                 off = r.off;
             }
-            if (off === b.length) return blocks;
+            if (off === b.length) return Object.assign(blocks, { counted: true });
         } catch { /* the bare variant */ }
     }
     const r = skinBlock(b, 0);
     if (r.off !== b.length) throw new Error('not a .skin this reader knows');
-    return [r.block];
+    return Object.assign([r.block], { counted: false });
 }
 
 /* -------------------------------------------------------------- .bones --

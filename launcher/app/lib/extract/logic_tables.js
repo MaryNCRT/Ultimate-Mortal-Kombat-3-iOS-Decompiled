@@ -346,6 +346,13 @@ function extractLogicTables(machoInput, outPath, mapPath, reportPath = null) {
     out.push('        *fix[i].at = (uint32_t)(uintptr_t)fix[i].to;');
     out.push('#endif');
     out.push('}');
+    out.push('');
+    out.push("/* The word tables by name, for a mod's data.ini (runtime/mods.c). */");
+    out.push('const struct { const char *name; void *at; unsigned n; } umk3_logic_names[] = {');
+    for (const [cname, , , , items, , raw] of dataDefs)
+        if (raw === null) out.push(`    { "${cname}", ${cname}, ${items.length} },`);
+    out.push('};');
+    out.push('const unsigned umk3_logic_nnames = sizeof umk3_logic_names / sizeof umk3_logic_names[0];');
 
     const content = out.join('\n') + '\n';
     if (outPath) {

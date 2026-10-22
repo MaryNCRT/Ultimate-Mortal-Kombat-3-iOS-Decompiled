@@ -42,6 +42,12 @@
         if (await api.modsAdd(m.folder)) await refreshMods();
     }
 
+    /* the mod's picture in the list: a PNG or JPEG the player picks */
+    async function cover(m) {
+        selectBlip();
+        if (await api.modsCover(m.folder)) await refreshMods();
+    }
+
     async function trash(m) {
         if (trashArmed !== m.folder) {
             trashArmed = m.folder;
@@ -109,6 +115,10 @@
             </div>
             {#if ms.open === m.folder}
                 <div class="body">
+                    <div class="cover">
+                        {#if m.preview}<img src={m.preview} alt="">{:else}<i class="cat {m.category}"></i>{/if}
+                        <button class="btn" onpointerenter={hoverBlip} onclick={() => cover(m)}>{tx('mgCover')}</button>
+                    </div>
                     <div class="fields">
                         <div class="field"><span class="lbl">{tx('mgName')}</span>
                             <input class="edt" maxlength="60" value={m.name} onchange={e => info(m, 'name', e.currentTarget.value)}></div>
@@ -130,6 +140,7 @@
                         {/each}
                     </ul>
                     <div class="row end">
+                        <button class="btn" onpointerenter={hoverBlip} onclick={() => { selectBlip(); ms.layer = m.folder; ms.tab = 'view'; }}>{tx('mgSeeIt')}</button>
                         <button class="btn" onpointerenter={hoverBlip} onclick={() => add(m)}>{tx('mgAdd')}</button>
                         <button class="btn" onpointerenter={hoverBlip} onclick={() => api.modsOpen(m.folder)}>{tx('mgOpen')}</button>
                         <button class="btn danger" onpointerenter={hoverBlip} onclick={() => trash(m)}>{trashArmed === m.folder ? tx('mgTrashAsk') : tx('mgTrash')}</button>
@@ -159,6 +170,9 @@
     .prio { width: calc(var(--u) * 2.6); text-align: center; color: var(--dim); font-family: var(--font-mono); }
     .pic { width: calc(var(--u) * 4.4); height: calc(var(--u) * 4.4); flex: none; display: grid; place-items: center; }
     .pic img { max-width: 100%; max-height: 100%; border-radius: 4px; }
+    .cover { float: right; display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * .5); margin: 0 0 calc(var(--u) * .6) calc(var(--u) * 1.2); }
+    .cover img { width: calc(var(--u) * 16); height: calc(var(--u) * 10); object-fit: cover; border-radius: var(--r-sm); border: 1px solid var(--line); }
+    .cover i { width: calc(var(--u) * 16); height: calc(var(--u) * 10); display: block; }
     .cat { width: 70%; height: 70%; border-radius: 50%; background: var(--grad-hot); box-shadow: 0 0 calc(var(--u) * .6) rgba(140, 130, 255, .6); }
     .cat.audio, .tag.audio { background: #1f6f6a; }
     .cat.music, .tag.music { background: #8a3c8f; }

@@ -3,15 +3,21 @@
      * the pose they were modelled in, or any of their animations, played as
      * the game skins them), stages, every other model, the textures. A
      * texture can be copied into a mod as PNG to paint over: the game takes
-     * it back by its name. */
+     * it back by its name.
+     *
+     * Everything can be seen as the game alone, with the mods that are on, or
+     * with one mod. A fighter's rig goes out to Blender (FBX) and comes back:
+     * an animation over one of its clips, or a new model on the same bones
+     * (mods/fbxin.js), written into a mod and shown at once. */
     import { onMount, onDestroy } from 'svelte';
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     import { tx } from '#lib/app.svelte.js';
     import { api } from '#lib/platform.js';
     import { hoverBlip, selectBlip } from '#lib/sound.js';
-    import { ms, src, loadCatalog, fighter, refreshMods, exportThis, VIEW_KINDS } from '#lib/mods/store.svelte.js';
-    import { stageDesc, meshsetDesc, textureFile, pngBytes } from '#lib/mods/assets.js';
+    import { ms, src, loadCatalog, fighter, refreshMods, exportThis, forgetMod, VIEW_KINDS } from '#lib/mods/store.svelte.js';
+    import { stageDesc, meshsetDesc, textureFile, pngBytes, exportFiles, isPng } from '#lib/mods/assets.js';
+    import { readFbx, fbxScene, fbxTakes, importAnim, importModel, rigDesc } from '#lib/mods/fbxin.js';
     import { framePose, posedVerts, fitRest } from '#lib/mods/rig.js';
     import { decodePvr } from '#lib/mods/formats.js';
 
@@ -22,6 +28,9 @@
     let target = $state('');
     let copied = $state('');
     let fx = $state(null);                  /* the fighter open, for its clips */
+    let stems = [];                         /* the textures of what is open */
+    let imp = $state(null);                 /* an FBX being brought in */
+    let done = $state('');
 
     let renderer, scene, camera, controls, root, raf, skel;
     let fighterView = null;                 /* { f, meshes: [{ mesh, map }], rest } */
@@ -124,7 +133,7 @@
             const b = await src.read(file);
             if (!b) return null;
             let t;
-            if (/\.pvr$/i.test(file)) {
+            if (!isPng(b)) {
                 const img = decodePvr(b);
                 if (!img) return null;
                 t = new THREE.DataTexture(img.rgba, img.width, img.height, THREE.RGBAFormat);
@@ -166,6 +175,9 @@
         copied = '';
         texInfo = null;
         fx = null;
+        imp = null;
+        done = '';
+        stems = [];
         ms.loading = true;
         ms.playing = false;
         try {
@@ -176,6 +188,7 @@
                 const f = await fighter(item);
                 if (my !== token) return;
                 fx = f;
+                stems = [...new Set([...f.blockTex, ...f.variants])];
                 if (!f.variants.includes(ms.outfit)) ms.outfit = f.variants[0];
                 if (ms.clip >= f.clips.length) ms.clip = -1;
                 await buildFighter(f);
@@ -185,6 +198,7 @@
                 if (my !== token) return;
                 root = new THREE.Group();
                 for (const m of d.meshes) root.add(await meshFrom(m, d.materials[m.material].stem));
+                stems = [...new Set(d.materials.map(m => m.stem).filter(Boolean))];
                 scene.add(root);
                 frame(root, ms.kind === 'stages');
                 info = item.name + ' · ' + d.meshes.length + ' meshes';
@@ -281,7 +295,7 @@
     async function showTexture(item) {
         const b = await src.read(item.id);
         let w, h, data;
-        if (/\.pvr$/i.test(item.id)) {
+        if (!isPng(b)) {
             const img = decodePvr(b);
             if (!img) throw new Error('?');
             ({ width: w, height: h } = img);
@@ -317,8 +331,98 @@
         copied = tx('vwCopied') + name + '\\' + texInfo.name + '.png';
     }
 
+    /* --------------------------------------------------------- layers -- */
+
+    async function setLayer(v) {
+        selectBlip();
+        ms.layer = v;
+        texCache.clear();
+        if (ms.pick) await open(ms.pick);
+    }
+
+    /* the textures of what is on screen, as PNG, to exports\<name>_TEXTURES */
+    async function exportTextures() {
+        selectBlip();
+        const files = {};
+        for (const stem of stems) {
+            const file = textureFile(src.files, stem);
+            const png = file && await pngBytes(src, file);
+            if (png) files[stem + '.png'] = png;
+        }
+        const name = String(fx ? fx.ch.file : ms.pick.id).replace(/^.*\//, '').replace(/\.\w+$/, '');
+        done = tx('exDone') + ' ' + await api.exportSave(name + '_TEXTURES', files);
+    }
+
+    /* the rig to model over: T-pose, no animation, FBX with its textures */
+    async function exportRig() {
+        selectBlip();
+        const files = await exportFiles(src, rigDesc(fx), 'fbx');
+        done = tx('exDone') + ' ' + await api.exportSave(fx.ch.file + '_RIG', files);
+    }
+
+    /* ---------------------------------------- bringing Blender's work in -- */
+
+    async function pickImport(kind) {
+        selectBlip();
+        done = '';
+        const got = await api.pickFile('fbx');
+        if (!got) return;
+        try {
+            const sc = fbxScene(await readFbx(got.bytes));
+            const takes = kind === 'anim' ? fbxTakes(sc) : [];
+            if (kind === 'anim' && !takes.length) throw new Error(tx('vwNoTakes'));
+            const clipName = ms.clip >= 0 ? fx.clips[ms.clip].name.toLowerCase() : '';
+            const take = takes.find(t => clipName && t.name.toLowerCase().includes(clipName)) || takes[0];
+            if (!target) target = (ms.layer && ms.layer !== '*' ? ms.layer : '') || fx.ch.name + ' mod';
+            imp = { kind, sc, file: got.name, takes, take: take ? take.id : null, clip: Math.max(0, ms.clip) };
+        } catch (e) {
+            ms.error = String(e && e.message || e);
+        }
+    }
+
+    async function applyImport() {
+        const name = target.trim();
+        if (!imp || !fx || !name) return;
+        selectBlip();
+        ms.error = '';
+        try {
+            await refreshMods();
+            if (!ms.list.some(m => m.folder === name)) await api.modsCreate({ name, category: 'models' });
+            let file, bytes, what;
+            if (imp.kind === 'anim') {
+                /* over the mod's own copy, if it has one: clips replaced
+                 * before stay replaced */
+                file = fx.ch.file + '.skinanim';
+                const base = (await api.resRead(file, name)) || (await api.resRead(file, ''));
+                const r = importAnim(fx, imp.sc, imp.take, imp.clip, base);
+                bytes = r.bytes;
+                what = fx.clips[imp.clip].name + ' · ' + r.frames + ' → ' + r.into + ' · ' + r.matched + '/' + r.of;
+            } else {
+                file = fx.ch.file + '.skin';
+                const r = importModel(fx, imp.sc);
+                bytes = r.bytes;
+                what = r.verts + ' verts · ' + r.tris + ' tris · ' + r.matched + '/' + r.of;
+            }
+            await api.modsPut(name, file, bytes);
+            await refreshMods();
+            const clip = imp.kind === 'anim' ? imp.clip : ms.clip;
+            imp = null;
+            forgetMod();
+            ms.layer = name;
+            texCache.clear();
+            await open(ms.pick);
+            ms.clip = clip;
+            ms.frame = 0;
+            ms.playing = clip >= 0;
+            done = tx('vwSaved') + name + '\\' + file + ' (' + what + ')';
+        } catch (e) {
+            ms.error = String(e && e.message || e);
+        }
+    }
+
     onMount(async () => {
         setup();
+        refreshMods();
         await loadCatalog();
         /* the capture aid: UMK3_LAUNCHER_PICK=characters/KANO[@clip] */
         const raw = new URLSearchParams(location.search).get('pick') || '';
@@ -341,6 +445,12 @@
 
 <div class="viewer">
     <aside class="side">
+        <label class="layer"><span class="lbl">{tx('vwLayer')}</span>
+            <select class="sel" value={ms.layer} onchange={e => setLayer(e.currentTarget.value)}>
+                <option value="">{tx('vwLayerGame')}</option>
+                <option value="*">{tx('vwLayerOn')}</option>
+                {#each ms.list as m}<option value={m.folder}>{m.name}</option>{/each}
+            </select></label>
         <div class="kinds">
             {#each VIEW_KINDS as [k, key]}
                 <button class="tab" class:active={ms.kind === k} onpointerenter={hoverBlip}
@@ -393,6 +503,34 @@
                 <label class="chk"><input type="checkbox" bind:checked={ms.wire}><span>{tx('vwWire')}</span></label>
                 <button class="btn hot" onclick={exportThis}>{tx('vwExport')}</button>
             </div>
+            <div class="ctl">
+                <button class="btn" onclick={exportTextures}>{tx('vwExpTex')}</button>
+                <button class="btn" onclick={exportRig}>{tx('vwExpRig')}</button>
+                <button class="btn" onclick={() => pickImport('anim')}>{tx('vwImpAnim')}</button>
+                <button class="btn" onclick={() => pickImport('model')}>{tx('vwImpModel')}</button>
+            </div>
+            {#if imp}
+                <div class="ctl imp">
+                    <span class="lbl">{imp.file}</span>
+                    {#if imp.kind === 'anim'}
+                        <label class="lbl" for="itake">{tx('vwTake')}</label>
+                        <select id="itake" class="sel" bind:value={imp.take}>
+                            {#each imp.takes as t}<option value={t.id}>{t.name} ({t.frames})</option>{/each}
+                        </select>
+                        <label class="lbl" for="iclip">{tx('vwInto')}</label>
+                        <select id="iclip" class="sel" bind:value={imp.clip}>
+                            {#each fx.clips as c, i}<option value={i}>{c.name} ({c.to - c.from + 1})</option>{/each}
+                        </select>
+                    {/if}
+                    <label class="lbl" for="imod">{tx('vwModName')}</label>
+                    <input id="imod" class="edt" list="impmods" spellcheck="false" bind:value={target}>
+                    <datalist id="impmods">{#each ms.list as m}<option value={m.folder}></option>{/each}</datalist>
+                    <button class="btn hot" onclick={applyImport}>{tx('vwApply')}</button>
+                    <button class="btn" onclick={() => imp = null}>{tx('vwCancel')}</button>
+                </div>
+                <p class="note">{imp.kind === 'anim' ? tx('vwImpAnimNote') : tx('vwImpModelNote')}</p>
+            {/if}
+            {#if done}<p class="note ok">{done}</p>{/if}
         {:else if ms.kind === 'textures' && texInfo}
             <div class="ctl">
                 <label class="lbl" for="tmod">{tx('vwModName')}</label>
@@ -406,8 +544,10 @@
             <div class="ctl">
                 <label class="chk"><input type="checkbox" bind:checked={ms.wire}
                     onchange={() => root && root.traverse(o => { if (o.material) o.material.wireframe = ms.wire; })}><span>{tx('vwWire')}</span></label>
+                <button class="btn" onclick={exportTextures}>{tx('vwExpTex')}</button>
                 <button class="btn hot" onclick={exportThis}>{tx('vwExport')}</button>
             </div>
+            {#if done}<p class="note ok">{done}</p>{/if}
         {/if}
     </section>
 </div>
@@ -418,6 +558,8 @@
     .kinds { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u) * .4); }
     .kinds .tab { font-size: calc(var(--u) * 1.25); padding: calc(var(--u) * .5) calc(var(--u) * .4); }
     .search { flex: none; }
+    .layer { display: flex; flex-direction: column; gap: calc(var(--u) * .3); }
+    .imp { background: var(--well); border-radius: var(--r-sm); padding: calc(var(--u) * .6) calc(var(--u) * .9); }
     .list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 0; background: var(--well); border-radius: var(--r-sm); }
     .list button {
         width: 100%; text-align: left; background: none; border: 0; cursor: pointer;
