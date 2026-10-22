@@ -1812,13 +1812,16 @@ long t_dizzy_sleep(void *thread);
  * the handler of its current frame (+0xa4 the index, 8 bytes a frame). */
 static int opponent_dizzy(void)
 {
-    char *t = *(char **)(Plyr + 108 + 4);
+    /* 32-bit words, as the engine stores them (the x64 build keeps its
+     * heap below 4 GB): reading them as 8-byte pointers crashed there */
+    char *t = (char *)(uintptr_t)*(uint32_t *)(Plyr + 108 + 4);
     unsigned f;
 
     if (!t)
         return 0;
     f = *(unsigned *)(t + 0xa4);
-    return *(uintptr_t *)(t + f * 8 + 4) == (uintptr_t)t_dizzy_sleep;
+    return *(uint32_t *)(t + f * 8 + 4)
+           == (uint32_t)(uintptr_t)t_dizzy_sleep;
 }
 
 int dbg_finishing(void)
