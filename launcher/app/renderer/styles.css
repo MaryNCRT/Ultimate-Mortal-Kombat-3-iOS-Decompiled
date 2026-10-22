@@ -71,21 +71,28 @@ button, input, select { font: inherit; color: inherit; }
         linear-gradient(#0e0720, #070414 60%, #03020a);
 }
 
+#space.cloud { background-size: cover; background-position: center; }
+#space::after {
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(ellipse 75% 70% at 50% 48%, transparent 45%, rgba(3, 2, 10, .55) 100%);
+}
 #ring {
     position: fixed; inset: 0; width: 100%; height: 100%;
 }
-#ring .trace { fill: none; stroke: rgba(5, 3, 18, .55); stroke-width: 9; stroke-linejoin: round; }
-#ring .trace-lit { fill: none; stroke: rgba(170, 175, 255, .18); stroke-width: 1.5; stroke-linejoin: round; }
+/* the traces: dark grooves with a grey edge either side */
+#ring .trace-edge { fill: none; stroke: rgba(150, 150, 185, .28); stroke-width: 15; stroke-linejoin: miter; }
+#ring .trace { fill: none; stroke: rgba(6, 4, 18, .82); stroke-width: 11; stroke-linejoin: miter; }
 #ring .seg-body { fill: url(#marble); }
 #ring .seg-glow2 { fill: none; stroke: #a9b8ff; stroke-width: 16; stroke-opacity: .10; stroke-linejoin: round; }
 #ring .seg-glow { fill: none; stroke: #d6dcff; stroke-width: 8; stroke-opacity: .28; stroke-linejoin: round; }
 #ring .seg-rim { fill: none; stroke: #f4f5ff; stroke-width: 3.5; stroke-linejoin: round; }
-#ring .ring-small .seg-rim { stroke-width: 2.4; }
-#ring .ring-small { opacity: .9; }
+#ring .ring-small .seg-rim { stroke-width: 2.6; }
 /* the rings turn slowly, the small one the other way */
 #ring .ring-big, #ring .ring-small { transform-box: view-box; }
 #ring .ring-big { animation: spin 240s linear infinite; }
 #ring .ring-small { animation: spin 160s linear infinite reverse; }
+/* a section's page has the big ring alone, as the console's online pages */
+body.full #ring .ring-small { display: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ----------------------------------------------------------- titlebar */
@@ -165,7 +172,7 @@ button, input, select { font: inherit; color: inherit; }
     display: flex; align-items: center; gap: calc(var(--u) * 1.4);
     background: none; border: 0; border-top: 1px solid transparent; border-bottom: 1px solid transparent;
     cursor: pointer; text-align: left;
-    font-size: calc(var(--u) * 2.5); font-weight: 600; letter-spacing: .01em;
+    font-size: calc(var(--u) * 2.0); font-weight: 600; letter-spacing: .01em;
     color: var(--lav); text-shadow: 0 calc(var(--u) * .2) calc(var(--u) * .4) #000, 0 0 calc(var(--u) * .8) rgba(0, 0, 0, .8);
     padding: calc(var(--u) * .35) calc(var(--u) * 6) calc(var(--u) * .35) 0; white-space: nowrap;
 }
@@ -180,7 +187,7 @@ button, input, select { font: inherit; color: inherit; }
 /* the chrome orb with the red 3 */
 .orb {
     position: relative; flex: none;
-    width: calc(var(--u) * 4.2); height: calc(var(--u) * 4.2); border-radius: 50%;
+    width: calc(var(--u) * 3.4); height: calc(var(--u) * 3.4); border-radius: 50%;
     visibility: hidden; font-style: normal;
     background: radial-gradient(circle at 34% 28%, #fff, #e3e6ee 14%, #8a92a8 42%, #2c3142 72%, #0c0e16);
     box-shadow: 0 0 0 calc(var(--u) * .15) rgba(255, 255, 255, .35), 0 0 calc(var(--u) * 1.4) rgba(160, 170, 255, .7);
@@ -188,7 +195,7 @@ button, input, select { font: inherit; color: inherit; }
 .orb::after {
     content: "3"; position: absolute; inset: 0;
     display: flex; align-items: center; justify-content: center;
-    font-family: Impact, "Arial Black", sans-serif; font-size: calc(var(--u) * 3);
+    font-family: Impact, "Arial Black", sans-serif; font-size: calc(var(--u) * 2.4);
     color: #e1141d; text-shadow: 0 calc(var(--u) * .15) 0 #5a0408, 0 0 calc(var(--u) * .5) rgba(255, 40, 40, .6);
     transform: skewX(-8deg);
 }
@@ -204,7 +211,7 @@ button, input, select { font: inherit; color: inherit; }
     border-image: linear-gradient(90deg, transparent, rgba(215, 220, 255, .75) 15%, rgba(215, 220, 255, .6) 70%, transparent) 1;
     transition: transform .3s cubic-bezier(.3, .7, .25, 1), width .3s, height .3s, opacity .2s;
 }
-#menuSel .orb { position: absolute; left: 0; top: 50%; margin-top: calc(var(--u) * -2.1); visibility: visible; }
+#menuSel .orb { position: absolute; left: 0; top: 50%; margin-top: calc(var(--u) * -1.7); visibility: visible; }
 #menuSel.on { opacity: 1; }
 .mi:hover { color: #fff; }
 .mi:focus { outline: none; }
@@ -486,3 +493,71 @@ section[data-sec="profile"] .prof {
 #status.ready { color: #6fe39b; }
 #status.need { color: #ff8d8d; }
 #status.building, #status.playing { color: var(--gold1); }
+
+/* ------------------------------------------------- a section, full screen
+ * The console release's online pages: the section's name between two blue
+ * arrows and the triggers' pictures, a second row of pages between arrows
+ * with light lines over and under the chosen one, the page itself on the
+ * backdrop, the command bar below. The menu, title and description go. */
+
+#secHead { display: none; }
+body.full #logo, body.full #menu, body.full #desc { display: none; }
+body:not(.full) #stage { display: none; }
+body.full #stage {
+    grid-column: 1 / -1; grid-row: 2 / 5;
+    width: min(100%, calc(var(--u) * 118));
+    padding: calc(var(--u) * 1.2) calc(var(--u) * 4) calc(var(--u) * 1.6);
+}
+body.full #secHead {
+    display: flex; align-items: center; justify-content: center;
+    gap: calc(var(--u) * 1.2); margin-bottom: calc(var(--u) * 1.6); flex: none;
+}
+#secTitle {
+    margin: 0 calc(var(--u) * 1.4); font-size: calc(var(--u) * 3.6); font-weight: 600;
+    letter-spacing: .02em; color: #fff; white-space: nowrap;
+    text-shadow: 0 calc(var(--u) * .2) calc(var(--u) * .4) #000, 0 0 calc(var(--u) * 1.2) rgba(150, 170, 255, .45);
+}
+.sh-g { display: inline-flex; }
+.sh-g .glyph { height: calc(var(--u) * 3.2); }
+.sh-g .kkey { gap: 0; }
+/* the blue chevrons */
+.sh-arr {
+    flex: none; width: calc(var(--u) * 2.4); height: calc(var(--u) * 3.2);
+    border: 0; padding: 0; cursor: pointer;
+    background: linear-gradient(#d4efff, #58b4ff 45%, #1f6fe0);
+    filter: drop-shadow(0 0 calc(var(--u) * .5) rgba(80, 170, 255, .8));
+}
+.sh-arr.l { clip-path: polygon(100% 0, 58% 0, 0 50%, 58% 100%, 100% 100%, 42% 50%); }
+.sh-arr.r { clip-path: polygon(0 0, 42% 0, 100% 50%, 42% 100%, 0 100%, 58% 50%); }
+.sh-arr:hover { background: linear-gradient(#fff, #9fd4ff 45%, #3f8cff); }
+body.locked .sh-arr#secPrev, body.locked .sh-arr#secNext, body.locked .sh-g { visibility: hidden; }
+.subnav .sh-arr { display: none; }
+body.full .subnav {
+    justify-content: space-between; gap: calc(var(--u) * 2);
+    margin: 0 0 calc(var(--u) * 1.8);
+}
+body.full .subnav .sh-arr { display: block; }
+body.full .subnav .tab {
+    position: relative; background: none; border: 0; border-radius: 0;
+    font-size: calc(var(--u) * 2); letter-spacing: .03em; color: #8e9fd4;
+    padding: calc(var(--u) * .7) calc(var(--u) * 2.4);
+    text-shadow: 0 calc(var(--u) * .15) calc(var(--u) * .3) #000;
+}
+body.full .subnav .tab:hover { color: #dfe5ff; }
+body.full .subnav .tab.active { color: #dfe5ff; background: none; }
+body.full .subnav .tab.active::before, body.full .subnav .tab.active::after {
+    content: ""; position: absolute; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(205, 215, 255, .9) 18%, rgba(205, 215, 255, .9) 82%, transparent);
+    box-shadow: 0 0 calc(var(--u) * .6) rgba(140, 160, 255, .7);
+}
+body.full .subnav .tab.active::before { top: 0; }
+body.full .subnav .tab.active::after { bottom: 0; }
+/* the page on the backdrop: a light veil instead of a framed box */
+body.full .sec {
+    background: linear-gradient(rgba(6, 5, 24, .58), rgba(6, 5, 24, .48));
+    border: 0; border-top: 1px solid transparent; border-bottom: 1px solid transparent;
+    border-image: linear-gradient(90deg, transparent, rgba(215, 220, 255, .45) 20%, rgba(215, 220, 255, .45) 80%, transparent) 1;
+    border-radius: 0; box-shadow: none; flex: 1 1 auto;
+}
+/* the name is in the header now */
+body.full .sec > h2:first-child, body.full .gpage > h2:first-child { display: none; }

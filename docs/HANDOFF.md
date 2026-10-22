@@ -5,6 +5,22 @@
 
 ---
 
+## Launcher rework (2026-10-22, not yet tested by Mary)
+
+- Menu: smaller lines and orb; PLAY moved second, under COMPILE YOUR .IPA.
+- No game compiled in either build (`root:get` -> `any`): the menu shows
+  COMPILE alone; the first successful compile relaunches the launcher
+  (`app:relaunch`, app.relaunch + exit) so the whole menu appears.
+- A section opened from the menu fills the window, after the console
+  release's online pages: its name between blue arrows (Q / E, the pad's
+  triggers or bumpers step through sections), the GRAPHICS and CONTROLS
+  pages in a second row between arrows (left / right, the d-pad), the
+  chosen page with light lines over and under it; Esc / B returns to the
+  menu, which keeps its old layout.
+- Backdrop shared by both: a generated cloud of red, purple and blue light
+  (`nebulaURL`), dark circuit grooves with grey edges, a big ring of short
+  thick marble blocks and, on the menu only, a smaller one to the right.
+
 ## Next, after the launcher rework: Mary's 0.1.6 reports
 
 See docs/PROGRESS.md: FLAWLESS VICTORY missing in 64-bit, Reptile's

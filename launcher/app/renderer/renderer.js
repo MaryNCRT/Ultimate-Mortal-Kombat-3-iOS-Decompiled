@@ -476,7 +476,68 @@ function marbleURL(S) {
     return cv.toDataURL('image/png');
 }
 
+/* The backdrop's cloud, as the console release's menus: blue light through
+ * the middle, red and brown to the left and along the top, purple between,
+ * in soft billows. Value noise in a few octaves, made once as a small
+ * picture the page stretches over the window. */
+function nebulaURL(W, H) {
+    const field = seed => {
+        const rnd = () => {             /* mulberry32 */
+            seed = (seed + 0x6D2B79F5) | 0;
+            let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+        const oct = [];
+        for (let o = 0, P = 3; o < 6; o++, P *= 2) {
+            const v = new Float32Array(P * P);
+            for (let i = 0; i < v.length; i++) v[i] = rnd();
+            oct.push({ P, v });
+        }
+        const sm = t => t * t * (3 - 2 * t);
+        return (x, y) => {
+            let t = 0, w = 0.5, n = 0;
+            for (const { P, v } of oct) {
+                const fx = x * P, fy = y * P, ix = Math.floor(fx), iy = Math.floor(fy);
+                const tx = sm(fx - ix), ty = sm(fy - iy);
+                const at = (a, b) => v[(b % P) * P + (a % P)];
+                const a = at(ix, iy) + (at(ix + 1, iy) - at(ix, iy)) * tx;
+                const b = at(ix, iy + 1) + (at(ix + 1, iy + 1) - at(ix, iy + 1)) * tx;
+                t += (a + (b - a) * ty) * w;
+                n += w;
+                w *= 0.55;
+            }
+            return t / n;
+        };
+    };
+    const dens = field(7), hue = field(23);
+    const RED = [170, 44, 34], PUR = [96, 36, 124], BLU = [48, 92, 220];
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const g = cv.getContext('2d'), im = g.createImageData(W, H);
+    const cl = v => Math.max(0, Math.min(1, v));
+    for (let y = 0; y < H; y++)
+        for (let x = 0; x < W; x++) {
+            const u = x / W, v = y / H;
+            const h = hue(u * 1.3, v * 1.3), d = dens(u * 1.6 + 3, v * 1.6 + 3);
+            /* red on the left and along the top, blue in a band through the middle */
+            const wr = cl(0.95 - u * 1.25 + (h - 0.5) * 1.6) + cl(0.32 - v) * 1.4;
+            const wb = (cl(1.15 - Math.abs(v - 0.55) * 2.2) * cl(0.35 + u * 1.2) + cl(0.55 - h) * 0.9) * 1.6;
+            const wp = 0.45;
+            const sum = wr + wb + wp;
+            const k = (0.14 + 1.35 * Math.pow(cl(d * 1.3 - 0.15), 1.6));
+            const p = (y * W + x) * 4;
+            for (let c = 0; c < 3; c++)
+                im.data[p + c] = Math.min(255, (RED[c] * wr + BLU[c] * wb + PUR[c] * wp) / sum * k);
+            im.data[p + 3] = 255;
+        }
+    g.putImageData(im, 0, 0);
+    return cv.toDataURL('image/png');
+}
+
 function buildRing() {
+    $('space').style.backgroundImage = 'url(' + nebulaURL(400, 225) + ')';
+    $('space').classList.add('cloud');
     const svg = $('ring'), NS = 'http://www.w3.org/2000/svg';
     const mk = (tag, attrs, parent) => {
         const n = document.createElementNS(NS, tag);
@@ -489,15 +550,20 @@ function buildRing() {
                                 width: '512', height: '512' }, defs);
     mk('image', { href: marbleURL(512), width: '512', height: '512' }, pat);
 
-    /* the circuit traces: dark grooves with a faint light edge */
-    const traces = ['M0 250 H260 L330 320 H640', 'M0 610 H180 L260 530 H560 L640 450',
-        'M1600 170 H1380 L1310 240 H1120', 'M1600 690 H1400 L1320 610 H1150',
-        'M380 900 L480 800 H860 L920 740', 'M0 700 H90 L140 650 H300',
-        'M1600 420 H1500 L1450 470 H1260', 'M760 0 L820 60 H1040'];
+    /* the circuit traces: dark grooves with a grey edge, long runs with
+     * 45-degree bends, across the whole field as on the console */
+    const traces = [
+        'M180 120 H520 L580 180 H900 L960 120 H1240', 'M300 205 H560 L610 255 H760',
+        'M1000 230 H1180 L1240 290 H1460',
+        'M120 330 H420 L480 390 H700', 'M820 350 H1050 L1110 290 H1400',
+        'M200 455 H380 L440 395', 'M600 470 H860 L920 530 H1180 L1240 470 H1500',
+        'M150 560 H330 L390 620 H640', 'M760 600 H940 L1000 660 H1300',
+        'M260 700 H520 L580 640 H700', 'M1080 740 H1260 L1320 680 H1480',
+        'M420 790 H690 L750 730 H980'];
     const tg = mk('g', { class: 'traces' });
     for (const d of traces) {
+        mk('path', { d, class: 'trace-edge' }, tg);
         mk('path', { d, class: 'trace' }, tg);
-        mk('path', { d, class: 'trace-lit', transform: 'translate(0 -3)' }, tg);
     }
 
     const rad = a => a * Math.PI / 180;
@@ -519,13 +585,15 @@ function buildRing() {
             mk('path', { d, class: 'seg-rim' }, g);
         }
     };
-    /* the big ring: open at the top, where the title is, and at the bottom */
-    ring(820, 520, 690, 790, [[-140, -110], [-68, -26], [-18, 22], [30, 70],
-                              [110, 150], [158, 198]], 'ring-big');
-    /* the small one, behind the title and the panel */
-    const small = [];
-    for (let a = -100; a < 250; a += 44) small.push([a, a + 36]);
-    ring(1060, 400, 300, 342, small, 'ring-small');
+    /* as on the console's main menu: a big ring round the window and a
+     * smaller one to the right, both of short thick blocks with gaps */
+    const blocks = (n, gap, from) => {
+        const out = [], step = 360 / n;
+        for (let i = 0; i < n; i++) out.push([from + i * step, from + (i + 1) * step - gap]);
+        return out;
+    };
+    ring(805, 456, 600, 700, blocks(11, 8, -84), 'ring-big');
+    ring(1110, 430, 285, 330, blocks(16, 7, -95), 'ring-small');
 }
 
 /* ---------------------------------------------------- the pad, here --
@@ -548,6 +616,8 @@ function paintCmdbar() {
         put('cgB', keyFace(27));
         put('cgF', keyFace(122));
     }
+    put('secPrevG', usingPad ? padFace(kind, 'L2') : keyFace(81));
+    put('secNextG', usingPad ? padFace(kind, 'R2') : keyFace(69));
     $('cgF').classList.toggle('hidden', usingPad);
     $('cgFl').classList.toggle('hidden', usingPad);
 }
@@ -562,6 +632,9 @@ function padTick() {
         const b = g.buttons.map(x => x.pressed), ay = g.axes[1] || 0;
         b[12] = b[12] || ay < -0.6;
         b[13] = b[13] || ay > 0.6;
+        const ax = g.axes[0] || 0;
+        b[14] = b[14] || ax < -0.6;
+        b[15] = b[15] || ax > 0.6;
         const hit = i => b[i] && !padWas[i];
         if (b.some(Boolean)) useDevice(true);
         if (!$('picker') && !waitingKey) {
@@ -569,6 +642,10 @@ function padTick() {
             if (hit(13)) navKey('ArrowDown');
             if (hit(0)) navKey('Enter');
             if (hit(1)) navKey('Escape');
+            if (hit(14)) navKey('ArrowLeft');
+            if (hit(15)) navKey('ArrowRight');
+            if (hit(4) || hit(6)) navKey('SecPrev');
+            if (hit(5) || hit(7)) navKey('SecNext');
         }
         padWas = b;
     } else if (usingPad)
@@ -648,7 +725,9 @@ const KEY_DEFAULT = {
     dbg_ko_p2: 120, dbg_ko_p1: 121, dbg_win: 122, dbg_lose: 123,
     dbg_scr_prev: 117, dbg_scr_next: 118, dbg_scr_menu: 119,
 };
-const SECTIONS = ['build', 'video', 'controls', 'profile', 'play', 'quit'];
+const SECTIONS = ['build', 'play', 'video', 'controls', 'profile', 'quit'];
+/* each section's name in its full-screen header */
+const TITLE = { build: 'mBuild', play: 'mPlay', video: 'mVideo', controls: 'mControls', profile: 'mProfile' };
 const DESC = { build: 'dBuild', video: 'dVideo', controls: 'dControls', profile: 'dProfile', play: 'dPlay', quit: 'dQuit' };
 
 const $ = id => document.getElementById(id);
@@ -660,6 +739,9 @@ const el = (tag, cls, text) => {
 };
 
 let cfg = null, ready = false, builtAt = null, building = false, both = false;
+/* no game compiled yet: the menu offers COMPILE alone, until the first
+ * compile opens the launcher again */
+let locked = false, full = false;
 let ui = 'EN', waitingKey = null, sec = 'build';
 
 /* ------------------------------------------------------------- sounds -- */
@@ -696,6 +778,7 @@ function applyTexts() {
     fillPads();
     paintState();
     $('desc').textContent = tx(DESC[sec]);
+    if (full) $('secTitle').textContent = tx(TITLE[sec]);
 }
 
 function setStatus(kind, text) {
@@ -721,18 +804,52 @@ function paintState() {
 
 /* ---------------------------------------------------------- sections -- */
 
+/* The menu's line chosen; run opens it: QUIT closes, a section fills the
+ * window (openFull). */
 function setSection(next, run) {
+    if (locked && next !== 'build' && next !== 'quit') return;
+    sec = next;
     if (next === 'quit') {
         if (run) window.umk3.close();
     } else {
-        sec = next;
         document.querySelectorAll('.sec').forEach(s =>
             s.classList.toggle('active', s.dataset.sec === next));
+        if (run || full) openFull();
     }
     document.querySelectorAll('.mi').forEach(b =>
         b.classList.toggle('active', b.dataset.sec === next));
     $('desc').textContent = tx(DESC[next]);
     moveMenuSel();
+}
+
+/* A section on the whole window, as the console release's online pages:
+ * its name between arrows, the menu and the title gone; BACK returns. */
+function openFull() {
+    full = true;
+    document.body.classList.add('full');
+    $('secTitle').textContent = tx(TITLE[sec]);
+}
+function closeFull() {
+    if (!full) return;
+    full = false;
+    closePicker();
+    document.body.classList.remove('full');
+    if (document.activeElement) document.activeElement.blur();
+    moveMenuSel();
+}
+/* the triggers / Q E / the header's arrows: the next section, round */
+function stepSection(d) {
+    const list = SECTIONS.filter(n => n !== 'quit' && !(locked && n !== 'build'));
+    if (list.length < 2) return;
+    hoverBlip();
+    setSection(list[(list.indexOf(sec) + d + list.length) % list.length], true);
+}
+/* left / right / the second row's arrows: the section's next page */
+function stepPage(d) {
+    const tabs = Array.from(document.querySelectorAll('.sec.active .subnav .tab'));
+    if (!tabs.length) return;
+    const i = Math.max(0, tabs.findIndex(t => t.classList.contains('active')));
+    tabs[(i + d + tabs.length) % tabs.length].click();
 }
 
 /* --------------------------------------------------------------- keys -- */
@@ -911,6 +1028,10 @@ async function refreshRoot() {
     const info = await window.umk3.root();
     ready = info.ready;
     builtAt = info.builtAt;
+    locked = !info.any;
+    document.body.classList.toggle('locked', locked);
+    document.querySelectorAll('.mi').forEach(b =>
+        b.classList.toggle('hidden', locked && b.dataset.sec !== 'build'));
     both = !!info.both;
     /* both builds compiled: JUGAR picks which one opens */
     $('playarchf').classList.toggle('hidden', !both);
@@ -927,6 +1048,7 @@ async function startBuild() {
         return;
     }
     selectBlip();
+    const wasLocked = locked;
     showBuildUI(true);
     const r = await window.umk3.startBuild(cfg.ipa.trim());
     showBuildUI(false);
@@ -937,6 +1059,8 @@ async function startBuild() {
         logLine('OK.');
         setStatus('ready', T[ui].buildDone);
         doneChord();
+        if (wasLocked)          /* the first game: open again with the whole menu */
+            setTimeout(() => window.umk3.relaunch(), 1500);
     } else {
         setBar(100, true);
         logLine(r.code === -3 ? 'ERROR: ' + T[ui].notIpa : 'EXIT CODE: ' + r.code);
@@ -1298,12 +1422,23 @@ function onKey(e) {
 
 /* The menu's keys, from the keyboard or the pad: true when one acted. */
 function navKey(key) {
-    const i = SECTIONS.indexOf(sec);
+    if (full) {
+        if (key === 'Escape') { selectBlip(); closeFull(); return true; }
+        if (key === 'SecPrev' || key === 'q' || key === 'Q') { stepSection(-1); return true; }
+        if (key === 'SecNext' || key === 'e' || key === 'E') { stepSection(1); return true; }
+        if ((key === 'ArrowLeft' || key === 'ArrowRight') && document.activeElement === document.body) {
+            stepPage(key === 'ArrowLeft' ? -1 : 1);
+            return true;
+        }
+        return false;
+    }
+    const vis = SECTIONS.filter(n => !(locked && n !== 'build'));
+    const i = Math.max(0, vis.indexOf(sec));
     if (key === 'ArrowDown' || key === 'ArrowUp') {
-        const n = SECTIONS[(i + (key === 'ArrowDown' ? 1 : SECTIONS.length - 1)) % SECTIONS.length];
+        if (vis.length < 2) return true;
+        const n = vis[(i + (key === 'ArrowDown' ? 1 : vis.length - 1)) % vis.length];
         hoverBlip();
-        setSection(n === 'quit' ? 'quit' : n, false);
-        if (n === 'quit') sec = 'quit';
+        setSection(n, false);
         return true;
     }
     if (key === 'Enter' && document.activeElement === document.body) {
@@ -1365,6 +1500,10 @@ async function init() {
         });
     });
 
+    $('secPrev').addEventListener('click', () => stepSection(-1));
+    $('secNext').addEventListener('click', () => stepSection(1));
+    document.querySelectorAll('.sub-prev, .sub-next').forEach(b =>
+        b.addEventListener('click', () => stepPage(b.classList.contains('sub-prev') ? -1 : 1)));
     $('browse').addEventListener('click', async () => {
         const p = await window.umk3.browseIpa();
         if (!p) return;
@@ -1509,7 +1648,8 @@ async function init() {
 
     /* UMK3_LAUNCHER_SEC=<section>[:<controls tab>], the capture aid */
     const [want, sub] = (new URLSearchParams(location.search).get('sec') || '').split(':');
-    setSection(SECTIONS.includes(want) && want !== 'quit' ? want : ready ? 'play' : 'build', false);
+    const open = SECTIONS.includes(want) && want !== 'quit';
+    setSection(open ? want : ready ? 'play' : 'build', open);
     if (sub && document.querySelector('.tab[data-c="' + sub + '"]'))
         document.querySelector('.tab[data-c="' + sub + '"]').click();
     else if (sub === 'end')             /* scrolled to its foot */
