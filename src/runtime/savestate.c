@@ -55,7 +55,7 @@ static struct st_head *head(void) { return (struct st_head *)g_base; }
  * longs, which sign-extend, so its memory has to sit below 2 GB. Reserves
  * `size` bytes in the first free range there big enough; 0 if none.
  * Shared with limeMalloc's region (lime_platform.c). */
-void *umk3_reserve_low(size_t size)
+static void *reserve_low(size_t size, DWORD extra)
 {
     MEMORY_BASIC_INFORMATION mi;
     uintptr_t q = 0x10000;
@@ -65,13 +65,19 @@ void *umk3_reserve_low(size_t size)
         uintptr_t end = (uintptr_t)mi.BaseAddress + mi.RegionSize;
 
         if (mi.State == MEM_FREE && at + size <= end && at + size <= 0x7FFF0000u) {
-            void *p = VirtualAlloc((void *)at, size, MEM_RESERVE, PAGE_READWRITE);
+            void *p = VirtualAlloc((void *)at, size, MEM_RESERVE | extra,
+                                   PAGE_READWRITE);
             if (p)
                 return p;
         }
         q = end;
     }
     return 0;
+}
+
+void *umk3_reserve_low(size_t size)
+{
+    return reserve_low(size, 0);
 }
 #endif
 
@@ -82,11 +88,12 @@ static int arena_init(void)
     if (g_failed)
         return 0;
 #ifdef UMK3_LOW32
-    g_base = (uint8_t *)umk3_reserve_low(ST_RESERVE);
+    g_base = (uint8_t *)reserve_low(ST_RESERVE, MEM_WRITE_WATCH);
     if (!g_base)
         fprintf(stderr, "savestate: no room below 2 GB for the arena\n");
 #else
-    g_base = (uint8_t *)VirtualAlloc(NULL, ST_RESERVE, MEM_RESERVE,
+    g_base = (uint8_t *)VirtualAlloc(NULL, ST_RESERVE,
+                                     MEM_RESERVE | MEM_WRITE_WATCH,
                                      PAGE_READWRITE);
 #endif
     if (!g_base) {
@@ -246,18 +253,22 @@ void *st_realloc_any(void *p, size_t n)
 
 /* ------------------------------------------------------------ the states */
 
-/* The exe's .umkstd and .umkstb: the game files' globals and statics. */
+/* The exe's .umkstd and .umkstb, the game files' globals and statics, then
+ * .umkntd and .umkntb, the ones a rollback leaves alone (UMK3_NO_ROLLBACK).
+ * `max` 2 asks for the first two only. */
 static int state_sections(uint8_t **p, uint32_t *n, int max)
 {
     uint8_t *img = (uint8_t *)GetModuleHandleA(NULL);
     IMAGE_NT_HEADERS *nt =
         (IMAGE_NT_HEADERS *)(img + ((IMAGE_DOS_HEADER *)img)->e_lfanew);
     IMAGE_SECTION_HEADER *s;
-    static const char *const name[2] = { ".umkstd", ".umkstb" };
+    static const char *const name[4] = {
+        ".umkstd", ".umkstb", ".umkntd", ".umkntb"
+    };
     int i, j, k = 0;
 
     /* .umkstd first, whatever order the linker put them in */
-    for (j = 0; j < 2 && k < max; j++) {
+    for (j = 0; j < 4 && k < max; j++) {
         s = IMAGE_FIRST_SECTION(nt);
         for (i = 0; i < nt->FileHeader.NumberOfSections; i++, s++)
             if (!memcmp(s->Name, name[j], 7)) {
@@ -324,14 +335,14 @@ int st_load(int slot, const char **why)
 
 static int save_slot(int slot, const char **why)
 {
-    uint8_t *p[2];
-    uint32_t n[2], need, at;
+    uint8_t *p[4];
+    uint32_t n[4], need, at;
     int k, i;
 
     if (!st_available())
         return *why = g_failed ? "the game's memory overflowed its arena"
                                : "this build has no state sections", -1;
-    k = state_sections(p, n, 2);
+    k = state_sections(p, n, 4);
     need = head()->top;
     for (i = 0; i < k; i++)
         need += n[i];
@@ -358,15 +369,15 @@ static int save_slot(int slot, const char **why)
 
 static int load_slot(int slot, const char **why)
 {
-    uint8_t *p[2];
-    uint32_t n[2], at;
+    uint8_t *p[4];
+    uint32_t n[4], at;
     int k, i;
 
     if (!g_slot[slot].used)
         return *why = "that slot is empty", -1;
     if (!st_available())
         return *why = "save states are off", -1;
-    k = state_sections(p, n, 2);
+    k = state_sections(p, n, 4);
     at = 0;
     for (i = 0; i < k; i++) {
         memcpy(p[i], g_slot[slot].buf + at, n[i]);
@@ -375,6 +386,178 @@ static int load_slot(int slot, const char **why)
     /* the arena only grows: what lies past the state's top is free space
      * for it now, and stays committed */
     memcpy(g_base, g_slot[slot].buf + at, g_slot[slot].arena);
+    return 0;
+}
+
+/* ------------------------------------------------------ rollback's */
+
+/* A rollback snapshot is .umkstd and .umkstb whole, and of the arena only
+ * the pages written since st_rb_begin: GetWriteWatch names them, they join
+ * `g_rb_track` for good, and a page a snapshot does not hold was not yet
+ * written when it was taken, so the copy made at the start is its content. */
+#define RB_PAGE 4096u
+
+struct rb_slot {
+    uint8_t  *sect;                     /* .umkstd then .umkstb */
+    uint32_t *page;                     /* arena pages held, in order */
+    uint8_t  *data;                     /* their contents */
+    uint32_t  npages, cap, top;
+    int       used;
+};
+
+static struct rb_slot *g_rb;
+static int       g_rb_n;
+static uint32_t  g_rb_sect;             /* bytes of the two sections */
+static uint8_t  *g_rb_base;             /* the arena at st_rb_begin */
+static uint32_t  g_rb_base_size;
+static uint8_t  *g_rb_track;            /* per arena page: written since */
+static uint32_t *g_rb_list;             /* the tracked pages, in order */
+static uint32_t  g_rb_ntrack;
+
+void st_rb_end(void)
+{
+    int i;
+
+    for (i = 0; i < g_rb_n; i++) {
+        VirtualFree(g_rb[i].sect, 0, MEM_RELEASE);
+        free(g_rb[i].page);
+        free(g_rb[i].data);
+    }
+    free(g_rb);
+    g_rb = NULL;
+    g_rb_n = 0;
+    if (g_rb_base)
+        VirtualFree(g_rb_base, 0, MEM_RELEASE);
+    g_rb_base = NULL;
+    free(g_rb_track);
+    free(g_rb_list);
+    g_rb_track = NULL;
+    g_rb_list = NULL;
+    g_rb_ntrack = 0;
+}
+
+int st_rb_begin(int n)
+{
+    uint8_t *p[2];
+    uint32_t sz[2];
+    int i;
+
+    st_rb_end();
+    if (!st_available() || state_sections(p, sz, 2) != 2 || n < 1)
+        return -1;
+    g_rb_sect = sz[0] + sz[1];
+    g_rb = (struct rb_slot *)calloc((size_t)n, sizeof *g_rb);
+    g_rb_track = (uint8_t *)calloc(ST_RESERVE / RB_PAGE, 1);
+    g_rb_list = (uint32_t *)malloc(ST_RESERVE / RB_PAGE * sizeof *g_rb_list);
+    g_rb_base_size = g_committed;
+    g_rb_base = (uint8_t *)VirtualAlloc(NULL, g_rb_base_size,
+                                        MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    if (!g_rb || !g_rb_track || !g_rb_list || !g_rb_base)
+        return st_rb_end(), -1;
+    g_rb_n = n;
+    for (i = 0; i < n; i++) {
+        g_rb[i].sect = (uint8_t *)VirtualAlloc(NULL, g_rb_sect,
+                                MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        if (!g_rb[i].sect)
+            return st_rb_end(), -1;
+    }
+    memcpy(g_rb_base, g_base, g_rb_base_size);
+    ResetWriteWatch(g_base, ST_RESERVE);
+    return 0;
+}
+
+unsigned long st_rb_size(void)
+{
+    return g_rb_sect + g_rb_ntrack * RB_PAGE;
+}
+
+/* The arena pages written since the last call join the tracked ones. */
+static void rb_watch(void)
+{
+    static void *hit[4096];
+    ULONG_PTR count;
+    DWORD gran;
+    ULONG_PTR i;
+
+    do {
+        count = sizeof hit / sizeof hit[0];
+        if (GetWriteWatch(WRITE_WATCH_FLAG_RESET, g_base, ST_RESERVE, hit,
+                          &count, &gran) != 0)
+            return;
+        for (i = 0; i < count; i++) {
+            uint32_t pg = (uint32_t)(((uint8_t *)hit[i] - g_base) / RB_PAGE);
+
+            if (!g_rb_track[pg]) {
+                g_rb_track[pg] = 1;
+                g_rb_list[g_rb_ntrack++] = pg;
+            }
+        }
+    } while (count == sizeof hit / sizeof hit[0]);
+}
+
+int st_rb_save(int slot)
+{
+    struct rb_slot *s;
+    uint8_t *p[2];
+    uint32_t sz[2], i;
+
+    if (slot < 0 || slot >= g_rb_n || state_sections(p, sz, 2) != 2)
+        return -1;
+    s = &g_rb[slot];
+    memcpy(s->sect, p[0], sz[0]);
+    memcpy(s->sect + sz[0], p[1], sz[1]);
+
+    rb_watch();
+    if (g_rb_ntrack > s->cap) {
+        uint32_t cap = g_rb_ntrack + 64;
+        uint32_t *pg = (uint32_t *)realloc(s->page, cap * sizeof *pg);
+        uint8_t *d;
+
+        if (!pg)
+            return -1;
+        s->page = pg;
+        d = (uint8_t *)realloc(s->data, (size_t)cap * RB_PAGE);
+        if (!d)
+            return -1;
+        s->data = d;
+        s->cap = cap;
+    }
+    for (i = 0; i < g_rb_ntrack; i++) {
+        s->page[i] = g_rb_list[i];
+        memcpy(s->data + (size_t)i * RB_PAGE, g_base + g_rb_list[i] * RB_PAGE,
+               RB_PAGE);
+    }
+    s->npages = g_rb_ntrack;
+    s->top = head()->top;
+    s->used = 1;
+    return 0;
+}
+
+int st_rb_load(int slot)
+{
+    struct rb_slot *s;
+    uint8_t *p[2];
+    uint32_t sz[2], i, pg;
+
+    if (slot < 0 || slot >= g_rb_n || !g_rb[slot].used
+        || state_sections(p, sz, 2) != 2)
+        return -1;
+    s = &g_rb[slot];
+    memcpy(p[0], s->sect, sz[0]);
+    memcpy(p[1], s->sect + sz[0], sz[1]);
+
+    rb_watch();
+    /* the slot's pages are the first s->npages of the list, in its order */
+    for (i = 0; i < g_rb_ntrack; i++) {
+        pg = g_rb_list[i];
+        if (i < s->npages)
+            memcpy(g_base + pg * RB_PAGE, s->data + (size_t)i * RB_PAGE, RB_PAGE);
+        else if (pg * RB_PAGE < g_rb_base_size)
+            memcpy(g_base + pg * RB_PAGE, g_rb_base + pg * RB_PAGE, RB_PAGE);
+        else
+            memset(g_base + pg * RB_PAGE, 0, RB_PAGE);
+    }
+    rb_watch();                         /* what the load itself wrote */
     return 0;
 }
 
@@ -519,5 +702,10 @@ unsigned long st_probe_diff(int k, void (*page)(int, uint32_t, void *), void *ct
 uint64_t st_probe_hash(void)              { return 0; }
 unsigned long st_probe_page_hashes(int r, uint64_t *out, unsigned long max)
 { (void)r; (void)out; (void)max; return 0; }
+int   st_rb_begin(int n)                   { (void)n; return -1; }
+int   st_rb_save(int slot)                 { (void)slot; return -1; }
+int   st_rb_load(int slot)                 { (void)slot; return -1; }
+void  st_rb_end(void)                      {}
+unsigned long st_rb_size(void)            { return 0; }
 
 #endif

@@ -80,11 +80,21 @@ void  st_free(void *p);
 #define P32
 #endif
 
+/* A state file that holds the machine's side of the game -- the clock, the
+ * sound table, the network session -- is UMK3_NO_ROLLBACK as well: a save
+ * state keeps it (.umkntd, .umkntb), a rollback of the fight does not
+ * (rollback.c). */
 #ifdef UMK3_STATE_FILE
 #ifdef _WIN32
+#ifdef UMK3_NO_ROLLBACK
+__asm__(".section .umkntb,\"bw\"");
+#pragma data_seg(".umkntd")
+#pragma bss_seg(".umkntb")
+#else
 __asm__(".section .umkstb,\"bw\"");
 #pragma data_seg(".umkstd")
 #pragma bss_seg(".umkstb")
+#endif
 #else
 #pragma clang section data=".umkstd" bss=".umkstb"
 #endif
@@ -122,6 +132,15 @@ unsigned long st_probe_diff(int k, void (*page)(int r, uint32_t off, void *ctx),
                             void *ctx);
 uint64_t st_probe_hash(void);
 unsigned long st_probe_page_hashes(int r, uint64_t *out, unsigned long max);
+
+/* Rollback netcode's snapshots (rollback.c): .umkstd and .umkstb only, and
+ * of the arena the pages written since the fight began (a write watch),
+ * against a copy taken then. st_rb_begin sizes `n` slots; 0 on success. */
+int  st_rb_begin(int n);
+int  st_rb_save(int slot);
+int  st_rb_load(int slot);
+void st_rb_end(void);
+unsigned long st_rb_size(void);         /* bytes a snapshot copies */
 
 /* Port, not in the binary: the C library's rand() for the game's files,
  * kept in the state so a load puts the sequence back and every build draws

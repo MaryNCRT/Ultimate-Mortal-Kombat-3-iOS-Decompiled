@@ -257,6 +257,8 @@ static long g_colour_mask[4] = { 1, 1, 1, 1 };
 static long g_fills;
 
 int rb_fixed_step(void);               /* rollback_probe.c */
+int rb_active(void);                    /* rollback.c */
+int rb_quiet(void);
 
 /* armv7 0x00066a74, transcribed whole. The one substitution is the clock:
  * CFAbsoluteTimeGetCurrent becomes the host-advanced clock above. */
@@ -277,7 +279,7 @@ void limeBegin(void)
     }
     /* Port, not in the binary: a recorded or replayed fight
      * (rollback_probe.c) runs a fixed step, whatever the clock says. */
-    if (dt <= 0.0 || rb_fixed_step()) {
+    if (dt <= 0.0 || rb_fixed_step() || rb_active()) {
         limeFPSScaleFactor = 1.0f;
         limeFPS = 60.0f;
     }
@@ -530,6 +532,8 @@ void limeDeleteSound(long h)
 void limePlaySound(long h, float v, float p, long f)
 {
     (void)p; (void)f;                   /* not read by the original either */
+    if (rb_quiet())                     /* port: a frame run again (rollback.c) */
+        return;
     if (h == -1) {
         if (getenv("UMK3_LOG_SOUND"))
             printf("limePlaySound: -1 (a sound never loaded)\n");
@@ -556,6 +560,8 @@ void limePlayTune(const char *name, long vol, long loop)
 {
     char rel[300];
 
+    if (rb_quiet())                     /* port: a frame run again (rollback.c) */
+        return;
     snprintf(rel, sizeof rel, "res/audio/%s", name);
     lime_platform_resolve(rel, g_tune_path, sizeof g_tune_path);
     g_tune_loop = loop;
@@ -573,9 +579,11 @@ void limeRestartPlayTune(void)
     plat_music_play(g_tune_path, g_tune_loop != 0);
 }
 
-void limeStopTune(void)               { plat_music_stop(); }
+void limeStopTune(void)               { if (!rb_quiet()) plat_music_stop(); }
 void limeSetTuneVol(long v)
 {
+    if (rb_quiet())                     /* port: a frame run again (rollback.c) */
+        return;
     g_tune_vol = v;                     /* lasttunevol, as limeSetTuneVol stores it */
     plat_music_volume((float)v / 100.0f);
 }
@@ -741,7 +749,9 @@ const char *limeGetPropertyString(const char *key)
  * `(seed / 65536) % 32768` the compiler's rounding sequence spells out -- the
  * same generator as PIrand in Particles.c, on its own seed. The arithmetic is
  * done unsigned and read back as int32 so it wraps the same on any host. */
-int32_t rand_seed = 0x00089c84;
+extern int32_t rand_seed;               /* 0x00089c84 at start, fight_runtime.c:
+                                         * in what a rollback puts back, which
+                                         * this file is not (UMK3_NO_ROLLBACK) */
 
 long limeRand(void)
 {

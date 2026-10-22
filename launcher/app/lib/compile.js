@@ -12,6 +12,11 @@ function getCSourceFiles(dir) {
         .map(f => path.join(dir, f));
 }
 
+/* State files that hold the machine's side of the game -- the clock and the
+ * sound table, the low heap, the network session: a save state keeps them,
+ * a rollback of an online fight does not (src/runtime/savestate.h). */
+const NO_ROLLBACK = ['lime_menu', 'lime_platform', 'lime_app', 'wav', 'limeMPGameSpecific'];
+
 function isStateFile(srcPath, buildDir) {
     const filename = path.basename(srcPath);
     const normalized = srcPath.replace(/\\/g, '/');
@@ -149,6 +154,7 @@ async function compileGame({
         path.join(rootDir, 'src/runtime/fight_runtime.c'),
         path.join(rootDir, 'src/runtime/savestate.c'),
         path.join(rootDir, 'src/runtime/rollback_probe.c'),
+        path.join(rootDir, 'src/runtime/rollback.c'),
     ];
 
     if (isWindows) {
@@ -237,6 +243,9 @@ async function compileGame({
         const fileFlags = [...baseFlags];
         if (isStateFile(src, buildDir)) {
             fileFlags.push('-DUMK3_STATE_FILE');
+            if (NO_ROLLBACK.includes(baseName)) {
+                fileFlags.push('-DUMK3_NO_ROLLBACK');
+            }
         }
         if (baseName === 'text') {
             fileFlags.push('-DUMK3_NO_LONG_REMAP');

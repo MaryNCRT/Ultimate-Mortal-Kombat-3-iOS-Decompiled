@@ -102,6 +102,10 @@ void fight_runtime_init(void)
  * so a Windows build draws the way it did before. */
 uint32_t umk3_rand_seed = 1;
 
+/* limeRand's seed (lime_menu.c), here for the same reason: lime_menu.c holds
+ * the machine's clock and sound table, which a rollback must not put back. */
+int32_t rand_seed = 0x00089c84;
+
 int umk3_rand(void)
 {
     umk3_rand_seed = umk3_rand_seed * 214013u + 2531011u;

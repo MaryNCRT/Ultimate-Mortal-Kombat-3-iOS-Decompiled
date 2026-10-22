@@ -54,6 +54,7 @@
 #include "lime/par.h"
 
 #include "../decomp/lime/lime.h"
+int rb_nodraw(void);                    /* runtime/rollback.c, port */
 
 const char *lime_platform_asset_root(void);
 
@@ -1097,7 +1098,8 @@ static void face_draw(TEXTURE *tex, const float *xyz, const float *uv,
     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
     {
         const int clamp = lime_port_edge_clamp(uv, 2, NULL, 4);
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        if (!rb_nodraw())               /* a frame run again (rollback.c) */
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
         lime_port_edge_restore(clamp);
     }
     glDisable(GL_TEXTURE_2D);

@@ -47,6 +47,8 @@ static long g_interruptions;
 
 long lime_app_interruptions(void) { return g_interruptions; }
 
+int rb_active(void);                    /* rollback.c, port */
+
 void lime_app_resign_active(void)
 {
     if (Settings[2] != 0)
@@ -54,7 +56,8 @@ void lime_app_resign_active(void)
     g_interruptions++;
 
     if (GameMode == 1) {
-        if (GamePaused == 0) {
+        /* port: a rollback fight has no pause (rollback.c) */
+        if (GamePaused == 0 && !rb_active()) {
             GamePaused = 1;             /* r4, which held GameMode == 1 */
             sendPause(1);
             sendPause(1);

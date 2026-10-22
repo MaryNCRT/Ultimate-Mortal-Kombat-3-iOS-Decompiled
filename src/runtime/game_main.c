@@ -89,6 +89,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "rollback.h"
 
 #include "platform/platform.h"
 #include "platform/gl.h"
@@ -3008,6 +3009,7 @@ int main(int argc, char **argv)
                     limeTouchScreenY[0] = limeLastTouchScreenY[0] = hy;
                 }
                 mpnet_poll();       /* ONLINE: the other game's packets (port) */
+                rb_poll();          /* rollback: inputs after a fight */
                 GameCodeMain();
                 PortPadPalette[0] = PortPadPalette[1] = 0;  /* off the select screen */
                 if (on) {

@@ -20,6 +20,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "lime.h"
+int rb_nodraw(void);                    /* runtime/rollback.c, port */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1010,7 +1011,8 @@ void LIME_RenderMeshSingleIndexed(void *rec, TEXTURE *tex, float alpha,
         const int clamp = tex ? lime_port_edge_clamp((const float *)uvs, 2,
                                    (const unsigned short *)indices,
                                                      nfaces * 3) : 0;
-        glDrawElements(GL_TRIANGLES, nfaces * 3, GL_UNSIGNED_SHORT, indices);
+        if (!rb_nodraw())               /* port: a frame run again (rollback.c) */
+            glDrawElements(GL_TRIANGLES, nfaces * 3, GL_UNSIGNED_SHORT, indices);
         lime_port_edge_restore(clamp);
     }
 
@@ -1243,8 +1245,9 @@ void LIME_RenderMeshSingle(MESHINFO *mesh, TEXTURE *t0, TEXTURE *t1,
     {   /* Port, not in the binary: the edge clamp (draw_gl.c) */
         const int clamp = t0 ? lime_port_edge_clamp(&mesh->verts[0].u, 4,
                                    mesh->indices, mesh->numFaces * 3) : 0;
-        glDrawElements(GL_TRIANGLES, mesh->numFaces * 3,
-                       GL_UNSIGNED_SHORT, mesh->indices);   /* +0x1c */
+        if (!rb_nodraw())               /* port: a frame run again (rollback.c) */
+            glDrawElements(GL_TRIANGLES, mesh->numFaces * 3,
+                           GL_UNSIGNED_SHORT, mesh->indices);   /* +0x1c */
         lime_port_edge_restore(clamp);
     }
     glPopMatrix();
