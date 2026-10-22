@@ -1412,6 +1412,16 @@ void RenderAnimatedCharacter(char *name, ANIMATEDCHARACTER *c,
         LIME_printf(0x1b, "Player SKIN %s at fr %d is VISIBLE\n",
                     name, (int)frameA);
         LIME_RenderMeshSingleIndexed(frame, tex, grey, pos, 0);
+    } else {
+        /* 0x5c2f4: a body not drawn is still posed. A baked frame (Mileena's
+         * nail fatality, 310..334) draws scene meshes instead, and what they
+         * hold -- her BIG CUP on bone 24 -- rides this skeleton through the
+         * attach matrices RenderLevelPlayers copies after the draw. */
+        GenerateMatrices(((char *P32 *)c)[0x3c / 4],
+                         (BONESINFO *)((char *P32 *)c)[0x34 / 4],
+                         idxA, idxB, t, a[0x40 / 4]);
+        LIME_printf(0x1b, "Player SKIN %s at fr %d is INVISIBLE\n",
+                    name, (int)frameA);
     }
     glPopMatrix();
 

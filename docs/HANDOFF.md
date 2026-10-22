@@ -40,6 +40,10 @@ Fixed while testing (2026-10-22):
 - No pause in a rollback fight yet (a synced pause is still to do).
 - Not merged with the EOS transport work; the LAN transport is what it runs on today.
 
+## 0. Latest (2026-10-22): Mileena's fatalities
+
+Fixed and confirmed by the tester: the nail fatality's cup now follows Mileena's hand, and the suck-kiss absorption plays once. Details in `docs/PROGRESS.md` and `docs/CHANGELOG.md`. Still open from the same report: the fatality camera was never investigated. The EOS online work on `claude/online-eos` stays uncommitted until it is tested.
+
 ## 1. What was completed
 
 1. **Pure Node.js Extraction Engine (`launcher/app/lib/extract/`)**:
