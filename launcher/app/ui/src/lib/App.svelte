@@ -36,7 +36,7 @@
         <TitleBar />
         <ProfileBadge />
         {#if app.full && Sec}
-            <main class="stage">
+            <main class="stage" class:wide={app.sec === 'mods'}>
                 <SecHead />
                 <Sec />
             </main>
@@ -64,4 +64,6 @@
         padding: calc(var(--u) * 1.2) calc(var(--u) * 4) calc(var(--u) * 1.6);
         display: flex; flex-direction: column;
     }
+    /* MODS: the whole window, for the viewer and the editor */
+    .stage.wide { width: 100%; padding: calc(var(--u) * .6) calc(var(--u) * 1.2) calc(var(--u) * .8); }
 </style>

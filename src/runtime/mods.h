@@ -15,8 +15,9 @@ void mods_init(const char *res_root);
 int  mods_find(const char *rel, char *out, size_t n);
 
 /* The mod picture for a texture named `stem` (no extension: "KANO_DIFFUSE"),
- * whatever its extension in the mod (.png or .pvr). A sheet the game wants
- * at iPhone size (X_LOW) is also served by a mod's X. */
+ * whatever its extension in the mod (.png or .pvr). The smaller copies the
+ * game takes by quality are served by a mod's full one when it has no copy
+ * of its own: X_LOW and X_LITE by X, X_LITE2 and X_LOW2 by X2. */
 int  mods_find_texture(const char *stem, char *out, size_t n);
 
 /* How many mods are on and how many files they replace, for the log. */

@@ -224,15 +224,16 @@ function modPath(root, folder) {
     return path.join(modsDir(root), name || '');
 }
 
-/* the picture the player picked, as the mod's cover */
-function setCover(root, folder, file) {
+/* the picture the player picked, as the mod's cover: PNG bytes, which the
+ * window made of it (any format, no wider than 640) */
+function setCover(root, folder, png) {
     const name = safeName(folder);
-    const ext = path.extname(file || '').toLowerCase();
-    if (!name || !['.png', '.jpg', '.jpeg'].includes(ext)) return false;
+    if (!name || !(png instanceof Uint8Array) || png[0] !== 0x89 || png[1] !== 0x50) return false;
     const base = path.join(modsDir(root), name);
+    if (!fs.existsSync(base)) return false;
     for (const old of ['cover.png', 'cover.jpg', 'cover.jpeg', 'preview.png', 'preview.jpg'])
         fs.rmSync(path.join(base, old), { force: true });
-    fs.copyFileSync(file, path.join(base, 'cover' + ext));
+    fs.writeFileSync(path.join(base, 'cover.png'), png);
     return true;
 }
 

@@ -7,7 +7,8 @@
     import { tx } from '#lib/app.svelte.js';
     import { api } from '#lib/platform.js';
     import { hoverBlip, selectBlip } from '#lib/sound.js';
-    import { ms, refreshMods, moveMod, toggleMod } from '#lib/mods/store.svelte.js';
+    import { ms, refreshMods, reloadMods, moveMod, toggleMod } from '#lib/mods/store.svelte.js';
+    import { toPng } from '#lib/mods/image.js';
 
     const CATS = ['textures', 'audio', 'music', 'models', 'mixed'];
     let making = $state(false);
@@ -42,10 +43,19 @@
         if (await api.modsAdd(m.folder)) await refreshMods();
     }
 
-    /* the mod's picture in the list: a PNG or JPEG the player picks */
+    /* the mod's picture in the list: any picture the player picks, made a
+     * PNG no wider than 640 (a photo straight off a camera was too big to
+     * show) */
+    let coverErr = $state('');
     async function cover(m) {
         selectBlip();
-        if (await api.modsCover(m.folder)) await refreshMods();
+        coverErr = '';
+        const got = await api.pickFile('picture');
+        if (!got) return;
+        const png = await toPng(got.bytes, 640).catch(() => null);
+        if (!png) { coverErr = tx('vwNotPicture'); return; }
+        if (await api.modsCover(m.folder, png)) await refreshMods();
+        else coverErr = tx('vwNotPicture');
     }
 
     async function trash(m) {
@@ -64,7 +74,7 @@
 <div class="bar">
     <button class="btn hot" onpointerenter={hoverBlip} onclick={() => { making = !making; err = ''; }}>{tx('mgNew')}</button>
     <button class="btn" onpointerenter={hoverBlip} onclick={() => api.modsOpen('')}>{tx('mgOpen')}</button>
-    <button class="btn" onpointerenter={hoverBlip} onclick={refreshMods}>{tx('mgRefresh')}</button>
+    <button class="btn" onpointerenter={hoverBlip} onclick={reloadMods}>{tx('mgRefresh')}</button>
     <span class="grow"></span>
     <label class="lbl" for="mfilter">{tx('mgFilter')}</label>
     <select id="mfilter" class="sel narrow" bind:value={ms.filter}>
@@ -118,6 +128,7 @@
                     <div class="cover">
                         {#if m.preview}<img src={m.preview} alt="">{:else}<i class="cat {m.category}"></i>{/if}
                         <button class="btn" onpointerenter={hoverBlip} onclick={() => cover(m)}>{tx('mgCover')}</button>
+                        {#if coverErr}<span class="note bad">{coverErr}</span>{/if}
                     </div>
                     <div class="fields">
                         <div class="field"><span class="lbl">{tx('mgName')}</span>
@@ -183,12 +194,12 @@
         display: flex; flex-direction: column;
     }
     .name b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .name small { color: var(--dim); font-size: calc(var(--u) * 1.3); }
+    .name small { color: var(--dim); font-size: calc(var(--t) * 1.3); }
     .tag {
-        font-size: calc(var(--u) * 1.2); letter-spacing: .08em; padding: calc(var(--u) * .25) calc(var(--u) * .8);
+        font-size: calc(var(--t) * 1.2); letter-spacing: .08em; padding: calc(var(--u) * .25) calc(var(--u) * .8);
         border-radius: calc(var(--u) * 1); background: #4a3fae;
     }
-    .count { color: var(--dim); font-size: calc(var(--u) * 1.4); white-space: nowrap; }
+    .count { color: var(--dim); font-size: calc(var(--t) * 1.4); white-space: nowrap; }
     .warn { color: var(--gold1); font-style: normal; }
     .lost { color: #ff9aa0; font-style: normal; }
     .arrow {
@@ -198,7 +209,7 @@
     .arrow:disabled { opacity: .3; cursor: default; }
     .switch {
         min-width: calc(var(--u) * 12); height: calc(var(--u) * 3); cursor: pointer; letter-spacing: .08em;
-        font-size: calc(var(--u) * 1.3); border-radius: calc(var(--u) * 1.5);
+        font-size: calc(var(--t) * 1.3); border-radius: calc(var(--u) * 1.5);
         background: var(--well); border: 1px solid var(--line); color: var(--dim);
     }
     .switch.on { background: var(--grad-hot); border-color: var(--hot-rim); color: #fff; }
@@ -206,7 +217,7 @@
     .files {
         list-style: none; margin: calc(var(--u) * 1) 0; padding: calc(var(--u) * .6); max-height: calc(var(--u) * 18);
         overflow-y: auto; background: var(--well); border-radius: var(--r-sm);
-        font-family: var(--font-mono); font-size: calc(var(--u) * 1.3);
+        font-family: var(--font-mono); font-size: calc(var(--t) * 1.3);
     }
     .files li { display: flex; justify-content: space-between; gap: calc(var(--u) * 2); padding: calc(var(--u) * .15) 0; }
     .files .to { color: var(--dim); }

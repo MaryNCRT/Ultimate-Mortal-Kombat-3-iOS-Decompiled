@@ -72,7 +72,7 @@
     rect, line { vector-effect: non-scaling-stroke; }
     .body { fill: rgba(150, 140, 255, .22); stroke: rgba(190, 180, 255, .7); stroke-width: 1.5; }
     .axis { stroke: rgba(255, 255, 255, .3); stroke-dasharray: 4 4; }
-    .tag { fill: rgba(255, 255, 255, .5); font-size: 8px; }
+    .tag { fill: rgba(255, 255, 255, .5); font-size: 6px; }
     .other { fill: rgba(255, 140, 140, .05); stroke: rgba(255, 150, 150, .45); stroke-width: 1; }
     .hit { fill: rgba(255, 70, 70, .4); stroke: #ff5a5a; stroke-width: 2; cursor: move; }
     .grip { fill: #fff; cursor: nwse-resize; }

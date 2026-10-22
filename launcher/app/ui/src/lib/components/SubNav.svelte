@@ -32,7 +32,7 @@
     }
     .pg {
         position: relative; background: none; border: 0; border-radius: 0; cursor: pointer;
-        font-size: calc(var(--u) * 2); letter-spacing: .03em; color: #8e9fd4; white-space: nowrap;
+        font-size: calc(var(--t) * 2); letter-spacing: .03em; color: #8e9fd4; white-space: nowrap;
         padding: calc(var(--u) * .7) calc(var(--u) * 2.4);
         text-shadow: 0 calc(var(--u) * .15) calc(var(--u) * .3) #000;
     }

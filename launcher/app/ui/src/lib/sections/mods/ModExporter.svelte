@@ -155,10 +155,10 @@
     .exp { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: calc(var(--u) * 2.4); flex: 1; min-height: calc(var(--u) * 40); }
     .pick { display: flex; flex-direction: column; min-height: 0; }
     .kinds { display: grid; grid-template-columns: repeat(4, 1fr); gap: calc(var(--u) * .4); }
-    .kinds .tab { font-size: calc(var(--u) * 1.25); padding: calc(var(--u) * .5) calc(var(--u) * .4); }
+    .kinds .tab { font-size: calc(var(--t) * 1.25); padding: calc(var(--u) * .5) calc(var(--u) * .4); }
     .grow { flex: 1; }
     .list { list-style: none; margin: 0; padding: calc(var(--u) * .4) calc(var(--u) * .8); overflow-y: auto; flex: 1; min-height: 0; background: var(--well); border-radius: var(--r-sm); }
-    .list .chk { font-size: calc(var(--u) * 1.45); padding: calc(var(--u) * .2) 0; }
+    .list .chk { font-size: calc(var(--t) * 1.45); padding: calc(var(--u) * .2) 0; }
     .list .chk input { width: calc(var(--u) * 1.6); height: calc(var(--u) * 1.6); }
     .opts { display: flex; flex-direction: column; }
     .more { margin-top: calc(var(--u) * 1.2); }

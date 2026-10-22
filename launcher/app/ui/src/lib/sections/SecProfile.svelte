@@ -104,7 +104,7 @@
     .prof :global(canvas.big) { width: calc(var(--u) * 16); height: calc(var(--u) * 16); flex: none; }
     .idcode {
         height: var(--ctl-h); line-height: var(--ctl-h); white-space: nowrap;
-        font-family: var(--font-mono); font-size: calc(var(--u) * 1.8);
+        font-family: var(--font-mono); font-size: calc(var(--t) * 1.8);
         letter-spacing: .12em; color: var(--code);
     }
     .icongrid { display: grid; grid-template-columns: repeat(12, 1fr); gap: calc(var(--u) * .5); }

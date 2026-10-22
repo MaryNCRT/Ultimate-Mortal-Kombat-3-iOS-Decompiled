@@ -2561,6 +2561,40 @@ void port_buttons_set(int n)
 
 const char *port_ini_path(void) { return g_ini_path; }
 
+/* language= (port): "" follows the system. Changed from the settings menu,
+ * it takes at once: `Language` as start_app sets it (English when the bundle
+ * has no TOS_URL_ for it), then the game's text table loaded again as
+ * Task_LoadGeneralData loads it. The old table stays allocated, since a
+ * screen may still hold a string from it. */
+void LoadTextData(const char *file);
+
+const char *port_language(void) { return g_cfg_lang; }
+
+void port_language_set(const char *code)
+{
+    char key[40], lang[16] = "";
+    const char *file;
+    int i;
+
+    snprintf(g_cfg_lang, sizeof g_cfg_lang, "%s", code ? code : "");
+    if (g_cfg_lang[0])
+        snprintf(lang, sizeof lang, "%s", g_cfg_lang);
+    else
+        plat_language(lang, (int)sizeof lang);
+    for (i = 0; lang[i]; i++)
+        if (lang[i] >= 'a' && lang[i] <= 'z')
+            lang[i] = (char)(lang[i] - 'a' + 'A');
+    lang[2] = 0;
+    snprintf(key, sizeof key, "TOS_URL_%s", lang);
+    if (!lang[0] || limeGetPropertyString(key) == NULL)
+        snprintf(lang, sizeof lang, "EN");
+    snprintf(Language, 10, "%s", lang);
+    snprintf(key, sizeof key, "LANGUAGE_TEXT_%s", Language);
+    file = limeGetPropertyString(key);
+    if (file)
+        LoadTextData(file);
+}
+
 int main(int argc, char **argv)
 {
     const char *root = (argc > 1 && argv[1][0] != '-') ? argv[1] : "res";

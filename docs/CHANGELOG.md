@@ -4,6 +4,15 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 
 ---
 
+## Unreleased
+
+- **Language in the in-game settings menu**, changed at once (texts and menus).
+- **Mod textures reach the game's smaller copies** (`_LITE`, `_LOW`): a replaced fighter skin now shows at IPHONE texture quality.
+- **Launcher:** smaller text everywhere; MODS fills the window; the model viewer has its options beside the model, a full screen button, REFRESH FOLDERS, textures by fighter, REPLACE TEXTURE from any picture (PNG, JPEG, WebP, GIF, BMP, ICO, AVIF, SVG, TGA) with the LOW and LITE copies made automatically; covers from any picture.
+- **[GOALS.md](GOALS.md):** what works and what comes next.
+
+---
+
 ## 0.1.8-beta (2026-10-22) — Mods, Character Editor, Blender Round Trip
 
 Built for Windows (64 and 32 bits) and Linux; not yet played by Mary at release. The Linux package is untested.

@@ -41,7 +41,7 @@ contextBridge.exposeInMainWorld('umk3', {
     modsTrash: folder => ipcRenderer.invoke('mods:trash', folder),
     resFiles: () => ipcRenderer.invoke('res:files'),
     resRead: (rel, layer) => ipcRenderer.invoke('res:read', rel, layer),
-    modsCover: folder => ipcRenderer.invoke('mods:cover', folder),
+    modsCover: (folder, png) => ipcRenderer.invoke('mods:cover', folder, png),
     modsDataRead: folder => ipcRenderer.invoke('mods:dataRead', folder),
     modsDataWrite: (folder, entries) => ipcRenderer.invoke('mods:dataWrite', folder, entries),
     gameTables: () => ipcRenderer.invoke('game:tables'),

@@ -15,11 +15,12 @@
     import { tx } from '#lib/app.svelte.js';
     import { api } from '#lib/platform.js';
     import { hoverBlip, selectBlip } from '#lib/sound.js';
-    import { ms, src, loadCatalog, fighter, refreshMods, exportThis, forgetMod, VIEW_KINDS } from '#lib/mods/store.svelte.js';
+    import { ms, src, loadCatalog, fighter, refreshMods, reloadMods, exportThis, forgetMod, VIEW_KINDS } from '#lib/mods/store.svelte.js';
     import { stageDesc, meshsetDesc, textureFile, pngBytes, exportFiles, isPng } from '#lib/mods/assets.js';
     import { readFbx, fbxScene, fbxTakes, importAnim, importModel, rigDesc } from '#lib/mods/fbxin.js';
     import { framePose, posedVerts, fitRest } from '#lib/mods/rig.js';
     import { decodePvr } from '#lib/mods/formats.js';
+    import { putTexture } from '#lib/mods/image.js';
 
     let host = $state();
     let pic = $state();
@@ -28,7 +29,7 @@
     let target = $state('');
     let copied = $state('');
     let fx = $state(null);                  /* the fighter open, for its clips */
-    let stems = [];                         /* the textures of what is open */
+    let stems = $state([]);                 /* the textures of what is open */
     let imp = $state(null);                 /* an FBX being brought in */
     let done = $state('');
 
@@ -39,7 +40,10 @@
         if (!ms.cat) return [];
         const q = ms.search.trim().toLowerCase();
         const all = ms.cat[ms.kind] || [];
-        const hit = q ? all.filter(x => x.name.toLowerCase().includes(q) || String(x.id).toLowerCase().includes(q)) : all;
+        const fid = ms.kind === 'textures' && ms.texFighter;
+        const own = fid ? new RegExp('^(IPAD)?' + fid + '(_|BABY|BABILITY|PORTRAIT|X_)', 'i') : null;
+        const mine = own ? all.filter(x => own.test(x.name)) : all;
+        const hit = q ? mine.filter(x => x.name.toLowerCase().includes(q) || String(x.id).toLowerCase().includes(q)) : mine;
         return hit.slice(0, 400);
     });
 
@@ -62,6 +66,21 @@
         ro.observe(host);
         loop();
     }
+
+    /* FULL SCREEN: the view and its controls over the whole screen (the
+     * page's own fullscreen; Esc or the button leaves it) */
+    let mainEl = $state(), full = $state(false);
+    let texPick = $state('');               /* the texture REPLACE TEXTURE takes */
+    const onFull = () => { full = document.fullscreenElement === mainEl; };
+    function toggleFull() {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else mainEl && mainEl.requestFullscreen().catch(() => {});
+    }
+    onMount(() => document.addEventListener('fullscreenchange', onFull));
+    onDestroy(() => {
+        document.removeEventListener('fullscreenchange', onFull);
+        if (document.fullscreenElement) document.exitFullscreen();
+    });
 
     function fit() {
         if (!renderer || !host) return;
@@ -177,6 +196,7 @@
         fx = null;
         imp = null;
         done = '';
+        texPick = '';
         stems = [];
         ms.loading = true;
         ms.playing = false;
@@ -331,6 +351,69 @@
         copied = tx('vwCopied') + name + '\\' + texInfo.name + '.png';
     }
 
+    /* the mod a change goes to when its box is left empty */
+    function defaultTarget() {
+        if (ms.layer && ms.layer !== '*') return ms.layer;
+        if (fx) return fx.ch.name + ' mod';
+        return (ms.list[0] && ms.list[0].folder) || 'My textures';
+    }
+
+    /* REPLACE TEXTURE: a picture, saved in the mod as the texture's PNG
+     * (the game takes it in place of its own) with, when AUTO is on, the
+     * game's smaller copies of it; shown at once */
+    async function replaceTexture(stem) {
+        if (!stem) return;
+        selectBlip();
+        done = copied = '';
+        ms.error = '';
+        const got = await api.pickFile('picture');
+        if (!got) return;
+        const name = target.trim() || defaultTarget();
+        try {
+            await refreshMods();
+            if (!ms.list.some(m => m.folder === name)) await api.modsCreate({ name, category: 'textures' });
+            const files = await putTexture(api, src, name, stem, got.bytes, ms.autoSmall);
+            if (!files) { ms.error = tx('vwNotPicture'); return; }
+            await refreshMods();
+            forgetMod();
+            ms.layer = name;
+            target = name;
+            texCache.clear();
+            await open(ms.pick);
+            texPick = stem;
+            done = tx('vwSaved') + name + '\\' + files.join(', ');
+        } catch (e) {
+            ms.error = String(e && e.message || e);
+        }
+    }
+
+    /* REPLACE TEXTURE's list starts on the outfit shown */
+    $effect(() => {
+        if (stems.length && !stems.includes(texPick)) texPick = stems.includes(ms.outfit) ? ms.outfit : stems[0];
+    });
+
+    /* the open fighter's textures, in TEXTURES */
+    function seeTextures() {
+        selectBlip();
+        ms.texFighter = fx.ch.id;
+        ms.kind = 'textures';
+        ms.search = '';
+    }
+
+    /* REFRESH: the mods' folders read again (files changed outside) */
+    async function refresh() {
+        selectBlip();
+        await reloadMods();
+    }
+    let seenRev = ms.rev;
+    $effect(() => {
+        if (ms.rev !== seenRev) {
+            seenRev = ms.rev;
+            texCache.clear();
+            if (ms.pick && ms.cat) open(ms.pick);
+        }
+    });
+
     /* --------------------------------------------------------- layers -- */
 
     async function setLayer(v) {
@@ -443,7 +526,7 @@
     });
 </script>
 
-<div class="viewer">
+<div class="viewer" class:full bind:this={mainEl}>
     <aside class="side">
         <label class="layer"><span class="lbl">{tx('vwLayer')}</span>
             <select class="sel" value={ms.layer} onchange={e => setLayer(e.currentTarget.value)}>
@@ -451,12 +534,19 @@
                 <option value="*">{tx('vwLayerOn')}</option>
                 {#each ms.list as m}<option value={m.folder}>{m.name}</option>{/each}
             </select></label>
+        <button class="btn" onclick={refresh}>{tx('vwRefresh')}</button>
         <div class="kinds">
             {#each VIEW_KINDS as [k, key]}
                 <button class="tab" class:active={ms.kind === k} onpointerenter={hoverBlip}
                         onclick={() => { selectBlip(); ms.kind = k; ms.search = ''; }}>{tx(key)}</button>
             {/each}
         </div>
+        {#if ms.kind === 'textures' && ms.cat}
+            <select class="sel" bind:value={ms.texFighter}>
+                <option value="">{tx('vwTexAll')}</option>
+                {#each ms.cat.characters as c}<option value={c.id}>{c.name}</option>{/each}
+            </select>
+        {/if}
         <input class="edt search" placeholder={tx('vwSearch')} spellcheck="false" bind:value={ms.search}>
         <ul class="list">
             {#each items as it (it.id)}
@@ -477,93 +567,124 @@
             {:else if !ms.pick}<span class="msg">{tx('vwPick')}</span>{/if}
         </div>
         <div class="info">{info}</div>
+        <button class="btn fullbtn" onclick={toggleFull}>{full ? tx('vwFullExit') : tx('vwFull')}</button>
+        {#if ms.kind === 'characters' && fx && ms.clip >= 0}
+            <div class="play">
+                <button class="btn" onclick={() => ms.playing = !ms.playing}>{ms.playing ? tx('vwPause') : tx('vwPlay')}</button>
+                <input type="range" min="0" max={fx.clips[ms.clip].to - fx.clips[ms.clip].from} bind:value={ms.frame}>
+                <span class="lbl">{tx('vwFrame')} {ms.frame + 1}</span>
+            </div>
+        {/if}
+    </section>
 
+    <aside class="opts">
         {#if ms.kind === 'characters' && fx}
-            <div class="ctl">
-                <select class="sel" value={ms.clip} onchange={e => { ms.clip = Number(e.currentTarget.value); ms.frame = 0; }}>
-                    <option value={-1}>{tx('vwPose')}</option>
-                    {#each fx.clips as c, i}<option value={i}>{c.name} ({c.to - c.from + 1})</option>{/each}
+            <span class="lbl">{tx('vwAnim')}</span>
+            <select class="sel" value={ms.clip} onchange={e => { ms.clip = Number(e.currentTarget.value); ms.frame = 0; }}>
+                <option value={-1}>{tx('vwPose')}</option>
+                {#each fx.clips as c, i}<option value={i}>{c.name} ({c.to - c.from + 1})</option>{/each}
+            </select>
+            {#if ms.clip < 0}
+                <span class="tabs sub">
+                    <button class="tab" class:active={ms.pose === 'tpose'} disabled={!fx.tpose} onclick={() => ms.pose = 'tpose'}>{tx('vwTpose')}</button>
+                    <button class="tab" class:active={ms.pose === 'bind'} onclick={() => ms.pose = 'bind'}>{tx('vwBind')}</button>
+                </span>
+            {/if}
+            {#if fx.variants.length > 1}
+                <span class="lbl">{tx('vwOutfit')}</span>
+                <select class="sel" value={ms.outfit} onchange={e => outfit(e.currentTarget.value)}>
+                    {#each fx.variants as v}<option value={v}>{v}</option>{/each}
                 </select>
-                {#if ms.clip < 0}
-                    <span class="tabs sub">
-                        <button class="tab" class:active={ms.pose === 'tpose'} disabled={!fx.tpose} onclick={() => ms.pose = 'tpose'}>{tx('vwTpose')}</button>
-                        <button class="tab" class:active={ms.pose === 'bind'} onclick={() => ms.pose = 'bind'}>{tx('vwBind')}</button>
-                    </span>
-                {:else}
-                    <button class="btn" onclick={() => ms.playing = !ms.playing}>{ms.playing ? tx('vwPause') : tx('vwPlay')}</button>
-                    <input type="range" min="0" max={fx.clips[ms.clip].to - fx.clips[ms.clip].from} bind:value={ms.frame}>
-                    <span class="lbl">{tx('vwFrame')} {ms.frame + 1}</span>
-                {/if}
-                {#if fx.variants.length > 1}
-                    <select class="sel" value={ms.outfit} onchange={e => outfit(e.currentTarget.value)}>
-                        {#each fx.variants as v}<option value={v}>{v}</option>{/each}
-                    </select>
-                {/if}
+            {/if}
+            <div class="checks">
                 <label class="chk"><input type="checkbox" bind:checked={ms.bones}><span>{tx('vwBones')}</span></label>
                 <label class="chk"><input type="checkbox" bind:checked={ms.wire}><span>{tx('vwWire')}</span></label>
-                <button class="btn hot" onclick={exportThis}>{tx('vwExport')}</button>
             </div>
-            <div class="ctl">
+        {:else if ms.pick && ms.kind !== 'textures' && !ms.loading}
+            <div class="checks">
+                <label class="chk"><input type="checkbox" bind:checked={ms.wire}
+                    onchange={() => root && root.traverse(o => { if (o.material) o.material.wireframe = ms.wire; })}><span>{tx('vwWire')}</span></label>
+            </div>
+        {/if}
+
+        {#if ms.pick && (ms.kind === 'textures' ? texInfo : stems.length)}
+            <span class="lbl">{tx('vwModName')}</span>
+            <input class="edt" list="modnames" spellcheck="false" bind:value={target} placeholder={defaultTarget()}>
+            <datalist id="modnames">{#each ms.list as m}<option value={m.folder}></option>{/each}</datalist>
+
+            <span class="lbl head">{tx('vwTexHead')}</span>
+            {#if ms.kind === 'textures'}
+                <label class="chk"><input type="checkbox" bind:checked={ms.autoSmall}><span>{tx('vwAutoSmall')}</span></label>
+                <button class="btn hot" onclick={() => replaceTexture(texInfo.name)}>{tx('vwImpTex')}</button>
+                <button class="btn" onclick={toMod}>{tx('vwToMod')}</button>
+            {:else}
+                <select class="sel" bind:value={texPick}>
+                    {#each stems as s}<option value={s}>{s}</option>{/each}
+                </select>
+                <label class="chk"><input type="checkbox" bind:checked={ms.autoSmall}><span>{tx('vwAutoSmall')}</span></label>
+                <button class="btn hot" onclick={() => replaceTexture(texPick || stems[0])}>{tx('vwImpTex')}</button>
                 <button class="btn" onclick={exportTextures}>{tx('vwExpTex')}</button>
+                {#if fx}<button class="btn" onclick={seeTextures}>{tx('vwSeeTex')}</button>{/if}
+            {/if}
+
+            {#if ms.kind === 'characters' && fx}
+                <span class="lbl head">BLENDER</span>
                 <button class="btn" onclick={exportRig}>{tx('vwExpRig')}</button>
                 <button class="btn" onclick={() => pickImport('anim')}>{tx('vwImpAnim')}</button>
                 <button class="btn" onclick={() => pickImport('model')}>{tx('vwImpModel')}</button>
-            </div>
-            {#if imp}
-                <div class="ctl imp">
-                    <span class="lbl">{imp.file}</span>
-                    {#if imp.kind === 'anim'}
-                        <label class="lbl" for="itake">{tx('vwTake')}</label>
-                        <select id="itake" class="sel" bind:value={imp.take}>
-                            {#each imp.takes as t}<option value={t.id}>{t.name} ({t.frames})</option>{/each}
-                        </select>
-                        <label class="lbl" for="iclip">{tx('vwInto')}</label>
-                        <select id="iclip" class="sel" bind:value={imp.clip}>
-                            {#each fx.clips as c, i}<option value={i}>{c.name} ({c.to - c.from + 1})</option>{/each}
-                        </select>
-                    {/if}
-                    <label class="lbl" for="imod">{tx('vwModName')}</label>
-                    <input id="imod" class="edt" list="impmods" spellcheck="false" bind:value={target}>
-                    <datalist id="impmods">{#each ms.list as m}<option value={m.folder}></option>{/each}</datalist>
-                    <button class="btn hot" onclick={applyImport}>{tx('vwApply')}</button>
-                    <button class="btn" onclick={() => imp = null}>{tx('vwCancel')}</button>
-                </div>
-                <p class="note">{imp.kind === 'anim' ? tx('vwImpAnimNote') : tx('vwImpModelNote')}</p>
+                {#if imp}
+                    <div class="imp">
+                        <span class="lbl">{imp.file}</span>
+                        {#if imp.kind === 'anim'}
+                            <label class="lbl" for="itake">{tx('vwTake')}</label>
+                            <select id="itake" class="sel" bind:value={imp.take}>
+                                {#each imp.takes as t}<option value={t.id}>{t.name} ({t.frames})</option>{/each}
+                            </select>
+                            <label class="lbl" for="iclip">{tx('vwInto')}</label>
+                            <select id="iclip" class="sel" bind:value={imp.clip}>
+                                {#each fx.clips as c, i}<option value={i}>{c.name} ({c.to - c.from + 1})</option>{/each}
+                            </select>
+                        {/if}
+                        <p class="note">{imp.kind === 'anim' ? tx('vwImpAnimNote') : tx('vwImpModelNote')}</p>
+                        <div class="pair">
+                            <button class="btn hot" onclick={applyImport}>{tx('vwApply')}</button>
+                            <button class="btn" onclick={() => imp = null}>{tx('vwCancel')}</button>
+                        </div>
+                    </div>
+                {/if}
             {/if}
-            {#if done}<p class="note ok">{done}</p>{/if}
-        {:else if ms.kind === 'textures' && texInfo}
-            <div class="ctl">
-                <label class="lbl" for="tmod">{tx('vwModName')}</label>
-                <input id="tmod" class="edt" list="modnames" spellcheck="false" bind:value={target}>
-                <datalist id="modnames">{#each ms.list as m}<option value={m.folder}></option>{/each}</datalist>
-                <button class="btn hot" onclick={toMod}>{tx('vwToMod')}</button>
-                <button class="btn" onclick={exportThis}>{tx('vwExport')}</button>
-            </div>
-            {#if copied}<p class="note ok">{copied}</p>{/if}
-        {:else if ms.pick && ms.kind !== 'characters'}
-            <div class="ctl">
-                <label class="chk"><input type="checkbox" bind:checked={ms.wire}
-                    onchange={() => root && root.traverse(o => { if (o.material) o.material.wireframe = ms.wire; })}><span>{tx('vwWire')}</span></label>
-                <button class="btn" onclick={exportTextures}>{tx('vwExpTex')}</button>
-                <button class="btn hot" onclick={exportThis}>{tx('vwExport')}</button>
-            </div>
-            {#if done}<p class="note ok">{done}</p>{/if}
+
+            <span class="lbl head">{tx('vwExpHead')}</span>
+            <button class="btn" onclick={exportThis}>{tx('vwExport')}</button>
         {/if}
-    </section>
+        {#if done}<p class="note ok">{done}</p>{/if}
+        {#if copied}<p class="note ok">{copied}</p>{/if}
+    </aside>
 </div>
 
 <style>
-    .viewer { display: grid; grid-template-columns: calc(var(--u) * 26) minmax(0, 1fr); gap: calc(var(--u) * 1.4); flex: 1; min-height: calc(var(--u) * 40); }
-    .side { display: flex; flex-direction: column; gap: calc(var(--u) * .6); min-height: 0; }
+    .viewer { display: grid; grid-template-columns: calc(var(--u) * 22) minmax(0, 1fr) calc(var(--u) * 24); gap: calc(var(--u) * 1.2); flex: 1; min-height: calc(var(--u) * 40); }
+    .viewer.full { background: var(--bg); padding: calc(var(--u) * 1.2); }
+    .side, .opts { display: flex; flex-direction: column; gap: calc(var(--u) * .6); min-height: 0; }
+    .side .sel, .side .btn { flex: none; }
+    .opts { overflow-x: hidden; overflow-y: auto; padding-right: calc(var(--u) * .3); }
+    .opts .btn { white-space: normal; height: auto; min-height: var(--ctl-h); padding-top: calc(var(--u) * .4); padding-bottom: calc(var(--u) * .4); }
+    .opts .sub { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u) * .4); }
+    .opts .sub .tab { font-size: calc(var(--t) * 1.15); padding: calc(var(--u) * .5) calc(var(--u) * .3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .opts .btn, .opts .sel, .opts .edt { width: 100%; flex: none; }
+    .opts .head { margin-top: calc(var(--u) * .8); border-top: 1px solid var(--line); padding-top: calc(var(--u) * .6); }
+    .checks { display: flex; flex-wrap: wrap; gap: calc(var(--u) * .9); }
+    .pair { display: flex; gap: calc(var(--u) * .5); }
+    .opts .pair .btn { flex: 1; width: auto; }
     .kinds { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u) * .4); }
-    .kinds .tab { font-size: calc(var(--u) * 1.25); padding: calc(var(--u) * .5) calc(var(--u) * .4); }
+    .kinds .tab { font-size: calc(var(--t) * 1.15); padding: calc(var(--u) * .5) calc(var(--u) * .3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .search { flex: none; }
     .layer { display: flex; flex-direction: column; gap: calc(var(--u) * .3); }
-    .imp { background: var(--well); border-radius: var(--r-sm); padding: calc(var(--u) * .6) calc(var(--u) * .9); }
+    .imp { display: flex; flex-direction: column; gap: calc(var(--u) * .5); background: var(--well); border-radius: var(--r-sm); padding: calc(var(--u) * .6) calc(var(--u) * .8); }
     .list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 0; background: var(--well); border-radius: var(--r-sm); }
     .list button {
         width: 100%; text-align: left; background: none; border: 0; cursor: pointer;
-        padding: calc(var(--u) * .45) calc(var(--u) * .9); font-size: calc(var(--u) * 1.4); color: var(--lav);
+        padding: calc(var(--u) * .45) calc(var(--u) * .9); font-size: calc(var(--t) * 1.4); color: var(--lav);
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .list button:hover { color: #fff; background: rgba(150, 140, 255, .12); }
@@ -582,10 +703,9 @@
     .over { position: absolute; inset: 0 0 auto 0; height: 60%; display: grid; place-items: center; pointer-events: none; }
     .msg { color: var(--dim); letter-spacing: .08em; }
     .msg.bad { color: #ff9aa0; }
-    .info { position: absolute; left: calc(var(--u) * 1); top: calc(var(--u) * .6); font-size: calc(var(--u) * 1.3); color: var(--dim); pointer-events: none; }
-    .ctl { display: flex; align-items: center; gap: calc(var(--u) * .9); margin-top: calc(var(--u) * .8); flex-wrap: wrap; }
-    .ctl .sel { flex: 0 1 calc(var(--u) * 22); }
-    .ctl input[type=range] { flex: 1; min-width: calc(var(--u) * 10); accent-color: var(--blue); }
-    .ctl .edt { flex: 0 1 calc(var(--u) * 20); }
-    .ok { color: var(--ok-text); }
+    .info { position: absolute; left: calc(var(--u) * 1); top: calc(var(--u) * .6); font-size: calc(var(--t) * 1.3); color: var(--dim); pointer-events: none; }
+    .fullbtn { position: absolute; right: calc(var(--u) * .8); top: calc(var(--u) * .6); height: auto; padding: calc(var(--u) * .35) calc(var(--u) * .9); font-size: calc(var(--t) * 1.2); opacity: .85; }
+    .play { display: flex; align-items: center; gap: calc(var(--u) * .9); margin-top: calc(var(--u) * .6); }
+    .play input[type=range] { flex: 1; accent-color: var(--blue); }
+    .ok { color: var(--ok-text); word-break: break-all; }
 </style>

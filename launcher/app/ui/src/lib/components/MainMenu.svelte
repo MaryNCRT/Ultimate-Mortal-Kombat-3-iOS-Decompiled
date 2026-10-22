@@ -60,7 +60,7 @@
         height: calc(var(--u) * 3.4);
         background: none; border: 0; border-top: 1px solid transparent; border-bottom: 1px solid transparent;
         cursor: pointer; text-align: left;
-        font-size: calc(var(--u) * 1.65); font-weight: 600; letter-spacing: .01em;
+        font-size: calc(var(--t) * 1.65); font-weight: 600; letter-spacing: .01em;
         color: var(--lav); text-shadow: var(--shadow-text), 0 0 calc(var(--u) * .8) rgba(0, 0, 0, .8);
         padding: 0 calc(var(--u) * 5.5) 0 0; white-space: nowrap;
         transition: color .25s;
@@ -102,7 +102,7 @@
     .sel .orb::after {
         content: "M"; position: absolute; inset: 0;
         display: flex; align-items: center; justify-content: center;
-        font-family: var(--font-impact); font-size: calc(var(--u) * 3);
+        font-family: var(--font-impact); font-size: calc(var(--t) * 3);
         color: #d8141c; text-shadow: 0 calc(var(--u) * .12) 0 #4a0306, 0 0 calc(var(--u) * .5) rgba(255, 40, 40, .55);
         animation: m-turn 2.4s linear infinite;
     }

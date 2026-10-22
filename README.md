@@ -108,7 +108,7 @@ Available distribution packages:
 - **Core Guides:** [Getting Started](docs/GETTING-STARTED.md) · [How the Game Works](docs/HOW-THE-GAME-WORKS.md) · [Architecture](docs/ARCHITECTURE.md) · [Methodology](docs/METHODOLOGY.md) · [Verification](docs/VERIFICATION.md)
 - **Asset Formats (`docs/formats/`):** [MeshSet](docs/formats/MESHSET-FORMAT.md) · [Skin & Bones](docs/formats/SKIN-FORMAT.md) · [Scene](docs/formats/SCENE-FORMAT.md) · [Events](docs/formats/EVENTS-FORMAT.md) · [PVR / PVRTC](docs/formats/PVR-FORMAT.md) · [Fonts](docs/formats/FONT-FORMAT.md) · [Lighting](docs/formats/LIGHTING.md) · [Animation Streams](docs/formats/ANIMATION-STREAMS.md) · [Frame Lists](docs/formats/FRAMELISTS.md) · [X-Tables](docs/formats/X-TABLES.md)
 - **Engine Reference (`docs/engine/`):** [LIME Engine](docs/engine/LIME-ENGINE.md) · [Physics](docs/engine/PHYSICS.md) · [Moves Tables](docs/engine/MOVES-TABLES.md) · [Fatality Tables](docs/engine/FATALITY-TABLES.md) · [Game Events](docs/engine/GAME-EVENTS.md) · [Roster](docs/engine/ROSTER.md) · [Stages](docs/engine/STAGES.md) · [Game Bugs](docs/engine/GAME-BUGS.md) · [Hidden Content](docs/engine/HIDDEN-CONTENT.md) · [iPad Build](docs/engine/IPAD-BUILD.md) · [MAME Arcade Reference](docs/engine/MAME-ARCADE.md) · [Mesh Viewer](docs/engine/MESH-VIEWER.md) · [touchHLE Patch](docs/engine/TOUCHHLE-PATCH.md)
-- **Project Info:** [Progress](docs/PROGRESS.md) · [Changelog](docs/CHANGELOG.md) · [Contributing](docs/CONTRIBUTING.md) · [AI Disclosure](docs/AI-DISCLOSURE.md)
+- **Project Info:** [Goals](docs/GOALS.md) · [Progress](docs/PROGRESS.md) · [Changelog](docs/CHANGELOG.md) · [Contributing](docs/CONTRIBUTING.md) · [AI Disclosure](docs/AI-DISCLOSURE.md)
 
 ---
 

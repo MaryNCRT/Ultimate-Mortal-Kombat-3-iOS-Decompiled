@@ -25,7 +25,7 @@
         gap: calc(var(--u) * 1.2); margin-bottom: calc(var(--u) * 1.6); flex: none;
     }
     h1 {
-        margin: 0 calc(var(--u) * 1.4); font-size: calc(var(--u) * 3.6); font-weight: 600;
+        margin: 0 calc(var(--u) * 1.4); font-size: calc(var(--t) * 3.6); font-weight: 600;
         letter-spacing: .02em; color: #fff; white-space: nowrap;
         text-shadow: var(--shadow-text), 0 0 calc(var(--u) * 1.2) rgba(150, 170, 255, .45);
     }

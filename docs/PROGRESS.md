@@ -16,6 +16,56 @@
 
 ---
 
+## After 0.1.8: in-game language, viewer layout, texture replacement (2026-10-22, unreleased)
+
+What Mary asked for after 0.1.8, before the Vulkan and DirectX 12 work. The
+list of what works and what comes next is now [GOALS.md](GOALS.md).
+**Mary has not tried any of it yet.**
+
+### Game
+
+- **LANGUAGE in the settings menu** (GRAPHICS > INTERFACE, settings_menu.c):
+  the system's, English, Spanish, French, German, Italian, Korean, Chinese,
+  taken at once. `port_language_set` (game_main.c) sets `Language` as
+  start_app does (English when Info.plist has no `TOS_URL_` for it) and
+  loads the text table again as Task_LoadGeneralData does
+  (`LoadTextData(LANGUAGE_TEXT_xx)`); the old table stays allocated, since a
+  screen may still hold one of its strings. The port's own menus follow
+  `Language` already. Written to umk3.ini as `language=`, the launcher's key.
+  Compiled for both builds; not run.
+- **A mod's texture now serves the game's smaller copies** (mods.c
+  `mods_find_texture`): X_LITE and X_LOW by X, X_LITE2 and X_LOW2 by X2. At
+  IPHONE texture quality a fighter is drawn with its 256 `_DIFFUSE_LITE`
+  skin (Players.c `port_load_lite`), so a mod with only `KANO_DIFFUSE.png`
+  did not show in a fight: the likely reason behind Mary's "it does not
+  apply". Checked standalone against a mods folder (all seven names
+  resolve).
+
+### Launcher
+
+- Every font size is in a new unit `--t` (tokens.css), `--u` x 0.82: all
+  the text is smaller, the boxes stay the same size. The hitbox editor's
+  label too.
+- MODS uses the whole window (App.svelte `.stage.wide`).
+- **Viewer**: the list on the left, the model in the middle, its options on
+  the right (animation, outfit, bones, wireframe, the target mod, textures,
+  Blender, export); FULL SCREEN (the page's fullscreen, Esc leaves);
+  REFRESH FOLDERS (`reloadMods`: the mod list and every cached mod file read
+  again, the open item opened again; the manager's REFRESH does the same).
+- **TEXTURES by fighter**: a fighter list over the texture list
+  (`^(IPAD)?<ID>(_|BABY|BABILITY|PORTRAIT|X_)`); SEE ITS TEXTURES from a
+  fighter.
+- **REPLACE TEXTURE** in the viewer for fighters, stages, models and
+  textures, and in the editor's TEXTURES (`lib/mods/image.js`
+  `putTexture`): any picture the window decodes (PNG, JPEG, WebP, GIF, BMP,
+  ICO, AVIF, SVG) and TGA (own decoder, checked on plain and RLE files),
+  written as the texture's PNG, and with MAKE THE LOW AND LITE COPIES (on
+  by default) each smaller copy the game has, at that copy's own size.
+  With it off the editor lists the copies to replace one by one.
+- **COVER** takes any picture too, made a PNG no wider than 640 in the
+  window. Before, the file was copied as it was and a cover over 4 MB (a
+  photo) was never shown.
+
 ## Release 0.1.8 beta (2026-10-22): character editor, mods in the viewer, Blender round trip, playable bosses
 
 Published as the GitHub pre-release `v0.1.8-beta`, packaged as 0.1.7 was

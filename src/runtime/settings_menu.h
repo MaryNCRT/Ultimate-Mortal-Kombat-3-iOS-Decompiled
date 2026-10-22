@@ -50,5 +50,9 @@ int  port_buttons(void);
 void port_buttons_set(int n);
 /* umk3.ini's full path, "" when there is none */
 const char *port_ini_path(void);
+/* language=: "" (the system's), EN, ES, FR, DE, IT, KO or ZH; setting it
+ * changes the game's language at once */
+const char *port_language(void);
+void port_language_set(const char *code);
 
 #endif

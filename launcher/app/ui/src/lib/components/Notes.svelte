@@ -39,9 +39,9 @@
     .notes {
         flex: 1 0 auto; min-height: calc(var(--u) * 22); max-height: calc(var(--u) * 40); overflow: auto; user-select: text;
         padding: calc(var(--u) * .6) calc(var(--u) * 1.2); background: rgba(0, 0, 0, .55);
-        border: 1px solid var(--line); font-size: calc(var(--u) * 1.4); line-height: 1.35;
+        border: 1px solid var(--line); font-size: calc(var(--t) * 1.4); line-height: 1.35;
     }
-    h4 { margin: calc(var(--u) * .8) 0 calc(var(--u) * .3); color: var(--gold1); font-size: calc(var(--u) * 1.6); }
+    h4 { margin: calc(var(--u) * .8) 0 calc(var(--u) * .3); color: var(--gold1); font-size: calc(var(--t) * 1.6); }
     p { margin: calc(var(--u) * .4) 0; }
     ul { margin: calc(var(--u) * .2) 0; padding-left: calc(var(--u) * 2.2); }
     code { font-family: var(--font-mono); color: var(--code); }

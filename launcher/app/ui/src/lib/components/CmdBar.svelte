@@ -30,7 +30,7 @@
         height: calc(var(--u) * 5.6);
         display: flex; align-items: center; justify-content: center;
         padding: 0 calc(var(--u) * 4);
-        font-size: calc(var(--u) * 1.8); letter-spacing: .06em; z-index: 6; color: #fff;
+        font-size: calc(var(--t) * 1.8); letter-spacing: .06em; z-index: 6; color: #fff;
         text-shadow: 0 1px 2px #000;
     }
     /* the bar, as the console's: its ends cut on a slant, a light outline,

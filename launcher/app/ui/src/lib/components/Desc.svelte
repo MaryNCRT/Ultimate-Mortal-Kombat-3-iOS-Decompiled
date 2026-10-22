@@ -13,7 +13,7 @@
         left: calc(50vw + (820 - 800) * var(--k)); top: calc(50vh + (615 - 450) * var(--k));
         width: calc(var(--k) * 505); height: calc(var(--k) * 150);
         padding: calc(var(--k) * 14) calc(var(--k) * 18);
-        font-size: calc(var(--k) * 26); color: var(--text);
+        font-size: calc(var(--k) * 21); color: var(--text);
         background: var(--panel);
         border: 1px solid var(--rim); border-radius: var(--r-sm);
         box-shadow: inset 0 0 calc(var(--u) * 2) rgba(120, 125, 255, .15);
