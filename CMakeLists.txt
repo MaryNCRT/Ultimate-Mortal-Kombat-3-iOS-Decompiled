@@ -33,7 +33,8 @@ function(umk3_target_link_platform target_name is_full_game)
         target_sources(${target_name} PRIVATE
             src/runtime/platform/win32_gl.c
             src/runtime/platform/win32_gl_cdecl.c
-            src/runtime/platform/win32_audio.c)
+            src/runtime/platform/win32_audio.c
+            src/runtime/platform/ui_alert.c)
         target_link_libraries(${target_name} PRIVATE opengl32 gdi32 winmm msacm32 ws2_32)
         if(is_full_game)
             enable_language(RC)
@@ -42,7 +43,8 @@ function(umk3_target_link_platform target_name is_full_game)
     elseif(UMK3_BACKEND STREQUAL "sdl2")
         target_sources(${target_name} PRIVATE
             src/runtime/platform/sdl_gl.c
-            src/runtime/platform/sdl_audio.c)
+            src/runtime/platform/sdl_audio.c
+            src/runtime/platform/ui_alert.c)
         target_include_directories(${target_name} PRIVATE ${SDL2_INCLUDE_DIRS})
         target_compile_options(${target_name} PRIVATE -include stddef.h)
         target_compile_definitions(${target_name} PRIVATE
@@ -224,6 +226,8 @@ if(UMK3_BINARY)
                 src/runtime/wav.c
                 src/runtime/fight_runtime.c
                 src/runtime/savestate.c
+                src/runtime/rollback_probe.c
+                src/runtime/rollback.c
                 ${UMK3_GAME_GAMECODE}
                 ${UMK3_GAME_LIME}
                 ${UMK3_GAME_RUNLIME}
@@ -250,6 +254,13 @@ if(UMK3_BINARY)
                         ${UMK3_SEQ_DATA}
                         TARGET_DIRECTORY umk3-game
                         PROPERTIES COMPILE_DEFINITIONS UMK3_STATE_FILE)
+                # state the rollback leaves alone: kept by save states, not
+                # rolled back (savestate.h, runtime/rollback.c)
+                set_property(SOURCE
+                        src/runtime/lime_menu.c src/runtime/lime_platform.c src/runtime/lime_app.c
+                        src/runtime/wav.c src/decomp/gamecode/limeMPGameSpecific.c
+                        TARGET_DIRECTORY umk3-game
+                        APPEND PROPERTY COMPILE_DEFINITIONS UMK3_NO_ROLLBACK)
                 endif()
             endif()
 

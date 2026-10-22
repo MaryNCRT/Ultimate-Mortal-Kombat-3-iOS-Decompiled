@@ -49,6 +49,7 @@
 #include <string.h>
 
 #include "mp_net.h"
+#include "rollback.h"
 
 /* ---- the file's own data, 0x0017c920 onward ---- */
 
@@ -201,6 +202,10 @@ long isParentBasedOnSpeed(void)
 {
     if (GameMode != 1)
         return 0;
+    /* Port, not in the binary: in a rollback fight both machines run the
+     * engine (runtime/rollback.c); which player each is stays isParent. */
+    if (rb_active())
+        return 1;
     return isParent();
 }
 
@@ -561,6 +566,16 @@ void sendMenuPacket(long which)
 }
 
 /* armv7 0x000b0784 */
+/* Port, not in the binary: this machine's colour pick (FrontEnd.c,
+ * PortNetPalette), 0 for none. */
+void sendPalettePacket(int pick)
+{
+    int32_t w = pick;
+
+    if (mpnet_session_exists())
+        mpnet_send(PORT_PKT_PALETTE, &w, 4, 1);
+}
+
 void sendCharacterPacket(long who)
 {
     sendPacket(1, (float)who, 0.0f, NULL);
@@ -736,6 +751,8 @@ static void processIngameEventCommand(long event, long arg)
 {
     switch (event) {
     case 11:
+        if (rb_active())                /* port: no pause in a rollback fight */
+            break;
         if (arg == 0) {
             if (GamePaused == 1 || GamePaused == 2) {
                 GamePaused = 0;
@@ -1014,6 +1031,17 @@ void processPacket(const void *payload, long len, long type)
             *requestedLevel = w[3];
         break;
     }
+    case PORT_PKT_PALETTE: {            /* port: the other side's colour */
+        extern int PortNetPalette[2];
+        if (len == 4 && w[0] >= 0 && w[0] <= 2)
+            PortNetPalette[1] = w[0];
+        break;
+    }
+    case RB_PKT_INPUT:                  /* port: rollback netcode */
+    case RB_PKT_HELLO:
+    case RB_PKT_HASH:
+        rb_net(type, w, len);
+        break;
     case 13:
         NSLog("GOT PLAY PACKET");
         if (syncCharacters == 0)

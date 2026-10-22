@@ -97,5 +97,12 @@ int  dbg_state_has(int slot);
 int  dbg_info_on(void);
 void dbg_info_toggle(void);
 void dbg_info_draw(const char *line);
+/* a line of the corner's overlay: row 0 the top one */
+void dbg_info_draw_at(const char *line, int row);
+int  dbg_fps_on(void);                 /* TOOLS: FRAMES PER SECOND */
+int  dbg_net_on(void);                 /* TOOLS: ONLINE NUMBERS */
+/* FIGHT: INFINITE HEALTH (bit 0 player one, bit 1 two) and FREEZE CLOCK */
+int  dbg_health_mask(void);
+int  dbg_clock_frozen(void);
 
 #endif

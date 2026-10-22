@@ -55,6 +55,18 @@
 
 #include "../decomp/lime/lime.h"
 
+/* The texture cache's entries: the game keeps a TEXTURE's address in 32-bit
+ * words, so in the 64-bit build they come from below 2 GB (savestate.c);
+ * the C library's heap is above 4 GB on some runs, and every texture of
+ * such a run drew white. */
+#if defined(_WIN32) && defined(UMK3_LOW32)
+void *umk3_alloc_low(size_t n);
+#define tex_entry_alloc(n) umk3_alloc_low(n)
+#else
+#define tex_entry_alloc(n) malloc(n)
+#endif
+int rb_nodraw(void);                    /* runtime/rollback.c, port */
+
 const char *lime_platform_asset_root(void);
 
 /* Multitexture is GL 1.3 and Windows' opengl32 stops at 1.1, so these two are
@@ -558,10 +570,11 @@ TEXTURE *limeLoadTexture(const char *path, int a, int b)
 
     /* The TEXTURE handed back is stored in 32-bit words of the binary's
      * layout -- a fighter's skin at +0x528 -- so it must be below 4 GB, as
-     * any i686 block is. From the C library's heap, not limeMalloc's arena:
-     * a save state loaded must not take the cache back (savestate.h). Never
-     * freed; see limeDeleteTexture. */
-    e = (TexEntry *)malloc(sizeof(*e));
+     * any i686 block is. Not from limeMalloc's arena: a save state loaded
+     * must not take the cache back (savestate.h); nor from the C library's
+     * heap, above 4 GB on some 64-bit runs (tex_entry_alloc). Never freed;
+     * see limeDeleteTexture. */
+    e = (TexEntry *)tex_entry_alloc(sizeof(*e));
     if (e == NULL)
         return NULL;
     memset(e, 0, sizeof(*e));
@@ -678,7 +691,7 @@ TEXTURE *lime_load_extra_texture(const char *file)
     glGenTextures(1, &name);
     tex_upload(name, &img);
     free(img.rgba);
-    e = (TexEntry *)malloc(sizeof(*e));
+    e = (TexEntry *)tex_entry_alloc(sizeof(*e));
     if (e == NULL)
         return NULL;
     memset(e, 0, sizeof(*e));
@@ -1097,7 +1110,8 @@ static void face_draw(TEXTURE *tex, const float *xyz, const float *uv,
     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
     {
         const int clamp = lime_port_edge_clamp(uv, 2, NULL, 4);
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        if (!rb_nodraw())               /* a frame run again (rollback.c) */
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
         lime_port_edge_restore(clamp);
     }
     glDisable(GL_TEXTURE_2D);

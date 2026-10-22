@@ -629,12 +629,18 @@ void achievementsIncreaseMatchesWon(void);
  * sides gives one player every multiplayer achievement and the other none, and
  * it would look correct in single-player testing because GameMode gates it.
  */
+int rb_active(void);                    /* runtime/rollback.c, port */
+int isParent(void);                    /* limeMPGameSpecific.c */
+
 void updateMPWins(void)
 {
     if (GameMode != 1)
         return;
 
-    if (isParentBasedOnSpeed()) {
+    /* Port, not in the binary: with rollback both machines run the engine,
+     * and isParentBasedOnSpeed says so on both; which player this one is
+     * stays isParent. */
+    if (rb_active() ? isParent() : isParentBasedOnSpeed()) {
         if (Health[1] != 0)
             return;
     } else {
@@ -3523,6 +3529,10 @@ void TogglePauseMenu(void)
 {
     float lx, ly;
 
+    /* Port, not in the binary: a pause taken on one machine is not one of the
+     * inputs both run the fight from, so a rollback fight has none (yet). */
+    if (rb_active())
+        return;
     if (*FE_FadeAddP != 0.0f)
         return;
     if (limeTouchScreenX[0] != -1.0f)
@@ -3651,6 +3661,8 @@ void  limePlayTune(const char *file, long vol, long arg);
  *
  * `FrameCount` still advances on the frame the sync succeeds.
  */
+int rb_ready(void);                     /* runtime/rollback.c, port */
+
 void Task_MultiplayerSync(void)
 {
     char buf[0x100];
@@ -3677,7 +3689,8 @@ void Task_MultiplayerSync(void)
 
     *readyToSync = 1;
 
-    if (syncGame((long)FrameCount) == 1) {
+    /* Port, not in the binary: and, with rollback, the other side's hello */
+    if (syncGame((long)FrameCount) == 1 && rb_ready()) {
         enableHeartbeat(10);
         CurrentTask = 6;
 
@@ -5944,9 +5957,59 @@ void heartbeatSetIncoming(long n);
 void preprocessPostloadKode(void);
 long GameInit_LoadABit(long step);
 
+/* Port, not in the binary: the rollback probe (runtime/rollback_probe.c).
+ * A recorded fight keeps its setup; a replayed one gets the recorded setup
+ * back before anything loads. */
+int  rb_fight_setup(int32_t *setup, int n);
+void rb_online_begin(int c1, int c2, int level);
+int  rb_host_level(long *level);
+int  rb_step_begin(int32_t joy[2]);
+void rb_trial_done(void);
+void rb_step_end(const uint32_t *w, int n);
+void rb_tick_end(const uint32_t *w, int n);
+
+extern long Character2Override;         /* 0x00101798, declared again below */
+
+static void rb_setup(void)
+{
+    int32_t v[17];
+    int i;
+
+    /* what loading step 42 builds the two models from, the level, the mode;
+     * the settings after them are compared only */
+    v[0] = Character1;
+    v[1] = Character2;
+    v[2] = Character2Override;
+    v[3] = Destiny;
+    v[4] = Stage;
+    v[5] = *LevelSelectP;
+    v[6] = GameMode;
+    for (i = 0; i < 10; i++)
+        v[7 + i] = Settings[i];
+    if (!rb_fight_setup(v, 17))
+        return;
+    Character1         = v[0];
+    Character2         = v[1];
+    Character2Override = v[2];
+    Destiny            = v[3];
+    Stage              = v[4];
+    *LevelSelectP      = v[5];
+    if (GameMode != 1 && v[6] != 1)     /* never into or out of ONLINE */
+        GameMode = v[6];
+}
+
 void Task_GameInit(void)
 {
     long i;
+
+    if (GameInitState == 0) {
+        /* Port, not in the binary: the guest takes the host's level */
+        if (GameMode == 1 && rb_host_level(LevelSelectP))
+            return;
+        rb_setup();                     /* Port, not in the binary */
+        if (GameMode == 1)              /* Port: rollback netcode */
+            rb_online_begin((int)Character1, (int)Character2, (int)*LevelSelectP);
+    }
 
     *InGameLevelSelect = *LevelSelectP;
     MoveListPage   = 0;
@@ -6273,17 +6336,17 @@ void ResetFightData(void)
         G->healthBar2 = 1;
     } else if (*theKode == 0x0d) {
         SetKodeHandicap(100, 0xa6, 50, 0x53,
-                        isParent() != isParentBasedOnSpeed());
+                        !rb_active() && isParent() != isParentBasedOnSpeed());
     } else if (*theKode == 0x0e) {
         SetKodeHandicap(100, 0xa6, 25, 0x29,
-                        isParent() != isParentBasedOnSpeed());
+                        !rb_active() && isParent() != isParentBasedOnSpeed());
     } else if (*theKode == 0x0f) {
         SetKodeHandicap(100, 0xa6, 50, 0x53,
-                        isParent() != isParentBasedOnSpeed());
+                        !rb_active() && isParent() != isParentBasedOnSpeed());
     } else if (*theKode == 0x10) {
         /* The one whose side rule is inverted -- see the header. */
         SetKodeHandicap(100, 0xa6, 25, 0x29,
-                        isParent() == isParentBasedOnSpeed());
+                        rb_active() || isParent() == isParentBasedOnSpeed());
     }
 
     FlawlessCounter  = 0;
@@ -7807,7 +7870,7 @@ void MovesList(void)
     long header;
 
     /* On the guest of a network game the local player is player 2. */
-    if (GameMode == 1 && !isParentBasedOnSpeed())
+    if (GameMode == 1 && !(rb_active() ? isParent() : isParentBasedOnSpeed()))
         character = PLAYER2MODEL;
     /* Port, not in the binary: in VS, player two's own fighter when they
      * opened it (their pad or keys) */
@@ -8312,7 +8375,7 @@ static void RoundEndedAgainst(long loser)
             if (flawlessVictories == 5)
                 achievementsUnlock(3);
         }
-    } else if (GameMode == 1 && isParentBasedOnSpeed()
+    } else if (GameMode == 1 && (rb_active() ? isParent() : isParentBasedOnSpeed())
                && Health[1] == 0 && Health[0] == 100) {
         /* the network half counts the host's flawless without the message */
         Stats[6]++;
@@ -8718,8 +8781,11 @@ static void RoundSummaryUpdate(void)
         break;
     }
 
-    Player1NumButtons = Settings[4];
-    mk3_set_four_button(0, Settings[4] != 6);
+    /* Port, not in the binary: in a rollback fight player one's buttons are
+     * the host's setting on both machines (rollback.c, rb_game_buttons) */
+    if (!rb_active())
+        Player1NumButtons = Settings[4];
+    mk3_set_four_button(0, Player1NumButtons != 6);
     mk3_set_four_button(1, Player2NumButtons != 6);
     ResetFightData();
 }
@@ -9122,10 +9188,13 @@ static void FreeSceneHandle(void **h)
     *h = NULL;
 }
 
+void rb_online_end(void);               /* runtime/rollback.c, port */
+
 void Task_GameDestroy(void)
 {
     long i;
 
+    rb_online_end();                    /* Port, not in the binary */
     FadeMusicOut = 0;
     *theKode     = -1;                  /* the kode does not outlive the fight */
 
@@ -9410,6 +9479,25 @@ static void CatchJaxSquash(long mirror)
     JaxSquashFlip = *flag;
 }
 
+/* Port, not in the binary: what the rollback probe hashes after a step --
+ * the sprite list without its links, the health and the event queue, words
+ * that hold no address, so every build can compare them. */
+static void rb_sim_end(void)
+{
+    uint32_t w[ARCADE_OBJECTS * 3 + 2 + MP_EVENT_BYTES / 4];
+    const unsigned char *o = (const unsigned char *)(void *)GameObjects;
+    int n = 0, i;
+
+    if (o)
+        for (i = 0; i < ARCADE_OBJECTS; i++, n += 3)
+            memcpy(w + n, o + i * ARCADE_OBJECT_STRIDE + 4, 12);
+    w[n++] = (uint32_t)Health[0];
+    w[n++] = (uint32_t)Health[1];
+    memcpy(w + n, MKEventQueue, MP_EVENT_BYTES);
+    n += MP_EVENT_BYTES / 4;
+    rb_step_end(w, n);
+}
+
 void UpdateArcadeCode(int *joy1, int *joy2)
 {
     long i;
@@ -9427,7 +9515,12 @@ void UpdateArcadeCode(int *joy1, int *joy2)
         long joy[2];
         int  stepped = 1;
 
-        if (GameMode == 1 && !isParentBasedOnSpeed()) {
+        if (rb_active()) {
+            /* Port, not in the binary: rollback -- both machines step the
+             * engine from both players' inputs (Task_GameMain), and nothing
+             * of the binary's own network fight is sent. */
+            mk3_update((const long *)joy1, (void **)&GameObjects);
+        } else if (GameMode == 1 && !isParentBasedOnSpeed()) {
             /* ---- the guest: drain every list that arrived ---- */
             while (setNextSpritesAndEvents()) {
                 long k = currentMPSpriteList;
@@ -9455,7 +9548,21 @@ void UpdateArcadeCode(int *joy1, int *joy2)
             /* `&GameObjects`: 0x222a2 loads the ADDRESS 0x14dfec into r1, and
              * mk3_update stores the frame's object list through it. This is
              * the only writer GameObjects has besides Task_GameInit's zero. */
-            mk3_update((const long *)joy1, (void **)&GameObjects);
+            /* Port, not in the binary: the rollback probe may swap in
+             * recorded sticks, or step the tick twice (sync test). */
+            int32_t rj[2] = { joy1[0], joy1[1] };
+            long pj[2];
+
+            if (rb_step_begin(rj)) {
+                pj[0] = rj[0];
+                pj[1] = rj[1];
+                mk3_update(pj, (void **)&GameObjects);
+                rb_trial_done();
+            }
+            pj[0] = rj[0];
+            pj[1] = rj[1];
+            mk3_update(pj, (void **)&GameObjects);
+            rb_sim_end();
         } else {
             long k = currentMPJoystickData;
 
@@ -9468,7 +9575,7 @@ void UpdateArcadeCode(int *joy1, int *joy2)
         }
 
         if (stepped) {
-            if (GameMode == 1 && isParentBasedOnSpeed()) {
+            if (GameMode == 1 && isParentBasedOnSpeed() && !rb_active()) {
                 if (MKEventQueue[0] > highestQueueNum) {
                     highestQueueNum = MKEventQueue[0];
                     puts("#########################");
@@ -9536,6 +9643,15 @@ void UpdateArcadeCode(int *joy1, int *joy2)
             TrackCam(Player2Pos, Player1Pos, 1);   /* the guest is player two */
         } else {
             TrackCam(Player1Pos, Player2Pos, 1);
+        }
+
+        if (stepped && GameMode != 1) {
+            uint32_t w[9];              /* Port, not in the binary */
+
+            memcpy(w, Player1Pos, 12);
+            memcpy(w + 3, Player2Pos, 12);
+            memcpy(w + 6, Camera, 12);
+            rb_tick_end(w, 9);
         }
 
         FrameCompensation -= 1.0f;
@@ -10302,7 +10418,101 @@ static void SmokeEarthFatalCutaway(void)
     }
 }
 
+/* Port, not in the binary: rollback netcode (runtime/rollback.c). */
+void     rb_frame(void (*frame)(void));
+void     rb_inputs(uint16_t *p1, uint16_t *p2);
+int      rb_quiet(void);
+void     ReadControls(void);
+extern long Player1NumButtons, Player2NumButtons;
+void     mk3_set_four_button(long side, long four);
+
+/* This machine's input now, as rollback.c sends it: the stick (JoystickState,
+ * 0..15) and ButtonStates[0..6], one bit each above it. ReadControls reads
+ * it; what it changed in the game's state is put back. */
+uint16_t rb_game_local_input(void)
+{
+    long js = JoystickState, p2c = P2Controls;
+    int bs[7], lbs[7], i;
+    uint16_t v;
+
+    for (i = 0; i < 7; i++) {
+        bs[i] = ButtonStates[i];
+        lbs[i] = LastButtonStates[i];
+    }
+    ReadControls();
+    v = (uint16_t)(JoystickState & 0xf);
+    for (i = 0; i < 7; i++)
+        if (ButtonStates[i])
+            v |= (uint16_t)(0x10 << i);
+    JoystickState = js;
+    P2Controls = p2c;
+    for (i = 0; i < 7; i++) {
+        ButtonStates[i] = bs[i];
+        LastButtonStates[i] = lbs[i];
+    }
+    return v;
+}
+
+/* The frame's two inputs into both players' controls, as two players on one
+ * device have them (GameMode 6): ReadControls has just moved player one's on. */
+static void rb_apply_inputs(void)
+{
+    uint16_t a, b;
+    int i;
+
+    rb_inputs(&a, &b);
+    JoystickState = a & 0xf;
+    for (i = 0; i < 7; i++)
+        ButtonStates[i] = (a >> (4 + i)) & 1;
+    JoystickStateP2 = b & 0xf;
+    for (i = 0; i < 7; i++) {
+        LastButtonStatesP2[i] = ButtonStatesP2[i];
+        ButtonStatesP2[i] = (b >> (4 + i)) & 1;
+    }
+    P2Controls = 1;
+}
+
+/* Each side's own button setting for its own fighter (the host's is player
+ * one's), at the start of the fight. */
+void rb_game_buttons(int p1, int p2)
+{
+    Player1NumButtons = p1;
+    Player2NumButtons = p2;
+    mk3_set_four_button(0, Player1NumButtons != 6);
+    mk3_set_four_button(1, Player2NumButtons != 6);
+}
+
+/* What the two machines compare: the sprite list without its links, the
+ * health and the fighters' positions, words that hold no address. */
+uint32_t rb_game_hash(void)
+{
+    const unsigned char *o = (const unsigned char *)(void *)GameObjects;
+    uint32_t w[8 * 3 + 2 + 6], h = 0x811c9dc5u;
+    int n = 0, i;
+
+    memset(w, 0, sizeof w);
+    if (o)
+        for (i = 0; i < 8; i++, n += 3)
+            memcpy(w + n, o + i * 16 + 4, 12);
+    else
+        n += 24;
+    w[n++] = (uint32_t)Health[0];
+    w[n++] = (uint32_t)Health[1];
+    memcpy(w + n, Player1Pos, 12);
+    memcpy(w + n + 3, Player2Pos, 12);
+    for (i = 0; i < (int)(sizeof w / 4); i++)
+        h = (h ^ w[i]) * 0x01000193u;
+    return h;
+}
+
+static void Task_GameMain_frame(void);
+
 void Task_GameMain(void)
+{
+    rb_frame(Task_GameMain_frame);      /* Port: the frame itself below */
+}
+
+static void Task_GameMain_frame(void)
 {
     long joy[2];
     long i;
@@ -10318,8 +10528,9 @@ void Task_GameMain(void)
         && FE_FadeAdd == 0.0f)
         FE_FadeAdd = GAMEMAIN_FADE_OUT_STEP;
 
-    /* one key holds block for both sides -- see the header */
-    if (limePressed[0] & GAMEMAIN_KEY_BLOCK) {
+    /* one key holds block for both sides -- see the header (port: not in a
+     * rollback fight, where the inputs come from rollback.c) */
+    if (!rb_active() && (limePressed[0] & GAMEMAIN_KEY_BLOCK)) {
         joy[0] = GAMEMAIN_JOY_BLOCK;
         joy[1] = GAMEMAIN_JOY_BLOCK;
     }
@@ -10363,6 +10574,8 @@ void Task_GameMain(void)
         }
     } else if (G->field44e != 0) {
         ReadControls();
+        if (rb_active())
+            rb_apply_inputs();          /* Port, not in the binary */
     }
 
     GetReal6ButtonJoyBits((int)JoystickState, (const int *)ButtonStates,
@@ -10835,8 +11048,16 @@ void RenderLevelPlayers(void)
                  * 12..15 are Reptile's 12..15 bone for bone (within 2e-4),
                  * and REPTILEFRAMES.bin maps 3288..3291 to exactly those.
                  * So the ids take those frames. RPCOMBO10 is in nobody's
-                 * list, Reptile's included; it and anything else missing
-                 * hold the last pose drawn. */
+                 * list, Reptile's included; it and anything else of his
+                 * that is missing hold the last pose drawn.
+                 *
+                 * Only his. Every other fighter keeps the binary's -1, and
+                 * the -1 is load-bearing: a victim of Mileena's suck kiss
+                 * plays 1394 (frame 327, which fires MILEENA_SUK_<him>) and
+                 * then 1399..1405, all -1. Held at 327, the fire went on
+                 * after set_inviso -- an invisible fighter re-fires its
+                 * frame's events every draw -- and the body was sucked in
+                 * again every eleven frames until the round ended. */
                 if (slot <= 1) {
                     static long port_pose[2] = { -1, -1 }, port_chr[2];
 
@@ -10847,7 +11068,8 @@ void RenderLevelPlayers(void)
                     if (w[0x14 / 4] != -1) {
                         port_pose[slot] = w[0x14 / 4];
                         port_chr[slot]  = chr;
-                    } else if (port_pose[slot] != -1 && port_chr[slot] == chr) {
+                    } else if (chr == 21 && port_pose[slot] != -1
+                               && port_chr[slot] == chr) {
                         w[0x14 / 4] = port_pose[slot];
                     }
                 }

@@ -9,15 +9,14 @@ launcher/bin/, and launcher/stub/umk3_launcher_stub.c is compiled into the
 UMK3-Launcher.exe the player double-clicks: the portable single .exe took
 9.3 s to open (it unpacked itself at every start), this takes 0.7 s.
 
-Copies the sources launcher/build_game.ps1 compiles (it globs the same
-directories), the three table generators and their helpers, the launcher and
-its scripts, and LEEME.txt. Nothing of the game: the player's own .ipa
-supplies the data tables and res\\ when they press Compilar.
+Copies all of src/ (the tree launcher/app/lib/compile.js compiles from), the
+table generators and their helpers, the launcher stub's sources, LEEME.txt,
+and the Epic Online Services SDK from TOOLS/eos when it is there (online over
+the internet; not in the repository). Nothing of the game: the player's own
+.ipa supplies the data tables and res\\ when they press Compilar.
 
-The list of runtime files matches build_game.ps1 and the umk3-game target in
-CMakeLists.txt; when a source is added there, add it here too. The script
-refuses to finish if a header one of the sources includes is missing (it
-checks every #include "..." it can resolve against the copied tree).
+The script refuses to finish if a header one of the sources includes is
+missing (it checks every #include "..." it can resolve against the copied tree).
 """
 
 import os
@@ -28,37 +27,17 @@ import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-RUNTIME_FILES = [
-    "src/runtime/game_main.c", "src/runtime/debug_menu.c", "src/runtime/draw_gl.c",
-    "src/runtime/settings_menu.c", "src/runtime/settings_menu.h",
-    "src/runtime/pad_nav.c", "src/runtime/pad_nav.h",
-    "src/runtime/profiles.c", "src/runtime/profiles.h",
-    "src/runtime/mp_net.c", "src/runtime/mp_net.h",
-    "src/runtime/online_ui.c", "src/runtime/online_ui.h",
-    "src/runtime/umk3_game.rc", "src/runtime/umk3_game.ico",
-    "src/runtime/gamecode_globals.c",
-    "src/runtime/gamecode_globals.h", "src/runtime/gamecode_stubs.c",
-    "src/runtime/lime_menu.c", "src/runtime/lime_platform.c", "src/runtime/lime_app.c",
-    "src/runtime/wav.c", "src/runtime/wav.h", "src/runtime/fight_runtime.c",
-    "src/runtime/fight_runtime.h", "src/runtime/arm_runtime.h", "src/runtime/debug_menu.h",
-    "src/runtime/savestate.c", "src/runtime/savestate.h",
-    "src/runtime/platform/platform.h", "src/runtime/platform/gl.h",
-    "src/runtime/platform/win32_gl.c", "src/runtime/platform/win32_gl_cdecl.c",
-    "src/runtime/platform/win32_audio.c",
-]
-SOURCE_DIRS = ["src/decomp/gamecode", "src/decomp/gamecode/logic", "src/decomp/lime",
-               "src/runtime/lime"]
 TOOLS = ["tools/build/logic_tables.py", "tools/build/logic_tables.map", "tools/build/macho.py", "tools/build/low32_static.py",
-         "tools/build/level_info.py", "tools/build/seq_data.py", "tools/build/check_binary.py", "tools/build/unpack_ipa.py"]
-LAUNCHER = ["launcher/build_game.ps1", "launcher/setup_res.ps1",
-            "launcher/LEEME.txt", "launcher/stub/umk3_launcher_stub.c",
+         "tools/build/level_info.py", "tools/build/seq_data.py", "tools/build/check_binary.py"]
+LAUNCHER = ["launcher/LEEME.txt", "launcher/stub/umk3_launcher_stub.c",
             "launcher/stub/umk3_launcher_stub.rc"]
 TOP = ["LICENSE", "docs/AI-DISCLOSURE.md", "CMakeLists.txt", "build.py"]
 
 
 def find_mingw():
     """x86_64-w64-mingw32-clang and -windres: the game's own toolchain
-    (toolchain/llvm-mingw-*/bin, which build_game.ps1 downloads) or PATH."""
+    (toolchain/llvm-mingw-*/bin, which build_game.ps1 downloads) or PATH;
+    None when neither is there (build_stub then uses zig)."""
     import glob
     for d in sorted(glob.glob(os.path.join(ROOT, "toolchain", "llvm-mingw-*", "bin"))):
         cc = os.path.join(d, "x86_64-w64-mingw32-clang.exe")
@@ -67,19 +46,67 @@ def find_mingw():
     cc = shutil.which("x86_64-w64-mingw32-clang")
     if cc:
         return cc, shutil.which("x86_64-w64-mingw32-windres")
-    raise SystemExit("no x86_64-w64-mingw32-clang: run build_game.ps1 once, or put llvm-mingw on PATH")
+    return None
+
+
+def find_zig():
+    """The zig the launcher downloads (%LOCALAPPDATA%/umk3-launcher/toolchain),
+    UMK3_ZIG, or PATH."""
+    import glob
+    if os.environ.get("UMK3_ZIG"):
+        return os.environ["UMK3_ZIG"]
+    base = os.path.join(os.environ.get("LOCALAPPDATA", ""), "umk3-launcher", "toolchain")
+    for z in sorted(glob.glob(os.path.join(base, "zig-*", "zig.exe"))):
+        return z
+    z = shutil.which("zig")
+    if z:
+        return z
+    raise SystemExit("no x86_64-w64-mingw32-clang and no zig: run the launcher's "
+                     "compile once, set UMK3_ZIG, or put llvm-mingw on PATH")
 
 
 def build_stub(dst):
     import subprocess
     import tempfile
-    cc, rc = find_mingw()
+    mingw = find_mingw()
     stub = os.path.join(ROOT, "launcher", "stub")
     with tempfile.TemporaryDirectory(dir=os.path.dirname(dst)) as tmp:
         res = os.path.join(tmp, "stub.res")
-        subprocess.check_call([rc, "umk3_launcher_stub.rc", "-O", "coff", "-o", res], cwd=stub)
-        subprocess.check_call([cc, "-O2", "-municode", "-mwindows", "-s",
-                               "umk3_launcher_stub.c", res, "-o", dst], cwd=stub)
+        if mingw:
+            cc, rc = mingw
+            subprocess.check_call([rc, "umk3_launcher_stub.rc", "-O", "coff", "-o", res], cwd=stub)
+            subprocess.check_call([cc, "-O2", "-municode", "-mwindows", "-s",
+                                   "umk3_launcher_stub.c", res, "-o", dst], cwd=stub)
+        else:
+            zig = find_zig()
+            subprocess.check_call([zig, "rc", "-fo", res, "umk3_launcher_stub.rc"], cwd=stub)
+            subprocess.check_call([zig, "cc", "-target", "x86_64-windows-gnu", "-O2",
+                                   "-municode", "-Wl,--subsystem,windows", "-s",
+                                   "umk3_launcher_stub.c", res, "-o", dst], cwd=stub)
+
+
+def copy_eos(out):
+    """ONLINE over the internet (src/runtime/mp_eos.c): the Epic Online
+    Services SDK's headers, its Windows library and the product's eos.ini,
+    from TOOLS/eos (not in the repository), to TOOLS/eos in the release,
+    where the launcher's compile finds them. Without them the release
+    still builds, with online on the local network alone."""
+    src = os.environ.get("UMK3_EOS_DIR") or os.path.join(ROOT, "TOOLS", "eos")
+    if not os.path.exists(os.path.join(src, "SDK", "Include", "eos_sdk.h")):
+        print("no EOS SDK in %s: online on the local network alone" % src)
+        return
+    dst = os.path.join(out, "TOOLS", "eos")
+    shutil.copytree(os.path.join(src, "SDK", "Include"), os.path.join(dst, "SDK", "Include"))
+    os.makedirs(os.path.join(dst, "SDK", "Bin"))
+    shutil.copy2(os.path.join(src, "SDK", "Bin", "EOSSDK-Win64-Shipping.dll"),
+                 os.path.join(dst, "SDK", "Bin"))
+    for n in ("eos.ini", "ThirdPartyNotices"):
+        p = os.path.join(src, n)
+        if os.path.isdir(p):
+            shutil.copytree(p, os.path.join(dst, n))
+        elif os.path.exists(p):
+            shutil.copy2(p, os.path.join(dst, n))
+    print("EOS SDK from %s" % src)
 
 
 def main(argv):
@@ -89,11 +116,13 @@ def main(argv):
     if os.path.exists(out):
         shutil.rmtree(out)
 
-    files = list(RUNTIME_FILES) + TOOLS + LAUNCHER + TOP
-    for d in SOURCE_DIRS:
-        for n in sorted(os.listdir(os.path.join(ROOT, d))):
-            if n.endswith((".c", ".h")):
-                files.append(d + "/" + n)
+    # all of src/: the tree the launcher's compile (launcher/app/lib/compile.js)
+    # picks its sources from
+    files = []
+    for dp, _, fns in os.walk(os.path.join(ROOT, "src")):
+        for n in sorted(fns):
+            files.append(os.path.relpath(os.path.join(dp, n), ROOT).replace("\\", "/"))
+    files += TOOLS + LAUNCHER + TOP
 
     for rel in files:
         dst = os.path.join(out, rel)
@@ -108,6 +137,7 @@ def main(argv):
     shutil.copytree(os.path.join(ROOT, "launcher", "aditional textures"),
                     os.path.join(out, "launcher", "aditional textures"))
     build_stub(os.path.join(out, "UMK3-Launcher.exe"))
+    copy_eos(out)
 
     # Every quoted include of every copied source has to resolve in the copy.
     inc_dirs = ["src/runtime", "src/decomp/lime", "src/decomp/gamecode/logic"]

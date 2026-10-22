@@ -4,43 +4,45 @@
  * Only there when umk3.ini says debug_keys=1 (the launcher's "Debug mode"
  * box, in PLAY). F2 opens it over the game, which freezes underneath -- the
  * frame it was showing stays as a dimmed backdrop and GameCodeMain is not
- * called while the menu is up. Arrows or W/S move, left/right change a
- * value, Enter picks, Q / E change the tab, F2 closes; every one of those
- * debug keys can be rebound in the launcher's CONTROLS (key_dbg_* in
- * umk3.ini). The mouse works too: a click on a tab opens it, on a
- * value row its left half lowers the value and its right half raises it,
- * on any other row it picks.
+ * called while the menu is up. It is laid out as the settings menu (Esc,
+ * settings_menu.c): three categories down a side panel, sections under
+ * headings, a list that scrolls, and a list of the values that opens on a
+ * row that has them. Arrows or W/S (or the mouse's wheel) move, left/right
+ * change a value, Enter picks or opens the list, Q / E change the category,
+ * Esc goes back, F2 closes; every one of those debug keys can be rebound in
+ * the launcher's CONTROLS (key_dbg_* in umk3.ini). A click on a category
+ * opens it, on a row picks it; the pad works as in the settings menu.
  *
- * Five tabs along the top: FIGHTERS (the two fighters, their palettes, the
- * stage, START FIGHT), FIGHT (round and match keys, FINISHER, the Arcade
- * bosses), MENUS (any screen, the main menu), OPTIONS (direct keys, info),
- * TOOLS (hitboxes, fight speed, save states).
- *
- *     FIGHTER 1 / FIGHTER 2   any of CharacterNames' 26, the bosses included
- *     PALETTE 1 / PALETTE 2   AUTO (the game's rule: the alternate only for
- *                             the second of two identical fighters), 1 or 2,
- *                             for the next debug fight (back to AUTO after)
- *     STAGE                   a Level_Info row, 0..15
- *     START FIGHT             from the menus or from inside a fight
- *     SCREEN                  any of the front end's 51 screens
- *     MAIN MENU
- *     WIN / LOSE ROUND, WIN MATCH (skips the fight), LOSE MATCH   only while
- *                             a round is in play (not in the intro, the
- *                             round summary, a finisher or the pause)
- *     FINISHER                only during FINISH HIM/HER: player 1 does a pit
- *                             fatality, mercy, fatality 1 or 2, animality,
- *                             babality or friendship (DoASpecial 0xd..0x13),
- *                             whatever was typed
- *     ARCADE: MOTARO / SHAO KAHN  Arcade only: the next fight is that boss
- *     DIRECT KEYS             F3, F6..F12 on or off (on at start)
- *     INFO                    the task / screen line in the corner (also F3)
- *     HITBOXES                the boxes the fight engine tests, drawn over
- *                             the fight: each fighter's body, and every
- *                             strike for a moment (red, white on a hit)
- *     FIGHT SPEED             10% to 400%, a bar; only the fight runs at it
- *     STATE SLOT, SAVE STATE, LOAD STATE   four slots; a save is the whole
- *                             game at that tick and a load goes back to it,
- *                             in the same session (runtime/savestate.h)
+ *   FIGHT
+ *     FIGHTERS   FIGHTER 1 / 2 (any of CharacterNames' 26, the bosses
+ *                included), PALETTE 1 / 2 (AUTO: the game's rule, the
+ *                alternate only for the second of two identical fighters;
+ *                1 or 2, for the next debug fight, back to AUTO after),
+ *                STAGE (a Level_Info row, 0..15), START FIGHT
+ *     ROUND      WIN / LOSE ROUND, WIN MATCH (skips the fight), LOSE MATCH,
+ *                only while a round is in play (not in the intro, the round
+ *                summary, a finisher or the pause); FINISHER, only during
+ *                FINISH HIM/HER: player 1 does a pit fatality, mercy,
+ *                fatality 1 or 2, animality, babality or friendship
+ *                (DoASpecial 0xd..0x13), picked from its list
+ *     ARCADE     NEXT IS MOTARO / SHAO KAHN, Arcade only
+ *     CHEATS     INFINITE HEALTH (player 1, 2 or both: the bar never goes
+ *                down) and FREEZE CLOCK, the hooks training uses
+ *                (logic/other.c); never in an online fight
+ *   MENUS
+ *     SCREENS    SCREEN (any of the front end's 51, picked from its list),
+ *                MAIN MENU
+ *   TOOLS
+ *     OPTIONS    DIRECT KEYS (F3, F6..F12, on at start), INFO LINE (the
+ *                task / screen line in the corner, also F3), FRAMES PER
+ *                SECOND and ONLINE NUMBERS (the rollback's frame, delay,
+ *                rollbacks, holds and desyncs) under it
+ *     FIGHT      HITBOXES (the boxes the fight engine tests, drawn over the
+ *                fight: each fighter's body, and every strike for a moment,
+ *                red, white on a hit), FIGHT SPEED (10% to 400%, a bar)
+ *     SAVE STATES  SLOT, SAVE STATE, LOAD STATE: four slots; a save is the
+ *                whole game at that tick and a load goes back to it, in the
+ *                same session (runtime/savestate.h)
  *
  * Everything is drawn here, with a 5x7 font of its own, in a space 320 high
  * and as wide as the view's shape, so it never stretches; nothing comes from the game's assets, so the menu works on a
@@ -49,6 +51,7 @@
  */
 
 #include <math.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -269,59 +272,57 @@ static void grab(int vx, int vy, int vw, int vh)
 
 /* ----------------------------------------------------------------- menu */
 
+extern char Language[10];
+extern int PortDbgClock, PortDbgHealth;  /* logic/other.c, port */
+
+static const char *tx(const char *es, const char *en)
+{
+    return Language[0] == 'E' && Language[1] == 'S' ? es : en;
+}
+
+/* Three categories down the side panel, as in the settings menu (Esc):
+ * FIGHT (the fighters, the round, Arcade, cheats), MENUS (the screens) and
+ * TOOLS (the options, the fight tools, save states); Q / E, L1 / R1 or a
+ * click on one changes it. Each holds sections under their headings and
+ * ends in BACK TO THE GAME. */
+enum { PAGE_FIGHT, PAGE_MENUS, PAGE_TOOLS, N_PAGES };
+
 enum {
     ROW_P1, ROW_PAL1, ROW_P2, ROW_PAL2, ROW_STAGE, ROW_FIGHT,
     ROW_SCREEN, ROW_MAIN,
     ROW_WIN_ROUND, ROW_LOSE_ROUND, ROW_WIN_MATCH, ROW_LOSE_MATCH,
     ROW_FINISHER,
     ROW_MOTARO, ROW_SK,
-    ROW_KEYS, ROW_INFO,
+    ROW_HEALTH, ROW_CLOCK,
+    ROW_KEYS, ROW_INFO, ROW_FPS, ROW_NET,
     ROW_HITBOX, ROW_SPEED, ROW_SLOT, ROW_SAVE, ROW_LOAD,
-    ROW_CLOSE, N_ROWS
+    ROW_CLOSE, ROW_HEAD
 };
 
-/* One page per kind of thing, shown as tabs along the top: Q / E (the
- * launcher can rebind them), L1 / R1 or a click on a tab to change; CLOSE
- * ends every page. */
-#define MAX_PAGE_ROWS 10
-static const struct {
-    const char *name;
-    int n;
-    int rows[MAX_PAGE_ROWS];
-} k_pages[] = {
-    { "FIGHTERS", 7,
-      { ROW_P1, ROW_PAL1, ROW_P2, ROW_PAL2, ROW_STAGE, ROW_FIGHT, ROW_CLOSE } },
-    { "FIGHT", 8,
-      { ROW_WIN_ROUND, ROW_LOSE_ROUND, ROW_WIN_MATCH, ROW_LOSE_MATCH,
-        ROW_FINISHER, ROW_MOTARO, ROW_SK, ROW_CLOSE } },
-    { "MENUS", 3, { ROW_SCREEN, ROW_MAIN, ROW_CLOSE } },
-    { "OPTIONS", 3, { ROW_KEYS, ROW_INFO, ROW_CLOSE } },
-    { "TOOLS", 6,
-      { ROW_HITBOX, ROW_SPEED, ROW_SLOT, ROW_SAVE, ROW_LOAD, ROW_CLOSE } },
-};
-#define N_PAGES (int)(sizeof k_pages / sizeof k_pages[0])
-enum { PAGE_FIGHTERS, PAGE_FIGHT, PAGE_MENUS, PAGE_OPTIONS, PAGE_TOOLS };
-
-static const char *const k_label[N_ROWS] = {
-    "FIGHTER 1", "PALETTE 1", "FIGHTER 2", "PALETTE 2", "STAGE",
-    "START FIGHT", "SCREEN", "MAIN MENU", "WIN ROUND", "LOSE ROUND",
-    "WIN MATCH (SKIP FIGHT)", "LOSE MATCH", "FINISHER (IN FINISH HIM)",
-    "ARCADE: NEXT IS MOTARO", "ARCADE: NEXT IS SHAO KAHN",
-    "DIRECT KEYS", "INFO LINE",
-    "HITBOXES", "FIGHT SPEED", "STATE SLOT", "SAVE STATE", "LOAD STATE",
-    "CLOSE"
-};
+#define MAX_ROWS 40
+#define VIS_ROWS 15
+static struct {
+    int  kind;
+    char label[48], value[192];
+    int  en;
+} g_rows[MAX_ROWS];
+static int g_n, g_first;
 
 static int g_open, g_want_open, g_page, g_sel;
 static int g_p1 = 15, g_p2 = 25, g_stage, g_screen;   /* Kitana vs Shao Kahn */
-static int g_info;
+static int g_info, g_fps, g_net;
 static int g_fin = 2;                   /* FATALITY 1 */
-static const char *const k_fin[7] = {
+static const char *const k_fin_es[7] = {
+    "FOSO / ESCENARIO", "MERCY", "FATALITY 1", "FATALITY 2", "ANIMALITY",
+    "BABALITY", "FRIENDSHIP"
+};
+static const char *const k_fin_en[7] = {
     "PIT / STAGE", "MERCY", "FATALITY 1", "FATALITY 2", "ANIMALITY",
     "BABALITY", "FRIENDSHIP"
 };
 static int g_keys = 1;                 /* the direct keys (F3, F6..F12) */
-static int g_hitbox;                    /* the TOOLS page */
+static int g_hitbox;
+static int g_health, g_clock;           /* INFINITE HEALTH (bits), FREEZE CLOCK */
 static const int k_speed[] = { 10, 25, 50, 75, 100, 125, 150, 200, 300, 400 };
 #define N_SPEEDS (int)(sizeof k_speed / sizeof k_speed[0])
 static int g_speed = 4;                 /* 100% */
@@ -335,18 +336,49 @@ static int g_task;                      /* CurrentTask while open */
  * its end, then puts both back to AUTO). Port only. */
 int DbgPalette[2];
 int DbgFightActive;
-static const char *const k_pal[3] = { "AUTO", "1", "2 (ALTERNATE)" };
 
-/* Where the box was last drawn, in the menu's space, for the mouse: the
- * tab strip from g_title0 to g_top, N_PAGES tabs from g_bx, g_bw wide. */
-static float g_bx, g_by, g_bw, g_top, g_rowh, g_title0;
+static const char *pal_name(int i)
+{
+    return i == 0 ? "AUTO" : i == 1 ? "1" : tx("2 (ALTERNA)", "2 (ALTERNATE)");
+}
+
+static const char *health_name(int i)
+{
+    static const char *const es[4] = { "NO", "JUGADOR 1", "JUGADOR 2", "AMBOS" };
+    static const char *const en[4] = { "OFF", "PLAYER 1", "PLAYER 2", "BOTH" };
+    return tx(es[i & 3], en[i & 3]);
+}
+
+static const char *on_off(int on)
+{
+    return on ? tx("SI", "ON") : tx("NO", "OFF");
+}
+
+/* Where the box and an open list went, in the menu's space, for the mouse. */
+static float g_bx, g_bw, g_top, g_rowh, g_title0;
 static float g_sx, g_sw, g_stop, g_srow;    /* the side panel, if any */
-static int   g_mouse_was;
+static struct ui_geo g_geo, g_dgeo;
+static int   g_mouse_was, g_esc_was;
+static float g_mx, g_my;                /* the pointer, in the menu's space */
+static int   g_mdown;
+
+/* The list a row with values opens (Enter, or a click on it), as in the
+ * settings menu: its row, the options, the current one, the one under the
+ * cursor and the first one in sight. */
+#define MAX_DROP 64
+#define VIS_DROP 13
+static int  g_drop, g_drop_kind, g_drop_n, g_drop_cur, g_drop_sel, g_drop_first;
+static char g_drop_lab[MAX_DROP][48];
+static char g_drop_title[48];
 
 int dbg_menu_is_open(void) { return g_open; }
 int dbg_info_on(void)      { return g_info; }
+int dbg_fps_on(void)       { return g_fps; }
+int dbg_net_on(void)       { return g_net; }
 int dbg_keys_on(void)      { return g_keys; }
 int dbg_hitboxes_on(void)  { return g_hitbox; }
+int dbg_health_mask(void)  { return g_health; }
+int dbg_clock_frozen(void) { return g_clock; }
 int dbg_speed_percent(void) { return k_speed[g_speed]; }
 void dbg_info_toggle(void) { g_info = !g_info; }
 
@@ -354,30 +386,10 @@ void dbg_menu_toggle(void)
 {
     if (g_open) {
         g_open = 0;
+        g_drop = 0;
         printf("debug menu: closed\n");
     } else
         g_want_open = 1;                /* opened after the next frame */
-}
-
-static int row_enabled(int row);
-
-void dbg_menu_after_frame(int vx, int vy, int vw, int vh, int task, int fe)
-{
-    if (!g_want_open)
-        return;
-    g_want_open = 0;
-    grab(vx, vy, vw, vh);
-    g_open = 1;
-    g_task = task;
-    g_mouse_was = 1;                    /* the click that opened it is not a pick */
-    if (fe >= 0 && fe < DBG_SCREENS)
-        g_screen = fe;
-    /* in a fight that can take a fight key or a finisher, start there */
-    if (task == 6 && (row_enabled(ROW_WIN_ROUND) || row_enabled(ROW_FINISHER))) {
-        g_page = PAGE_FIGHT;
-        g_sel = row_enabled(ROW_FINISHER) ? 4 : 0;
-    }
-    printf("debug menu: open (task %d, screen %d)\n", task, fe);
 }
 
 static const char *stage_name(int i)
@@ -396,6 +408,8 @@ static const char *stage_name(int i)
  * main menu (game_main.c queues it), so only the fight keys ever grey out. */
 static int row_enabled(int row)
 {
+    if (row == ROW_HEAD)
+        return 0;
     if (row >= ROW_WIN_ROUND && row <= ROW_LOSE_MATCH)
         return g_task == 6 && dbg_round_live();
     if (row == ROW_FINISHER)
@@ -411,46 +425,289 @@ static int row_enabled(int row)
 
 static int wrap(int v, int n) { return (v % n + n) % n; }
 
-static int has_value(int row)
+/* ---------------------------------------------------------------- rows */
+
+static void add(int kind, const char *label, const char *fmt, ...)
+{
+    va_list ap;
+
+    if (g_n >= MAX_ROWS)
+        return;
+    g_rows[g_n].kind = kind;
+    g_rows[g_n].en = row_enabled(kind);
+    snprintf(g_rows[g_n].label, sizeof g_rows[0].label, "%s", label);
+    va_start(ap, fmt);
+    vsnprintf(g_rows[g_n].value, sizeof g_rows[0].value, fmt, ap);
+    va_end(ap);
+    g_n++;
+}
+
+/* A section's heading: shown, never chosen (plat_ui_menu draws "\002"). */
+static void head(const char *name)
+{
+    add(ROW_HEAD, "", "");
+    snprintf(g_rows[g_n - 1].label, sizeof g_rows[0].label, "\002%s", name);
+}
+
+static void build(void)
+{
+    char a[96], b[96];
+
+    g_n = 0;
+    switch (g_page) {
+    case PAGE_FIGHT:
+        head(tx("LUCHADORES", "FIGHTERS"));
+        add(ROW_P1, tx("LUCHADOR 1", "FIGHTER 1"), "< %2d %s >", g_p1,
+            CharacterNames[g_p1]);
+        add(ROW_PAL1, tx("PALETA 1", "PALETTE 1"), "< %s >", pal_name(DbgPalette[0]));
+        add(ROW_P2, tx("LUCHADOR 2", "FIGHTER 2"), "< %2d %s >", g_p2,
+            CharacterNames[g_p2]);
+        add(ROW_PAL2, tx("PALETA 2", "PALETTE 2"), "< %s >", pal_name(DbgPalette[1]));
+        add(ROW_STAGE, tx("ESCENARIO", "STAGE"), "< %2d %s >", g_stage,
+            stage_name(g_stage));
+        add(ROW_FIGHT, tx("EMPEZAR PELEA", "START FIGHT"), "");
+        head(tx("RONDA", "ROUND"));
+        add(ROW_WIN_ROUND, tx("GANAR RONDA", "WIN ROUND"), "");
+        add(ROW_LOSE_ROUND, tx("PERDER RONDA", "LOSE ROUND"), "");
+        add(ROW_WIN_MATCH, tx("GANAR COMBATE (SALTA LA PELEA)",
+                              "WIN MATCH (SKIP FIGHT)"), "");
+        add(ROW_LOSE_MATCH, tx("PERDER COMBATE", "LOSE MATCH"), "");
+        add(ROW_FINISHER, tx("REMATE (EN FINISH HIM)", "FINISHER (IN FINISH HIM)"),
+            "< %s >", tx(k_fin_es[g_fin], k_fin_en[g_fin]));
+        head("ARCADE");
+        add(ROW_MOTARO, tx("SIGUIENTE: MOTARO", "NEXT IS MOTARO"), "");
+        add(ROW_SK, tx("SIGUIENTE: SHAO KAHN", "NEXT IS SHAO KAHN"), "");
+        head(tx("TRUCOS", "CHEATS"));
+        add(ROW_HEALTH, tx("VIDA INFINITA", "INFINITE HEALTH"), "< %s >",
+            health_name(g_health));
+        add(ROW_CLOCK, tx("CONGELAR RELOJ", "FREEZE CLOCK"), "< %s >",
+            on_off(g_clock));
+        break;
+    case PAGE_MENUS:
+        head(tx("PANTALLAS", "SCREENS"));
+        add(ROW_SCREEN, tx("PANTALLA", "SCREEN"), "< %2d %s >", g_screen,
+            FETaskNames[g_screen] + 8);
+        add(ROW_MAIN, tx("MENU PRINCIPAL", "MAIN MENU"), "");
+        break;
+    case PAGE_TOOLS:
+        head("GENERAL");
+        plat_key_glyph(PK_DBG_KO_P2, a, sizeof a);
+        plat_key_glyph(PK_DBG_LOSE, b, sizeof b);
+        add(ROW_KEYS, tx("TECLAS DIRECTAS", "DIRECT KEYS"), "< %s >  %s-%s",
+            on_off(g_keys), a, b);
+        plat_key_glyph(PK_BACK, a, sizeof a);
+        add(ROW_INFO, tx("LINEA DE INFO", "INFO LINE"), "< %s >  %s",
+            on_off(g_info), a);
+        add(ROW_FPS, tx("FOTOGRAMAS POR SEGUNDO", "FRAMES PER SECOND"), "< %s >",
+            on_off(g_fps));
+        add(ROW_NET, tx("DATOS DEL ONLINE (ROLLBACK)", "ONLINE NUMBERS (ROLLBACK)"),
+            "< %s >", on_off(g_net));
+        head(tx("PELEA", "FIGHT"));
+        add(ROW_HITBOX, tx("CAJAS DE GOLPE", "HITBOXES"), "< %s >", on_off(g_hitbox));
+        {
+            char bar[N_SPEEDS + 1];
+            int i;
+            for (i = 0; i < N_SPEEDS; i++)
+                bar[i] = i <= g_speed ? '#' : '-';
+            bar[N_SPEEDS] = 0;
+            add(ROW_SPEED, tx("VELOCIDAD DE LA PELEA", "FIGHT SPEED"),
+                "< %s %3d%% >", bar, k_speed[g_speed]);
+        }
+        head(tx("ESTADOS GUARDADOS", "SAVE STATES"));
+        add(ROW_SLOT, tx("RANURA", "SLOT"), "< %d %s >", g_slot + 1,
+            dbg_state_has(g_slot) ? tx("GUARDADO", "SAVED") : tx("VACIO", "EMPTY"));
+        add(ROW_SAVE, tx("GUARDAR ESTADO", "SAVE STATE"), "");
+        add(ROW_LOAD, tx("CARGAR ESTADO", "LOAD STATE"), "");
+        break;
+    }
+    add(ROW_CLOSE, tx("VOLVER AL JUEGO", "BACK TO THE GAME"), "");
+}
+
+/* the rows that take Enter as a toggle, and those that open a list */
+static int is_toggle(int row)
+{
+    return row == ROW_CLOCK || row == ROW_KEYS || row == ROW_INFO
+        || row == ROW_FPS || row == ROW_NET || row == ROW_HITBOX;
+}
+
+/* The variable a list row sets and how many values it has. */
+static int *list_var(int row, int *n)
 {
     switch (row) {
-    case ROW_P1: case ROW_PAL1: case ROW_P2: case ROW_PAL2: case ROW_STAGE:
-    case ROW_SCREEN: case ROW_FINISHER: case ROW_KEYS: case ROW_INFO:
-    case ROW_HITBOX: case ROW_SPEED: case ROW_SLOT:
-        return 1;
+    case ROW_P1:       *n = N_FIGHTERS;      return &g_p1;
+    case ROW_P2:       *n = N_FIGHTERS;      return &g_p2;
+    case ROW_PAL1:     *n = 3;               return &DbgPalette[0];
+    case ROW_PAL2:     *n = 3;               return &DbgPalette[1];
+    case ROW_STAGE:    *n = N_STAGES;        return &g_stage;
+    case ROW_SCREEN:   *n = DBG_SCREENS;     return &g_screen;
+    case ROW_FINISHER: *n = 7;               return &g_fin;
+    case ROW_HEALTH:   *n = 4;               return &g_health;
+    case ROW_SPEED:    *n = N_SPEEDS;        return &g_speed;
+    case ROW_SLOT:     *n = DBG_STATE_SLOTS; return &g_slot;
     }
-    return 0;
+    *n = 0;
+    return NULL;
 }
 
 static void change(int row, int d)
 {
-    switch (row) {
-    case ROW_P1:       g_p1 = wrap(g_p1 + d, N_FIGHTERS); break;
-    case ROW_P2:       g_p2 = wrap(g_p2 + d, N_FIGHTERS); break;
-    case ROW_PAL1:     DbgPalette[0] = wrap(DbgPalette[0] + d, 3); break;
-    case ROW_PAL2:     DbgPalette[1] = wrap(DbgPalette[1] + d, 3); break;
-    case ROW_STAGE:    g_stage = wrap(g_stage + d, N_STAGES); break;
-    case ROW_SCREEN:   g_screen = wrap(g_screen + d, DBG_SCREENS); break;
-    case ROW_FINISHER: g_fin = wrap(g_fin + d, 7); break;
-    case ROW_INFO:     g_info = !g_info; break;
-    case ROW_KEYS:     g_keys = !g_keys; break;
-    case ROW_HITBOX:   g_hitbox = !g_hitbox; break;
-    case ROW_SPEED:                     /* a bar: it stops at both ends */
+    int n, *v = list_var(row, &n);
+
+    if (row == ROW_SPEED) {             /* a bar: it stops at both ends */
         g_speed += d;
         if (g_speed < 0) g_speed = 0;
         if (g_speed > N_SPEEDS - 1) g_speed = N_SPEEDS - 1;
-        break;
-    case ROW_SLOT:     g_slot = wrap(g_slot + d, DBG_STATE_SLOTS); break;
+    } else if (v)
+        *v = wrap(*v + d, n);
+    else switch (row) {
+    case ROW_CLOCK:  g_clock = !g_clock; break;
+    case ROW_INFO:   g_info = !g_info; break;
+    case ROW_FPS:    g_fps = !g_fps; break;
+    case ROW_NET:    g_net = !g_net; break;
+    case ROW_KEYS:   g_keys = !g_keys; break;
+    case ROW_HITBOX: g_hitbox = !g_hitbox; break;
     }
+}
+
+/* ------------------------------------------------------------ lists */
+
+static void drop_open(int row)
+{
+    int n, i, *v = list_var(row, &n);
+
+    if (!v)
+        return;
+    for (i = 0; i < n && i < MAX_DROP; i++) {
+        char *L = g_drop_lab[i];
+        switch (row) {
+        case ROW_P1: case ROW_P2:
+            snprintf(L, 48, "%2d %s", i, CharacterNames[i]); break;
+        case ROW_PAL1: case ROW_PAL2:
+            snprintf(L, 48, "%s", pal_name(i)); break;
+        case ROW_STAGE:
+            snprintf(L, 48, "%2d %s", i, stage_name(i)); break;
+        case ROW_SCREEN:
+            snprintf(L, 48, "%2d %s", i, FETaskNames[i] + 8); break;
+        case ROW_FINISHER:
+            snprintf(L, 48, "%s", tx(k_fin_es[i], k_fin_en[i])); break;
+        case ROW_HEALTH:
+            snprintf(L, 48, "%s", health_name(i)); break;
+        case ROW_SPEED:
+            snprintf(L, 48, "%d%%", k_speed[i]); break;
+        case ROW_SLOT:
+            snprintf(L, 48, "%d %s", i + 1, dbg_state_has(i)
+                     ? tx("GUARDADO", "SAVED") : tx("VACIO", "EMPTY"));
+            break;
+        }
+    }
+    g_drop_n = i;
+    for (i = 0; i < g_n && g_rows[i].kind != row; i++)
+        ;
+    snprintf(g_drop_title, sizeof g_drop_title, "%s", i < g_n ? g_rows[i].label : "");
+    g_drop = 1;
+    g_drop_kind = row;
+    g_drop_cur = *v;
+    g_drop_sel = *v;
+    g_drop_first = 0;
+}
+
+static int drop_apply(int i)
+{
+    int n, *v = list_var(g_drop_kind, &n);
+
+    g_drop = 0;
+    if (!v || i < 0 || i >= n)
+        return 0;
+    *v = i;
+    return 1;
+}
+
+/* The open list's turn: arrows and the wheel move, Enter or a click picks,
+ * Esc, the pad's east button or a click outside goes back. 1 on a pick. */
+static int drop_tick(int up, int down, int wheel, int ok, int back, int click)
+{
+    if (back) {
+        g_drop = 0;
+        return 0;
+    }
+    if (up)   g_drop_sel = wrap(g_drop_sel - 1, g_drop_n);
+    if (down) g_drop_sel = wrap(g_drop_sel + 1, g_drop_n);
+    if (wheel) {                        /* the wheel stops at both ends */
+        g_drop_sel -= wheel;
+        if (g_drop_sel < 0) g_drop_sel = 0;
+        if (g_drop_sel > g_drop_n - 1) g_drop_sel = g_drop_n - 1;
+    }
+    if (click) {
+        int i = -1;
+
+        if (g_dgeo.rowh > 0 && g_mx >= g_dgeo.bx && g_mx < g_dgeo.bx + g_dgeo.bw
+            && g_my >= g_dgeo.top) {
+            i = g_drop_first + (int)((g_my - g_dgeo.top) / g_dgeo.rowh);
+            if (i - g_drop_first >= VIS_DROP)
+                i = -1;
+        }
+        if (i >= 0 && i < g_drop_n)
+            return drop_apply(i);
+        g_drop = 0;
+        return 0;
+    }
+    return ok ? drop_apply(g_drop_sel) : 0;
+}
+
+/* ---------------------------------------------------------------- tick */
+
+/* The first row that can be chosen at or after i (CLOSE, last, always can). */
+static int first_on(int i)
+{
+    while (i < g_n - 1 && !g_rows[i].en)
+        i++;
+    return i;
 }
 
 static void turn_page(int d)
 {
     g_page = wrap(g_page + d, N_PAGES);
-    g_sel = 0;
-    while (g_sel < k_pages[g_page].n - 1
-           && !row_enabled(k_pages[g_page].rows[g_sel]))
-        g_sel++;                        /* CLOSE, last, is always on */
+    g_first = 0;
+    g_drop = 0;
+    build();
+    g_sel = first_on(0);
+}
+
+static void select_row(int row)
+{
+    int i;
+
+    for (i = 0; i < g_n; i++)
+        if (g_rows[i].kind == row) {
+            g_sel = i;
+            return;
+        }
+}
+
+void dbg_menu_after_frame(int vx, int vy, int vw, int vh, int task, int fe)
+{
+    if (!g_want_open)
+        return;
+    g_want_open = 0;
+    grab(vx, vy, vw, vh);
+    g_open = 1;
+    g_drop = 0;
+    g_task = task;
+    g_mouse_was = 1;                    /* the click that opened it is not a pick */
+    g_esc_was = 1;
+    plat_mouse_wheel();                 /* turns made while it was shut */
+    if (fe >= 0 && fe < DBG_SCREENS)
+        g_screen = fe;
+    build();
+    if (g_sel >= g_n)
+        g_sel = first_on(0);
+    /* in a fight that can take a fight key or a finisher, start there */
+    if (task == 6 && (row_enabled(ROW_WIN_ROUND) || row_enabled(ROW_FINISHER))) {
+        g_page = PAGE_FIGHT;
+        build();
+        select_row(row_enabled(ROW_FINISHER) ? ROW_FINISHER : ROW_WIN_ROUND);
+    }
+    printf("debug menu: open (task %d, screen %d)\n", task, fe);
 }
 
 /* Key edges, read here so the menu never reaches the fight's input. */
@@ -462,11 +719,9 @@ static int edge(int k, int *was)
 }
 
 /* The mouse: game_main.c passes the pointer as fractions of the view each
- * frame the menu is open. A click on a tab opens that page; on a row with a
- * value, the left half lowers it and the right half raises it; on any other
- * row it picks. */
-static float g_mx, g_my;
-static int   g_mdown;
+ * frame the menu is open. A click on a category opens it; on a row with
+ * values it opens the list, on an ON / OFF row it switches it, on any other
+ * row it picks. The wheel moves the cursor. */
 
 void dbg_menu_mouse(float x, float y, int down)
 {
@@ -476,8 +731,8 @@ void dbg_menu_mouse(float x, float y, int down)
 }
 
 /* The pad, passed in by game_main.c each frame the menu is open: d-pad or
- * stick to move, south (cross / A) to pick, L1 / R1 to turn the page, east
- * (circle / B) to close. */
+ * stick to move, south (cross / A) to pick, L1 / R1 to change the category,
+ * east (circle / B) to go back. */
 static PLAT_PAD g_pad, g_pad_was;
 
 /* The footer shows the pictures of what the player is using: the pad or
@@ -499,8 +754,9 @@ void dbg_menu_pad(const PLAT_PAD *p)
 int dbg_menu_tick(struct dbg_request *rq)
 {
     static int was[11];
-    int up, down, left, right, ok, prev, next, row, click;
+    int up, down, left, right, ok, prev, next, back, click, wheel, row;
 
+    memset(rq, 0, sizeof *rq);
     up    = edge(PK_UP, &was[0])    | edge(PK_P2_UP, &was[1])    | PAD_EDGE(up);
     down  = edge(PK_DOWN, &was[2])  | edge(PK_P2_DOWN, &was[3])  | PAD_EDGE(down);
     left  = edge(PK_LEFT, &was[4])  | edge(PK_P2_LEFT, &was[5])  | PAD_EDGE(left);
@@ -508,64 +764,86 @@ int dbg_menu_tick(struct dbg_request *rq)
     ok    = edge(PK_OK, &was[8]) | (PAD_HIT(PB_SOUTH) != 0);
     prev  = edge(PK_DBG_PAGE_PREV, &was[9]) | (PAD_HIT(PB_L1) != 0);
     next  = edge(PK_DBG_PAGE_NEXT, &was[10]) | (PAD_HIT(PB_R1) != 0);
-    if (PAD_HIT(PB_EAST)) {
-        g_pad_was = g_pad;
-        dbg_menu_toggle();
-        memset(rq, 0, sizeof *rq);
-        return 0;
-    }
+    back  = edge(PK_SETTINGS, &g_esc_was) | (PAD_HIT(PB_EAST) != 0);
     g_pad_was = g_pad;
     click = g_mdown && !g_mouse_was;
     g_mouse_was = g_mdown;
+    wheel = plat_mouse_wheel();
 
-    memset(rq, 0, sizeof *rq);
+    build();
+    if (g_sel >= g_n)
+        g_sel = g_n - 1;
+    if (!g_rows[g_sel].en)
+        g_sel = first_on(g_sel);
+
+    if (g_drop) {
+        /* a screen or a finisher picked from its list is done at once */
+        row = g_drop_kind;
+        if (!drop_tick(up, down, wheel, ok, back, click)
+            || (row != ROW_SCREEN && row != ROW_FINISHER))
+            return 0;
+        rq->what = row == ROW_SCREEN ? DBG_SCREEN : DBG_FINISHER;
+        rq->a = row == ROW_SCREEN ? g_screen : g_fin;
+        g_open = 0;
+        return 1;
+    }
+    if (back) {
+        dbg_menu_toggle();
+        return 0;
+    }
     if (prev || next)
         turn_page(next ? 1 : -1);
 
-    if (click && g_rowh > 0 && g_mx >= g_bx && g_mx < g_bx + g_bw) {
-        float mid = g_bx + g_bw * 0.5f;
-        if (g_my >= g_title0 && g_my < g_top) {
-            int t = (int)((g_mx - g_bx) * N_PAGES / g_bw);
-            if (t >= 0 && t < N_PAGES && t != g_page)
-                turn_page(t - g_page);
-        } else if (g_my >= g_top) {
-            int i = (int)((g_my - g_top) / g_rowh);
-            if (i < k_pages[g_page].n
-                && row_enabled(k_pages[g_page].rows[i])) {
-                g_sel = i;
-                if (has_value(k_pages[g_page].rows[i]))
-                    change(k_pages[g_page].rows[i], g_mx < mid ? -1 : 1);
-                else
-                    ok = 1;
-            }
+    if (click && g_geo.srow > 0 && g_mx >= g_geo.sx && g_mx < g_geo.sx + g_geo.sw
+        && g_my >= g_geo.stop && g_my < g_geo.stop + N_PAGES * g_geo.srow) {
+        int t = (int)((g_my - g_geo.stop) / g_geo.srow);   /* a category */
+        if (t != g_page)
+            turn_page(t - g_page);
+    } else if (click && g_geo.rowh > 0 && g_mx >= g_geo.bx
+               && g_mx < g_geo.bx + g_geo.bw && g_my >= g_geo.top) {
+        int i = g_first + (int)((g_my - g_geo.top) / g_geo.rowh);
+        if (i < g_n && i - g_first < VIS_ROWS && g_rows[i].en) {
+            g_sel = i;
+            ok = 1;
         }
     }
 
     if (up || down) {
-        int i, n = k_pages[g_page].n;
-        for (i = 0; i < n; i++) {               /* skip the greyed rows */
-            g_sel = wrap(g_sel + (up ? -1 : 1), n);
-            if (row_enabled(k_pages[g_page].rows[g_sel]))
+        int i;
+        for (i = 0; i < g_n; i++) {     /* skip the greyed rows */
+            g_sel = wrap(g_sel + (up ? -1 : 1), g_n);
+            if (g_rows[g_sel].en)
                 break;
         }
     }
-    row = k_pages[g_page].rows[g_sel];
+    for (; wheel; wheel += wheel > 0 ? -1 : 1) {    /* no wrap at the ends */
+        int i = g_sel, d = wheel > 0 ? -1 : 1;
+        for (i += d; i >= 0 && i < g_n && !g_rows[i].en; i += d)
+            ;
+        if (i >= 0 && i < g_n)
+            g_sel = i;
+    }
+    row = g_rows[g_sel].kind;
     if (left || right)
         change(row, right ? 1 : -1);
     if (!ok || !row_enabled(row))
         return 0;
 
-    switch (row) {
-    case ROW_P1: case ROW_PAL1: case ROW_P2: case ROW_PAL2: case ROW_STAGE:
-        g_sel = 5;                              /* Enter on a value: go on */
+    if (is_toggle(row)) {
+        change(row, 1);
         return 0;
+    }
+    {
+        int n;
+        if (list_var(row, &n)) {
+            drop_open(row);
+            return 0;
+        }
+    }
+    switch (row) {
     case ROW_FIGHT:
         rq->what = DBG_FIGHT;
         rq->a = g_p1; rq->b = g_p2; rq->c = g_stage;
-        break;
-    case ROW_SCREEN:
-        rq->what = DBG_SCREEN;
-        rq->a = g_screen;
         break;
     case ROW_MAIN:
         rq->what = DBG_SCREEN;
@@ -576,19 +854,10 @@ int dbg_menu_tick(struct dbg_request *rq)
         rq->what = DBG_FIGHT_KEY;               /* 0..3, as F9..F12 */
         rq->a = row - ROW_WIN_ROUND;
         break;
-    case ROW_FINISHER:
-        rq->what = DBG_FINISHER;
-        rq->a = g_fin;
-        break;
     case ROW_MOTARO: case ROW_SK:
         rq->what = DBG_BOSS;
         rq->a = row == ROW_MOTARO ? 24 : 25;
         break;
-    case ROW_INFO: case ROW_KEYS: case ROW_HITBOX:
-        change(row, 1);
-        return 0;
-    case ROW_SPEED: case ROW_SLOT:
-        return 0;
     case ROW_SAVE: case ROW_LOAD:
         rq->what = row == ROW_SAVE ? DBG_SAVE_STATE : DBG_LOAD_STATE;
         rq->a = g_slot;
@@ -600,72 +869,34 @@ int dbg_menu_tick(struct dbg_request *rq)
     return rq->what != DBG_NONE;
 }
 
-/* A row's value, "" for none. */
-static void row_value(int i, char *v, size_t n)
+static void footer_text(char *f, size_t n, int rows)
 {
-    char a[96], b[96];
+    char p[96], q[96], c[96], o[96], pos[32];
 
-    v[0] = 0;
-    switch (i) {
-    case ROW_P1: snprintf(v, n, "< %2d %s >", g_p1, CharacterNames[g_p1]); break;
-    case ROW_P2: snprintf(v, n, "< %2d %s >", g_p2, CharacterNames[g_p2]); break;
-    case ROW_PAL1: snprintf(v, n, "< %s >", k_pal[DbgPalette[0]]); break;
-    case ROW_PAL2: snprintf(v, n, "< %s >", k_pal[DbgPalette[1]]); break;
-    case ROW_STAGE: snprintf(v, n, "< %2d %s >", g_stage, stage_name(g_stage)); break;
-    case ROW_SCREEN:
-        snprintf(v, n, "< %2d %s >", g_screen, FETaskNames[g_screen] + 8);
-        break;
-    case ROW_KEYS:
-        plat_key_glyph(PK_DBG_KO_P2, a, sizeof a);
-        plat_key_glyph(PK_DBG_LOSE, b, sizeof b);
-        snprintf(v, n, "< %s >  %s-%s", g_keys ? "ON" : "OFF", a, b);
-        break;
-    case ROW_INFO:
-        plat_key_glyph(PK_BACK, a, sizeof a);
-        snprintf(v, n, "< %s >  %s", g_info ? "ON" : "OFF", a);
-        break;
-    case ROW_FINISHER: snprintf(v, n, "< %s >", k_fin[g_fin]); break;
-    case ROW_HITBOX: snprintf(v, n, "< %s >", g_hitbox ? "ON" : "OFF"); break;
-    case ROW_SPEED: {
-        char bar[N_SPEEDS + 1];
-        int i;
-        for (i = 0; i < N_SPEEDS; i++)
-            bar[i] = i <= g_speed ? '#' : '-';
-        bar[N_SPEEDS] = 0;
-        snprintf(v, n, "< %s %3d%% >", bar, k_speed[g_speed]);
-        break;
-    }
-    case ROW_SLOT:
-        snprintf(v, n, "< %d %s >", g_slot + 1,
-                 dbg_state_has(g_slot) ? "SAVED" : "EMPTY");
-        break;
-    }
-}
-
-static void title_text(char *t, size_t n)
-{
-    snprintf(t, n, "DEBUG MENU");
-}
-
-static void footer_text(char *f, size_t n)
-{
-    char p[96], q[96], c[96], o[96];
-
+    pos[0] = 0;
+    if (g_n > VIS_ROWS)
+        snprintf(pos, sizeof pos, "%d-%d / %d   ", g_first + 1, g_first + rows, g_n);
     if (g_using_pad) {                  /* only the pad's pictures */
         int k = plat_pad_glyph_kind(0, g_pad.kind);
         plat_pad_glyph(k, PB_L1, p, sizeof p);
         plat_pad_glyph(k, PB_R1, q, sizeof q);
         plat_pad_glyph(k, PB_SOUTH, o, sizeof o);
         plat_pad_glyph(k, PB_EAST, c, sizeof c);
-        snprintf(f, n, "%s%s TAB   %s PICK   %s CLOSE", p, q, o, c);
     } else {                            /* only the keyboard's */
         plat_key_glyph(PK_DBG_PAGE_PREV, p, sizeof p);
         plat_key_glyph(PK_DBG_PAGE_NEXT, q, sizeof q);
         plat_key_glyph(PK_TEST, c, sizeof c);
         plat_key_glyph(PK_OK, o, sizeof o);
-        snprintf(f, n, "%s%s TAB   ARROWS OR MOUSE   %s PICK   %s CLOSE",
-                 p, q, o, c);
     }
+    if (g_drop && !g_using_pad)         /* the list goes back with Esc */
+        plat_key_glyph(PK_SETTINGS, c, sizeof c);
+    if (g_drop)
+        snprintf(f, n, "%s %s   %s %s", o, tx("ELIGE", "PICK"),
+                 c, tx("VUELVE", "BACK"));
+    else
+        snprintf(f, n, "%s%s%s %s   %s %s   %s %s", pos, p, q,
+                 tx("CATEGORIA", "CATEGORY"), o, tx("ELIGE", "PICK"), c,
+                 tx("CIERRA", "CLOSES"));
 }
 
 /* Points the next boxes are moved right by, for a picture beside them
@@ -1191,23 +1422,51 @@ void ui_icon_draw(float x, float y, float size)
 
 void dbg_menu_draw(void)
 {
-    char vals[MAX_PAGE_ROWS][192], title[96], footer[512];
-    const char *vp[MAX_PAGE_ROWS], *lp[MAX_PAGE_ROWS], *tabs[N_PAGES];
-    int en[MAX_PAGE_ROWS], i, rows = k_pages[g_page].n;
+    const char *tabs[N_PAGES], *lp[VIS_ROWS], *vp[VIS_ROWS];
+    int en[VIS_ROWS], i, rows;
+    char footer[512];
 
-    for (i = 0; i < N_PAGES; i++)
-        tabs[i] = k_pages[i].name;
-    title_text(title, sizeof title);
-    footer_text(footer, sizeof footer);
+    build();
+    if (g_sel < g_first)
+        g_first = g_sel;
+    if (g_sel >= g_first + VIS_ROWS)
+        g_first = g_sel - VIS_ROWS + 1;
+    if (g_first > g_n - VIS_ROWS)
+        g_first = g_n - VIS_ROWS > 0 ? g_n - VIS_ROWS : 0;
+    if (g_first > 0 && g_first == g_sel && g_rows[g_sel - 1].kind == ROW_HEAD)
+        g_first--;                      /* a row's heading stays in sight */
+    rows = g_n - g_first < VIS_ROWS ? g_n - g_first : VIS_ROWS;
     for (i = 0; i < rows; i++) {
-        int r = k_pages[g_page].rows[i];
-        row_value(r, vals[i], sizeof vals[i]);
-        vp[i] = vals[i];
-        lp[i] = k_label[r];
-        en[i] = row_enabled(r);
+        lp[i] = g_rows[g_first + i].label;
+        vp[i] = g_rows[g_first + i].value;
+        en[i] = g_rows[g_first + i].en;
     }
-    ui_menu_show(title, tabs, N_PAGES, g_page, lp, vp, en, rows, g_sel,
-                 footer, NULL);
+    tabs[PAGE_FIGHT] = tx("PELEA", "FIGHT");
+    tabs[PAGE_MENUS] = tx("MENUS", "MENUS");
+    tabs[PAGE_TOOLS] = tx("OPCIONES", "TOOLS");   /* fits the panel */
+    footer_text(footer, sizeof footer, rows);
+    /* the categories down the side panel, as the settings menu's */
+    ui_menu_show(tx("MENU DEBUG", "DEBUG MENU"), tabs, -N_PAGES, g_page, lp, vp,
+                 en, rows, g_sel - g_first, footer, &g_geo);
+    if (g_drop) {                       /* the open list, over the menu */
+        const char *dl[VIS_DROP], *dv[VIS_DROP];
+        int de[VIS_DROP], dn;
+
+        if (g_drop_sel < g_drop_first)
+            g_drop_first = g_drop_sel;
+        if (g_drop_sel >= g_drop_first + VIS_DROP)
+            g_drop_first = g_drop_sel - VIS_DROP + 1;
+        dn = g_drop_n - g_drop_first < VIS_DROP ? g_drop_n - g_drop_first : VIS_DROP;
+        for (i = 0; i < dn; i++) {
+            dl[i] = g_drop_lab[g_drop_first + i];
+            dv[i] = g_drop_first + i == g_drop_cur ? tx("ACTUAL", "CURRENT") : "";
+            de[i] = 1;
+        }
+        ui_menu_layer = 1;
+        ui_menu_show(g_drop_title, NULL, 0, 0, dl, dv, de, dn,
+                     g_drop_sel - g_drop_first, footer, &g_dgeo);
+        ui_menu_layer = 0;
+    }
 }
 
 /* ---------------------------------------------------------------- frame
@@ -1271,14 +1530,18 @@ void dbg_frame_draw(int ww, int wh)
     end_2d();
 }
 
-void dbg_info_draw(const char *line)
+void dbg_info_draw_at(const char *line, int row)
 {
+    float y = row * (CH_H + 2.0f);
+
     begin_2d();
     glBegin(GL_QUADS);
     glColor4f(0.0f, 0.0f, 0.0f, 0.6f);
-    rect(0, 0, (float)strlen(line) * CH_W + 4, CH_H + 2);
+    rect(0, y, (float)strlen(line) * CH_W + 4, CH_H + 2);
     glColor4f(0.4f, 1.0f, 0.4f, 1.0f);
-    text(2, 2, 1.0f, line);
+    text(2, y + 2, 1.0f, line);
     glEnd();
     end_2d();
 }
+
+void dbg_info_draw(const char *line) { dbg_info_draw_at(line, 0); }

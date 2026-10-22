@@ -129,12 +129,16 @@ void online_after_frame(void)
         badge(1, o->name, &ol, w - 4.0f, 6.0f, 2, 0.8f);
     } else if ((CurrentTask == 3 && FE_CurrentTask == 0x2b)
                || CurrentTask == 6) {
-        /* the versus screen and the fight: player 1 (the host) left */
+        /* the versus screen and the fight: player 1 (the host) left. In
+         * the fight, above the life bars, beside the moves (i) and pause
+         * buttons in the top corners, so they cover nothing. */
         int host = mpnet_am_server();
-        float y = CurrentTask == 6 ? 40.0f : 6.0f;
-        float k = CurrentTask == 6 ? 0.6f : 0.8f;
+        int fight = CurrentTask == 6;
+        float y = fight ? 2.0f : 6.0f;
+        float k = fight ? 0.55f : 0.8f;
+        float x = fight ? 26.0f : 4.0f;
 
-        badge(2, host ? me->name : o->name, host ? &ml : &ol, 4.0f, y, 0, k);
-        badge(3, host ? o->name : me->name, host ? &ol : &ml, w - 4.0f, y, 2, k);
+        badge(2, host ? me->name : o->name, host ? &ml : &ol, x, y, 0, k);
+        badge(3, host ? o->name : me->name, host ? &ol : &ml, w - x, y, 2, k);
     }
 }

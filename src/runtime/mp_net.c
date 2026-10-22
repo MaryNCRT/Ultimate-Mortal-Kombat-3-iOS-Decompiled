@@ -21,10 +21,13 @@
  *
  * The ONLINE screen (FrontEnd.c, FE_Task_Online) opens a session. FIND MATCH
  * asks for a player by their code -- the id in their profiles.ini -- and the
- * game with that code, if its ONLINE screen is open, answers and hosts. Here
- * the question goes to the games on this computer and on the local network
- * (UDP ports 27560-27575, broadcast); Epic Online Services, for players on
- * the internet, goes under the same calls (not yet: it needs the EOS SDK).
+ * game with that code, if its ONLINE screen is open, answers and hosts. The
+ * question goes two ways at once: to the games on this computer and on the
+ * local network (UDP ports 27560-27575, broadcast), and over the internet
+ * through Epic Online Services (mp_eos.c), where the game with the ONLINE
+ * screen open owns a lobby named after its code. Whichever answers is the
+ * link, and the same messages go over either: over EOS they are P2P
+ * datagrams, acknowledged here exactly as over UDP.
  */
 
 #ifdef _WIN32
@@ -45,9 +48,11 @@ typedef int SOCKET;
 #endif
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
+#include "mp_eos.h"
 #include "mp_net.h"
 #include "profiles.h"
 
@@ -62,6 +67,7 @@ void endMP(void);
 #define RESEND_MS     120
 #define JOIN_MS       400
 #define FIND_MS       10000             /* "not found" after ten seconds */
+#define FIND_EOS_MS   30000             /* found over the internet: thirty */
 #define KEEP_MS       1000
 #define LINK_LOST_MS  15000
 #define WINDOW        256               /* reliable packets in flight */
@@ -74,7 +80,10 @@ static int      g_session;              /* gSession exists */
 static int      g_connected;
 static int      g_server;
 static int      g_status = MPNET_IDLE;
-static struct sockaddr_in g_peer_addr;
+/* Where a message came from or goes: a UDP address, or an EOS user. */
+struct paddr { int eos; struct sockaddr_in in; char who[40]; };
+static struct paddr g_peer_addr;
+static char     g_eos_target[40];       /* the code's owner, from the lobby search */
 static struct mpnet_peer g_peer;
 static char     g_want[16];             /* the code FIND MATCH asked for */
 static unsigned g_find_start, g_join_last, g_keep_last, g_heard;
@@ -163,11 +172,19 @@ static void sock_close(void)
     g_port = 0;
 }
 
-static void send_to(const struct sockaddr_in *a, const void *p, int n)
+static void send_in(const struct sockaddr_in *a, const void *p, int n)
 {
     if (g_sock != INVALID_SOCKET)
         sendto(g_sock, (const char *)p, n, 0, (const struct sockaddr *)a,
                sizeof *a);
+}
+
+static void send_to(const struct paddr *a, const void *p, int n)
+{
+    if (a->eos)
+        mpeos_send(a->who, p, n);
+    else
+        send_in(&a->in, p, n);
 }
 
 static void send_peer(const void *p, int n) { send_to(&g_peer_addr, p, n); }
@@ -240,7 +257,7 @@ static void reliable_reset(void)
     g_in_next = 0;
 }
 
-static void connect_to(const struct sockaddr_in *a, const unsigned char *info,
+static void connect_to(const struct paddr *a, const unsigned char *info,
                        int server)
 {
     g_peer_addr = *a;
@@ -251,9 +268,13 @@ static void connect_to(const struct sockaddr_in *a, const unsigned char *info,
     g_heard = g_keep_last = now_ms();
     g_want[0] = 0;
     reliable_reset();
-    printf("online: connected to %s (%s) at %s:%d, %s\n", g_peer.name,
-           g_peer.code, inet_ntoa(a->sin_addr), ntohs(a->sin_port),
-           server ? "hosting" : "joining");
+    if (a->eos)
+        printf("online: connected to %s (%s) over the internet, %s\n",
+               g_peer.name, g_peer.code, server ? "hosting" : "joining");
+    else
+        printf("online: connected to %s (%s) at %s:%d, %s\n", g_peer.name,
+               g_peer.code, inet_ntoa(a->in.sin_addr), ntohs(a->in.sin_port),
+               server ? "hosting" : "joining");
 }
 
 /* The link went: as when GKSession reported the peer gone. */
@@ -274,8 +295,14 @@ int mpnet_session_exists(void) { return g_session; }
 
 void mpnet_session_create(void)
 {
-    if (!sock_open())
+    /* UMK3_ONLINE_NOLAN=1: the internet alone (testing EOS on one PC) */
+    const char *nolan = getenv("UMK3_ONLINE_NOLAN");
+    int lan = !(nolan && nolan[0] == '1') && sock_open();
+
+    mpeos_start();
+    if (!lan && (mpeos_state() == MPEOS_OFF || mpeos_state() == MPEOS_FAILED))
         return;
+    mpeos_advertise(my_code());
     g_session = 1;
     g_connected = 0;
     g_server = 0;
@@ -295,6 +322,7 @@ void mpnet_session_destroy(void)
     g_connected = 0;
     g_session = 0;
     g_want[0] = 0;
+    mpeos_unadvertise();
     sock_close();
 }
 
@@ -303,6 +331,7 @@ int mpnet_session_state(void)    { return g_connected ? 2 : 0; }
 int mpnet_am_server(void)        { return g_connected && g_server; }
 int mpnet_is_working(void)       { return g_session && g_want[0] != 0; }
 int mpnet_peer_count(void)       { return 0; }
+int mpnet_internet(void)         { return mpeos_state(); }
 
 void mpnet_send(long type, const void *data, int len, int reliable)
 {
@@ -349,6 +378,8 @@ void mpnet_find(const char *code)
     if (!g_session || g_connected)
         return;
     snprintf(g_want, sizeof g_want, "%s", code);
+    g_eos_target[0] = 0;
+    mpeos_lookup(code);
     g_find_start = now_ms();
     g_join_last = 0;
     g_status = MPNET_SEARCHING;
@@ -372,6 +403,7 @@ static void send_join(void)
 {
     unsigned char b[4 + 16 + INFO_BYTES];
     struct sockaddr_in a;
+    struct paddr e;
     int i;
 
     hdr(b, K_JOIN);
@@ -385,18 +417,28 @@ static void send_join(void)
             continue;
         a.sin_port = htons((unsigned short)(PORT_FIRST + i));
         a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-        send_to(&a, b, sizeof b);
+        send_in(&a, b, sizeof b);
         a.sin_addr.s_addr = htonl(INADDR_BROADCAST);
-        send_to(&a, b, sizeof b);
+        send_in(&a, b, sizeof b);
+    }
+    if (g_eos_target[0]) {
+        memset(&e, 0, sizeof e);
+        e.eos = 1;
+        snprintf(e.who, sizeof e.who, "%s", g_eos_target);
+        send_to(&e, b, sizeof b);
     }
 }
 
 /* -------------------------------------------------------------- poll */
 
-static int from_peer(const struct sockaddr_in *a)
+static int from_peer(const struct paddr *a)
 {
-    return g_connected && a->sin_addr.s_addr == g_peer_addr.sin_addr.s_addr
-           && a->sin_port == g_peer_addr.sin_port;
+    if (!g_connected || a->eos != g_peer_addr.eos)
+        return 0;
+    if (a->eos)
+        return !strcmp(a->who, g_peer_addr.who);
+    return a->in.sin_addr.s_addr == g_peer_addr.in.sin_addr.s_addr
+           && a->in.sin_port == g_peer_addr.in.sin_port;
 }
 
 static void deliver(const unsigned char *p, int n)
@@ -405,7 +447,7 @@ static void deliver(const unsigned char *p, int n)
     processPacket(p + 4, n - 4, type);
 }
 
-static void on_packet(const unsigned char *b, int n, const struct sockaddr_in *a)
+static void on_packet(const unsigned char *b, int n, const struct paddr *a)
 {
     if (n < 4 || b[0] != 'U' || b[1] != '3')
         return;
@@ -530,24 +572,41 @@ static void on_packet(const unsigned char *b, int n, const struct sockaddr_in *a
 void mpnet_poll(void)
 {
     unsigned char b[MAX_PACKET + 16];
-    struct sockaddr_in a;
+    struct paddr a;
     unsigned t;
     int n, i;
 
-    if (g_sock == INVALID_SOCKET)
+    mpeos_tick();
+    if (!g_session)
         return;
-    for (;;) {
-        socklen_t al = sizeof a;
-        n = (int)recvfrom(g_sock, (char *)b, sizeof b, 0, (struct sockaddr *)&a, &al);
+    memset(&a, 0, sizeof a);
+    while (g_sock != INVALID_SOCKET) {
+        socklen_t al = sizeof a.in;
+        n = (int)recvfrom(g_sock, (char *)b, sizeof b, 0, (struct sockaddr *)&a.in, &al);
         if (n <= 0)
             break;
         on_packet(b, n, &a);
-        if (g_sock == INVALID_SOCKET)   /* the packet ended the session */
+        if (!g_session)                 /* the packet ended the session */
+            return;
+    }
+    for (;;) {
+        struct paddr e;
+        memset(&e, 0, sizeof e);
+        e.eos = 1;
+        n = mpeos_recv(e.who, sizeof e.who, b, sizeof b);
+        if (n == 0)
+            break;
+        if (n > 0)
+            on_packet(b, n, &e);
+        if (!g_session)
             return;
     }
     t = now_ms();
+    if (!g_connected && g_want[0] && !g_eos_target[0]
+        && mpeos_lookup_result(g_eos_target, sizeof g_eos_target) == 1)
+        g_join_last = 0;                /* found over the internet: ask now */
     if (!g_connected && g_want[0]) {
-        if (t - g_find_start > FIND_MS) {
+        if (t - g_find_start > (g_eos_target[0] ? FIND_EOS_MS : FIND_MS)) {
             g_want[0] = 0;
             g_status = MPNET_NOT_FOUND;
         } else if (!g_join_last || t - g_join_last > JOIN_MS) {

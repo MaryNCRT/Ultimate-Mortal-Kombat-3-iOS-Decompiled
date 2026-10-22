@@ -8,7 +8,8 @@
  * the debug menu (debug_menu.c, whose box it shares); Esc again, the pad's
  * east button (circle / B) or CLOSE closes it. Arrows or W/S move,
  * left/right change a value, Enter picks, Q / E or L1 / R1 change the tab;
- * the mouse works as in the debug menu. Every change is written to umk3.ini
+ * the mouse works as in the debug menu, and its wheel moves the cursor (in
+ * an open list too). Every change is written to umk3.ini
  * at once with the launcher's own names, so the launcher shows it (it reads
  * the ini again when it comes to the front) and the next start keeps it;
  * the ini's other lines are kept as they were.
@@ -248,6 +249,7 @@ void set_menu_after_frame(int vx, int vy, int vw, int vh)
     g_open = 1;
     g_mouse_was = 1;
     g_esc_was = 1;                      /* the press that opened it */
+    plat_mouse_wheel();                 /* turns made while it was shut */
     memcpy(g_pad_was, g_pad, sizeof g_pad_was);
     printf("settings menu: open\n");
 }
@@ -1021,9 +1023,19 @@ static void drop_apply(int i)
 /* The open list's turn: arrows (a grid's go across too), Enter picks, Esc
  * or the pad's east button goes back, a click picks or, outside, goes back. */
 static void drop_tick(int up, int down, int left, int right, int ok, int back,
-                      int click)
+                      int click, int wheel)
 {
     int grid = drop_grid(g_drop_kind), cols = grid ? g_ggeo.cols : 1;
+
+    if (wheel) {                        /* a row of the grid a notch; no wrap */
+        g_drop_sel -= wheel * (cols > 0 ? cols : 1);
+        while (g_drop_sel < 0)
+            g_drop_sel += cols > 1 ? cols : 1;
+        while (g_drop_sel > g_drop_n - 1)
+            g_drop_sel -= cols > 1 ? cols : 1;
+        if (g_drop_sel < 0)
+            g_drop_sel = 0;
+    }
 
     if (back) {
         drop_close();
@@ -1246,7 +1258,7 @@ static void turn_page(int d)
 void set_menu_tick(void)
 {
     static int was[10];
-    int up, down, left, right, ok, prev, next, esc, click, back;
+    int up, down, left, right, ok, prev, next, esc, click, back, wheel;
 
     build();
     if (g_sel >= g_n)
@@ -1255,6 +1267,7 @@ void set_menu_tick(void)
         g_sel++;                        /* a heading is never the one chosen */
     if (g_capture) {
         capture();
+        plat_mouse_wheel();             /* the wheel waits too */
         memcpy(g_pad_was, g_pad, sizeof g_pad_was);
         g_mouse_was = g_mdown;
         {                               /* swallow the edges meanwhile */
@@ -1282,9 +1295,10 @@ void set_menu_tick(void)
     memcpy(g_pad_was, g_pad, sizeof g_pad_was);
     click = g_mdown && !g_mouse_was;
     g_mouse_was = g_mdown;
+    wheel = plat_mouse_wheel();
 
     if (g_drop) {
-        drop_tick(up, down, left, right, ok, esc || back, click);
+        drop_tick(up, down, left, right, ok, esc || back, click, wheel);
         if (g_dirty) {
             save_ini();
             g_dirty = 0;
@@ -1327,6 +1341,13 @@ void set_menu_tick(void)
             if (g_rows[g_sel].en)
                 break;
         }
+    }
+    for (; wheel; wheel += wheel > 0 ? -1 : 1) {    /* no wrap at the ends */
+        int i, d = wheel > 0 ? -1 : 1;
+        for (i = g_sel + d; i >= 0 && i < g_n && !g_rows[i].en; i += d)
+            ;
+        if (i >= 0 && i < g_n)
+            g_sel = i;
     }
     if (left || right)
         change(g_rows[g_sel].kind, right ? 1 : -1);

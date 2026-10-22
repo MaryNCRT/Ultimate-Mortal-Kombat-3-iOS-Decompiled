@@ -89,6 +89,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "rollback.h"
 
 #include "platform/platform.h"
 #include "platform/gl.h"
@@ -545,6 +546,8 @@ static void start_app(void)
 #include <io.h>
 #include <stdint.h>
 
+
+
 /* The function an address falls in, from the exe's own COFF symbol table
  * (the build does not strip it): the nearest function symbol at or below
  * the address. Read from the file on disk, so it works after any crash
@@ -708,6 +711,30 @@ static LONG WINAPI on_crash(EXCEPTION_POINTERS *ep)
             crash_symbol((void *)fp[1], fn, sizeof fn);
             pos += snprintf(msg + pos, sizeof msg - pos, "  %s\r\n", fn);
             fp = (unsigned long *)fp[0];
+        }
+    }
+#elif defined(_M_X64) || defined(__x86_64__)
+    if (code != EXCEPTION_STACK_OVERFLOW) {
+        /* Unwind from the faulting context by the exe's .pdata; each frame
+         * as an exe offset, for llvm-symbolizer against the .pdb. */
+        CONTEXT c = *ep->ContextRecord;
+        int i;
+        for (i = 0; i < 24 && c.Rip && pos < (int)sizeof msg - 200; i++) {
+            DWORD64 base = 0, frame = 0;
+            void *handler = NULL;
+            PRUNTIME_FUNCTION rf = RtlLookupFunctionEntry(c.Rip, &base, NULL);
+
+            crash_symbol((void *)c.Rip, fn, sizeof fn);
+            pos += snprintf(msg + pos, sizeof msg - pos, "  %s (exe offset 0x%lx)\r\n",
+                            fn, (unsigned long)(c.Rip - (DWORD64)(uintptr_t)self));
+            if (!rf) {                  /* a leaf: the return address on top */
+                if (IsBadReadPtr((void *)(uintptr_t)c.Rsp, 8))
+                    break;
+                c.Rip = *(DWORD64 *)c.Rsp;
+                c.Rsp += 8;
+                continue;
+            }
+            RtlVirtualUnwind(0, base, c.Rip, rf, &c, &handler, &frame, NULL);
         }
     }
 #endif
@@ -1583,6 +1610,16 @@ static int render_alloc(int w, int h)
     }
     g_rs_bind_fb(RS_FRAMEBUFFER, 0);
     printf("render buffer %dx%d, antialiasing x%d\n", w, h, g_rs_samples);
+    {
+        /* which OpenGL draws: a window moved to a monitor on another
+         * adapter, or Windows' own 1.1 renderer, has other limits */
+        GLint max = 0;
+        glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max);
+        printf("opengl: %s / %s / %s, textures up to %d\n",
+               (const char *)glGetString(GL_VENDOR),
+               (const char *)glGetString(GL_RENDERER),
+               (const char *)glGetString(GL_VERSION), (int)max);
+    }
     return 1;
 
 fail:
@@ -1812,13 +1849,16 @@ long t_dizzy_sleep(void *thread);
  * the handler of its current frame (+0xa4 the index, 8 bytes a frame). */
 static int opponent_dizzy(void)
 {
-    char *t = *(char **)(Plyr + 108 + 4);
+    /* 32-bit words, as the engine stores them (the x64 build keeps its
+     * heap below 4 GB): reading them as 8-byte pointers crashed there */
+    char *t = (char *)(uintptr_t)*(uint32_t *)(Plyr + 108 + 4);
     unsigned f;
 
     if (!t)
         return 0;
     f = *(unsigned *)(t + 0xa4);
-    return *(uintptr_t *)(t + f * 8 + 4) == (uintptr_t)t_dizzy_sleep;
+    return *(uint32_t *)(t + f * 8 + 4)
+           == (uint32_t)(uintptr_t)t_dizzy_sleep;
 }
 
 int dbg_finishing(void)
@@ -2117,6 +2157,15 @@ static void hb_update(void)
 
     PortAfterScene = on ? hb_draw : NULL;
     PortStrikeHook = on ? hb_strike : NULL;
+    {
+        /* the menu's cheats (logic/other.c); never in an online fight,
+         * where the other player's game would not have them */
+        extern int PortDbgClock, PortDbgHealth;
+        int dbg = g_cfg_debug_keys && GameMode != 1;
+
+        PortDbgHealth = dbg ? dbg_health_mask() : 0;
+        PortDbgClock = dbg ? dbg_clock_frozen() : 0;
+    }
 }
 
 /* The fight's speed, from FIGHT SPEED (or UMK3_DBG_SPEED=<percent>): the
@@ -3008,6 +3057,7 @@ int main(int argc, char **argv)
                     limeTouchScreenY[0] = limeLastTouchScreenY[0] = hy;
                 }
                 mpnet_poll();       /* ONLINE: the other game's packets (port) */
+                rb_poll();          /* rollback: inputs after a fight */
                 GameCodeMain();
                 PortPadPalette[0] = PortPadPalette[1] = 0;  /* off the select screen */
                 if (on) {
@@ -3098,6 +3148,31 @@ int main(int argc, char **argv)
                              CharacterNames[PLAYER2MODEL % 26],
                              RoundWins[0], RoundWins[1]);
                     dbg_info_draw(line);
+                }
+                {
+                    /* FRAMES PER SECOND and ONLINE NUMBERS, under it */
+                    static double t0;
+                    static int frames, fps;
+                    char line[160];
+                    int at = dbg_info_on();
+
+                    frames++;
+                    if (plat_time() - t0 >= 1.0) {
+                        fps = frames;
+                        frames = 0;
+                        t0 = plat_time();
+                    }
+                    if (dbg_fps_on()) {
+                        snprintf(line, sizeof line, "%d FPS", fps);
+                        dbg_info_draw_at(line, at++);
+                    }
+                    if (dbg_net_on()) {
+                        if (!rb_stats(line, sizeof line))
+                            snprintf(line, sizeof line, "%s", GameMode == 1
+                                     ? "ONLINE: CLASSIC (NO ROLLBACK)"
+                                     : "ONLINE: NOT IN AN ONLINE FIGHT");
+                        dbg_info_draw_at(line, at++);
+                    }
                 }
                 if (g_rs_on)        /* the menu draws in the game's buffer */
                     dbg_menu_after_frame(0, 0, g_rs_w, g_rs_h,

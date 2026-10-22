@@ -1,6 +1,6 @@
 # Project Status & Verification Progress
 
-**Last updated:** 2026-10-18 · See [CHANGELOG.md](CHANGELOG.md) for release history and [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md) for architecture.
+**Last updated:** 2026-10-22 · See [CHANGELOG.md](CHANGELOG.md) for release history and [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md) for architecture.
 
 ---
 
@@ -15,6 +15,105 @@
 | **Cross-Platform Launcher** | Multiplatform (Win/Linux) | 100% pure Node.js / Electron | Standalone compilation via `zig cc` (0.13.0), zero Python/CMake runtime dependency |
 
 ---
+
+## Release 0.1.6 beta (2026-10-22)
+
+Published as the GitHub pre-release `v0.1.6-beta`, two packages:
+
+- `UMK3-PC-0.1.6-beta.zip` (Windows): `launcher/make_release.py` over the
+  `electron-builder --win dir` output. It now copies all of `src/` (the old
+  file list had lost `mp_eos.c` and `ui_alert.c` and still named the
+  removed .ps1 scripts), the EOS SDK from `TOOLS/eos` (headers, the Win64
+  DLL, eos.ini; git-ignored, never in the repository), and builds the stub
+  with zig when llvm-mingw is missing. Checked: the release folder compiles
+  umk3-game64.exe (with EOS) and umk3-game.exe from the 1.2.59 .ipa.
+- `UMK3-PC-0.1.6-beta-linux-x64.tar.gz`: `electron-builder --linux tar.gz`,
+  repacked so the launcher and helpers are executable (a tar made on
+  Windows has no exec bits). The EOS SDK lands in `resources/tools/eos`
+  (Windows merges TOOLS/ into tools/), so `findEosDir` in compile.js looks
+  for both spellings. **Never run on Linux.**
+- Known: the launcher's updater takes the first .zip, so a Linux launcher
+  would offer the Windows zip; Linux players update by hand.
+- Open question for Mary: whether the EOS SDK headers may be redistributed
+  under Epic's licence, and whether eos.ini's client credentials are a
+  game-client policy (they are public in the zip).
+
+## Debug menu, mouse wheel, iPhone-style boxes on Linux (2026-10-22, tested on Windows)
+
+Port, not in the binary. Built for Windows x64 and x86; the Linux files
+pass a zig `x86_64-linux-gnu` compile with the SDL2 lint header, but nobody
+has run them on Linux yet. Mary tested all of it on Windows on 2026-10-22.
+
+- **Debug menu (F2)** is laid out like the settings menu (Esc): a side panel
+  with three categories (FIGHT = fighters + round + Arcade + cheats, MENUS,
+  TOOLS/OPCIONES = options + tools + save states), sections under headings,
+  a list that scrolls, and a list of values that opens with Enter or a
+  click. Labels are Spanish or English, following the game's language.
+  Picking a SCREEN or a FINISHER from its list does it at once.
+- **New debug options:**
+  - INFINITE HEALTH (player 1, 2 or both) and FREEZE CLOCK. These are the
+    PortDbgHealth/PortDbgClock hooks in logic/other.c's bar_reducer and
+    t_clock4, beside training's. game_main.c forces them off in an online
+    fight.
+  - FRAMES PER SECOND and ONLINE NUMBERS (rb_stats: frame, delay, remote
+    lead, rollbacks, deepest, holds, desyncs), drawn under the INFO line.
+- **Mouse wheel:** plat_mouse_wheel (WM_MOUSEWHEEL, SDL_MOUSEWHEEL) moves
+  the cursor in both menus and in their open lists.
+- **ui_alert.c:** the iPhone OS 3 boxes now live in one file shared by both
+  backends: the alerts (plat_ask), the menus, the grid, the badge, and the
+  pad button pictures.
+  - Windows supplies GDI's Arial and its raw keys (ui_alert.h).
+  - Linux uses stb_truetype (platform/stb, public domain/MIT) with the first
+    font it finds: "aditional textures/fonts/ui_bold.ttf"/"ui.ttf", then
+    Liberation Sans, DejaVu, Noto, then fontconfig. Linux also gets the
+    keyboard and pad pictures, and the pad's kind comes from the SDL vendor
+    id.
+- **Alerts with the pad:**
+  - Left / right (pad or arrow keys) light a button.
+  - South or START presses the lit button, or OK when none is lit.
+  - East is CANCEL.
+
+## Rollback netcode for ONLINE fights (2026-10-22, in 0.1.6 beta)
+
+Status: **tested by Mary on one PC, two windows (LAN), 64-bit:** fights run on
+both, 0 desyncs, snapshots 0.8 ms / 6.1 MB, a few holds. Not yet tested over the
+internet or 64 vs 32 bits. Port, not in the binary.
+
+Fixed while testing (2026-10-22):
+- `limeMalloc` takes its blocks from the save-state arena during a rollback fight;
+  its own region is not rolled back, so a re-run frame freed a block twice.
+- Snapshots skip `PreloadedCharacters` (60 MB the fight only reads); the copy was
+  66 MB and 11 ms a frame.
+- The guest waits, before loading the fight, for the host's hello and takes its
+  level. Before, each side loaded its own random level; with the classic netcode
+  the host's level arrived mid-fight and the guest crashed in `RenderLevelBG`.
+- Multiplayer versus screen: the kode wheels each side may press were transcribed
+  wrong (armv7 0x16b98: host 0..4, guest 7..9); portraits and wheels now sit at
+  the screen's edges as on `FE_Task_VS_Screen`.
+- 64-bit crash reports unwind the stack (.pdata) and print exe offsets.
+
+- `src/runtime/rollback.c`: both machines run the fight from both players' inputs;
+  only inputs travel (packets 20 INPUT, 21 HELLO, 22 HASH over `mp_net`). The
+  remote input is predicted as the last confirmed one; a late input that differs
+  rolls the state back and re-runs the frames silent and undrawn. Input delay 2
+  (`UMK3_RB_DELAY`), at most 8 frames predicted, a desync hash every 60 frames
+  (`DESYNC at frame` in the log). `UMK3_NETCODE=classic` turns it off.
+- `src/runtime/savestate.c`: per-frame snapshots (`st_rb_*`) of `.umkstd/.umkstb`
+  plus the arena pages written during the fight (MEM_WRITE_WATCH). Files built with
+  `UMK3_NO_ROLLBACK` (lime_menu, lime_platform, lime_app, wav, limeMPGameSpecific)
+  keep their state out of it; `PreloadedCharacters` too.
+- Determinism: `random32` uses `umk3_rand`, held in the state; the frame step is
+  pinned to 1. A recorded fight replays identically on x64 over 3038 ticks; x86
+  differs only in the event queue (address-derived arguments), not yet fixed.
+- No pause in a rollback fight yet (a synced pause is still to do).
+- Runs over the LAN transport and over EOS (0.1.6 beta).
+
+## Mileena's fatalities (2026-10-22)
+
+Both were reported by the tester and both are confirmed fixed in her build.
+
+- **Nail fatality (BIG CUP in the wrong place):** checked against the binary function by function (`RenderLevelPlayers`, `RenderPlayer`, `RenderAnimatedCharacter`, the bone attach in `LIME_RenderScene`, `limeMatrixMult`). The missing piece was the `else` arm of `RenderAnimatedCharacter` at 0x5c2f4: a frame whose body is not skinned still calls `GenerateMatrices`. Without it, `MatrixPalette2` kept the other fighter's pose and the cup followed his hand.
+- **Suck-kiss fatality (victim's body kept reappearing):** `RenderLevelPlayers`, the event code (`LIME_TriggerEventFromSceneH`, `LIME_UpdateEvents`, `LIME_RenderEvents`, `CountEventsMatching`, `LIME_TriggerEventsFromSceneOffsetIfFollowing`), `mk3_update`, `t_r_kiss_suck`, `t_mframew` and `fastxfer_thread` all match the binary. The divergence was a port-only block that replaced a frame-list `-1` with the last pose. The victim's frames 1399..1405 are `-1`; held at 327, an invisible fighter re-fires that frame's events every draw. The block now applies only to Classic Sub-Zero.
 
 ## What was built and verified in this session (2026-10-18)
 

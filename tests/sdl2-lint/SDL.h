@@ -59,6 +59,11 @@ typedef void *SDL_GLContext;
 #define SDL_WINDOW_RESIZABLE      0x8u
 #define SDL_WINDOW_ALLOW_HIGHDPI  0x10u
 #define SDLK_ESCAPE               0x20
+#define SDLK_BACKSPACE            0x21
+#define SDLK_RETURN               0x22
+#define SDLK_KP_ENTER             0x23
+#define SDLK_v                    0x24
+#define KMOD_CTRL                 0x25
 
 typedef enum {
     SDL_GL_RED_SIZE, SDL_GL_GREEN_SIZE, SDL_GL_BLUE_SIZE, SDL_GL_ALPHA_SIZE,
@@ -67,7 +72,9 @@ typedef enum {
 
 #define SDL_GL_CONTEXT_PROFILE_COMPATIBILITY 0x0002
 
-typedef enum { SDL_QUIT = 0x100, SDL_WINDOWEVENT = 0x200, SDL_KEYDOWN = 0x300 } SDL_EventType;
+typedef enum { SDL_QUIT = 0x100, SDL_WINDOWEVENT = 0x200, SDL_KEYDOWN = 0x300,
+               SDL_TEXTINPUT = 0x303, SDL_MOUSEWHEEL = 0x403 } SDL_EventType;
+typedef enum { SDL_MOUSEWHEEL_NORMAL, SDL_MOUSEWHEEL_FLIPPED } SDL_MouseWheelDirection;
 typedef enum {
     SDL_WINDOWEVENT_SIZE_CHANGED = 6,
     SDL_WINDOWEVENT_FOCUS_GAINED = 12,
@@ -75,9 +82,12 @@ typedef enum {
     SDL_WINDOWEVENT_CLOSE        = 14
 } SDL_WindowEventID;
 
-typedef struct { Sint32 sym; } SDL_Keysym;
+typedef Sint32 SDL_Keycode;
+typedef struct { Sint32 sym; Uint32 mod; } SDL_Keysym;
 typedef struct { Uint32 type; SDL_Keysym keysym; } SDL_KeyboardEvent;
 typedef struct { Uint32 type; Uint8 event; Sint32 data1, data2; } SDL_WindowEvent;
+typedef struct { Uint32 type; char text[32]; } SDL_TextInputEvent;
+typedef struct { Uint32 type; Sint32 x, y; Uint32 direction; } SDL_MouseWheelEvent;
 typedef struct {
     Uint32 type;
     Uint32 timestamp;
@@ -88,6 +98,8 @@ typedef union SDL_Event {
     Uint32                    type;
     SDL_KeyboardEvent         key;
     SDL_WindowEvent           window;
+    SDL_TextInputEvent        text;
+    SDL_MouseWheelEvent       wheel;
     SDL_ControllerDeviceEvent cdevice;
 } SDL_Event;
 
@@ -262,6 +274,9 @@ int SDL_ConvertAudio(SDL_AudioCVT *cvt);
 
 void *SDL_malloc(size_t size);
 void  SDL_free(void *mem);
+void  SDL_StartTextInput(void);
+char *SDL_GetClipboardText(void);
+int   SDL_SetClipboardText(const char *text);
 
 Uint32 SDL_WasInit(Uint32 flags);
 int    SDL_InitSubSystem(Uint32 flags);
