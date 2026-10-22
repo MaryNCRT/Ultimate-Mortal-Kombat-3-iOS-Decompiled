@@ -507,14 +507,8 @@ ipcMain.handle('mods:trash', async (_ev, folder) => {
     await shell.trashItem(p);
     return true;
 });
-ipcMain.handle('mods:cover', async (_ev, folder) => {
-    const r = g_win && await pickFile({
-        title: 'Cover picture',
-        properties: ['openFile'],
-        filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg'] }],
-    });
-    return !!r && !r.canceled && mods.setCover(g_root, folder, r.filePaths[0]);
-});
+/* the cover, as the PNG the window made of the picture picked */
+ipcMain.handle('mods:cover', (_ev, folder, png) => mods.setCover(g_root, folder, png));
 ipcMain.handle('mods:dataRead', (_ev, folder) => mods.dataRead(g_root, folder));
 ipcMain.handle('mods:dataWrite', (_ev, folder, entries) => mods.dataWrite(g_root, folder, entries));
 ipcMain.handle('res:files', () => mods.resFiles(g_root));
@@ -525,7 +519,11 @@ ipcMain.handle('file:pick', async (_ev, kind) => {
     const r = g_win && await pickFile({
         title: kind === 'picture' ? 'Picture' : 'FBX from Blender',
         properties: ['openFile'],
-        filters: kind === 'picture' ? [{ name: 'Pictures', extensions: ['png'] }] : [{ name: 'FBX', extensions: ['fbx'] }],
+        /* pictures: whatever the window decodes, and TGA (ui/src/lib/mods/image.js) */
+        filters: kind === 'picture'
+            ? [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'jfif', 'webp', 'gif', 'bmp', 'ico', 'avif', 'svg', 'tga'] },
+               { name: 'All files', extensions: ['*'] }]
+            : [{ name: 'FBX', extensions: ['fbx'] }],
     });
     if (!r || r.canceled)
         return null;

@@ -28,7 +28,7 @@
             radial-gradient(ellipse 75% 60% at 50% -10%, rgba(255, 255, 255, .2) 0 99%, transparent 100%),
             linear-gradient(#2a2a2e, #000);
         box-shadow: 0 calc(var(--u) * .3) calc(var(--u) * .8) rgba(0, 0, 0, .5);
-        color: #fff; font-weight: 700; font-size: calc(var(--u) * 1.6);
+        color: #fff; font-weight: 700; font-size: calc(var(--t) * 1.6);
         letter-spacing: .04em; cursor: pointer; max-width: calc(var(--u) * 30);
     }
     .badge :global(canvas) { width: calc(var(--u) * 4.2); height: calc(var(--u) * 4.2); flex: none; }

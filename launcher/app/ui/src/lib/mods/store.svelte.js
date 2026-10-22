@@ -19,6 +19,10 @@ export const ms = $state({
     /* what the viewer and the editor read: the game alone (''), the game
      * with every mod that is on ('*'), or with one mod (its folder) */
     layer: '',
+    /* TEXTURES by fighter (a fighter's id, '' all); `rev` counts REFRESH */
+    texFighter: '', rev: 0,
+    /* REPLACE TEXTURE also writes the game's smaller copies (_LOW, _LITE) */
+    autoSmall: true,
     /* the CHARACTER EDITOR: the fighter, the mod its changes go to */
     edFighter: 0, edMod: '', edPage: 'attacks',
 });
@@ -30,6 +34,14 @@ export async function refreshMods() {
     if (!r) return;
     ms.list = r.mods;
     ms.dir = r.dir;
+}
+
+/* REFRESH: the mods' folders read again, for changes made in them outside
+ * the launcher; the viewer opens what it shows again (ms.rev) */
+export async function reloadMods() {
+    await refreshMods();
+    forgetMod();
+    ms.rev++;
 }
 
 /* the order as it stands, to mods/mods.ini (the game reads it at start) */

@@ -74,13 +74,13 @@
 <style>
     .progress { flex: 1; display: flex; gap: calc(var(--u) * 1); align-items: center; }
     .progress.upd { flex: none; margin-top: calc(var(--u) * .8); }
-    .plbl { color: var(--dim); font-size: calc(var(--u) * 1.5); }
-    .upd .plbl { font-size: calc(var(--u) * 1.4); }
+    .plbl { color: var(--dim); font-size: calc(var(--t) * 1.5); }
+    .upd .plbl { font-size: calc(var(--t) * 1.4); }
     .console {
         margin: calc(var(--u) * 1) 0 0; padding: calc(var(--u) * 1);
         flex: 1 1 auto; min-height: calc(var(--u) * 8); overflow: auto;
         background: rgba(0, 0, 0, .7); border: 1px solid var(--line);
-        font-family: var(--font-mono); font-size: calc(var(--u) * 1.3); color: #9fc0e0;
+        font-family: var(--font-mono); font-size: calc(var(--t) * 1.3); color: #9fc0e0;
         user-select: text; white-space: pre-wrap;
     }
     .updrow { display: flex; gap: calc(var(--u) * 1); align-items: center; margin-top: calc(var(--u) * 1.4); }

@@ -22,6 +22,7 @@
     import { hoverBlip, selectBlip, doneChord, failChord } from '#lib/sound.js';
     import { ms, src, loadCatalog, refreshMods, gameTables, forgetMod } from '#lib/mods/store.svelte.js';
     import { FIGHTERS, pngBytes } from '#lib/mods/assets.js';
+    import { putTexture } from '#lib/mods/image.js';
     import HitboxEditor from './HitboxEditor.svelte';
 
     /* CharacterNames' order: the model file and the move list's prefix */
@@ -162,17 +163,19 @@
 
     /* ------------------------------------------------------------ looks -- */
 
+    /* the smaller copies are listed when AUTO does not write them */
     const looks = $derived(src.files.filter(f => /^Textures\//i.test(f) && f.toUpperCase().includes(fid)
-        && !/_LOW\d*\.|_LITE\d*\./i.test(f)).map(f => f.slice(9).replace(/\.(pvr|png)$/i, '')).filter((v, i, a) => a.indexOf(v) === i));
+        && (!ms.autoSmall || !/_LOW\d*\.|_LITE\d*\./i.test(f))).map(f => f.slice(9).replace(/\.(pvr|png)$/i, '')).filter((v, i, a) => a.indexOf(v) === i));
 
     async function replaceLook(stem) {
         selectBlip();
         if (!(await ensureMod())) return;
         const got = await api.pickFile('picture');
         if (!got) return;
-        await api.modsPut(ms.edMod, stem + '.png', got.bytes);
+        const files = await putTexture(api, src, ms.edMod, stem, got.bytes, ms.autoSmall);
+        if (!files) { note = tx('vwNotPicture'); return; }
         forgetMod();
-        note = tx('vwSaved') + ms.edMod + '\\' + stem + '.png';
+        note = tx('vwSaved') + ms.edMod + '\\' + files.join(', ');
         await refreshMods();
     }
 
@@ -361,6 +364,7 @@
             </div>
         {:else}
             <p class="note">{tx('edLooksNote')}</p>
+            <label class="chk"><input type="checkbox" bind:checked={ms.autoSmall}><span>{tx('vwAutoSmall')}</span></label>
             <div class="scroll">
                 <table class="grid">
                     <tbody>
@@ -385,7 +389,7 @@
     .list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 0; background: var(--well); border-radius: var(--r-sm); }
     .list button {
         width: 100%; text-align: left; background: none; border: 0; cursor: pointer; display: flex; gap: calc(var(--u) * .7);
-        padding: calc(var(--u) * .4) calc(var(--u) * .9); font-size: calc(var(--u) * 1.4); color: var(--lav);
+        padding: calc(var(--u) * .4) calc(var(--u) * .9); font-size: calc(var(--t) * 1.4); color: var(--lav);
     }
     .list button:hover { color: #fff; background: rgba(150, 140, 255, .12); }
     .list button.on { color: #fff; background: rgba(140, 125, 255, .3); }
@@ -399,7 +403,7 @@
     .scroll { overflow-y: auto; flex: 1; min-height: 0; padding-right: calc(var(--u) * .4); }
     h4 { margin: calc(var(--u) * 1) 0 calc(var(--u) * .4); letter-spacing: .08em; }
     h4 small { color: var(--dim); font-weight: normal; }
-    .grid { width: 100%; border-collapse: collapse; font-size: calc(var(--u) * 1.3); }
+    .grid { width: 100%; border-collapse: collapse; font-size: calc(var(--t) * 1.3); }
     .grid th { text-align: left; color: var(--dim); font-weight: normal; padding: calc(var(--u) * .2) calc(var(--u) * .4); }
     .grid td { padding: calc(var(--u) * .15) calc(var(--u) * .4); border-top: 1px solid var(--line); }
     .grid tr.mod td { background: rgba(120, 220, 160, .08); }
@@ -410,17 +414,17 @@
     .att .grid { flex: 1; }
     .hb { flex: 0 0 calc(var(--u) * 24); position: sticky; top: 0; }
     .att .grid td, .att .grid th { padding: calc(var(--u) * .1) calc(var(--u) * .2); }
-    .att .grid th { font-size: calc(var(--u) * 1.05); }
+    .att .grid th { font-size: calc(var(--t) * 1.05); }
     .hbview { height: calc(var(--u) * 30); }
     .n { width: calc(var(--u) * 4.6); background: var(--well); color: inherit; border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px; font: inherit; }
     .n.wide { width: calc(var(--u) * 12); }
     .txt { width: 100%; }
     .txt .edt { width: 100%; }
     .dim { color: var(--dim); }
-    .x { background: none; border: 0; color: var(--dim); cursor: pointer; font-size: calc(var(--u) * 1.4); }
+    .x { background: none; border: 0; color: var(--dim); cursor: pointer; font-size: calc(var(--t) * 1.4); }
     .x:hover { color: #fff; }
     .chips { list-style: none; display: flex; flex-wrap: wrap; gap: calc(var(--u) * .5); margin: 0; padding: 0; }
-    .chips li { padding: calc(var(--u) * .25) calc(var(--u) * .7); border-radius: 999px; background: rgba(140, 125, 255, .2); font-size: calc(var(--u) * 1.2); }
+    .chips li { padding: calc(var(--u) * .25) calc(var(--u) * .7); border-radius: 999px; background: rgba(140, 125, 255, .2); font-size: calc(var(--t) * 1.2); }
     .chips li.miss { background: rgba(255, 110, 120, .15); color: #ff9aa0; }
     .ok { color: var(--ok-text); word-break: break-all; }
     .bad { color: #ff9aa0; }

@@ -16,8 +16,9 @@
  *
  *     GRAPHICS   DISPLAY (window, borderless, fullscreen) and RESOLUTION,
  *                both taken by APPLY DISPLAY; 3D RESOLUTION, ANTIALIASING,
- *                TEXTURES, ASPECT, INTERFACE and ON-SCREEN CONTROLS at
- *                once. TEXTURES loads every texture again at the new
+ *                TEXTURES, ASPECT, LANGUAGE, INTERFACE and ON-SCREEN
+ *                CONTROLS at once; LANGUAGE loads the game's texts again
+ *                (port_language_set). TEXTURES loads every texture again at the new
  *                quality (draw_gl.c, lime_textures_requality).
  *     KEYBOARD   PLAYER 1 / 2, LAYOUT 6 / 5 buttons (buttons=), then each
  *                key: Enter on it and press the new key (Esc cancels).
@@ -62,6 +63,26 @@ static const struct { int w, h; } k_res[] = {
 #define N_RES (int)(sizeof k_res / sizeof k_res[0])
 static const int k_aa[] = { 0, 2, 4, 8, 16 };
 static const char *const k_aspect[] = { "3:2", "4:3", "16:9", "21:9" };
+/* The languages Info.plist maps (LANGUAGE_TEXT_xx, the launcher's ini.js
+ * LANGS); "" follows the system. */
+static const struct { const char *code, *es, *en; } k_lang[] = {
+    { "", "EL DEL SISTEMA", "THE SYSTEM'S" }, { "EN", "ENGLISH", "ENGLISH" },
+    { "ES", "ESPANOL", "ESPANOL" }, { "FR", "FRANCAIS", "FRANCAIS" },
+    { "DE", "DEUTSCH", "DEUTSCH" }, { "IT", "ITALIANO", "ITALIANO" },
+    { "KO", "COREANO", "KOREAN" }, { "ZH", "CHINO", "CHINESE" },
+};
+#define N_LANG (int)(sizeof k_lang / sizeof k_lang[0])
+
+static int lang_index(void)
+{
+    const char *c = port_language();
+    int i;
+
+    for (i = 1; i < N_LANG; i++)
+        if ((c[0] | 32) == (k_lang[i].code[0] | 32) && (c[1] | 32) == (k_lang[i].code[1] | 32))
+            return i;
+    return 0;
+}
 static const char *const k_pb[PB_COUNT] = {
     "SOUTH", "EAST", "WEST", "NORTH", "L1", "R1", "L2", "R2",
     "SELECT", "START", "L3", "R3", "HOME",
@@ -72,7 +93,7 @@ static const char *const k_pb[PB_COUNT] = {
 enum { PAGE_GFX, PAGE_CTL, PAGE_PROF, N_PAGES };
 
 enum {
-    R_DISPLAY, R_MONITOR, R_RES, R_APPLY, R_RRES, R_AA, R_TEXQ, R_ASPECT, R_UI, R_HIDE,
+    R_DISPLAY, R_MONITOR, R_RES, R_APPLY, R_RRES, R_AA, R_TEXQ, R_ASPECT, R_UI, R_HIDE, R_LANG,
     R_PLAYER, R_LAYOUT, R_KEY, R_KRESET, R_DEVICE, R_PICONS, R_PADB, R_PRESET,
     R_PNAME, R_PICON, R_PCOLOR, R_PSHADE, R_PCOLOR2, R_PID, R_PRESET2,
     R_CLOSE, R_QUIT, R_HEAD, R_CSUB
@@ -549,6 +570,8 @@ static void build(void)
         add(R_TEXQ, 0, tx("CALIDAD", "QUALITY"), "< %s >",
             tx(tq_es[g_gfx.texq], tq_en[g_gfx.texq]));
         head(tx("INTERFAZ", "INTERFACE"));
+        add(R_LANG, 0, tx("IDIOMA", "LANGUAGE"), "< %s >",
+            tx(k_lang[lang_index()].es, k_lang[lang_index()].en));
         add(R_ASPECT, 0, tx("RELACION DE ASPECTO", "ASPECT RATIO"), "< %s >",
             g_gfx.aspect);
         add(R_UI, 0, tx("TAMANO DE LA INTERFAZ", "INTERFACE SIZE"), "< %s >",
@@ -656,7 +679,7 @@ static int has_value(int kind)
 {
     switch (kind) {
     case R_DISPLAY: case R_MONITOR: case R_RES: case R_RRES: case R_AA: case R_TEXQ:
-    case R_ASPECT: case R_UI: case R_HIDE: case R_PLAYER: case R_LAYOUT:
+    case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_PLAYER: case R_LAYOUT:
     case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE: case R_PCOLOR2:
     case R_PICONS:
         return 1;
@@ -765,6 +788,10 @@ static void change(int kind, int d)
     case R_TEXQ:   g_gfx.texq = wrap(g_gfx.texq + d, 3); break;
     case R_UI:     g_gfx.ui = !g_gfx.ui; break;
     case R_HIDE:   g_gfx.hidectl = !g_gfx.hidectl; break;
+    case R_LANG:                        /* at once, texts and menus */
+        port_language_set(k_lang[wrap(lang_index() + d, N_LANG)].code);
+        g_dirty = 1;
+        return;
     case R_ASPECT:
         for (i = 0; i < 4 && strcmp(k_aspect[i], g_gfx.aspect) != 0; i++)
             ;
@@ -894,6 +921,11 @@ static int drop_fill(int kind)
         snprintf(L[1], 48, "%s", tx("OCULTOS", "HIDDEN"));
         n = 2;
         g_drop_cur = g_gfx.hidectl ? 1 : 0;
+        break;
+    case R_LANG:
+        for (n = 0; n < N_LANG; n++)
+            snprintf(L[n], 48, "%s", tx(k_lang[n].es, k_lang[n].en));
+        g_drop_cur = lang_index();
         break;
     case R_PLAYER:
         snprintf(L[0], 48, "%s", tx("JUGADOR 1", "PLAYER 1"));
@@ -1614,6 +1646,7 @@ static void save_ini(void)
     put("ui_size", "%s", g.ui ? "ipad" : "iphone");
     put("texture_quality", "%s", tq[g.texq]);
     put("hide_controls", "%d", g.hidectl);
+    put("language", "%s", port_language());
     put("buttons", "%d", port_buttons());
     {
         static const char *const st[5] = { "auto", "xbox", "ps5", "nintendo", "ps4" };

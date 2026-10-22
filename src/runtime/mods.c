@@ -348,10 +348,19 @@ int mods_find_texture(const char *stem, char *out, size_t n)
     strcpy(key, base);
     lower(key);
     hit = map_get(&g_tex, key);
-    /* X_LOW, the iPhone's smaller copy: a mod's X serves it too */
+    /* The smaller copies the game takes by quality: X_LOW (the iPhone's
+     * sheets), X_LITE (a fighter's 256 skin, same layout) and X2_LITE,
+     * X_LITE2, X_LOW2 (the second outfit's): a mod's X or X2 serves them */
     k = strlen(key);
-    if (!hit && k > 4 && strcmp(key + k - 4, "_low") == 0) {
+    if (!hit && k > 4 && (strcmp(key + k - 4, "_low") == 0)) {
         key[k - 4] = 0;
+        hit = map_get(&g_tex, key);
+    } else if (!hit && k > 5 && strcmp(key + k - 5, "_lite") == 0) {
+        key[k - 5] = 0;
+        hit = map_get(&g_tex, key);
+    } else if (!hit && k > 6 && (strcmp(key + k - 6, "_lite2") == 0
+                                 || strcmp(key + k - 5, "_low2") == 0)) {
+        strcpy(key + k - (key[k - 5] == '_' ? 5 : 6), "2");
         hit = map_get(&g_tex, key);
     }
     if (!hit)

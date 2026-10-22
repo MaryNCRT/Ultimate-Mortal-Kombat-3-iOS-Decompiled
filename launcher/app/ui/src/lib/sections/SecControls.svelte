@@ -172,7 +172,7 @@
     .padkeys .keybtn {
         display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: calc(var(--u) * .8);
         min-height: calc(var(--u) * 2.8); padding: calc(var(--u) * .3) calc(var(--u) * .8);
-        font-size: calc(var(--u) * 1.3);
+        font-size: calc(var(--t) * 1.3);
     }
     .padkeys .kname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>

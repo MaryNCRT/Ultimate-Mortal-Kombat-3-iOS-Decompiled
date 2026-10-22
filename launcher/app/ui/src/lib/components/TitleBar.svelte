@@ -30,12 +30,12 @@
         flex: 1; -webkit-app-region: drag;
         display: flex; align-items: center; padding-left: calc(var(--u) * 1.6);
     }
-    .ver { color: var(--dim); font-size: calc(var(--u) * 1.3); letter-spacing: .15em; }
+    .ver { color: var(--dim); font-size: calc(var(--t) * 1.3); letter-spacing: .15em; }
     .btns { display: flex; -webkit-app-region: no-drag; }
     .tb {
         min-width: calc(var(--u) * 5); height: 100%;
         background: transparent; border: 0; color: var(--dim);
-        font-size: calc(var(--u) * 1.7); cursor: pointer; padding: 0 calc(var(--u) * 1.2);
+        font-size: calc(var(--t) * 1.7); cursor: pointer; padding: 0 calc(var(--u) * 1.2);
     }
     .tb:hover { color: #fff; background: rgba(255, 255, 255, .08); }
     .tb.x:hover { background: var(--red); }
