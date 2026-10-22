@@ -43,6 +43,20 @@ list of what works and what comes next is now [GOALS.md](GOALS.md).
 
 ### Launcher
 
+- **Linux link fix** (launcher/app/lib/compile.js): Mary's Linux build got
+  as far as linking and stopped at `ld.lld: error: /usr/lib/libGL.so.1 is
+  incompatible with elf64-x86-64`. On Fedora and its kin /usr/lib holds the
+  32-bit libraries and /usr/lib64 the 64-bit ones; the library search
+  started at /usr/lib. Now the 64-bit directories come first and each
+  library is checked for the build's ELF class before it is passed to the
+  linker. Not yet rebuilt on Linux.
+- **Checked on Mary's Rain mod** (OLDSUBZERO_DIFFUSE2.png, 1024): `putTexture`
+  run in Electron wrote OLDSUBZERO_DIFFUSE2_LOW.png (512) and
+  OLDSUBZERO_DIFFUSE2_LITE.png (256), the game's own sizes; the viewer's
+  reader (lib/mods.js `resRead`, now with the same LOW / LITE / LITE2 /
+  LOW2 fallbacks as the game) returns the mod's three files with SHOW WITH
+  Rain and the game's for the rest.
+
 - Every font size is in a new unit `--t` (tokens.css), `--u` x 0.82: all
   the text is smaller, the boxes stay the same size. The hitbox editor's
   label too.

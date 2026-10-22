@@ -353,7 +353,21 @@ async function compileGame({
             linkArgs.push(`-target`, isLow32 ? 'x86_64-linux-gnu' : 'x86-linux-gnu');
         }
         linkArgs.push('-no-pie');
-        const libDirs = ['/usr/lib', '/usr/lib/x86_64-linux-gnu', '/usr/lib64', '/lib/x86_64-linux-gnu', '/lib64'];
+        /* the 64-bit directories first: on Fedora and its kin /usr/lib
+         * holds the 32-bit libraries (libGL.so.1 "incompatible with
+         * elf64-x86-64"), the 64-bit ones are in /usr/lib64 */
+        const libDirs = ['/usr/lib64', '/usr/lib/x86_64-linux-gnu', '/lib/x86_64-linux-gnu', '/lib64', '/usr/lib'];
+        const want = process.platform === 'linux' || isLow32 ? 2 : 1;      /* ELF class: 2 = 64-bit */
+        /* a library of the build's own width (a linker script, not ELF, is
+         * taken as it is) */
+        const fits = p => {
+            try {
+                const fd = fs.openSync(p, 'r'), h = Buffer.alloc(5);
+                fs.readSync(fd, h, 0, 5, 0);
+                fs.closeSync(fd);
+                return h.readUInt32BE(0) !== 0x7f454c46 || h[4] === want;
+            } catch { return false; }
+        };
         for (const dir of libDirs) {
             if (fs.existsSync(dir)) {
                 linkArgs.push(`-L${dir}`);
@@ -364,11 +378,11 @@ async function compileGame({
          * versioned names, which every desktop has */
         const sysLib = (base, sonames) => {
             for (const dir of libDirs)
-                if (fs.existsSync(path.join(dir, `lib${base}.so`)))
-                    return `-l${base}`;
+                if (fits(path.join(dir, `lib${base}.so`)))
+                    return path.join(dir, `lib${base}.so`);
             for (const so of sonames)
                 for (const dir of libDirs)
-                    if (fs.existsSync(path.join(dir, so)))
+                    if (fits(path.join(dir, so)))
                         return path.join(dir, so);
             return `-l${base}`;
         };
