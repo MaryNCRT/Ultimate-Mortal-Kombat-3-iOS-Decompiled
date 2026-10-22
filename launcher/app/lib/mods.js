@@ -306,7 +306,10 @@ function resRead(root, rel, layer) {
         let hit = g_layer.byName.get(n);
         if (!hit && /\.(png|pvr)$/.test(n)) {
             const stem = n.slice(0, -4);
-            hit = g_layer.byStem.get(stem) || (stem.endsWith('_low') && g_layer.byStem.get(stem.slice(0, -4)));
+            /* the smaller copies, as the game finds them (runtime/mods.c
+             * mods_find_texture): X_LOW, X_LITE by X; X_LITE2, X_LOW2 by X2 */
+            const full = stem.replace(/_(low|lite)$/, '').replace(/_(low|lite)2$/, '2');
+            hit = g_layer.byStem.get(stem) || (full !== stem && g_layer.byStem.get(full));
         }
         if (hit) try { return new Uint8Array(fs.readFileSync(hit)); } catch { /* the game's, then */ }
     }

@@ -9,6 +9,7 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 - **Language in the in-game settings menu**, changed at once (texts and menus).
 - **Mod textures reach the game's smaller copies** (`_LITE`, `_LOW`): a replaced fighter skin now shows at IPHONE texture quality.
 - **Launcher:** smaller text everywhere; MODS fills the window; the model viewer has its options beside the model, a full screen button, REFRESH FOLDERS, textures by fighter, REPLACE TEXTURE from any picture (PNG, JPEG, WebP, GIF, BMP, ICO, AVIF, SVG, TGA) with the LOW and LITE copies made automatically; covers from any picture.
+- **Linux:** the link no longer takes a 32-bit `libGL.so.1` from `/usr/lib` (Fedora and its kin): 64-bit directories first, each library checked for its width.
 - **[GOALS.md](GOALS.md):** what works and what comes next.
 
 ---
