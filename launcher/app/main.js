@@ -507,8 +507,30 @@ ipcMain.handle('mods:trash', async (_ev, folder) => {
     await shell.trashItem(p);
     return true;
 });
+ipcMain.handle('mods:cover', async (_ev, folder) => {
+    const r = g_win && await pickFile({
+        title: 'Cover picture',
+        properties: ['openFile'],
+        filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg'] }],
+    });
+    return !!r && !r.canceled && mods.setCover(g_root, folder, r.filePaths[0]);
+});
+ipcMain.handle('mods:dataRead', (_ev, folder) => mods.dataRead(g_root, folder));
+ipcMain.handle('mods:dataWrite', (_ev, folder, entries) => mods.dataWrite(g_root, folder, entries));
 ipcMain.handle('res:files', () => mods.resFiles(g_root));
-ipcMain.handle('res:read', (_ev, rel) => mods.resRead(g_root, rel));
+ipcMain.handle('res:read', (_ev, rel, layer) => mods.resRead(g_root, rel, layer));
+ipcMain.handle('game:tables', () => mods.gameTables(g_root));
+/* a model or an animation from Blender, for the viewer to bring in */
+ipcMain.handle('file:pick', async (_ev, kind) => {
+    const r = g_win && await pickFile({
+        title: kind === 'picture' ? 'Picture' : 'FBX from Blender',
+        properties: ['openFile'],
+        filters: kind === 'picture' ? [{ name: 'Pictures', extensions: ['png'] }] : [{ name: 'FBX', extensions: ['fbx'] }],
+    });
+    if (!r || r.canceled)
+        return null;
+    return { name: path.basename(r.filePaths[0]), bytes: new Uint8Array(fs.readFileSync(r.filePaths[0])) };
+});
 ipcMain.handle('export:save', (_ev, sub, files) => mods.exportSave(g_root, sub, files));
 ipcMain.handle('export:open', (_ev, sub) => {
     const p = path.join(g_root, 'exports', sub && /^[\w .()-]+$/.test(sub) ? sub : '');

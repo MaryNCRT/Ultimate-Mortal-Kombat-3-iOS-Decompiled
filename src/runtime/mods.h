@@ -22,4 +22,8 @@ int  mods_find_texture(const char *stem, char *out, size_t n);
 /* How many mods are on and how many files they replace, for the log. */
 int  mods_count(int *files);
 
+/* each mod's data.ini over the fight engine's tables, lowest first; returns
+ * how many words it wrote */
+int  mods_apply_data(void);
+
 #endif

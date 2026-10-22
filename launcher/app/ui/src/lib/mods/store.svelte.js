@@ -3,7 +3,7 @@
 import { api } from '../platform.js';
 import { catalog, loadFighter } from './assets.js';
 
-export const MODS_TABS = [['mgr', 'modsMgr'], ['view', 'modsView'], ['exp', 'modsExp']];
+export const MODS_TABS = [['mgr', 'modsMgr'], ['view', 'modsView'], ['edit', 'modsEdit'], ['exp', 'modsExp']];
 export const VIEW_KINDS = [['characters', 'vwChars'], ['stages', 'vwStages'], ['models', 'vwModels'], ['textures', 'vwTex']];
 
 export const ms = $state({
@@ -16,6 +16,11 @@ export const ms = $state({
     kind: 'characters', pick: null, search: '',
     pose: 'tpose', clip: -1, frame: 0, playing: false, outfit: '', bones: false, wire: false,
     loading: false, error: '',
+    /* what the viewer and the editor read: the game alone (''), the game
+     * with every mod that is on ('*'), or with one mod (its folder) */
+    layer: '',
+    /* the CHARACTER EDITOR: the fighter, the mod its changes go to */
+    edFighter: 0, edMod: '', edPage: 'attacks',
 });
 
 /* ------------------------------------------------------------- mods -- */
@@ -57,10 +62,11 @@ let cacheBytes = 0;
 export const src = {
     files: [],
     async read(rel) {
-        if (cache.has(rel)) return cache.get(rel);
-        const b = await api.resRead(rel);
+        const key = ms.layer + '|' + rel;
+        if (cache.has(key)) return cache.get(key);
+        const b = await api.resRead(rel, ms.layer);
         if (b) {
-            cache.set(rel, b);
+            cache.set(key, b);
             cacheBytes += b.length;
             for (const [k, v] of cache) {
                 if (cacheBytes < 200 << 20) break;
@@ -81,16 +87,30 @@ export async function loadCatalog(force) {
     ms.files = files.length;
 }
 
-/* fighters once loaded, by id: the bind pose fit takes a moment */
+/* fighters once loaded, by layer and id: the bind pose fit takes a moment */
 const fighters = new Map();
 export async function fighter(ch) {
-    if (!fighters.has(ch.id)) fighters.set(ch.id, loadFighter(src, ch));
+    const key = ms.layer + '|' + ch.id;
+    if (!fighters.has(key)) fighters.set(key, loadFighter(src, ch));
     try {
-        return await fighters.get(ch.id);
+        return await fighters.get(key);
     } catch (e) {
-        fighters.delete(ch.id);
+        fighters.delete(key);
         throw e;
     }
+}
+
+/* A mod's files changed (a model or an animation brought in): read them again. */
+export function forgetMod() {
+    for (const k of [...cache.keys()]) if (!k.startsWith('|')) { cacheBytes -= cache.get(k).length; cache.delete(k); }
+    for (const k of [...fighters.keys()]) if (!k.startsWith('|')) fighters.delete(k);
+}
+
+/* The fight engine's tables (lib/mods.js gameTables), once. */
+let tables = null;
+export async function gameTables() {
+    if (!tables) tables = (await api.gameTables()) || {};
+    return tables;
 }
 
 /* the viewer's selection carried to the exporter */

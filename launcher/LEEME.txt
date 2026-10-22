@@ -1,4 +1,4 @@
-ULTIMATE MORTAL KOMBAT 3 - PORT DE PC - 0.1.7 BETA (ONLINE POR INTERNET)
+ULTIMATE MORTAL KOMBAT 3 - PORT DE PC - 0.1.8 BETA (MODS)
 ========================================================================
 
 Port nativo para Windows de la version de iOS (1.2.59), hecho por
@@ -111,6 +111,36 @@ NUEVO EN 0.0.9
   memoria). Una pelea del debug ya no deja sus luchadores, escenario ni
   paletas para los demas modos.
 - Launcher: botones mas pequenos.
+
+NUEVO EN 0.1.8 BETA (MODS)
+- MODS en el menu del launcher, con cuatro paginas:
+  - GESTOR DE MODS: un mod es una carpeta en mods\. Cada archivo con el
+    nombre de uno del juego lo reemplaza (texturas: un PNG con el nombre
+    de la textura). Prioridad (subir/bajar), activar/desactivar,
+    categorias (texturas, audio, musica, modelos), portada y VER EN EL
+    VISOR.
+  - VISOR DE MODELOS: luchadores con sus animaciones, escenarios, otros
+    modelos y texturas, vistos con el juego original, con los mods
+    activados o con un solo mod. Exporta las texturas de lo que ves y el
+    rig (FBX) para Blender. REEMPLAZAR ANIMACION y REEMPLAZAR MODELO
+    traen de vuelta un FBX hecho sobre ese rig y lo guardan en un mod; se
+    ve al momento.
+  - EDITOR DE PERSONAJES: los golpes de cada luchador (dano, dano en
+    bloqueo, hitbox editable a mano o arrastrando la caja), sus ataques
+    especiales y remates (marca los que faltan: Noob Saibot, Motaro y
+    Shao Kahn no tienen especiales propios), sus datos, los textos del
+    juego (nombres, lista de movimientos) y sus texturas (traje 1 y 2,
+    retratos, VERSUS) para reemplazar con un PNG. Los numeros van al
+    data.ini del mod, que el juego aplica al iniciar.
+  - EXPORTAR: FBX, USD (USDA, USDC, USDZ) u OBJ con texturas PNG, cada
+    animacion o todas, en T-pose corregida o en la pose original.
+- Arreglado: elegir a Motaro o Shao Kahn como LUCHADOR 1/2 en el menu
+  debug cerraba el juego (al pulsar botones o saltar). Ahora se pueden
+  jugar; solo tienen los golpes que el juego les da.
+- LINUX (SIN PROBAR): el juego ya no falla con "GL/gl.h not found" (el
+  launcher trae esas cabeceras) y el launcher de Linux se actualiza con
+  el .tar.gz. Quien tenga la 0.1.7 en Linux tiene que bajar esta a mano
+  una vez.
 
 NUEVO EN 0.1.7 BETA
 - Launcher nuevo, con el aspecto del menu principal de la consola: los
@@ -366,11 +396,13 @@ ARREGLADO EN 0.0.2
 - La melena de Sindel aparece, con su textura.
 - El joystick en pantalla se mueve.
 
-ERRORES CONOCIDOS EN 0.1.7
+ERRORES CONOCIDOS EN 0.1.8
+- Duplicar un luchador en un slot nuevo (el 27) todavia no esta.
+- Los cambios de datos de un mod (dano, hitbox) afectan al online: los
+  dos jugadores tienen que tener los mismos mods.
 - En 64 bits no sale FLAWLESS VICTORY.
 - Fatalities de Reptile: en uno solo levanta los brazos.
 - La version de Linux no esta probada.
-- En Linux el launcher no se actualiza solo: descarga el .tar.gz nuevo.
 - Online por internet solo en 64 bits.
 - La espera antes de una pelea online puede hacerse larga.
 - El combo del codo de Sub-Zero clasico aun no se ve del todo bien.
@@ -406,7 +438,7 @@ picker on the select screen ("< COLOR 1 >", saved), no input lag, crash
 reports, the Kombat Kode loading tip fixed, debug TOOLS (hitboxes, fight
 speed, save states), smaller launcher buttons. New in 0.1.0b: the iPad build's menus on 4:3,
 PLAY > DUELO (two players, one PC), free gamepad binding, a tabbed debug
-menu, wide-screen fixes. New in 0.1.7 beta: a new launcher after the console's main menu (marble rings, a curved menu with a glass orb and a turning M, your own picture from aditional textures\image.png), full-screen sections, the 64-bit debug menu no longer crashes on choosing a stage or turning on hitboxes, and the Linux compiler download no longer stops at once. New in 0.1.6 beta: ONLINE over the internet (Epic Online Services, 64-bit), rollback netcode, a reorganised debug menu (F2) with infinite health, frozen clock, FPS and online numbers, the mouse wheel in the menus, alerts answered with the pad, the white textures of some 64-bit runs fixed, and an untested Linux package. New in 0.1.5 alpha: PLAY > ONLINE, two games against each other by player code (same PC or local network for now), the versus spotlights and the FATALITY sign fixed in 64 bits. New in 0.1.4 beta: a 64-bit build (WINDOWS in the launcher), winning in
+menu, wide-screen fixes. New in 0.1.8 beta: MODS in the launcher -- a mod manager with priority, on/off, categories and covers, a model viewer that shows the game with or without mods, a character editor for each fighter's damage, hitboxes, texts and textures, export to FBX, USD and OBJ, and FBX animations and models brought back from Blender; Motaro and Shao Kahn no longer crash the game when picked in the debug menu; Linux compiles without GL headers installed and updates itself. New in 0.1.7 beta: a new launcher after the console's main menu (marble rings, a curved menu with a glass orb and a turning M, your own picture from aditional textures\image.png), full-screen sections, the 64-bit debug menu no longer crashes on choosing a stage or turning on hitboxes, and the Linux compiler download no longer stops at once. New in 0.1.6 beta: ONLINE over the internet (Epic Online Services, 64-bit), rollback netcode, a reorganised debug menu (F2) with infinite health, frozen clock, FPS and online numbers, the mouse wheel in the menus, alerts answered with the pad, the white textures of some 64-bit runs fixed, and an untested Linux package. New in 0.1.5 alpha: PLAY > ONLINE, two games against each other by player code (same PC or local network for now), the versus spotlights and the FATALITY sign fixed in 64 bits. New in 0.1.4 beta: a 64-bit build (WINDOWS in the launcher), winning in
 Arcade no longer closes the game. New in 0.1.3 beta: the game's menus with the pad or
 the keyboard, a console-style launcher that closes when the game opens, key
 and button pictures (Free Input Prompts by Julio Cacko, CC0), player two's

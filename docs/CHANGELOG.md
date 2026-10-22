@@ -4,6 +4,18 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 
 ---
 
+## 0.1.8-beta (2026-10-22) — Mods, Character Editor, Blender Round Trip
+
+Built for Windows (64 and 32 bits) and Linux; not yet played by Mary at release. The Linux package is untested.
+
+- **MODS in the launcher:** a mod manager (`mods/<mod>/`, files named like the game's replace them; priority, on/off, categories, covers), a model viewer that shows the game with or without mods, a character editor (each fighter's strikes with damage, chip and a visual hitbox editor, specials and finishers with the missing ones marked, per-fighter data, the game's texts, the fighter's textures), and export to FBX, USD (USDA/USDC/USDZ) and OBJ with a corrected T-pose.
+- **From Blender back to the game:** an FBX animation replaces one of a fighter's clips, an FBX model on the same rig becomes a new `.skin`, both written into a mod.
+- **The game reads mods:** `src/runtime/mods.c` lays `mods/` over `res/` and applies each mod's `data.ini` over the fight tables (`umk3_logic_names`, a new registry at the end of `logic_tables.c`).
+- **Motaro and Shao Kahn** picked as FIGHTER 1/2 in the debug menu no longer crash the game (button rows, animation tables and strike rows stop before the bosses).
+- **Linux:** bundled GL/KHR/SDL2 headers (`GL/gl.h` not found), soname link fallback, and a self-update that takes the Linux `.tar.gz`.
+
+---
+
 ## 0.1.6-beta (2026-10-22) — Internet Play, Debug Menu, Linux Package
 
 Tested by Mary on Windows (64 and 32 bits). The Linux package is built but untested.

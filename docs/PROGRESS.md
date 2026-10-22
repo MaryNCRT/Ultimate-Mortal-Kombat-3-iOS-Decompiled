@@ -16,7 +16,80 @@
 
 ---
 
-## After 0.1.7: MODS section, game-side mod overlay, Linux build fixes (2026-10-22, unreleased)
+## Release 0.1.8 beta (2026-10-22): character editor, mods in the viewer, Blender round trip, playable bosses
+
+Published as the GitHub pre-release `v0.1.8-beta`, packaged as 0.1.7 was
+(`launcher/make_release.py` over `electron-builder --win dir`; `electron-
+builder --linux tar.gz` repacked with exec bits). On top of the MODS section
+below (unreleased until now), what Mary asked for next:
+
+### Motaro and Shao Kahn as players (debug menu FIGHTER 1/2)
+
+- Mary's crash report (`running address 0x04840a04`, SHAO KAHN vs MOTARO,
+  both builds, "always been there"). Reproduced with no window: the headless
+  fight simulator (`fight_headless.c`) built with a crash handler, Shao Kahn
+  as player 1 holding one button. The game never hands a boss to a player,
+  and the per-fighter rows a player's buttons read stop at 24 or 25 words:
+  - `DoSwitchJump` (other.c) read `row[25]` past the button rows and called
+    the next table as code. Port guard: no button handler for c >= 24.
+  - `get_char_ani*` / `get_his_char_ani*`: the bosses' animation tables hold
+    38 animations, the others 73, and Motaro's second table is not a table.
+    A flip read frame data as an animation (`find_last_frame` from
+    `t_do_flip`). Port guard `ani_fetch`: a boss's missing animation is its
+    stance.
+  - `get_char_stk`: Motaro's strike row has 7 entries and Shao Kahn's 6
+    (22 to 27 for the others). Port guard: none, and the two strike checks
+    treat a missing strike as no hit.
+- Checked: 736 headless fights, both bosses as player 1 and 2 against four
+  fighters with 46 held inputs each, none crash; ordinary fights unchanged.
+  **Mary has not played it yet.** The bosses only do what the game gives them.
+
+### Mod data: `data.ini` over the fight tables
+
+- Both table generators (`launcher/app/lib/extract/logic_tables.js`,
+  `tools/build/logic_tables.py`) end `logic_tables.c` with
+  `umk3_logic_names[]`: every word table by its name in the binary, its
+  address and length.
+- `mods_apply_data()` (runtime/mods.c), called after the asset root is set:
+  each mod's `data.ini` lines `table[word] = value`, lowest priority first.
+  Unit-tested standalone (priority, signed values, unknown names reported).
+- A strike record (`stk_*`, 7 words, `strike_check_regs`): reach, top,
+  width, height (signed 16-bit, measured from the fighter facing right:
+  left = x + reach - width), reaction, damage (high byte full, low byte chip
+  on block), squeeze. Shared rows: the six ninjas use `nj_strikes`, the
+  three robots `robo_strikes`, the three female ninjas `fn_strikes`.
+- Data mods change the fight: online, both players need the same mods.
+
+### Launcher
+
+- **CHARACTER EDITOR** (`sections/mods/ModEditor.svelte`, new tab): per
+  fighter, the basic strikes (damage, chip, box, reaction) with a visual
+  hitbox editor (`HitboxEditor.svelte`, drag to move, corner to size); the
+  special moves and finishers the move list names (`seq_<fighter>_*`), with
+  the missing ones marked (Noob Saibot, Motaro and Shao Kahn have no
+  specials; Reptile and the hidden ninjas lack finishers); every per-fighter
+  numeric table; the game's texts (a copy of `<language>_text.dat` in the
+  mod: names, move list); the fighter's textures replaced by PNG. Reads
+  `build/logic_tables.c` (`gameTables` in lib/mods.js).
+- **Viewer**: SHOW WITH the game alone, the mods that are on, or one mod
+  (`resRead(rel, layer)`, pictures told apart by their bytes); EXPORT ITS
+  TEXTURES; EXPORT RIG (FBX); REPLACE ANIMATION / REPLACE MODEL from an FBX
+  (`ui/src/lib/mods/fbxin.js`): a binary FBX reader, the FBX transform
+  chain, and a similarity fit from the file's cluster rests to the game's
+  T-pose or bind pose, so Blender's axes and units do not matter. An
+  animation replaces one clip's frames in the `.skinanim` (resampled to the
+  clip's length); a model is written as a new `.skin` on the same bones
+  (each material to one of the fighter's blocks). Checked through Blender
+  5.2 (import and export with defaults): Kano's clip back within 0.05
+  units, Sindel's model (2 blocks) within 0.14; from the T-pose rest the
+  model within 3.7 (the T-pose fit's own error). **The game has not loaded
+  a replaced .skin yet: Mary's test.**
+- Manager: COVER (cover.png/jpg, preview.* still read), SEE IN THE VIEWER.
+- Not done: duplicating a fighter into a new slot (27th). Every per-fighter
+  table of the game (strike rows, animation tables, the select screen's 26
+  places, names, sounds, portraits) would have to grow; a session of its own.
+
+## After 0.1.7: MODS section, game-side mod overlay, Linux build fixes (2026-10-22, released in 0.1.8)
 
 Mary asked for a MODS option in the launcher's menu: a mod manager, a viewer
 of the game's files and an exporter for Blender. All three are in, plus the

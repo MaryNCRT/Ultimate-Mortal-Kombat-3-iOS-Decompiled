@@ -93,6 +93,7 @@
 
 #include "platform/platform.h"
 #include "platform/gl.h"
+#include "mods.h"
 #include "debug_menu.h"
 #include "settings_menu.h"
 #include "profiles.h"
@@ -2717,6 +2718,7 @@ int main(int argc, char **argv)
         load_frame();
     }
     lime_platform_set_asset_root(root);
+    mods_apply_data();                  /* the mods' numbers (mods.c) */
     setup_surfaces();
     use_surface(0);
 
