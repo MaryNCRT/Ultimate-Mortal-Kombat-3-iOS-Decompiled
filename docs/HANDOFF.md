@@ -5,6 +5,26 @@
 
 ---
 
+## Rollback netcode for ONLINE fights (2026-10-22, branch claude/nice-joliot-163d76, not on main)
+
+Status: **built, not yet tested in a fight.** Port, not in the binary.
+
+- `src/runtime/rollback.c`: both machines run the fight from both players' inputs;
+  only inputs travel (packets 20 INPUT, 21 HELLO, 22 HASH over `mp_net`). The
+  remote input is predicted as the last confirmed one; a late input that differs
+  rolls the state back and re-runs the frames silent and undrawn. Input delay 2
+  (`UMK3_RB_DELAY`), at most 8 frames predicted, a desync hash every 60 frames
+  (`DESYNC at frame` in the log). `UMK3_NETCODE=classic` turns it off.
+- `src/runtime/savestate.c`: per-frame snapshots (`st_rb_*`) of `.umkstd/.umkstb`
+  plus the arena pages written during the fight (MEM_WRITE_WATCH). Files built with
+  `UMK3_NO_ROLLBACK` (lime_menu, lime_platform, lime_app, wav, limeMPGameSpecific)
+  keep their state out of it; `PreloadedCharacters` too.
+- Determinism: `random32` uses `umk3_rand`, held in the state; the frame step is
+  pinned to 1. A recorded fight replays identically on x64 over 3038 ticks; x86
+  differs only in the event queue (address-derived arguments), not yet fixed.
+- No pause in a rollback fight yet (a synced pause is still to do).
+- Not merged with the EOS transport work; the LAN transport is what it runs on today.
+
 ## 1. What was completed
 
 1. **Pure Node.js Extraction Engine (`launcher/app/lib/extract/`)**:
