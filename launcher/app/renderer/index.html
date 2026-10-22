@@ -9,10 +9,11 @@
 </head>
 <body>
 
-<!-- The backdrop, after the console release's arcade menu: red and
-     purple light, a blue band, circuit traces, and two rings of marbled
-     segments with glowing white rims (built in renderer.js, buildRing).
-     Drawn here; no game art. -->
+<!-- The backdrop, after the console release's menus: a cloud of red,
+     purple and blue light, dark circuit traces across it, and a ring of
+     marbled segments with glowing white rims round the window (built in
+     renderer.js, nebulaURL and buildRing). The menu and every section
+     share it. Drawn here; no game art. -->
 <div id="space" aria-hidden="true"></div>
 <svg id="ring" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
 
@@ -40,14 +41,24 @@
 <nav id="menu">
   <div id="menuSel" aria-hidden="true"><i class="orb"></i></div>
   <button class="mi active" data-sec="build"><i class="orb"></i><span data-t="mBuild">COMPILAR TU .IPA</span></button>
+  <button class="mi" data-sec="play"><i class="orb"></i><span data-t="mPlay">JUGAR</span></button>
   <button class="mi" data-sec="video"><i class="orb"></i><span data-t="mVideo">GRÁFICOS</span></button>
   <button class="mi" data-sec="controls"><i class="orb"></i><span data-t="mControls">CONTROLES</span></button>
   <button class="mi" data-sec="profile"><i class="orb"></i><span data-t="mProfile">PERFIL</span></button>
-  <button class="mi" data-sec="play"><i class="orb"></i><span data-t="mPlay">JUGAR</span></button>
   <button class="mi" data-sec="quit"><i class="orb"></i><span data-t="mQuit">SALIR</span></button>
 </nav>
 
 <main id="stage">
+
+  <!-- A section opened from the menu fills the window, as the console
+       release's online pages: its name between two arrows (the triggers
+       turn to the next section) and, where it has pages, a second row of
+       them between arrows too (renderer.js, openFull). -->
+  <div id="secHead">
+    <button id="secPrev" class="sh-arr l" aria-label="&lt;"></button><span id="secPrevG" class="sh-g"></span>
+    <h1 id="secTitle"></h1>
+    <span id="secNextG" class="sh-g"></span><button id="secNext" class="sh-arr r" aria-label="&gt;"></button>
+  </div>
 
   <!-- 1. Compile -->
   <section class="sec active" data-sec="build">
@@ -87,10 +98,12 @@
 
   <!-- 2. Graphics -->
   <section class="sec" data-sec="video">
-    <div class="tabs">
+    <div class="tabs subnav">
+      <button class="sh-arr l sub-prev" aria-label="&lt;"></button>
       <button class="tab" data-g="video" data-t="gVideo">VIDEO</button>
       <button class="tab" data-g="tex" data-t="gTex">TEXTURAS</button>
       <button class="tab" data-g="ui" data-t="gUi">INTERFAZ</button>
+      <button class="sh-arr r sub-next" aria-label="&gt;"></button>
     </div>
     <!-- VIDEO: the window and what draws into it -->
     <div class="gpage" data-g="video">
@@ -161,10 +174,12 @@
 
   <!-- 3. Controls -->
   <section class="sec" data-sec="controls">
-    <div class="tabs">
+    <div class="tabs subnav">
+      <button class="sh-arr l sub-prev" aria-label="&lt;"></button>
       <button class="tab" data-c="p" data-t="tabKb">TECLADO</button>
       <button class="tab" data-c="pad" data-t="tabPad">MANDO</button>
       <button class="tab" data-c="dbg" data-t="tabDbg">DEBUG</button>
+      <button class="sh-arr r sub-next" aria-label="&gt;"></button>
     </div>
     <h2 id="hCtlP" data-t="hControls">TECLADO DEL JUGADOR 1</h2>
     <h2 id="hCtlM" class="hidden" data-t="hPad">MANDO DEL JUGADOR 1</h2>

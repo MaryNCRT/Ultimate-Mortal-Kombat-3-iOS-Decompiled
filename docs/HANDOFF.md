@@ -5,6 +5,12 @@
 
 ---
 
+## Next, after the launcher rework: Mary's 0.1.6 reports
+
+See docs/PROGRESS.md: FLAWLESS VICTORY missing in 64-bit, Reptile's
+fatalities (one only raises his arms), the hitbox view crashes, and the
+Linux compile dies downloading Zig 0.13.0 (EXIT CODE -1).
+
 ## Release 0.1.6 beta (2026-10-22)
 
 Published as the GitHub pre-release `v0.1.6-beta`, two packages:

@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('umk3', {
     listPads: () => ipcRenderer.invoke('pads:list'),
     listMonitors: () => ipcRenderer.invoke('monitors:list'),
     close: () => ipcRenderer.invoke('window:close'),
+    relaunch: () => ipcRenderer.invoke('app:relaunch'),
     minimize: () => ipcRenderer.invoke('window:minimize'),
     maximize: () => ipcRenderer.invoke('window:maximize'),
     fullscreen: () => ipcRenderer.invoke('window:fullscreen'),

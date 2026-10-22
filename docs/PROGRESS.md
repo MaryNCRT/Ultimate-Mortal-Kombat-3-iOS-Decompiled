@@ -16,6 +16,18 @@
 
 ---
 
+## Reported by Mary on 0.1.6 beta, to fix after the launcher rework (2026-10-22)
+
+Not investigated yet; each needs its mechanism traced in the binary first.
+
+- **64-bit:** the FLAWLESS VICTORY text is not shown (fine in 32-bit).
+- **Reptile's fatalities** sometimes do not work fully; in one of them he
+  only raises his arms.
+- **Hitboxes** (the debug view) crash the game.
+- **Linux:** compiling in the launcher fails at once:
+  `1/5 Preparing compiler toolchain... Starting download of Zig 0.13.0
+  compiler / Build failed: / EXIT CODE: -1` (lib/toolchain.js).
+
 ## Release 0.1.6 beta (2026-10-22)
 
 Published as the GitHub pre-release `v0.1.6-beta`, two packages:

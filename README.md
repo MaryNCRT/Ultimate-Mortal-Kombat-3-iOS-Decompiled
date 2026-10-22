@@ -20,6 +20,8 @@
 | **Verification (`tools/decomp/`)** | **98.30%** | Differential tests against the `armrecomp` ARM→C oracle + build-time table layout verification (`ctest`). |
 | **Native Port (`src/runtime/`)** | **Playable (v0.1.6-beta)** | Native OpenGL renderer, Win32 & SDL2 backends, 3:2 / 4:3 / 16:9 / 21:9 aspect ratios, HD textures, keyboard & gamepad support, local 2P (`DUELO`), LAN/Online multiplayer, and debug tools (`F2`). |
 
+**Known problems in 0.1.6 beta:** the FLAWLESS VICTORY text is missing in the 64-bit build; Reptile's fatalities sometimes fail (in one he only raises his arms); the debug hitbox view crashes; on Linux, compiling fails while downloading Zig (`EXIT CODE: -1`).
+
 > [!IMPORTANT]
 > **No copyrighted assets or binaries are distributed in this repository.**
 > To build and play, you must supply your own legally obtained copy of **Ultimate Mortal Kombat 3 for iOS (v1.2.59)** (`.ipa`, `armv7` UUID `90d6f56a18e2303f8f2053b02a42742e`).
