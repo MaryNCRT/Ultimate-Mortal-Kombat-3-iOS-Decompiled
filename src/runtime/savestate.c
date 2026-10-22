@@ -414,6 +414,59 @@ static uint8_t  *g_rb_track;            /* per arena page: written since */
 static uint32_t *g_rb_list;             /* the tracked pages, in order */
 static uint32_t  g_rb_ntrack;
 
+/* The pieces of the two sections a snapshot holds: all of them but the
+ * range st_rb_skip names (the loaded fighters, which a fight only reads). */
+static struct { uint8_t *p; uint32_t n; } g_rb_piece[3];
+static int       g_rb_npieces;
+static uint8_t  *g_rb_skip;
+static uint32_t  g_rb_skip_n;
+
+void st_rb_skip(const void *p, unsigned long n)
+{
+    g_rb_skip = (uint8_t *)p;
+    g_rb_skip_n = (uint32_t)n;
+}
+
+static void rb_pieces(uint8_t *p[2], uint32_t sz[2])
+{
+    int i;
+
+    g_rb_npieces = 0;
+    g_rb_sect = 0;
+    for (i = 0; i < 2; i++) {
+        uint8_t *a = p[i], *e = p[i] + sz[i];
+        uint8_t *sa = g_rb_skip, *se = g_rb_skip + g_rb_skip_n;
+
+        if (g_rb_skip_n && sa >= a && se <= e) {
+            if (sa > a) {
+                g_rb_piece[g_rb_npieces].p = a;
+                g_rb_piece[g_rb_npieces++].n = (uint32_t)(sa - a);
+            }
+            a = se;
+        }
+        if (e > a) {
+            g_rb_piece[g_rb_npieces].p = a;
+            g_rb_piece[g_rb_npieces++].n = (uint32_t)(e - a);
+        }
+    }
+    for (i = 0; i < g_rb_npieces; i++)
+        g_rb_sect += g_rb_piece[i].n;
+}
+
+static void rb_sect_copy(uint8_t *buf, int save)
+{
+    uint32_t at = 0;
+    int i;
+
+    for (i = 0; i < g_rb_npieces; i++) {
+        if (save)
+            memcpy(buf + at, g_rb_piece[i].p, g_rb_piece[i].n);
+        else
+            memcpy(g_rb_piece[i].p, buf + at, g_rb_piece[i].n);
+        at += g_rb_piece[i].n;
+    }
+}
+
 void st_rb_end(void)
 {
     int i;
@@ -445,7 +498,7 @@ int st_rb_begin(int n)
     st_rb_end();
     if (!st_available() || state_sections(p, sz, 2) != 2 || n < 1)
         return -1;
-    g_rb_sect = sz[0] + sz[1];
+    rb_pieces(p, sz);
     g_rb = (struct rb_slot *)calloc((size_t)n, sizeof *g_rb);
     g_rb_track = (uint8_t *)calloc(ST_RESERVE / RB_PAGE, 1);
     g_rb_list = (uint32_t *)malloc(ST_RESERVE / RB_PAGE * sizeof *g_rb_list);
@@ -465,6 +518,9 @@ int st_rb_begin(int n)
     ResetWriteWatch(g_base, ST_RESERVE);
     return 0;
 }
+
+int st_rb_running(void) { return g_rb_n > 0; }
+int st_owns(const void *p) { return in_arena(p); }
 
 unsigned long st_rb_size(void)
 {
@@ -504,8 +560,7 @@ int st_rb_save(int slot)
     if (slot < 0 || slot >= g_rb_n || state_sections(p, sz, 2) != 2)
         return -1;
     s = &g_rb[slot];
-    memcpy(s->sect, p[0], sz[0]);
-    memcpy(s->sect + sz[0], p[1], sz[1]);
+    rb_sect_copy(s->sect, 1);
 
     rb_watch();
     if (g_rb_ntrack > s->cap) {
@@ -543,8 +598,7 @@ int st_rb_load(int slot)
         || state_sections(p, sz, 2) != 2)
         return -1;
     s = &g_rb[slot];
-    memcpy(p[0], s->sect, sz[0]);
-    memcpy(p[1], s->sect + sz[0], sz[1]);
+    rb_sect_copy(s->sect, 0);
 
     rb_watch();
     /* the slot's pages are the first s->npages of the list, in its order */
@@ -706,6 +760,9 @@ int   st_rb_begin(int n)                   { (void)n; return -1; }
 int   st_rb_save(int slot)                 { (void)slot; return -1; }
 int   st_rb_load(int slot)                 { (void)slot; return -1; }
 void  st_rb_end(void)                      {}
+void  st_rb_skip(const void *p, unsigned long n) { (void)p; (void)n; }
+int   st_rb_running(void)                  { return 0; }
+int   st_owns(const void *p)               { (void)p; return 0; }
 unsigned long st_rb_size(void)            { return 0; }
 
 #endif

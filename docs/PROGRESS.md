@@ -18,7 +18,22 @@
 
 ## Rollback netcode for ONLINE fights (2026-10-22, branch claude/nice-joliot-163d76, not on main)
 
-Status: **built, not yet tested in a fight.** Port, not in the binary.
+Status: **tested by Mary on one PC, two windows (LAN), 64-bit:** fights run on
+both, 0 desyncs, snapshots 0.8 ms / 6.1 MB, a few holds. Not yet tested over the
+internet or 64 vs 32 bits. Port, not in the binary.
+
+Fixed while testing (2026-10-22):
+- `limeMalloc` takes its blocks from the save-state arena during a rollback fight;
+  its own region is not rolled back, so a re-run frame freed a block twice.
+- Snapshots skip `PreloadedCharacters` (60 MB the fight only reads); the copy was
+  66 MB and 11 ms a frame.
+- The guest waits, before loading the fight, for the host's hello and takes its
+  level. Before, each side loaded its own random level; with the classic netcode
+  the host's level arrived mid-fight and the guest crashed in `RenderLevelBG`.
+- Multiplayer versus screen: the kode wheels each side may press were transcribed
+  wrong (armv7 0x16b98: host 0..4, guest 7..9); portraits and wheels now sit at
+  the screen's edges as on `FE_Task_VS_Screen`.
+- 64-bit crash reports unwind the stack (.pdata) and print exe offsets.
 
 - `src/runtime/rollback.c`: both machines run the fight from both players' inputs;
   only inputs travel (packets 20 INPUT, 21 HELLO, 22 HASH over `mp_net`). The

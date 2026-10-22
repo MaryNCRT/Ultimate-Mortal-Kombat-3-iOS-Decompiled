@@ -711,6 +711,30 @@ static LONG WINAPI on_crash(EXCEPTION_POINTERS *ep)
             fp = (unsigned long *)fp[0];
         }
     }
+#elif defined(_M_X64) || defined(__x86_64__)
+    if (code != EXCEPTION_STACK_OVERFLOW) {
+        /* Unwind from the faulting context by the exe's .pdata; each frame
+         * as an exe offset, for llvm-symbolizer against the .pdb. */
+        CONTEXT c = *ep->ContextRecord;
+        int i;
+        for (i = 0; i < 24 && c.Rip && pos < (int)sizeof msg - 200; i++) {
+            DWORD64 base = 0, frame = 0;
+            void *handler = NULL;
+            PRUNTIME_FUNCTION rf = RtlLookupFunctionEntry(c.Rip, &base, NULL);
+
+            crash_symbol((void *)c.Rip, fn, sizeof fn);
+            pos += snprintf(msg + pos, sizeof msg - pos, "  %s (exe offset 0x%lx)\r\n",
+                            fn, (unsigned long)(c.Rip - (DWORD64)(uintptr_t)self));
+            if (!rf) {                  /* a leaf: the return address on top */
+                if (IsBadReadPtr((void *)(uintptr_t)c.Rsp, 8))
+                    break;
+                c.Rip = *(DWORD64 *)c.Rsp;
+                c.Rsp += 8;
+                continue;
+            }
+            RtlVirtualUnwind(0, base, c.Rip, rf, &c, &handler, &frame, NULL);
+        }
+    }
 #endif
 
     fprintf(stderr, "\ncrash:\n%s", msg);

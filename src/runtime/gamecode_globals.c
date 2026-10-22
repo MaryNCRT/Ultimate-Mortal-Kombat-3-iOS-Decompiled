@@ -18984,16 +18984,7 @@ long PlayerSelectToggle;  /* 0x00101720 */
 float PlayerSize = 0.0101562496f;  /* pointer slot */
 char Players[24320 / sizeof(char)];  /* 0x001fa4d4 */
 void *PortraitBorderTexture;  /* 0x00183f2c */
-/* Port: 60 MB of loaded data a fight never writes, so a rollback leaves it
- * out (savestate.h, UMK3_NO_ROLLBACK); a save state still keeps it. */
-#if defined(_WIN32) && defined(UMK3_STATE_FILE)
-__asm__(".section .umkntb,\"bw\"");
-#pragma bss_seg(push, ".umkntb")
-#endif
 char PreloadedCharacters[41148 / sizeof(char)][PRELOAD_STRIDE];  /* 0x0028bc10 */
-#if defined(_WIN32) && defined(UMK3_STATE_FILE)
-#pragma bss_seg(pop)
-#endif
 float RealBGSceneMatrix[32];  /* 0x001abaa0, two 4x4 */
 float RenderMeshAlphaOverRide = 1.0f;  /* 0x0014e238 */
 int RenderSettings[2];  /* 0x001ab678, two words */

@@ -5962,6 +5962,7 @@ long GameInit_LoadABit(long step);
  * back before anything loads. */
 int  rb_fight_setup(int32_t *setup, int n);
 void rb_online_begin(int c1, int c2, int level);
+int  rb_host_level(long *level);
 int  rb_step_begin(int32_t joy[2]);
 void rb_trial_done(void);
 void rb_step_end(const uint32_t *w, int n);
@@ -6002,6 +6003,9 @@ void Task_GameInit(void)
     long i;
 
     if (GameInitState == 0) {
+        /* Port, not in the binary: the guest takes the host's level */
+        if (GameMode == 1 && rb_host_level(LevelSelectP))
+            return;
         rb_setup();                     /* Port, not in the binary */
         if (GameMode == 1)              /* Port: rollback netcode */
             rb_online_begin((int)Character1, (int)Character2, (int)*LevelSelectP);

@@ -20,6 +20,7 @@ int  rb_nodraw(void);
 
 /* Task_GameInit, state 0, of an online fight: the two fighters and the
  * level, which also seed the two generators. */
+int  rb_host_level(long *level);
 void rb_online_begin(int c1, int c2, int level);
 /* Task_GameDestroy */
 void rb_online_end(void);

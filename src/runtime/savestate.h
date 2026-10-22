@@ -140,6 +140,12 @@ int  st_rb_begin(int n);
 int  st_rb_save(int slot);
 int  st_rb_load(int slot);
 void st_rb_end(void);
+/* 1 between st_rb_begin and st_rb_end; st_owns says a block is the arena's.
+ * limeMalloc (lime_platform.c) takes its blocks from the arena meanwhile. */
+int  st_rb_running(void);
+/* A range of the sections the snapshots leave out (set before st_rb_begin). */
+void st_rb_skip(const void *p, unsigned long n);
+int  st_owns(const void *p);
 unsigned long st_rb_size(void);         /* bytes a snapshot copies */
 
 /* Port, not in the binary: the C library's rand() for the game's files,

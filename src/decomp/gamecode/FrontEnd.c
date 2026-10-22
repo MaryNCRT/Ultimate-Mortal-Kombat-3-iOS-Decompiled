@@ -13719,6 +13719,11 @@ void FE_Task_Select_Treasure(void)
 #define MVS_FADE_STEP    -0.033333335f
 #define MVS_BIG_TEXT     2.5f
 #define MVS_LOG_MATCH    0x7555
+/* Port, not in the binary: a wheel's x on the screen. The host's wheels at the
+ * left edge and the guest's at the right, under their portraits, where the
+ * binary's FE_X kept the whole row in the middle 480 of a wide screen. */
+#define MVS_KX(x)  ((x) < 240.0f ? FE_WidthScale * (x) \
+                    :(float)limeScreenWidth - FE_WidthScale * (480.0f - (x)))
 
 extern long  SpritelistReceived;        /* pointer slot -> 0x0010deac */
 extern float  limeLastTouchScreenY[];     /* 0x00171b6c, four slots */
@@ -13802,18 +13807,22 @@ void FE_Task_Multiplayer_Versus_Screen(void)
 
     limeEnableAlphaBlending_Basic();
 
-    /* ---- the two portraits, through FE_X / FE_W / FE_H this time ---- */
+    /* ---- the two portraits ---- */
+    /* The binary draws them through FE_X / FE_W / FE_H, inside the middle
+     * 480 of a wide screen; at the screen's edges as FE_Task_VS_Screen has
+     * them (port, Mary) */
     limeDrawSprite((TEXTURE *)CharacterVSTexture[left],
-                   FE_X(0.0f - VSScroll),
+                   0.0f - FE_WidthScale * VSScroll,
                    (float)limeScreenHeight + FE_HeightScale * -256.0f,
-                   FE_W(256.0f), FE_H(256.0f),
+                   FE_WidthScale * 256.0f, FE_HeightScale * 256.0f,
                    0.0f, 0.0f, 1.0f, 1.0f, col);
 
     limeDrawSprite((TEXTURE *)(left == right ? CharacterVSTexture2[right]
                                              : CharacterVSTexture[right]),
-                   FE_X(224.0f + VSScroll),
+                   (float)limeScreenWidth + FE_WidthScale * VSScroll
+                   + FE_WidthScale * -256.0f,
                    (float)limeScreenHeight + FE_HeightScale * -256.0f,
-                   FE_W(256.0f), FE_H(256.0f),
+                   FE_WidthScale * 256.0f, FE_HeightScale * 256.0f,
                    0.0f, 0.0f, -1.0f, 1.0f, col);   /* mirrored */
 
     /* ---- the shared kode row: six digits, 3..6 skipped ---- */
@@ -13823,16 +13832,18 @@ void FE_Task_Multiplayer_Versus_Screen(void)
         long  x = i * MVS_CELL;
 
         if (GamePaused == 0 && otherPlayerPaused == 0) {
-            long mine = isParent() ? (isParentBasedOnSpeed() && i <= 4)
-                                   : (i <= 5);
+            /* the host's wheels are 0..4, the guest's 6 and up (armv7
+             * 0x16b98..0x1708c: four branches on isParent and
+             * isParentBasedOnSpeed, one test each) */
+            long mine = isParent() ? (i <= 4) : (i > 5);
 
             if (mine && limeLastTouchScreenX[0] == -1.0f
                 && limeTouchScreenY[0] >= (float)limeScreenHeight
                                         + FE_HeightScale * -64.0f
                 && limeTouchScreenY[0] <= (float)limeScreenHeight
                                         + FE_HeightScale * 16.0f
-                && limeTouchScreenX[0] >= FE_X((float)x)
-                && limeTouchScreenX[0] <= FE_X((float)((i + 1) * MVS_CELL))) {
+                && limeTouchScreenX[0] >= MVS_KX((float)x)
+                && limeTouchScreenX[0] <= MVS_KX((float)x) + FE_WidthScale * MVS_CELL) {
 
                 KodeSelector[i] = (KodeSelector[i] + 1) % 10;
 
@@ -13862,9 +13873,9 @@ void FE_Task_Multiplayer_Versus_Screen(void)
         v = (float)((double)((n / 5) * MVS_CELL) * 0.0078125);
 
         limeDrawSprite((TEXTURE *)KodesTexture,
-                       FE_X((float)x),
+                       MVS_KX((float)x),
                        (float)limeScreenHeight + FE_HeightScale * -48.0f,
-                       FE_W((float)MVS_CELL), FE_H((float)MVS_CELL),
+                       FE_WidthScale * MVS_CELL, FE_HeightScale * MVS_CELL,
                        u, v, MVS_U, MVS_V, col);
 
         t = KodeSelectorParticle[i];
@@ -13875,12 +13886,12 @@ void FE_Task_Multiplayer_Versus_Screen(void)
             part[3] = 1.0f - t;
 
             limeDrawSprite((TEXTURE *)KodesTexture,
-                           FE_X((float)x - MVS_PART_MOVE * t),
+                           MVS_KX((float)x) - FE_WidthScale * MVS_PART_MOVE * t,
                            (float)limeScreenHeight
                            + FE_HeightScale * -48.0f
                            - FE_HeightScale * MVS_PART_MOVE * t,
-                           FE_W((t + 1.0f) * (float)MVS_CELL),
-                           FE_H((t + 1.0f) * (float)MVS_CELL),
+                           FE_WidthScale * ((t + 1.0f) * (float)MVS_CELL),
+                           FE_HeightScale * ((t + 1.0f) * (float)MVS_CELL),
                            u, v, MVS_U, MVS_V, part);
         }
 

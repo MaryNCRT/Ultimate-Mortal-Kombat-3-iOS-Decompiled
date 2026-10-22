@@ -299,11 +299,16 @@ static void hold(void (*frame)(void))
     st_rb_load(RB_SLOTS - 1);
 }
 
+/* The loaded fighters: 60 MB a fight only reads, so no snapshot holds them
+ * (gamecode_globals.c, 0x5f4 = PRELOAD_STRIDE). */
+extern char PreloadedCharacters[41148][0x5f4];
+
 static void start(void)
 {
     int mine = Settings[4], theirs = g_their_buttons;
 
     g_started = 1;
+    st_rb_skip(PreloadedCharacters, sizeof PreloadedCharacters);
     if (st_rb_begin(RB_SLOTS) != 0)
         printf("rollback: NO SNAPSHOTS -- save states are off in this build\n");
     rb_game_buttons(g_me ? theirs : mine, g_me ? mine : theirs);
@@ -445,6 +450,30 @@ int rb_quiet(void)  { return g_quiet; }
 int rb_nodraw(void) { return g_nodraw; }
 int rb_ready(void)  { return !g_on || g_hello; }
 
+/* The guest's fight waits, before anything loads, for the host's hello and
+ * takes the host's level: each side picked one of its own on the select
+ * screen, and the host's word (sendLevelPacket) can come after the guest has
+ * begun loading. 1 while waiting; gives up after ten seconds. */
+int rb_host_level(long *level)
+{
+    static int waited;
+
+    /* the classic netcode too: its guest drew a level it never loaded when
+     * the host's arrived mid-fight (RenderLevelBG) */
+    if (isParent())
+        return 0;
+    if (!g_hello && ++waited < 600)
+        return 1;
+    if (g_hello && *level != g_their_setup[2]) {
+        printf("rollback: the host's level %d, not %ld\n",
+               (int)g_their_setup[2], *level);
+        *level = g_their_setup[2];
+    } else if (!g_hello)
+        printf("rollback: no hello from the host in ten seconds\n");
+    waited = 0;
+    return 0;
+}
+
 void rb_online_begin(int c1, int c2, int level)
 {
     const char *e = getenv("UMK3_RB_DELAY");
@@ -452,6 +481,11 @@ void rb_online_begin(int c1, int c2, int level)
 
     if (getenv("UMK3_NETCODE") && !strcmp(getenv("UMK3_NETCODE"), "classic")) {
         printf("rollback: off (UMK3_NETCODE=classic)\n");
+        g_me = isParent() ? 0 : 1;      /* the hello still says the level */
+        g_setup[0] = c1;
+        g_setup[1] = c2;
+        g_setup[2] = level;
+        send_hello();
         return;
     }
     g_on = 1;
@@ -492,8 +526,10 @@ void rb_online_begin(int c1, int c2, int level)
 
 void rb_online_end(void)
 {
-    if (!g_on)
+    if (!g_on) {
+        g_hello = 0;                    /* the classic netcode's */
         return;
+    }
     if (g_started)
         report();
     st_rb_end();

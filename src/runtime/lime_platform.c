@@ -401,6 +401,23 @@ void *limeMalloc(const char *tag, size_t bytes)
     if (heap_paranoid())
         lime_heap_check(tag);
 
+    /* Port: in a rollback fight the engine's blocks come from the save
+     * states' arena, which a rollback puts back with the rest of the game;
+     * this region and its free lists it does not (runtime/rollback.c). Such
+     * a block is not on g_blocks, which is not put back either. */
+    if (st_rb_running()) {
+        b = st_malloc(sizeof(*b) + bytes + LIME_GUARD_BYTES);
+        if (b != NULL && st_owns(b)) {
+            b->tag   = tag ? tag : "(untagged)";
+            b->bytes = bytes;
+            b->prev  = b->next = NULL;
+            memcpy((unsigned char *)(b + 1) + bytes, LIME_CANARY,
+                   LIME_GUARD_BYTES);
+            return b + 1;
+        }
+        st_free(b);
+    }
+
     b = low_alloc(sizeof(*b) + bytes + LIME_GUARD_BYTES);
 
     if (b == NULL)
@@ -433,6 +450,16 @@ void limeFree(void *p)
                 b->tag, (unsigned long)b->bytes);
         g_overruns++;
     }
+
+    /* Port: an arena block (above) goes back to the arena. One from this
+     * region is kept while a rollback fight runs: a frame run again would
+     * free it a second time. */
+    if (st_owns(b)) {
+        st_free(b);
+        return;
+    }
+    if (st_rb_running())
+        return;
 
     if (b->prev) b->prev->next = b->next; else g_blocks = b->next;
     if (b->next) b->next->prev = b->prev;
