@@ -395,7 +395,9 @@ void dbg_menu_toggle(void)
 static const char *stage_name(int i)
 {
     static char buf[40];
-    const char *s = *(const char *const *)(Level_Info + i * LEVEL_INFO_STRIDE + 0x1c);
+    /* a 32-bit word, as the engine stores it: read as an 8-byte pointer
+     * it crashed the 64-bit build as soon as the menu opened */
+    const char *s = *(const char *P32 const *)(Level_Info + i * LEVEL_INFO_STRIDE + 0x1c);
     char *u;
 
     snprintf(buf, sizeof buf, "%s", s ? s : "?");

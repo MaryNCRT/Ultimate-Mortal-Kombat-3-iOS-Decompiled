@@ -592,8 +592,52 @@ function buildRing() {
         for (let i = 0; i < n; i++) out.push([from + i * step, from + (i + 1) * step - gap]);
         return out;
     };
-    ring(805, 456, 600, 700, blocks(11, 8, -84), 'ring-big');
-    ring(1110, 430, 285, 330, blocks(16, 7, -95), 'ring-small');
+    ring(845, 450, 560, 715, blocks(9, 13, -100), 'ring-big');
+
+    /* the picture of the game inside the small ring, tinted blue, under the
+     * title (filled by showHero): it fades out towards every edge, an
+     * ellipse the picture's own shape, solid only in the middle */
+    /* the centre a little low: the top (the fight's bars) fades out first */
+    const fade = mk('radialGradient', { id: 'heroFade', cy: '0.6', r: '0.55' }, defs);
+    mk('stop', { offset: '0.35', 'stop-color': '#fff' }, fade);
+    mk('stop', { offset: '0.7', 'stop-color': '#fff', 'stop-opacity': '0.55' }, fade);
+    mk('stop', { offset: '1', 'stop-color': '#fff', 'stop-opacity': '0' }, fade);
+    const mask = mk('mask', { id: 'heroMask' }, defs);
+    mk('rect', { x: '800', y: '288', width: '560', height: '315', fill: 'url(#heroFade)' }, mask);
+    const hero = mk('g', { class: 'hero', mask: 'url(#heroMask)' });
+    mk('image', { id: 'heroImg', x: '800', y: '288', width: '560', height: '315',
+                  preserveAspectRatio: 'xMidYMid slice' }, hero);
+    mk('rect', { class: 'hero-tint', x: '800', y: '288', width: '560', height: '315' }, hero);
+    mk('circle', { class: 'hero-line', cx: '1080', cy: '450', r: '228' });
+    ring(1080, 450, 278, 342, blocks(14, 9, -97), 'ring-small');
+
+    /* the light behind the title, as on the console: a white glow on the
+     * dragon's medallion and thin rays out of it, the long ones along the
+     * title, pulsing slowly */
+    const glow = mk('radialGradient', { id: 'burstGlow' }, defs);
+    mk('stop', { offset: '0', 'stop-color': '#fff', 'stop-opacity': '0.95' }, glow);
+    mk('stop', { offset: '0.25', 'stop-color': '#cfe0ff', 'stop-opacity': '0.6' }, glow);
+    mk('stop', { offset: '1', 'stop-color': '#7fa0ff', 'stop-opacity': '0' }, glow);
+    const rayG = mk('linearGradient', { id: 'burstRay' }, defs);
+    mk('stop', { offset: '0', 'stop-color': '#fff', 'stop-opacity': '0.95' }, rayG);
+    mk('stop', { offset: '0.6', 'stop-color': '#dfe6f5', 'stop-opacity': '0.75' }, rayG);
+    mk('stop', { offset: '1', 'stop-color': '#bcd0ff', 'stop-opacity': '0' }, rayG);
+    const burst = mk('g', { class: 'burst', transform: 'translate(1012 190)' });
+    mk('circle', { r: '210', fill: 'url(#burstGlow)' }, burst);
+    /* [angle, length, half width] */
+    for (const [a, l, w] of [[-90, 190, 13], [-118, 160, 10], [-62, 160, 10], [180, 290, 11],
+                             [0, 340, 11], [-160, 190, 8], [-20, 210, 8], [135, 170, 10],
+                             [45, 170, 10], [100, 140, 8], [80, 140, 8], [160, 180, 6], [20, 200, 6]])
+        mk('path', { d: 'M0 ' + -w + ' L' + l + ' 0 L0 ' + w + ' Z', fill: 'url(#burstRay)',
+                     transform: 'rotate(' + a + ')' }, burst);
+}
+async function showHero() {
+    const url = await window.umk3.hero();
+    const img = document.getElementById('heroImg');
+    if (url && img) {
+        img.setAttribute('href', url);
+        document.body.classList.add('has-hero');
+    }
 }
 
 /* ---------------------------------------------------- the pad, here --
@@ -1642,6 +1686,7 @@ async function init() {
     const logo = await window.umk3.logo();
     if (logo)
         $('logoImg').src = logo;
+    await showHero();
     window.addEventListener('keydown', onKey, true);
     $('play').addEventListener('click', doPlay);
     document.querySelectorAll('.btn').forEach(b => b.addEventListener('pointerenter', hoverBlip));

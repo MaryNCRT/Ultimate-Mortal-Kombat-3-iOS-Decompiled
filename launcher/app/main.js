@@ -177,6 +177,20 @@ ipcMain.handle('logo:get', () => {
     }
 });
 
+/* The picture inside the home screen's small ring, as the console's main
+ * menu shows the game: "aditional textures/image.png" in the game folder,
+ * the player's own (the launcher ships no game art). None: an empty ring. */
+ipcMain.handle('hero:get', () => {
+    for (const n of ['image.png', 'image.jpg']) {
+        try {
+            const p = path.join(g_root, 'aditional textures', n);
+            return 'data:image/' + (n.endsWith('png') ? 'png' : 'jpeg') + ';base64,'
+                   + fs.readFileSync(p).toString('base64');
+        } catch (err) { /* the next */ }
+    }
+    return null;
+});
+
 /* arch= in umk3.ini: which exe is built and played (x86 or x64). */
 function arch() {
     return (g_cfg || ini.load(path.join(g_root, 'umk3.ini'))).arch;

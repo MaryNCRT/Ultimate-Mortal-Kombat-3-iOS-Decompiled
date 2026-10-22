@@ -561,3 +561,54 @@ body.full .sec {
 }
 /* the name is in the header now */
 body.full .sec > h2:first-child, body.full .gpage > h2:first-child { display: none; }
+
+/* ------------------------------------------------- the home screen
+ * Laid out as the console release's main menu, in the backdrop's own
+ * 1600 x 900 box (the rings' viewBox, cropped to cover the window): the
+ * title over the small ring, the picture of the game inside it, the
+ * description under it, the menu down the left on the big ring's curve.
+ * --k is one unit of that box; X(x) = 50vw + (x - 800) k, Y likewise. */
+:root { --k: max(calc(100vw / 1600), calc(100vh / 900)); }
+body:not(.full) #logo {
+    position: fixed; z-index: 4; padding: 0;
+    left: calc(50vw + (770 - 800) * var(--k)); top: calc(50vh + (62 - 450) * var(--k));
+    width: calc(var(--k) * 550);
+}
+body:not(.full) #logo img { width: 100%; max-height: none; }
+/* the version, small, at the top left instead of under the title */
+body:not(.full) #logo .l-sub {
+    position: fixed; left: calc(var(--u) * 1.6); top: calc(var(--u) * 1.1); margin: 0;
+    font-size: calc(var(--u) * 1.3); letter-spacing: .15em;
+}
+body:not(.full) #menu {
+    --u: calc(var(--k) * 17);
+    position: fixed; margin: 0; padding: 0; gap: calc(var(--u) * .76);
+    left: calc(50vw + (265 - 800) * var(--k)); top: calc(50vh + (222 - 450) * var(--k));
+}
+body:not(.full) #menu .orb { width: calc(var(--u) * 4.6); height: calc(var(--u) * 4.6); }
+body:not(.full) #menu .orb::after { font-size: calc(var(--u) * 3.2); }
+body:not(.full) #menuSel .orb { margin-top: calc(var(--u) * -2.3); }
+body:not(.full) .mi { gap: calc(var(--u) * 1); }
+/* each line's own orb only keeps the text in place: the shown one is
+ * #menuSel's, so the lines stay the console's 70 units apart */
+body:not(.full) #menu .mi .orb { height: calc(var(--u) * 2.2); }
+body:not(.full) #desc {
+    position: fixed; margin: 0; max-width: none;
+    left: calc(50vw + (820 - 800) * var(--k)); top: calc(50vh + (615 - 450) * var(--k));
+    width: calc(var(--k) * 505); height: calc(var(--k) * 150);
+    font-size: calc(var(--k) * 25); padding: calc(var(--k) * 14) calc(var(--k) * 18);
+}
+#ring .hero-tint { fill: rgba(30, 50, 150, .28); }
+#ring .hero-line { fill: none; stroke: rgba(205, 215, 255, .35); stroke-width: 2.5; }
+body:not(.has-hero) #ring .hero, body:not(.has-hero) #ring .hero-line { display: none; }
+body.full #ring .hero, body.full #ring .hero-line, body.full #ring .burst { display: none; }
+#ring .burst { animation: burst 4s ease-in-out infinite alternate; }
+@keyframes burst { from { opacity: .75; } to { opacity: 1; } }
+/* the title's border, as on the console: a dark edge hugging the letters
+ * (four hard shadows, each round the last) and a white-blue halo outside */
+body:not(.full) #logo img {
+    filter: drop-shadow(calc(var(--k) * 2.5) 0 0 #05040f) drop-shadow(calc(var(--k) * -2.5) 0 0 #05040f)
+            drop-shadow(0 calc(var(--k) * 2.5) 0 #05040f) drop-shadow(0 calc(var(--k) * -2.5) 0 #05040f)
+            drop-shadow(0 0 calc(var(--k) * 5) rgba(235, 240, 255, .8))
+            drop-shadow(0 0 calc(var(--k) * 20) rgba(130, 165, 255, .55));
+}

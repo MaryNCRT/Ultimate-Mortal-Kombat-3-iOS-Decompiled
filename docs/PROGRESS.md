@@ -31,6 +31,30 @@
 - Backdrop shared by both: a generated cloud of red, purple and blue light
   (`nebulaURL`), dark circuit grooves with grey edges, a big ring of short
   thick marble blocks and, on the menu only, a smaller one to the right.
+- Home screen laid out as the console's main menu, in the rings' own
+  1600 x 900 box (`--k` in styles.css), so it holds at any window size:
+  the title top right with a dark border, a white-blue halo and light rays
+  behind it; the player's picture `aditional textures/image.png` (read at
+  run time by `hero:get`, never shipped: it is game art) inside the small
+  ring, tinted blue and faded towards every edge; the description box under
+  it; the menu down the left 70 units a line. The version moved to the top
+  left corner.
+
+## Debug crashes on 64-bit, fixed (2026-10-22, not yet tested by Mary)
+
+Both from Mary's crash logs, symbolized with the build's .pdb:
+
+- Opening the debug menu, or its STAGE list: `stage_name` (debug_menu.c)
+  read Level_Info's name field (+0x1c, a 32-bit word) as an 8-byte pointer
+  and snprintf crashed. Now `const char *P32`.
+- HITBOXES on: `hb_draw` (game_main.c) read the fighters at G +0xbc /
+  +0x214 the same way and `hb_body` crashed. Now `P32` too.
+
+Both files compile for x86 and x64. Mary also reported that the stage of
+a debug fight stays chosen afterwards. Not changed: her logs show no debug
+fight in the session where CAVE repeated (Arcade, then Survival, then
+Karnage), and Karnage and Survival keep `LevelSelect` by the iOS game's
+own rule (FrontEnd.c, modes 3/4/5). Waiting for her steps.
 
 ## Reported by Mary on 0.1.6 beta, to fix after the launcher rework (2026-10-22)
 
@@ -39,7 +63,7 @@ Not investigated yet; each needs its mechanism traced in the binary first.
 - **64-bit:** the FLAWLESS VICTORY text is not shown (fine in 32-bit).
 - **Reptile's fatalities** sometimes do not work fully; in one of them he
   only raises his arms.
-- **Hitboxes** (the debug view) crash the game.
+- **Hitboxes** (the debug view) crash the game. Fixed, see above.
 - **Linux:** compiling in the launcher fails at once:
   `1/5 Preparing compiler toolchain... Starting download of Zig 0.13.0
   compiler / Build failed: / EXIT CODE: -1` (lib/toolchain.js).

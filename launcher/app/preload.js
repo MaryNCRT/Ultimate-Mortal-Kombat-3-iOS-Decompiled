@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('umk3', {
     platform: process.platform,
     root: () => ipcRenderer.invoke('root:get'),
     logo: () => ipcRenderer.invoke('logo:get'),
+    hero: () => ipcRenderer.invoke('hero:get'),
     loadConfig: () => ipcRenderer.invoke('config:load'),
     saveConfig: delta => ipcRenderer.invoke('config:save', delta),
     browseIpa: () => ipcRenderer.invoke('ipa:browse'),
