@@ -1,0 +1,130 @@
+/* The pieces every page shares -- headings, rows and fields, the inputs,
+ * lists, buttons, tabs, the state line, the progress bar and the key and
+ * button pictures -- in the theme's tokens (tokens.css). What belongs to
+ * one part of the window is in that part's component. */
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+}
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: calc(var(--u) * 1.9);
+    user-select: none;
+}
+.root { display: contents; }
+
+button, input, select { font: inherit; color: inherit; }
+.hidden { display: none !important; }
+
+/* ---- headings: a page's name, its sections */
+h2 {
+    margin: 0 0 calc(var(--u) * 1.2);
+    font-size: calc(var(--u) * 2.4); letter-spacing: .08em; color: #fff; font-weight: 600;
+    border-bottom: 1px solid transparent; padding-bottom: calc(var(--u) * .8);
+    border-image: var(--head-rule) 1;
+    text-shadow: 0 0 calc(var(--u) * .8) rgba(150, 160, 255, .5);
+}
+h3 {
+    margin: calc(var(--u) * 1.8) 0 calc(var(--u) * .8); padding-top: calc(var(--u) * 1.2);
+    font-size: calc(var(--u) * 1.6); color: var(--head); letter-spacing: .12em;
+    border-top: 1px solid transparent; border-image: var(--sub-rule) 1;
+}
+h2 + h3, h3.first { margin-top: 0; padding-top: 0; border: 0; }
+
+/* ---- layout */
+.row { display: flex; gap: calc(var(--u) * 1); align-items: center; margin: calc(var(--u) * .8) 0; }
+.row.top { align-items: flex-start; }
+.row.end { justify-content: flex-end; }
+.fields {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: calc(var(--u) * 1.8) calc(var(--u) * 2.4); align-items: end;
+}
+.field { display: flex; flex-direction: column; gap: calc(var(--u) * .6); min-width: 0; }
+.field.wide, .chk.wide { grid-column: 1 / -1; }
+.field .row { margin: 0; }
+
+/* ---- text */
+.lbl { color: var(--dim); font-size: calc(var(--u) * 1.6); letter-spacing: .08em; }
+.note { color: var(--dim); font-size: calc(var(--u) * 1.4); margin: calc(var(--u) * 1.2) 0 0; }
+.hint { color: var(--dim); font-size: calc(var(--u) * 1.4); margin-right: auto; }
+
+/* ---- inputs and lists */
+.edt, .sel, .btn { height: var(--ctl-h); font-size: calc(var(--u) * 1.5); }
+.edt, .sel {
+    flex: 1; min-width: 0;
+    background: var(--well); border: 1px solid var(--line);
+    border-radius: var(--r-sm); padding: calc(var(--u) * .7) calc(var(--u) * 1);
+}
+.sel option { background: #120e30; }
+.chk { display: flex; gap: calc(var(--u) * .8); align-items: center; cursor: pointer; }
+.chk input { width: calc(var(--u) * 2); height: calc(var(--u) * 2); accent-color: var(--blue); }
+.fields .chk { font-size: calc(var(--u) * 1.8); }
+
+/* ---- buttons */
+.btn {
+    background: var(--grad-btn);
+    border: 1px solid var(--line); border-radius: var(--r-sm);
+    padding: calc(var(--u) * .5) calc(var(--u) * 1.4);
+    letter-spacing: .08em; cursor: pointer; white-space: nowrap;
+}
+.btn:hover { border-color: #fff; box-shadow: var(--hover-glow); }
+.btn:disabled { opacity: .4; cursor: default; box-shadow: none; }
+.btn.hot { background: var(--grad-hot); border-color: var(--hot-rim); }
+.btn.danger { background: var(--grad-danger); border-color: #ff7f86; }
+.btn.big {
+    height: auto; font-size: calc(var(--u) * 2.4); padding: calc(var(--u) * .9) calc(var(--u) * 4.5);
+    margin-top: calc(var(--u) * 1.5); align-self: flex-start;
+}
+
+/* ---- tabs: a row of choices, the chosen one lit */
+.tabs { display: flex; align-items: center; gap: calc(var(--u) * 1); margin-bottom: calc(var(--u) * 1.4); }
+.tabs.sub { margin-bottom: 0; }
+.tab {
+    font: inherit; font-size: calc(var(--u) * 1.35); letter-spacing: .08em;
+    color: var(--dim); background: rgba(255, 255, 255, .05);
+    border: 1px solid rgba(205, 210, 255, .3); border-radius: var(--r-sm);
+    padding: calc(var(--u) * .45) calc(var(--u) * 1.2); cursor: pointer; white-space: nowrap;
+}
+.tab:hover { color: #fff; border-color: rgba(215, 220, 255, .7); }
+.tab.active { color: #fff; border-color: var(--hot-rim); background: var(--grad-hot); }
+
+/* ---- whether something is done: a coloured edge */
+.state {
+    border-left: calc(var(--u) * .5) solid var(--dim);
+    padding: calc(var(--u) * .8) calc(var(--u) * 1.2); margin-bottom: calc(var(--u) * 1.4);
+    background: rgba(255, 255, 255, .04);
+}
+.state.ok { border-color: var(--ok); }
+.state.need { border-color: var(--red); }
+
+/* ---- a group of keys or buttons */
+.kgroups { display: grid; grid-template-columns: 1fr 1.3fr 1fr; gap: calc(var(--u) * 1.6); }
+.keys { display: flex; flex-direction: column; gap: calc(var(--u) * .5); }
+.keybtn {
+    display: flex; justify-content: space-between; align-items: center; gap: calc(var(--u) * 1);
+    min-height: calc(var(--u) * 3);
+    background: var(--sunk); border: 1px solid var(--line);
+    border-radius: var(--r-md); padding: calc(var(--u) * .45) calc(var(--u) * .9);
+    cursor: pointer; font-size: calc(var(--u) * 1.5);
+}
+.keybtn:hover { border-color: var(--blue); }
+.keybtn.ro { cursor: default; }
+.keybtn.ro:hover { border-color: var(--line); }
+.keybtn.waiting { border-color: var(--red); box-shadow: 0 0 calc(var(--u) * 1) rgba(227, 36, 43, .7); }
+.devfield { margin-bottom: calc(var(--u) * 1.4); }
+.devfield .sel { flex: 0 1 calc(var(--u) * 34); }
+
+/* ---- the key and button pictures (Free Input Prompts, CC0) */
+.glyph { height: calc(var(--u) * 2.6); width: auto; vertical-align: middle; }
+.kkey { display: inline-flex; align-items: center; gap: calc(var(--u) * .3); }
+.keybtn .kkey { color: var(--gold1); font-weight: 700; }
+.knum { font-size: calc(var(--u) * 1.1); color: var(--dim); }
+.gname { font-weight: 700; font-size: calc(var(--u) * 1.2); }
+.gplus { color: var(--dim); margin: 0 calc(var(--u) * .2); }
+.padsels { display: flex; gap: calc(var(--u) * .4); align-items: center; }

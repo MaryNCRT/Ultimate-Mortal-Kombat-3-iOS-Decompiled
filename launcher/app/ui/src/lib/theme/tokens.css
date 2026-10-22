@@ -1,0 +1,69 @@
+/* The launcher's theme, in one place: every colour, face, size and finish
+ * the components use is named here, so a page reads the same everywhere
+ * and a change of look is a change of these values.
+ *
+ * Sizes are in two units:
+ *   --u  one hundredth of the window's width (or 1.333 of its height, the
+ *        smaller): the page scales with the window, any size or fullscreen
+ *   --k  one unit of the backdrop's 1600 x 900 box, which crops to cover
+ *        the window: what is laid out on the rings uses it, so it stays on
+ *        them at any shape of window */
+
+:root {
+    --u: min(1vw, 1.333vh);
+    --k: max(calc(100vw / 1600), calc(100vh / 900));
+
+    /* ---- colours: the console menu's lavender, silver and navy */
+    --bg: #110b26;                      /* under the backdrop */
+    --ink: #05040f;                     /* the darkest: edges, shadows */
+    --text: #eceaff;
+    --dim: #9e98d8;                     /* labels, notes, hints */
+    --lav: #b3acf2;                     /* the menu's lines */
+    --head: #b8b0f5;                    /* a page's headings */
+    --code: #9fd0ff;                    /* ids, code, links */
+    --blue: #8a7ff5;
+    --red: #e3242b;
+    --gold1: #ffe9a6;                   /* keys, notes' headings */
+    --gold2: #c88a1c;
+    --ok: #36d07a;
+    --ok-text: #6fe39b;
+    --bad-text: #ff8d8d;
+
+    /* ---- lines and rims */
+    --line: rgba(205, 210, 255, .45);   /* a control's border */
+    --rim: rgba(215, 220, 255, .75);    /* a panel's border */
+    --rim-fade: linear-gradient(90deg, transparent, rgba(215, 220, 255, .45) 20%, rgba(215, 220, 255, .45) 80%, transparent);
+    --head-rule: linear-gradient(90deg, rgba(215, 220, 255, .7), transparent);
+    --sub-rule: linear-gradient(90deg, rgba(215, 220, 255, .35), transparent 70%);
+
+    /* ---- surfaces */
+    --glass: rgba(12, 10, 36, .80);     /* a framed panel */
+    --panel: linear-gradient(rgba(30, 28, 90, .6), rgba(10, 8, 34, .74));  /* the menu's description box */
+    --veil: linear-gradient(rgba(22, 20, 66, .8), rgba(8, 7, 30, .84));    /* a page on the backdrop: the box's glass, deeper, so the text reads over the traces */
+    --well: rgba(4, 3, 18, .6);         /* inside an input */
+    --sunk: rgba(0, 0, 0, .45);         /* a key's row */
+    --popup: rgba(14, 11, 40, .97);
+    --glow-in: inset 0 0 calc(var(--u) * 2.5) rgba(120, 125, 255, .14);
+
+    /* ---- finishes: a dull button, the chosen one, a dangerous one */
+    --grad-btn: linear-gradient(rgba(255, 255, 255, .14), rgba(255, 255, 255, 0) 50%), linear-gradient(#2b2862, #100e2c);
+    --grad-hot: linear-gradient(rgba(255, 255, 255, .32), rgba(255, 255, 255, 0) 50%), linear-gradient(#7a6ff0, #2e2484);
+    --grad-danger: linear-gradient(#b0222a, #4a070c);
+    --hot-rim: rgba(225, 228, 255, .9);
+    --hover-glow: 0 0 calc(var(--u) * 1) rgba(170, 160, 255, .6);
+    --grad-arrow: linear-gradient(#f4f2ff, #c2b9ff 45%, #6f62d8);
+    --grad-arrow-hot: linear-gradient(#fff, #ddd7ff 45%, #9184f5);
+
+    /* ---- faces */
+    --font: "Segoe UI Semibold", "Segoe UI", Arial, sans-serif;
+    --font-mono: Consolas, monospace;
+    --font-impact: Impact, "Arial Black", sans-serif;
+    --shadow-text: 0 calc(var(--u) * .2) calc(var(--u) * .4) #000;
+
+    /* ---- shapes */
+    --r-sm: calc(var(--u) * .4);
+    --r-md: calc(var(--u) * .5);
+    --ctl-h: calc(var(--u) * 3.5);      /* an input, a list, a button */
+
+    color-scheme: dark;
+}

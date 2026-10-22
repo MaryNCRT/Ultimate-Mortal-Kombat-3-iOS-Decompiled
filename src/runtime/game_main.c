@@ -2057,8 +2057,9 @@ static void hb_draw(void)
     glLineWidth(2.0f);
 
     for (i = 0; i < 2; i++) {
-        const char *o = *(const char *const *)((const char *)G
-                                               + (i ? 0x214 : 0xbc));
+        /* 32-bit words in the engine's G (an 8-byte read crashed x64) */
+        const char *o = *(const char *P32 const *)((const char *)G
+                                                   + (i ? 0x214 : 0xbc));
         if (o)
             hb_draw_box(hb_body(o), hb_offset(o), depth, i ? 0.2f : 0.25f,
                         i ? 1.0f : 0.55f, i ? 0.3f : 1.0f, 1);

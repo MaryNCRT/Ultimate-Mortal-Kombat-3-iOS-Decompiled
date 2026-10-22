@@ -177,6 +177,20 @@ ipcMain.handle('logo:get', () => {
     }
 });
 
+/* The picture inside the home screen's small ring, as the console's main
+ * menu shows the game: "aditional textures/image.png" in the game folder,
+ * the player's own (the launcher ships no game art). None: an empty ring. */
+ipcMain.handle('hero:get', () => {
+    for (const n of ['image.png', 'image.jpg']) {
+        try {
+            const p = path.join(g_root, 'aditional textures', n);
+            return 'data:image/' + (n.endsWith('png') ? 'png' : 'jpeg') + ';base64,'
+                   + fs.readFileSync(p).toString('base64');
+        } catch (err) { /* the next */ }
+    }
+    return null;
+});
+
 /* arch= in umk3.ini: which exe is built and played (x86 or x64). */
 function arch() {
     return (g_cfg || ini.load(path.join(g_root, 'umk3.ini'))).arch;
@@ -196,7 +210,15 @@ ipcMain.handle('root:get', () =>
     ({ root: g_root, ready: ini.gameReady(g_root, arch()),
        builtAt: ini.gameBuiltAt(g_root, arch()), version: app.getVersion(),
        /* both compiled: JUGAR offers the choice (Windows only) */
-       both: process.platform === 'win32' && ini.gameReady(g_root, 'x86') && ini.gameReady(g_root, 'x64') }));
+       both: process.platform === 'win32' && ini.gameReady(g_root, 'x86') && ini.gameReady(g_root, 'x64'),
+       /* none compiled yet: the menu shows COMPILE alone */
+       any: ini.gameReady(g_root, 'x64') || (process.platform === 'win32' && ini.gameReady(g_root, 'x86')) }));
+
+/* The first compile done: the launcher opens again with the whole menu. */
+ipcMain.handle('app:relaunch', () => {
+    app.relaunch();
+    app.exit(0);
+});
 
 ipcMain.handle('config:load', () => {
     g_cfg = ini.load(path.join(g_root, 'umk3.ini'));

@@ -86,23 +86,53 @@ function findExistingZig() {
     return null;
 }
 
-function downloadFile(url, destPath, expectedSha, onProgress = () => {}) {
+/* Node tries each of the server's addresses (IPv6, then IPv4) for only
+ * 250 ms by default and, when every one runs out, fails with an
+ * AggregateError whose message is empty: on Linux the build stopped with a
+ * bare "Build failed:". Each address gets 5 s here, and a second try uses
+ * IPv4 alone. */
+const CONNECT = { autoSelectFamily: true, autoSelectFamilyAttemptTimeout: 5000 };
+const CONNECT_V4 = { family: 4 };
+
+/* the error's own text, or its parts' when it is an AggregateError */
+function describeError(err) {
+    if (err && err.message) return err.message;
+    const parts = (err && err.errors || []).map(e => e.message || e.code).filter(Boolean);
+    return parts.length ? parts.join('; ') : String((err && err.code) || err);
+}
+
+async function downloadFile(url, destPath, expectedSha, onProgress = () => {}) {
+    try {
+        return await downloadOnce(url, destPath, expectedSha, onProgress, CONNECT);
+    } catch (err) {
+        if (err.httpStatus || err.checksum) throw err;
+        onProgress({ phase: `Download failed (${describeError(err)}), retrying over IPv4`, pct: 2 });
+        try {
+            return await downloadOnce(url, destPath, expectedSha, onProgress, CONNECT_V4);
+        } catch (err2) {
+            throw new Error(`Could not download Zig ${ZIG_VERSION} from ${url}: ${describeError(err2)}`);
+        }
+    }
+}
+
+function downloadOnce(url, destPath, expectedSha, onProgress, connect) {
     return new Promise((resolve, reject) => {
         fs.mkdirSync(path.dirname(destPath), { recursive: true });
         const fileStream = fs.createWriteStream(destPath);
         const hash = crypto.createHash('sha256');
 
         const request = (reqUrl) => {
-            https.get(reqUrl, res => {
-                // Follow redirects (HTTP 301, 302, 307, 308)
+            https.get(reqUrl, connect, res => {
+                // Follow redirects (HTTP 301, 302, 307, 308), relative ones too
                 if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                    return request(res.headers.location);
+                    res.resume();
+                    return request(new URL(res.headers.location, reqUrl).href);
                 }
 
                 if (res.statusCode !== 200) {
                     fileStream.close();
                     fs.unlinkSync(destPath);
-                    return reject(new Error(`Error downloading toolchain: HTTP ${res.statusCode}`));
+                    return reject(Object.assign(new Error(`Error downloading toolchain: HTTP ${res.statusCode}`), { httpStatus: res.statusCode }));
                 }
 
                 const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
@@ -129,7 +159,7 @@ function downloadFile(url, destPath, expectedSha, onProgress = () => {}) {
                         const actualSha = hash.digest('hex');
                         if (expectedSha && actualSha.toLowerCase() !== expectedSha.toLowerCase()) {
                             fs.unlinkSync(destPath);
-                            return reject(new Error(`Zig SHA-256 checksum mismatch: expected ${expectedSha}, got ${actualSha}`));
+                            return reject(Object.assign(new Error(`Zig SHA-256 checksum mismatch: expected ${expectedSha}, got ${actualSha}`), { checksum: true }));
                         }
                         resolve(destPath);
                     });
@@ -220,6 +250,8 @@ async function ensureToolchain(onProgress = () => {}) {
 
 module.exports = {
     ensureToolchain,
+    describeError,
+    downloadFile,
     findExistingZig,
     getToolchainBaseDir,
     ZIG_VERSION,
