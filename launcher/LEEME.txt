@@ -1,5 +1,5 @@
-ULTIMATE MORTAL KOMBAT 3 - PORT DE PC - 0.1.5 ALPHA (ONLINE)
-============================================================
+ULTIMATE MORTAL KOMBAT 3 - PORT DE PC - 0.1.6 BETA (ONLINE POR INTERNET)
+========================================================================
 
 Port nativo para Windows de la version de iOS (1.2.59), hecho por
 descompilacion. Esta carpeta NO contiene nada del juego: ni graficos, ni
@@ -111,6 +111,32 @@ NUEVO EN 0.0.9
   memoria). Una pelea del debug ya no deja sus luchadores, escenario ni
   paletas para los demas modos.
 - Launcher: botones mas pequenos.
+
+NUEVO EN 0.1.6 BETA (ONLINE POR INTERNET)
+- ONLINE por internet con Epic Online Services: sin abrir puertos, con
+  el mismo codigo de jugador. El SDK de EOS viene en tools\eos y el
+  launcher lo pone junto al juego al compilar (solo en 64 bits; el de
+  32 bits sigue jugando online en la red local).
+- Rollback en las peleas online: cada juego corre la pelea con los
+  controles de los dos y corrige al llegar los del otro, asi la pelea no
+  espera a la red. Cada jugador elige el color de su luchador.
+- Menu debug (F2) nuevo, con la forma del menu de Esc: PELEA
+  (luchadores, ronda, Arcade, trucos), MENUS y OPCIONES (opciones,
+  herramientas y save states), listas que se abren con Enter o clic.
+  Nuevas opciones: vida infinita (jugador 1, 2 o ambos), congelar el
+  reloj, fotogramas por segundo y datos del online. En una pelea online
+  no hay menu debug.
+- La rueda del raton mueve el cursor en el menu debug y en el de Esc.
+- Los avisos (OK / VOLVER) se manejan con el mando: izquierda y derecha
+  eligen, A / Cruz o START aceptan, B / Circulo vuelve.
+- Arreglado en 64 bits: algunas partidas dibujaban todas las texturas
+  en blanco.
+- Arreglado: los fatalities de Mileena (el de los clavos y el del beso).
+- LINUX (SIN PROBAR): paquete UMK3-PC-0.1.6-beta-linux-x64.tar.gz con
+  el launcher para Linux. Compila el juego con SDL2 (hace falta tener
+  libSDL2 y OpenGL instalados), con los avisos estilo iPhone y los
+  iconos de teclado y mando. Nadie lo ha probado todavia en un Linux
+  real; si falla, reportalo en GitHub (Issues).
 
 NUEVO EN 0.1.5 ALPHA (LA ACTUALIZACION ONLINE)
 - JUGAR > ONLINE: tu perfil (icono y nombre) y TU CODIGO, el id de tu
@@ -326,8 +352,10 @@ ARREGLADO EN 0.0.2
 - La melena de Sindel aparece, con su textura.
 - El joystick en pantalla se mueve.
 
-ERRORES CONOCIDOS EN 0.1.5
-- ONLINE solo entre juegos del mismo PC o de la red local.
+ERRORES CONOCIDOS EN 0.1.6
+- La version de Linux no esta probada.
+- En Linux el launcher no se actualiza solo: descarga el .tar.gz nuevo.
+- Online por internet solo en 64 bits.
 - La espera antes de una pelea online puede hacerse larga.
 - El combo del codo de Sub-Zero clasico aun no se ve del todo bien.
 - Algunos objetos aparte de los luchadores aun pueden no verse.
@@ -339,7 +367,7 @@ ERRORES CONOCIDOS EN 0.1.5
 - Al pausar a veces la pelea se ve encogida.
 - Algunos ataques especiales (sobre todo proyectiles) no tienen sonido.
 - Tras un round un luchador puede verse con el modelo de otro.
-- Solo Windows. Linux y macOS todavia no tienen launcher.
+- macOS todavia no tiene launcher.
 - Si el juego falla, mira logs\ junto a umk3-game.exe y reportalo
   con ese archivo en GitHub (Issues).
 
@@ -362,7 +390,7 @@ picker on the select screen ("< COLOR 1 >", saved), no input lag, crash
 reports, the Kombat Kode loading tip fixed, debug TOOLS (hitboxes, fight
 speed, save states), smaller launcher buttons. New in 0.1.0b: the iPad build's menus on 4:3,
 PLAY > DUELO (two players, one PC), free gamepad binding, a tabbed debug
-menu, wide-screen fixes. New in 0.1.5 alpha: PLAY > ONLINE, two games against each other by player code (same PC or local network for now), the versus spotlights and the FATALITY sign fixed in 64 bits. New in 0.1.4 beta: a 64-bit build (WINDOWS in the launcher), winning in
+menu, wide-screen fixes. New in 0.1.6 beta: ONLINE over the internet (Epic Online Services, 64-bit), rollback netcode, a reorganised debug menu (F2) with infinite health, frozen clock, FPS and online numbers, the mouse wheel in the menus, alerts answered with the pad, the white textures of some 64-bit runs fixed, and an untested Linux package. New in 0.1.5 alpha: PLAY > ONLINE, two games against each other by player code (same PC or local network for now), the versus spotlights and the FATALITY sign fixed in 64 bits. New in 0.1.4 beta: a 64-bit build (WINDOWS in the launcher), winning in
 Arcade no longer closes the game. New in 0.1.3 beta: the game's menus with the pad or
 the keyboard, a console-style launcher that closes when the game opens, key
 and button pictures (Free Input Prompts by Julio Cacko, CC0), player two's

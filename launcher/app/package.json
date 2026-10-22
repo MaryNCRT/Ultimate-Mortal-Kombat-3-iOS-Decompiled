@@ -1,6 +1,6 @@
 {
   "name": "umk3-launcher",
-  "version": "0.1.5-alpha",
+  "version": "0.1.6-beta",
   "description": "UMK3 PC port launcher - arcade shell (Electron)",
   "main": "main.js",
   "author": "UMK3 Recomp",
@@ -61,6 +61,18 @@
         "AppImage"
       ],
       "category": "Game",
+      "extraResources": [
+        {
+          "from": "../../TOOLS/eos",
+          "to": "TOOLS/eos",
+          "filter": [
+            "SDK/Include/**",
+            "SDK/Bin/libEOSSDK-Linux-Shipping.so",
+            "eos.ini",
+            "ThirdPartyNotices/**"
+          ]
+        }
+      ],
       "icon": "build/icon.png"
     }
   }

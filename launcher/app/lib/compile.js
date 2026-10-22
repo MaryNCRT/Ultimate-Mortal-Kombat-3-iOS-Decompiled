@@ -29,8 +29,11 @@ function findEosDir(rootDir) {
     if (has(process.env.UMK3_EOS_DIR)) return process.env.UMK3_EOS_DIR;
     let d = path.resolve(rootDir);
     for (;;) {
-        const c = path.join(d, 'TOOLS', 'eos');
-        if (has(c)) return c;
+        // tools/eos too: a package made on Windows merges TOOLS/ into tools/
+        for (const t of ['TOOLS', 'tools']) {
+            const c = path.join(d, t, 'eos');
+            if (has(c)) return c;
+        }
         const up = path.dirname(d);
         if (up === d) return null;
         d = up;

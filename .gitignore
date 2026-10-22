@@ -115,3 +115,7 @@ launcher/app/node_modules/
 launcher/app/dist/
 /executables/
 
+
+# The Epic Online Services SDK and the product credentials (eos.ini): the
+# release packages copy them from here, the repository never holds them
+TOOLS/eos/

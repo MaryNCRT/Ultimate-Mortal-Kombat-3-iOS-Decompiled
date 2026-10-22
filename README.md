@@ -18,7 +18,7 @@
 |---|---|---|
 | **Decompilation (`src/decomp/`)** | **2,572 / 2,572 (100%)** | LIME 3D engine (`109`), Front-End & Scene (`291`), Arcade Fight Engine (`2,172`). |
 | **Verification (`tools/decomp/`)** | **98.30%** | Differential tests against the `armrecomp` ARM→C oracle + build-time table layout verification (`ctest`). |
-| **Native Port (`src/runtime/`)** | **Playable (v0.1.5-alpha)** | Native OpenGL renderer, Win32 & SDL2 backends, 3:2 / 4:3 / 16:9 / 21:9 aspect ratios, HD textures, keyboard & gamepad support, local 2P (`DUELO`), LAN/Online multiplayer, and debug tools (`F2`). |
+| **Native Port (`src/runtime/`)** | **Playable (v0.1.6-beta)** | Native OpenGL renderer, Win32 & SDL2 backends, 3:2 / 4:3 / 16:9 / 21:9 aspect ratios, HD textures, keyboard & gamepad support, local 2P (`DUELO`), LAN/Online multiplayer, and debug tools (`F2`). |
 
 > [!IMPORTANT]
 > **No copyrighted assets or binaries are distributed in this repository.**
@@ -56,7 +56,7 @@ cmake --build build --target umk3-game
 On Windows and Linux, you can run **`UMK3-Launcher`** (built from [`launcher/app/`](launcher/app/)), which provides a self-contained arcade interface: it receives your `.ipa`, downloads the pinned `zig cc` compiler automatically (zero system compiler dependencies), unpacks the game assets, compiles the native game binary, and lets you configure graphics/controls (`umk3.ini`).
 
 Available distribution packages:
-- **Linux:** Standalone portable `.tar.gz` and `.AppImage`.
+- **Linux:** Standalone portable `.tar.gz` (0.1.6 beta: built, not yet tested on a Linux machine).
 - **Windows:** Portable `.zip` and `.exe`.
 
 ---

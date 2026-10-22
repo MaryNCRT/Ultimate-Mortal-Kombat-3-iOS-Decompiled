@@ -4,7 +4,20 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 
 ---
 
-## Unreleased (2026-10-22) — Mileena's Fatalities
+## 0.1.6-beta (2026-10-22) — Internet Play, Debug Menu, Linux Package
+
+Tested by Mary on Windows (64 and 32 bits). The Linux package is built but untested.
+
+- **ONLINE over the internet:** Epic Online Services (`src/runtime/mp_eos.c`), loaded at run time from the SDK beside the exe; 64-bit only. The release ships the SDK in `tools/eos` and the launcher copies it next to the game. LAN play works without it.
+- **Rollback netcode** for online fights (`src/runtime/rollback.c`); each player picks their fighter's colour online.
+- **Debug menu (F2)** reorganised like the settings menu: FIGHT, MENUS, TOOLS; new infinite health, freeze clock, FPS and online numbers (all off in an online fight).
+- **Mouse wheel** in the debug and settings menus; **alerts answer the pad**.
+- **iPhone-style boxes on Linux:** `src/runtime/platform/ui_alert.c` is shared by both backends (GDI on Windows, stb_truetype on Linux).
+- **64-bit white textures:** the texture cache's entries come from below 2 GB (`umk3_alloc_low`); the C heap sometimes sat above 4 GB.
+- **Linux package:** `UMK3-PC-0.1.6-beta-linux-x64.tar.gz`, the Electron launcher for Linux; needs SDL2 and OpenGL. Untested.
+- **Release tooling:** `launcher/make_release.py` copies all of `src/` and the EOS SDK, and builds the stub with zig when llvm-mingw is missing.
+
+### Also in 0.1.6 — Mileena's Fatalities
 
 - **Nail fatality:** `RenderAnimatedCharacter` (0x5c2f4) now poses the skeleton on frames that draw no skinned body, as the binary does. Mileena's frames 310..334 are baked meshes, so her BIG CUP (bone 24) was riding the opponent's skeleton instead of her hand.
 - **Suck-kiss fatality:** the port's "hold the last pose" for frames missing from a fighter's frame list now applies only to Classic Sub-Zero, the case it was written for. Held for everyone, it kept the victim on frame 327 after `set_inviso`, and the `MILEENA_SUK_<victim>` absorption replayed every eleven frames until the round ended.
