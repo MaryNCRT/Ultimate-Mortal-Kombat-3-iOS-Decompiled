@@ -4,6 +4,12 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 
 ---
 
+## Unreleased (2026-10-22) — Mileena's Fatalities
+
+- **Nail fatality:** `RenderAnimatedCharacter` (0x5c2f4) now poses the skeleton on frames that draw no skinned body, as the binary does. Mileena's frames 310..334 are baked meshes, so her BIG CUP (bone 24) was riding the opponent's skeleton instead of her hand.
+- **Suck-kiss fatality:** the port's "hold the last pose" for frames missing from a fighter's frame list now applies only to Classic Sub-Zero, the case it was written for. Held for everyone, it kept the victim on frame 327 after `set_inviso`, and the `MILEENA_SUK_<victim>` absorption replayed every eleven frames until the round ended.
+- **Debug finisher on x64:** `opponent_dizzy` reads the engine's 32-bit words instead of 8-byte pointers (it crashed the scripted finisher test).
+
 ## 2026-10-18 — Repository Reorganization & Unified `.ipa` Build
 
 - **Directory layout:** Separated source into `src/decomp/` (1:1 decompiled C) and `src/runtime/` (PC port layer), and tools into `tools/build/` (build-time `.ipa` & table extractors) and `tools/decomp/` (reverse engineering, Ghidra, `armrecomp`, `difftest`).

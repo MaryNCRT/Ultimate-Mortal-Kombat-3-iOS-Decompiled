@@ -10835,8 +10835,16 @@ void RenderLevelPlayers(void)
                  * 12..15 are Reptile's 12..15 bone for bone (within 2e-4),
                  * and REPTILEFRAMES.bin maps 3288..3291 to exactly those.
                  * So the ids take those frames. RPCOMBO10 is in nobody's
-                 * list, Reptile's included; it and anything else missing
-                 * hold the last pose drawn. */
+                 * list, Reptile's included; it and anything else of his
+                 * that is missing hold the last pose drawn.
+                 *
+                 * Only his. Every other fighter keeps the binary's -1, and
+                 * the -1 is load-bearing: a victim of Mileena's suck kiss
+                 * plays 1394 (frame 327, which fires MILEENA_SUK_<him>) and
+                 * then 1399..1405, all -1. Held at 327, the fire went on
+                 * after set_inviso -- an invisible fighter re-fires its
+                 * frame's events every draw -- and the body was sucked in
+                 * again every eleven frames until the round ended. */
                 if (slot <= 1) {
                     static long port_pose[2] = { -1, -1 }, port_chr[2];
 
@@ -10847,7 +10855,8 @@ void RenderLevelPlayers(void)
                     if (w[0x14 / 4] != -1) {
                         port_pose[slot] = w[0x14 / 4];
                         port_chr[slot]  = chr;
-                    } else if (port_pose[slot] != -1 && port_chr[slot] == chr) {
+                    } else if (chr == 21 && port_pose[slot] != -1
+                               && port_chr[slot] == chr) {
                         w[0x14 / 4] = port_pose[slot];
                     }
                 }
