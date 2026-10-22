@@ -12,9 +12,14 @@
  * The window is resizable and reports its drawable size rather than the
  * requested one, so high-DPI displays get the right viewport.
  */
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE                     /* popen, for fontconfig */
+#endif
+#include <math.h>
 #include <stdio.h>
 #include "platform.h"
 #include "gl.h"
+#include "ui_alert.h"
 
 #include <SDL.h>
 #include <stdlib.h>
@@ -27,8 +32,23 @@ static SDL_Window   *g_wnd;
 static SDL_GLContext g_ctx;
 static bool          g_quit;
 static bool          g_focused = true;
+static int           g_wheel;           /* notches not yet taken */
 static Uint64        g_start, g_freq;
 static SDL_GameController *g_controller;
+/* Typed text for plat_text_take, one character (UTF-8) per entry, with
+ * Backspace, Enter, Esc and Ctrl+V as 8, 13, 27 and 22, as Windows' WM_CHAR
+ * gives them. Port, not in the binary. */
+static char g_text[64][8];
+static int  g_text_n;
+
+static void text_push(const char *c, int len)
+{
+    if (g_text_n >= (int)(sizeof g_text / sizeof g_text[0]) || len <= 0 || len > 7)
+        return;
+    memcpy(g_text[g_text_n], c, (size_t)len);
+    g_text[g_text_n][len] = 0;
+    g_text_n++;
+}
 
 bool plat_open(const char *title, int width, int height)
 {
@@ -75,6 +95,7 @@ bool plat_open(const char *title, int width, int height)
 
     SDL_GL_MakeCurrent(g_wnd, g_ctx);
     SDL_GL_SetSwapInterval(1);
+    SDL_StartTextInput();               /* SDL_TEXTINPUT: plat_text_take */
 
     int dw, dh;
     SDL_GL_GetDrawableSize(g_wnd, &dw, &dh);
@@ -125,37 +146,49 @@ void plat_quit(void)
     g_quit = true;
 }
 
-unsigned char *plat_ui_badge(const char *name, const unsigned char *icon,
-                             int icon_px, float s, int *w, int *h)
-{
-    (void)name; (void)icon; (void)icon_px; (void)s; (void)w; (void)h;
-    return NULL;
-}
-
-/* No typed text in the SDL backend yet: profile names come from the
- * launcher there. */
 int plat_text_take(char *out, int n)
 {
+    int len;
+
     if (n > 0)
         out[0] = 0;
-    return 0;
+    if (g_text_n == 0 || n < 5)
+        return 0;
+    len = (int)strlen(g_text[0]);
+    if (len > n - 1)
+        len = n - 1;
+    memcpy(out, g_text[0], (size_t)len);
+    out[len] = 0;
+    g_text_n--;
+    memmove(g_text, g_text + 1, (size_t)g_text_n * sizeof g_text[0]);
+    return len;
 }
 
 void plat_text_clear(void)
 {
+    g_text_n = 0;
 }
 
 int plat_clipboard_text(char *out, int n)
 {
-    if (n > 0)
-        out[0] = 0;
-    return 0;
+    char *c;
+    int len = 0;
+
+    if (n <= 0)
+        return 0;
+    out[0] = 0;
+    c = SDL_GetClipboardText();
+    if (c) {
+        snprintf(out, (size_t)n, "%s", c);
+        len = (int)strlen(out);
+        SDL_free(c);
+    }
+    return len;
 }
 
 int plat_clipboard_set(const char *utf8)
 {
-    (void)utf8;
-    return 0;
+    return SDL_SetClipboardText(utf8) == 0;
 }
 
 void *plat_gl_proc(const char *name)
@@ -173,7 +206,31 @@ bool plat_poll(void)
         case SDL_QUIT:
             g_quit = true;
             break;
-        case SDL_KEYDOWN:
+        case SDL_KEYDOWN: {
+            SDL_Keycode k = ev.key.keysym.sym;
+            if (k == SDLK_BACKSPACE)
+                text_push("\b", 1);
+            else if (k == SDLK_RETURN || k == SDLK_KP_ENTER)
+                text_push("\r", 1);
+            else if (k == SDLK_ESCAPE)
+                text_push("\033", 1);
+            else if (k == SDLK_v && (ev.key.keysym.mod & KMOD_CTRL))
+                text_push("\026", 1);
+            break;
+        }
+        case SDL_TEXTINPUT: {
+            /* one entry per character: split the UTF-8 */
+            const unsigned char *t = (const unsigned char *)ev.text.text;
+            while (*t) {
+                int len = *t < 0x80 ? 1 : *t < 0xe0 ? 2 : *t < 0xf0 ? 3 : 4;
+                text_push((const char *)t, len);
+                t += len;
+            }
+            break;
+        }
+        case SDL_MOUSEWHEEL:
+            g_wheel += ev.wheel.direction == SDL_MOUSEWHEEL_FLIPPED
+                       ? -ev.wheel.y : ev.wheel.y;
             break;
         case SDL_WINDOWEVENT:
             if (ev.window.event == SDL_WINDOWEVENT_CLOSE) {
@@ -237,6 +294,14 @@ int plat_mouse(int *x, int *y)
     return (buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;
 }
 
+int plat_mouse_wheel(void)
+{
+    int n = g_wheel;
+
+    g_wheel = 0;
+    return n;
+}
+
 static SDL_Scancode g_scancode[PK_COUNT] = {
     SDL_SCANCODE_W, SDL_SCANCODE_S, SDL_SCANCODE_A, SDL_SCANCODE_D,
     SDL_SCANCODE_U, SDL_SCANCODE_I, SDL_SCANCODE_O,
@@ -273,26 +338,82 @@ void plat_key_label(int code, char *out, int n)
             *p = (char)(*p - 32);
 }
 
+/* The Vintage keyboard pictures' names (aditional textures/glyphs/kb), by
+ * SDL scancode -- the USB HID usage, the same on every system. */
+static const char *key_glyph_file(int sc, char *tmp)
+{
+    if (sc >= 4 && sc <= 29) {                  /* A..Z */
+        tmp[0] = (char)('A' + sc - 4);
+        tmp[1] = 0;
+        return tmp;
+    }
+    if (sc >= 30 && sc <= 39) {                 /* 1..9, 0 */
+        tmp[0] = (char)(sc == 39 ? '0' : '1' + sc - 30);
+        tmp[1] = 0;
+        return tmp;
+    }
+    if (sc >= 89 && sc <= 98) {                 /* the keypad's 1..9, 0 */
+        tmp[0] = (char)(sc == 98 ? '0' : '1' + sc - 89);
+        tmp[1] = 0;
+        return tmp;
+    }
+    if (sc >= 58 && sc <= 69) {                 /* F1..F12 */
+        snprintf(tmp, 8, "F%d", sc - 58 + 1);
+        return tmp;
+    }
+    switch (sc) {
+    case 82: return "Up";
+    case 81: return "Down";
+    case 80: return "Left";
+    case 79: return "Right";
+    case 40: case 88: return "Enter";
+    case 41: return "Esc";
+    case 44: return "Space";
+    case 43: return "Tab";
+    case 42: return "BackSpace";
+    case 225: case 229: return "Shift";
+    case 224: case 228: return "Crtl";
+    case 226: case 230: return "Alt";
+    case 57: return "CapsLock";
+    case 76: case 99: return "Del";
+    case 73: return "Ins";
+    case 74: return "Home";
+    case 77: return "End";
+    case 75: return "PageUp";
+    case 78: return "PageDown";
+    case 45: case 86: return "Minus";
+    case 46: case 87: return "Plus";
+    case 85: return "Asterisk";
+    case 51: return "Semicolon";
+    case 56: case 84: return "Slash";
+    case 53: return "Tilde";
+    case 47: return "Brackets_L";
+    case 48: return "Brackets_R";
+    case 52: return "Quotation";
+    case 70: return "PrtScrn";
+    case 83: return "NumLock";
+    }
+    return NULL;
+}
+
 void plat_key_glyph(int code, char *out, int n)
 {
+    int sc = (code >= 0 && code < PK_COUNT) ? (int)g_scancode[code] : 0;
+    char tmp[8], name[64];
+    const char *f = key_glyph_file(sc, tmp);
+
+    if (n <= 0)
+        return;
+    if (f) {
+        snprintf(name, sizeof name, "kb/T_%s_Key_Vintage", f);
+        if (ui_glyph_have(name)) {
+            /* the keypad's keys are told from the row's by a NUM */
+            snprintf(out, (size_t)n, "%s\001%s\001",
+                     sc >= 84 && sc <= 99 ? "NUM " : "", name);
+            return;
+        }
+    }
     plat_key_label(code, out, n);
-}
-
-int plat_pad_glyph_style(int player, int style)
-{
-    (void)player;
-    (void)style;
-    return 0;
-}
-
-unsigned char *plat_ui_grid(const char *title,
-                            const unsigned char *const *cells, int n,
-                            int cols, int cpx, float cell, int sel,
-                            const char *footer, float s, int *w, int *h)
-{
-    (void)title; (void)cells; (void)n; (void)cols; (void)cpx; (void)cell; (void)sel;
-    (void)footer; (void)s; (void)w; (void)h;
-    return NULL;
 }
 
 void plat_monitor_select(int i) { (void)i; }
@@ -304,28 +425,6 @@ void plat_monitor_name(int i, char *out, int n)
         snprintf(out, (size_t)n, "%d", i);
 }
 void plat_monitor_list(void) { printf("1\t1\n"); }
-
-int plat_pad_sony_kind(unsigned product)
-{
-    return product == 0x05c4 || product == 0x09cc || product == 0x0ba0 ? 4 : 2;
-}
-
-int plat_pad_glyph_kind(int player, int kind)
-{
-    (void)player;
-    return kind;
-}
-
-void plat_pad_glyph(int kind, int pb, char *out, int n)
-{
-    static const char *const names[PB_COUNT] = {
-        "SOUTH", "EAST", "WEST", "NORTH", "L1", "R1", "L2", "R2",
-        "SELECT", "START", "L3", "R3", "HOME",
-    };
-    (void)kind;
-    if (n > 0)
-        snprintf(out, (size_t)n, "%s", pb >= 0 && pb < PB_COUNT ? names[pb] : "");
-}
 
 void plat_bind_key(int code, int key)
 {
@@ -525,6 +624,9 @@ int plat_pad_read(PLAT_PAD *out)
     out->right = (i >> 3) & 1;
     snprintf(out->name, sizeof out->name, "%s",
              SDL_GameControllerName(pad) ? SDL_GameControllerName(pad) : "pad");
+    v = SDL_GameControllerGetVendor(pad);       /* the pictures to show */
+    out->kind = v == 0x054c ? plat_pad_sony_kind(SDL_GameControllerGetProduct(pad))
+              : v == 0x057e ? 3 : 1;
     return out->connected = 1;
 }
 
@@ -568,19 +670,9 @@ static void utf16_to_utf8(const unsigned short *in, char *out, size_t n)
     out[o] = 0;
 }
 
-unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
-                            int ntab, int tab, const char *const *label,
-                            const char *const *value, const int *enabled,
-                            int n, int sel, const char *footer, float width,
-                            float s, int *w, int *h)
-{
-    (void)title; (void)tabs; (void)ntab; (void)tab; (void)label; (void)value; (void)enabled; (void)n;
-    (void)sel; (void)footer; (void)width; (void)s; (void)w; (void)h;
-    return NULL;                        /* the menu's own font */
-}
-
-int plat_ask(const unsigned short *msg, const unsigned short *ok,
-             const unsigned short *cancel)
+/* The system's own dialog: plat_ask (ui_alert.c) when there is no font. */
+int ui_ask_native(const unsigned short *msg, const unsigned short *ok,
+                  const unsigned short *cancel)
 {
     char m[1024], a[128], b[128];
     SDL_MessageBoxButtonData btn[2];
@@ -610,6 +702,228 @@ int plat_ask(const unsigned short *msg, const unsigned short *ok,
         return cancel ? 1 : 0;
     return hit;
 }
+
+
+/* ------------------------------------------------------------------- font
+ *
+ * The alerts' and menus' text (ui_alert.c), through stb_truetype (Sean
+ * Barrett, public domain / MIT, platform/stb/). The font is the first found
+ * of: "aditional textures/fonts/ui_bold.ttf" and "ui.ttf" beside res (the
+ * player's own), then Liberation Sans (Arial's metrics, as Windows draws
+ * them), DejaVu Sans and Noto Sans where the distributions put them, then
+ * whatever fontconfig gives for Arial. With none, ui_font_ok() is 0 and the
+ * menus use their own 5x7 font. */
+#define STB_TRUETYPE_IMPLEMENTATION
+#define STBTT_STATIC
+#if defined(__GNUC__)
+#pragma GCC diagnostic push               /* its unused parts */
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
+#include "stb/stb_truetype.h"
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+
+const char *lime_platform_asset_root(void);
+
+static struct ui_font {
+    int tried, ok;
+    unsigned char *data;
+    stbtt_fontinfo info;
+} g_font[2];                            /* regular, bold */
+
+static unsigned char *read_file(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    unsigned char *d = NULL;
+    long n;
+
+    if (!f)
+        return NULL;
+    if (fseek(f, 0, SEEK_END) == 0 && (n = ftell(f)) > 0
+        && fseek(f, 0, SEEK_SET) == 0 && (d = (unsigned char *)malloc((size_t)n)) != NULL
+        && fread(d, 1, (size_t)n, f) != (size_t)n) {
+        free(d);
+        d = NULL;
+    }
+    fclose(f);
+    return d;
+}
+
+static struct ui_font *ui_font_get(int bold)
+{
+    static const char *const sys[2][12] = {
+        {
+            "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/TTF/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/TTF/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+            "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+            NULL,
+        }, {
+            "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/liberation-sans/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/TTF/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+            "/usr/share/fonts/noto/NotoSans-Bold.ttf",
+            NULL,
+        },
+    };
+    struct ui_font *f = &g_font[bold ? 1 : 0];
+    char path[1200];
+    const char *from = path;
+    int i;
+
+    if (f->tried)
+        return f->ok ? f : (bold ? ui_font_get(0) : NULL);
+    f->tried = 1;
+    snprintf(path, sizeof path, "%s/../aditional textures/fonts/%s",
+             lime_platform_asset_root(), bold ? "ui_bold.ttf" : "ui.ttf");
+    f->data = read_file(path);
+    for (i = 0; !f->data && sys[bold ? 1 : 0][i]; i++)
+        f->data = read_file(from = sys[bold ? 1 : 0][i]);
+#if defined(__linux__) && !defined(UMK3_SDL2_LINT)
+    if (!f->data) {                     /* fontconfig's choice */
+        FILE *p = popen(bold ? "fc-match -f '%{file}' 'Arial:bold' 2>/dev/null"
+                             : "fc-match -f '%{file}' 'Arial' 2>/dev/null", "r");
+        if (p) {
+            if (fgets(path, sizeof path, p))
+                f->data = read_file(from = path);
+            pclose(p);
+        }
+    }
+#endif
+    if (f->data && stbtt_InitFont(&f->info, f->data,
+                                  stbtt_GetFontOffsetForIndex(f->data, 0)))
+        f->ok = 1;
+    else {
+        free(f->data);
+        f->data = NULL;
+    }
+    if (f->ok)
+        printf("ui font (%s): %s\n", bold ? "bold" : "regular", from);
+    return f->ok ? f : (bold ? ui_font_get(0) : NULL);
+}
+
+int ui_font_ok(void)
+{
+    return ui_font_get(1) != NULL;
+}
+
+/* `px` to the em, as GDI's CreateFont(-px) */
+static float ui_font_scale(struct ui_font *f, int px)
+{
+    return stbtt_ScaleForMappingEmToPixels(&f->info, (float)px);
+}
+
+int ui_font_height(int px, int bold)
+{
+    struct ui_font *f = ui_font_get(bold);
+    int asc, desc, gap;
+
+    if (!f)
+        return 0;
+    stbtt_GetFontVMetrics(&f->info, &asc, &desc, &gap);
+    return (int)ceilf((asc - desc) * ui_font_scale(f, px));
+}
+
+int ui_font_width(const unsigned short *s, int n, int px, int bold)
+{
+    struct ui_font *f = ui_font_get(bold);
+    float sc, x = 0;
+    int i, adv, lsb;
+
+    if (!f)
+        return 0;
+    sc = ui_font_scale(f, px);
+    for (i = 0; i < n; i++) {
+        stbtt_GetCodepointHMetrics(&f->info, s[i], &adv, &lsb);
+        x += adv * sc;
+        if (i + 1 < n)
+            x += stbtt_GetCodepointKernAdvance(&f->info, s[i], s[i + 1]) * sc;
+    }
+    return (int)ceilf(x);
+}
+
+unsigned char *ui_font_line(const unsigned short *s, int n, int px, int bold,
+                            int *w, int *h)
+{
+    struct ui_font *f = ui_font_get(bold);
+    unsigned char *mask;
+    float sc, x = 0;
+    int asc, desc, gap, base, i;
+
+    if (!f)
+        return NULL;
+    sc = ui_font_scale(f, px);
+    stbtt_GetFontVMetrics(&f->info, &asc, &desc, &gap);
+    base = (int)ceilf(asc * sc);
+    *w = ui_font_width(s, n, px, bold) + 1;
+    *h = ui_font_height(px, bold);
+    if (*h < 1)
+        *h = 1;
+    mask = (unsigned char *)calloc((size_t)*w * *h, 1);
+    if (!mask)
+        return NULL;
+    for (i = 0; i < n; i++) {
+        int adv, lsb, x0, y0, x1, y1, gw, gh, gx, gy, X, Y;
+        float shift = x - (float)floor(x);
+        unsigned char *g;
+
+        stbtt_GetCodepointHMetrics(&f->info, s[i], &adv, &lsb);
+        stbtt_GetCodepointBitmapBoxSubpixel(&f->info, s[i], sc, sc, shift, 0,
+                                            &x0, &y0, &x1, &y1);
+        gw = x1 - x0;
+        gh = y1 - y0;
+        if (gw > 0 && gh > 0 && (g = (unsigned char *)malloc((size_t)gw * gh)) != NULL) {
+            stbtt_MakeCodepointBitmapSubpixel(&f->info, g, gw, gh, gw, sc, sc,
+                                              shift, 0, s[i]);
+            for (gy = 0; gy < gh; gy++)
+                for (gx = 0; gx < gw; gx++) {
+                    X = (int)floor(x) + x0 + gx;
+                    Y = base + y0 + gy;
+                    if (X >= 0 && X < *w && Y >= 0 && Y < *h) {
+                        unsigned char c = g[gy * gw + gx], *d = &mask[Y * *w + X];
+                        if (c > *d)
+                            *d = c;
+                    }
+                }
+            free(g);
+        }
+        x += adv * sc;
+        if (i + 1 < n)
+            x += stbtt_GetCodepointKernAdvance(&f->info, s[i], s[i + 1]) * sc;
+    }
+    return mask;
+}
+
+int ui_key(int k)
+{
+    const Uint8 *ks = SDL_GetKeyboardState(NULL);
+
+    switch (k) {                        /* USB scancodes, as SDL's */
+    case UI_K_OK:     return ks[40] || ks[88] || ks[44];    /* Enter, keypad's, Space */
+    case UI_K_CANCEL: return ks[41];                        /* Esc */
+    case UI_K_LEFT:   return ks[80];
+    case UI_K_RIGHT:  return ks[79];
+    }
+    return 0;
+}
+
+int  ui_focused(void)    { return g_focused; }
+void ui_sleep_ms(int ms) { SDL_Delay((Uint32)ms); }
 
 /* POSIX locale variables, in the order setlocale(LC_MESSAGES) reads them:
  * "es_CO.UTF-8" gives "es". */

@@ -8996,6 +8996,11 @@ long t_back_to_shang_form(MK3THREAD *thread)
  */
 extern int PortPractice;                /* FrontEnd.c, port: training */
 
+/* Port, not in the binary: the debug menu's FREEZE CLOCK and INFINITE HEALTH
+ * (runtime/debug_menu.c sets them; bit 0 player one, bit 1 player two). */
+int PortDbgClock;
+int PortDbgHealth;
+
 long t_clock4(MK3THREAD *thread)
 {
     MK3OBJ  *obj   = (MK3OBJ *)thread->proc;
@@ -9017,7 +9022,8 @@ long t_clock4(MK3THREAD *thread)
         (int32_t)*(const uint32_t *)(G_BYTES + 0x36c) <= 0) {
         next = (MK3THREADFUNC)t_round_is_over;
     } else if ((((const uint32_t *)RoundParam)[0x2c / 4] & 1) != 0
-               || PortPractice) {       /* port: training stops it too */
+               || PortPractice          /* port: training stops it too */
+               || PortDbgClock) {       /* port: and the debug menu */
         next = (MK3THREADFUNC)t_clock4;         /* the clock is frozen */
     } else {
         obj->field3c = obj->field3c - 1;
@@ -9936,6 +9942,8 @@ void bar_reducer(MK3OBJ *obj)
         h = 0;
     if (PortPractice && h <= 0)
         h = 0xa6;                       /* port: training, full again */
+    if (PortDbgHealth & (1 << i))
+        h = 0xa6;                       /* port: debug, never takes any */
     obj->field20 = (uint32_t)h;
     *(uint32_t *)(uintptr_t)obj->field38 = (uint32_t)h;
 

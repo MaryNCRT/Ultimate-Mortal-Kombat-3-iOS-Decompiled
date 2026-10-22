@@ -17,6 +17,26 @@ function getCSourceFiles(dir) {
  * a rollback of an online fight does not (src/runtime/savestate.h). */
 const NO_ROLLBACK = ['lime_menu', 'lime_platform', 'lime_app', 'wav', 'limeMPGameSpecific'];
 
+/**
+ * ONLINE over the internet (src/runtime/mp_eos.c, Port, not in the binary):
+ * the Epic Online Services SDK, which is not in the repository. Found through
+ * UMK3_EOS_DIR, or a TOOLS/eos folder in the root or any folder above it.
+ * Returns that folder, or null: then the game plays on the local network
+ * alone.
+ */
+function findEosDir(rootDir) {
+    const has = d => d && fs.existsSync(path.join(d, 'SDK', 'Include', 'eos_sdk.h'));
+    if (has(process.env.UMK3_EOS_DIR)) return process.env.UMK3_EOS_DIR;
+    let d = path.resolve(rootDir);
+    for (;;) {
+        const c = path.join(d, 'TOOLS', 'eos');
+        if (has(c)) return c;
+        const up = path.dirname(d);
+        if (up === d) return null;
+        d = up;
+    }
+}
+
 function isStateFile(srcPath, buildDir) {
     const filename = path.basename(srcPath);
     const normalized = srcPath.replace(/\\/g, '/');
@@ -146,6 +166,7 @@ async function compileGame({
         path.join(rootDir, 'src/runtime/draw_gl.c'),
         path.join(rootDir, 'src/runtime/gamecode_stubs.c'),
         path.join(rootDir, 'src/runtime/mp_net.c'),
+        path.join(rootDir, 'src/runtime/mp_eos.c'),
         path.join(rootDir, 'src/runtime/online_ui.c'),
         path.join(rootDir, 'src/runtime/lime_menu.c'),
         path.join(rootDir, 'src/runtime/lime_platform.c'),
@@ -161,12 +182,14 @@ async function compileGame({
         sources.push(
             path.join(rootDir, 'src/runtime/platform/win32_gl.c'),
             path.join(rootDir, 'src/runtime/platform/win32_gl_cdecl.c'),
-            path.join(rootDir, 'src/runtime/platform/win32_audio.c')
+            path.join(rootDir, 'src/runtime/platform/win32_audio.c'),
+            path.join(rootDir, 'src/runtime/platform/ui_alert.c')
         );
     } else {
         sources.push(
             path.join(rootDir, 'src/runtime/platform/sdl_gl.c'),
-            path.join(rootDir, 'src/runtime/platform/sdl_audio.c')
+            path.join(rootDir, 'src/runtime/platform/sdl_audio.c'),
+            path.join(rootDir, 'src/runtime/platform/ui_alert.c')
         );
     }
 
@@ -219,6 +242,13 @@ async function compileGame({
         if (fs.existsSync('/usr/include/SDL2')) {
             baseFlags.push('-I', '/usr/include/SDL2');
         }
+    }
+
+    // EOS: 64 bits only (the SDK has no 32-bit Windows or Linux library)
+    const eosDir = isLow32 ? findEosDir(rootDir) : null;
+    const eosLib = isWindows ? 'EOSSDK-Win64-Shipping.dll' : 'libEOSSDK-Linux-Shipping.so';
+    if (eosDir && fs.existsSync(path.join(eosDir, 'SDK', 'Bin', eosLib))) {
+        baseFlags.push('-DUMK3_EOS', '-I', path.join(eosDir, 'SDK', 'Include'));
     }
 
     if (isLow32) {
@@ -306,6 +336,8 @@ async function compileGame({
         if (isLow32) {
             linkArgs.push('-Wl,--image-base,0x400000', '-Wl,--no-dynamicbase');
         }
+        // the 32-bit game is already large-address-aware (4 GB on 64-bit
+        // Windows): zig's linker sets it and takes no flag for it
     } else {
         if (process.platform !== 'linux') {
             linkArgs.push(`-target`, isLow32 ? 'x86_64-linux-gnu' : 'x86-linux-gnu');
@@ -317,7 +349,7 @@ async function compileGame({
                 linkArgs.push(`-L${dir}`);
             }
         }
-        linkArgs.push('-lSDL2', '-lGL', '-lm');
+        linkArgs.push('-lSDL2', '-lGL', '-lm', '-ldl');
     }
 
     const linkRsp = path.join(buildDir, 'link.rsp');
@@ -365,6 +397,17 @@ async function compileGame({
 
         linkChild.on('error', reject);
     });
+
+    // The EOS library and the product's eos.ini beside the game
+    if (baseFlags.includes('-DUMK3_EOS')) {
+        fs.copyFileSync(path.join(eosDir, 'SDK', 'Bin', eosLib), path.join(destDir, eosLib));
+        const ini = path.join(eosDir, 'eos.ini');
+        if (fs.existsSync(ini)) {
+            fs.copyFileSync(ini, path.join(destDir, 'eos.ini'));
+        } else {
+            onProgress({ phase: `EOS: no ${ini}; online on the local network only`, pct: 99 });
+        }
+    }
 
     onProgress({ phase: 'Compilation completed', pct: 100 });
     return {

@@ -33,7 +33,8 @@ function(umk3_target_link_platform target_name is_full_game)
         target_sources(${target_name} PRIVATE
             src/runtime/platform/win32_gl.c
             src/runtime/platform/win32_gl_cdecl.c
-            src/runtime/platform/win32_audio.c)
+            src/runtime/platform/win32_audio.c
+            src/runtime/platform/ui_alert.c)
         target_link_libraries(${target_name} PRIVATE opengl32 gdi32 winmm msacm32 ws2_32)
         if(is_full_game)
             enable_language(RC)
@@ -42,7 +43,8 @@ function(umk3_target_link_platform target_name is_full_game)
     elseif(UMK3_BACKEND STREQUAL "sdl2")
         target_sources(${target_name} PRIVATE
             src/runtime/platform/sdl_gl.c
-            src/runtime/platform/sdl_audio.c)
+            src/runtime/platform/sdl_audio.c
+            src/runtime/platform/ui_alert.c)
         target_include_directories(${target_name} PRIVATE ${SDL2_INCLUDE_DIRS})
         target_compile_options(${target_name} PRIVATE -include stddef.h)
         target_compile_definitions(${target_name} PRIVATE

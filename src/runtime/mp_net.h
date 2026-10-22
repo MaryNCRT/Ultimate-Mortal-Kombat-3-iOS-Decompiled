@@ -40,6 +40,9 @@ enum { MPNET_IDLE, MPNET_SEARCHING, MPNET_NOT_FOUND, MPNET_CONNECTED,
 void mpnet_find(const char *code);
 void mpnet_cancel_find(void);
 int  mpnet_status(void);                /* MPNET_* */
+/* Internet play (Epic Online Services, mp_eos.h): MPEOS_OFF, _STARTING,
+ * _READY or _FAILED. */
+int  mpnet_internet(void);
 const struct mpnet_peer *mpnet_peer(void);   /* NULL before a connection */
 /* Called once a frame by game_main.c: reads the socket, hands each game
  * packet to processPacket, resends what was not acknowledged. */

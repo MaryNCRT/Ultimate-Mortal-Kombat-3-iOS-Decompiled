@@ -24,7 +24,11 @@
 #ifdef _WIN32
 #include <windows.h>
 
-#define ST_RESERVE   (768u << 20)       /* address space, committed lazily */
+/* The arena's address space, committed lazily: the largest of the sizes
+ * in arena_init that fits (in the 64-bit build below 2 GB, beside
+ * limeMalloc's region) */
+static uint32_t g_reserve;
+#define ST_RESERVE   g_reserve
 #define ST_COMMIT    (4u << 20)         /* commit step */
 #define ST_HDR       16u                /* per block, keeps 16-byte alignment */
 #define ST_MIN_CLASS 4                  /* 16 bytes */
@@ -79,6 +83,31 @@ void *umk3_reserve_low(size_t size)
 {
     return reserve_low(size, 0);
 }
+
+/* A block below 2 GB that is never freed, outside every state: what the
+ * game keeps in a 32-bit word and a save state must not take back (the
+ * texture cache, draw_gl.c). The C library's heap lands anywhere in the
+ * 64-bit space -- above 4 GB on some runs, as address randomisation has it. */
+void *umk3_alloc_low(size_t n)
+{
+    static uint8_t *cur, *end;
+    uint8_t *p;
+
+    n = (n + 15) & ~(size_t)15;
+    if (!cur || (size_t)(end - cur) < n) {
+        size_t chunk = n > (16u << 20) ? n : (16u << 20);
+
+        cur = (uint8_t *)reserve_low(chunk, 0);
+        if (!cur || !VirtualAlloc(cur, chunk, MEM_COMMIT, PAGE_READWRITE)) {
+            cur = end = NULL;
+            return NULL;
+        }
+        end = cur + chunk;
+    }
+    p = cur;
+    cur += n;
+    return p;
+}
 #endif
 
 static int arena_init(void)
@@ -87,15 +116,26 @@ static int arena_init(void)
         return 1;
     if (g_failed)
         return 0;
+    {
+        static const uint32_t sizes[] = { 1024u << 20, 896u << 20, 768u << 20,
+                                           512u << 20, 384u << 20 };
+        unsigned i;
+
+        for (i = 0; !g_base && i < sizeof sizes / sizeof sizes[0]; i++) {
+            g_reserve = sizes[i];
 #ifdef UMK3_LOW32
-    g_base = (uint8_t *)reserve_low(ST_RESERVE, MEM_WRITE_WATCH);
-    if (!g_base)
-        fprintf(stderr, "savestate: no room below 2 GB for the arena\n");
+            g_base = (uint8_t *)reserve_low(g_reserve, MEM_WRITE_WATCH);
 #else
-    g_base = (uint8_t *)VirtualAlloc(NULL, ST_RESERVE,
-                                     MEM_RESERVE | MEM_WRITE_WATCH,
-                                     PAGE_READWRITE);
+            g_base = (uint8_t *)VirtualAlloc(NULL, g_reserve,
+                                             MEM_RESERVE | MEM_WRITE_WATCH,
+                                             PAGE_READWRITE);
 #endif
+        }
+        if (g_base)
+            printf("savestate: arena of %u MB\n", g_reserve >> 20);
+        else
+            fprintf(stderr, "savestate: no room for the arena\n");
+    }
     if (!g_base) {
         g_failed = 1;
         return 0;
@@ -293,6 +333,9 @@ static struct {
  * calls this first thing, before the graphics driver takes the low memory. */
 void st_init(void)
 {
+#ifdef UMK3_LOW32
+    umk3_alloc_low(0);                  /* the texture cache's first chunk */
+#endif
     arena_init();
 }
 

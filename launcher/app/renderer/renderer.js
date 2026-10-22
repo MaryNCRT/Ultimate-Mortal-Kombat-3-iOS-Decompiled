@@ -308,8 +308,8 @@ const PAD_ICON_NAMES = ['auto', 'xbox', 'ps5', 'ps4', 'nintendo'];
 const PAD_SETS = {
     xbox: { dir: 'xb', files: ['T_X_A_Color_Retro', 'T_X_B_Color_Retro', 'T_X_X_Color_Retro',
         'T_X_Y_Color_Retro', 'T_X_LB_Retro', 'T_X_RB_Retro', 'T_X_LT_Retro', 'T_X_RT_Retro',
-        'T_X_Share_Retro', null, 'T_X_Left_Stick_Click_Retro', 'T_X_Right_Stick_Click_Retro', null],
-        names: { START: 'MENU', HOME: 'XBOX' }, extra: { Dpad: 'T_X_Dpad_Retro', L: 'T_X_L_Retro' } },
+        'T_X_Share_Retro', 'T_X_X_Retro', 'T_X_Left_Stick_Click_Retro', 'T_X_Right_Stick_Click_Retro', null],
+        names: { HOME: 'XBOX' }, extra: { Dpad: 'T_X_Dpad_Retro', L: 'T_X_L_Retro' } },
     ps5: { dir: 'ps', files: ['T_P5_Cross_Color_Retro', 'T_P5_Circle_Color_Retro',
         'T_P5_Square_Color_Retro', 'T_P5_Triangle_Color_Retro', 'T_P5_L1_Retro', 'T_P5_R1_Retro',
         'T_P5_L2_Retro', 'T_P5_R2_Retro', 'T_P5_Share_Retro', 'T_P5_Options_Retro',

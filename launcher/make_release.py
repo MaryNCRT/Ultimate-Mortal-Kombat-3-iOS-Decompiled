@@ -47,6 +47,7 @@ RUNTIME_FILES = [
     "src/runtime/platform/platform.h", "src/runtime/platform/gl.h",
     "src/runtime/platform/win32_gl.c", "src/runtime/platform/win32_gl_cdecl.c",
     "src/runtime/platform/win32_audio.c",
+    "src/runtime/platform/ui_alert.c", "src/runtime/platform/ui_alert.h",
 ]
 SOURCE_DIRS = ["src/decomp/gamecode", "src/decomp/gamecode/logic", "src/decomp/lime",
                "src/runtime/lime"]

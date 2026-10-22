@@ -5,6 +5,41 @@
 
 ---
 
+## Debug menu, mouse wheel, iPhone-style boxes on Linux (2026-10-22, untested)
+
+Port, not in the binary. Built for Windows x64 and x86; the Linux files
+pass a zig `x86_64-linux-gnu` compile with the SDL2 lint header, but nobody
+has run them on Linux yet. Mary has not tested any of this yet.
+
+- **Debug menu (F2)** is laid out like the settings menu (Esc): a side panel
+  with three categories (FIGHT = fighters + round + Arcade + cheats, MENUS,
+  TOOLS/OPCIONES = options + tools + save states), sections under headings,
+  a list that scrolls, and a list of values that opens with Enter or a
+  click. Labels are Spanish or English, following the game's language.
+  Picking a SCREEN or a FINISHER from its list does it at once.
+- **New debug options:**
+  - INFINITE HEALTH (player 1, 2 or both) and FREEZE CLOCK. These are the
+    PortDbgHealth/PortDbgClock hooks in logic/other.c's bar_reducer and
+    t_clock4, beside training's. game_main.c forces them off in an online
+    fight.
+  - FRAMES PER SECOND and ONLINE NUMBERS (rb_stats: frame, delay, remote
+    lead, rollbacks, deepest, holds, desyncs), drawn under the INFO line.
+- **Mouse wheel:** plat_mouse_wheel (WM_MOUSEWHEEL, SDL_MOUSEWHEEL) moves
+  the cursor in both menus and in their open lists.
+- **ui_alert.c:** the iPhone OS 3 boxes now live in one file shared by both
+  backends: the alerts (plat_ask), the menus, the grid, the badge, and the
+  pad button pictures.
+  - Windows supplies GDI's Arial and its raw keys (ui_alert.h).
+  - Linux uses stb_truetype (platform/stb, public domain/MIT) with the first
+    font it finds: "aditional textures/fonts/ui_bold.ttf"/"ui.ttf", then
+    Liberation Sans, DejaVu, Noto, then fontconfig. Linux also gets the
+    keyboard and pad pictures, and the pad's kind comes from the SDL vendor
+    id.
+- **Alerts with the pad:**
+  - Left / right (pad or arrow keys) light a button.
+  - South or START presses the lit button, or OK when none is lit.
+  - East is CANCEL.
+
 ## Rollback netcode for ONLINE fights (2026-10-22, branch claude/nice-joliot-163d76, not on main)
 
 Status: **tested by Mary on one PC, two windows (LAN), 64-bit:** fights run on

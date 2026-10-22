@@ -275,8 +275,9 @@ static void low_reserve(void)
 {
 #ifdef UMK3_LOW32
     /* the 64-bit build: below 2 GB (longs sign-extend), beside the save
-     * states' 768 MB arena (runtime/savestate.c) */
-    static const size_t sizes[] = { 512u << 20, 256u << 20, 128u << 20 };
+     * states' arena (runtime/savestate.c): the largest that fits */
+    static const size_t sizes[] = { 768u << 20, 640u << 20, 512u << 20,
+                                    384u << 20, 256u << 20, 128u << 20 };
 #else
     static const size_t sizes[] = { 1u << 30, 512u << 20, 256u << 20 };
     const uintptr_t lim = 0xFFFF0000u;
@@ -315,6 +316,7 @@ static void low_reserve(void)
         }
 #endif
         if (g_low_base) {
+            printf("lime_heap: %u MB\n", (unsigned)(sizes[s] >> 20));
             g_low_top = g_low_committed = g_low_base;
             g_low_end = g_low_base + sizes[s];
             g_low_state = 1;

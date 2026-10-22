@@ -546,6 +546,8 @@ static void start_app(void)
 #include <io.h>
 #include <stdint.h>
 
+
+
 /* The function an address falls in, from the exe's own COFF symbol table
  * (the build does not strip it): the nearest function symbol at or below
  * the address. Read from the file on disk, so it works after any crash
@@ -1608,6 +1610,16 @@ static int render_alloc(int w, int h)
     }
     g_rs_bind_fb(RS_FRAMEBUFFER, 0);
     printf("render buffer %dx%d, antialiasing x%d\n", w, h, g_rs_samples);
+    {
+        /* which OpenGL draws: a window moved to a monitor on another
+         * adapter, or Windows' own 1.1 renderer, has other limits */
+        GLint max = 0;
+        glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max);
+        printf("opengl: %s / %s / %s, textures up to %d\n",
+               (const char *)glGetString(GL_VENDOR),
+               (const char *)glGetString(GL_RENDERER),
+               (const char *)glGetString(GL_VERSION), (int)max);
+    }
     return 1;
 
 fail:
@@ -2145,6 +2157,15 @@ static void hb_update(void)
 
     PortAfterScene = on ? hb_draw : NULL;
     PortStrikeHook = on ? hb_strike : NULL;
+    {
+        /* the menu's cheats (logic/other.c); never in an online fight,
+         * where the other player's game would not have them */
+        extern int PortDbgClock, PortDbgHealth;
+        int dbg = g_cfg_debug_keys && GameMode != 1;
+
+        PortDbgHealth = dbg ? dbg_health_mask() : 0;
+        PortDbgClock = dbg ? dbg_clock_frozen() : 0;
+    }
 }
 
 /* The fight's speed, from FIGHT SPEED (or UMK3_DBG_SPEED=<percent>): the
@@ -3127,6 +3148,31 @@ int main(int argc, char **argv)
                              CharacterNames[PLAYER2MODEL % 26],
                              RoundWins[0], RoundWins[1]);
                     dbg_info_draw(line);
+                }
+                {
+                    /* FRAMES PER SECOND and ONLINE NUMBERS, under it */
+                    static double t0;
+                    static int frames, fps;
+                    char line[160];
+                    int at = dbg_info_on();
+
+                    frames++;
+                    if (plat_time() - t0 >= 1.0) {
+                        fps = frames;
+                        frames = 0;
+                        t0 = plat_time();
+                    }
+                    if (dbg_fps_on()) {
+                        snprintf(line, sizeof line, "%d FPS", fps);
+                        dbg_info_draw_at(line, at++);
+                    }
+                    if (dbg_net_on()) {
+                        if (!rb_stats(line, sizeof line))
+                            snprintf(line, sizeof line, "%s", GameMode == 1
+                                     ? "ONLINE: CLASSIC (NO ROLLBACK)"
+                                     : "ONLINE: NOT IN AN ONLINE FIGHT");
+                        dbg_info_draw_at(line, at++);
+                    }
                 }
                 if (g_rs_on)        /* the menu draws in the game's buffer */
                     dbg_menu_after_frame(0, 0, g_rs_w, g_rs_h,

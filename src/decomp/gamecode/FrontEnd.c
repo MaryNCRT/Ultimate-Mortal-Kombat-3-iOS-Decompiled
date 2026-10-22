@@ -12006,7 +12006,8 @@ static char *PortUC(const char *s)
 }
 
 enum { OT_ONLINE, OT_YOURCODE, OT_COPY, OT_COPIED, OT_OTHER, OT_FIND, OT_HINT,
-       OT_SEARCHING, OT_NOTFOUND, OT_BUSY, OT_LOST, OT_CONNECTED, OT_N };
+       OT_SEARCHING, OT_NOTFOUND, OT_BUSY, OT_LOST, OT_CONNECTED,
+       OT_NET_OFF, OT_NET_WAIT, OT_NET_ON, OT_NET_FAIL, OT_N };
 
 /* EN ES FR DE IT KO ZH JA */
 static const char *const PortOnlineText[OT_N][8] = {
@@ -12037,6 +12038,21 @@ static const char *const PortOnlineText[OT_N][8] = {
       "LA CONNEXION A \xc3\x89T\xc3\x89 PERDUE", "VERBINDUNG GETRENNT",
       "CONNESSIONE PERSA" },
     { "CONNECTED", "CONECTADO", "CONNECT\xc3\x89", "VERBUNDEN", "CONNESSO" },
+    { "INTERNET: OFF (NO EOS), LOCAL NETWORK ONLY",
+      "INTERNET: APAGADO (SIN EOS), SOLO RED LOCAL",
+      "INTERNET : D\xc3\x89SACTIV\xc3\x89 (PAS D'EOS), R\xc3\x89SEAU LOCAL SEULEMENT",
+      "INTERNET: AUS (KEIN EOS), NUR LOKALES NETZ",
+      "INTERNET: SPENTO (NIENTE EOS), SOLO RETE LOCALE" },
+    { "INTERNET: CONNECTING...", "INTERNET: CONECTANDO...",
+      "INTERNET : CONNEXION...", "INTERNET: VERBINDE...",
+      "INTERNET: CONNESSIONE..." },
+    { "INTERNET: READY", "INTERNET: LISTO", "INTERNET : PR\xc3\x8aT",
+      "INTERNET: BEREIT", "INTERNET: PRONTO" },
+    { "INTERNET: COULD NOT CONNECT, LOCAL NETWORK ONLY",
+      "INTERNET: NO SE PUDO CONECTAR, SOLO RED LOCAL",
+      "INTERNET : CONNEXION IMPOSSIBLE, R\xc3\x89SEAU LOCAL SEULEMENT",
+      "INTERNET: KEINE VERBINDUNG, NUR LOKALES NETZ",
+      "INTERNET: CONNESSIONE NON RIUSCITA, SOLO RETE LOCALE" },
 };
 
 /* The word for `id` in the game's language (Language, "EN", "ES"...). */
@@ -12204,6 +12220,17 @@ void FE_Task_Online(void)
     if (status)
         limeDrawFONT(&GameFont, PortUC(status), FE_X(360.0f), FE_Y(206.0f), 1,
                      FE_WidthScale * 0.55f, fontcol);
+    {
+        /* internet play (runtime/mp_eos.c): 0 off, 1 starting, 2 ready,
+         * 3 failed, as MPEOS_* */
+        static const int net_text[4] = { OT_NET_OFF, OT_NET_WAIT, OT_NET_ON,
+                                         OT_NET_FAIL };
+        int k = mpnet_internet();
+        if (k >= 0 && k < 4)
+            limeDrawFONT(&GameFont, PortUC(PortOnlineWord(net_text[k])),
+                         FE_X(360.0f), FE_Y(240.0f), 1,
+                         FE_WidthScale * 0.45f, fontcol);
+    }
     if (mpnet_status() != MPNET_SEARCHING && !PortOnlineListening)
         PortOnlineListening = 1;        /* the search ended: listen again */
 

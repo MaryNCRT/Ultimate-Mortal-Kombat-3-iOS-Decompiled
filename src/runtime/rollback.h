@@ -16,6 +16,8 @@
 int  rb_active(void);
 /* 1 while a frame is run again after a rollback (or a stall): no sound. */
 int  rb_quiet(void);
+/* the rollback's numbers on one line, 0 when no rollback fight is on */
+int  rb_stats(char *out, int n);
 /* 1 while a frame is run again after a rollback: nothing drawn. */
 int  rb_nodraw(void);
 

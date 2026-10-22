@@ -99,6 +99,10 @@ void plat_size(int *width, int *height);
  * other. */
 int plat_mouse(int *x, int *y);
 
+/* The wheel's notches since the last call: up positive, down negative
+ * (port: the in-game menus scroll with it). */
+int plat_mouse_wheel(void);
+
 /* Seconds since plat_open, monotonic. */
 double plat_time(void);
 

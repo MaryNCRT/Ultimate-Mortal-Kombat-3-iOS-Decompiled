@@ -450,6 +450,19 @@ int rb_quiet(void)  { return g_quiet; }
 int rb_nodraw(void) { return g_nodraw; }
 int rb_ready(void)  { return !g_on || g_hello; }
 
+/* One line of the numbers report() logs, for the debug menu's NET STATS
+ * (game_main.c draws it); 0 when no rollback fight is on. */
+int rb_stats(char *out, int n)
+{
+    if (!g_on)
+        return 0;
+    snprintf(out, (size_t)n, "ROLLBACK  FRAME %u  DELAY %d  REMOTE %+d  "
+             "ROLLBACKS %u  DEEPEST %u  HOLDS %u  DESYNCS %u",
+             g_frame, g_delay, (int)g_frame - g_remote_frame, g_rollbacks,
+             g_deepest, g_holds, g_desyncs);
+    return 1;
+}
+
 /* The guest's fight waits, before anything loads, for the host's hello and
  * takes the host's level: each side picked one of its own on the select
  * screen, and the host's word (sendLevelPacket) can come after the guest has
