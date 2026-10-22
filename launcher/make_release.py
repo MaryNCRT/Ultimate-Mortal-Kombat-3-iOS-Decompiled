@@ -42,6 +42,7 @@ RUNTIME_FILES = [
     "src/runtime/wav.c", "src/runtime/wav.h", "src/runtime/fight_runtime.c",
     "src/runtime/fight_runtime.h", "src/runtime/arm_runtime.h", "src/runtime/debug_menu.h",
     "src/runtime/savestate.c", "src/runtime/savestate.h",
+    "src/runtime/rollback_probe.c",
     "src/runtime/platform/platform.h", "src/runtime/platform/gl.h",
     "src/runtime/platform/win32_gl.c", "src/runtime/platform/win32_gl_cdecl.c",
     "src/runtime/platform/win32_audio.c",

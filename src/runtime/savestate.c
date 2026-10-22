@@ -252,22 +252,31 @@ static int state_sections(uint8_t **p, uint32_t *n, int max)
     uint8_t *img = (uint8_t *)GetModuleHandleA(NULL);
     IMAGE_NT_HEADERS *nt =
         (IMAGE_NT_HEADERS *)(img + ((IMAGE_DOS_HEADER *)img)->e_lfanew);
-    IMAGE_SECTION_HEADER *s = IMAGE_FIRST_SECTION(nt);
-    int i, k = 0;
+    IMAGE_SECTION_HEADER *s;
+    static const char *const name[2] = { ".umkstd", ".umkstb" };
+    int i, j, k = 0;
 
-    for (i = 0; i < nt->FileHeader.NumberOfSections && k < max; i++, s++)
-        if (!memcmp(s->Name, ".umkstd", 7) || !memcmp(s->Name, ".umkstb", 7)) {
-            p[k] = img + s->VirtualAddress;
-            n[k] = s->Misc.VirtualSize;
-            k++;
-        }
+    /* .umkstd first, whatever order the linker put them in */
+    for (j = 0; j < 2 && k < max; j++) {
+        s = IMAGE_FIRST_SECTION(nt);
+        for (i = 0; i < nt->FileHeader.NumberOfSections; i++, s++)
+            if (!memcmp(s->Name, name[j], 7)) {
+                p[k] = img + s->VirtualAddress;
+                n[k] = s->Misc.VirtualSize;
+                k++;
+                break;
+            }
+    }
     return k;
 }
+
+/* The menu's slots, then the rollback probe's own (rollback_probe.c). */
+#define ST_PROBE_SLOTS 3
 
 static struct {
     uint8_t *buf;
     uint32_t cap, used, arena;
-} g_slot[ST_SLOTS];
+} g_slot[ST_SLOTS + ST_PROBE_SLOTS];
 
 /* The arena reserved now rather than at the first block: the 64-bit build
  * calls this first thing, before the graphics driver takes the low memory. */
@@ -294,15 +303,31 @@ unsigned long st_size(int slot)
     return st_has(slot) ? g_slot[slot].used : 0;
 }
 
+static int save_slot(int slot, const char **why);
+static int load_slot(int slot, const char **why);
+
 int st_save(int slot, const char **why)
+{
+    *why = "";
+    if (slot < 0 || slot >= ST_SLOTS)
+        return *why = "no such slot", -1;
+    return save_slot(slot, why);
+}
+
+int st_load(int slot, const char **why)
+{
+    *why = "";
+    if (!st_has(slot))
+        return *why = "that slot is empty", -1;
+    return load_slot(slot, why);
+}
+
+static int save_slot(int slot, const char **why)
 {
     uint8_t *p[2];
     uint32_t n[2], need, at;
     int k, i;
 
-    *why = "";
-    if (slot < 0 || slot >= ST_SLOTS)
-        return *why = "no such slot", -1;
     if (!st_available())
         return *why = g_failed ? "the game's memory overflowed its arena"
                                : "this build has no state sections", -1;
@@ -331,14 +356,13 @@ int st_save(int slot, const char **why)
     return 0;
 }
 
-int st_load(int slot, const char **why)
+static int load_slot(int slot, const char **why)
 {
     uint8_t *p[2];
     uint32_t n[2], at;
     int k, i;
 
-    *why = "";
-    if (!st_has(slot))
+    if (!g_slot[slot].used)
         return *why = "that slot is empty", -1;
     if (!st_available())
         return *why = "save states are off", -1;
@@ -352,6 +376,123 @@ int st_load(int slot, const char **why)
      * for it now, and stays committed */
     memcpy(g_base, g_slot[slot].buf + at, g_slot[slot].arena);
     return 0;
+}
+
+/* ------------------------------------------------- the rollback probe's */
+
+int st_probe_save(int k)
+{
+    const char *why;
+    return k >= 0 && k < ST_PROBE_SLOTS ? save_slot(ST_SLOTS + k, &why) : -1;
+}
+
+int st_probe_load(int k)
+{
+    const char *why;
+    return k >= 0 && k < ST_PROBE_SLOTS ? load_slot(ST_SLOTS + k, &why) : -1;
+}
+
+/* Region r of the live state: 0 .umkstd, 1 .umkstb, 2 the arena up to its top. */
+static int live_region(int r, const uint8_t **p, uint32_t *n)
+{
+    uint8_t *sp[2];
+    uint32_t sn[2];
+
+    if (!st_available())
+        return 0;
+    if (r == 2) {
+        *p = g_base;
+        *n = head()->top;
+        return 1;
+    }
+    if (r < 0 || r > 2 || state_sections(sp, sn, 2) != 2)
+        return 0;
+    *p = sp[r];
+    *n = sn[r];
+    return 1;
+}
+
+unsigned long st_probe_region_size(int r)
+{
+    const uint8_t *p;
+    uint32_t n;
+    return live_region(r, &p, &n) ? n : 0;
+}
+
+/* Every 4 KB page of the live state that differs from probe slot k, by
+ * region and offset; the arena's pages past the copy's top count as
+ * different. Returns how many. */
+unsigned long st_probe_diff(int k, void (*page)(int r, uint32_t off, void *ctx),
+                            void *ctx)
+{
+    const uint8_t *p, *q;
+    uint32_t n, have, off, len;
+    unsigned long count = 0;
+    int r;
+
+    if (k < 0 || k >= ST_PROBE_SLOTS || !g_slot[ST_SLOTS + k].used)
+        return 0;
+    q = g_slot[ST_SLOTS + k].buf;
+    for (r = 0; r < 3; r++) {
+        if (!live_region(r, &p, &n))
+            return count;
+        have = r == 2 ? g_slot[ST_SLOTS + k].arena : n;
+        for (off = 0; off < n; off += 4096) {
+            len = n - off < 4096 ? n - off : 4096;
+            if (off + len > have || memcmp(p + off, q + off, len)) {
+                count++;
+                if (page)
+                    page(r, off, ctx);
+            }
+        }
+        q += have;
+    }
+    return count;
+}
+
+/* A hash of each 4 KB page of live region r, at most `max`; how many. */
+unsigned long st_probe_page_hashes(int r, uint64_t *out, unsigned long max)
+{
+    const uint8_t *p;
+    uint32_t n, off, i, len;
+    unsigned long k = 0;
+    uint64_t h, w;
+
+    if (!live_region(r, &p, &n))
+        return 0;
+    for (off = 0; off < n && k < max; off += 4096) {
+        len = n - off < 4096 ? n - off : 4096;
+        h = 0xcbf29ce484222325ull;
+        for (i = 0; i + 8 <= len; i += 8) {
+            memcpy(&w, p + off + i, 8);
+            h = (h ^ w) * 0x100000001b3ull;
+        }
+        for (; i < len; i++)
+            h = (h ^ p[off + i]) * 0x100000001b3ull;
+        out[k++] = h;
+    }
+    return k;
+}
+
+/* A hash of the whole live state (one process only: it holds addresses). */
+uint64_t st_probe_hash(void)
+{
+    uint64_t h = 0xcbf29ce484222325ull, w;
+    const uint8_t *p;
+    uint32_t n, i;
+    int r;
+
+    for (r = 0; r < 3; r++) {
+        if (!live_region(r, &p, &n))
+            break;
+        for (i = 0; i + 8 <= n; i += 8) {
+            memcpy(&w, p + i, 8);
+            h = (h ^ w) * 0x100000001b3ull;
+        }
+        for (; i < n; i++)
+            h = (h ^ p[i]) * 0x100000001b3ull;
+    }
+    return h;
 }
 
 #else   /* no arena elsewhere yet: the C library's heap, and no states */
@@ -370,5 +511,13 @@ int   st_save(int slot, const char **why)
 { (void)slot; *why = "save states need the Windows build"; return -1; }
 int   st_load(int slot, const char **why)
 { (void)slot; *why = "save states need the Windows build"; return -1; }
+int   st_probe_save(int k)                 { (void)k; return -1; }
+int   st_probe_load(int k)                 { (void)k; return -1; }
+unsigned long st_probe_region_size(int r) { (void)r; return 0; }
+unsigned long st_probe_diff(int k, void (*page)(int, uint32_t, void *), void *ctx)
+{ (void)k; (void)page; (void)ctx; return 0; }
+uint64_t st_probe_hash(void)              { return 0; }
+unsigned long st_probe_page_hashes(int r, uint64_t *out, unsigned long max)
+{ (void)r; (void)out; (void)max; return 0; }
 
 #endif

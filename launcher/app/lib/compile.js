@@ -148,6 +148,7 @@ async function compileGame({
         path.join(rootDir, 'src/runtime/wav.c'),
         path.join(rootDir, 'src/runtime/fight_runtime.c'),
         path.join(rootDir, 'src/runtime/savestate.c'),
+        path.join(rootDir, 'src/runtime/rollback_probe.c'),
     ];
 
     if (isWindows) {

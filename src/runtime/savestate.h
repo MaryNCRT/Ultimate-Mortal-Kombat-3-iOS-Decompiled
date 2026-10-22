@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
+#include <stdint.h>
 #ifndef _WIN32
 #include <strings.h>
 #ifndef _stricmp
@@ -110,6 +111,25 @@ int  st_save(int slot, const char **why);
 int  st_load(int slot, const char **why);
 /* What a state holds, in bytes (for the menu and the log). */
 unsigned long st_size(int slot);
+
+/* The rollback probe's (rollback_probe.c): three slots of its own, the
+ * live state's regions (0 .umkstd, 1 .umkstb, 2 the arena), the pages that
+ * differ from one of its slots, and a hash of the live state. */
+int  st_probe_save(int k);
+int  st_probe_load(int k);
+unsigned long st_probe_region_size(int r);
+unsigned long st_probe_diff(int k, void (*page)(int r, uint32_t off, void *ctx),
+                            void *ctx);
+uint64_t st_probe_hash(void);
+unsigned long st_probe_page_hashes(int r, uint64_t *out, unsigned long max);
+
+/* Port, not in the binary: the C library's rand() for the game's files,
+ * kept in the state so a load puts the sequence back and every build draws
+ * the same numbers (fight_runtime.c). */
+int umk3_rand(void);
+#ifdef UMK3_STATE_FILE
+#define rand umk3_rand
+#endif
 
 #if defined(UMK3_LOW32) && defined(UMK3_STATE_FILE) && !defined(_WIN32)
 /*

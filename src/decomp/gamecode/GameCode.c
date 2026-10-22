@@ -5944,9 +5944,51 @@ void heartbeatSetIncoming(long n);
 void preprocessPostloadKode(void);
 long GameInit_LoadABit(long step);
 
+/* Port, not in the binary: the rollback probe (runtime/rollback_probe.c).
+ * A recorded fight keeps its setup; a replayed one gets the recorded setup
+ * back before anything loads. */
+int  rb_fight_setup(int32_t *setup, int n);
+int  rb_step_begin(int32_t joy[2]);
+void rb_trial_done(void);
+void rb_step_end(const uint32_t *w, int n);
+void rb_tick_end(const uint32_t *w, int n);
+
+extern long Character2Override;         /* 0x00101798, declared again below */
+
+static void rb_setup(void)
+{
+    int32_t v[17];
+    int i;
+
+    /* what loading step 42 builds the two models from, the level, the mode;
+     * the settings after them are compared only */
+    v[0] = Character1;
+    v[1] = Character2;
+    v[2] = Character2Override;
+    v[3] = Destiny;
+    v[4] = Stage;
+    v[5] = *LevelSelectP;
+    v[6] = GameMode;
+    for (i = 0; i < 10; i++)
+        v[7 + i] = Settings[i];
+    if (!rb_fight_setup(v, 17))
+        return;
+    Character1         = v[0];
+    Character2         = v[1];
+    Character2Override = v[2];
+    Destiny            = v[3];
+    Stage              = v[4];
+    *LevelSelectP      = v[5];
+    if (GameMode != 1 && v[6] != 1)     /* never into or out of ONLINE */
+        GameMode = v[6];
+}
+
 void Task_GameInit(void)
 {
     long i;
+
+    if (GameInitState == 0)
+        rb_setup();                     /* Port, not in the binary */
 
     *InGameLevelSelect = *LevelSelectP;
     MoveListPage   = 0;
@@ -9410,6 +9452,25 @@ static void CatchJaxSquash(long mirror)
     JaxSquashFlip = *flag;
 }
 
+/* Port, not in the binary: what the rollback probe hashes after a step --
+ * the sprite list without its links, the health and the event queue, words
+ * that hold no address, so every build can compare them. */
+static void rb_sim_end(void)
+{
+    uint32_t w[ARCADE_OBJECTS * 3 + 2 + MP_EVENT_BYTES / 4];
+    const unsigned char *o = (const unsigned char *)(void *)GameObjects;
+    int n = 0, i;
+
+    if (o)
+        for (i = 0; i < ARCADE_OBJECTS; i++, n += 3)
+            memcpy(w + n, o + i * ARCADE_OBJECT_STRIDE + 4, 12);
+    w[n++] = (uint32_t)Health[0];
+    w[n++] = (uint32_t)Health[1];
+    memcpy(w + n, MKEventQueue, MP_EVENT_BYTES);
+    n += MP_EVENT_BYTES / 4;
+    rb_step_end(w, n);
+}
+
 void UpdateArcadeCode(int *joy1, int *joy2)
 {
     long i;
@@ -9455,7 +9516,21 @@ void UpdateArcadeCode(int *joy1, int *joy2)
             /* `&GameObjects`: 0x222a2 loads the ADDRESS 0x14dfec into r1, and
              * mk3_update stores the frame's object list through it. This is
              * the only writer GameObjects has besides Task_GameInit's zero. */
-            mk3_update((const long *)joy1, (void **)&GameObjects);
+            /* Port, not in the binary: the rollback probe may swap in
+             * recorded sticks, or step the tick twice (sync test). */
+            int32_t rj[2] = { joy1[0], joy1[1] };
+            long pj[2];
+
+            if (rb_step_begin(rj)) {
+                pj[0] = rj[0];
+                pj[1] = rj[1];
+                mk3_update(pj, (void **)&GameObjects);
+                rb_trial_done();
+            }
+            pj[0] = rj[0];
+            pj[1] = rj[1];
+            mk3_update(pj, (void **)&GameObjects);
+            rb_sim_end();
         } else {
             long k = currentMPJoystickData;
 
@@ -9536,6 +9611,15 @@ void UpdateArcadeCode(int *joy1, int *joy2)
             TrackCam(Player2Pos, Player1Pos, 1);   /* the guest is player two */
         } else {
             TrackCam(Player1Pos, Player2Pos, 1);
+        }
+
+        if (stepped && GameMode != 1) {
+            uint32_t w[9];              /* Port, not in the binary */
+
+            memcpy(w, Player1Pos, 12);
+            memcpy(w + 3, Player2Pos, 12);
+            memcpy(w + 6, Camera, 12);
+            rb_tick_end(w, 9);
         }
 
         FrameCompensation -= 1.0f;

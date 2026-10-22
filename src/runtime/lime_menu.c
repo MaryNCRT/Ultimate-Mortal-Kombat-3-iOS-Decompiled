@@ -256,6 +256,8 @@ static int g_depth_test = 1;
 static long g_colour_mask[4] = { 1, 1, 1, 1 };
 static long g_fills;
 
+int rb_fixed_step(void);               /* rollback_probe.c */
+
 /* armv7 0x00066a74, transcribed whole. The one substitution is the clock:
  * CFAbsoluteTimeGetCurrent becomes the host-advanced clock above. */
 void limeBegin(void)
@@ -272,7 +274,10 @@ void limeBegin(void)
         limeFPS = limeFPSScaleFactor * 60.0f;
         if (limeFPSScaleFactor < 0.25f)
             limeFPSScaleFactor = 0.25f;
-    } else {
+    }
+    /* Port, not in the binary: a recorded or replayed fight
+     * (rollback_probe.c) runs a fixed step, whatever the clock says. */
+    if (dt <= 0.0 || rb_fixed_step()) {
         limeFPSScaleFactor = 1.0f;
         limeFPS = 60.0f;
     }

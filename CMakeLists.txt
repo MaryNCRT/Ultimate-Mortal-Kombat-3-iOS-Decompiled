@@ -224,6 +224,7 @@ if(UMK3_BINARY)
                 src/runtime/wav.c
                 src/runtime/fight_runtime.c
                 src/runtime/savestate.c
+                src/runtime/rollback_probe.c
                 ${UMK3_GAME_GAMECODE}
                 ${UMK3_GAME_LIME}
                 ${UMK3_GAME_RUNLIME}

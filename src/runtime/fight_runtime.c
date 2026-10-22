@@ -93,3 +93,17 @@ void fight_runtime_init(void)
     MKEventQueue = umk3_common_MKEventQueue;
     RoundParam   = (long *)umk3_common_RoundParam;
 }
+
+/* Port, not in the binary: the device's rand() is its C library's, and the
+ * fight engine draws from it (random32 in logic/other.c, mkdrone.c). The C
+ * library's own sequence lives outside the game's state and differs between
+ * Windows and Linux, so the game's files get this one instead (savestate.h):
+ * the Windows C runtime's formula, seeded 1 as the game never calls srand,
+ * so a Windows build draws the way it did before. */
+uint32_t umk3_rand_seed = 1;
+
+int umk3_rand(void)
+{
+    umk3_rand_seed = umk3_rand_seed * 214013u + 2531011u;
+    return (int)((umk3_rand_seed >> 16) & 0x7fff);
+}
