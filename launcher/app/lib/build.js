@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
-const { ensureToolchain } = require('./toolchain');
+const { ensureToolchain, describeError } = require('./toolchain');
 const { extractIpaPipeline } = require('./extract/ipa');
 const { compileGame } = require('./compile');
 
@@ -152,7 +152,7 @@ async function build(root, ipa, arch = 'x64', onData = () => {}) {
         return 0;
     } catch (err) {
         onData({
-            text: `Build failed: ${err.message}`,
+            text: `Build failed: ${err.message || describeError(err)}`,
             pct: -1,
             phase: 'Error',
         });

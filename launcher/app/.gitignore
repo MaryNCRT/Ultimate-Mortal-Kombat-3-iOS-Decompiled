@@ -1,0 +1,4 @@
+# the window, built from ui/ (npm run ui)
+renderer/
+ui/.svelte-kit/
+ui/node_modules/

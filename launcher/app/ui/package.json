@@ -1,0 +1,13 @@
+{
+  "name": "umk3-launcher-ui",
+  "private": true,
+  "type": "module",
+  "description": "The launcher's window (SvelteKit). Its packages are launcher/app's; npm run ui there builds it into ../renderer.",
+  "scripts": {
+    "build": "vite build",
+    "check": "svelte-kit sync"
+  },
+  "imports": {
+    "#lib/*": "./src/lib/*"
+  }
+}

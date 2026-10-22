@@ -16,6 +16,53 @@
 
 ---
 
+## Release 0.1.7 beta (2026-10-22)
+
+Published as the GitHub pre-release `v0.1.7-beta`, built the same way as
+0.1.6 (`launcher/make_release.py` over `electron-builder --win dir` for the
+Windows zip; `electron-builder --linux dir` repacked with exec bits for the
+Linux tar.gz). On top of 0.1.6: the launcher rework and the 64-bit debug
+crash fixes below, the SvelteKit port of the launcher's window, and the
+Linux Zig download fix. Mary asked for the release before testing the debug
+fixes; the port's launcher was in her test folder (`launcher/bin`) and
+opens there.
+
+### The launcher's window is a SvelteKit app (`launcher/app/ui/`)
+
+- Svelte 5 + SvelteKit 3 (`@sveltejs/kit` 3.1, `adapter-static`, hash
+  router), built into `launcher/app/renderer/` by `npm run ui`
+  (`scripts/build-ui.js`), which electron-builder also runs before it packs
+  (`build.beforePack`). `renderer/` is generated and git-ignored.
+- `build-ui.js` makes SvelteKit's root `/_app/` paths relative (the page is
+  loaded from disk) and recomputes the Content-Security-Policy hashes of
+  the inline start-up script and of SvelteKit's route announcer's style.
+- SvelteKit 3 notes: the config lives in `sveltekit({...})` in
+  `ui/vite.config.js` (no `svelte.config.js`); `$lib` is gone, the code
+  imports `#lib/...` through `ui/package.json`'s `imports`; no page options
+  with the hash router.
+- One theme: `ui/src/lib/theme/tokens.css` names every colour, surface,
+  finish and size; `base.css` holds the shared controls. State is one
+  `$state` object in `app.svelte.js`; sections and pieces are components.
+- Matched to Mary's high-quality capture of the console's main menu:
+  eight-block rings (36 degrees a block, 9 between) with brushed-silver rims
+  and a lavender glow, 39 units between the rings' halos; a thin ring round
+  the picture; the menu's curve, text size and spacing measured off it; the
+  selection orb is a glass sphere with a red M turning in it; the command
+  bar higher, slanted ends, fine lines; the cloud crimson top left and
+  bottom right with a blue streak down the middle; the theme in lavender,
+  silver and navy, the pages' glass deeper so text reads over the traces.
+
+### Linux: Zig download stopped at once (`EXIT CODE: -1`)
+
+- The log said only `Build failed:` -- an error with no message, which is
+  what Node's `https` gives (an AggregateError) when every address of the
+  server runs out of its connect time: Node 20 tries IPv6 then IPv4 for
+  250 ms each. `lib/toolchain.js` now allows 5 s per address, retries over
+  IPv4 alone, and reports the parts of such an error (`describeError`).
+- Checked on Windows: the Linux archive downloads and its SHA-256 matches.
+  The original failure could not be reproduced here (a fast link); **not
+  yet run on Linux**.
+
 ## Launcher rework (2026-10-22, not yet tested by Mary)
 
 - Menu: smaller lines and orb; PLAY moved second, under COMPILE YOUR .IPA.
@@ -32,7 +79,7 @@
   (`nebulaURL`), dark circuit grooves with grey edges, a big ring of short
   thick marble blocks and, on the menu only, a smaller one to the right.
 - Home screen laid out as the console's main menu, in the rings' own
-  1600 x 900 box (`--k` in styles.css), so it holds at any window size:
+  1600 x 900 box (`--k` in the theme's tokens.css), so it holds at any window size:
   the title top right with a dark border, a white-blue halo and light rays
   behind it; the player's picture `aditional textures/image.png` (read at
   run time by `hero:get`, never shipped: it is game art) inside the small

@@ -1,20 +1,26 @@
 {
   "name": "umk3-launcher",
-  "version": "0.1.6-beta",
+  "version": "0.1.7-beta",
   "description": "UMK3 PC port launcher - arcade shell (Electron)",
   "main": "main.js",
   "author": "UMK3 Recomp",
   "license": "MIT",
   "scripts": {
-    "start": "electron .",
+    "ui": "node scripts/build-ui.js",
+    "start": "npm run ui && electron .",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win zip portable --x64",
     "dist:linux": "electron-builder --linux tar.gz AppImage --x64",
     "test": "node --test test/*.js"
   },
   "devDependencies": {
+    "@sveltejs/adapter-static": "^4.0.0",
+    "@sveltejs/kit": "^3.1.0",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "electron": "^33.0.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "svelte": "^5.57.2",
+    "vite": "^8.3.5"
   },
   "build": {
     "appId": "com.umk3recomp.launcher",
@@ -74,6 +80,7 @@
         }
       ],
       "icon": "build/icon.png"
-    }
+    },
+    "beforePack": "scripts/build-ui.js"
   }
 }
