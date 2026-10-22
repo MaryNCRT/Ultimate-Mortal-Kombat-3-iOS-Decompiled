@@ -42,6 +42,7 @@
 #include <stdint.h>
 
 #include "arm_runtime.h"
+#include "mods.h"
 
 void *limeMalloc(const char *tag, size_t bytes);
 void  limeFree(void *p);
@@ -64,6 +65,7 @@ const char *lime_platform_asset_root(void)
 void lime_platform_set_asset_root(const char *path)
 {
     snprintf(g_lime_asset_root, sizeof(g_lime_asset_root), "%s", path);
+    mods_init(path);
 }
 
 /* The port reads its own `res` folder and nothing outside it. The engine asks
@@ -79,6 +81,9 @@ static void resolve(const char *rel, char *out, size_t n)
     }
     if (strncmp(rel, "res/", 4) == 0 || strncmp(rel, "res\\", 4) == 0)
         rel += 4;
+    /* port: a mod's file of the same name first (mods.c) */
+    if (mods_find(rel, out, n))
+        return;
     snprintf(out, n, "%s/%s", g_lime_asset_root, rel);
 }
 

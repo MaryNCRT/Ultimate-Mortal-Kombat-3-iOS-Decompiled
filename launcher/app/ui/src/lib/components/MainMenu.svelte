@@ -74,7 +74,8 @@
     .mi:nth-of-type(3) { margin-left: calc(var(--u) * .9); }
     .mi:nth-of-type(4) { margin-left: 0; }
     .mi:nth-of-type(5) { margin-left: calc(var(--u) * .5); }
-    .mi:nth-of-type(6) { margin-left: calc(var(--u) * 3.5); }
+    .mi:nth-of-type(6) { margin-left: calc(var(--u) * 1.6); }
+    .mi:nth-of-type(7) { margin-left: calc(var(--u) * 3.5); }
     /* an update waiting: a red dot after COMPILE */
     .mi.news::after {
         content: ''; width: calc(var(--u) * .9); height: calc(var(--u) * .9); border-radius: 50%;

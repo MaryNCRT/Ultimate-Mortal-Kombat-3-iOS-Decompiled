@@ -11,7 +11,7 @@
  */
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, nativeImage, net, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage, net, Notification, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const ini = require('./lib/ini');
@@ -19,6 +19,7 @@ const rootm = require('./lib/root');
 const bld = require('./lib/build');
 const upd = require('./lib/update');
 const prof = require('./lib/profiles');
+const mods = require('./lib/mods');
 
 let g_win = null;
 let g_root = null;
@@ -155,9 +156,10 @@ function createWindow() {
         if (level >= 2)
             dbg('console<' + level + '>: ' + message);
     });
-    /* UMK3_LAUNCHER_SEC=<section>: open on that page (with the shot aid) */
+    /* UMK3_LAUNCHER_SEC=<section>: open on that page (with the shot aid);
+     * UMK3_LAUNCHER_PICK=<kind>/<id>[@<clip>]: the MODS viewer opens that */
     g_win.loadFile(path.join(__dirname, 'renderer', 'index.html'),
-                   { query: { sec: process.env.UMK3_LAUNCHER_SEC || '' } });
+                   { query: { sec: process.env.UMK3_LAUNCHER_SEC || '', pick: process.env.UMK3_LAUNCHER_PICK || '' } });
     g_win.webContents.once('did-finish-load', () => dbg('did-finish-load'));
     g_win.once('ready-to-show', () => g_win.show());
     g_win.on('closed', () => { g_win = null; });
@@ -463,6 +465,56 @@ ipcMain.handle('play', () => {
      * the answer has reached the page */
     setTimeout(() => app.quit(), 800);
     return { ok: true };
+});
+
+/* --------------------------------------------------------------- mods --
+ * The MODS section (lib/mods.js): the mod list and its order, the game's
+ * files for the viewer, the exports. */
+
+ipcMain.handle('mods:list', () => mods.list(g_root));
+ipcMain.handle('mods:save', (_ev, order) => mods.save(g_root, order));
+ipcMain.handle('mods:create', (_ev, fields) => mods.create(g_root, fields));
+ipcMain.handle('mods:info', (_ev, folder, fields) => mods.setInfo(g_root, folder, fields));
+ipcMain.handle('mods:put', (_ev, folder, file, bytes) => mods.putFile(g_root, folder, file, bytes));
+ipcMain.handle('mods:add', async (_ev, folder) => {
+    if (!g_win)
+        return 0;
+    const r = await pickFile({
+        title: 'Files for the mod',
+        properties: ['openFile', 'multiSelections'],
+        filters: [
+            { name: 'Game files', extensions: ['png', 'pvr', 'wav', 'mp3', 'meshset', 'skin', 'bones', 'skinanim', 'scene', 'events'] },
+            { name: 'All files', extensions: ['*'] },
+        ],
+    });
+    if (r.canceled)
+        return 0;
+    return mods.addFiles(g_root, folder, r.filePaths);
+});
+ipcMain.handle('mods:open', (_ev, folder) => {
+    const p = mods.modPath(g_root, folder);
+    if (!p)
+        return false;
+    fs.mkdirSync(p, { recursive: true });
+    shell.openPath(p);
+    return true;
+});
+/* to the recycle bin, not deleted: the player can get it back */
+ipcMain.handle('mods:trash', async (_ev, folder) => {
+    const p = folder && mods.modPath(g_root, folder);
+    if (!p || !fs.existsSync(p))
+        return false;
+    await shell.trashItem(p);
+    return true;
+});
+ipcMain.handle('res:files', () => mods.resFiles(g_root));
+ipcMain.handle('res:read', (_ev, rel) => mods.resRead(g_root, rel));
+ipcMain.handle('export:save', (_ev, sub, files) => mods.exportSave(g_root, sub, files));
+ipcMain.handle('export:open', (_ev, sub) => {
+    const p = path.join(g_root, 'exports', sub && /^[\w .()-]+$/.test(sub) ? sub : '');
+    fs.mkdirSync(p, { recursive: true });
+    shell.openPath(p);
+    return true;
 });
 
 /* ------------------------------------------------------------- splash -- */

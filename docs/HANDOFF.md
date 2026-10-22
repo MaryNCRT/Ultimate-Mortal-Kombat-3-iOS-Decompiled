@@ -5,6 +5,73 @@
 
 ---
 
+## After 0.1.7: MODS section, game-side mod overlay, Linux build fixes (2026-10-22, unreleased)
+
+Mary asked for a MODS option in the launcher's menu: a mod manager, a viewer
+of the game's files and an exporter for Blender. All three are in, plus the
+two Linux faults she reported on 0.1.6/0.1.7.
+
+### The game reads mods (`src/runtime/mods.c`)
+
+- `<game>/mods/<folder>/**` is indexed by lowercased file name at start-up
+  (`mods_init`, called from `set_asset_root`). A mod replaces a game file by
+  carrying a file of the same name, in any sub-folder.
+- `mods/mods.ini` holds the order, highest priority first, as `on=<folder>`
+  / `off=<folder>` lines; folders it does not name are on, after the rest.
+  The first mod in the order that has a name wins.
+- Hooked in `lime_platform.c` `resolve()` (every `limeLoadFile`, sound and
+  music path) and in `draw_gl.c` `load_rgba`, where textures also match by
+  stem (a `.png` in a mod replaces the game's `.pvr`) and a mod's `X` also
+  serves `X_LOW`.
+- `mod.ini` and `preview.*` at a mod's top level are the mod's own and are
+  never served. Tested standalone (priority, sub-folders, _LOW, unnamed
+  folders on).
+
+### Launcher: MODS (`ui/src/lib/sections/SecMods.svelte`, `lib/mods.js`)
+
+- **Manager**: create a mod (name, author, category: textures, audio, music,
+  models), order (up/down = priority), on/off, category filter, preview
+  picture, details with every file and the game file it replaces (files that
+  replace nothing are flagged), add files, open the folder, delete (a second
+  press). Writes `mods/mods.ini` and `mods/<mod>/mod.ini`.
+- **Viewer** (three.js 0.170): fighters, stages, other models and textures
+  from `res/`. Fighters are skinned on the CPU from the game's `.skin`,
+  `.bones` and `.skinanim`; one clip or all, play/pause/frame, outfits,
+  bones, wireframe, T-pose or the game's own pose. Textures can be copied
+  into a mod to edit.
+- **Exporter**: FBX (binary 7.4: skeleton, skin, one action per clip), USD
+  as USDA, USDC (crate 0.8.0, written by `ui/src/lib/mods/usd.js`) or USDZ,
+  and OBJ (mesh only); textures as PNG. Fighters with every animation, one,
+  or none; rest pose T-pose or bind; their other outfits as PNG. Written to
+  `<game>/exports/<name>_<FORMAT>/`.
+- The T-pose: the rest pose is not in `.bones`, which is why exports came
+  out broken. `ui/src/lib/mods/rig.js` solves the bind pose from the clips
+  (least squares over rigid fits), finds hips/spine/arms/legs from the
+  skeleton's shape, faces the figure along +Z by its knees, turns the head
+  to the front by symmetry (Kano's head was sideways), straightens it, and
+  fits a rest mesh so Blender's skinning reproduces the game's within about
+  2 mm on average. Motaro (centaur) keeps the bind pose. Sindel's hair took
+  the wrong texture; blocks now take their texture from the meshset mesh
+  with the same triangle count.
+- Checked by importing into Blender 5.2 headless (FBX, OBJ, USDA, USDC,
+  USDZ: bones, actions, textures) and by opening the USDC in pxr 26.03.
+
+### Linux
+
+- `fatal error: 'GL/gl.h' file not found` (Mary's 0.1.7 log): the launcher
+  now ships the GL, KHR and SDL2 headers in
+  `src/runtime/platform/linux-include/` (Mesa/Khronos MIT, SDL zlib; see its
+  README) and links `libSDL2-2.0.so.0` / `libGL.so.1` by soname when the
+  `-dev` symlinks are missing. The runtime cross-compiles for
+  x86_64-linux-gnu with Zig against those headers alone; **linking on a real
+  Linux machine is untested.**
+- "could not unpack the update" (0.1.6): the updater took the Windows zip.
+  It now picks the `linux*.tar.gz` asset, unpacks it with the system `tar`,
+  and installs with a shell script (`apply.sh`) that waits for the launcher
+  to exit, swaps the folders, keeps `res/`, `mods/` and the ini files, and
+  restarts it. Linux users on 0.1.7 still have the old updater and must
+  download the next release by hand once.
+
 ## Release 0.1.7 beta (2026-10-22)
 
 Published as the GitHub pre-release `v0.1.7-beta`, built the same way as

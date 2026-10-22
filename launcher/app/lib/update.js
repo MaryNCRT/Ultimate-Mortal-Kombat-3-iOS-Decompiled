@@ -9,10 +9,15 @@
  *                         the release's zip into <root>/update/, its SHA-256
  *                         checked against the one GitHub states
  *   install(root, zip, rel)
- *                         unpacks it, writes update/apply.ps1 and starts it:
- *                         the script waits for this launcher to close, copies
- *                         the new files over the folder and starts
- *                         UMK3-Launcher.exe again, which then recompiles
+ *                         unpacks it, writes update/apply.ps1 (Linux:
+ *                         apply.sh) and starts it: the script waits for this
+ *                         launcher to close, copies the new files over the
+ *                         folder and starts UMK3-Launcher again, which then
+ *                         recompiles
+ *
+ * Windows takes the release's .zip, Linux its linux .tar.gz -- the archive
+ * of its own launcher. Up to 0.1.7 the Linux launcher took the .zip too and
+ * could not unpack it ("could not unpack the update").
  *
  * What an update leaves alone: umk3.ini, res\, the compiled umk3-game.exe
  * (rebuilt right after), toolchain\, build-game\ and anything the player put
@@ -29,6 +34,12 @@ const { spawn, spawnSync } = require('child_process');
 const REPO = 'MaryNCRT/Ultimate-Mortal-Kombat-3-iOS-Recomp';
 const API = 'https://api.github.com/repos/' + REPO + '/releases?per_page=10';
 const MIRROR = ['src', 'decomp', 'runtime', 'tools', 'launcher'];
+const LINUX = process.platform === 'linux';
+
+/* this system's archive among a release's files */
+const assetFor = assets => (assets || []).find(a => (LINUX
+    ? /linux.*\.tar\.gz$/i.test(a.name)
+    : /\.zip$/i.test(a.name) && !/linux/i.test(a.name)));
 
 /* "v0.0.10-alpha", "0.0.7b-alpha" -> [[0,''],[0,''],[10,'']] / [..,[7,'b']] */
 function parseVersion(v) {
@@ -50,7 +61,7 @@ function compareVersions(a, b) {
     return 0;
 }
 
-/* The newest published release with a .zip, or null. `fetchFn` is Electron's
+/* The newest published release with an archive for this system, or null. `fetchFn` is Electron's
  * net.fetch (system proxy, redirects) or anything with the same shape. */
 async function check(fetchFn, current) {
     const r = await fetchFn(API, { headers: { 'User-Agent': 'UMK3-Launcher', Accept: 'application/vnd.github+json' } });
@@ -60,7 +71,7 @@ async function check(fetchFn, current) {
     for (const rel of list) {
         if (rel.draft)
             continue;
-        const zip = (rel.assets || []).find(a => /\.zip$/i.test(a.name));
+        const zip = assetFor(rel.assets);
         if (!zip)
             continue;
         return {
@@ -82,7 +93,7 @@ async function check(fetchFn, current) {
 
 /* Streams the zip to dir/<file>; resolves with its path. */
 async function download(fetchFn, rel, dir, onProgress) {
-    if (!/^[\w.\-]+\.zip$/i.test(rel.file))
+    if (!/^[\w.\-]+\.(zip|tar\.gz)$/i.test(rel.file))
         throw new Error('unexpected file name');
     fs.mkdirSync(dir, { recursive: true });
     const out = path.join(dir, rel.file);
@@ -125,9 +136,9 @@ function unpack(root, zip) {
     const dest = path.join(root, 'update', 'new');
     fs.rmSync(dest, { recursive: true, force: true });
     fs.mkdirSync(dest, { recursive: true });
-    const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
-    let r = fs.existsSync(tar) ? spawnSync(tar, ['-xf', zip, '-C', dest], { windowsHide: true }) : { status: 1 };
-    if (r.status !== 0)
+    const tar = LINUX ? 'tar' : path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+    let r = LINUX || fs.existsSync(tar) ? spawnSync(tar, ['-xf', zip, '-C', dest], { windowsHide: true }) : { status: 1 };
+    if (r.status !== 0 && !LINUX)
         r = spawnSync('powershell.exe', ['-NoProfile', '-Command',
             'Expand-Archive -LiteralPath ' + psq(zip) + ' -DestinationPath ' + psq(dest) + ' -Force'],
             { windowsHide: true });
@@ -136,20 +147,56 @@ function unpack(root, zip) {
     /* the zip holds one folder, UMK3-PC-<version>; up to 0.0.9 the launcher
      * was one portable UMK3-Launcher.exe, since then a stub over launcher\bin */
     const cands = [dest].concat(fs.readdirSync(dest).map(n => path.join(dest, n)));
-    const src = cands.find(d => (fs.existsSync(path.join(d, 'launcher')) || fs.existsSync(path.join(d, 'src')))
+    /* (Linux: the launcher's own folder, the sources in resources/src) */
+    const src = cands.find(d => (fs.existsSync(path.join(d, 'launcher')) || fs.existsSync(path.join(d, 'src'))
+                                 || fs.existsSync(path.join(d, 'resources', 'src')))
                              && (fs.existsSync(path.join(d, 'UMK3-Launcher.exe')) || fs.existsSync(path.join(d, 'UMK3-Launcher'))));
     if (!src)
         throw new Error('the update archive structure is unexpected');
     return src;
 }
 
-/* Writes update/apply.ps1, starts it detached and returns; the caller quits. */
+const shq = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
+
+/* Linux: the archive is the launcher's folder itself. Every folder in it is
+ * mirrored (resources/ holds the sources, so a dropped one goes), its files
+ * copied; what the player's folder has besides -- res/, umk3.ini, build/,
+ * mods/, the compiled game -- is not in the archive and stays. */
+function installLinux(root, src, zip, upd) {
+    const sh = [
+        '#!/bin/sh',
+        'root=' + shq(root), 'src=' + shq(src), 'log="$root/update/apply.log"',
+        'echo "update $(date)" > "$log"',
+        'i=0; while kill -0 ' + process.pid + ' 2>/dev/null && [ $i -lt 120 ]; do sleep 0.5; i=$((i+1)); done',
+        'fail=0',
+        'for d in "$src"/*/; do',
+        '  n=$(basename "$d")',
+        '  rm -rf "$root/$n.old"; [ -e "$root/$n" ] && mv "$root/$n" "$root/$n.old"',
+        '  if cp -a "$d" "$root/$n" >>"$log" 2>&1; then rm -rf "$root/$n.old"',
+        '  else fail=1; echo "copy $n failed" >>"$log"; rm -rf "$root/$n"; [ -e "$root/$n.old" ] && mv "$root/$n.old" "$root/$n"; fi',
+        'done',
+        'for f in "$src"/*; do [ -f "$f" ] && { cp -af "$f" "$root/" >>"$log" 2>&1 || fail=1; }; done',
+        'chmod +x "$root/UMK3-Launcher" "$root/chrome_crashpad_handler" 2>/dev/null',
+        'if [ $fail -ne 0 ]; then mv "$root/update/pending.json" "$root/update/failed.json"',
+        'else mv "$root/update/pending.json" "$root/update/installed.json"; rm -rf "$root/update/new" ' + shq(zip) + '; fi',
+        'cd "$root" && nohup "$root/UMK3-Launcher" >/dev/null 2>&1 &',
+    ].join('\n') + '\n';
+    const script = path.join(upd, 'apply.sh');
+    fs.writeFileSync(script, sh, { mode: 0o755 });
+    const child = spawn('/bin/sh', [script], { cwd: upd, detached: true, stdio: 'ignore' });
+    child.unref();
+}
+
+/* Writes update/apply.ps1 (apply.sh), starts it detached and returns; the
+ * caller quits. */
 function install(root, zip, rel) {
     const src = unpack(root, zip);
     const upd = path.join(root, 'update');
     fs.writeFileSync(path.join(upd, 'pending.json'), JSON.stringify({
         tag: rel.tag, name: rel.name, notes: rel.notes, from: rel.current,
     }));
+    if (LINUX)
+        return installLinux(root, src, zip, upd);
     const ps = [
         '$ErrorActionPreference = "Continue"',
         '$root = ' + psq(root),

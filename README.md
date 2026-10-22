@@ -20,7 +20,7 @@
 | **Verification (`tools/decomp/`)** | **98.30%** | Differential tests against the `armrecomp` ARM→C oracle + build-time table layout verification (`ctest`). |
 | **Native Port (`src/runtime/`)** | **Playable (v0.1.7-beta)** | Native OpenGL renderer, Win32 & SDL2 backends, 3:2 / 4:3 / 16:9 / 21:9 aspect ratios, HD textures, keyboard & gamepad support, local 2P (`DUELO`), LAN/Online multiplayer, and debug tools (`F2`). |
 
-**Known problems in 0.1.7 beta:** the FLAWLESS VICTORY text is missing in the 64-bit build; Reptile's fatalities sometimes fail (in one he only raises his arms); the Linux package is still untested (0.1.7 fixes the Zig download that stopped with `EXIT CODE: -1`, not yet confirmed on Linux).
+**Known problems in 0.1.7 beta:** the FLAWLESS VICTORY text is missing in the 64-bit build; Reptile's fatalities sometimes fail (in one he only raises his arms); the Linux package is still untested (0.1.7 fixes the Zig download that stopped with `EXIT CODE: -1`, not yet confirmed on Linux). After 0.1.7, unreleased: the launcher's MODS section (mod manager with priority and on/off, viewer of the game's models, export to FBX/USD/OBJ for Blender) and the game reading `mods/`; the Linux `GL/gl.h` compile error and the Linux self-update fixed, but not yet tested on Linux.
 
 > [!IMPORTANT]
 > **No copyrighted assets or binaries are distributed in this repository.**
@@ -55,7 +55,7 @@ cmake --build build --target umk3-game
 
 ### 3. Cross-Platform Desktop Launcher (Windows & Linux)
 
-On Windows and Linux, you can run **`UMK3-Launcher`** (built from [`launcher/app/`](launcher/app/)), which provides a self-contained arcade interface: it receives your `.ipa`, downloads the pinned `zig cc` compiler automatically (zero system compiler dependencies), unpacks the game assets, compiles the native game binary, and lets you configure graphics/controls (`umk3.ini`).
+On Windows and Linux, you can run **`UMK3-Launcher`** (built from [`launcher/app/`](launcher/app/)), which provides a self-contained arcade interface: it receives your `.ipa`, downloads the pinned `zig cc` compiler automatically (zero system compiler dependencies), unpacks the game assets, compiles the native game binary, and lets you configure graphics/controls (`umk3.ini`). Its **MODS** section manages mods (`mods/<mod>/`, files named like the game's replace them; priority and on/off in `mods/mods.ini`), shows the game's fighters, stages, models and textures, and exports them for Blender as FBX, USD (USDA/USDC/USDZ) or OBJ with PNG textures.
 
 Available distribution packages:
 - **Linux:** Standalone portable `.tar.gz` (0.1.7 beta: built, not yet tested on a Linux machine).
