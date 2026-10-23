@@ -4,9 +4,9 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 
 ---
 
-## Unreleased (after 0.1.10b)
+## 0.1.11-beta (2026-10-23) — updates that finish, window resize, loads, profile picker, sharp edges
 
-Not yet played by Mary.
+Built for Windows (64 and 32 bits) and Linux. Not yet played by Mary.
 
 - Launcher updates: every Windows update since 0.1.6 ended as "could not be
   copied" (robocopy on folders no release has) and deleted `tools\eos\`;
@@ -28,7 +28,12 @@ Not yet played by Mary.
 - PROFILE: a gradient picker (two colours, an angle, presets) and the
   fighter's second outfit as the player's picture, in the launcher and the game.
 - SMOOTH MODELS: automatic sharp edges, with two sliders (which edges, how
-  much) in GRAPHICS and the model viewer.
+  much) in GRAPHICS and the model viewer, and in the game's own GRAPHICS.
+- SMOOTH MODELS: Kung Lao's hat is no longer pierced by his head -- the skin
+  under a piece on its bones gets no correction pass (game and viewer).
+- The game's Esc menu: PROFILE's background is the launcher's gradient picker,
+  drawn the same, with the mouse, the keys and the pad; OUTFIT 1 / 2.
+- Launcher version 0.1.11-beta.
 
 ## 0.1.10b-beta (2026-10-23) — video settings, settings in two columns
 

@@ -16,7 +16,42 @@
 
 ---
 
-## After 0.1.10b: updater, window resize, load times, profile picture, sharp edges (2026-10-23, not released)
+## Release 0.1.11 beta (2026-10-23): updates that finish, window resize, loads, profile picker, sharp edges
+
+Everything below, "After 0.1.10b", plus Kung Lao's hat and the Esc menu's
+picker. Not played by Mary yet.
+
+**Kung Lao's hat pierced by his head (Mary, with a picture).** Measured in
+the rest pose with the viewer's own code: 4 head points through the hat
+unsmoothed (the original's), 13 at level 1, 45 at level 2; sharp edges
+change nothing. The cause is SMOOTH MODELS' correction pass (added for Jax
+and Sektor): it makes the surface pass through the model's vertices, and
+between them a convex part bulges past the faces; the hat is a scene mesh on
+the head bone and is not smoothed. Tried: smoothing the hat too made it worse
+(24 / 102: the cone's tip rounds down onto the head); lowering the
+correction everywhere fixed it but doubled every fighter's shrink. Done: the
+skin inside a piece on its bones (its box, 2 cm wider) gets no correction --
+`umk_subsurf_set_fit` per vertex; the game boxes each bone-attached scene
+mesh `LIME_RenderScene` draws, for the skin `RenderPlayer` names (a frame
+uses the boxes of the one before); the viewer from the attachments it shows.
+Measured: 0 and 0 points through the hat, the rest of the body as before.
+`tests/subsurf_test.c` I covers the per-vertex share. The game was not run:
+its log says `smooth models: N vertices of a skin under a piece on its
+bones` the first time it engages -- if Mary's log never shows it for Kung
+Lao, the box is in the wrong space.
+
+**The Esc menu like the launcher.** PROFILE's background row opens the
+launcher's gradient picker, drawn in software by `plat_ui_gradient`
+(`ui_alert.c`) from the component's CSS (colours, sizes, the dial, the 18
+presets eight across, the CSS and COPY / CLEAR), over the menu as the
+colour list is; the mouse drags the dial and clicks the rest, the keys and
+the pad move between the controls (left / right turn the dial 5 degrees, as
+the launcher's arrow keys). FROM and TO open the game's colour list. OUTFIT 1
+/ 2 is a row. GRAPHICS gains SHARP EDGE ANGLE and SHARP EDGE PRESERVATION
+(5 degrees and 5% a press), off with SMOOTH MODELS, as in the launcher. The
+launcher's fullscreen frame picture is not in the game (it picks a file).
+
+## After 0.1.10b: updater, window resize, load times, profile picture, sharp edges (2026-10-23, released in 0.1.11)
 
 What Mary reported on 0.1.10b, in the order she sent it, and what was done.
 Nothing here has been played by Mary yet; a test build is in
