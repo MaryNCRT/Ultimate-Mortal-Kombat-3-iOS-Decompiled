@@ -12,17 +12,19 @@
  *
  *   positions   SkinnedVerts: one int16 triple per skin vertex, written by
  *               the DrawSkinnedMesh2 call right before the draw
- *   topology    the skin's own triangles (vertExtra) and corner UVs (uvs) --
- *               the record's indices follow the skin's triangle order, so
- *               corner c of triangle f is record vertex indices[3f + c]
+ *   topology    the skin's own triangles (vertExtra); the record's indices
+ *               follow the skin's triangle order, so corner c of triangle f
+ *               is record vertex indices[3f + c]
+ *   UVs         the record's UV of that vertex, per corner: what the
+ *               original draws, rather than the skin's own corner UVs
  *   light       the record's light byte of that vertex, per corner, carried
  *               through the subdivision as Blender carries loop data
  *
  * The weld is measured on the first pose a skin is drawn in, at Blender's
  * default distance (0.001 m: 0.1 of the game's centimetre units).
  *
- * The shadow is the body flattened (RenderAnimatedCharacter): it reuses the
- * last smoothed body, as the original reuses the last skinned positions. */
+ * The shadow is the body flattened (RenderAnimatedCharacter): it is drawn
+ * from the plain skin, unsmoothed. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -87,7 +89,8 @@ static void skin_positions(const SKININFO *skin, float *out)
         out[i] = (float)p[i];
 }
 
-static smooth_entry *lookup(const SKININFO *skin)
+static smooth_entry *lookup(const SKININFO *skin, const float *ruv,
+                            const uint16_t *idx)
 {
     smooth_entry *e = NULL;
     int i, oldest = 0;
@@ -126,10 +129,30 @@ static smooth_entry *lookup(const SKININFO *skin)
         return NULL;
 
     skin_positions(skin, e->pos);
-    e->s = umk_subsurf_new(e->levels, UMK_WELD_DISTANCE_CM * VertScale,
-                           e->nmat, e->pos, e->nfaces,
-                           (const unsigned short *)skin->vertExtra,
-                           (const float *)skin->uvs);
+    {
+        /* the corner UVs the original draws: the record's, through its
+         * indices; the log says where they differ from the skin's own */
+        const float *su = (const float *)skin->uvs;
+        float *cu = malloc(sizeof(float) * 6 * (size_t)e->nfaces);
+        int diff = 0;
+
+        if (!cu)
+            return NULL;
+        for (i = 0; i < e->nfaces * 3; i++) {
+            cu[i * 2 + 0] = ruv[idx[i] * 2 + 0];
+            cu[i * 2 + 1] = ruv[idx[i] * 2 + 1];
+            if (cu[i * 2] != su[i * 2] || cu[i * 2 + 1] != su[i * 2 + 1])
+                diff++;
+        }
+        if (diff)
+            printf("smooth models: %d of %d corner UVs differ from the skin's
+",
+                   diff, e->nfaces * 3);
+        e->s = umk_subsurf_new(e->levels, UMK_WELD_DISTANCE_CM * VertScale,
+                               e->nmat, e->pos, e->nfaces,
+                               (const unsigned short *)skin->vertExtra, cu);
+        free(cu);
+    }
     if (e->s) {
         int n = umk_subsurf_num_verts(e->s);
         e->light = malloc((size_t)n);
@@ -226,6 +249,7 @@ int port_smooth_draw(const void *skin_p, const void *rec, long second,
     const limeVECTOR3 *fade = (const limeVECTOR3 *)fade_p;
     const char *r = (const char *)rec;
     const uint16_t *idx;
+    const float *ruv;
     const uint8_t *light;
     smooth_entry *e;
     int i, n;
@@ -233,20 +257,16 @@ int port_smooth_draw(const void *skin_p, const void *rec, long second,
     if (!port_smooth_models || skin == NULL || rec == NULL)
         return 0;
     lime_port_skin_freed = port_smooth_forget;
-    e = lookup(skin);
-    if (e == NULL)
+    if (second == 2)                    /* the shadow: no longer smoothed */
         return 0;
 
-    if (second == 2) {                  /* the shadow: the last smoothed body */
-        if (!e->ok)
-            return 0;
-        draw(e, NULL, alpha, fade);
-        return 1;
-    }
-
     idx   = *(const uint16_t *P32 const *)(r + (second ? 0x2c : 0x1c));
+    ruv   = *(const float *P32 const *)(r + (second ? 0x30 : 0x20));
     light = *(const uint8_t *P32 const *)(r + (second ? 0x34 : 0x24));
-    if (idx == NULL || light == NULL)
+    if (idx == NULL || ruv == NULL || light == NULL)
+        return 0;
+    e = lookup(skin, ruv, idx);
+    if (e == NULL)
         return 0;
 
     skin_positions(skin, e->pos);

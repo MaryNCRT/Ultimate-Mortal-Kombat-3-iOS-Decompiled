@@ -3874,13 +3874,20 @@ void group_sound(MK3OBJ *obj)
 
     /* Port diagnostic, not in the binary: every death scream (kind 9) says
      * which handler asked for it -- Mary hears them repeat in every
-     * fatality. The address is in the exe; the build log's PDB names it. */
+     * fatality. The address is in the exe; the build log's PDB names it.
+     * "handler" is the screamer's own state; "running" the handler the
+     * thread loop is in (mk3.c) and "called from" who asked for the sound. */
     if (obj->field1c == 9 && obj->thread != NULL) {
+        extern void *port_mk3_running;
+        extern uint32_t port_mk3_running_token;
         MK3THREAD *t = obj->thread;
-        printf("death scream: character %u, handler %p, token 0x%x, level %u\n",
+        printf("death scream: character %u, handler %p, token 0x%x, level %u; "
+               "running %p token 0x%x, called from %p\n",
                (unsigned)obj->field08->field24,
                (void *)(uintptr_t)mk3_frame(t, t->frame)[1],
-               (unsigned)*mk3_frame(t, t->frame + 1), (unsigned)t->frame);
+               (unsigned)*mk3_frame(t, t->frame + 1), (unsigned)t->frame,
+               port_mk3_running, (unsigned)port_mk3_running_token,
+               __builtin_return_address(0));
     }
 
     MKEvent_Add(2, 1, (long)(((uint32_t)group << 4) + obj->field1c), 0);
