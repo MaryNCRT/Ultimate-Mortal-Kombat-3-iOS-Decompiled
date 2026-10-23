@@ -20,6 +20,8 @@ Vulkan and Direct3D 12 renderers: all three work.
   and value would overlap is drawn smaller.
 - CONTROLS: the keys and the pad's buttons split into FIGHT and MENU, each
   in its own column.
+- Launcher: its own version `0.1.10-beta.b` reads as 0.1.10b, so it no
+  longer offers the 0.1.10b release as an update to itself (`lib/update.js`).
 
 ## 0.1.10-beta (2026-10-23) — Kombos, SMOOTH MODELS, GPL
 
