@@ -125,6 +125,21 @@ static TexEntry *g_textures;
 #define TEX_BUCKETS 2048
 static TexEntry *g_tex_hash[TEX_BUCKETS];
 
+/* How many textures are loaded and their pixels (the log's memory line). */
+int lime_texture_count(long *pixels)
+{
+    const TexEntry *e;
+    int n = 0;
+    long px = 0;
+    for (e = g_textures; e; e = e->next) {
+        n++;
+        px += (long)e->w * e->h;
+    }
+    if (pixels)
+        *pixels = px;
+    return n;
+}
+
 static unsigned tex_hash(const char *path)
 {
     unsigned h = 2166136261u;

@@ -562,6 +562,50 @@ static char g_gpu[200];                 /* GL_RENDERER / GL_VERSION, read at sta
 #include <sys/utsname.h>
 #endif
 
+int lime_texture_count(long *pixels);   /* draw_gl.c */
+
+/* Every five minutes, the process's memory and the textures loaded, to the
+ * log: whether a long session grows, and in what (Mary: lag and memory after
+ * the game has been open a long time). Port. */
+static void mem_log(void)
+{
+    static double start, next;
+    double now = plat_time();
+    long px = 0, mb = -1;
+    int n;
+
+    if (start == 0.0)
+        start = next = now;
+    if (now < next)
+        return;
+    next = now + 300.0;
+#ifdef _WIN32
+    {
+        typedef struct { DWORD cb, faults; SIZE_T peak_ws, ws, q[4], pagefile, peak_pagefile; } pmc_t;
+        typedef BOOL (WINAPI *pmi_t)(HANDLE, pmc_t *, DWORD);
+        pmi_t pmi = (pmi_t)(void *)GetProcAddress(GetModuleHandleA("kernel32.dll"), "K32GetProcessMemoryInfo");
+        pmc_t c;
+        memset(&c, 0, sizeof c);
+        c.cb = sizeof c;
+        if (pmi && pmi(GetCurrentProcess(), &c, sizeof c))
+            mb = (long)(c.pagefile >> 20);
+    }
+#elif !defined(__EMSCRIPTEN__)
+    {
+        FILE *f = fopen("/proc/self/statm", "r");
+        long pages = 0, rss = 0;
+        if (f) {
+            if (fscanf(f, "%ld %ld", &pages, &rss) == 2)
+                mb = rss * (sysconf(_SC_PAGESIZE) / 1024) / 1024;
+            fclose(f);
+        }
+    }
+#endif
+    n = lime_texture_count(&px);
+    printf("memory: %ld MB, %d textures (%ld MB of pixels), after %.0f min\n",
+           mb, n, px * 4 / (1024 * 1024), (now - start) / 60.0);
+}
+
 static void system_name(char *out, int n)
 {
 #ifdef _WIN32
@@ -3572,6 +3616,7 @@ int main(int argc, char **argv)
             save_shot(ww, wh);
             break;
         }
+        mem_log();
         pace_work_end();
         if (!plat_swap())
             break;
