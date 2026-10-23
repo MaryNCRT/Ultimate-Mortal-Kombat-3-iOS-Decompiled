@@ -3054,8 +3054,9 @@ void LIME_GLAPI glMultMatrixf(const float *m);
  * they are.
  *
  * frameA stays the game's frame (its record decides the mesh, the second
- * skin and the events); frameB is the previous one, weighted by t. A blend
- * the game set itself is left alone. No blend across a frame that is not
+ * skin and the events); frameB is the previous one, weighted by t. Where the
+ * game blends itself (the select screen, the intro), the frame its blend is
+ * mostly on stands for the game's frame. No blend across a frame that is not
  * skinned, a change of second skin, a change of character or model, the
  * 16/35..41 range, or what IsLiaProblem and IsOstrichProblem refuse -- the
  * cases where the game itself cuts. */
@@ -3129,7 +3130,19 @@ static void port_smooth_pose(long *w)
         st[i].held++;
     }
 
-    if (!port_smooth_anims || own || st[i].held + 1 >= st[i].dur)
+    if (!port_smooth_anims)
+        return;
+    /* The select screen and the intro run PlayerAutoSmoothAnims with their
+     * own windows (40, 20), and it blends nearly all the time; leaving that
+     * blend alone meant the option changed nothing there (Mary). With the
+     * option on, this one draws: from the frame the game's blend is mostly
+     * on, the way the fight does. */
+    if (own) {
+        w[0x51c / 4] = g;
+        w[0x520 / 4] = g;
+        ((float *)w)[0x524 / 4] = 0.0f;
+    }
+    if (st[i].held + 1 >= st[i].dur)
         return;
     if (!smooth_frame_ok(a, st[i].cur, w[0], &s2a)
         || !smooth_frame_ok(a, st[i].prev, w[0], &s2b) || s2a != s2b)
