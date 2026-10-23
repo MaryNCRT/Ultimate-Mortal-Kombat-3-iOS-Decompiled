@@ -8,6 +8,8 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 
 Built for Windows (64 and 32 bits) and Linux. Mary tried the two-column
 menus and the new box before the last two changes below; those are untested.
+Mary has now run the Linux package on a Linux machine, and played the
+Vulkan and Direct3D 12 renderers: all three work.
 
 - **VIDEO SETTINGS** on the settings screen, in the empty top-right box above
   SOUND VOLUME: it opens the settings menu's GRAPHICS page in the game's own
@@ -18,6 +20,8 @@ menus and the new box before the last two changes below; those are untested.
   and value would overlap is drawn smaller.
 - CONTROLS: the keys and the pad's buttons split into FIGHT and MENU, each
   in its own column.
+- Launcher: its own version `0.1.10-beta.b` reads as 0.1.10b, so it no
+  longer offers the 0.1.10b release as an update to itself (`lib/update.js`).
 
 ## 0.1.10-beta (2026-10-23) — Kombos, SMOOTH MODELS, GPL
 

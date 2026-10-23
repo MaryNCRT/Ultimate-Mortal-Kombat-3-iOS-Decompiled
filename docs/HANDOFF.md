@@ -20,6 +20,17 @@ CONTROLS split into FIGHT / MENU headings. **Mary saw the first version**
 split; that version is built but not yet seen by her. Left/right still
 change a value; they do not move between columns.
 
+**Tried by Mary at this release:** the Linux package works on a Linux
+machine (after the Linux fixes of 0.1.6-0.1.10), and the Vulkan and
+Direct3D 12 renderers play. Neither is a known problem any more.
+
+**Launcher bug in the published 0.1.10b:** `compareVersions` cut
+`0.1.10-beta.b` at the `-` and read it as 0.1.10, so this launcher offers
+`v0.1.10b-beta` as an update to itself (noted in the release's known
+problems). Fixed in `lib/update.js` with test cases after publishing
+(PR #117); GitHub's immutable releases refuse new assets, so the fix
+ships with the next version.
+
 ## Release 0.1.10 beta (2026-10-23): kombos, SMOOTH MODELS, GPL
 
 Published as the GitHub pre-release `v0.1.10-beta`, packaged as 0.1.9 was:

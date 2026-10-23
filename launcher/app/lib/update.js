@@ -41,9 +41,12 @@ const assetFor = assets => (assets || []).find(a => (LINUX
     ? /linux.*\.tar\.gz$/i.test(a.name)
     : /\.zip$/i.test(a.name) && !/linux/i.test(a.name)));
 
-/* "v0.0.10-alpha", "0.0.7b-alpha" -> [[0,''],[0,''],[10,'']] / [..,[7,'b']] */
+/* "v0.0.10-alpha", "0.0.7b-alpha" -> [[0,''],[0,''],[10,'']] / [..,[7,'b']]
+ * The launcher's own "0.1.10-beta.b" (package.json must be semver) reads as "0.1.10b". */
 function parseVersion(v) {
-    const core = String(v || '').trim().replace(/^v/i, '').split('-')[0];
+    const s = String(v || '').trim().replace(/^v/i, '');
+    const letter = (s.match(/^[^-]*-[a-z]+\.([a-z])$/i) || [])[1] || '';
+    const core = s.split('-')[0] + letter;
     return core.split('.').map(p => {
         const m = p.match(/^(\d+)([a-z]*)$/i);
         return m ? [parseInt(m[1], 10), m[2].toLowerCase()] : [0, ''];

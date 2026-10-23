@@ -11,6 +11,9 @@ test('versions compare by number, then letter', () => {
     assert.ok(c('v0.0.9-alpha', '0.0.9-alpha') === 0);
     assert.ok(c('v0.0.8-alpha', '0.0.9-alpha') < 0);
     assert.ok(c('v0.1.0', '0.0.99') > 0);
+    assert.ok(c('v0.1.10b-beta', '0.1.10-beta.b') === 0);
+    assert.ok(c('v0.1.11-beta', '0.1.10-beta.b') > 0);
+    assert.ok(c('v0.1.10b-beta', '0.1.10-beta') > 0);
 });
 
 test('check picks the newest non-draft release with a zip', async () => {
