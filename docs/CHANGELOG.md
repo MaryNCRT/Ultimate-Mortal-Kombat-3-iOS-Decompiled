@@ -15,8 +15,9 @@ Not yet played by Mary.
 - Window resize and move: Direct3D 12 and Vulkan keep working through resizes
   that fail or change the buffers; the render buffer is remade once the size
   settles, not every frame.
-- Online over the internet: the release scripts refuse to package without the
-  EOS SDK and `eos.ini` (0.1.10b went out without them).
+- Online over the internet: the EOS SDK's headers and libraries are in the
+  repository (`tools/eos`), and the release scripts refuse to package without
+  them and `eos.ini` (0.1.10b went out without them).
 - The home screen ring's picture (`image.png`) comes with the launcher.
 - Load times: texture uploads batched on Direct3D 12 and Vulkan; load screens
   draw half as often; the launcher's compile is incremental (13.9 s to 1.2 s

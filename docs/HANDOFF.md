@@ -52,11 +52,15 @@ and fixed, none seen crashing here (the game is Mary's to run):
 **EOS on other PCs.** 0.1.10b was packaged in a worktree without `TOOLS/eos`
 and went out with online on the local network alone. `make_release.py` and
 `make_release_linux.py` now refuse to package without the SDK and `eos.ini`
-(`UMK3_EOS_DIR`, else `TOOLS/eos`; `UMK3_NO_EOS=1` on purpose). Mary asked
-for the files in the repository; committing the EOS SDK and the product's
-`eos.ini` (its client secret) was refused by the session's safety checks, so
-they stay outside it. **Mary's decision**: commit them herself, or keep them
-outside and package with `UMK3_EOS_DIR`.
+(`UMK3_EOS_DIR`, else `tools/eos`, else `TOOLS/eos`; `UMK3_NO_EOS=1` on
+purpose). At Mary's request the SDK is now in the repository, only what
+online needs: `tools/eos/SDK/Include` (the 45 headers `mp_eos.c` includes on
+Windows and Linux, checked by compiling it for both), `tools/eos/SDK/Bin`
+(`EOSSDK-Win64-Shipping.dll`, `libEOSSDK-Linux-Shipping.so`) and Epic's
+`ThirdPartyNotices`. The product's `eos.ini` (its client secret) is not: the
+session's safety checks refused to publish it, so the release scripts take it
+from `UMK3_EOS_INI` or the main checkout's `TOOLS/eos/eos.ini`. Without it a
+build plays online on the local network alone.
 
 **The "image" file.** `launcher/aditional textures/image.png`, the home
 screen ring's picture, is now in the repository (Mary: "inclúyela"), so

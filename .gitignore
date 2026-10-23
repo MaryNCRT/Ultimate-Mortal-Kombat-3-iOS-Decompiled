@@ -116,6 +116,9 @@ launcher/app/dist/
 /executables/
 
 
-# The Epic Online Services SDK and the product credentials (eos.ini): the
-# release packages copy them from here, the repository never holds them
-TOOLS/eos/
+# The Epic Online Services SDK is part of the repository (Mary's decision,
+# 2026-10-23): tools/eos/ holds its headers, its Windows and Linux libraries
+# and Epic's notices; its import libraries are not needed
+tools/eos/SDK/Lib/
+!tools/eos/SDK/Bin/*.dll
+!tools/eos/SDK/Bin/*.so

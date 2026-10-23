@@ -11,8 +11,11 @@ UMK3-Launcher.exe the player double-clicks: the portable single .exe took
 
 Copies all of src/ (the tree launcher/app/lib/compile.js compiles from), the
 table generators and their helpers, the launcher stub's sources, LEEME.txt,
-and the Epic Online Services SDK from TOOLS/eos when it is there (online over
-the internet; not in the repository). Nothing of the game: the player's own
+and the Epic Online Services SDK with the product's eos.ini (online over the
+internet): UMK3_EOS_DIR, else tools/eos (in the repository since after
+0.1.10b), else TOOLS/eos; eos.ini beside the SDK, or UMK3_EOS_INI, or the
+repository's tools/eos/eos.ini. It refuses to finish without them
+(UMK3_NO_EOS=1 makes such a package on purpose). Nothing of the game: the player's own
 .ipa supplies the data tables and res\\ when they press Compilar.
 
 The script refuses to finish if a header one of the sources includes is
@@ -90,7 +93,8 @@ def eos_dir():
     """The EOS SDK's folder: UMK3_EOS_DIR, else TOOLS/eos (not in the
     repository). None when UMK3_NO_EOS=1; exits when there is none, since a
     package without it plays online on the local network alone."""
-    for d in (os.environ.get("UMK3_EOS_DIR"), os.path.join(ROOT, "TOOLS", "eos")):
+    for d in (os.environ.get("UMK3_EOS_DIR"), os.path.join(ROOT, "tools", "eos"),
+              os.path.join(ROOT, "TOOLS", "eos")):
         if d and os.path.exists(os.path.join(d, "SDK", "Include", "eos_sdk.h")):
             return d
     if os.environ.get("UMK3_NO_EOS") == "1":
@@ -106,7 +110,8 @@ def find_eos_ini():
     d = eos_dir()
     if d is None:
         return None
-    for c in (os.environ.get("UMK3_EOS_INI"), os.path.join(d, "eos.ini")):
+    for c in (os.environ.get("UMK3_EOS_INI"), os.path.join(d, "eos.ini"),
+              os.path.join(ROOT, "tools", "eos", "eos.ini")):
         if c and os.path.isfile(c):
             return c
     raise SystemExit("no eos.ini in %s: set UMK3_EOS_INI, or UMK3_NO_EOS=1" % d)
