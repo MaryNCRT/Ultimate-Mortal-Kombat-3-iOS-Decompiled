@@ -172,7 +172,7 @@
         if (!(await ensureMod())) return;
         const got = await api.pickFile('picture');
         if (!got) return;
-        const files = await putTexture(api, src, ms.edMod, stem, got.bytes, ms.autoSmall);
+        const files = await putTexture(api, src, ms.edMod, stem, got.bytes, ms.autoSmall, 'Characters/' + fname);
         if (!files) { note = tx('vwNotPicture'); return; }
         forgetMod();
         note = tx('vwSaved') + ms.edMod + '\\' + files.join(', ');
@@ -183,7 +183,7 @@
         selectBlip();
         const file = src.files.find(f => f.slice(9).replace(/\.(pvr|png)$/i, '') === stem);
         const png = file && await pngBytes(src, file);
-        if (png) note = tx('exDone') + ' ' + await api.exportSave(fid + '_TEXTURES', { [stem + '.png']: png });
+        if (png) note = tx('exDone') + ' ' + await api.exportSave('Characters/' + fname + '/Textures', { [stem + '.png']: png });
     }
 
     function seeIt() {

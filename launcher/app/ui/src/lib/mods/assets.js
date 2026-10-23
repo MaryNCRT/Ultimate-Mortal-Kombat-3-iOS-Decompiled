@@ -220,10 +220,73 @@ export function fighterDesc(f, opts) {
  * fighter units. */
 const STAGE_SCALE = 0.0133138057 / 0.0101562496;
 
-export async function stageDesc(src, st) {
+export async function stageDesc(src, st, animated = false) {
     const scene = parseScene(await src.read(st.scene));
     const set = parseMeshset(await src.read(st.meshset));
-    return placedDesc(st.id + '_STAGE', scene, set, 0);
+    return animated ? animatedDesc(st.id + '_STAGE', scene, set) : placedDesc(st.id + '_STAGE', scene, set, 0);
+}
+
+/* The stage with its animation (issue #101): the scene's keys, frame by
+ * frame. Each object that is ever shown is a bone of its own (no parent)
+ * and its mesh is bound to it whole; a frame's key gives the bone its
+ * palette transform -- turned, moved and scaled, as placedDesc places it --
+ * and a key at alpha 0.03 or below (not drawn, RenderLevelBG) scales it to
+ * nothing. The rest is the object's first shown key, without its scale:
+ * the scale rides the animation, relative to that key's (FBX Lcl Scaling,
+ * USD SkelAnimation scales). One clip, the scene's frames at 30 a second. */
+function animatedDesc(name, scene, set) {
+    const byName = new Map();
+    for (const [i, m] of set.entries()) {
+        if (!byName.has(m.name)) byName.set(m.name, i);
+        if (!byName.has(m.name.toUpperCase())) byName.set(m.name.toUpperCase(), i);
+    }
+    const shown = k => k && k.alpha > 0.03 && scene.palette[k.pal];
+    const xf = pal => {
+        const [x, y, z, w] = pal.q, n = Math.hypot(x, y, z, w) || 1;
+        return { R: rowQuat(x / n, y / n, z / n, w / n), T: pal.t.map(v => v * STAGE_SCALE) };
+    };
+    const meshes = [], materials = [], matOf = new Map(), used = new Map();
+    const names = [], rest = [], objs = [];
+    let frames = 1;
+    for (const obj of scene.objects) {
+        const mi = byName.get(obj.name) ?? byName.get(obj.name.toUpperCase());
+        const first = obj.keys.find(shown);
+        if (mi === undefined || !first) continue;
+        frames = Math.max(frames, obj.keys.length);
+        const m = set[mi], pal = scene.palette[first.pal], r = xf(pal), s0 = pal.s;
+        const b = names.length;
+        const pos = new Float32Array(m.pos.length);
+        for (let i = 0; i < m.pos.length; i += 3) {
+            const p = vmul([m.pos[i] * s0[0], m.pos[i + 1] * s0[1], m.pos[i + 2] * s0[2]], r.R);
+            for (let k = 0; k < 3; k++) pos[i + k] = p[k] * STAGE_SCALE + r.T[k];
+        }
+        const tex = m.texture || '';
+        if (!matOf.has(tex)) {
+            matOf.set(tex, materials.length);
+            materials.push({ name: tex || 'untextured', texture: tex ? tex + '.png' : '', stem: tex });
+        }
+        const nm0 = obj.name.replace(/\W+/g, '_') || 'object';
+        const k = (used.get(nm0) || 0) + 1;
+        used.set(nm0, k);
+        const nm = k > 1 ? nm0 + '_' + k : nm0;
+        const nv = m.pos.length / 3;
+        const idx = new Int32Array(nv * 4), wt = new Float32Array(nv * 4);
+        for (let v = 0; v < nv; v++) { idx[v * 4] = b; wt[v * 4] = 1; }
+        meshes.push({ name: nm, pos, uv: m.uv, faces: m.faces, material: matOf.get(tex), skin: { idx, wt } });
+        names.push(nm);
+        rest.push(r);
+        objs.push({ keys: obj.keys, s0 });
+    }
+    const poses = [];
+    for (let f = 0; f < frames; f++)
+        poses.push(objs.map((o, b) => {
+            const key = o.keys[Math.min(f, o.keys.length - 1)];
+            if (!shown(key)) return { R: rest[b].R, T: rest[b].T, S: [0, 0, 0] };
+            const pal = scene.palette[key.pal], r = xf(pal);
+            return { R: r.R, T: r.T, S: pal.s.map((v, i) => (o.s0[i] ? v / o.s0[i] : 1)) };
+        }));
+    const skeleton = { names, parent: names.map(() => -1), rest };
+    return { name, meshes, materials, skeleton, clips: [{ name: 'Stage', poses }], fps: 30 };
 }
 
 function placedDesc(name, scene, set, frame) {

@@ -22,6 +22,7 @@
     import { subsurfCreate } from '#lib/mods/subsurf.js';
     import { decodePvr } from '#lib/mods/formats.js';
     import { putTexture } from '#lib/mods/image.js';
+    import { homeOf, textureDir, exportTexDir } from '#lib/mods/owners.js';
 
     let host = $state();
     let pic = $state();
@@ -465,10 +466,12 @@
         if (!png || !name) return;
         if (!ms.list.some(m => m.folder === name))
             await api.modsCreate({ name, category: 'textures' });
-        await api.modsPut(name, texInfo.name + '.png', png);
+        const dir = await textureDir(src, ms.cat, texInfo.name);
+        const file = (dir ? dir + '/' : '') + texInfo.name + '.png';
+        await api.modsPut(name, file, png);
         await refreshMods();
         selectBlip();
-        copied = tx('vwCopied') + name + '\\' + texInfo.name + '.png';
+        copied = tx('vwCopied') + name + '\\' + file.replace(/\//g, '\\');
     }
 
     /* the mod a change goes to when its box is left empty */
@@ -492,7 +495,7 @@
         try {
             await refreshMods();
             if (!ms.list.some(m => m.folder === name)) await api.modsCreate({ name, category: 'textures' });
-            const files = await putTexture(api, src, name, stem, got.bytes, ms.autoSmall);
+            const files = await putTexture(api, src, name, stem, got.bytes, ms.autoSmall, await textureDir(src, ms.cat, stem));
             if (!files) { ms.error = tx('vwNotPicture'); return; }
             await refreshMods();
             forgetMod();
@@ -552,15 +555,16 @@
             const png = file && await pngBytes(src, file);
             if (png) files[stem + '.png'] = png;
         }
-        const name = String(fx ? fx.ch.file : ms.pick.id).replace(/^.*\//, '').replace(/\.\w+$/, '');
-        done = tx('exDone') + ' ' + await api.exportSave(name + '_TEXTURES', files);
+        const home = fx ? homeOf('characters', fx.ch)
+            : homeOf(ms.kind, ms.pick) || await textureDir(src, ms.cat, ms.pick.name);
+        done = tx('exDone') + ' ' + await api.exportSave(exportTexDir(home), files);
     }
 
     /* the rig to model over: T-pose, no animation, FBX with its textures */
     async function exportRig() {
         selectBlip();
         const files = await exportFiles(src, rigDesc(fx), 'fbx');
-        done = tx('exDone') + ' ' + await api.exportSave(fx.ch.file + '_RIG', files);
+        done = tx('exDone') + ' ' + await api.exportSave(homeOf('characters', fx.ch) + '/RIG', files);
     }
 
     /* ---------------------------------------- bringing Blender's work in -- */
@@ -606,7 +610,7 @@
                 bytes = r.bytes;
                 what = r.verts + ' verts · ' + r.tris + ' tris · ' + r.matched + '/' + r.of;
             }
-            await api.modsPut(name, file, bytes);
+            await api.modsPut(name, homeOf('characters', fx.ch) + '/' + file, bytes);
             await refreshMods();
             const clip = imp.kind === 'anim' ? imp.clip : ms.clip;
             imp = null;

@@ -16,6 +16,78 @@
 
 ---
 
+## After 0.1.9: smooth models fixed in the game, stage animation export, folders, TEXTURES page (2026-10-23, not released)
+
+**SMOOTH MODELS: dark wedges and black spots (fixed, Mary confirmed both in
+the viewer and the game).** Two causes:
+- UVs: Blender 2.79's subdivided UV mesh moves a UV island's rim like any
+  boundary, and where the rim bends inwards it leaves the island and samples
+  other parts of the texture. Now each output UV is its face's own corner UVs
+  mixed with the loop weights (`umk3_subsurf.c` build_output), so it stays in
+  the face's UV triangle (Blender 2.91+ "UV Smooth: None"). The UV mesh still
+  decides which output vertices are shared. Checked on a flat grid with UV =
+  position: interior UVs equal positions (level 1 exact, level 2 within 0.01).
+- Light: the game took the skin's triangles and positions but the frame
+  record's light through the record's indices; where those differ a corner
+  took another vertex's light, some near black. `smooth_models.c` now builds
+  the surface from the frame record alone, as `LIME_RenderMeshSingleIndexed`
+  draws it: its indices, UVs and light per record vertex, positions from
+  `RenderVerts`. A cache entry is keyed by the skin and an FNV-1a hash of the
+  record's indices and UVs.
+
+**Builds into the test folder take `src/` from the test folder**, not from the
+repository (`node launcher/app/cli.js <ipa> --arch x64 --root <folder>`
+compiles `<folder>/src`). Copy the changed sources there first, then check the
+exe holds a string from the change. Three builds this session missed their
+changes this way.
+
+**Exports and mods by place (Mary).** `launcher/app/ui/src/lib/mods/owners.js`:
+- Exports: `exports/Characters/<fighter>/<FORMAT>`, `exports/Stages/<stage>/<FORMAT>`,
+  `exports/Models/<model>/<FORMAT>`; a texture alone goes to its fighter's or
+  stage's `Textures`, or `Interface`, or `Effects`. The viewer's texture and
+  rig exports and the character editor's go to the same places.
+- Mods: a replaced texture goes into the mod at the same place
+  (`Stages/The Pit III/PIT1.png`); a model imported from Blender into
+  `Characters/<fighter>/`. The game takes a mod's files by name from any of
+  its folders (`runtime/mods.c` walks them), so nothing changed in the game.
+  `lib/mods.js` putFile takes a path and removes a same-named copy elsewhere
+  in the mod; exportSave takes a folder path (each part a safe name, four
+  deep at most).
+- A texture's owner: a texture a stage's meshset uses is that stage's (so
+  JADE_SKY is Jade's Desert's, not Jade's); a `*_COMPLETEMAP` is the
+  interface's; a stem naming a fighter (at its start first) is that
+  fighter's; a texture another meshset uses is an effect; anything else is
+  the interface's. 1582 textures sort into 27 fighters (1065), 16 stages (164),
+  88 effects and 265 interface.
+
+**TEXTURES page in MODS (Mary: stage and menu textures in their own
+section).** Fighters, stages (a list each), interface and menus, effects:
+every texture with SEE, REPLACE (PNG) into the chosen mod and EXPORT (PNG);
+the mod's own ones are marked.
+
+**Issue #101, animated stage export.** EXPORT > STAGES > WITH ITS ANIMATION
+(FBX, USDA, USDC, USDZ): each scene object that is ever shown is a bone of its
+own with its mesh bound to it; each frame's key gives the bone its palette
+rotation, translation and scale relative to its first shown key, and a key at
+alpha 0.03 or below scales it to nothing. FBX gets `Lcl Scaling` curves and
+USD `SkelAnimation` scales samples when a pose has a scale. Checked: frame 0
+equals the static export exactly; on Scorpion's Lair (1001 frames, 43
+objects) every shown vertex at frames 3, 400 and 999 matches the scene's own
+placement within 0.0004. **Not opened in Blender or a USD viewer yet.**
+
+**Issue #114 (Liu Kang's 7-hit kombo, the opponent slides away).** Checked
+against the binary: `t_cc_hi_punch` (4 punches, 6 holding away),
+`t_ccp3`, `t_separate_us`, `inc_p_block` (the punch count at header +0x4c),
+`t_avoid_corner_trap(_b)`. All match. It may be the original's rule; the log
+now prints `separate us:` and `corner trap:` when they act. Needs Mary's log
+of the kombo.
+
+**Death screams in friendships and animalities (open).** `t_friendship_complete`,
+`t_end_friend_proc`, `t_friend_ender` and `death_blow_complete` match the
+binary. The `death scream:` line now also names the handler the thread loop is
+running (`port_mk3_running`, mk3.c) and the caller of `group_sound`. Needs a
+log from the current build (its PDB is kept in `WORK/pdb-0928/`).
+
 ## After 0.1.9: SMOOTH MODELS, crash report context, GPL (2026-10-23, not released)
 
 **SMOOTH MODELS** (Mary): an option, OFF / LEVEL 1 / LEVEL 2, that draws the

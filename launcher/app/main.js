@@ -531,7 +531,7 @@ ipcMain.handle('file:pick', async (_ev, kind) => {
 });
 ipcMain.handle('export:save', (_ev, sub, files) => mods.exportSave(g_root, sub, files));
 ipcMain.handle('export:open', (_ev, sub) => {
-    const p = path.join(g_root, 'exports', sub && /^[\w .()-]+$/.test(sub) ? sub : '');
+    const p = path.join(g_root, 'exports', sub && /^[\w .()'-]+(\/[\w .()'-]+)*$/.test(sub) && !sub.includes('..') ? sub : '');
     fs.mkdirSync(p, { recursive: true });
     shell.openPath(p);
     return true;

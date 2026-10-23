@@ -3,7 +3,7 @@
 import { api } from '../platform.js';
 import { catalog, loadFighter } from './assets.js';
 
-export const MODS_TABS = [['mgr', 'modsMgr'], ['view', 'modsView'], ['edit', 'modsEdit'], ['exp', 'modsExp']];
+export const MODS_TABS = [['mgr', 'modsMgr'], ['view', 'modsView'], ['edit', 'modsEdit'], ['tex', 'modsTex'], ['exp', 'modsExp']];
 export const VIEW_KINDS = [['characters', 'vwChars'], ['stages', 'vwStages'], ['models', 'vwModels'], ['textures', 'vwTex']];
 
 export const ms = $state({
@@ -28,6 +28,8 @@ export const ms = $state({
     autoSmall: true,
     /* the CHARACTER EDITOR: the fighter, the mod its changes go to */
     edFighter: 0, edMod: '', edPage: 'attacks',
+    /* TEXTURES: the group (mods/owners.js GROUPS), the fighter or stage */
+    txGroup: 'characters', txItem: '',
 });
 
 /* ------------------------------------------------------------- mods -- */

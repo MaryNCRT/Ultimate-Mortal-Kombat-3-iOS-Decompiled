@@ -115,18 +115,19 @@ export async function smallerCopies(src, stem) {
     return out;
 }
 
-/* REPLACE TEXTURE: the picture as `stem`.png in the mod and, with `auto`,
- * each smaller copy the game has, at that copy's own size. Returns the
- * files written. */
-export async function putTexture(api, src, mod, stem, bytes, auto) {
+/* REPLACE TEXTURE: the picture as `stem`.png in the mod, in its folder
+ * `dir` (mods/owners.js), and, with `auto`, each smaller copy the game has,
+ * at that copy's own size. Returns the files written. */
+export async function putTexture(api, src, mod, stem, bytes, auto, dir = '') {
     const pic = await decodePicture(bytes);
     if (!pic) return null;
-    const files = [stem + '.png'];
-    await api.modsPut(mod, stem + '.png', await pngOf(pic));
+    const at = name => (dir ? dir + '/' : '') + name;
+    const files = [at(stem + '.png')];
+    await api.modsPut(mod, files[0], await pngOf(pic));
     if (auto)
         for (const c of await smallerCopies(src, stem)) {
-            await api.modsPut(mod, c.stem + '.png', await pngOf(pic, c.w, c.h));
-            files.push(c.stem + '.png');
+            await api.modsPut(mod, at(c.stem + '.png'), await pngOf(pic, c.w, c.h));
+            files.push(at(c.stem + '.png'));
         }
     return files;
 }

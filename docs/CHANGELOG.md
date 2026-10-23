@@ -17,6 +17,14 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 - Linux: sound and music (the Linux game was silent); music needs libmpg123.
 - SMOOTH ANIMATIONS also on the select screen and in the intro.
 - Faster drawing of large models with Vulkan and DirectX 12.
+- Fixed: SMOOTH MODELS drew dark wedges and black spots on some fighters
+  (Jax, Sektor, Cyrax, Kano, Kitana, Mileena, Jade, Liu Kang).
+- MODS > EXPORT: stages with their animation (FBX, USD); every export in its
+  own folder: Characters, Stages, Models, and textures in their fighter's or
+  stage's folder, Interface or Effects.
+- MODS > TEXTURES: replace or export any texture of a fighter, a stage, the
+  interface and menus, or the effects; a mod keeps each in that place's
+  folder.
 
 - **SMOOTH ANIMATIONS** (off by default): the launcher's GRAPHICS > VIDEO, or
   Esc > GRAPHICS > VIDEO in the game (applied at once), `smooth_anims=1` in

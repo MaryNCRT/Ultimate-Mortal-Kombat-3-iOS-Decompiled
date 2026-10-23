@@ -1,6 +1,6 @@
 <script>
-    /* MODS: four pages -- the MOD MANAGER, the MODEL VIEWER, the CHARACTER
-     * EDITOR and EXPORT (sections/mods/). */
+    /* MODS: five pages -- the MOD MANAGER, the MODEL VIEWER, the CHARACTER
+     * EDITOR, TEXTURES and EXPORT (sections/mods/). */
     import Page from '#lib/components/Page.svelte';
     import SubNav from '#lib/components/SubNav.svelte';
     import { ms, MODS_TABS } from '#lib/mods/store.svelte.js';
@@ -8,6 +8,7 @@
     import ModViewer from './mods/ModViewer.svelte';
     import ModEditor from './mods/ModEditor.svelte';
     import ModExporter from './mods/ModExporter.svelte';
+    import ModTextures from './mods/ModTextures.svelte';
 </script>
 
 <Page>
@@ -18,6 +19,8 @@
         <ModViewer />
     {:else if ms.tab === 'edit'}
         <ModEditor />
+    {:else if ms.tab === 'tex'}
+        <ModTextures />
     {:else}
         <ModExporter />
     {/if}
