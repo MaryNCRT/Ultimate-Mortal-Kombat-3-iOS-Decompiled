@@ -10,15 +10,11 @@
  * (src/thirdparty/blender/umk3_subsurf.c) and the smoothed mesh is drawn
  * instead, with the same state calls.
  *
- *   positions   SkinnedVerts: one int16 triple per skin vertex, written by
- *               the DrawSkinnedMesh2 call right before the draw
- *   topology    the skin's own triangles (vertExtra); the record's indices
- *               follow the skin's triangle order, so corner c of triangle f
- *               is record vertex indices[3f + c]
- *   UVs         the record's UV of that vertex, per corner: what the
- *               original draws, rather than the skin's own corner UVs
- *   light       the record's light byte of that vertex, per corner, carried
- *               through the subdivision as Blender carries loop data
+ *   everything  from what that draw uses: the record's triangles (its
+ *               indices), its UVs and light per record vertex, and RenderVerts
+ *               (int16, one per record vertex) just skinned -- so each corner
+ *               keeps exactly the UV and light the original gives it
+ *   light       carried through the subdivision as Blender carries loop data
  *
  * The weld is measured on the first pose a skin is drawn in, at Blender's
  * default distance (0.001 m: 0.1 of the game's centimetre units).
@@ -46,15 +42,16 @@ extern void (*lime_port_skin_freed)(const void *skin);   /* RenderSkinned.c */
 
 #define SMOOTH_CACHE 8
 
+extern limeVECTOR3 *RenderVerts;        /* int16 triples, as drawn */
+
 typedef struct {
-    const SKININFO *skin;
-    const void     *tri, *uvs;          /* the skin's arrays, as identity */
-    int             nmat, nfaces, levels;
+    const void     *skin;
+    uint32_t        hash;               /* the record's indices and UVs */
+    int             nverts, nfaces, levels;
     UmkSubsurf     *s;
-    float          *pos;                /* nmat x 3, scratch */
+    float          *pos;                /* nverts x 3, scratch */
     float          *attr;               /* nfaces x 3, scratch */
     uint8_t        *light, *rgba;       /* per output vertex */
-    int             ok;                 /* evaluated at least once */
     unsigned        used;
 } smooth_entry;
 
@@ -80,25 +77,45 @@ void port_smooth_forget(const void *skin)
             entry_free(&g_cache[i]);
 }
 
-static void skin_positions(const SKININFO *skin, float *out)
+static void record_positions(int nverts, float *out)
 {
-    const int16_t *p = (const int16_t *)SkinnedVerts;
+    const int16_t *p = (const int16_t *)(const void *)RenderVerts;
     int i;
 
-    for (i = 0; i < skin->numMatrices * 3; i++)
+    for (i = 0; i < nverts * 3; i++)
         out[i] = (float)p[i];
 }
 
-static smooth_entry *lookup(const SKININFO *skin, const float *ruv,
-                            const uint16_t *idx)
+/* FNV-1a over the record's indices and UVs: frames that share a mesh share
+ * an entry, whichever arrays hold it */
+static uint32_t record_hash(const uint16_t *idx, int nfaces, const float *uv, int nverts)
 {
+    const uint8_t *b;
+    uint32_t h = 2166136261u;
+    size_t i, n;
+
+    b = (const uint8_t *)idx;
+    n = (size_t)nfaces * 6;
+    for (i = 0; i < n; i++)
+        h = (h ^ b[i]) * 16777619u;
+    b = (const uint8_t *)uv;
+    n = (size_t)nverts * 8;
+    for (i = 0; i < n; i++)
+        h = (h ^ b[i]) * 16777619u;
+    return h;
+}
+
+static smooth_entry *lookup(const void *skin, int nverts, int nfaces,
+                            const uint16_t *idx, const float *ruv)
+{
+    const uint32_t hash = record_hash(idx, nfaces, ruv, nverts);
     smooth_entry *e = NULL;
+    float *cu;
     int i, oldest = 0;
 
     for (i = 0; i < SMOOTH_CACHE; i++) {
         smooth_entry *c = &g_cache[i];
-        if (c->skin == skin && c->tri == skin->vertExtra && c->uvs == skin->uvs
-            && c->nmat == skin->numMatrices && c->nfaces == skin->numVerts) {
+        if (c->skin == skin && c->hash == hash && c->nverts == nverts && c->nfaces == nfaces) {
             if (c->levels == port_smooth_models) {
                 c->used = ++g_tick;
                 return c->s ? c : NULL;
@@ -117,55 +134,40 @@ static smooth_entry *lookup(const SKININFO *skin, const float *ruv,
     }
 
     e->skin = skin;
-    e->tri = skin->vertExtra;
-    e->uvs = skin->uvs;
-    e->nmat = skin->numMatrices;
-    e->nfaces = skin->numVerts;
+    e->hash = hash;
+    e->nverts = nverts;
+    e->nfaces = nfaces;
     e->levels = port_smooth_models;
     e->used = ++g_tick;
-    e->pos = malloc(sizeof(float) * 3 * (size_t)e->nmat);
-    e->attr = malloc(sizeof(float) * 3 * (size_t)e->nfaces);
-    if (!e->pos || !e->attr)
-        return NULL;
-
-    skin_positions(skin, e->pos);
-    {
-        /* the corner UVs the original draws: the record's, through its
-         * indices; the log says where they differ from the skin's own */
-        const float *su = (const float *)skin->uvs;
-        float *cu = malloc(sizeof(float) * 6 * (size_t)e->nfaces);
-        int diff = 0;
-
-        if (!cu)
-            return NULL;
-        for (i = 0; i < e->nfaces * 3; i++) {
-            cu[i * 2 + 0] = ruv[idx[i] * 2 + 0];
-            cu[i * 2 + 1] = ruv[idx[i] * 2 + 1];
-            if (cu[i * 2] != su[i * 2] || cu[i * 2 + 1] != su[i * 2 + 1])
-                diff++;
-        }
-        if (diff)
-            printf("smooth models: %d of %d corner UVs differ from the skin's
-",
-                   diff, e->nfaces * 3);
-        e->s = umk_subsurf_new(e->levels, UMK_WELD_DISTANCE_CM * VertScale,
-                               e->nmat, e->pos, e->nfaces,
-                               (const unsigned short *)skin->vertExtra, cu);
+    e->pos = malloc(sizeof(float) * 3 * (size_t)nverts);
+    e->attr = malloc(sizeof(float) * 3 * (size_t)nfaces);
+    cu = malloc(sizeof(float) * 6 * (size_t)nfaces);
+    if (!e->pos || !e->attr || !cu) {
         free(cu);
+        return NULL;
     }
+
+    record_positions(nverts, e->pos);
+    for (i = 0; i < nfaces * 3; i++) {
+        cu[i * 2 + 0] = ruv[idx[i] * 2 + 0];
+        cu[i * 2 + 1] = ruv[idx[i] * 2 + 1];
+    }
+    e->s = umk_subsurf_new(e->levels, UMK_WELD_DISTANCE_CM * VertScale,
+                           nverts, e->pos, nfaces, idx, cu);
+    free(cu);
     if (e->s) {
         int n = umk_subsurf_num_verts(e->s);
         e->light = malloc((size_t)n);
         e->rgba = malloc((size_t)n * 4);
-        printf("smooth models: skin %d verts %d tris -> level %d, %d welded, %d verts %d tris\n",
-               e->nmat, e->nfaces, e->levels, umk_subsurf_welded(e->s), n,
+        printf("smooth models: mesh %d verts %d tris -> level %d, %d welded, %d verts %d tris\n",
+               nverts, nfaces, e->levels, umk_subsurf_welded(e->s), n,
                umk_subsurf_num_tris(e->s));
         if (!e->light || !e->rgba) {
             umk_subsurf_free(e->s);
             e->s = NULL;
         }
     } else
-        printf("smooth models: skin %d verts %d tris not smoothed\n", e->nmat, e->nfaces);
+        printf("smooth models: mesh %d verts %d tris not smoothed\n", nverts, nfaces);
     return e->s ? e : NULL;
 }
 
@@ -241,10 +243,9 @@ static void draw(smooth_entry *e, TEXTURE *tex, float alpha, const limeVECTOR3 *
     glDisableClientState(GL_COLOR_ARRAY);
 }
 
-int port_smooth_draw(const void *skin_p, const void *rec, long second,
+int port_smooth_draw(const void *skin, const void *rec, long second,
                      void *tex_p, float alpha, const void *fade_p)
 {
-    const SKININFO *skin = (const SKININFO *)skin_p;
     TEXTURE *tex = (TEXTURE *)tex_p;
     const limeVECTOR3 *fade = (const limeVECTOR3 *)fade_p;
     const char *r = (const char *)rec;
@@ -252,24 +253,30 @@ int port_smooth_draw(const void *skin_p, const void *rec, long second,
     const float *ruv;
     const uint8_t *light;
     smooth_entry *e;
+    long nverts, nfaces;
     int i, n;
 
-    if (!port_smooth_models || skin == NULL || rec == NULL)
-        return 0;
+    if (!port_smooth_models || skin == NULL || rec == NULL || second == 2)
+        return 0;                       /* the shadow is not smoothed */
     lime_port_skin_freed = port_smooth_forget;
-    if (second == 2)                    /* the shadow: no longer smoothed */
-        return 0;
 
-    idx   = *(const uint16_t *P32 const *)(r + (second ? 0x2c : 0x1c));
-    ruv   = *(const float *P32 const *)(r + (second ? 0x30 : 0x20));
-    light = *(const uint8_t *P32 const *)(r + (second ? 0x34 : 0x24));
-    if (idx == NULL || ruv == NULL || light == NULL)
+    /* LIME_RenderMeshSingleIndexed's own reads */
+    nverts = *(const long *)(r + (second ? 0x08 : 0x00));
+    nfaces = *(const long *)(r + (second ? 0x0c : 0x04));
+    idx    = *(const uint16_t *P32 const *)(r + (second ? 0x2c : 0x1c));
+    ruv    = *(const float *P32 const *)(r + (second ? 0x30 : 0x20));
+    light  = *(const uint8_t *P32 const *)(r + (second ? 0x34 : 0x24));
+    if (idx == NULL || ruv == NULL || light == NULL || nverts <= 0 || nfaces <= 0)
         return 0;
-    e = lookup(skin, ruv, idx);
+    for (i = 0; i < nfaces * 3; i++)
+        if (idx[i] >= nverts)
+            return 0;                   /* not a mesh this can read */
+
+    e = lookup(skin, (int)nverts, (int)nfaces, idx, ruv);
     if (e == NULL)
         return 0;
 
-    skin_positions(skin, e->pos);
+    record_positions(e->nverts, e->pos);
     for (i = 0; i < e->nfaces * 3; i++)
         e->attr[i] = (float)light[idx[i]];
     if (!umk_subsurf_eval(e->s, e->pos, e->attr))
@@ -283,7 +290,6 @@ int port_smooth_draw(const void *skin_p, const void *rec, long second,
             e->light[i] = (uint8_t)(v <= 0.0f ? 0 : v >= 255.0f ? 255 : (int)v);
         }
     }
-    e->ok = 1;
     draw(e, tex, alpha, fade);
     return 1;
 }

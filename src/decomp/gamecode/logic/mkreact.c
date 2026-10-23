@@ -10,6 +10,7 @@
  * oracle: tests/test_gup2_diff.c.
  */
 
+#include <stdio.h>
 #include "mk3logic.h"
 
 #define MK3_CHAR_SHAO_KAHN  0x19
@@ -1428,6 +1429,11 @@ long t_separate_us(MK3THREAD *thread)
         return -3;
 
     am_i_close_to_edge(obj);
+    /* Port diagnostic, not in the binary (issue #114): the chain rule
+     * pushing the fighters apart mid-kombo. */
+    printf("separate us: character %u, punches %u, hits %u, edge %u\n",
+           (unsigned)obj->field08->field24, (unsigned)obj->field00->field4c,
+           (unsigned)obj->field00->p_hit, (unsigned)obj->field5c);
     obj->field1c = 0x30000;
     if (obj->field5c == 0)
         return mk3_push_handler(thread, (MK3THREADFUNC)t_stumble_back_vel);
@@ -2877,6 +2883,10 @@ long t_avoid_corner_trap(MK3THREAD *thread)
     if (obj->field5c != 0) {
         obj->field1c = obj->field00->p_hit;
         if ((long)obj->field1c >= (long)obj->field20) {
+            /* Port diagnostic, not in the binary (issue #114) */
+            printf("corner trap: character %u, hits %u, threshold %u\n",
+                   (unsigned)obj->field08->field24, (unsigned)obj->field1c,
+                   (unsigned)obj->field20);
             obj->field38 = (uint32_t)(uintptr_t)t_ken_masters_xfer;
             xfer_otherguy(obj);
         }
