@@ -68,7 +68,7 @@ JUDGEMENT = {
     "analysis": 100.0,      # binary analysis and source-tree mapping
     "tooling": 100.0,       # tooling and the verification oracle
     "formats": 100.0,       # asset format specifications
-    "platform": 90.0,       # native PC platform layer, recounted 2026-10-15: all 49 lime.m C entry points (43 real, 6 nothing to do on a PC) and the ~112 Objective-C roles replaced by the Win32 backend; left: SDL2 parity (pads, launcher), in-game ad windows
+    "platform": 100.0,     # native PC platform layer: all 49 lime.m C entry points and the ~112 Objective-C roles (Win32 and SDL2), gamepads and the in-game ad windows included; Mary confirmed the pads and ad windows on Windows and Linux, 2026-10-22
     "sdkstubs": 100.0,      # EA SDK boundary: 27 fn + LocaleManager, runtime/gamecode_stubs.c
 }
 

@@ -17,7 +17,7 @@
 | Componente | Progreso | Notas |
 |---|---|---|
 | **Decompilación (`src/decomp/`)** | **2.572 / 2.572 (100%)** | Motor 3D LIME (`109`), Front-End y Escenas (`291`), Motor de Combate Arcade (`2.172`). |
-| **Verificación (`tools/decomp/`)** | **98,30%** | Tests diferenciales contra el oráculo ARM→C (`armrecomp`) + verificación de las 229 tablas de datos (`ctest`). |
+| **Verificación (`tools/decomp/`)** | **100%** | Tests diferenciales contra el oráculo ARM→C (`armrecomp`) + verificación de las 229 tablas de datos (`ctest`). |
 | **Port Nativo (`src/runtime/`)** | **Jugable (v0.1.5-alpha)** | Renderizador OpenGL nativo, backends Win32 y SDL2, relaciones 3:2 / 4:3 / 16:9 / 21:9, texturas HD, teclado y mando, 2 jugadores local (`DUELO`), multijugador LAN/Online y menú de depuración (`F2`). |
 
 > [!IMPORTANT]

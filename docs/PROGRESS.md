@@ -11,7 +11,7 @@
 | **LIME 3D Engine (`src/decomp/lime/`)** | 109 | 109 (100%) | Verified against recompiled oracle (`tests/test_*_diff.c`) |
 | **Game Front-End & Scene (`src/decomp/gamecode/`)** | 291 | 291 (100%) | Verified & running natively (51 front-end screens, HUD, audio, blood) |
 | **Arcade Fight Engine (`src/decomp/gamecode/logic/`)** | 2,172 | 2,172 (100%) | Behaviourally tested file-by-file (`tools/decomp/difftest/`) + 229 data tables verified by `ctest` |
-| **Total Game Core** | **2,572** | **2,572 (100%)** | **98.30% weighted verification score (`tools/decomp/progress.py`)** |
+| **Total Game Core** | **2,572** | **2,572 (100%)** | **100% weighted verification score (`tools/decomp/progress.py`)** |
 | **Cross-Platform Launcher** | Multiplatform (Win/Linux) | 100% pure Node.js / Electron | Standalone compilation via `zig cc` (0.13.0), zero Python/CMake runtime dependency |
 
 ---
