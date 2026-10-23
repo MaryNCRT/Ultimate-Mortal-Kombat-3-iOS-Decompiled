@@ -20,7 +20,8 @@ const SRC = path.join(ROOT, 'src', 'thirdparty', 'blender');
 const OUT = path.join(__dirname, '..', 'ui', 'src', 'lib', 'mods', 'subsurf_wasm.js');
 const EXPORTS = ['umk_subsurf_new', 'umk_subsurf_eval', 'umk_subsurf_num_verts', 'umk_subsurf_pos',
     'umk_subsurf_uv', 'umk_subsurf_attr', 'umk_subsurf_num_tris', 'umk_subsurf_tris',
-    'umk_subsurf_welded', 'umk_subsurf_free', 'malloc', 'free'];
+    'umk_subsurf_welded', 'umk_subsurf_free', 'umk_subsurf_set_sharp', 'umk_subsurf_sharp_edges',
+    'malloc', 'free'];
 
 function findZig() {
     if (process.argv[2]) return process.argv[2];

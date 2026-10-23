@@ -5,6 +5,9 @@
  *     hide_controls=1   (no on-screen stick and buttons)
  *     smooth_anims=1    (fighters' animation frames blended, drawing only)
  *     smooth_models=1   (fighters smoothed: Blender's weld + Catmull-Clark, level 1 or 2)
+ *     sharp_edge_angle=80  sharp_edge_strength=100   (the smoothing keeps an edge
+ *       whose faces turn by more than the angle, by that percent of a crease;
+ *       src/thirdparty/blender/umk3_subsurf.h)
  *     texture_quality=iphone|ipad|max
  *     arch=x86|x64   (the launcher's own: which game it builds and plays,
  *       umk3-game.exe, 32 bits, or umk3-game64.exe, 64 bits)
@@ -125,6 +128,16 @@ const P2_KEY_DEFAULTS = {
 };
 const P2_KEY5_DEFAULTS = { p: 103, b: 105, k: 100, r: 102 };
 
+/* SHARP EDGES' defaults, as src/thirdparty/blender/umk3_subsurf.h has them
+ * (UMK_SHARP_ANGLE_DEFAULT, UMK_SHARP_STRENGTH_DEFAULT) */
+const SHARP_ANGLE = 80;
+const SHARP_STRENGTH = 100;
+
+function clampInt(v, lo, hi, d) {
+    const n = Math.round(Number(v));
+    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d;
+}
+
 function defaultConfig() {
     const keys = {};
     for (const name of KEY_NAMES)
@@ -150,6 +163,8 @@ function defaultConfig() {
         hideControls: false,         /* hide_controls=1: no on-screen stick and buttons */
         smoothAnims: false,          /* smooth_anims=1: blend the fighters' frames (drawing only) */
         smoothModels: 0,             /* smooth_models=: 0 off, 1 or 2 the subdivision level */
+        sharpAngle: SHARP_ANGLE,     /* sharp_edge_angle=: degrees, 0..180 */
+        sharpStrength: SHARP_STRENGTH,   /* sharp_edge_strength=: percent, 0..100 */
         language: 0,                 /* "" = follow Windows */
         ui: 'EN',                    /* the launcher's own language */
         ipa: '',
@@ -214,6 +229,8 @@ function load(p) {
         else if (key === 'hide_controls') cfg.hideControls = num === 1;
         else if (key === 'smooth_anims') cfg.smoothAnims = num === 1;
         else if (key === 'smooth_models') cfg.smoothModels = num >= 1 && num <= 2 ? num : 0;
+        else if (key === 'sharp_edge_angle') cfg.sharpAngle = clampInt(num, 0, 180, SHARP_ANGLE);
+        else if (key === 'sharp_edge_strength') cfg.sharpStrength = clampInt(num, 0, 100, SHARP_STRENGTH);
         else if (key === 'language') {
             const i = LANGS.findIndex(l => l.code.toUpperCase() === val.toUpperCase());
             if (i >= 0)
@@ -306,6 +323,8 @@ function save(p, cfg) {
         'hide_controls=' + (cfg.hideControls ? 1 : 0),
         'smooth_anims=' + (cfg.smoothAnims ? 1 : 0),
         'smooth_models=' + (cfg.smoothModels === 1 || cfg.smoothModels === 2 ? cfg.smoothModels : 0),
+        'sharp_edge_angle=' + clampInt(cfg.sharpAngle, 0, 180, SHARP_ANGLE),
+        'sharp_edge_strength=' + clampInt(cfg.sharpStrength, 0, 100, SHARP_STRENGTH),
         'buttons=' + (cfg.buttons === 6 ? 6 : 5),
         'pad=' + (cfg.pad || 'auto'),
         'arch=' + (cfg.arch === 'x64' ? 'x64' : 'x86'),
@@ -376,7 +395,7 @@ function gameReady(root, arch) {
     return hasExe && fs.existsSync(plist);
 }
 
-module.exports = { RES, LANGS, KEY_NAMES, KEY_DEFAULTS, KEY5_NAMES, KEY5_DEFAULTS,
+module.exports = { SHARP_ANGLE, SHARP_STRENGTH, RES, LANGS, KEY_NAMES, KEY_DEFAULTS, KEY5_NAMES, KEY5_DEFAULTS,
                    PAD_NAMES, PAD_DEFAULTS, PAD5_NAMES, PAD5_DEFAULTS,
                    P2_KEY_NAMES, P2_KEY_DEFAULTS, P2_KEY5_DEFAULTS, defaultConfig,
                    load, save, gameExe, gameReady, gameBuiltAt };

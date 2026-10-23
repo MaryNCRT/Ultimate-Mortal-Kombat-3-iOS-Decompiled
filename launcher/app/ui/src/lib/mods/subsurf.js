@@ -59,6 +59,9 @@ export async function subsurfCreate(levels, pos, tri, triUv) {
             if (!w.umk_subsurf_eval(h, scratch, 0)) return null;
             return new Float32Array(w.memory.buffer, w.umk_subsurf_pos(h), nOut * 3).slice();
         },
+        /* SHARP EDGES (umk3_subsurf.h): degrees, 0..1; the next eval uses them */
+        setSharp(angle, strength) { w.umk_subsurf_set_sharp(h, angle, strength); },
+        sharpEdges() { return w.umk_subsurf_sharp_edges(h); },
         free() { w.free(scratch); w.umk_subsurf_free(h); },
     };
 }

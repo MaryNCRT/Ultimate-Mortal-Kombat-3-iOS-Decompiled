@@ -1113,6 +1113,14 @@ static void read_config(const char *dir)
             extern int port_smooth_models;
             port_smooth_models = atoi(v) < 0 ? 0 : atoi(v) > 2 ? 2 : atoi(v);
         }
+        else if (strcmp(line, "sharp_edge_angle") == 0) {      /* degrees */
+            extern float port_sharp_angle;
+            port_sharp_angle = (float)(atoi(v) < 0 ? 0 : atoi(v) > 180 ? 180 : atoi(v));
+        }
+        else if (strcmp(line, "sharp_edge_strength") == 0) {   /* percent */
+            extern float port_sharp_strength;
+            port_sharp_strength = (float)(atoi(v) < 0 ? 0 : atoi(v) > 100 ? 100 : atoi(v)) / 100.0f;
+        }
         else if (strcmp(line, "buttons") == 0)
             g_cfg_buttons = atoi(v);
         else if (strncmp(line, "key5_", 5) == 0) {

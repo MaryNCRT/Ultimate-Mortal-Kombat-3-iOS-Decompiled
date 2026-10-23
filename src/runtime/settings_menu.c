@@ -1735,6 +1735,8 @@ static void save_ini(void)
                         : port_renderer() == RGL_D3D12 ? "d3d12" : "opengl");
     put("smooth_anims", "%d", port_smooth_anims);
     put("smooth_models", "%d", port_smooth_models);
+    put("sharp_edge_angle", "%d", (int)(port_sharp_angle + 0.5f));
+    put("sharp_edge_strength", "%d", (int)(port_sharp_strength * 100.0f + 0.5f));
     put("buttons", "%d", port_buttons());
     {
         static const char *const st[5] = { "auto", "xbox", "ps5", "nintendo", "ps4" };

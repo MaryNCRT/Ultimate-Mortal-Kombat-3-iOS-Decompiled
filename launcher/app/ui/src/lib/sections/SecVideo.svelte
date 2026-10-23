@@ -7,6 +7,7 @@
     import { selectBlip, hoverBlip } from '#lib/sound.js';
     import Page from '#lib/components/Page.svelte';
     import SubNav from '#lib/components/SubNav.svelte';
+    import SharpSliders from '#lib/components/SharpSliders.svelte';
 
     const c = $derived(app.cfg);
     const label = (r, i) => r.w + ' × ' + r.h + (i === 0 ? '  ' + tx('original') : '');
@@ -86,6 +87,9 @@
                         onchange={e => save({ smoothModels: e.currentTarget.selectedIndex })}>
                     {#each tx('smodels') as m, i}<option value={i}>{m}</option>{/each}
                 </select>
+            </div>
+            <div class="field wide">
+                <SharpSliders disabled={!c.smoothModels} />
             </div>
             <label class="chk wide"><input type="checkbox" checked={!!c.smoothAnims}
                 onchange={e => save({ smoothAnims: e.currentTarget.checked })}><span>{tx('smooth')}</span></label>

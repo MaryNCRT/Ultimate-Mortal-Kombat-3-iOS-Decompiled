@@ -6,6 +6,7 @@
 
 /* smooth_models=: 0 off, 1 or 2 the subdivision level */
 extern int port_smooth_models;
+extern float port_sharp_angle, port_sharp_strength;   /* degrees, 0..1 */
 
 /* Draws a fighter's skin smoothed in place of LIME_RenderMeshSingleIndexed
  * (same arguments, plus the skin). `second` is the record half, 0 the body
