@@ -10,6 +10,7 @@
  */
 
 #include <stdint.h>
+#include <stdarg.h>   /* va_list, the 64-bit build's argument repacking */
 #include <string.h>   /* strlen, for asciiToUnicode */
 
 uint32_t decodeLHWord(const char *p);

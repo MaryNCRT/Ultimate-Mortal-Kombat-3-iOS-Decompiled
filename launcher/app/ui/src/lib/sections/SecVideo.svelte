@@ -2,7 +2,7 @@
     /* GRAPHICS: three pages. VIDEO, the window and what draws into it;
      * TEXTURES; INTERFACE, the shape of the screen and what is drawn over
      * the game. Every change writes umk3.ini at once. */
-    import { app, tx, GFX_TABS, RES, ASPECT, AA, TEXQ, UISIZE, save } from '#lib/app.svelte.js';
+    import { app, tx, GFX_TABS, RES, ASPECT, AA, TEXQ, UISIZE, RENDERERS, save } from '#lib/app.svelte.js';
     import { api } from '#lib/platform.js';
     import { selectBlip, hoverBlip } from '#lib/sound.js';
     import Page from '#lib/components/Page.svelte';
@@ -34,6 +34,13 @@
     {#if app.gfxTab === 'video'}
         <h3 class="first">{tx('gScreen')}</h3>
         <div class="fields">
+            <div class="field">
+                <label class="lbl" for="rend">{tx('rend')}</label>
+                <select id="rend" class="sel" value={idx(RENDERERS, c.renderer, 'opengl')}
+                        onchange={e => save({ renderer: RENDERERS[e.currentTarget.selectedIndex] })}>
+                    {#each RENDERERS as r}<option value={RENDERERS.indexOf(r)}>{tx('rends')[r]}</option>{/each}
+                </select>
+            </div>
             <div class="field">
                 <label class="lbl" for="mode">{tx('mode')}</label>
                 <select id="mode" class="sel" value={c.fullscreen ? 1 : c.borderless ? 2 : 0}
@@ -82,6 +89,7 @@
                 </div>
             </div>
         </div>
+        <p class="note">{tx('rendNote')}</p>
     {:else if app.gfxTab === 'tex'}
         <div class="fields">
             <div class="field">

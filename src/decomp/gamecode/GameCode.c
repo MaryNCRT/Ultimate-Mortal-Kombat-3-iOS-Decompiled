@@ -7853,12 +7853,18 @@ static void DrawCharacterPage(long character, long section)
     const long *table = ((PortMovesWho() == 2 ? Player2NumButtons
                                                : Player1NumButtons) == 5)
                         ? s->moves5 : s->moves6;
+    /* Both sections point at the same table, and section 2's rows follow
+     * section 1's: page 4 reads `(word0 + row) << 6`, word0 being section
+     * 1's row count (0x1fd74: ldr r1, [entry]; add r1, row; lsls r1, #6).
+     * Starting section 2 at row 0 drew the finishers with the specials'
+     * notation, the page before's. */
+    long first = section ? MovesListTab[character].section[0].rows : 0;
     long row;
 
     for (row = 0; row < s->rows; row++)
-        /* `y << 1` is the 64-byte row stride (0x1f36e) */
+        /* 64 bytes a row (0x1f36e: `y << 1`, 0x1fd7c: `lsls r1, #6`) */
         DrawMovesRow(row * 0x20, row,
-                     (const int *)((const char *)table + ((row * 0x20) << 1)),
+                     (const int *)((const char *)table + (first + row) * 0x40),
                      s->nameId, s->captionId, 1);
 }
 

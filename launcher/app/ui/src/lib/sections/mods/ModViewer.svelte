@@ -101,7 +101,10 @@
             if (acc >= 1 / (30 * ms.speed)) {          /* the game's 30 a second, times SPEED */
                 acc = 0;
                 const c = fighterView.f.clips[ms.clip];
-                ms.frame = ms.frame >= c.to - c.from ? 0 : ms.frame + 1;
+                /* the last frame: back to the first (LOOP) or stop there */
+                if (ms.frame < c.to - c.from) ms.frame++;
+                else if (ms.loop) ms.frame = 0;
+                else ms.playing = false;
             }
         }
         controls && controls.update();
@@ -574,7 +577,7 @@
     });
 </script>
 
-<div class="viewer" class:full bind:this={mainEl}>
+<div class="viewer" class:full class:solo={ms.solo} bind:this={mainEl}>
     <aside class="side">
         <label class="layer"><span class="lbl">{tx('vwLayer')}</span>
             <select class="sel" value={ms.layer} onchange={e => setLayer(e.currentTarget.value)}>
@@ -615,10 +618,14 @@
             {:else if !ms.pick}<span class="msg">{tx('vwPick')}</span>{/if}
         </div>
         <div class="info">{info}</div>
-        <button class="btn fullbtn" onclick={toggleFull}>{full ? tx('vwFullExit') : tx('vwFull')}</button>
+        <div class="topbtns">
+            <button class="btn" onclick={() => { selectBlip(); ms.solo = !ms.solo; }}>{ms.solo ? tx('vwPanels') : tx('vwSolo')}</button>
+            <button class="btn" onclick={toggleFull}>{full ? tx('vwFullExit') : tx('vwFull')}</button>
+        </div>
         {#if ms.kind === 'characters' && fx && ms.clip >= 0}
             <div class="play">
-                <button class="btn" onclick={() => ms.playing = !ms.playing}>{ms.playing ? tx('vwPause') : tx('vwPlay')}</button>
+                <button class="btn" onclick={() => { if (!ms.playing && ms.frame >= fx.clips[ms.clip].to - fx.clips[ms.clip].from) ms.frame = 0; ms.playing = !ms.playing; }}>{ms.playing ? tx('vwPause') : tx('vwPlay')}</button>
+                <label class="chk"><input type="checkbox" bind:checked={ms.loop}><span>{tx('vwLoop')}</span></label>
                 <input type="range" min="0" max={fx.clips[ms.clip].to - fx.clips[ms.clip].from} bind:value={ms.frame}>
                 <span class="lbl">{tx('vwFrame')} {ms.frame + 1}</span>
                 <select class="sel speed" bind:value={ms.speed} title={tx('vwSpeed')}>
@@ -771,7 +778,11 @@
     .msg { color: var(--dim); letter-spacing: .08em; }
     .msg.bad { color: #ff9aa0; }
     .info { position: absolute; left: calc(var(--u) * 1); top: calc(var(--u) * .6); font-size: calc(var(--t) * 1.3); color: var(--dim); pointer-events: none; }
-    .fullbtn { position: absolute; right: calc(var(--u) * .8); top: calc(var(--u) * .6); height: auto; padding: calc(var(--u) * .35) calc(var(--u) * .9); font-size: calc(var(--t) * 1.2); opacity: .85; }
+    .topbtns { position: absolute; right: calc(var(--u) * .8); top: calc(var(--u) * .6); display: flex; gap: calc(var(--u) * .5); }
+    .topbtns .btn { height: auto; padding: calc(var(--u) * .35) calc(var(--u) * .9); font-size: calc(var(--t) * 1.2); opacity: .85; }
+    /* SOLO MODEL: the side panels away, the view across */
+    .viewer.solo { grid-template-columns: minmax(0, 1fr); }
+    .viewer.solo .side, .viewer.solo .opts { display: none; }
     .play { display: flex; align-items: center; gap: calc(var(--u) * .9); margin-top: calc(var(--u) * .6); }
     .play input[type=range] { flex: 1; accent-color: var(--blue); }
     .play .speed { flex: 0 0 calc(var(--u) * 8); }

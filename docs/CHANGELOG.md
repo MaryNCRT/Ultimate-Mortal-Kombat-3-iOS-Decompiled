@@ -4,7 +4,15 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 
 ---
 
-## Unreleased
+## 0.1.9-beta (2026-10-22) — Vulkan and Direct3D 12, Linux Fixes
+
+Built for Windows (64 and 32 bits) and Linux. Not yet played by Mary at release; the Linux package is untested on a Linux machine.
+
+- **Vulkan and Direct3D 12 renderers** beside OpenGL (`src/runtime/render/`): every GL call goes through `rgl_front.c`; with Vulkan or Direct3D 12 a fixed-function layer (`rgl_ff.c`) keeps OpenGL 1.1's state and hands transformed vertices to `rgl_vk.c` or `rgl_d3d12.c`. Chosen in GRAPHICS > VIDEO or the in-game menu (`renderer=` in umk3.ini); a renderer that cannot start falls back to OpenGL. `tests/rgl_test.c` checks all three against the same calls (22 checks, 64 and 32 bits).
+- **Move list:** the fatality page drew the special moves' buttons (section 2 starts after section 1's rows in the shared table, as the binary reads it).
+- **Linux:** the game reads `umk3.ini` and `res/` beside its executable; it no longer links against libGL (loaded at run time); `text.c` includes `<stdarg.h>`; `build-game.sh`, `install-shortcut.sh`, `README-linux.md`, a CI job compiling every source with the bundled headers only.
+- **Build from a terminal:** `launcher/app/cli.js`, run by `build-game.sh` / `build-game.cmd` with the launcher's own Electron.
+- **eos.ini.example** for internet play.
 
 - **Language in the in-game settings menu**, changed at once (texts and menus).
 - **Mod textures reach the game's smaller copies** (`_LITE`, `_LOW`): a replaced fighter skin now shows at IPHONE texture quality.

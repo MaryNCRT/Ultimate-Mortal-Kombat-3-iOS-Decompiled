@@ -1,4 +1,4 @@
-ULTIMATE MORTAL KOMBAT 3 - PORT DE PC - 0.1.8 BETA (MODS)
+ULTIMATE MORTAL KOMBAT 3 - PORT DE PC - 0.1.9 BETA (VULKAN Y DIRECTX 12)
 ========================================================================
 
 Port nativo para Windows de la version de iOS (1.2.59), hecho por
@@ -111,6 +111,32 @@ NUEVO EN 0.0.9
   memoria). Una pelea del debug ya no deja sus luchadores, escenario ni
   paletas para los demas modos.
 - Launcher: botones mas pequenos.
+
+NUEVO EN 0.1.9 BETA (VULKAN Y DIRECTX 12)
+- RENDERIZADOR: OPENGL, VULKAN o DIRECTX 12 (solo Windows), en GRAFICOS >
+  VIDEO del launcher o en el menu de opciones del juego (Esc > GRAFICOS;
+  desde el juego se aplica al reiniciar). Vulkan y DirectX 12 son nuevos:
+  si no arrancan, el juego dibuja con OpenGL y lo dice en su registro.
+- IDIOMA en el menu de opciones del juego (Esc > GRAFICOS > INTERFAZ):
+  cambia textos y menus al momento, sin reiniciar.
+- La lista de movimientos: la pagina de fatalities mostraba los botones
+  de la pagina anterior (los especiales). Arreglado.
+- MODS: una textura del mod ahora tambien se ve con calidad IPHONE (el
+  juego usa ahi las copias _LOW y _LITE); al reemplazar una textura el
+  launcher crea esas copias solo (o las pones tu); cualquier formato de
+  imagen (PNG, JPG, WEBP, BMP, GIF, TGA...); portadas de cualquier imagen.
+- VISOR: pantalla completa, solo el modelo, opciones a la derecha,
+  ACTUALIZAR CARPETAS, texturas por personaje, calidad NORMAL / LOW /
+  LITE, velocidad y bucle de las animaciones, el sombrero de Kung Lao
+  (ACCESORIOS), y Reptile y Noob Saibot con su propia textura.
+- El texto del launcher es mas pequeno (el menu de inicio no).
+- COMPILAR SIN LA VENTANA: build-game.cmd <tu .ipa> (Windows) o
+  ./build-game.sh <tu .ipa> (Linux).
+- LINUX (SIN PROBAR TODAVIA): el enlace ya no falla con "libGL.so.1 is
+  incompatible" (Fedora y parecidas), el juego lee umk3.ini y su carpeta
+  res junto al ejecutable, y no hace falta ningun paquete -dev. Guia en
+  README-linux.md.
+- Internet: eos.ini.example explica como poner tu propio eos.ini.
 
 NUEVO EN 0.1.8 BETA (MODS)
 - MODS en el menu del launcher, con cuatro paginas:
@@ -396,7 +422,9 @@ ARREGLADO EN 0.0.2
 - La melena de Sindel aparece, con su textura.
 - El joystick en pantalla se mueve.
 
-ERRORES CONOCIDOS EN 0.1.8
+ERRORES CONOCIDOS EN 0.1.9
+- Vulkan y DirectX 12 son nuevos: si algo se ve mal, vuelve a OPENGL y
+  avisa con el registro (logs\).
 - Duplicar un luchador en un slot nuevo (el 27) todavia no esta.
 - Los cambios de datos de un mod (dano, hitbox) afectan al online: los
   dos jugadores tienen que tener los mismos mods.

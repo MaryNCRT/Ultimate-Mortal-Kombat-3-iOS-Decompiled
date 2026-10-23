@@ -7,8 +7,9 @@
  *
  * Two fixes for that were written in parallel. This header used to make the
  * decompiled declarations __stdcall on i686; runtime/platform/gl.h instead
- * declares every GL call cdecl on that target and
- * runtime/platform/win32_gl_cdecl.c forwards each one to the real entry point.
+ * declares every GL call cdecl on that target and the runtime forwards each
+ * one to the real entry point (now runtime/render/rgl_front.c, on every
+ * target, which can also send it to Vulkan or Direct3D 12).
  * A file that includes both headers sees one function with two conventions,
  * which does not compile, so only one can stand. The forwarders win: they
  * keep the decompiled declarations exactly as the binary has them and put the

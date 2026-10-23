@@ -185,9 +185,9 @@ async function compileGame({
     if (isWindows) {
         sources.push(
             path.join(rootDir, 'src/runtime/platform/win32_gl.c'),
-            path.join(rootDir, 'src/runtime/platform/win32_gl_cdecl.c'),
             path.join(rootDir, 'src/runtime/platform/win32_audio.c'),
-            path.join(rootDir, 'src/runtime/platform/ui_alert.c')
+            path.join(rootDir, 'src/runtime/platform/ui_alert.c'),
+            path.join(rootDir, 'src/runtime/render/rgl_d3d12.c')
         );
     } else {
         sources.push(
@@ -196,6 +196,13 @@ async function compileGame({
             path.join(rootDir, 'src/runtime/platform/ui_alert.c')
         );
     }
+    /* what draws: every GL call through rgl_front.c, to OpenGL or to the
+     * Vulkan / Direct3D 12 fixed-function layer (src/runtime/render) */
+    sources.push(
+        path.join(rootDir, 'src/runtime/render/rgl_front.c'),
+        path.join(rootDir, 'src/runtime/render/rgl_ff.c'),
+        path.join(rootDir, 'src/runtime/render/rgl_vk.c')
+    );
 
     // Glob directory sources
     for (const d of ['src/decomp/gamecode', 'src/decomp/lime', 'src/runtime/lime', 'src/decomp/gamecode/logic']) {
@@ -231,6 +238,7 @@ async function compileGame({
         '-I', path.join(rootDir, 'src/decomp/lime'),
         '-I', path.join(rootDir, 'src/decomp/gamecode/logic'),
         '-include', path.join(rootDir, 'src/runtime/savestate.h'),
+        '-I', path.join(rootDir, 'src/runtime/platform/vulkan-include'),
     ];
 
     if (isWindows) {
@@ -386,7 +394,9 @@ async function compileGame({
                         return path.join(dir, so);
             return `-l${base}`;
         };
-        linkArgs.push(sysLib('SDL2', ['libSDL2-2.0.so.0', 'libSDL2-2.0.so']), sysLib('GL', ['libGL.so.1', 'libOpenGL.so.0']), '-lm', '-ldl');
+        /* no libGL: render/rgl_front.c loads it when OpenGL draws, so a
+         * machine without it can still run the game with Vulkan */
+        linkArgs.push(sysLib('SDL2', ['libSDL2-2.0.so.0', 'libSDL2-2.0.so']), '-lm', '-ldl');
     }
 
     const linkRsp = path.join(buildDir, 'link.rsp');

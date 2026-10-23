@@ -16,7 +16,82 @@
 
 ---
 
-## After 0.1.8: in-game language, viewer layout, texture replacement (2026-10-22, unreleased)
+## Release 0.1.9 beta (2026-10-22): Vulkan and Direct3D 12, Linux fixes
+
+### Renderers (src/runtime/render)
+
+Mary chose renderers written for the game over a translation layer (Mesa's
+Zink / D3D12 drivers were offered).
+
+- `rgl_front.c` defines every GL 1.1 call the tree makes (the list
+  `platform/win32_gl_cdecl.c` had, now deleted) as plain C on every target.
+  With OpenGL it forwards to the driver's entry point, fetched by name
+  (opengl32.dll; libGL.so.1 by dlopen, so Linux no longer links libGL).
+  `platform/gl.h` strips dllimport/stdcall on all of Windows, not only
+  32-bit.
+- `rgl_ff.c`: OpenGL 1.1's fixed function as the game uses it -- three
+  matrix stacks, enables, blend, alpha test, depth, cull, colour mask,
+  viewport and scissor, current colour, texture environment, one texture
+  unit with its parameters and mipmaps (box-filtered on the CPU), client
+  arrays and glBegin/glEnd, pixel store, glPushAttrib, and the framebuffer
+  objects game_main.c's 3D resolution and antialiasing use (answered
+  through plat_gl_proc). Draws are assembled into transformed triangles
+  or lines and handed to a backend with a pipeline key.
+- `rgl_vk.c` (Vulkan 1.0, loaded at run time) and `rgl_d3d12.c` (Direct3D
+  12, Windows): one frame in flight (OpenGL drew with glFinish after each
+  swap), one command buffer in the game's order with a flush when a texture
+  in use is rewritten or pixels are read, render passes / targets that
+  load, clears inside the scissor, pipelines cached by state, MSAA targets
+  resolved, scaled blits (vkCmdBlitImage; a textured quad on D3D12).
+- Shaders: `render/shaders/ff.vert`, `ff.frag` (glslang 16.6.0 -> SPIR-V)
+  and `ff.hlsl` (fxc, SM 5.1), embedded by `shaders/build.py` into
+  `rgl_shaders_vk.h` / `rgl_shaders_d3d12.h`; the game's build needs
+  neither tool.
+- Vulkan headers 1.3.296 in `platform/vulkan-include` (Apache-2.0 / MIT).
+- Chosen with `renderer=opengl|vulkan|d3d12` (game_main.c read_config),
+  GRAPHICS > VIDEO in the launcher, or Esc > GRAPHICS > RENDERER (from the
+  next start). A backend that does not start falls back to OpenGL.
+- **Checked:** `tests/rgl_test.c` draws the same calls on a hidden window
+  with each renderer and reads the pixels back: clear, an untextured quad,
+  a 2x2 texture's orientation, MODULATE / REPLACE, two blend modes, the
+  alpha test, depth, culling (back and front), a scissored clear, the 3D
+  resolution path (a 4x multisampled buffer resolved, then scaled onto the
+  window) and three presents. 22 checks, all pass for OpenGL, Vulkan and
+  Direct3D 12, 64-bit and 32-bit, on an RTX 5070. Vulkan's front face had
+  to be counter-clockwise (the first guess, clockwise, failed the cull
+  checks). **The game itself has not been run on them: Mary's test.**
+
+### Move list (GameCode.c DrawCharacterPage)
+
+A tester reported the fatality page showing the previous page's entries.
+Both sections of a MovesListTab entry point at the same table (Kano:
+0x103958 for both, read from the binary), and page 4 reads the notation at
+`(section 1's rows + row) << 6` (armv7 0x1fd74..0x1fd7e); the port started
+section 2 at row 0, so the finishers' names came with the specials'
+buttons. Fixed; not yet seen in the game.
+
+### Linux
+
+- The game reads `umk3.ini` and `res/` beside its executable
+  (`/proc/self/exe`), as on Windows; before, `res` came from the current
+  folder and umk3.ini was never read, so nothing the launcher set reached
+  the Linux game.
+- `text.c` included no `<stdarg.h>` (Windows' headers bring it); found by
+  `tools/ci_compile_linux.py`, which compiles every Linux source with the
+  bundled headers only (78 of 78), and runs in `.github/workflows/linux.yml`
+  with the launcher's tests. It cannot link: the data tables come from the
+  .ipa.
+- `launcher/app/cli.js` with `build-game.sh` / `build-game.cmd`: the
+  launcher's build from a terminal, run with its own Electron as Node.
+  `install-shortcut.sh` writes a .desktop entry; `README-linux.md`
+  (packages by distribution, what to run, writable folder, renderer,
+  internet play); `eos.ini.example`; `make_release_linux.py` packs the tar
+  with the executable bits.
+- From a tester's notes (Mary relayed them): AppImage was not made; the
+  CI cannot build a known .ipa (it is copyrighted) or run the game under
+  xvfb.
+
+## After 0.1.8: in-game language, viewer layout, texture replacement (2026-10-22, released in 0.1.9)
 
 What Mary asked for after 0.1.8, before the Vulkan and DirectX 12 work. The
 list of what works and what comes next is now [GOALS.md](GOALS.md).

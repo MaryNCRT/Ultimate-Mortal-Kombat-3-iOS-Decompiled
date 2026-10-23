@@ -139,6 +139,7 @@ function defaultConfig() {
         antialiasing: 0,             /* 0, 2, 4, 8 or 16 samples */
         uiSize: 'iphone',            /* ui_size=: iphone (480x320) or ipad (960x640: HUD at 1.75 of 2) */
         arch: process.platform === 'win32' ? 'x86' : 'x64',
+        renderer: 'opengl',          /* renderer=: opengl, vulkan or d3d12 (Windows) */
         textureQuality: 'iphone',    /* texture_quality=: iphone (the _LOW sheets), ipad (full sheets) or max (full sheets, PNG first, mipmaps) */
         aspect: '3:2',               /* aspect=: 3:2, 4:3, 16:9 or 21:9 */
         widescreen: false,           /* native: widen the 3D view, no stretch */
@@ -248,6 +249,8 @@ function load(p) {
             cfg.arch = /^x64$/i.test(val) ? 'x64' : 'x86';
         } else if (key === 'texture_quality') {
             cfg.textureQuality = /^(iphone|ipad|max)$/i.test(val) ? val.toLowerCase() : 'iphone';
+        } else if (key === 'renderer') {
+            cfg.renderer = /^(opengl|vulkan|d3d12)$/i.test(val) ? val.toLowerCase() : 'opengl';
         } else if (key === 'pad_dbg_menu') {
             cfg.padDbgMenu = /^([A-Z0-9]+(\+[A-Z0-9]+)*)?$/i.test(val) ? val.toUpperCase() : 'L3+R3';
         } else if (key === 'pad_name') {
@@ -299,6 +302,7 @@ function save(p, cfg) {
         'pad=' + (cfg.pad || 'auto'),
         'arch=' + (cfg.arch === 'x64' ? 'x64' : 'x86'),
         'texture_quality=' + (cfg.textureQuality || 'iphone'),
+        'renderer=' + (cfg.renderer || 'opengl'),
         'ui_size=' + (cfg.uiSize || 'iphone'),
         'pad_dbg_menu=' + (cfg.padDbgMenu === undefined ? 'L3+R3' : cfg.padDbgMenu),
         'pad_icons=' + (cfg.padIcons || 'auto'),

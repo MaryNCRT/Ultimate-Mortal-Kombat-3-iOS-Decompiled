@@ -32,9 +32,13 @@ function(umk3_target_link_platform target_name is_full_game)
         endif()
         target_sources(${target_name} PRIVATE
             src/runtime/platform/win32_gl.c
-            src/runtime/platform/win32_gl_cdecl.c
             src/runtime/platform/win32_audio.c
-            src/runtime/platform/ui_alert.c)
+            src/runtime/platform/ui_alert.c
+            src/runtime/render/rgl_front.c
+            src/runtime/render/rgl_ff.c
+            src/runtime/render/rgl_vk.c
+            src/runtime/render/rgl_d3d12.c)
+        target_include_directories(${target_name} PRIVATE src/runtime/platform/vulkan-include)
         target_link_libraries(${target_name} PRIVATE opengl32 gdi32 winmm msacm32 ws2_32)
         if(is_full_game)
             enable_language(RC)
@@ -44,19 +48,23 @@ function(umk3_target_link_platform target_name is_full_game)
         target_sources(${target_name} PRIVATE
             src/runtime/platform/sdl_gl.c
             src/runtime/platform/sdl_audio.c
-            src/runtime/platform/ui_alert.c)
+            src/runtime/platform/ui_alert.c
+            src/runtime/render/rgl_front.c
+            src/runtime/render/rgl_ff.c
+            src/runtime/render/rgl_vk.c)
+        target_include_directories(${target_name} PRIVATE src/runtime/platform/vulkan-include)
         target_include_directories(${target_name} PRIVATE ${SDL2_INCLUDE_DIRS})
         target_compile_options(${target_name} PRIVATE -include stddef.h)
         target_compile_definitions(${target_name} PRIVATE
             _snprintf=snprintf _strdup=strdup)
         if(SDL2_MIXER_FOUND)
             target_link_libraries(${target_name} PRIVATE
-                ${SDL2_LIBRARIES} PkgConfig::SDL2_MIXER OpenGL::GL m)
+                ${SDL2_LIBRARIES} PkgConfig::SDL2_MIXER ${CMAKE_DL_LIBS} m)
         else()
             message(STATUS "SDL2_mixer not found: building ${target_name} with pure SDL2 fallback")
             target_compile_definitions(${target_name} PRIVATE UMK3_NO_SDL_MIXER=1)
             target_link_libraries(${target_name} PRIVATE
-                ${SDL2_LIBRARIES} OpenGL::GL m)
+                ${SDL2_LIBRARIES} ${CMAKE_DL_LIBS} m)
         endif()
     else()
         message(FATAL_ERROR "Unknown UMK3_BACKEND '${UMK3_BACKEND}'.")
