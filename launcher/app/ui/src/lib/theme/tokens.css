@@ -6,7 +6,7 @@
  *   --u  one hundredth of the window's width (or 1.333 of its height, the
  *        smaller): the page scales with the window, any size or fullscreen
  *   --t  a unit of text: --u a little smaller, so the words leave the
- *        boxes room (every font-size is in it)
+ *        boxes room (every font-size but the home menu's is in it)
  *   --k  one unit of the backdrop's 1600 x 900 box, which crops to cover
  *        the window: what is laid out on the rings uses it, so it stays on
  *        them at any shape of window */

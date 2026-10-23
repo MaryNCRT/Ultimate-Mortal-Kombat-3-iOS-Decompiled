@@ -70,6 +70,7 @@
     /* FULL SCREEN: the view and its controls over the whole screen (the
      * page's own fullscreen; Esc or the button leaves it) */
     let mainEl = $state(), full = $state(false);
+    const SPEEDS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3];
     let texPick = $state('');               /* the texture REPLACE TEXTURE takes */
     const onFull = () => { full = document.fullscreenElement === mainEl; };
     function toggleFull() {
@@ -97,7 +98,7 @@
         last = t;
         if (ms.playing && fighterView && ms.clip >= 0) {
             acc += dt;
-            if (acc >= 1 / 30) {
+            if (acc >= 1 / (30 * ms.speed)) {          /* the game's 30 a second, times SPEED */
                 acc = 0;
                 const c = fighterView.f.clips[ms.clip];
                 ms.frame = ms.frame >= c.to - c.from ? 0 : ms.frame + 1;
@@ -241,7 +242,7 @@
             g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(f.topo.src.length * 3), 3));
             g.setAttribute('uv', new THREE.BufferAttribute(Float32Array.from(f.topo.uv), 2));
             g.setIndex(new THREE.BufferAttribute(f.topo.faces.slice(blk.first * 3, (blk.first + blk.count) * 3), 1));
-            const stem = bi === 0 && ms.outfit ? ms.outfit : f.blockTex[bi];
+            const stem = bi === 0 && ms.outfit ? shownOutfit() : f.blockTex[bi];
             const map = await texture(stem);
             const mat = new THREE.MeshLambertMaterial({ map, color: map ? 0xffffff : 0x9a96c8, side: THREE.DoubleSide, alphaTest: 0.35, wireframe: ms.wire });
             const mesh = new THREE.Mesh(g, mat);
@@ -301,14 +302,31 @@
         }
     });
 
+    /* the outfit at a quality: '' its own texture, LOW or LITE the smaller
+     * copy the game takes at IPHONE quality (X_LOW, X_LITE; for a second
+     * outfit X2 also X_LOW2, X_LITE2), null when the game has none */
+    let quality = $state('');
+    function copyOf(stem, q) {
+        if (!q) return stem;
+        const s = String(stem).toUpperCase(), names = [s + '_' + q];
+        if (/2$/.test(s)) names.push(s.slice(0, -1) + '_' + q + '2');
+        return names.find(n => textureFile(src.files, n)) || null;
+    }
+    const qualities = $derived(fx && ms.outfit ? ['', 'LOW', 'LITE'].filter(q => copyOf(ms.outfit, q)) : []);
+    const shownOutfit = () => copyOf(ms.outfit, quality) || ms.outfit;
+
     async function outfit(v) {
         ms.outfit = v;
-        if (fighterView) {
-            const map = await texture(v);
-            fighterView.meshes[0].material.map = map;
-            fighterView.meshes[0].material.needsUpdate = true;
-        }
+        await showOutfit();
     }
+    async function showOutfit() {
+        if (!fighterView) return;
+        const map = await texture(shownOutfit());
+        fighterView.meshes[0].material.map = map;
+        fighterView.meshes[0].material.color.set(map ? 0xffffff : 0x9a96c8);
+        fighterView.meshes[0].material.needsUpdate = true;
+    }
+    $effect(() => { quality; showOutfit(); });
 
     /* ------------------------------------------------------- textures -- */
 
@@ -573,6 +591,9 @@
                 <button class="btn" onclick={() => ms.playing = !ms.playing}>{ms.playing ? tx('vwPause') : tx('vwPlay')}</button>
                 <input type="range" min="0" max={fx.clips[ms.clip].to - fx.clips[ms.clip].from} bind:value={ms.frame}>
                 <span class="lbl">{tx('vwFrame')} {ms.frame + 1}</span>
+                <select class="sel speed" bind:value={ms.speed} title={tx('vwSpeed')}>
+                    {#each SPEEDS as v}<option value={v}>{v}x</option>{/each}
+                </select>
             </div>
         {/if}
     </section>
@@ -596,6 +617,14 @@
                     {#each fx.variants as v}<option value={v}>{v}</option>{/each}
                 </select>
             {/if}
+            {#if qualities.length > 1}
+                <span class="lbl">{tx('vwQuality')}</span>
+                <span class="tabs sub q{qualities.length}">
+                    {#each qualities as q}
+                        <button class="tab" class:active={quality === q} onclick={() => { selectBlip(); quality = q; }}>{q || 'NORMAL'}</button>
+                    {/each}
+                </span>
+            {/if}
             <div class="checks">
                 <label class="chk"><input type="checkbox" bind:checked={ms.bones}><span>{tx('vwBones')}</span></label>
                 <label class="chk"><input type="checkbox" bind:checked={ms.wire}><span>{tx('vwWire')}</span></label>
@@ -618,11 +647,15 @@
                 <button class="btn hot" onclick={() => replaceTexture(texInfo.name)}>{tx('vwImpTex')}</button>
                 <button class="btn" onclick={toMod}>{tx('vwToMod')}</button>
             {:else}
-                <select class="sel" bind:value={texPick}>
-                    {#each stems as s}<option value={s}>{s}</option>{/each}
-                </select>
+                {#if fx}
+                    <span class="lbl">{ms.autoSmall || !quality ? ms.outfit : shownOutfit()}</span>
+                {:else}
+                    <select class="sel" bind:value={texPick}>
+                        {#each stems as s}<option value={s}>{s}</option>{/each}
+                    </select>
+                {/if}
                 <label class="chk"><input type="checkbox" bind:checked={ms.autoSmall}><span>{tx('vwAutoSmall')}</span></label>
-                <button class="btn hot" onclick={() => replaceTexture(texPick || stems[0])}>{tx('vwImpTex')}</button>
+                <button class="btn hot" onclick={() => replaceTexture(fx ? (ms.autoSmall || !quality ? ms.outfit : shownOutfit()) : (texPick || stems[0]))}>{tx('vwImpTex')}</button>
                 <button class="btn" onclick={exportTextures}>{tx('vwExpTex')}</button>
                 {#if fx}<button class="btn" onclick={seeTextures}>{tx('vwSeeTex')}</button>{/if}
             {/if}
@@ -669,6 +702,7 @@
     .side .sel, .side .btn { flex: none; }
     .opts { overflow-x: hidden; overflow-y: auto; padding-right: calc(var(--u) * .3); }
     .opts .btn { white-space: normal; height: auto; min-height: var(--ctl-h); padding-top: calc(var(--u) * .4); padding-bottom: calc(var(--u) * .4); }
+    .opts .sub.q3 { grid-template-columns: 1fr 1fr 1fr; }
     .opts .sub { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u) * .4); }
     .opts .sub .tab { font-size: calc(var(--t) * 1.15); padding: calc(var(--u) * .5) calc(var(--u) * .3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .opts .btn, .opts .sel, .opts .edt { width: 100%; flex: none; }
@@ -707,5 +741,6 @@
     .fullbtn { position: absolute; right: calc(var(--u) * .8); top: calc(var(--u) * .6); height: auto; padding: calc(var(--u) * .35) calc(var(--u) * .9); font-size: calc(var(--t) * 1.2); opacity: .85; }
     .play { display: flex; align-items: center; gap: calc(var(--u) * .9); margin-top: calc(var(--u) * .6); }
     .play input[type=range] { flex: 1; accent-color: var(--blue); }
+    .play .speed { flex: 0 0 calc(var(--u) * 8); }
     .ok { color: var(--ok-text); word-break: break-all; }
 </style>
