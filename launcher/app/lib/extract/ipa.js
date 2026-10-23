@@ -83,6 +83,18 @@ function inspectIpa(ipaPath) {
  * @param {boolean} [options.allowMismatch] Proceed even if UUID does not match 1.2.59.
  * @param {function} [options.onProgress] Callback for progress updates: { step, total, file, pct, phase }.
  */
+/* A generated table written to a file beside it and put in place only when
+ * it differs: the same file keeps its date, and the compile (compile.js,
+ * upToDate) does not build it again. */
+function keepIfSame(out, make) {
+    const tmp = out + '.new';
+    make(tmp);
+    let same = false;
+    try { same = fs.readFileSync(tmp).equals(fs.readFileSync(out)); } catch (_) { same = false; }
+    if (same) fs.rmSync(tmp, { force: true });
+    else fs.renameSync(tmp, out);
+}
+
 async function extractIpaPipeline({
     ipaPath,
     destDir,
@@ -134,17 +146,17 @@ async function extractIpaPipeline({
         onProgress({ phase: 'Generating logic_tables.c', pct: 25 });
         const mapPath = path.join(rootDir, 'tools/build/logic_tables.map');
         const outLogicC = path.join(buildDir, 'logic_tables.c');
-        extractLogicTables(rawBin, outLogicC, mapPath);
+        keepIfSame(outLogicC, tmp => extractLogicTables(rawBin, tmp, mapPath));
 
         // 2. Generate level_info.c
         onProgress({ phase: 'Generating level_info.c', pct: 30 });
         const outLevelC = path.join(buildDir, 'level_info.c');
-        extractLevelInfo(rawBin, outLevelC, 'UMK3');
+        keepIfSame(outLevelC, tmp => extractLevelInfo(rawBin, tmp, 'UMK3'));
 
         // 3. Generate seq_data.c
         onProgress({ phase: 'Generating seq_data.c', pct: 35 });
         const outSeqC = path.join(buildDir, 'seq_data.c');
-        extractSeqData(rawBin, outSeqC, 'UMK3');
+        keepIfSame(outSeqC, tmp => extractSeqData(rawBin, tmp, 'UMK3'));
 
         // 4. Generate gamecode_globals64.c if Low32
         if (isLow32) {
@@ -152,7 +164,7 @@ async function extractIpaPipeline({
             const globalsH = path.join(rootDir, 'src/runtime/gamecode_globals.h');
             const globalsC = path.join(rootDir, 'src/runtime/gamecode_globals.c');
             const outGlobalsC = path.join(buildDir, 'gamecode_globals64.c');
-            transformLow32Static([globalsH], globalsC, outGlobalsC, 'umk3_globals_fixup');
+            keepIfSame(outGlobalsC, tmp => transformLow32Static([globalsH], globalsC, tmp, 'umk3_globals_fixup'));
         }
 
         // 5. Extract assets: res/* and Info.plist
@@ -170,6 +182,16 @@ async function extractIpaPipeline({
         const totalAssets = assetEntries.length;
         let extractedCount = 0;
 
+        /* What an earlier compile extracted, by the zip's CRC of each file:
+         * a file already there with that CRC and its size is not inflated
+         * and written again. A compile after an update took 4 to 8 s here
+         * for nothing; now a fraction of one. */
+        const manifestPath = path.join(resDir, '.extracted.json');
+        let had = {};
+        try { had = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) || {}; } catch (_) { had = {}; }
+        const now = {};
+        const made = new Set();
+
         for (const name of assetEntries) {
             let rel;
             if (name.startsWith(resPrefix)) {
@@ -179,8 +201,20 @@ async function extractIpaPipeline({
             }
 
             const outPath = path.join(resDir, ...rel.split('/'));
-            fs.mkdirSync(path.dirname(outPath), { recursive: true });
-            fs.writeFileSync(outPath, zip.read(name));
+            const ent = zip.get(name);
+            let same = false;
+            if (ent && had[rel] === ent.crc) {
+                try { same = fs.statSync(outPath).size === ent.uncompSize; } catch (_) { same = false; }
+            }
+            if (!same) {
+                const dir = path.dirname(outPath);
+                if (!made.has(dir)) {
+                    fs.mkdirSync(dir, { recursive: true });
+                    made.add(dir);
+                }
+                fs.writeFileSync(outPath, zip.read(name));
+            }
+            if (ent) now[rel] = ent.crc;
 
             extractedCount++;
             if (extractedCount % 100 === 0 || extractedCount === totalAssets) {
@@ -194,6 +228,8 @@ async function extractIpaPipeline({
                 });
             }
         }
+
+        fs.writeFileSync(manifestPath, JSON.stringify(now));
 
         // Copy additional textures if present
         const addSrc = path.join(rootDir, 'launcher/aditional textures');
