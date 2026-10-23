@@ -65,5 +65,7 @@ void port_renderer_set(int r);
 extern int port_smooth_anims;
 /* smooth_models=: 0 off, 1 or 2 the subdivision level (smooth_models.c) */
 extern int port_smooth_models;
+/* sharp_edge_angle= (degrees) and sharp_edge_strength= (0..1), smooth_models.c */
+extern float port_sharp_angle, port_sharp_strength;
 
 #endif

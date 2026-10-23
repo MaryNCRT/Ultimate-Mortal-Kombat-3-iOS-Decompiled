@@ -56,6 +56,7 @@ class ZipArchive {
             }
 
             const compMethod = cdBuf.readUInt16LE(pos + 10);
+            const crc = cdBuf.readUInt32LE(pos + 16);
             const compSize = cdBuf.readUInt32LE(pos + 20);
             const uncompSize = cdBuf.readUInt32LE(pos + 24);
             const nameLen = cdBuf.readUInt16LE(pos + 28);
@@ -67,6 +68,7 @@ class ZipArchive {
             this.entries.set(filename, {
                 filename,
                 compMethod,
+                crc,
                 compSize,
                 uncompSize,
                 localOffset,

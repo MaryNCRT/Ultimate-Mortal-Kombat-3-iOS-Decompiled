@@ -4,6 +4,31 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 
 ---
 
+## Unreleased (after 0.1.10b)
+
+Not yet played by Mary.
+
+- Launcher updates: every Windows update since 0.1.6 ended as "could not be
+  copied" (robocopy on folders no release has) and deleted `tools\eos\`;
+  now only `src\`, `launcher\` and `toolsuild\` are mirrored, the rest
+  copied, the downloaded archives removed.
+- Window resize and move: Direct3D 12 and Vulkan keep working through resizes
+  that fail or change the buffers; the render buffer is remade once the size
+  settles, not every frame.
+- Online over the internet: the release scripts refuse to package without the
+  EOS SDK and `eos.ini` (0.1.10b went out without them).
+- The home screen ring's picture (`image.png`) comes with the launcher.
+- Load times: texture uploads batched on Direct3D 12 and Vulkan; load screens
+  draw half as often; the launcher's compile is incremental (13.9 s to 1.2 s
+  with nothing changed).
+- Long sessions: textures found by a hash, not a list walk that grew all
+  session; a memory line in the log every five minutes.
+- Character editor: Motaro's page no longer fails (a strike named three times).
+- PROFILE: a gradient picker (two colours, an angle, presets) and the
+  fighter's second outfit as the player's picture, in the launcher and the game.
+- SMOOTH MODELS: automatic sharp edges, with two sliders (which edges, how
+  much) in GRAPHICS and the model viewer.
+
 ## 0.1.10b-beta (2026-10-23) — video settings, settings in two columns
 
 Built for Windows (64 and 32 bits) and Linux. Mary tried the two-column

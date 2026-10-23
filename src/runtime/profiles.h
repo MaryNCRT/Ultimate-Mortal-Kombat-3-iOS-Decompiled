@@ -17,6 +17,13 @@ struct profile {
                                            color2, black by default), 2
                                            custom (the colour to color2) */
     unsigned color2;                    /* 0xRRGGBB, the gradient's other end */
+    int      angle;                     /* custom: a straight gradient from the
+                                           colour to color2 at this angle, in
+                                           degrees as CSS has it (0 up, 180
+                                           down; the launcher's gradient
+                                           picker); -1 the older custom look */
+    int      alt;                       /* 1: the fighter in his second outfit
+                                           (<NAME>_VERSUS2.pvr) */
 };
 
 /* profiles.ini in the folder of `ini_path` (umk3.ini's path); with none,
@@ -30,10 +37,12 @@ void prof_reset(const char *default_name);
 int  prof_name_len(const char *s);
 
 /* The icon at S x S, RGBA, malloc'd: the fighter's bio and endings art
- * (res/Textures/<NAME>_VERSUS.PNG) over the colour's glossy gradient, the
- * same as the launcher draws it. NULL when the art cannot be read. */
-unsigned char *prof_icon_rgba(int icon, unsigned color, int dark,
-                              unsigned color2, int S);
+ * (res/Textures/<NAME>_VERSUS.PNG; alt: the second outfit's
+ * <NAME>_VERSUS2.pvr, framed the same) over the colour's glossy gradient
+ * (angle: see struct profile), the same as the launcher draws it. NULL when
+ * the art cannot be read. */
+unsigned char *prof_icon_rgba(int icon, int alt, unsigned color, int dark,
+                              unsigned color2, int angle, int S);
 /* color2's default for a gradient: white, black, blood red. */
 unsigned prof_shade_default(int dark);
 /* Changes whenever the icon would look different. */

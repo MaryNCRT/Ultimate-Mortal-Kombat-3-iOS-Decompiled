@@ -562,6 +562,50 @@ static char g_gpu[200];                 /* GL_RENDERER / GL_VERSION, read at sta
 #include <sys/utsname.h>
 #endif
 
+int lime_texture_count(long *pixels);   /* draw_gl.c */
+
+/* Every five minutes, the process's memory and the textures loaded, to the
+ * log: whether a long session grows, and in what (Mary: lag and memory after
+ * the game has been open a long time). Port. */
+static void mem_log(void)
+{
+    static double start, next;
+    double now = plat_time();
+    long px = 0, mb = -1;
+    int n;
+
+    if (start == 0.0)
+        start = next = now;
+    if (now < next)
+        return;
+    next = now + 300.0;
+#ifdef _WIN32
+    {
+        typedef struct { DWORD cb, faults; SIZE_T peak_ws, ws, q[4], pagefile, peak_pagefile; } pmc_t;
+        typedef BOOL (WINAPI *pmi_t)(HANDLE, pmc_t *, DWORD);
+        pmi_t pmi = (pmi_t)(void *)GetProcAddress(GetModuleHandleA("kernel32.dll"), "K32GetProcessMemoryInfo");
+        pmc_t c;
+        memset(&c, 0, sizeof c);
+        c.cb = sizeof c;
+        if (pmi && pmi(GetCurrentProcess(), &c, sizeof c))
+            mb = (long)(c.pagefile >> 20);
+    }
+#elif !defined(__EMSCRIPTEN__)
+    {
+        FILE *f = fopen("/proc/self/statm", "r");
+        long pages = 0, rss = 0;
+        if (f) {
+            if (fscanf(f, "%ld %ld", &pages, &rss) == 2)
+                mb = rss * (sysconf(_SC_PAGESIZE) / 1024) / 1024;
+            fclose(f);
+        }
+    }
+#endif
+    n = lime_texture_count(&px);
+    printf("memory: %ld MB, %d textures (%ld MB of pixels), after %.0f min\n",
+           mb, n, px * 4 / (1024 * 1024), (now - start) / 60.0);
+}
+
 static void system_name(char *out, int n)
 {
 #ifdef _WIN32
@@ -1068,6 +1112,14 @@ static void read_config(const char *dir)
         else if (strcmp(line, "smooth_models") == 0) { /* smooth_models.c */
             extern int port_smooth_models;
             port_smooth_models = atoi(v) < 0 ? 0 : atoi(v) > 2 ? 2 : atoi(v);
+        }
+        else if (strcmp(line, "sharp_edge_angle") == 0) {      /* degrees */
+            extern float port_sharp_angle;
+            port_sharp_angle = (float)(atoi(v) < 0 ? 0 : atoi(v) > 180 ? 180 : atoi(v));
+        }
+        else if (strcmp(line, "sharp_edge_strength") == 0) {   /* percent */
+            extern float port_sharp_strength;
+            port_sharp_strength = (float)(atoi(v) < 0 ? 0 : atoi(v) > 100 ? 100 : atoi(v)) / 100.0f;
         }
         else if (strcmp(line, "buttons") == 0)
             g_cfg_buttons = atoi(v);
@@ -1814,8 +1866,25 @@ static void clear_frame(int ww, int wh, int vx, int vy, int vw, int vh)
 
         if (g_cfg_rw > 0 && g_cfg_rh > 0)
             fit_view(g_cfg_rw, g_cfg_rh, &x, &y, &bw, &bh);
-        if ((bw != g_rs_w || bh != g_rs_h || !g_rs_fbo) && bw > 0 && bh > 0)
-            render_alloc(bw, bh);
+        /* While the window is being resized its size changes every frame,
+         * and so did the buffers -- multisampled, window-sized, made and
+         * dropped sixty times a second (Mary: resizing the window a few
+         * times closed the game). The old buffer is stretched onto the
+         * window meanwhile; a new one once the size has held a quarter of a
+         * second. */
+        if ((bw != g_rs_w || bh != g_rs_h || !g_rs_fbo) && bw > 0 && bh > 0) {
+            static int want_w, want_h;
+            static double since;
+            double now = plat_time();
+
+            if (bw != want_w || bh != want_h) {
+                want_w = bw;
+                want_h = bh;
+                since = now;
+            }
+            if (!g_rs_fbo || now - since >= 0.25)
+                render_alloc(bw, bh);
+        }
     }
     if (g_rs_on) {
         g_rs_vx = vx;
@@ -3555,6 +3624,7 @@ int main(int argc, char **argv)
             save_shot(ww, wh);
             break;
         }
+        mem_log();
         pace_work_end();
         if (!plat_swap())
             break;

@@ -70,10 +70,59 @@ function isStateFile(srcPath, buildDir) {
 /**
  * Compiles a single source file into an object file.
  */
-function compileSingleFile(zigExe, args, rspPath) {
+/* An object is kept when it was compiled with these very arguments (its
+ * .rsp) and nothing it was built from -- the source and every header, as
+ * clang's .d lists them -- is newer. Every compile used to build all of the
+ * game's sources again, an update's included. */
+function depFiles(depPath) {
+    const text = fs.readFileSync(depPath, 'utf8').replace(/\\\r?\n/g, ' ');
+    const toks = [];
+    let cur = '';
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (c === '\\' && i + 1 < text.length && /[ #$]/.test(text[i + 1])) { cur += text[++i]; continue; }
+        if (/\s/.test(c)) { if (cur) toks.push(cur); cur = ''; continue; }
+        cur += c;
+    }
+    if (cur) toks.push(cur);
+    const at = toks.findIndex(t => t.endsWith(':'));
+    return at < 0 ? null : toks.slice(at + 1).filter(t => t !== ':');
+}
+
+/* the headers' dates, once a compile: every object lists the same few
+ * thousand (the system's among them) */
+let g_mtimes = new Map();
+function mtime(f) {
+    let t = g_mtimes.get(f);
+    if (t === undefined) {
+        t = fs.statSync(f).mtimeMs;
+        g_mtimes.set(f, t);
+    }
+    return t;
+}
+
+function upToDate(objPath, rspPath, rspContent, depPath) {
+    try {
+        if (fs.readFileSync(rspPath, 'utf8') !== rspContent) return false;
+        const built = fs.statSync(objPath).mtimeMs;
+        const deps = depFiles(depPath);
+        if (!deps || !deps.length) return false;
+        return deps.every(d => mtime(d) <= built);
+    } catch (_) {
+        return false;
+    }
+}
+
+function compileSingleFile(zigExe, args, rspPath, objPath) {
     return new Promise((resolve, reject) => {
+        const depPath = objPath + '.d';
+        const all = [...args, '-MD', '-MF', depPath];
         // Write arguments to response file to avoid CLI length limits on Windows
-        const rspContent = args.map(a => a.startsWith('-') ? a : `"${a.replace(/\\/g, '/')}"`).join('\n');
+        const rspContent = all.map(a => a.startsWith('-') ? a : `"${a.replace(/\\/g, '/')}"`).join('\n');
+        if (upToDate(objPath, rspPath, rspContent, depPath)) {
+            resolve();
+            return;
+        }
         fs.writeFileSync(rspPath, rspContent, 'utf8');
 
         const child = spawn(zigExe, ['cc', `@${rspPath}`], {
@@ -88,6 +137,8 @@ function compileSingleFile(zigExe, args, rspPath) {
             if (code === 0) {
                 resolve();
             } else {
+                /* not kept: a failed compile must run again */
+                try { fs.rmSync(rspPath, { force: true }); } catch (_) { /* none */ }
                 reject(new Error(`Error compiling ${path.basename(rspPath, '.rsp')}: ${stderr || 'code ' + code}`));
             }
         });
@@ -156,6 +207,7 @@ async function compileGame({
 }) {
     const isWindows = targetOs === 'windows';
     const isLow32 = targetArch === 'x64';
+    g_mtimes = new Map();
     const objDir = path.join(buildDir, isLow32 ? 'obj64' : 'obj');
     fs.mkdirSync(objDir, { recursive: true });
 
@@ -240,9 +292,6 @@ async function compileGame({
         '-DUMK3_HAVE_MK3',
         '-DUMK3_REAL_GL',
         '-DUMK3_SHELL',
-        /* the version crash reports and the session log name (game_main.c,
-         * port_report_context): this launcher's, which built the game */
-        '-DUMK3_VERSION=' + require('../package.json').version,
         '-I', path.join(rootDir, 'src/runtime'),
         '-I', path.join(rootDir, 'src/decomp/lime'),
         '-I', path.join(rootDir, 'src/decomp/gamecode/logic'),
@@ -304,6 +353,12 @@ async function compileGame({
                 fileFlags.push('-DUMK3_NO_ROLLBACK');
             }
         }
+        /* the version crash reports and the session log name (game_main.c,
+         * port_report_context): this launcher's, which built the game. Only
+         * there, so a new version does not compile every other file again. */
+        if (baseName === 'game_main') {
+            fileFlags.push('-DUMK3_VERSION=' + require('../package.json').version);
+        }
         if (baseName === 'text') {
             fileFlags.push('-DUMK3_NO_LONG_REMAP');
         }
@@ -312,7 +367,7 @@ async function compileGame({
         }
 
         const compileArgs = [...fileFlags, '-c', src, '-o', objPath];
-        tasks.push(() => compileSingleFile(zigExe, compileArgs, rspPath));
+        tasks.push(() => compileSingleFile(zigExe, compileArgs, rspPath, objPath));
     }
 
     // Windows icon resource (.rc)
@@ -321,6 +376,14 @@ async function compileGame({
         const resObj = path.join(objDir, 'umk3_game.res');
         objFiles.push(resObj);
         tasks.push(async () => {
+            /* the icon and version: again only when the .rc or its icon changed */
+            try {
+                const made = fs.statSync(resObj).mtimeMs;
+                const ico = path.join(path.dirname(rcPath), 'umk3_game.ico');
+                if (fs.statSync(rcPath).mtimeMs <= made
+                    && (!fs.existsSync(ico) || fs.statSync(ico).mtimeMs <= made))
+                    return;
+            } catch (_) { /* not made yet */ }
             execSync(`"${zigExe}" rc -- "${rcPath}" "${resObj}"`, { stdio: 'pipe' });
         });
     }

@@ -1050,7 +1050,7 @@ static int drop_fill(int kind)
             return 0;
         for (n = 0; n < PROF_ICONS; n++) {
             snprintf(L[n], 48, "%s", tx(k_fighter_es[n], k_fighter_en[n]));
-            g_drop_cell[n] = prof_icon_rgba(n, p->color, p->dark, p->color2, 96);
+            g_drop_cell[n] = prof_icon_rgba(n, p->alt, p->color, p->dark, p->color2, p->angle, 96);
         }
         g_drop_cur = p->icon;
         break;
@@ -1563,7 +1563,7 @@ void set_menu_draw(void)
             float y = g_geo.stop + N_PAGES * g_geo.srow + 6.0f;
 
             if (key != g_icon_key) {
-                unsigned char *px = prof_icon_rgba(p->icon, p->color, p->dark, p->color2, 256);
+                unsigned char *px = prof_icon_rgba(p->icon, p->alt, p->color, p->dark, p->color2, p->angle, 256);
                 ui_icon_set(px, 256, 256);
                 free(px);
                 g_icon_key = key;
@@ -1632,7 +1632,7 @@ void set_menu_badge(void)
     k = (int)prof_look_key(p);
     if (k != icon_key || !icon) {
         free(icon);
-        icon = prof_icon_rgba(p->icon, p->color, p->dark, p->color2, 96);
+        icon = prof_icon_rgba(p->icon, p->alt, p->color, p->dark, p->color2, p->angle, 96);
         icon_key = k;
     }
     for (c = p->name; *c; c++)
@@ -1735,6 +1735,8 @@ static void save_ini(void)
                         : port_renderer() == RGL_D3D12 ? "d3d12" : "opengl");
     put("smooth_anims", "%d", port_smooth_anims);
     put("smooth_models", "%d", port_smooth_models);
+    put("sharp_edge_angle", "%d", (int)(port_sharp_angle + 0.5f));
+    put("sharp_edge_strength", "%d", (int)(port_sharp_strength * 100.0f + 0.5f));
     put("buttons", "%d", port_buttons());
     {
         static const char *const st[5] = { "auto", "xbox", "ps5", "nintendo", "ps4" };

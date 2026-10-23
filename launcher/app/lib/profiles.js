@@ -9,9 +9,15 @@
  * endings art: res/Textures/<NAME>_VERSUS.PNG), the colour behind it
  * (RRGGBB), the gradient -- L light: the second colour (white unless
  * chosen) into the colour; D dark: the colour into the second (black); C
- * custom: the colour to the second (blood red) -- and the second colour,
- * RRGGBB (absent: L and its default; an older file's lone RRGGBB is C).
- * UTF-8.
+ * custom: the colour to the second (blood red) -- the second colour,
+ * RRGGBB (absent: L and its default; an older file's lone RRGGBB is C), the
+ * custom gradient's angle in degrees as CSS has it (0 up, 90 right, 180
+ * down; "-" or absent: the older custom look, top to bottom with a lighter
+ * top), and 1 for the fighter in his second outfit (<NAME>_VERSUS2.pvr),
+ * else 0. An older game or launcher reads the first six fields and keeps
+ * going. UTF-8.
+ *
+ *     profile=7KQ2-9XMD-4TPA|MARY|18|7A1F45|C|1D0C17|135|1
  *
  * The id is given once, when the installation first has no profile: 60
  * random bits from the system's cryptographic generator as twelve Crockford
@@ -27,7 +33,7 @@ const crypto = require('crypto');
 const ALPHA = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const NAME_MAX = 24;
 const ICONS = 24;
-const DEFAULTS = { name: 'PLAYER', icon: 18, color: '3A8EE6', shade: 'L' };
+const DEFAULTS = { name: 'PLAYER', icon: 18, color: '3A8EE6', shade: 'L', angle: -1, alt: 0 };
 const SHADE_COLOR2 = { L: 'FFFFFF', D: '000000', C: '6E0B12' };
 
 /* The bio art, in CharacterNames order (Versus_Names, 0x000ffbf4). */
@@ -73,9 +79,17 @@ function read(root) {
         const icon = Number(f[2]);
         return { id: f[0], name: cleanName(f[1]),
                  icon: icon >= 0 && icon < ICONS ? icon : DEFAULTS.icon,
-                 color: cleanColor(f[3]), ...readShade(f[4], f[5]) };
+                 color: cleanColor(f[3]), ...readShade(f[4], f[5]),
+                 angle: cleanAngle(f[6]), alt: f[7] === '1' ? 1 : 0 };
     }
     return null;
+}
+
+/* 0..359, or -1: no angle (the older custom look) */
+function cleanAngle(a) {
+    if (a === undefined || a === null || a === '' || a === '-') return -1;
+    const n = Math.round(Number(a));
+    return Number.isFinite(n) && n >= 0 ? n % 360 : -1;
 }
 
 function readShade(a, b) {
@@ -93,7 +107,9 @@ function save(root, p) {
                    'profile=' + [p.id, cleanName(p.name), p.icon | 0, cleanColor(p.color),
                                  SHADE_COLOR2[p.shade] ? p.shade : 'L',
                                  /^[0-9A-F]{6}$/i.test(p.color2 || '') ? p.color2.toUpperCase()
-                                     : SHADE_COLOR2[p.shade] || 'FFFFFF'].join('|')];
+                                     : SHADE_COLOR2[p.shade] || 'FFFFFF',
+                                 cleanAngle(p.angle) < 0 ? '-' : cleanAngle(p.angle),
+                                 p.alt ? 1 : 0].join('|')];
     fs.writeFileSync(path.join(root, 'profiles.ini'), lines.join('\n') + '\n', 'utf8');
 }
 
@@ -102,7 +118,8 @@ function load(root, defaultName) {
     let p = read(root);
     if (!p) {
         p = { id: newId(), name: defaultName || DEFAULTS.name,
-              icon: DEFAULTS.icon, color: DEFAULTS.color, shade: 'L', color2: SHADE_COLOR2.L };
+              icon: DEFAULTS.icon, color: DEFAULTS.color, shade: 'L', color2: SHADE_COLOR2.L,
+              angle: DEFAULTS.angle, alt: DEFAULTS.alt };
         save(root, p);
     }
     return p;
@@ -116,6 +133,8 @@ function reset(root, defaultName) {
     p.color = DEFAULTS.color;
     p.shade = 'L';
     p.color2 = SHADE_COLOR2.L;
+    p.angle = DEFAULTS.angle;
+    p.alt = DEFAULTS.alt;
     save(root, p);
     return p;
 }
@@ -132,6 +151,8 @@ function update(root, fields) {
     }
     if (fields.color2 && /^#?[0-9A-F]{6}$/i.test(fields.color2))
         p.color2 = fields.color2.replace('#', '').toUpperCase();
+    if (fields.angle !== undefined) p.angle = cleanAngle(fields.angle);
+    if (fields.alt !== undefined) p.alt = fields.alt ? 1 : 0;
     save(root, p);
     return p;
 }
@@ -148,4 +169,16 @@ function iconData(root, i) {
     }
 }
 
-module.exports = { load, update, reset, newId, cleanName, cleanColor, iconData, ICONS, NAME_MAX };
+/* The second outfit's art: <NAME>_VERSUS2.pvr, as it is (the window decodes
+ * it, mods/formats.js), or null -- Sonya has none. */
+function iconAltData(root, i) {
+    const f = ICON_FILES[i];
+    if (!f) return null;
+    try {
+        return fs.readFileSync(path.join(root, 'res', 'Textures', f.replace('_VERSUS.PNG', '_VERSUS2.pvr')));
+    } catch (err) {
+        return null;
+    }
+}
+
+module.exports = { load, update, reset, newId, cleanName, cleanColor, cleanAngle, iconData, iconAltData, ICONS, NAME_MAX };

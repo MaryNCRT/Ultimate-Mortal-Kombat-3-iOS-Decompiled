@@ -1,13 +1,14 @@
 <script>
     /* PROFILE: profiles.ini, which the game's settings menu edits too. The
-     * name, the id (one per installation, it never changes), the fighter,
-     * the background colour and its gradient, and a reset. The icon stays in
-     * sight while the page scrolls to the colours, so every change shows. */
+     * name, the id (one per installation, it never changes), the fighter in
+     * his first or second outfit, the background's gradient (the gradient
+     * picker: two colours and an angle) and a reset. The icon stays in sight
+     * while the page scrolls to the colours, so every change shows. */
     import { app, tx, updateProf, resetProf } from '#lib/app.svelte.js';
-    import { PROF_COLORS } from '#lib/profileIcon.js';
     import { selectBlip, hoverBlip } from '#lib/sound.js';
     import Page from '#lib/components/Page.svelte';
     import IconCanvas from '#lib/components/IconCanvas.svelte';
+    import GradientPicker from '#lib/components/GradientPicker.svelte';
 
     const p = $derived(app.prof);
     let name = $state('');
@@ -17,28 +18,49 @@
         if (p && !typing) name = p.name;
     });
 
-    const color2Lbl = $derived(p ? tx(p.shade === 'C' ? 'profColor2' : p.shade === 'D' ? 'profColorDark' : 'profColorLight') : '');
-    const SHADES = [['L', 'profLight'], ['D', 'profDark'], ['C', 'profCustom']];
-
     function pick(fields) {
         selectBlip();
         updateProf(fields);
     }
-</script>
 
-{#snippet swatches(cur, key)}
-    <div class="palette">
-        {#each PROF_COLORS as c}
-            <button class="swatch" class:on={c === cur} style:background="#{c}" aria-label={c}
-                    onclick={() => pick({ [key]: c })}></button>
-        {/each}
-    </div>
-{/snippet}
+    /* The profile's gradient as the picker's CSS. An older one (light, dark,
+     * or custom without an angle) is shown as the straight gradient nearest
+     * to it; it changes only when the player picks. */
+    const hex = c => '#' + c.toLowerCase();
+    const gradCss = $derived.by(() => {
+        if (!p) return '';
+        if (p.shade === 'C' && p.angle >= 0)
+            return p.color === p.color2 ? hex(p.color) : `linear-gradient(${p.angle}deg, ${hex(p.color)}, ${hex(p.color2)})`;
+        return p.shade === 'L' ? `linear-gradient(180deg, ${hex(p.color2)}, ${hex(p.color)})`
+                               : `linear-gradient(180deg, ${hex(p.color)}, ${hex(p.color2)})`;
+    });
+
+    /* the picker's CSS into the profile: two colours (one: both ends) and the
+     * angle; none -- QUITAR -- is the default light gradient again */
+    const NAMED = { 'to top': 0, 'to right': 90, 'to bottom': 180, 'to left': 270 };
+    function full(h) {
+        h = h.replace('#', '');
+        if (h.length === 3 || h.length === 4) h = h.slice(0, 3).split('').map(c => c + c).join('');
+        return h.slice(0, 6).toUpperCase();
+    }
+    function setGradient(css) {
+        if (!css) {
+            updateProf({ shade: 'L', color: '3A8EE6', angle: -1 });
+            return;
+        }
+        const hexes = css.match(/#[0-9a-fA-F]{3,8}/g) || [];
+        if (!hexes.length) return;
+        const deg = /(\d+(?:\.\d+)?)deg/.exec(css), named = /(to (?:top|right|bottom|left))/.exec(css);
+        const angle = deg ? Math.round(parseFloat(deg[1])) % 360 : named ? NAMED[named[1]] : 180;
+        updateProf({ shade: 'C', color: full(hexes[0]), color2: full(hexes[1] || hexes[0]), angle });
+    }
+</script>
 
 <Page>
     {#if p}
         <div class="prof">
-            <IconCanvas class="big" size={192} icon={p.icon} color={p.color} shade={p.shade} color2={p.color2} />
+            <IconCanvas class="big" size={192} icon={p.icon} color={p.color} shade={p.shade} color2={p.color2}
+                        angle={p.angle} alt={p.alt} />
             <div class="fields">
                 <div class="field wide">
                     <label class="lbl" for="profName">{tx('profName')}</label>
@@ -59,32 +81,18 @@
         <div class="icongrid">
             {#each { length: 24 } as _, i}
                 <IconCanvas class={i === p.icon ? 'on' : ''} size={64} icon={i} color={p.color} shade={p.shade}
-                            color2={p.color2} onclick={() => pick({ icon: i })} />
+                            color2={p.color2} angle={p.angle} alt={p.alt} onclick={() => pick({ icon: i })} />
             {/each}
         </div>
-
-        <h3>{tx('profColor')}</h3>
-        <div class="row top">
-            {@render swatches(p.color, 'color')}
-            <input type="color" class="colorpick" title="+" value={'#' + p.color.toLowerCase()}
-                   oninput={e => updateProf({ color: e.currentTarget.value.replace('#', '').toUpperCase() })}>
-        </div>
-
-        <h3>{tx('profShadeLbl')}</h3>
         <span class="tabs sub shades">
-            {#each SHADES as [s, key]}
-                <button class="tab" class:active={p.shade === s} onpointerenter={hoverBlip}
-                        onclick={() => pick({ shade: s })}>{tx(key)}</button>
+            {#each [[0, 'profOutfit1'], [1, 'profOutfit2']] as [a, key]}
+                <button class="tab" class:active={(p.alt ? 1 : 0) === a} onpointerenter={hoverBlip}
+                        onclick={() => pick({ alt: a })}>{tx(key)}</button>
             {/each}
         </span>
-        <div>
-            <span class="lbl">{color2Lbl}</span>
-            <div class="row top">
-                {@render swatches(p.color2, 'color2')}
-                <input type="color" class="colorpick" title="+" value={'#' + p.color2.toLowerCase()}
-                       oninput={e => updateProf({ color2: e.currentTarget.value.replace('#', '').toUpperCase() })}>
-            </div>
-        </div>
+
+        <h3>{tx('profColor')}</h3>
+        <GradientPicker label={tx('gpLabel')} value={gradCss} onchange={setGradient} />
         <div class="row end">
             <button class="btn" onpointerenter={hoverBlip} onclick={resetProf}>{tx(app.profResetArmed ? 'profResetAsk' : 'profReset')}</button>
         </div>
@@ -110,14 +118,5 @@
     .icongrid { display: grid; grid-template-columns: repeat(12, 1fr); gap: calc(var(--u) * .5); }
     .icongrid :global(canvas) { width: 100%; cursor: pointer; border-radius: 18%; outline: 2px solid transparent; }
     .icongrid :global(canvas.on) { outline-color: #fff; }
-    /* the palette: 16 across, as the game's */
-    .palette { display: grid; grid-template-columns: repeat(16, 1fr); gap: calc(var(--u) * .35); flex: 1; }
-    .swatch {
-        aspect-ratio: 1; width: 100%; border-radius: 50%;
-        border: 1.5px solid rgba(255, 255, 255, .35); cursor: pointer; padding: 0;
-    }
-    .swatch:hover { border-color: #fff; }
-    .swatch.on { border-color: #fff; box-shadow: 0 0 0 2px var(--blue), 0 0 calc(var(--u) * .8) #fff; }
-    .colorpick { width: calc(var(--u) * 5); height: var(--ctl-h); padding: 0; border: 0; background: none; cursor: pointer; }
     .shades { margin: calc(var(--u) * .4) 0 0; }
 </style>

@@ -20,9 +20,15 @@
  * could not unpack it ("could not unpack the update").
  *
  * What an update leaves alone: umk3.ini, res\, the compiled umk3-game.exe
- * (rebuilt right after), toolchain\, build-game\ and anything the player put
- * in the folder. decomp\, runtime\, tools\ and launcher\ are mirrored, so a
- * source the new release dropped does not stay behind to be compiled.
+ * (rebuilt right after), toolchain\, build-game\, tools\eos\ (the online SDK)
+ * and anything the player put in the folder. src\, launcher\ and
+ * tools\build\ are mirrored, so a source the new release dropped does not
+ * stay behind to be compiled; the release's other files are copied over
+ * without deleting anything, and a mirrored folder the release lacks is
+ * skipped. Up to 0.1.10b the list held decomp\ and runtime\, which no
+ * release has had since 0.1.6: robocopy answered 16 for them and every
+ * update ended as "could not be copied". tools\ was mirrored whole, which
+ * deleted the EOS SDK and eos.ini an earlier release had put in tools\eos\.
  */
 'use strict';
 
@@ -33,7 +39,7 @@ const { spawn, spawnSync } = require('child_process');
 
 const REPO = 'MaryNCRT/Ultimate-Mortal-Kombat-3-iOS-Recomp';
 const API = 'https://api.github.com/repos/' + REPO + '/releases?per_page=10';
-const MIRROR = ['src', 'decomp', 'runtime', 'tools', 'launcher'];
+const MIRROR = ['src', 'launcher', 'tools\\build'];
 const LINUX = process.platform === 'linux';
 
 /* this system's archive among a release's files */
@@ -181,7 +187,8 @@ function installLinux(root, src, zip, upd) {
         'for f in "$src"/*; do [ -f "$f" ] && { cp -af "$f" "$root/" >>"$log" 2>&1 || fail=1; }; done',
         'chmod +x "$root/UMK3-Launcher" "$root/chrome_crashpad_handler" 2>/dev/null',
         'if [ $fail -ne 0 ]; then mv "$root/update/pending.json" "$root/update/failed.json"',
-        'else mv "$root/update/pending.json" "$root/update/installed.json"; rm -rf "$root/update/new" ' + shq(zip) + '; fi',
+        'else mv "$root/update/pending.json" "$root/update/installed.json"; fi',
+        'rm -rf "$root/update/new" "$root"/update/*.tar.gz',
         'cd "$root" && nohup "$root/UMK3-Launcher" >/dev/null 2>&1 &',
     ].join('\n') + '\n';
     const script = path.join(upd, 'apply.sh');
@@ -215,16 +222,24 @@ function install(root, zip, rel) {
         '  Start-Sleep -Milliseconds 500',
         '}',
         '$fail = $false',
+        '$mirrored = @()',
         'foreach ($d in @(' + MIRROR.map(psq).join(', ') + ')) {',
-        '  & robocopy (Join-Path $src $d) (Join-Path $root $d) /MIR /R:5 /W:1 /NFL /NDL /NJH /NJS /NP | Out-File $log -Append -Encoding utf8',
+        '  $from = Join-Path $src $d',
+        '  if (-not (Test-Path -LiteralPath $from -PathType Container)) { continue }',
+        '  $mirrored += $from',
+        '  & robocopy $from (Join-Path $root $d) /MIR /R:5 /W:1 /NFL /NDL /NJH /NJS /NP | Out-File $log -Append -Encoding utf8',
         '  if ($LASTEXITCODE -ge 8) { $fail = $true; "robocopy $d -> $LASTEXITCODE" | Out-File $log -Append -Encoding utf8 }',
         '}',
-        '& robocopy $src $root /R:5 /W:1 /NFL /NDL /NJH /NJS /NP | Out-File $log -Append -Encoding utf8',
-        'if ($LASTEXITCODE -ge 8) { $fail = $true; "robocopy top -> $LASTEXITCODE" | Out-File $log -Append -Encoding utf8 }',
+        /* the rest of the release (its top files, docs\, tools\eos\): copied, nothing deleted */
+        '$rc = @($src, $root, "/E", "/R:5", "/W:1", "/NFL", "/NDL", "/NJH", "/NJS", "/NP")',
+        'if ($mirrored.Count) { $rc += "/XD"; $rc += $mirrored }',
+        '& robocopy @rc | Out-File $log -Append -Encoding utf8',
+        'if ($LASTEXITCODE -ge 8) { $fail = $true; "robocopy rest -> $LASTEXITCODE" | Out-File $log -Append -Encoding utf8 }',
         'if ($fail) { Rename-Item (Join-Path $root "update\\pending.json") "failed.json" -Force }',
-        'else { Rename-Item (Join-Path $root "update\\pending.json") "installed.json" -Force',
-        '       Remove-Item (Join-Path $root "update\\new") -Recurse -Force -ErrorAction SilentlyContinue',
-        '       Remove-Item ' + psq(zip) + ' -Force -ErrorAction SilentlyContinue }',
+        'else { Rename-Item (Join-Path $root "update\\pending.json") "installed.json" -Force }',
+        /* the unpacked copy and every archive go either way: a retry downloads again */
+        'Remove-Item (Join-Path $root "update\\new") -Recurse -Force -ErrorAction SilentlyContinue',
+        'Get-ChildItem (Join-Path $root "update") -Filter "*.zip" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue',
         'Start-Process -FilePath (Join-Path $root "UMK3-Launcher.exe") -WorkingDirectory $root',
     ].join('\r\n');
     const script = path.join(upd, 'apply.ps1');

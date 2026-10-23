@@ -32,6 +32,36 @@ UmkSubsurf *umk_subsurf_new(int levels, float weld_dist,
                             int ntris, const unsigned short *tri,
                             const float *corner_uv);
 
+/* SHARP EDGES (port, not Blender's modifier): an interior edge whose two
+ * triangles turn by more than `angle_deg` -- the angle between their
+ * normals, 0 flat, 180 folded back on itself; an edge within 0.001 degree
+ * of the threshold counts as at it, and at it is not sharp, so rounding in
+ * acos cannot flip a right angle at 90 -- is kept by Catmull-Clark: Blender's edge crease, `strength` of
+ * it (0..1; 0 the plain smoothing, 1 a crease that holds at every level,
+ * between, Blender's semi-sharp crease). Where two or more sharp edges meet,
+ * CCG's own crease and corner rules place the vertex. The angle is measured
+ * once, on the positions the mesh was made with, so an edge does not change
+ * class while a fighter moves. An open edge keeps its crease of 1 whatever
+ * these say (umk_subsurf_new); an edge of three or more triangles, or of a
+ * degenerate one, is never sharp. 180 or a strength of 0 is the subdivision
+ * as it was before this existed.
+ *
+ * The defaults: the fighters are low-poly and organic -- over their 74,646
+ * interior edges 38% turn by more than 30 degrees (Blender's auto smooth
+ * angle, which would make a third of every body blocky), 17% by more than
+ * 60, 9.6% by more than 80, 4.3% by more than 90. 80 keeps the folds of
+ * armour plates, belts, shoulder pads and fingers, right angles included,
+ * and smooths the rest. */
+#define UMK_SHARP_ANGLE_DEFAULT     80.0f
+#define UMK_SHARP_STRENGTH_DEFAULT  1.0f
+
+/* Made with the defaults; this changes them (clamped to 0..180 and 0..1),
+ * and the next umk_subsurf_eval subdivides with the new creases. */
+void umk_subsurf_set_sharp(UmkSubsurf *s, float angle_deg, float strength);
+
+/* How many interior edges are sharp now, for the log and the tests. */
+int umk_subsurf_sharp_edges(const UmkSubsurf *s);
+
 /* One evaluation: nverts x 3 positions, and optionally one float per
  * triangle corner (ntris x 3, e.g. the light value) that is carried the way
  * Blender carries loop data through a subdivision. 0 on failure. */

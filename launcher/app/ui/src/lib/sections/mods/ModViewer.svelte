@@ -12,7 +12,8 @@
     import { onMount, onDestroy } from 'svelte';
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-    import { tx } from '#lib/app.svelte.js';
+    import { app, tx } from '#lib/app.svelte.js';
+    import SharpSliders from '#lib/components/SharpSliders.svelte';
     import { api } from '#lib/platform.js';
     import { hoverBlip, selectBlip } from '#lib/sound.js';
     import { ms, src, loadCatalog, fighter, refreshMods, reloadMods, exportThis, forgetMod, VIEW_KINDS } from '#lib/mods/store.svelte.js';
@@ -303,6 +304,7 @@
             for (const [bi, blk] of f.rig.skin.entries()) {
                 const base = f.rig.blockBase[bi];
                 const ss = await subsurfCreate(level, bind.subarray(base * 3, (base + blk.numVerts) * 3), blk.tri, blk.triUv);
+                if (ss) ss.setSharp(sharpAngle(), sharpStrength());
                 if (fighterView !== fv || fv.smooth.level !== level) {
                     if (ss) ss.free();
                     for (const b of blocks) if (b.ss) b.ss.free();
@@ -325,6 +327,25 @@
         pose();
     }
     $effect(() => { ms.smoothModel; smoothModel(); });
+
+    /* SHARP EDGES (components/SharpSliders.svelte): the game's two values
+     * in umk3.ini, applied to the smoothed blocks as the sliders move -- at
+     * most once a frame, since each change syncs the subdivision again */
+    const sharpAngle = () => app.cfg.sharpAngle ?? 80;
+    const sharpStrength = () => (app.cfg.sharpStrength ?? 100) / 100;
+    let sharpQueued = false;
+    $effect(() => {
+        app.cfg.sharpAngle; app.cfg.sharpStrength;
+        if (sharpQueued) return;
+        sharpQueued = true;
+        requestAnimationFrame(() => {
+            sharpQueued = false;
+            const fv = fighterView;
+            if (!fv || !fv.smooth.level) return;
+            for (const b of fv.smooth.blocks) if (b.ss) b.ss.setSharp(sharpAngle(), sharpStrength());
+            pose();
+        });
+    });
 
     /* output-vertex positions (topology order) back to one per skin vertex */
     function skinOf(f, pos) {
@@ -742,6 +763,7 @@
                     <button class="tab" class:active={ms.smoothModel === i} onclick={() => { selectBlip(); ms.smoothModel = i; }}>{m}</button>
                 {/each}
             </span>
+            {#if fx}<SharpSliders disabled={!ms.smoothModel} />{/if}
             <div class="checks">
                 <label class="chk"><input type="checkbox" bind:checked={ms.bones}><span>{tx('vwBones')}</span></label>
                 <label class="chk"><input type="checkbox" bind:checked={ms.wire}><span>{tx('vwWire')}</span></label>

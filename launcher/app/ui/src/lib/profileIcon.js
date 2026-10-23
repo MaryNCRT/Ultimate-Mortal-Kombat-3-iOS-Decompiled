@@ -39,8 +39,34 @@ function roundRect(g, x, y, w, h, r) {
     g.closePath();
 }
 
-/* Draws the icon into a canvas: art is the fighter's picture (or null). */
-export function drawIcon(cv, art, color, shade, color2) {
+/* The second outfit's picture (<NAME>_VERSUS2.pvr, decoded: width, height,
+ * rgba) framed as the first one's PNG: the PNG is the .pvr shrunk about
+ * 2.12 times and set on its bottom left corner (measured on the art, 98 to
+ * 99 per cent of the outline in common). runtime/profiles.c frames it the
+ * same way. */
+export const ALT_FRAME = 1.061;
+export function altArt(img, size = 256) {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = size;
+    const out = cv.getContext('2d').createImageData(size, size);
+    const { width: w, height: h, rgba } = img;
+    for (let y = 0; y < size; y++)
+        for (let x = 0; x < size; x++) {
+            const sx = Math.floor((x + 0.5) / size * ALT_FRAME * w);
+            const sy = Math.floor(h - (1 - (y + 0.5) / size) * ALT_FRAME * h);
+            if (sx < 0 || sy < 0 || sx >= w || sy >= h) continue;
+            const s = (sy * w + sx) * 4, d = (y * size + x) * 4;
+            out.data[d] = rgba[s]; out.data[d + 1] = rgba[s + 1]; out.data[d + 2] = rgba[s + 2]; out.data[d + 3] = rgba[s + 3];
+        }
+    cv.getContext('2d').putImageData(out, 0, 0);
+    return cv;
+}
+
+/* Draws the icon into a canvas: art is the fighter's picture (or null).
+ * angle (0..359, CSS's: 0 up, 180 down) makes the custom gradient a straight
+ * one from the colour to the second at that angle (PROFILE's gradient
+ * picker); -1, the older custom look. */
+export function drawIcon(cv, art, color, shade, color2, angle = -1) {
     const g = cv.getContext('2d'), S = cv.width, c = hexRgb(color);
     const white = [255, 255, 255], black = [0, 0, 0];
     const dark = shade === 'D', o = hexRgb(color2 || (dark ? '000000' : 'FFFFFF'));
@@ -53,10 +79,21 @@ export function drawIcon(cv, art, color, shade, color2) {
     /* the sky. light: the second colour (white unless chosen) into the
      * colour, deeper at the bottom; dark: the colour at the top going down
      * to the second (black unless chosen); custom: the colour to the second */
-    let gr = g.createLinearGradient(0, 0, 0, S);
-    gr.addColorStop(0, css(c2 ? mix(c, white, 0.2) : dark ? mix(c, white, 0.15) : mix(c, o, 0.55)));
-    gr.addColorStop(0.5, css(c2 ? mix(c, c2, 0.5) : dark ? mix(c, o, 0.45) : c));
-    gr.addColorStop(1, css(c2 ? c2 : dark ? mix(c, o, 0.92) : mix(c, black, 0.3)));
+    let gr;
+    if (c2 && angle >= 0) {
+        /* CSS's gradient line: through the centre at the angle, long enough
+         * for the corners to fall on its ends */
+        const a = angle * Math.PI / 180, dx = Math.sin(a), dy = -Math.cos(a);
+        const half = (Math.abs(S * dx) + Math.abs(S * dy)) / 2;
+        gr = g.createLinearGradient(S / 2 - dx * half, S / 2 - dy * half, S / 2 + dx * half, S / 2 + dy * half);
+        gr.addColorStop(0, css(c));
+        gr.addColorStop(1, css(c2));
+    } else {
+        gr = g.createLinearGradient(0, 0, 0, S);
+        gr.addColorStop(0, css(c2 ? mix(c, white, 0.2) : dark ? mix(c, white, 0.15) : mix(c, o, 0.55)));
+        gr.addColorStop(0.5, css(c2 ? mix(c, c2, 0.5) : dark ? mix(c, o, 0.45) : c));
+        gr.addColorStop(1, css(c2 ? c2 : dark ? mix(c, o, 0.92) : mix(c, black, 0.3)));
+    }
     g.fillStyle = gr;
     g.fillRect(0, 0, S, S);
     /* the glow rising from the bottom */

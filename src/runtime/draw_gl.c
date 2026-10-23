@@ -112,9 +112,50 @@ typedef struct TexEntry {
     char            *path;
     TEXTURE          tex;       /* `name` is the GL object; lime.h states it */
     int              w, h;
+    struct TexEntry *hnext;     /* the same bucket of g_tex_hash */
 } TexEntry;
 
 static TexEntry *g_textures;
+
+/* Found by a hash of the path. The menus' button pictures, the hints and
+ * the move list ask for theirs every frame, and the list was searched from
+ * the start with strcmp: it grows with every stage and fighter a session
+ * visits, and so did the cost of every frame (Mary: lag after the game has
+ * been open a long time). */
+#define TEX_BUCKETS 2048
+static TexEntry *g_tex_hash[TEX_BUCKETS];
+
+/* How many textures are loaded and their pixels (the log's memory line). */
+int lime_texture_count(long *pixels)
+{
+    const TexEntry *e;
+    int n = 0;
+    long px = 0;
+    for (e = g_textures; e; e = e->next) {
+        n++;
+        px += (long)e->w * e->h;
+    }
+    if (pixels)
+        *pixels = px;
+    return n;
+}
+
+static unsigned tex_hash(const char *path)
+{
+    unsigned h = 2166136261u;
+    while (*path)
+        h = (h ^ (unsigned char)*path++) * 16777619u;
+    return h & (TEX_BUCKETS - 1);
+}
+
+static void tex_add(TexEntry *e)
+{
+    unsigned b = tex_hash(e->path);
+    e->hnext = g_tex_hash[b];
+    g_tex_hash[b] = e;
+    e->next = g_textures;
+    g_textures = e;
+}
 
 /* The launcher's texture quality (umk3.ini texture_quality=), port only:
  *
@@ -132,7 +173,7 @@ int PortTextureQuality;
 static TexEntry *tex_find(const char *path)
 {
     TexEntry *e;
-    for (e = g_textures; e; e = e->next)
+    for (e = g_tex_hash[tex_hash(path)]; e; e = e->hnext)
         if (strcmp(e->path, path) == 0)
             return e;
     return NULL;
@@ -439,9 +480,11 @@ static void upscale_small(LimeImage *img)
 /* Port, not in the binary: the loading screens' budget. The device ran one
  * step of FEInit_LoadABit / GameInit_LoadABit a frame (52 for a fight), so a
  * load took at least 52 frames however fast the steps were. The port runs
- * steps until 50 ms of the frame are spent -- the screen still moves, at
- * 20 frames a second or better -- and then draws. lime_port_load_more(1)
- * starts the frame's clock; (0) says whether another step fits. */
+ * steps until 100 ms of the frame are spent -- the loading screen still
+ * moves, at 10 frames a second or better -- and then draws. At 50 ms the
+ * draw and the wait for the screen's refresh took a fifth of every load;
+ * at 100 ms about a tenth. lime_port_load_more(1) starts the frame's clock;
+ * (0) says whether another step fits. */
 static double g_load_start;              /* 0 = no load running */
 
 int lime_port_load_more(int first)
@@ -454,7 +497,7 @@ int lime_port_load_more(int first)
             g_load_start = t0;
         return 1;
     }
-    return plat_time() - t0 < 0.050;
+    return plat_time() - t0 < 0.100;
 }
 
 /* The end of a load: its time goes to the log ("loading: fight 1.23 s"). */
@@ -588,8 +631,7 @@ TEXTURE *limeLoadTexture(const char *path, int a, int b)
     tex_set_name(&e->tex, path);
     e->w = img.width;
     e->h = img.height;
-    e->next = g_textures;
-    g_textures = e;
+    tex_add(e);
     return &e->tex;
 }
 
@@ -705,8 +747,7 @@ TEXTURE *lime_load_extra_texture(const char *file)
     tex_set_name(&e->tex, file);
     e->w = img.width;
     e->h = img.height;
-    e->next = g_textures;
-    g_textures = e;
+    tex_add(e);
     printf("extra texture: %s (%dx%d)\n", full, img.width, img.height);
     return &e->tex;
 }

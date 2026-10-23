@@ -15,6 +15,8 @@ import { T } from './i18n.js';
 import { PAD_SETS, padMake, livePad } from './glyphs.js';
 import { hoverBlip, selectBlip, doneChord, failChord } from './sound.js';
 import { ms, MODS_TABS } from './mods/store.svelte.js';
+import { decodePvr } from './mods/formats.js';
+import { altArt } from './profileIcon.js';
 
 /* ------------------------------------------------------------ tables -- */
 
@@ -130,6 +132,8 @@ export const app = $state({
 /* The fighters' pictures for the profile icons: Image objects, kept out of
  * the state (app.artTick says when more arrived). */
 export const profArt = [];
+/* the second outfits' pictures (profileIcon.js altArt); none for Sonya */
+export const profArtAlt = [];
 
 export const tx = k => (T[app.ui][k] !== undefined ? T[app.ui][k] : k);
 
@@ -538,6 +542,12 @@ async function loadProfArt() {
         im.src = url;
         await im.decode().catch(() => {});
         profArt[i] = im;
+    }
+    for (let i = 0; i < 24; i++) {
+        if (profArtAlt[i]) continue;
+        const b = await api.profileIconAlt(i);
+        const img = b && decodePvr(new Uint8Array(b));
+        if (img) profArtAlt[i] = altArt(img);
     }
     app.artTick++;
 }

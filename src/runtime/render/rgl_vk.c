@@ -167,6 +167,7 @@ static VkFormat g_depth_fmt;
 static int g_win_pass = -1;
 static unsigned g_image;                /* the swapchain image this frame */
 static int g_need_resize;
+static int g_made_w, g_made_h;         /* the window's size when the chain was made */
 
 static VkCommandPool g_pool;
 static VkCommandBuffer g_cmd;
@@ -301,8 +302,18 @@ static int make_image(vk_image *im, int w, int h, int levels, VkFormat fmt, VkSa
     return 1;
 }
 
+static int g_ucb_on;                    /* uploads recorded, not yet run (upload) */
+static VkCommandBuffer g_ucb;
+static VkFence g_ufence;
+static struct { VkBuffer b; VkDeviceMemory m; } *g_ustage;
+static int g_nustage, g_custage;
+static VkDeviceSize g_ubytes;
+static void upload_submit(void);
+
 static void free_image(vk_image *im)
 {
+    if (im->img && g_ucb_on)            /* a recorded upload may write it */
+        upload_submit();
     if (im->view) vkDestroyImageView(g_dev, im->view, NULL);
     if (im->img) vkDestroyImage(g_dev, im->img, NULL);
     if (im->mem) vkFreeMemory(g_dev, im->mem, NULL);
@@ -363,6 +374,7 @@ static void flush(int signal_done)
     VkSubmitInfo si;
     VkPipelineStageFlags st = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
+    upload_submit();                    /* the textures these commands draw with */
     if (!g_cmd_on)
         return;
     end_pass();
@@ -399,15 +411,23 @@ static void frame_begin(void)
     if (g_frame_on)
         return;
     plat_size(&w, &h);
-    if (w > 0 && h > 0 && (g_need_resize || (unsigned)w != g_extent.width || (unsigned)h != g_extent.height))
+    /* against the window's size when the chain was made, not the chain's
+     * own: the surface can give an extent a pixel off the window's, and the
+     * chain was then made again every frame */
+    if (w > 0 && h > 0 && (g_need_resize || !g_swap || w != g_made_w || h != g_made_h))
         recreate_swapchain();
+    if (!g_swap)                        /* none for now: tried next frame */
+        return;
     r = vkAcquireNextImageKHR(g_dev, g_swap, ~0ull, g_sem_acquire, VK_NULL_HANDLE, &g_image);
     if (r == VK_ERROR_OUT_OF_DATE_KHR) {
-        recreate_swapchain();
+        if (!recreate_swapchain())
+            return;
         r = vkAcquireNextImageKHR(g_dev, g_swap, ~0ull, g_sem_acquire, VK_NULL_HANDLE, &g_image);
     }
-    if (!vk_ok(r, "vkAcquireNextImageKHR"))
+    if (!vk_ok(r, "vkAcquireNextImageKHR")) {
+        g_need_resize = 1;
         return;
+    }
     g_acquire_wait = 1;
     g_img_layout[g_image] = VK_IMAGE_LAYOUT_UNDEFINED;
     g_frame_on = 1;
@@ -581,6 +601,7 @@ static int recreate_swapchain(void)
     VkSurfaceCapabilitiesKHR caps;
     VkSwapchainCreateInfoKHR si;
     VkSwapchainKHR old = g_swap;
+    VkResult r;
     int w = 0, h = 0;
     unsigned i, n;
 
@@ -616,10 +637,20 @@ static int recreate_swapchain(void)
     si.presentMode = VK_PRESENT_MODE_FIFO_KHR;     /* every driver has it: vsync */
     si.clipped = VK_TRUE;
     si.oldSwapchain = old;
-    if (!vk_ok(vkCreateSwapchainKHR(g_dev, &si, NULL, &g_swap), "vkCreateSwapchainKHR"))
-        return 0;
+    /* the old chain is retired even when the new one fails: then there is
+     * none, and the next frame tries again (Mary: resizing and moving the
+     * window a few times closed the game) */
+    g_swap = VK_NULL_HANDLE;
+    g_nimages = 0;
+    r = vkCreateSwapchainKHR(g_dev, &si, NULL, &g_swap);
     if (old)
         vkDestroySwapchainKHR(g_dev, old, NULL);
+    if (!vk_ok(r, "vkCreateSwapchainKHR")) {
+        g_swap = VK_NULL_HANDLE;
+        g_need_resize = 1;
+        return 0;
+    }
+    plat_size(&g_made_w, &g_made_h);
     n = 8;
     vkGetSwapchainImagesKHR(g_dev, g_swap, &n, g_images);
     g_nimages = n;
@@ -935,7 +966,14 @@ static void vk_close(void)
 
     if (!g_dev)
         return;
+    upload_submit();
     vkDeviceWaitIdle(g_dev);
+    if (g_ufence) vkDestroyFence(g_dev, g_ufence, NULL);
+    g_ufence = VK_NULL_HANDLE;
+    g_ucb = VK_NULL_HANDLE;             /* freed with the pool */
+    free(g_ustage);
+    g_ustage = NULL;
+    g_custage = 0;
     for (i = 0; i < g_npipes; i++)
         vkDestroyPipeline(g_dev, g_pipes[i].p, NULL);
     for (i = 0; i < g_nsamps; i++)
@@ -992,8 +1030,73 @@ static int vk_tex_new(void)
     return i;
 }
 
-/* rows into an image's levels through a staging buffer, recorded into the
- * frame's buffer before anything that draws with it */
+/* Rows into an image's levels through a staging buffer, recorded outside any
+ * render pass in a buffer of their own that runs before the frame's next
+ * commands (flush, the same queue) -- or sooner, past 64 MB of staging or
+ * when an image is freed. Each upload used to submit its own buffer and wait
+ * on a fence of its own: one wait per texture, hundreds in a load. The
+ * frame's commands that came before keep the texture as it was only if they
+ * already ran, so those run first when they used it (before_write). */
+static void upload_submit(void)
+{
+    VkSubmitInfo si;
+    int i;
+
+    if (!g_ucb_on)
+        return;
+    g_ucb_on = 0;
+    vkEndCommandBuffer(g_ucb);
+    memset(&si, 0, sizeof si);
+    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &g_ucb;
+    vkResetFences(g_dev, 1, &g_ufence);
+    vk_ok(vkQueueSubmit(g_queue, 1, &si, g_ufence), "vkQueueSubmit (uploads)");
+    vkWaitForFences(g_dev, 1, &g_ufence, VK_TRUE, ~0ull);
+    for (i = 0; i < g_nustage; i++)
+        free_buffer(g_ustage[i].b, g_ustage[i].m);
+    g_nustage = 0;
+    g_ubytes = 0;
+}
+
+static int upload_begin(VkDeviceSize bytes)
+{
+    VkCommandBufferBeginInfo bi;
+
+    if (g_ucb_on && g_ubytes + bytes > ((VkDeviceSize)64 << 20))
+        upload_submit();
+    if (!g_ucb) {
+        VkCommandBufferAllocateInfo ai;
+        VkFenceCreateInfo fi;
+        memset(&ai, 0, sizeof ai);
+        ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        ai.commandPool = g_pool;
+        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        ai.commandBufferCount = 1;
+        if (!vk_ok(vkAllocateCommandBuffers(g_dev, &ai, &g_ucb), "upload buffer"))
+            return 0;
+        memset(&fi, 0, sizeof fi);
+        fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        vkCreateFence(g_dev, &fi, NULL, &g_ufence);
+    }
+    if (g_nustage == g_custage) {
+        int n = g_custage ? g_custage * 2 : 256;
+        void *nb = realloc(g_ustage, (size_t)n * sizeof *g_ustage);
+        if (!nb)
+            return 0;
+        g_ustage = nb;
+        g_custage = n;
+    }
+    if (!g_ucb_on) {
+        memset(&bi, 0, sizeof bi);
+        bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        vkBeginCommandBuffer(g_ucb, &bi);       /* the pool resets it */
+        g_ucb_on = 1;
+    }
+    return 1;
+}
+
 static void upload(vk_image *im, int x, int y, int w, int h, int levels, const unsigned char *const *rgba)
 {
     VkBuffer sb;
@@ -1001,6 +1104,7 @@ static void upload(vk_image *im, int x, int y, int w, int h, int levels, const u
     unsigned char *map;
     VkBufferImageCopy cp[16];
     VkDeviceSize total = 0, off = 0;
+    VkCommandBuffer keep = g_cmd;
     int l, lw = w, lh = h;
 
     for (l = 0; l < levels; l++) {
@@ -1008,6 +1112,8 @@ static void upload(vk_image *im, int x, int y, int w, int h, int levels, const u
         lw = lw > 1 ? lw / 2 : 1;
         lh = lh > 1 ? lh / 2 : 1;
     }
+    if (!upload_begin(total))
+        return;
     if (!make_buffer(total, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &sb, &sm, (void **)&map))
         return;
     lw = w;
@@ -1028,52 +1134,15 @@ static void upload(vk_image *im, int x, int y, int w, int h, int levels, const u
         lw = lw > 1 ? lw / 2 : 1;
         lh = lh > 1 ? lh / 2 : 1;
     }
-    /* outside any render pass, in a buffer of its own run at once: the
-     * frame's commands that came before keep the texture as it was only
-     * if they already ran, so those run first when they used it */
-    {
-        VkCommandBuffer keep = g_cmd;
-        VkCommandBufferAllocateInfo ai;
-        VkCommandBufferBeginInfo bi;
-        VkSubmitInfo si;
-        VkCommandBuffer cb;
-        VkFence f;
-        VkFenceCreateInfo fi;
-
-        memset(&ai, 0, sizeof ai);
-        ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        ai.commandPool = g_pool;
-        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        ai.commandBufferCount = 1;
-        vkAllocateCommandBuffers(g_dev, &ai, &cb);
-        memset(&bi, 0, sizeof bi);
-        bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        vkBeginCommandBuffer(cb, &bi);
-        g_cmd = cb;
-        to_layout(im, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-        vkCmdCopyBufferToImage(cb, sb, im->img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, (unsigned)(levels < 16 ? levels : 16), cp);
-        to_layout(im, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        g_cmd = keep;
-        vkEndCommandBuffer(cb);
-        memset(&fi, 0, sizeof fi);
-        fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        vkCreateFence(g_dev, &fi, NULL, &f);
-        memset(&si, 0, sizeof si);
-        si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        si.commandBufferCount = 1;
-        si.pCommandBuffers = &cb;
-        vkQueueSubmit(g_queue, 1, &si, f);
-        vkWaitForFences(g_dev, 1, &f, VK_TRUE, ~0ull);
-        vkDestroyFence(g_dev, f, NULL);
-        {
-            /* freeing a command buffer needs the pool; the frame's own
-             * buffer was allocated from it too and is untouched */
-            extern void vk_free_cb(VkCommandBuffer cb);
-            vk_free_cb(cb);
-        }
-    }
-    free_buffer(sb, sm);
+    g_ustage[g_nustage].b = sb;
+    g_ustage[g_nustage].m = sm;
+    g_nustage++;
+    g_ubytes += total;
+    g_cmd = g_ucb;
+    to_layout(im, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    vkCmdCopyBufferToImage(g_ucb, sb, im->img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, (unsigned)(levels < 16 ? levels : 16), cp);
+    to_layout(im, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    g_cmd = keep;
 }
 
 static PFN_vkFreeCommandBuffers g_free_cbs;

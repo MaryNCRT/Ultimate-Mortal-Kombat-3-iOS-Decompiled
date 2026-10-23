@@ -1,15 +1,17 @@
 <script>
     /* A profile icon (profileIcon.js), redrawn whenever the profile, the
      * fighter or the pictures change. */
-    import { app, profArt } from '#lib/app.svelte.js';
+    import { app, profArt, profArtAlt } from '#lib/app.svelte.js';
     import { drawIcon } from '#lib/profileIcon.js';
 
-    let { icon, color, shade, color2, size = 96, class: cls = '', onclick = undefined } = $props();
+    /* alt: the fighter in his second outfit (Sonya has none: her first) */
+    let { icon, color, shade, color2, angle = -1, alt = 0, size = 96, class: cls = '', onclick = undefined } = $props();
     let cv;
 
     $effect(() => {
         app.artTick;                    /* the pictures arrived */
-        if (cv) drawIcon(cv, profArt[icon] || null, color, shade, color2);
+        const art = (alt && profArtAlt[icon]) || profArt[icon] || null;
+        if (cv) drawIcon(cv, art, color, shade, color2, angle);
     });
 </script>
 

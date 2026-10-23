@@ -606,6 +606,11 @@ struct UmkSubsurf {
 	int nedges;
 	EdgeKey *edges;
 	float *edge_crease;         /* per edge, Blender's crease * creaseFactor */
+	float *edge_angle;          /* per edge, degrees between its two faces'
+	                               normals; -1 open, -2 never sharp (three or
+	                               more faces, a degenerate one) */
+	float sharp_angle, sharp_strength;
+	int nsharp;
 	float *fit_base;            /* scratch, nwelded x 3 */
 	int ntris;                  /* input triangles */
 	float *last_pos, *last_attr;/* the last call's input, to skip a repeat */
@@ -659,6 +664,76 @@ static int edge_lookup_or_add(EdgeKey **edges, int *n, int *cap, int **hash, int
 	(*edges)[*n].v1 = v1;
 	(*hash)[h] = *n;
 	return (*n)++;
+}
+
+/* SHARP EDGES: the angle between each interior edge's two faces, on the
+ * welded positions the mesh is made with. Normals from the faces' corners,
+ * normalised; a face with no area leaves its edges never sharp. The cosine
+ * is clamped to -1..1 before acos, so rounding cannot make a NaN. */
+static void edge_angles(UmkSubsurf *s, const int *edge_f)
+{
+	int i, k;
+
+	for (i = 0; i < s->nedges; i++) {
+		float n[2][3], l[2];
+
+		if (s->edge_angle[i] != 0.0f || edge_f[i * 2] < 0 || edge_f[i * 2 + 1] < 0)
+			continue;
+		for (k = 0; k < 2; k++) {
+			const int *fv = s->face_v + edge_f[i * 2 + k] * 3;
+			const float *a = s->welded_pos + fv[0] * 3, *b = s->welded_pos + fv[1] * 3,
+			            *c = s->welded_pos + fv[2] * 3;
+			float u[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] };
+			float v[3] = { c[0] - a[0], c[1] - a[1], c[2] - a[2] };
+
+			n[k][0] = u[1] * v[2] - u[2] * v[1];
+			n[k][1] = u[2] * v[0] - u[0] * v[2];
+			n[k][2] = u[0] * v[1] - u[1] * v[0];
+			l[k] = sqrtf(n[k][0] * n[k][0] + n[k][1] * n[k][1] + n[k][2] * n[k][2]);
+		}
+		if (!(l[0] > 1e-12f) || !(l[1] > 1e-12f)) {
+			s->edge_angle[i] = -2.0f;
+			continue;
+		}
+		{
+			float d = (n[0][0] * n[1][0] + n[0][1] * n[1][1] + n[0][2] * n[1][2]) / (l[0] * l[1]);
+			if (!(d >= -1.0f)) d = -1.0f;    /* NaN too */
+			if (d > 1.0f) d = 1.0f;
+			s->edge_angle[i] = acosf(d) * (180.0f / 3.14159265f);
+		}
+	}
+}
+
+/* The creases for an angle and a strength; 1 when any changed. */
+static int set_creases(UmkSubsurf *s, float angle_deg, float strength)
+{
+	int i, changed = 0, n = 0;
+
+	if (!(angle_deg >= 0.0f)) angle_deg = 0.0f;
+	if (angle_deg > 180.0f) angle_deg = 180.0f;
+	if (!(strength >= 0.0f)) strength = 0.0f;
+	if (strength > 1.0f) strength = 1.0f;
+	if (angle_deg == s->sharp_angle && strength == s->sharp_strength)
+		return 0;
+	s->sharp_angle = angle_deg;
+	s->sharp_strength = strength;
+	for (i = 0; i < s->nedges; i++) {
+		float c;
+
+		if (s->edge_angle[i] == -1.0f)
+			c = (float)s->levels;           /* open: as umk_subsurf_new set */
+		else if (s->edge_angle[i] > angle_deg + 0.001f && strength > 0.0f) {
+			c = strength * (float)s->levels;
+			n++;
+		} else
+			c = 0.0f;
+		if (c != s->edge_crease[i]) {
+			s->edge_crease[i] = c;
+			changed = 1;
+		}
+	}
+	s->nsharp = n;
+	return changed;
 }
 
 /* Only the positions changed: CCG's partial sync (ccgSubSurf_initPartialSync,
@@ -950,6 +1025,7 @@ UmkSubsurf *umk_subsurf_new(int levels, float weld_dist,
 	unsigned char *dead, *in_ctx, *face_ctx;
 	EdgeKey *edges = NULL;
 	int nedges = 0, cap = 0, *hash = NULL, hcap = 0, nuv;
+	int *edge_f = NULL;              /* each edge's first two faces */
 
 	if (levels < 1 || nverts <= 0 || ntris <= 0)
 		return NULL;
@@ -1106,6 +1182,21 @@ UmkSubsurf *umk_subsurf_new(int levels, float weld_dist,
 		s->edge_crease = MEM_mallocN(sizeof(float) * (size_t)(nedges > 0 ? nedges : 1), "edge_crease");
 		for (i = 0; i < nedges; i++)
 			s->edge_crease[i] = uses[i] == 1 ? (float)levels : 0.0f;
+		/* SHARP EDGES: each edge's first two faces, for its angle once the
+		 * positions are welded (edge_angles) */
+		edge_f = MEM_mallocN(sizeof(int) * 2 * (size_t)(nedges > 0 ? nedges : 1), "edge faces");
+		for (i = 0; i < nedges * 2; i++)
+			edge_f[i] = -1;
+		for (i = 0; i < s->nfaces; i++)
+			for (j = 0; j < 3; j++) {
+				int e = edge_lookup_or_add(&ek, &en, &ecap, &eh, &ehcap,
+				                           s->face_v[i * 3 + j], s->face_v[i * 3 + (j + 1) % 3]);
+				if (edge_f[e * 2] < 0) edge_f[e * 2] = i;
+				else if (edge_f[e * 2 + 1] < 0) edge_f[e * 2 + 1] = i;
+			}
+		s->edge_angle = MEM_mallocN(sizeof(float) * (size_t)(nedges > 0 ? nedges : 1), "edge_angle");
+		for (i = 0; i < nedges; i++)
+			s->edge_angle[i] = uses[i] == 1 ? -1.0f : uses[i] == 2 ? 0.0f : -2.0f;
 		if (eh) MEM_freeN(eh);
 		MEM_freeN(ek);
 		MEM_freeN(uses);
@@ -1126,6 +1217,11 @@ UmkSubsurf *umk_subsurf_new(int levels, float weld_dist,
 	s->uvFaceMap = MEM_callocN(sizeof(CCGFace *) * (size_t)s->nfaces, "facemapuv");
 
 	weld_positions(s, pos);
+	edge_angles(s, edge_f);
+	MEM_freeN(edge_f);
+	s->sharp_angle = 181.0f;            /* none yet: set_sharp sets them all */
+	s->sharp_strength = 0.0f;
+	set_creases(s, UMK_SHARP_ANGLE_DEFAULT, UMK_SHARP_STRENGTH_DEFAULT);
 	nuv = sync_uvs(s, (const float (*)[2])face_uv);
 	if (nuv == 0 || !sync_positions(s)) {
 		MEM_freeN(face_uv);
@@ -1149,6 +1245,20 @@ UmkSubsurf *umk_subsurf_new(int levels, float weld_dist,
 	}
 	return s;
 }
+
+void umk_subsurf_set_sharp(UmkSubsurf *s, float angle_deg, float strength)
+{
+	if (!s || !set_creases(s, angle_deg, strength))
+		return;
+	/* the creases changed: CCG's full sync again (the edges' crease is a
+	 * full sync's, as when Blender's crease is edited), its faces mapped
+	 * again, and the next evaluation is not skipped as a repeat */
+	if (sync_positions(s))
+		face_maps(s->ss, s->faceMap);
+	s->have_last = 0;
+}
+
+int umk_subsurf_sharp_edges(const UmkSubsurf *s) { return s ? s->nsharp : 0; }
 
 int umk_subsurf_eval(UmkSubsurf *s, const float *pos, const float *corner_attr)
 {
@@ -1233,6 +1343,7 @@ void umk_subsurf_free(UmkSubsurf *s)
 	if (s->face_v) MEM_freeN(s->face_v);
 	if (s->edges) MEM_freeN(s->edges);
 	if (s->edge_crease) MEM_freeN(s->edge_crease);
+	if (s->edge_angle) MEM_freeN(s->edge_angle);
 	if (s->fit_base) MEM_freeN(s->fit_base);
 	if (s->last_pos) MEM_freeN(s->last_pos);
 	if (s->last_attr) MEM_freeN(s->last_attr);

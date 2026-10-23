@@ -205,7 +205,11 @@ static void info_put(unsigned char *p)
     put32(p + 116, (uint32_t)pr->icon);
     put32(p + 120, pr->color);
     put32(p + 124, pr->color2);
-    put32(p + 128, (uint32_t)pr->dark);
+    /* the gradient's kind, and above it the angle + 1 (0: none) and the
+     * outfit: an older game reads the word as the kind and draws the icon
+     * without them */
+    put32(p + 128, ((uint32_t)pr->dark & 0xff) | ((uint32_t)(pr->angle + 1) & 0x1ff) << 8
+                   | (uint32_t)(pr->alt ? 1 : 0) << 20);
 }
 
 static void info_get(const unsigned char *p, struct mpnet_peer *o)
@@ -218,7 +222,14 @@ static void info_get(const unsigned char *p, struct mpnet_peer *o)
         o->icon = 0;
     o->color = get32(p + 120);
     o->color2 = get32(p + 124);
-    o->dark = (int)get32(p + 128);
+    {
+        uint32_t v = get32(p + 128);
+        o->dark = (int)(v & 0xff);
+        o->angle = (int)((v >> 8) & 0x1ff) - 1;
+        if (o->angle >= 360)
+            o->angle = -1;
+        o->alt = (int)((v >> 20) & 1);
+    }
 }
 
 static const char *my_code(void)

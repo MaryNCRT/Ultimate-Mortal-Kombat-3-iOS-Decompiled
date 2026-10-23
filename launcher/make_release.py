@@ -86,28 +86,50 @@ def build_stub(dst):
                                    "umk3_launcher_stub.c", res, "-o", dst], cwd=stub)
 
 
+def eos_dir():
+    """The EOS SDK's folder: UMK3_EOS_DIR, else TOOLS/eos (not in the
+    repository). None when UMK3_NO_EOS=1; exits when there is none, since a
+    package without it plays online on the local network alone."""
+    for d in (os.environ.get("UMK3_EOS_DIR"), os.path.join(ROOT, "TOOLS", "eos")):
+        if d and os.path.exists(os.path.join(d, "SDK", "Include", "eos_sdk.h")):
+            return d
+    if os.environ.get("UMK3_NO_EOS") == "1":
+        print("no EOS SDK (UMK3_NO_EOS=1): online on the local network alone")
+        return None
+    raise SystemExit("no EOS SDK: set UMK3_EOS_DIR to the folder with SDK/ and eos.ini "
+                     "(E:/MK3 PROJECT/TOOLS/eos), or UMK3_NO_EOS=1 for a package without internet play")
+
+
+def find_eos_ini():
+    """The product's eos.ini: UMK3_EOS_INI, else the SDK folder's. Exits
+    when there is none, as eos_dir does."""
+    d = eos_dir()
+    if d is None:
+        return None
+    for c in (os.environ.get("UMK3_EOS_INI"), os.path.join(d, "eos.ini")):
+        if c and os.path.isfile(c):
+            return c
+    raise SystemExit("no eos.ini in %s: set UMK3_EOS_INI, or UMK3_NO_EOS=1" % d)
+
+
 def copy_eos(out):
     """ONLINE over the internet (src/runtime/mp_eos.c): the Epic Online
-    Services SDK's headers, its Windows library and the product's eos.ini,
-    from TOOLS/eos (not in the repository), to TOOLS/eos in the release,
-    where the launcher's compile finds them. Without them the release
-    still builds, with online on the local network alone."""
-    src = os.environ.get("UMK3_EOS_DIR") or os.path.join(ROOT, "TOOLS", "eos")
-    if not os.path.exists(os.path.join(src, "SDK", "Include", "eos_sdk.h")):
-        print("no EOS SDK in %s: online on the local network alone" % src)
+    Services SDK's headers and Windows library (eos_dir), and the
+    product's eos.ini (find_eos_ini), to TOOLS/eos in the release, where the
+    launcher's compile finds them."""
+    src = eos_dir()
+    if src is None:
         return
     dst = os.path.join(out, "TOOLS", "eos")
     shutil.copytree(os.path.join(src, "SDK", "Include"), os.path.join(dst, "SDK", "Include"))
     os.makedirs(os.path.join(dst, "SDK", "Bin"))
     shutil.copy2(os.path.join(src, "SDK", "Bin", "EOSSDK-Win64-Shipping.dll"),
                  os.path.join(dst, "SDK", "Bin"))
-    for n in ("eos.ini", "ThirdPartyNotices"):
-        p = os.path.join(src, n)
-        if os.path.isdir(p):
-            shutil.copytree(p, os.path.join(dst, n))
-        elif os.path.exists(p):
-            shutil.copy2(p, os.path.join(dst, n))
-    print("EOS SDK from %s" % src)
+    shutil.copytree(os.path.join(src, "ThirdPartyNotices"), os.path.join(dst, "ThirdPartyNotices"))
+    ini = find_eos_ini()
+    if ini:
+        shutil.copy2(ini, os.path.join(dst, "eos.ini"))
+    print("EOS SDK from %s, eos.ini from %s" % (src, ini))
 
 
 def main(argv):

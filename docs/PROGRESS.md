@@ -16,6 +16,118 @@
 
 ---
 
+## After 0.1.10b: updater, window resize, load times, profile picture, sharp edges (2026-10-23, not released)
+
+What Mary reported on 0.1.10b, in the order she sent it, and what was done.
+Nothing here has been played by Mary yet; a test build is in
+`WORK/test-after-0.1.10b/` (main checkout).
+
+**Launcher update "deletes the game, asks to download everything again".**
+Reproduced with the real 0.1.10 and 0.1.10b zips in a scratch folder.
+`lib/update.js` mirrored `decomp\`, `runtime\`, `tools\` and `launcher\`:
+`decomp\` and `runtime\` have not been in a release since 0.1.6, robocopy
+answered 16 for them, and **every Windows update since then ended as "could
+not be copied"** (Mary's own `update\apply.log` shows it); the archive stayed
+in `update\` (four of them, 570 MB, in her folder) and with 0.1.10b's
+self-offer the launcher asked for the same download again. Mirroring `tools\`
+whole also **deleted `tools\eos\`** (the EOS SDK and `eos.ini` that 0.1.10
+shipped). Now only `src\`, `launcher\` and `tools\build\` are mirrored, and
+only when the release has them; the rest is copied without deleting; the
+unpacked copy and every archive go either way. Checked: a 0.1.10 install with
+a fake game, mods, saves and `tools\eos\` updated to 0.1.10b ends as
+installed, keeps all of those, and drops a source the new release lacks.
+The game itself (exe, `res\`) was never touched by the script; what Mary saw
+as the game deleted is not explained beyond the failed copy -- if it happens
+again, `update\apply.log` and the launcher's state are what to look at.
+
+**Losing to Motaro in the debug menu softlocks.** Not reproduced and not
+changed: no log of it on this machine, and the code paths (DBG_BOSS, the
+debug fight's save/restore in `game_main.c`, `QuitAsLose` -> the continue
+screen) do not show it by reading. Needs Mary's `logs\umk3-*.log` of that
+session and the exact steps (NEXT IS MOTARO, or a debug fight with Motaro as
+fighter 2).
+
+**Resizing and moving the window a few times crashes.** Three causes found
+and fixed, none seen crashing here (the game is Mary's to run):
+- Direct3D 12: after `ResizeBuffers` the back buffer index was not read again
+  (drawing into one buffer, presenting another), and a failed resize went on
+  with no buffers. Now the index is re-read, a failed resize keeps the old
+  buffers, and drawing is skipped while there are none.
+- Vulkan: a failed swapchain re-creation left a retired handle in use; now
+  there is no chain until the next frame tries again. The chain was compared
+  to the surface's extent, which can be a pixel off the window's, and was
+  re-made every frame.
+- The render buffer (`render_alloc`, multisampled and window-sized) was made
+  again on every frame of a drag; now once the size has held 0.25 s.
+
+**EOS on other PCs.** 0.1.10b was packaged in a worktree without `TOOLS/eos`
+and went out with online on the local network alone. `make_release.py` and
+`make_release_linux.py` now refuse to package without the SDK and `eos.ini`
+(`UMK3_EOS_DIR`, else `TOOLS/eos`; `UMK3_NO_EOS=1` on purpose). Mary asked
+for the files in the repository; committing the EOS SDK and the product's
+`eos.ini` (its client secret) was refused by the session's safety checks, so
+they stay outside it. **Mary's decision**: commit them herself, or keep them
+outside and package with `UMK3_EOS_DIR`.
+
+**The "image" file.** `launcher/aditional textures/image.png`, the home
+screen ring's picture, is now in the repository (Mary: "inclúyela"), so
+every release and compile carries it; the launcher also looks for it in the
+release's `launcher\` folder before the first compile.
+
+**Load times.**
+- D3D12 and Vulkan: every texture upload made its own command list, submitted
+  it and waited for the GPU -- hundreds of waits per load. Uploads are now
+  recorded in one list that runs before the next draws.
+- Load screens run 100 ms of steps per frame, not 50 (the draw and the vsync
+  wait took a fifth of every load).
+- The launcher's compile is incremental (an object is kept when its arguments
+  match and nothing in clang's `.d` is newer); the `.ipa`'s files are written
+  only when their CRC changed (`res/.extracted.json`), the generated tables
+  only when their text did. A compile with nothing changed: 13.9 s -> 1.2 s
+  here; extraction 3.3 -> 0.5 s, sources 10 -> 0.1 s.
+- The 77 s "loading: menus" in one of Mary's logs is the settings menu left
+  open during a load, not a load.
+
+**Lag and memory over a long session.** Textures are looked up by name every
+frame (the menus' button pictures, hints, the move list), and the lookup was
+a `strcmp` walk of every texture loaded so far -- it grew with every stage and
+fighter visited. Now a hash. Textures are still never freed (by design, see
+`savestate.h`): memory grows with the distinct textures a session sees, up to
+the game's set. The log gets a line every five minutes, `memory: N MB, N
+textures (N MB of pixels), after N min`, to see whether anything else grows.
+
+**Character editor error with Motaro / Shao Kahn.** Motaro's strike table
+names `stk_dummy` three times and the hit box drawing keyed its boxes by name
+(Svelte refuses duplicate keys): his page failed. Each strike is drawn once.
+
+**Profile: gradient picker and the second outfit.** Mary's `GradientPicker`
+(two colours, an angle dial, presets) replaces the colour / shade / second
+colour boxes in PROFILE; the icon can show the fighter in his second outfit
+(`<NAME>_VERSUS2.pvr`, framed as the first one's PNG -- measured: the PNG is
+the .pvr shrunk 2.12 times on its bottom left; Sonya has no second). The
+game draws the same icon; `profiles.ini` gains `|angle|alt` (older files and
+versions read as before); online carries both in the look word's high bits.
+
+**Sharp edges for SMOOTH MODELS.** Mary's two specifications (automatic sharp
+edge detection; two sliders). In `umk3_subsurf.c`: each interior edge's
+dihedral angle, measured once on the positions the mesh is made with; an edge
+over the threshold gets Blender's crease (`strength * levels`), and CCG's own
+crease and corner rules keep it -- fractional strength is Blender's
+semi-sharp crease. Open edges keep their crease; three-face and degenerate
+edges are never sharp; 180 degrees or 0% is the old subdivision exactly.
+Default 80 degrees, 100%: over the fighters' 74,646 interior edges 38% turn
+by more than 30 (Blender's auto smooth angle would make them blocky), 9.6% by
+more than 80. Sliders in GRAPHICS (under SMOOTH MODELS) and in the model
+viewer (live), `umk3.ini sharp_edge_angle= sharp_edge_strength=`; the game
+reads them at start. `tests/subsurf_test.c` A-H all pass (cube corners kept
+exactly, smooth tube unchanged, threshold monotonic, levels 1-3, corners,
+open sheet, non-manifold/degenerate, regression).
+
+**Tests run:** `tests/rgl_test.c` on OpenGL, Vulkan and D3D12, x64 and x86:
+0 failed. `tests/subsurf_test.c`: all checks passed. Launcher tests
+(`extract`, `ini`, `update`): pass. Full compile of the game with the
+launcher's pipeline: OK. The game was not run.
+
 ## Release 0.1.10b beta (2026-10-23): video settings, two columns
 
 Published as the GitHub pre-release `v0.1.10b-beta` (package version

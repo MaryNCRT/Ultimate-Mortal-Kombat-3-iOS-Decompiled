@@ -30,6 +30,12 @@
 #include "smooth_models.h"
 
 int port_smooth_models;                 /* 0 off, else the level */
+/* SHARP EDGES (umk3_subsurf.h umk_subsurf_set_sharp): umk3.ini
+ * sharp_edge_angle= (degrees) and sharp_edge_strength= (percent), the
+ * launcher's two sliders, read at start (game_main.c); compared for every
+ * mesh drawn, so a mesh made before a change is brought to it */
+float port_sharp_angle = UMK_SHARP_ANGLE_DEFAULT;
+float port_sharp_strength = UMK_SHARP_STRENGTH_DEFAULT;
 
 void CreateFadedRGBS(const uint8_t *src, uint8_t *dst, float level, long count,
                      limeVECTOR3 offset);
@@ -49,6 +55,7 @@ typedef struct {
     uint32_t        hash;               /* the record's indices and UVs */
     int             nverts, nfaces, levels;
     UmkSubsurf     *s;
+    float           sharp_a, sharp_s;   /* what umk_subsurf_set_sharp has */
     float          *pos;                /* nverts x 3, scratch */
     float          *attr;               /* nfaces x 3, scratch */
     uint8_t        *light, *rgba;       /* per output vertex */
@@ -156,12 +163,19 @@ static smooth_entry *lookup(const void *skin, int nverts, int nfaces,
                            nverts, e->pos, nfaces, idx, cu);
     free(cu);
     if (e->s) {
-        int n = umk_subsurf_num_verts(e->s);
+        int n;
+
+        umk_subsurf_set_sharp(e->s, port_sharp_angle, port_sharp_strength);
+        e->sharp_a = port_sharp_angle;
+        e->sharp_s = port_sharp_strength;
+        n = umk_subsurf_num_verts(e->s);
         e->light = malloc((size_t)n);
         e->rgba = malloc((size_t)n * 4);
-        printf("smooth models: mesh %d verts %d tris -> level %d, %d welded, %d verts %d tris\n",
+        printf("smooth models: mesh %d verts %d tris -> level %d, %d welded, %d verts %d tris, "
+               "%d sharp edges (%.0f deg, %.0f%%)\n",
                nverts, nfaces, e->levels, umk_subsurf_welded(e->s), n,
-               umk_subsurf_num_tris(e->s));
+               umk_subsurf_num_tris(e->s), umk_subsurf_sharp_edges(e->s),
+               port_sharp_angle, port_sharp_strength * 100.0f);
         if (!e->light || !e->rgba) {
             umk_subsurf_free(e->s);
             e->s = NULL;
@@ -276,6 +290,11 @@ int port_smooth_draw(const void *skin, const void *rec, long second,
     if (e == NULL)
         return 0;
 
+    if (e->sharp_a != port_sharp_angle || e->sharp_s != port_sharp_strength) {
+        umk_subsurf_set_sharp(e->s, port_sharp_angle, port_sharp_strength);
+        e->sharp_a = port_sharp_angle;
+        e->sharp_s = port_sharp_strength;
+    }
     record_positions(e->nverts, e->pos);
     for (i = 0; i < e->nfaces * 3; i++)
         e->attr[i] = (float)light[idx[i]];

@@ -7,7 +7,11 @@
 resources/ carries src/ and the table generators, package.json
 extraResources). Beside the launcher go LEEME.txt, README-linux.md,
 build-game.sh (the build from a terminal), install-shortcut.sh (a menu
-entry), eos.ini.example and the icon.
+entry), eos.ini.example and the icon. The EOS SDK (its headers, the Linux
+library, the notices) and the product's eos.ini go into resources/TOOLS/eos/
+when electron-builder's extraResources did not bring them (TOOLS/eos is not in
+the repository, and a worktree has none): make_release.eos_dir, which refuses
+to finish without them.
 
 Written with Python's tarfile so the executable bits are right whatever
 system packs it: electron-builder's own tar.gz, made on Windows, had the
@@ -16,6 +20,8 @@ launcher and its helpers without them.
 import os
 import sys
 import tarfile
+
+from make_release import eos_dir, find_eos_ini
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXTRA = ["LEEME.txt", "README-linux.md", "build-game.sh", "install-shortcut.sh",
@@ -64,6 +70,24 @@ def main(argv):
                 n += 1
         for e in EXTRA:
             add(tf, os.path.join(ROOT, "launcher", e), top + "/" + e)
+            n += 1
+        eos = eos_dir()
+        have = os.path.join(src, "resources", "TOOLS", "eos")
+        if eos and not os.path.exists(os.path.join(have, "SDK", "Include", "eos_sdk.h")):
+            for sub in ("SDK/Include", "ThirdPartyNotices"):
+                for dp, dns, fns in os.walk(os.path.join(eos, sub)):
+                    dns.sort()
+                    rel = os.path.relpath(dp, eos).replace("\\", "/")
+                    add(tf, dp, top + "/resources/TOOLS/eos/" + rel)
+                    for fn in sorted(fns):
+                        add(tf, os.path.join(dp, fn), top + "/resources/TOOLS/eos/" + rel + "/" + fn)
+                        n += 1
+            add(tf, os.path.join(eos, "SDK", "Bin", "libEOSSDK-Linux-Shipping.so"),
+                top + "/resources/TOOLS/eos/SDK/Bin/libEOSSDK-Linux-Shipping.so")
+            n += 1
+        ini = find_eos_ini()
+        if ini and not os.path.exists(os.path.join(have, "eos.ini")):
+            add(tf, ini, top + "/resources/TOOLS/eos/eos.ini")
             n += 1
     print("%s: %d files, %.1f MB" % (out, n, os.path.getsize(out) / 1e6))
 
