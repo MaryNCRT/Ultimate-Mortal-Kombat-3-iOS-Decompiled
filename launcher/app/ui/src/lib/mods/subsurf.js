@@ -62,6 +62,14 @@ export async function subsurfCreate(levels, pos, tri, triUv) {
         /* SHARP EDGES (umk3_subsurf.h): degrees, 0..1; the next eval uses them */
         setSharp(angle, strength) { w.umk_subsurf_set_sharp(h, angle, strength); },
         sharpEdges() { return w.umk_subsurf_sharp_edges(h); },
+        /* the correction pass per vertex, 0..1 (umk3_subsurf.h
+         * umk_subsurf_set_fit), or null for all of it; copied by the C side */
+        setFit(weights) {
+            if (!weights) { w.umk_subsurf_set_fit(h, 0); return; }
+            const p = put(w, Float32Array.from(weights));
+            w.umk_subsurf_set_fit(h, p);
+            w.free(p);
+        },
         free() { w.free(scratch); w.umk_subsurf_free(h); },
     };
 }

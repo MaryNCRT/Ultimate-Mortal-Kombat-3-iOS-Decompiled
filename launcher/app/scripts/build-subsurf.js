@@ -21,6 +21,7 @@ const OUT = path.join(__dirname, '..', 'ui', 'src', 'lib', 'mods', 'subsurf_wasm
 const EXPORTS = ['umk_subsurf_new', 'umk_subsurf_eval', 'umk_subsurf_num_verts', 'umk_subsurf_pos',
     'umk_subsurf_uv', 'umk_subsurf_attr', 'umk_subsurf_num_tris', 'umk_subsurf_tris',
     'umk_subsurf_welded', 'umk_subsurf_free', 'umk_subsurf_set_sharp', 'umk_subsurf_sharp_edges',
+    'umk_subsurf_set_fit',
     'malloc', 'free'];
 
 function findZig() {

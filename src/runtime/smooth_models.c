@@ -50,12 +50,27 @@ extern void (*lime_port_skin_freed)(const void *skin);   /* RenderSkinned.c */
 
 extern limeVECTOR3 *RenderVerts;        /* int16 triples, as drawn */
 
+/* What covers each skin (port_smooth_cover_mesh): a box per piece, in the
+ * skin's own units (RenderVerts), kept a quarter of a second -- the scene is
+ * drawn after the skin, so a frame uses the boxes of the one before. */
+#define COVER_MAX 16
+#define COVER_MARGIN_CM 2.0f
+static struct cover {
+    const void *skin, *mesh;
+    float lo[3], hi[3];
+    double at;
+} g_cover[COVER_MAX];
+static const void *g_cover_owner;
+double plat_time(void);
+
 typedef struct {
     const void     *skin;
     uint32_t        hash;               /* the record's indices and UVs */
     int             nverts, nfaces, levels;
     UmkSubsurf     *s;
     float           sharp_a, sharp_s;   /* what umk_subsurf_set_sharp has */
+    float          *fitw;               /* nverts, umk_subsurf_set_fit's */
+    int             covered;            /* vertices under a piece, logged once */
     float          *pos;                /* nverts x 3, scratch */
     float          *attr;               /* nfaces x 3, scratch */
     uint8_t        *light, *rgba;       /* per output vertex */
@@ -67,12 +82,102 @@ static unsigned g_tick;
 
 static void entry_free(smooth_entry *e)
 {
+    free(e->fitw);
     umk_subsurf_free(e->s);
     free(e->pos);
     free(e->attr);
     free(e->light);
     free(e->rgba);
     memset(e, 0, sizeof *e);
+}
+
+void port_smooth_cover_owner(const void *skin)
+{
+    g_cover_owner = skin;
+}
+
+void port_smooth_cover_mesh(const void *mesh_p, const float *m, float scene_scale)
+{
+    const MESHINFO *mesh = (const MESHINFO *)mesh_p;
+    const double now = plat_time();
+    struct cover *c = NULL;
+    float k;
+    int i, j;
+
+    if (!g_cover_owner || !mesh || mesh->numVerts <= 0 || mesh->boundsRadius == 0.0f
+        || !port_smooth_models)
+        return;
+    for (i = 0; i < COVER_MAX && !c; i++)
+        if (g_cover[i].skin == g_cover_owner && g_cover[i].mesh == mesh)
+            c = &g_cover[i];
+    for (i = 0; i < COVER_MAX && !c; i++)
+        if (!g_cover[i].skin || now - g_cover[i].at > 0.25)
+            c = &g_cover[i];
+    if (!c)
+        return;
+    c->skin = g_cover_owner;
+    c->mesh = mesh;
+    c->at = now;
+    /* the piece's int16 positions over its radius (LIME_RenderMeshSingle's
+     * glScalef), through the key and bone matrix, the scene's scale on all
+     * of it (LIME_RenderScene's glScalef), into the skin's units */
+    k = scene_scale * VertScale;
+    for (j = 0; j < 3; j++) {
+        c->lo[j] = 1e30f;
+        c->hi[j] = -1e30f;
+    }
+    for (i = 0; i < mesh->numVerts; i++) {
+        const float x = mesh->verts[i].x / mesh->boundsRadius;
+        const float y = mesh->verts[i].y / mesh->boundsRadius;
+        const float z = mesh->verts[i].z / mesh->boundsRadius;
+        for (j = 0; j < 3; j++) {
+            float v = (m[j] * x + m[4 + j] * y + m[8 + j] * z + m[12 + j]) * k;
+            if (v < c->lo[j]) c->lo[j] = v;
+            if (v > c->hi[j]) c->hi[j] = v;
+        }
+    }
+    for (j = 0; j < 3; j++) {
+        c->lo[j] -= COVER_MARGIN_CM * VertScale;
+        c->hi[j] += COVER_MARGIN_CM * VertScale;
+    }
+}
+
+/* The correction's share for this frame: none for a vertex inside a piece
+ * that covers the skin, all of it elsewhere (and NULL when nothing covers
+ * it, the surface as made). */
+static void cover_fit(smooth_entry *e)
+{
+    const double now = plat_time();
+    int i, k, any = 0, n = 0;
+
+    for (k = 0; k < COVER_MAX; k++)
+        if (g_cover[k].skin == e->skin && now - g_cover[k].at <= 0.25)
+            any = 1;
+    if (!any) {
+        umk_subsurf_set_fit(e->s, NULL);
+        return;
+    }
+    if (!e->fitw && !(e->fitw = malloc(sizeof(float) * (size_t)e->nverts)))
+        return;
+    for (i = 0; i < e->nverts; i++) {
+        const float *p = e->pos + i * 3;
+        e->fitw[i] = 1.0f;
+        for (k = 0; k < COVER_MAX; k++) {
+            const struct cover *c = &g_cover[k];
+            if (c->skin != e->skin || now - c->at > 0.25)
+                continue;
+            if (p[0] >= c->lo[0] && p[0] <= c->hi[0] && p[1] >= c->lo[1] && p[1] <= c->hi[1]
+                && p[2] >= c->lo[2] && p[2] <= c->hi[2]) {
+                e->fitw[i] = 0.0f;
+                n++;
+                break;
+            }
+        }
+    }
+    if (n && !e->covered)
+        printf("smooth models: %d vertices of a skin under a piece on its bones, no correction there\n", n);
+    e->covered = n;
+    umk_subsurf_set_fit(e->s, e->fitw);
 }
 
 void port_smooth_forget(const void *skin)
@@ -296,6 +401,7 @@ int port_smooth_draw(const void *skin, const void *rec, long second,
         e->sharp_s = port_sharp_strength;
     }
     record_positions(e->nverts, e->pos);
+    cover_fit(e);
     for (i = 0; i < e->nfaces * 3; i++)
         e->attr[i] = (float)light[idx[i]];
     if (!umk_subsurf_eval(e->s, e->pos, e->attr))

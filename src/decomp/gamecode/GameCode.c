@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include "lime_glapi.h"   /* the GL calls' calling convention */
 #include <string.h>   /* memset, for clearSpriteListsAndEvents */
+#include "../../runtime/smooth_models.h"   /* port: SMOOTH MODELS, what covers a skin */
 
 extern int PortTextureQuality;          /* runtime/draw_gl.c, port only */
 int  lime_port_load_more(int first);    /* runtime/draw_gl.c, port only */
@@ -3263,12 +3264,16 @@ long RenderPlayer(PLAYER *p, long attach, long flag)
 
         if (attach != 0) {
             memcpy(AttachTransforms, MatrixPalette2, 0x1c20);
+            /* port: what the scene hangs on the bones covers this skin
+             * (SMOOTH MODELS, smooth_models.c port_smooth_cover_mesh) */
+            port_smooth_cover_owner(((void *P32 *)c)[0x30 / 4]);
             LIME_RenderScene(6,
                              c->scene,
                              w[0x51c / 4], w[0x520 / 4],
                              ((float *)w)[0x524 / 4], 0, 0, 0,
                              (void *)(uintptr_t)(unsigned long) w[0x528 / 4],
                              w[0x52c / 4], AttachTransforms);
+            port_smooth_cover_owner(NULL);
         }
     }
 

@@ -374,12 +374,33 @@
             p = f.bind.pose;
             pos = posedVerts(f.rig, f.topo, p);
         }
+        /* what rides his bones this frame (Kung Lao's hat), and the box of
+         * each piece, 2 cm wider: the skin inside gets no correction pass,
+         * so the smoothed head does not come through the hat -- as the game
+         * does (smooth_models.c port_smooth_cover_mesh) */
+        const extraPos = (fighterView.extras || []).map(({ a }) => (ms.extras ? attachVerts(a, at, p) : null));
+        const boxes = extraPos.filter(Boolean).map(v => {
+            const lo = [1e30, 1e30, 1e30], hi = [-1e30, -1e30, -1e30];
+            for (let i = 0; i < v.length; i += 3)
+                for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], v[i + k] - 2); hi[k] = Math.max(hi[k], v[i + k] + 2); }
+            return { lo, hi };
+        });
+        const covered = (q, i) => boxes.some(({ lo, hi }) => q[i] >= lo[0] && q[i] <= hi[0] && q[i + 1] >= lo[1] && q[i + 1] <= hi[1] && q[i + 2] >= lo[2] && q[i + 2] <= hi[2]);
         /* SMOOTH MODEL: a block drawn smoothed when it has been built */
         const sm = fighterView.smooth;
         const smooth = sm && sm.level > 0 && sm.blocks.length === meshes.length;
         const skin = smooth ? skinOf(f, pos) : null;
         meshes.forEach((m, bi) => {
             const b = smooth ? sm.blocks[bi] : null;
+            if (b && b.ss) {
+                const blk = skin.subarray(b.base * 3, (b.base + b.n) * 3);
+                let fit = null;
+                if (boxes.length) {
+                    fit = new Float32Array(b.n);
+                    for (let i = 0; i < b.n; i++) fit[i] = covered(blk, i * 3) ? 0 : 1;
+                }
+                b.ss.setFit(fit);
+            }
             const sp = b && b.ss ? b.ss.eval(skin.subarray(b.base * 3, (b.base + b.n) * 3)) : null;
             m.visible = !sp;
             if (b && b.mesh) b.mesh.visible = !!sp;
@@ -391,8 +412,8 @@
             g.computeBoundingBox();
             m.material.wireframe = ms.wire;
         });
-        for (const { a, mesh } of fighterView.extras || []) {
-            const v = ms.extras ? attachVerts(a, at, p) : null;
+        for (const [ei, { mesh }] of (fighterView.extras || []).entries()) {
+            const v = extraPos[ei];
             mesh.visible = !!v;
             if (!v) continue;
             mesh.geometry.attributes.position.array.set(v);
