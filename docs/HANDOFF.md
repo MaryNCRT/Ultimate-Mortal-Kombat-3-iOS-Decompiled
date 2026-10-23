@@ -5,7 +5,19 @@
 
 ---
 
-## After 0.1.9: smooth models fixed in the game, stage animation export, folders, TEXTURES page (2026-10-23, not released)
+## Release 0.1.10 beta (2026-10-23): kombos, SMOOTH MODELS, GPL
+
+Published as the GitHub pre-release `v0.1.10-beta`, packaged as 0.1.9 was:
+`UMK3-PC-0.1.10-beta.zip` (`launcher/make_release.py` over `electron-builder
+--win dir`) and `UMK3-PC-0.1.10-beta-linux-x64.tar.gz` (`electron-builder
+--linux dir`, then `launcher/make_release_linux.py`). It carries everything
+in the three "After 0.1.9" sections below, and the kombo fix (issue #114).
+Before packaging, the game was built from the 1.2.59 .ipa in Mary's test
+folder (64 and 32 bits, both succeed). **Mary has not played this build
+yet**: the kombo fix, the TEXTURES page, the folders and the animated stage
+export are untested by her; the repeated death screams are still open.
+
+## After 0.1.9: smooth models fixed in the game, stage animation export, folders, TEXTURES page (2026-10-23, released in 0.1.10)
 
 **SMOOTH MODELS: dark wedges and black spots (fixed, Mary confirmed both in
 the viewer and the game).** Two causes:
@@ -64,12 +76,34 @@ equals the static export exactly; on Scorpion's Lair (1001 frames, 43
 objects) every shown vertex at frames 3, 400 and 999 matches the scene's own
 placement within 0.0004. **Not opened in Blender or a USD viewer yet.**
 
-**Issue #114 (Liu Kang's 7-hit kombo, the opponent slides away).** Checked
-against the binary: `t_cc_hi_punch` (4 punches, 6 holding away),
-`t_ccp3`, `t_separate_us`, `inc_p_block` (the punch count at header +0x4c),
-`t_avoid_corner_trap(_b)`. All match. It may be the original's rule; the log
-now prints `separate us:` and `corner trap:` when they act. Needs Mary's log
-of the kombo.
+**Issue #114 (Liu Kang's 7-hit kombo, the opponent slides away): a real
+difference found and fixed, not yet tried in the game.** The chain rules all
+match the binary: `t_r_hi_punch` / `t_r_lo_punch` bump the punch count at
+proc+0x4c (`inc_p_block`), `t_cc_hi_punch` (6, or 4 for the machine or a
+player holding away) and `t_cc_lo_punch` (5 / 3) with `t_ccp3` push the pair
+apart through `t_separate_us` once the count reaches the threshold, and
+`back_to_normal` (from `t_local_reaction_exit`) clears it. Every writer of
+proc+0x4c in the binary was listed (a scan of all `str ..., #0x4c]`):
+`inc_p_block`, `t_avoid_corner_trap_b`, `t_block_exit`, `back_to_normal_px`;
+the two in `t_combo_air_pause` are its literal pool.
+
+The difference is in the combo recogniser. `combo_scan_a11` walks a combo
+table (entries of 0x18 bytes, `field48` moving along) looking for the button
+just pressed. On a match the binary writes the list's start to 0x1c only
+(0x32780, 0x3278e) and leaves `field48` on the matched entry; the port also
+put `field48` back at the start. `t_comb2` then reads the next move from
+`field48 + 4` / `+ 0x14`, so in the port any kombo whose button matched a
+later entry went on with the first entry's continuation. Only a player's
+kombos pass through the scan (`t_comb0`: the machine goes straight to
+`t_comb8`). Also fixed: `t_r_combo0` skips `set_no_block` when proc+0x10 bit
+0 is set (0x45da8 branches to 0x45d32).
+
+`tools/decomp/factdiff.py` over `mkcombo.c` and the combo and punch
+reactions in `mkreact.c` (transcriptions from `armrecomp/recomp.py --func`):
+the only differences left are the handler addresses stored into the frame,
+which the reader does not resolve to names, and the port's `printf`
+diagnostics (`separate us:`, `corner trap:`), still in place until Mary
+confirms.
 
 **Death screams in friendships and animalities (open).** `t_friendship_complete`,
 `t_end_friend_proc`, `t_friend_ender` and `death_blow_complete` match the
@@ -77,7 +111,7 @@ binary. The `death scream:` line now also names the handler the thread loop is
 running (`port_mk3_running`, mk3.c) and the caller of `group_sound`. Needs a
 log from the current build (its PDB is kept in `WORK/pdb-0928/`).
 
-## After 0.1.9: SMOOTH MODELS, crash report context, GPL (2026-10-23, not released)
+## After 0.1.9: SMOOTH MODELS, crash report context, GPL (2026-10-23, released in 0.1.10)
 
 **SMOOTH MODELS** (Mary): an option, OFF / LEVEL 1 / LEVEL 2, that draws the
 fighters through Blender's Weld and Subdivision Surface (Catmull-Clark)
@@ -189,7 +223,7 @@ own; the session log carries the same block.
 **Licence:** GPL-2.0-or-later from here on (`LICENSE`); 0.1.9 and earlier stay
 MIT.
 
-## After 0.1.9: SMOOTH ANIMATIONS (2026-10-22, not released)
+## After 0.1.9: SMOOTH ANIMATIONS (2026-10-22, released in 0.1.10)
 
 Mary asked for an on/off option that makes the fighters' animations look
 smoother, drawing only, without changing the animations.

@@ -4,8 +4,18 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 
 ---
 
-## Unreleased
+## 0.1.10-beta (2026-10-23) — Kombos, SMOOTH MODELS, GPL
 
+Built for Windows (64 and 32 bits) and Linux. Not yet played by Mary at release; the Linux package is untested on a Linux machine.
+
+- Kombos (issue #114): when a player's button matched any entry of a combo
+  table but the first, the port went on with the FIRST entry's next move.
+  `combo_scan_a11` put the list back at its start on a match; the binary
+  keeps the entry that matched, and `t_comb2` takes the next move from it
+  (armv7 0x32776..0x3278e). Likely the cause of Liu Kang's 7-hit kombo
+  breaking with the opponent sliding away; not yet tried in the game.
+- Fixed: `t_r_combo0` called `set_no_block` on a path where the binary skips
+  it (armv7 0x45da8).
 - **SMOOTH MODELS** (off, level 1 or 2): the fighters drawn through Blender's
   Weld and Subdivision Surface (Catmull-Clark), in the game (GRAPHICS > VIDEO,
   `smooth_models=` in `umk3.ini`) and the model viewer, which can also play

@@ -561,7 +561,8 @@ long t_comb0(MK3THREAD *thread)
  *
  *      MATCH:     n = *(uint8_t *)(e + 0x10)
  *                 obj->field1c = n ? n - 1 : (uint32_t)base
- *                 obj->field48 = base ; obj->field5c = 1
+ *                 obj->field5c = 1 ; obj->field1c = base
+ *                 -- 0x48 stays on the matched entry e
  *      NO MATCH:  obj->field48 = base ; obj->field5c = 0
  *
  * **The ring it walks is the one clear_combo_butn clears.** Six halfwords four
@@ -581,8 +582,9 @@ long t_comb0(MK3THREAD *thread)
  * the byte at +8 with an eight-byte stride, and its second word points at the
  * halfwords -- plus two for the second player, the same trick again.
  *
- * 0x48 is walked forward through the whole search and restored to `base` on
- * both exits, so the caller sees it unchanged. 0x1c, 0x20, 0x24 and 0x2c are
+ * 0x48 is walked forward through the search. Only the NO MATCH exit puts
+ * `base` back; a match leaves 0x48 on the matched entry, and t_comb2 takes
+ * the next move (+4, +0x14) from it. 0x1c, 0x20, 0x24 and 0x2c are
  * used as scratch throughout and are left holding whatever the last step put
  * there -- on a match, either the count less one or the base address, which is
  * the one place two exits disagree about what 0x1c means. */
@@ -634,8 +636,11 @@ long combo_scan_a11(MK3OBJ *obj)
                 if (n != 0)
                     obj->field1c = n - 1;
                 obj->field5c = 1;
+                /* str r5,[r0,#0x1c] at 0x32780/0x3278e: the base goes to
+                 * 0x1c only. 0x48 keeps the matched entry, which t_comb2
+                 * reads the next move from (issue #114: restoring the base
+                 * here ran the first entry's continuation instead). */
                 obj->field1c = (uint32_t)(uintptr_t)base;
-                obj->field48 = (uint32_t)(uintptr_t)base;
                 return 0;
             }
         }
