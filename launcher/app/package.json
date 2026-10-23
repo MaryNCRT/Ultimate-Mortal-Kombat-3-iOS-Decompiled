@@ -1,6 +1,6 @@
 {
   "name": "umk3-launcher",
-  "version": "0.1.8-beta",
+  "version": "0.1.9-beta",
   "description": "UMK3 PC port launcher - arcade shell (Electron)",
   "main": "main.js",
   "author": "UMK3 Recomp",
@@ -29,6 +29,7 @@
     "executableName": "UMK3-Launcher",
     "files": [
       "main.js",
+      "cli.js",
       "preload.js",
       "lib/**",
       "renderer/**",

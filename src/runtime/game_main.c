@@ -100,6 +100,10 @@
 #include "mp_net.h"
 #include "online_ui.h"
 #include "pad_nav.h"
+#include "render/rgl.h"
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
+#include <unistd.h>                 /* readlink, setenv */
+#endif
 
 /* A scripted run (UMK3_SHOT) ignores the real keyboard, as it ignores the
  * mouse: a test window takes the focus when it opens, and whoever is typing
@@ -838,6 +842,7 @@ extern int PortHideControls;           /* GameCode.c: hide_controls=1 */
  *     height=960
  *     fullscreen=0
  *     language=ES
+ *     renderer=opengl    (vulkan, d3d12: render/rgl.h; from the next start)
  *
  *     render_width=960
  *     render_height=640
@@ -859,6 +864,10 @@ static int  g_cfg_rw, g_cfg_rh, g_cfg_borderless, g_cfg_aa;
 static int  g_cfg_debug_keys;          /* debug_keys=1: F9..F12, see debug_keys() */
 static int  g_cfg_skip_intro;          /* skip_intro=1: no publisher logos */
 static char g_cfg_lang[8];
+/* renderer= as asked (the ini, then the settings menu): taken at the next
+ * start, since the window and everything on the GPU would have to be made
+ * again; rgl_renderer is what draws, OpenGL when the one asked did not start */
+static int g_cfg_renderer = -1;
 static char g_cfg_frame[1024];        /* marco=: the picture behind the bars */
 /* What the settings menu (settings_menu.c) writes back: umk3.ini's path,
  * aspect= as written, pad= and p2pad= (port). */
@@ -953,6 +962,8 @@ static void read_config(const char *dir)
             g_cfg_rh = atoi(v) >= VIRT_H ? atoi(v) : 0;
         else if (strcmp(line, "language") == 0)
             snprintf(g_cfg_lang, sizeof g_cfg_lang, "%s", v);
+        else if (strcmp(line, "renderer") == 0)        /* render/rgl.h */
+            rgl_renderer = g_cfg_renderer = rgl_parse(v);
         else if (strcmp(line, "buttons") == 0)
             g_cfg_buttons = atoi(v);
         else if (strncmp(line, "key5_", 5) == 0) {
@@ -2570,6 +2581,9 @@ void LoadTextData(const char *file);
 
 const char *port_language(void) { return g_cfg_lang; }
 
+int port_renderer(void) { return g_cfg_renderer >= 0 ? g_cfg_renderer : rgl_renderer; }
+void port_renderer_set(int r) { g_cfg_renderer = r; }
+
 void port_language_set(const char *code)
 {
     char key[40], lang[16] = "";
@@ -2671,6 +2685,42 @@ int main(int argc, char **argv)
     SetUnhandledExceptionFilter(on_crash);
     if (open_session_log())
         log_tasks = 1;
+#elif !defined(__EMSCRIPTEN__)
+    /* Linux: the same as on Windows -- `res` and umk3.ini beside the
+     * executable, wherever it was started from. Without this the game read
+     * `res` from the current folder and never read umk3.ini, so nothing the
+     * launcher set (window, keys, language, renderer) reached it. */
+    static char exe_res[4096 + 8];
+    if (argc <= 1 || argv[1][0] == '-') {
+        ssize_t len = readlink("/proc/self/exe", exe_res, 4096);
+        char *slash;
+        if (len > 0 && len < 4096) {
+            exe_res[len] = 0;
+            slash = strrchr(exe_res, '/');
+            if (slash) {
+                slash[1] = 0;
+                read_config(exe_res);
+                strcpy(slash + 1, "res");
+                root = exe_res;
+            }
+        }
+    }
+    if (g_cfg_lang[0] && !getenv("UMK3_LANG"))
+        setenv("UMK3_LANG", g_cfg_lang, 1);
+    {
+        char probe[4096 + 32];
+        FILE *f;
+        snprintf(probe, sizeof probe, "%s/Info.plist", root);
+        f = fopen(probe, "rb");
+        if (!f) {
+            fprintf(stderr,
+                "The res folder beside umk3-game is missing or incomplete (%s).\n"
+                "Build the game first: ./UMK3-Launcher, or ./build-game.sh <your .ipa>.\n",
+                root);
+            return 1;
+        }
+        fclose(f);
+    }
 #endif
     if (getenv("UMK3_DEBUG_KEYS"))
         g_cfg_debug_keys = 1;

@@ -1,0 +1,15 @@
+; Internet play (ONLINE) goes through Epic Online Services. The game reads
+; eos.ini beside its executable; without it, ONLINE works on the local
+; network only. The release ships the project's own eos.ini when it has one.
+;
+; To use your own product: create one at https://dev.epicgames.com/portal,
+; add a client with the "Peer2Peer" policy, then fill in its five values and
+; save this file as eos.ini next to the game (umk3-game on Linux, umk3-game64.exe on Windows).
+; 64-bit builds only: the SDK has no 32-bit library.
+
+[eos]
+product=
+sandbox=
+deployment=
+client_id=
+client_secret=

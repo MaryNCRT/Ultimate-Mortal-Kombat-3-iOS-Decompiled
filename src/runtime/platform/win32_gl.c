@@ -14,6 +14,7 @@
 #include "platform.h"
 #include "gl.h"
 #include "ui_alert.h"
+#include "../render/rgl.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -234,6 +235,16 @@ bool plat_open(const char *title, int width, int height)
 
     g_dc = GetDC(g_wnd);
 
+    /* Vulkan or Direct3D 12 (umk3.ini renderer=, render/rgl.h): the window
+     * takes their swapchain and has no OpenGL context; one that cannot
+     * start leaves rgl_renderer OpenGL and the context is made as always */
+    if (rgl_renderer != RGL_OPENGL && rgl_open(g_wnd, width, height)) {
+        ShowWindow(g_wnd, SW_SHOW);
+        QueryPerformanceFrequency(&g_freq);
+        QueryPerformanceCounter(&g_start);
+        return true;
+    }
+
     PIXELFORMATDESCRIPTOR pfd;
     ZeroMemory(&pfd, sizeof(pfd));
     pfd.nSize      = sizeof(pfd);
@@ -426,7 +437,11 @@ int plat_clipboard_set(const char *utf8)
 
 void *plat_gl_proc(const char *name)
 {
-    PROC p = wglGetProcAddress(name);
+    PROC p;
+
+    if (rgl_renderer != RGL_OPENGL)
+        return rgl_proc(name);
+    p = wglGetProcAddress(name);
 
     /* some drivers answer 1, 2, 3 or -1 for "no" */
     if ((uintptr_t)p <= 3 || (intptr_t)p == -1)
@@ -462,7 +477,13 @@ void plat_crash_restore(void)
  * frame the player sees one tick behind the keys at most. */
 bool plat_swap(void)
 {
-    bool ok = SwapBuffers(g_dc) != FALSE;
+    bool ok;
+
+    if (rgl_renderer != RGL_OPENGL) {
+        rgl_present();                  /* waits for the frame, as glFinish */
+        return true;
+    }
+    ok = SwapBuffers(g_dc) != FALSE;
 
     glFinish();
     return ok;
@@ -490,6 +511,7 @@ double plat_time(void)
 
 void plat_close(void)
 {
+    rgl_close();
     if (g_rc) { wglMakeCurrent(NULL, NULL); wglDeleteContext(g_rc); g_rc = NULL; }
     if (g_dc) { ReleaseDC(g_wnd, g_dc); g_dc = NULL; }
     if (g_wnd) { DestroyWindow(g_wnd); g_wnd = NULL; }

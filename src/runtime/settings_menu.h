@@ -54,5 +54,9 @@ const char *port_ini_path(void);
  * changes the game's language at once */
 const char *port_language(void);
 void port_language_set(const char *code);
+/* renderer=: what draws from the next start (render/rgl.h RGL_*); the one
+ * drawing now is rgl_renderer */
+int  port_renderer(void);
+void port_renderer_set(int r);
 
 #endif

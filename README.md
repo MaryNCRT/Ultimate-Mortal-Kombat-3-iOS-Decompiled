@@ -18,9 +18,9 @@
 |---|---|---|
 | **Decompilation (`src/decomp/`)** | **2,572 / 2,572 (100%)** | LIME 3D engine (`109`), Front-End & Scene (`291`), Arcade Fight Engine (`2,172`). |
 | **Verification (`tools/decomp/`)** | **98.30%** | Differential tests against the `armrecomp` ARM→C oracle + build-time table layout verification (`ctest`). |
-| **Native Port (`src/runtime/`)** | **Playable (v0.1.8-beta)** | Native OpenGL renderer, Win32 & SDL2 backends, 3:2 / 4:3 / 16:9 / 21:9 aspect ratios, HD textures, keyboard & gamepad support, local 2P (`DUELO`), LAN/Online multiplayer, and debug tools (`F2`). |
+| **Native Port (`src/runtime/`)** | **Playable (v0.1.9-beta)** | OpenGL, Vulkan and Direct3D 12 renderers (`src/runtime/render/`), Win32 & SDL2 backends, 3:2 / 4:3 / 16:9 / 21:9 aspect ratios, HD textures, keyboard & gamepad support, local 2P (`DUELO`), LAN/Online multiplayer, and debug tools (`F2`). |
 
-**Known problems in 0.1.8 beta:** the FLAWLESS VICTORY text is missing in the 64-bit build; Reptile's fatalities sometimes fail; the Linux package is still untested (0.1.8 bundles the GL headers whose absence stopped the Linux build, and the Linux self-update); a fighter cannot be duplicated into a new slot yet; a mod's data changes (damage, hitboxes) must match on both sides of an online fight. New in 0.1.8: the launcher's MODS section (mod manager, model viewer with mods, character editor with a visual hitbox editor, FBX/USD/OBJ export and FBX animations and models brought back from Blender) and Motaro and Shao Kahn playable from the debug menu without crashing.
+**Known problems in 0.1.9 beta:** the FLAWLESS VICTORY text is missing in the 64-bit build; Reptile's fatalities sometimes fail; the Linux package is still untested on a Linux machine (0.1.9 fixes the link error a tester hit, reads umk3.ini on Linux and adds `build-game.sh` and README-linux.md); the Vulkan and Direct3D 12 renderers are new and checked by `tests/rgl_test.c`, not yet in long play; a fighter cannot be duplicated into a new slot yet. New in 0.1.9: Vulkan and Direct3D 12 renderers beside OpenGL, the language changed from the in-game menu, the fatality page of the move list fixed, mod textures for the game's LOW/LITE copies, and many model-viewer additions.
 
 > [!IMPORTANT]
 > **No copyrighted assets or binaries are distributed in this repository.**
@@ -58,7 +58,7 @@ cmake --build build --target umk3-game
 On Windows and Linux, you can run **`UMK3-Launcher`** (built from [`launcher/app/`](launcher/app/)), which provides a self-contained arcade interface: it receives your `.ipa`, downloads the pinned `zig cc` compiler automatically (zero system compiler dependencies), unpacks the game assets, compiles the native game binary, and lets you configure graphics/controls (`umk3.ini`). Its **MODS** section manages mods (`mods/<mod>/`, files named like the game's replace them; priority and on/off in `mods/mods.ini`), shows the game's fighters, stages, models and textures, and exports them for Blender as FBX, USD (USDA/USDC/USDZ) or OBJ with PNG textures.
 
 Available distribution packages:
-- **Linux:** Standalone portable `.tar.gz` (0.1.8 beta: built, not yet tested on a Linux machine).
+- **Linux:** Standalone portable `.tar.gz` (0.1.9 beta: built, not yet tested on a Linux machine; see `launcher/README-linux.md`).
 - **Windows:** Portable `.zip` and `.exe`.
 
 ---

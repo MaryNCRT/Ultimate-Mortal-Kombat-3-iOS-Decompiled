@@ -16,7 +16,9 @@
  *
  *     GRAPHICS   DISPLAY (window, borderless, fullscreen) and RESOLUTION,
  *                both taken by APPLY DISPLAY; 3D RESOLUTION, ANTIALIASING,
- *                TEXTURES, ASPECT, LANGUAGE, INTERFACE and ON-SCREEN
+ *                RENDERER (OpenGL, Vulkan, DirectX 12: written for the
+ *                next start, render/rgl.h), TEXTURES, ASPECT, LANGUAGE,
+ *                INTERFACE and ON-SCREEN
  *                CONTROLS at once; LANGUAGE loads the game's texts again
  *                (port_language_set). TEXTURES loads every texture again at the new
  *                quality (draw_gl.c, lime_textures_requality).
@@ -44,6 +46,7 @@
 #include "debug_menu.h"
 #include "settings_menu.h"
 #include "profiles.h"
+#include "render/rgl.h"
 
 extern char Language[10];
 
@@ -73,6 +76,17 @@ static const struct { const char *code, *es, *en; } k_lang[] = {
 };
 #define N_LANG (int)(sizeof k_lang / sizeof k_lang[0])
 
+/* RGL_OPENGL, RGL_VULKAN and, on Windows, RGL_D3D12, in that order */
+#ifdef _WIN32
+#define N_REND 3
+#else
+#define N_REND 2
+#endif
+static const char *rend_name(int r)
+{
+    return r == RGL_VULKAN ? "VULKAN" : r == RGL_D3D12 ? "DIRECTX 12" : "OPENGL";
+}
+
 static int lang_index(void)
 {
     const char *c = port_language();
@@ -93,7 +107,7 @@ static const char *const k_pb[PB_COUNT] = {
 enum { PAGE_GFX, PAGE_CTL, PAGE_PROF, N_PAGES };
 
 enum {
-    R_DISPLAY, R_MONITOR, R_RES, R_APPLY, R_RRES, R_AA, R_TEXQ, R_ASPECT, R_UI, R_HIDE, R_LANG,
+    R_DISPLAY, R_MONITOR, R_RES, R_APPLY, R_RRES, R_AA, R_TEXQ, R_ASPECT, R_UI, R_HIDE, R_LANG, R_REND,
     R_PLAYER, R_LAYOUT, R_KEY, R_KRESET, R_DEVICE, R_PICONS, R_PADB, R_PRESET,
     R_PNAME, R_PICON, R_PCOLOR, R_PSHADE, R_PCOLOR2, R_PID, R_PRESET2,
     R_CLOSE, R_QUIT, R_HEAD, R_CSUB
@@ -566,6 +580,9 @@ static void build(void)
             add(R_AA, 0, "ANTIALIASING", "< X%d >", g_gfx.aa);
         else
             add(R_AA, 0, "ANTIALIASING", "< %s >", tx("DESACTIVADO", "OFF"));
+        add(R_REND, 0, tx("RENDERIZADOR", "RENDERER"), "< %s >%s",
+            rend_name(port_renderer()),
+            port_renderer() != rgl_renderer ? tx("  AL REINICIAR", "  AFTER A RESTART") : "");
         head(tx("TEXTURAS", "TEXTURES"));
         add(R_TEXQ, 0, tx("CALIDAD", "QUALITY"), "< %s >",
             tx(tq_es[g_gfx.texq], tq_en[g_gfx.texq]));
@@ -679,7 +696,7 @@ static int has_value(int kind)
 {
     switch (kind) {
     case R_DISPLAY: case R_MONITOR: case R_RES: case R_RRES: case R_AA: case R_TEXQ:
-    case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_PLAYER: case R_LAYOUT:
+    case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_PLAYER: case R_LAYOUT:
     case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE: case R_PCOLOR2:
     case R_PICONS:
         return 1;
@@ -788,6 +805,10 @@ static void change(int kind, int d)
     case R_TEXQ:   g_gfx.texq = wrap(g_gfx.texq + d, 3); break;
     case R_UI:     g_gfx.ui = !g_gfx.ui; break;
     case R_HIDE:   g_gfx.hidectl = !g_gfx.hidectl; break;
+    case R_REND:                        /* umk3.ini, for the next start */
+        port_renderer_set(wrap(port_renderer() + d, N_REND));
+        g_dirty = 1;
+        return;
     case R_LANG:                        /* at once, texts and menus */
         port_language_set(k_lang[wrap(lang_index() + d, N_LANG)].code);
         g_dirty = 1;
@@ -921,6 +942,11 @@ static int drop_fill(int kind)
         snprintf(L[1], 48, "%s", tx("OCULTOS", "HIDDEN"));
         n = 2;
         g_drop_cur = g_gfx.hidectl ? 1 : 0;
+        break;
+    case R_REND:
+        for (n = 0; n < N_REND; n++)
+            snprintf(L[n], 48, "%s", rend_name(n));
+        g_drop_cur = port_renderer();
         break;
     case R_LANG:
         for (n = 0; n < N_LANG; n++)
@@ -1647,6 +1673,8 @@ static void save_ini(void)
     put("texture_quality", "%s", tq[g.texq]);
     put("hide_controls", "%d", g.hidectl);
     put("language", "%s", port_language());
+    put("renderer", "%s", port_renderer() == RGL_VULKAN ? "vulkan"
+                        : port_renderer() == RGL_D3D12 ? "d3d12" : "opengl");
     put("buttons", "%d", port_buttons());
     {
         static const char *const st[5] = { "auto", "xbox", "ps5", "nintendo", "ps4" };

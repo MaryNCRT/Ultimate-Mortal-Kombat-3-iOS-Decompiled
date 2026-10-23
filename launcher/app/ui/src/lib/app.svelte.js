@@ -49,6 +49,8 @@ export const ARCH = isWin ? ['x86', 'x64'] : ['x64'];
 /* ui_size= in umk3.ini: IPAD lays the game out on 960x640, where it draws
  * the HUD at 1.75 of 2 */
 export const UISIZE = ['iphone', 'ipad'];
+/* renderer=: what draws (src/runtime/render); Direct3D 12 is Windows' */
+export const RENDERERS = isWin ? ['opengl', 'vulkan', 'd3d12'] : ['opengl', 'vulkan'];
 /* antialiasing= in umk3.ini: the multisampling the game asks the card for */
 export const AA = [0, 2, 4, 8, 16];
 export const LANGS = [null, 'English', 'Español', 'Français', 'Deutsch', 'Italiano', '한국어', '中文'];

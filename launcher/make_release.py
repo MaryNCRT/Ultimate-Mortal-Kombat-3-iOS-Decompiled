@@ -30,6 +30,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOLS = ["tools/build/logic_tables.py", "tools/build/logic_tables.map", "tools/build/macho.py", "tools/build/low32_static.py",
          "tools/build/level_info.py", "tools/build/seq_data.py", "tools/build/check_binary.py"]
 LAUNCHER = ["launcher/LEEME.txt", "launcher/stub/umk3_launcher_stub.c",
+            "launcher/build-game.cmd", "launcher/eos.ini.example",
             "launcher/stub/umk3_launcher_stub.rc"]
 TOP = ["LICENSE", "docs/AI-DISCLOSURE.md", "CMakeLists.txt", "build.py"]
 
@@ -130,6 +131,9 @@ def main(argv):
         shutil.copy2(os.path.join(ROOT, rel), dst)
     shutil.copy2(os.path.join(ROOT, "launcher", "LEEME.txt"),
                  os.path.join(out, "LEEME.txt"))
+    # the build from a terminal (launcher/app/cli.js) and the online example
+    for n in ("build-game.cmd", "eos.ini.example"):
+        shutil.copy2(os.path.join(ROOT, "launcher", n), os.path.join(out, n))
     shutil.copytree(launcher_exe, os.path.join(out, "launcher", "bin"))
     # Mary's own pictures for the wide screens (FrontEnd.c, the continue
     # screens): under launcher\ so an update copies them, and build_game.ps1

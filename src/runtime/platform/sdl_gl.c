@@ -20,8 +20,12 @@
 #include "platform.h"
 #include "gl.h"
 #include "ui_alert.h"
+#include "../render/rgl.h"
 
 #include <SDL.h>
+#ifndef __EMSCRIPTEN__
+#include <SDL_vulkan.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
 #ifdef __EMSCRIPTEN__
@@ -50,6 +54,35 @@ static void text_push(const char *c, int len)
     g_text_n++;
 }
 
+/* Vulkan (umk3.ini renderer=vulkan, render/rgl.h): the window is made for
+ * it and SDL gives its surface; without it the window is made again for
+ * OpenGL. */
+static int g_vk;
+
+static const char *const *vk_exts(unsigned *n)
+{
+    static const char *names[16];
+    unsigned cnt = 16;
+    if (!SDL_Vulkan_GetInstanceExtensions(g_wnd, &cnt, names))
+        cnt = 0;
+    *n = cnt;
+    return names;
+}
+
+static int vk_surface(void *window, void *instance, void *surface)
+{
+    return SDL_Vulkan_CreateSurface((SDL_Window *)window, (VkInstance)instance,
+                                    (VkSurfaceKHR *)surface) == SDL_TRUE;
+}
+
+static void drawable(int *w, int *h)
+{
+    if (g_vk)
+        SDL_Vulkan_GetDrawableSize(g_wnd, w, h);
+    else
+        SDL_GL_GetDrawableSize(g_wnd, w, h);
+}
+
 bool plat_open(const char *title, int width, int height)
 {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0) {
@@ -73,6 +106,30 @@ bool plat_open(const char *title, int width, int height)
     SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
 
+#ifndef __EMSCRIPTEN__
+    if (rgl_renderer == RGL_VULKAN) {
+        g_wnd = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                                 width, height, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE |
+                                 SDL_WINDOW_ALLOW_HIGHDPI);
+        if (g_wnd) {
+            g_vk = 1;
+            rgl_vk_instance_exts = vk_exts;
+            rgl_vk_make_surface = vk_surface;
+            if (rgl_open(g_wnd, width, height)) {
+                SDL_StartTextInput();
+                g_quit = false;
+                g_focused = true;
+                g_freq = SDL_GetPerformanceFrequency();
+                g_start = SDL_GetPerformanceCounter();
+                return true;
+            }
+            g_vk = 0;
+            SDL_DestroyWindow(g_wnd);
+            g_wnd = NULL;
+        }
+        rgl_renderer = RGL_OPENGL;
+    }
+#endif
     g_wnd = SDL_CreateWindow(title,
                              SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                              width, height,
@@ -193,6 +250,8 @@ int plat_clipboard_set(const char *utf8)
 
 void *plat_gl_proc(const char *name)
 {
+    if (rgl_renderer != RGL_OPENGL)
+        return rgl_proc(name);
     return SDL_GL_GetProcAddress(name);
 }
 
@@ -241,7 +300,7 @@ bool plat_poll(void)
                 g_focused = true;
             } else if (ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
                 int dw, dh;
-                SDL_GL_GetDrawableSize(g_wnd, &dw, &dh);
+                drawable(&dw, &dh);
                 if (dw > 0 && dh > 0) glViewport(0, 0, dw, dh);
             }
             break;
@@ -268,6 +327,10 @@ bool plat_poll(void)
 bool plat_swap(void)
 {
     if (!g_wnd) return false;
+    if (rgl_renderer != RGL_OPENGL) {
+        rgl_present();
+        return true;
+    }
     SDL_GL_SwapWindow(g_wnd);
     return true;
 }
@@ -275,7 +338,7 @@ bool plat_swap(void)
 void plat_size(int *width, int *height)
 {
     int dw = 0, dh = 0;
-    if (g_wnd) SDL_GL_GetDrawableSize(g_wnd, &dw, &dh);
+    if (g_wnd) drawable(&dw, &dh);
     if (width)  *width  = dw;
     if (height) *height = dh;
 }
@@ -286,7 +349,7 @@ int plat_mouse(int *x, int *y)
     Uint32 buttons = SDL_GetMouseState(&mx, &my);
 
     SDL_GetWindowSize(g_wnd, &ww, &wh);
-    SDL_GL_GetDrawableSize(g_wnd, &dw, &dh);
+    drawable(&dw, &dh);
     if (ww <= 0) ww = 1;
     if (wh <= 0) wh = 1;
     if (x) *x = mx * dw / ww;
@@ -642,6 +705,7 @@ void plat_close(void)
         SDL_GameControllerClose(g_controller);
         g_controller = NULL;
     }
+    rgl_close();
     if (g_ctx) { SDL_GL_DeleteContext(g_ctx); g_ctx = NULL; }
     if (g_wnd) { SDL_DestroyWindow(g_wnd); g_wnd = NULL; }
     SDL_Quit();

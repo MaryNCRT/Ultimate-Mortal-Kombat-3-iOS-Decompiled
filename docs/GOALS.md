@@ -9,7 +9,10 @@ Kept current with every release; the detail of each change is in
 **The game**
 - The whole game from the player's own `.ipa` (1.2.59 for iPhone): arcade,
   versus, the towers, fatalities, the front end. 32-bit and 64-bit builds.
-- Windows; Linux built but not yet tested on a Linux machine.
+- Windows; Linux built but not yet tested on a Linux machine (0.1.9:
+  `build-game.sh`, README-linux.md, CI compile check).
+- Renderers: OpenGL, Vulkan, DirectX 12 (Windows), chosen in the launcher
+  or the in-game menu.
 - Window, borderless or fullscreen; resolution, 3D resolution,
   antialiasing, texture quality, aspect 3:2 / 4:3 / 16:9 / 21:9, interface
   size, on-screen controls.
@@ -38,11 +41,10 @@ Kept current with every release; the detail of each change is in
 
 ## Next (in Mary's order)
 
-1. Native Vulkan and DirectX 12 renderers, chosen like OpenGL (Mary chose
-   renderers written for the game over a translation layer).
-2. The Linux build to a working game (0.1.8 stopped at the link; fixed for
-   the next release, then whatever comes next on Mary's Linux machine).
-3. Release the next build (0.1.9) with all of the above.
+1. Whatever Mary asks next. (0.1.9 brought the Vulkan and DirectX 12
+   renderers and the Linux fixes.)
+2. The Linux build to a working game on a Linux machine (0.1.9 fixes the
+   link error a tester hit; next, what that tester sees).
 
 ## Later
 
