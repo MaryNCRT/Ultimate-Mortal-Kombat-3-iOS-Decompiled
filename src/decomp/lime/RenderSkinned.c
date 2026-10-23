@@ -572,12 +572,19 @@ void GenerateMatrices(char *data, BONESINFO *bones, long frameA, long frameB,
  * `+0x18` twice was a double free that corrupted the heap (0xC0000374) when
  * Task_FEDestroy released the select-screen fighters.
  */
+/* Port, not in the binary: told when a skin goes, so what SMOOTH MODELS
+ * built for it (runtime/smooth_models.c) goes too. NULL until set. */
+void (*lime_port_skin_freed)(const void *skin);
+
 void LIME_FreeSkin(SKININFO *skin)
 {
     SKININFO *next;
 
     if (skin == NULL)
         return;
+
+    if (lime_port_skin_freed)
+        lime_port_skin_freed(skin);
 
     limeFree(skin->vertExtra);      /* +0x18 */
     limeFree(skin->uvs);            /* +0x1c */

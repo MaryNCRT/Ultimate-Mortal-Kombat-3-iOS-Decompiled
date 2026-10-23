@@ -17,10 +17,10 @@
 | Component | Progress | Notes |
 |---|---|---|
 | **Decompilation (`src/decomp/`)** | **2,572 / 2,572 (100%)** | LIME 3D engine (`109`), Front-End & Scene (`291`), Arcade Fight Engine (`2,172`). |
-| **Verification (`tools/decomp/`)** | **98.30%** | Differential tests against the `armrecomp` ARM→C oracle + build-time table layout verification (`ctest`). |
+| **Verification (`tools/decomp/`)** | **100%** | Differential tests against the `armrecomp` ARM→C oracle + build-time table layout verification (`ctest`). |
 | **Native Port (`src/runtime/`)** | **Playable (v0.1.9-beta)** | OpenGL, Vulkan and Direct3D 12 renderers (`src/runtime/render/`), Win32 & SDL2 backends, 3:2 / 4:3 / 16:9 / 21:9 aspect ratios, HD textures, keyboard & gamepad support, local 2P (`DUELO`), LAN/Online multiplayer, and debug tools (`F2`). |
 
-**Known problems in 0.1.9 beta:** the FLAWLESS VICTORY text is missing in the 64-bit build; Reptile's fatalities sometimes fail; the Linux package is still untested on a Linux machine (0.1.9 fixes the link error a tester hit, reads umk3.ini on Linux and adds `build-game.sh` and README-linux.md); the Vulkan and Direct3D 12 renderers are new and checked by `tests/rgl_test.c`, not yet in long play; a fighter cannot be duplicated into a new slot yet. New in 0.1.9: Vulkan and Direct3D 12 renderers beside OpenGL, the language changed from the in-game menu, the fatality page of the move list fixed, mod textures for the game's LOW/LITE copies, and many model-viewer additions.
+**Known problems in 0.1.9 beta:** Reptile's fatalities sometimes fail; the Linux package is still untested on a Linux machine (0.1.9 fixes the link error a tester hit, reads umk3.ini on Linux and adds `build-game.sh` and README-linux.md); the Vulkan and Direct3D 12 renderers are new and checked by `tests/rgl_test.c`, not yet in long play; a fighter cannot be duplicated into a new slot yet. New in 0.1.9: Vulkan and Direct3D 12 renderers beside OpenGL, the language changed from the in-game menu, the fatality page of the move list fixed, mod textures for the game's LOW/LITE copies, and many model-viewer additions. Since 0.1.9 (not released): SMOOTH ANIMATIONS (the fighters' frames blended when drawn) and SMOOTH MODELS (Blender's weld + Catmull-Clark, in the game and the viewer); the project is GPL-2.0-or-later from here on.
 
 > [!IMPORTANT]
 > **No copyrighted assets or binaries are distributed in this repository.**
@@ -55,7 +55,7 @@ cmake --build build --target umk3-game
 
 ### 3. Cross-Platform Desktop Launcher (Windows & Linux)
 
-On Windows and Linux, you can run **`UMK3-Launcher`** (built from [`launcher/app/`](launcher/app/)), which provides a self-contained arcade interface: it receives your `.ipa`, downloads the pinned `zig cc` compiler automatically (zero system compiler dependencies), unpacks the game assets, compiles the native game binary, and lets you configure graphics/controls (`umk3.ini`). Its **MODS** section manages mods (`mods/<mod>/`, files named like the game's replace them; priority and on/off in `mods/mods.ini`), shows the game's fighters, stages, models and textures, and exports them for Blender as FBX, USD (USDA/USDC/USDZ) or OBJ with PNG textures.
+On Windows and Linux, you can run **`UMK3-Launcher`** (built from [`launcher/app/`](launcher/app/)), which provides a self-contained arcade interface: it receives your `.ipa`, downloads the pinned `zig cc` compiler automatically (zero system compiler dependencies), unpacks the game assets, compiles the native game binary, and lets you configure graphics/controls (`umk3.ini`). Its **MODS** section manages mods (`mods/<mod>/`, files named like the game's replace them; priority and on/off in `mods/mods.ini`), shows the game's fighters, stages, models and textures, replaces any texture of a fighter, a stage, the interface or the effects (TEXTURES), and exports them for Blender as FBX, USD (USDA/USDC/USDZ) or OBJ with PNG textures, stages with their animation; exports and mods keep each fighter, stage, the interface and the effects in a folder of its own.
 
 Available distribution packages:
 - **Linux:** Standalone portable `.tar.gz` (0.1.9 beta: built, not yet tested on a Linux machine; see `launcher/README-linux.md`).
@@ -116,4 +116,4 @@ Available distribution packages:
 
 *Ultimate Mortal Kombat 3* was created by **Midway Games** (1995) and ported to iOS by **EA Mobile** (2011). This project is an independent clean-room reverse-engineering effort for interoperability and software preservation, unaffiliated with Warner Bros. Entertainment or Electronic Arts. No copyrighted code or assets are distributed here.
 
-Original project code and tooling are released under the [MIT License](LICENSE). Banner renders by [ermaccer](https://github.com/ermaccer) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)); UHD logo by [u/JuananoLaGarza](https://www.reddit.com/r/MortalKombat/comments/mvm4uo/ultimate_mortal_kombat_3_logo_redone_in_uhd/).
+The project is released under the [GNU GPL, version 2 or later](LICENSE): it contains code from [Blender](https://www.blender.org) (`src/thirdparty/blender`, the weld and Catmull-Clark of SMOOTH MODELS). Releases up to 0.1.9-beta were MIT and stay so. Banner renders by [ermaccer](https://github.com/ermaccer) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)); UHD logo by [u/JuananoLaGarza](https://www.reddit.com/r/MortalKombat/comments/mvm4uo/ultimate_mortal_kombat_3_logo_redone_in_uhd/).

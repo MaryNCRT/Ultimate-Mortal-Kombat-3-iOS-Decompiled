@@ -79,18 +79,23 @@ export function stageOf(desc) {
             skel.props.push({ name: 'skel:animationSource', targets: [base + '/Skel/Anim'] });
             const anim = prim('Anim', 'SkelAnimation');
             anim.props.push({ name: 'joints', type: 'token[]', value: paths, uniform: true });
-            const tr = [], rot = [];
+            const tr = [], rot = [], sc = [];
+            /* a joint's own scale, when a pose has one (an animated stage:
+             * its objects grow, shrink and hide) */
+            const scaled = clips.some(c => c.poses.some(p => p.some(x => x.S)));
             let t = 0;
             for (const c of clips)
                 for (const pose of c.poses) {
                     const loc = order.map(b => localOf(pose, { parent: sk.parent }, b));
                     tr.push([t, loc.map(x => x.T)]);
                     rot.push([t, loc.map(x => matToQuat(x.R))]);   /* x y z w */
+                    if (scaled) sc.push([t, loc.map(x => x.S || [1, 1, 1])]);
                     t++;
                 }
             anim.props.push({ name: 'translations', type: 'float3[]', samples: tr });
             anim.props.push({ name: 'rotations', type: 'quatf[]', samples: rot });
-            anim.props.push({ name: 'scales', type: 'half3[]', value: order.map(() => [1, 1, 1]) });
+            if (scaled) anim.props.push({ name: 'scales', type: 'half3[]', samples: sc });
+            else anim.props.push({ name: 'scales', type: 'half3[]', value: order.map(() => [1, 1, 1]) });
             skel.children.push(anim);
         }
         root.children.push(skel);

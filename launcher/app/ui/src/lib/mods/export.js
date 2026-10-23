@@ -342,15 +342,22 @@ export function toFbx(desc) {
         OO(ly, st);
         const times = Array.from({ length: nf }, (_, f) => Math.round(f * KTIME / desc.fps));
         sk.names.forEach((_, b) => {
-            const tv = [[], [], []], rv = [[], [], []];
+            const tv = [[], [], []], rv = [[], [], []], sv = [[], [], []];
+            /* a bone's own scale, when a pose has one (an animated stage) */
+            const scaled = clip.poses.some(p => p[b].S);
             let prev = null;
             for (const pose of clip.poses) {
                 const loc = localOf(pose, { parent: sk.parent }, b);
                 const e = euler(loc.R, prev);
                 prev = e;
-                for (let k = 0; k < 3; k++) { tv[k].push(loc.T[k]); rv[k].push(e[k]); }
+                for (let k = 0; k < 3; k++) {
+                    tv[k].push(loc.T[k]); rv[k].push(e[k]);
+                    if (scaled) sv[k].push(loc.S ? loc.S[k] : 1);
+                }
             }
-            for (const [what, vals, short] of [['Lcl Translation', tv, 'T'], ['Lcl Rotation', rv, 'R']]) {
+            const channels = [['Lcl Translation', tv, 'T'], ['Lcl Rotation', rv, 'R']];
+            if (scaled) channels.push(['Lcl Scaling', sv, 'S']);
+            for (const [what, vals, short] of channels) {
                 const cn = id();
                 add('AnimationCurveNode', ['AnimationCurveNode', [L(cn), S(cls(short, 'AnimCurveNode')), S('')], [
                     P70(P('d|X', 'Number', '', 'A', D(vals[0][0])), P('d|Y', 'Number', '', 'A', D(vals[1][0])), P('d|Z', 'Number', '', 'A', D(vals[2][0])))]]);

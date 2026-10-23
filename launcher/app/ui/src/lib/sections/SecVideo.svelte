@@ -80,6 +80,15 @@
                     {#each AA as n, i}<option value={i}>{n ? 'x' + n : tx('aaOff')}</option>{/each}
                 </select>
             </div>
+            <div class="field">
+                <label class="lbl" for="smodel">{tx('smodel')}</label>
+                <select id="smodel" class="sel" value={c.smoothModels || 0}
+                        onchange={e => save({ smoothModels: e.currentTarget.selectedIndex })}>
+                    {#each tx('smodels') as m, i}<option value={i}>{m}</option>{/each}
+                </select>
+            </div>
+            <label class="chk wide"><input type="checkbox" checked={!!c.smoothAnims}
+                onchange={e => save({ smoothAnims: e.currentTarget.checked })}><span>{tx('smooth')}</span></label>
             <div class="field wide">
                 <span class="lbl">{tx('frame')}</span>
                 <div class="row">

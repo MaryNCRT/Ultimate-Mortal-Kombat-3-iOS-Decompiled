@@ -13,6 +13,11 @@ Kept current with every release; the detail of each change is in
   `build-game.sh`, README-linux.md, CI compile check).
 - Renderers: OpenGL, Vulkan, DirectX 12 (Windows), chosen in the launcher
   or the in-game menu.
+- SMOOTH ANIMATIONS on/off (launcher and in-game menu): the fighters'
+  frames blended when drawn, in fights, the select screen and the intro.
+- SMOOTH MODELS off / level 1 / level 2 (launcher, in-game menu, model
+  viewer): Blender's weld + Catmull-Clark. Not yet seen by Mary.
+- Crash reports with version, system, renderer, GPU and settings.
 - Window, borderless or fullscreen; resolution, 3D resolution,
   antialiasing, texture quality, aspect 3:2 / 4:3 / 16:9 / 21:9, interface
   size, on-screen controls.
@@ -58,7 +63,9 @@ Kept current with every release; the detail of each change is in
 
 ## Known problems
 
-- FLAWLESS VICTORY text missing in the 64-bit build.
+- A scream repeats when a fighter takes a fatality; some fatalities do not
+  finish their animation.
+
 - Reptile's fatalities: in one he only raises his arms.
 - Internet play is 64-bit only.
 - Not yet tested by Mary: the bosses as players, a mod's damage and hitbox

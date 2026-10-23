@@ -51,7 +51,7 @@ This method has already caught things a human reviewer plausibly would not have.
 
 ## If you would rather not use AI-assisted code
 
-That is a legitimate position and we are not going to argue you out of it. Everything here is MIT-licensed, the methodology is documented in full, and the tooling is reusable — you can regenerate any of it yourself, or use the documentation and write your own implementation from scratch. The file format specifications in `docs/` are statements of fact about the binary; they hold regardless of what produced them.
+That is a legitimate position and we are not going to argue you out of it. Everything here is under the GPL (version 2 or later; MIT up to 0.1.9-beta), the methodology is documented in full, and the tooling is reusable — you can regenerate any of it yourself, or use the documentation and write your own implementation from scratch. The file format specifications in `docs/` are statements of fact about the binary; they hold regardless of what produced them.
 
 ## Prior art in being upfront about this
 

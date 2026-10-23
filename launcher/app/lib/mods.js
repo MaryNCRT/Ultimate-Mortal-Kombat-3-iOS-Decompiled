@@ -39,6 +39,16 @@ function safeName(name) {
     return n;
 }
 
+/* a path inside a mod or the exports: "Characters/Kano/KANO_DIFFUSE.png",
+ * every part a safe name, at most four deep */
+function safePath(rel) {
+    if (typeof rel !== 'string') return null;
+    const parts = rel.split(/[\\/]+/).filter(Boolean);
+    if (!parts.length || parts.length > 4) return null;
+    const ok = parts.map(safeName);
+    return ok.every(Boolean) ? ok : null;
+}
+
 function readIni(file) {
     const out = {};
     let text;
@@ -208,13 +218,22 @@ function addFiles(root, folder, paths) {
     return n;
 }
 
-/* bytes the window made (a texture exported to edit), into a mod */
+/* bytes the window made (a texture exported to edit), into a mod, at
+ * `file` -- a name, or a path in the mod's folders ("Stages/The Pit III/
+ * PIT_FLOOR.png"). The game finds a mod's files by name in any folder
+ * (runtime/mods.c), so a copy of the same name elsewhere in the mod is
+ * removed: one file a name. */
 function putFile(root, folder, file, bytes) {
-    const name = safeName(folder), fname = safeName(file);
-    if (!name || !fname || !(bytes instanceof Uint8Array)) return false;
+    const name = safeName(folder), parts = safePath(file);
+    if (!name || !parts || !(bytes instanceof Uint8Array)) return false;
     const base = path.join(modsDir(root), name);
-    fs.mkdirSync(base, { recursive: true });
-    fs.writeFileSync(path.join(base, fname), bytes);
+    const dest = path.join(base, ...parts);
+    const lower = parts[parts.length - 1].toLowerCase();
+    for (const p of walk(base))
+        if (p !== dest && path.basename(p).toLowerCase() === lower && !isOwn(path.relative(base, p)))
+            fs.rmSync(p, { force: true });
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, bytes);
     return true;
 }
 
@@ -338,10 +357,11 @@ function gameTables(root) {
 
 /* --------------------------------------------------------- exports -- */
 
+/* into exports\<sub>, where sub is a folder path: "Characters/Kano/FBX" */
 function exportSave(root, sub, files) {
-    const name = safeName(sub);
-    if (!name || !files || typeof files !== 'object') return null;
-    const dir = path.join(root, 'exports', name);
+    const parts = safePath(sub);
+    if (!parts || !files || typeof files !== 'object') return null;
+    const dir = path.join(root, 'exports', ...parts);
     fs.mkdirSync(dir, { recursive: true });
     for (const [f, bytes] of Object.entries(files)) {
         const fname = safeName(f);

@@ -4,6 +4,39 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 
 ---
 
+## Unreleased
+
+- **SMOOTH MODELS** (off, level 1 or 2): the fighters drawn through Blender's
+  Weld and Subdivision Surface (Catmull-Clark), in the game (GRAPHICS > VIDEO,
+  `smooth_models=` in `umk3.ini`) and the model viewer, which can also play
+  animations smoothed. The code is Blender's (`src/thirdparty/blender`).
+- **The project is now GPL-2.0-or-later**, because it contains Blender's code.
+  Releases up to 0.1.9-beta stay MIT.
+- Crash reports and the session log name the version, the system, the
+  renderer, the GPU and the settings in use.
+- Linux: sound and music (the Linux game was silent); music needs libmpg123.
+- SMOOTH ANIMATIONS also on the select screen and in the intro.
+- Faster drawing of large models with Vulkan and DirectX 12.
+- Fixed: SMOOTH MODELS drew dark wedges and black spots on some fighters
+  (Jax, Sektor, Cyrax, Kano, Kitana, Mileena, Jade, Liu Kang).
+- MODS > EXPORT: stages with their animation (FBX, USD); every export in its
+  own folder: Characters, Stages, Models, and textures in their fighter's or
+  stage's folder, Interface or Effects.
+- MODS > TEXTURES: replace or export any texture of a fighter, a stage, the
+  interface and menus, or the effects; a mod keeps each in that place's
+  folder.
+
+- **SMOOTH ANIMATIONS** (off by default): the launcher's GRAPHICS > VIDEO, or
+  Esc > GRAPHICS > VIDEO in the game (applied at once), `smooth_anims=1` in
+  `umk3.ini`. A fighter's frames are held for several ticks and drawn as hard
+  cuts; with this on, each new frame is reached by blending from the one
+  before. Drawing only: the game logic, hit boxes and events are unchanged.
+  It applies to every fighter: fights, the select screen and the intro.
+- Fixed: the game crashed when a fighter took Kabal's projectile (the
+  reaction asked for a sound before setting its number; armv7 0x46396).
+- Fixed: `tools/decomp/progress.py` looked one folder above the repository
+  and counted every module as 0%.
+
 ## 0.1.9-beta (2026-10-22) — Vulkan and Direct3D 12, Linux Fixes
 
 Built for Windows (64 and 32 bits) and Linux. Not yet played by Mary at release; the Linux package is untested on a Linux machine.

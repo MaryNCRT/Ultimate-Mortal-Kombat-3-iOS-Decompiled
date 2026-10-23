@@ -1,6 +1,10 @@
 <script>
-    /* EXPORT: fighters, stages, other models or textures, one or many, to
-     * exports\<name>\ in the game folder. Models as FBX (skeleton, skin,
+    /* EXPORT: fighters, stages, other models or textures, one or many, into
+     * the game folder's exports\, each in its own folder (mods/owners.js):
+     * Characters\<fighter>\<FORMAT>, Stages\<stage>\<FORMAT>,
+     * Models\<model>\<FORMAT>; a texture in its fighter's or stage's
+     * Textures, or in Interface or Effects. A stage can carry its animation
+     * (the scene's frames, issue #101). Models as FBX (skeleton, skin,
      * one action per animation), USD -- USDA text, USDC binary, or USDZ, the
      * USDC with its pictures in one file -- (the same, the animations end to
      * end) or OBJ (the mesh alone); their textures as PNG beside them. */
@@ -10,6 +14,7 @@
     import { hoverBlip, selectBlip, doneChord, failChord } from '#lib/sound.js';
     import { ms, src, loadCatalog, fighter, VIEW_KINDS } from '#lib/mods/store.svelte.js';
     import { fighterDesc, stageDesc, meshsetDesc, exportFiles, pngBytes, textureFile } from '#lib/mods/assets.js';
+    import { homeOf, textureOwners, textureHome, exportTexDir } from '#lib/mods/owners.js';
 
     let kind = $state(ms.kind);
     let chosen = $state(new Set());
@@ -17,6 +22,7 @@
     let rest = $state('tpose');
     let anims = $state('all');
     let outfits = $state(true);
+    let stageAnim = $state(true);
     let busy = $state(false);
     let line = $state('');
     let done = $state('');
@@ -51,7 +57,7 @@
                 if (kind === 'textures') {
                     const png = await pngBytes(src, it.id);
                     files = png ? { [it.name + '.png']: png } : {};
-                    sub = 'textures';
+                    sub = exportTexDir(textureHome(await textureOwners(src, ms.cat), it.name));
                 } else {
                     let desc;
                     if (kind === 'characters') {
@@ -71,15 +77,17 @@
                                 }
                             }
                     } else {
-                        desc = kind === 'stages' ? await stageDesc(src, it) : await meshsetDesc(src, it.id);
+                        desc = kind === 'stages' ? await stageDesc(src, it, stageAnim && format !== 'obj')
+                            : await meshsetDesc(src, it.id);
                         files = await exportFiles(src, desc, format);
                     }
-                    sub = desc.name + '_' + format.toUpperCase();
+                    sub = homeOf(kind, it) + '/' + format.toUpperCase();
                 }
                 last = await api.exportSave(sub, files);
             }
             doneChord();
-            done = tx('exDone') + ' ' + (chosen.size === 1 ? last : last.replace(/[\\/][^\\/]+$/, ''));
+            /* one: its folder; many: the exports folder */
+            done = tx('exDone') + ' ' + (chosen.size === 1 ? last : last.replace(/([\\/]exports)[\\/].*$/, '$1'));
         } catch (e) {
             failChord();
             done = String(e && e.message || e);
@@ -135,6 +143,11 @@
                     </select>
                 {/if}
                 <label class="chk more"><input type="checkbox" bind:checked={outfits}><span>{tx('exOutfits')}</span></label>
+            {/if}
+            {#if kind === 'stages' && format !== 'obj'}
+                <h3>{tx('exAnims')}</h3>
+                <label class="chk"><input type="checkbox" bind:checked={stageAnim}><span>{tx('exStageAnim')}</span></label>
+                <p class="note">{tx('exStageAnimNote')}</p>
             {/if}
             <p class="note">{tx('exTexNote')}</p>
             {#if format.startsWith('usd')}<p class="note">{tx('exUsdNote')}</p>{/if}

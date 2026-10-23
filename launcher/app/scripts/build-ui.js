@@ -24,7 +24,8 @@ function buildUi() {
         .replace(/import\("\/_app\//g, 'import("./_app/');
     const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
         .map(m => "'sha256-" + crypto.createHash('sha256').update(m[1]).digest('base64') + "'");
-    html = html.replace(/script-src 'self'[^;"]*/, "script-src 'self' " + scripts.join(' '));
+    /* 'wasm-unsafe-eval': the viewer's SMOOTH MODEL (ui/src/lib/mods/subsurf.js) */
+    html = html.replace(/script-src 'self'[^;"]*/, "script-src 'self' 'wasm-unsafe-eval' " + scripts.join(' '));
     /* SvelteKit's route announcer hides itself with a style attribute: that
      * one style, by its hash, and no other */
     const styles = new Set();

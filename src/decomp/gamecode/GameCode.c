@@ -3038,6 +3038,125 @@ void LIME_GLAPI glMultMatrixf(const float *m);
 #define GL_MODELVIEW 0x1700
 
 
+/* Port, not in the binary: SMOOTH ANIMATIONS (umk3.ini smooth_anims=1, or
+ * the options menu). A fighter's animation frame is held for several ticks
+ * and drawn as a hard cut (in a fight AnimSmoothWindowSize is 0, game_main.c;
+ * the front end and the intro blend only across runs of 40 and 20 ticks), so
+ * the motion steps. With this on, a new frame is reached by blending from the
+ * one before it over as many ticks as that one was held (at most
+ * SMOOTH_MAX_TICKS), through the frameA/frameB/t that PlayerAutoSmoothAnims
+ * writes. Only the drawn pose changes: the frame the game logic, the hit
+ * boxes and the scene events run on is the one the game chose.
+ *
+ * Every fighter drawn goes through here -- the fight, the select screen and
+ * the intro -- with its own state, kept by the PLAYER it is drawn from. The
+ * fight's projectile slots (Players 2..7) are not fighters and are left as
+ * they are.
+ *
+ * frameA stays the game's frame (its record decides the mesh, the second
+ * skin and the events); frameB is the previous one, weighted by t. Where the
+ * game blends itself (the select screen, the intro), the frame its blend is
+ * mostly on stands for the game's frame. No blend across a frame that is not
+ * skinned, a change of second skin, a change of character or model, the
+ * 16/35..41 range, or what IsLiaProblem and IsOstrichProblem refuse -- the
+ * cases where the game itself cuts. */
+int port_smooth_anims;
+
+#define SMOOTH_MAX_TICKS 5
+#define SMOOTH_SLOTS     6
+
+extern long LIME_Paused;                /* 0x0014e004 */
+int IsLiaProblem(PLAYER *p);
+int IsOstrichProblem(PLAYER *p);
+
+static int smooth_frame_ok(const long *a, long idx, long chr, long *skin2)
+{
+    long count = a[0];
+    const long *f;
+
+    if (chr == 0x10 && (unsigned long)(idx - 0x23) <= 6)
+        return 0;
+    if (idx < 0) idx = 0;               /* RenderAnimatedCharacter's clamp */
+    if (idx >= count - 2) idx = count - 2;
+    if (idx < 0)
+        return 0;
+    f = (const long *)((char *)(uintptr_t)(unsigned long)a[1] + idx * 88);
+    *skin2 = f[0x28 / 4];
+    return f[0x18 / 4] == 1;
+}
+
+static void port_smooth_pose(long *w)
+{
+    static struct {
+        long *who;
+        long  chr, anim, cur, prev, held, dur;
+    } st[SMOOTH_SLOTS];
+    static int next;
+    const long *a = (const long *)(uintptr_t)(unsigned long)w[4 / 4];
+    long g = w[0x51c / 4], s2a, s2b;
+    float t = ((float *)w)[0x524 / 4];
+    int own = w[0x520 / 4] != g || t != 0.0f;   /* the game's own blend */
+    int i;
+
+    if ((char *)w >= Players + 2 * 0x5f0 && (char *)w < Players + 8 * 0x5f0)
+        return;                         /* a projectile slot */
+    if (own)
+        g = t >= 0.5f ? w[0x520 / 4] : g;   /* the frame it is mostly on */
+    if (g < 0 || a == NULL)
+        return;
+
+    for (i = 0; i < SMOOTH_SLOTS && st[i].who != w; i++)
+        ;
+    if (i == SMOOTH_SLOTS) {
+        i = next;
+        next = (next + 1) % SMOOTH_SLOTS;
+        st[i].who = w;
+        st[i].chr = -1;
+    }
+
+    if (st[i].chr != w[0] || st[i].anim != w[4 / 4]) {
+        st[i].chr  = w[0];
+        st[i].anim = w[4 / 4];
+        st[i].cur  = st[i].prev = g;
+        st[i].held = 0;
+        st[i].dur  = 1;
+    } else if (g != st[i].cur) {
+        st[i].dur  = st[i].held + 1 < SMOOTH_MAX_TICKS
+                     ? st[i].held + 1 : SMOOTH_MAX_TICKS;
+        st[i].prev = st[i].cur;
+        st[i].cur  = g;
+        st[i].held = 0;
+    } else if (!LIME_Paused) {
+        st[i].held++;
+    }
+
+    if (!port_smooth_anims)
+        return;
+    /* The select screen and the intro run PlayerAutoSmoothAnims with their
+     * own windows (40, 20), and it blends nearly all the time; leaving that
+     * blend alone meant the option changed nothing there (Mary). With the
+     * option on, this one draws: from the frame the game's blend is mostly
+     * on, the way the fight does. */
+    if (own) {
+        w[0x51c / 4] = g;
+        w[0x520 / 4] = g;
+        ((float *)w)[0x524 / 4] = 0.0f;
+    }
+    if (st[i].held + 1 >= st[i].dur)
+        return;
+    if (!smooth_frame_ok(a, st[i].cur, w[0], &s2a)
+        || !smooth_frame_ok(a, st[i].prev, w[0], &s2b) || s2a != s2b)
+        return;
+
+    w[0x520 / 4] = st[i].prev;
+    ((float *)w)[0x524 / 4] = 1.0f - (float)(st[i].held + 1)
+                                     / (float)st[i].dur;
+    if (IsLiaProblem((PLAYER *)w) || IsOstrichProblem((PLAYER *)w)) {
+        w[0x520 / 4] = g;
+        ((float *)w)[0x524 / 4] = 0.0f;
+    }
+}
+
 /* --------------------------------------------------------------- RenderPlayer
  *
  * armv7 0x00023c7c, 620 bytes.  **Complete.**
@@ -3109,6 +3228,7 @@ long RenderPlayer(PLAYER *p, long attach, long flag)
     limeDisableAlphaBlending();
     limeEnableDepthWrites();
 
+    port_smooth_pose(w);                /* port: SMOOTH ANIMATIONS */
     vis = IsFrameVisible(c, w[0x51c / 4], w[0x520 / 4]);
     def = &PlayerDefs[w[0]];
 
@@ -4997,6 +5117,7 @@ void RenderIntroCharacterPlayer(void)
         p0[0x534 / 4] = 0;
         p0[0x528 / 4] = anim[0x14 / 4];
 
+        port_smooth_pose(p0);           /* port: SMOOTH ANIMATIONS */
         RenderAnimatedCharacter(0, (ANIMATEDCHARACTER *)anim,
                                 p0[0x51c / 4], p0[0x520 / 4],
                                 ((float *)p0)[0x524 / 4],
@@ -5049,6 +5170,7 @@ void RenderIntroCharacterPlayer(void)
         p1[0x534 / 4] = 0;
         p1[0x528 / 4] = (p1[0x530 / 4] != 0) ? p1[0x530 / 4] : anim[0x14 / 4];
 
+        port_smooth_pose(p1);           /* port: SMOOTH ANIMATIONS */
         RenderAnimatedCharacter(0, (ANIMATEDCHARACTER *)anim,
                                 p1[0x51c / 4], p1[0x520 / 4],
                                 ((float *)p1)[0x524 / 4],

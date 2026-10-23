@@ -58,5 +58,9 @@ void port_language_set(const char *code);
  * drawing now is rgl_renderer */
 int  port_renderer(void);
 void port_renderer_set(int r);
+/* smooth_anims=: the fighters' frames blended when drawn (GameCode.c) */
+extern int port_smooth_anims;
+/* smooth_models=: 0 off, 1 or 2 the subdivision level (smooth_models.c) */
+extern int port_smooth_models;
 
 #endif

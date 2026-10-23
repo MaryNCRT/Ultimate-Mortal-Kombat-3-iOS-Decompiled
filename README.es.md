@@ -17,7 +17,7 @@
 | Componente | Progreso | Notas |
 |---|---|---|
 | **Decompilación (`src/decomp/`)** | **2.572 / 2.572 (100%)** | Motor 3D LIME (`109`), Front-End y Escenas (`291`), Motor de Combate Arcade (`2.172`). |
-| **Verificación (`tools/decomp/`)** | **98,30%** | Tests diferenciales contra el oráculo ARM→C (`armrecomp`) + verificación de las 229 tablas de datos (`ctest`). |
+| **Verificación (`tools/decomp/`)** | **100%** | Tests diferenciales contra el oráculo ARM→C (`armrecomp`) + verificación de las 229 tablas de datos (`ctest`). |
 | **Port Nativo (`src/runtime/`)** | **Jugable (v0.1.5-alpha)** | Renderizador OpenGL nativo, backends Win32 y SDL2, relaciones 3:2 / 4:3 / 16:9 / 21:9, texturas HD, teclado y mando, 2 jugadores local (`DUELO`), multijugador LAN/Online y menú de depuración (`F2`). |
 
 > [!IMPORTANT]
@@ -53,7 +53,7 @@ cmake --build build --target umk3-game
 
 ### 3. Launcher de Escritorio Multiplataforma (Windows y Linux)
 
-En Windows y Linux puedes usar **`UMK3-Launcher`** (construido desde [`launcher/app/`](launcher/app/)), que provee una interfaz arcade autocontenida: recibe tu archivo `.ipa`, descarga automáticamente el compilador `zig cc` (sin requerir dependencias de compiladores en el sistema), desempaqueta los recursos, compila el juego nativo y permite configurar gráficos y mandos (`umk3.ini`). Su sección **MODS** administra mods (`mods/<mod>/`, los archivos con el nombre de uno del juego lo reemplazan; prioridad y activado en `mods/mods.ini`), muestra los luchadores, escenarios, modelos y texturas del juego, y los exporta para Blender en FBX, USD (USDA/USDC/USDZ) u OBJ con texturas PNG.
+En Windows y Linux puedes usar **`UMK3-Launcher`** (construido desde [`launcher/app/`](launcher/app/)), que provee una interfaz arcade autocontenida: recibe tu archivo `.ipa`, descarga automáticamente el compilador `zig cc` (sin requerir dependencias de compiladores en el sistema), desempaqueta los recursos, compila el juego nativo y permite configurar gráficos y mandos (`umk3.ini`). Su sección **MODS** administra mods (`mods/<mod>/`, los archivos con el nombre de uno del juego lo reemplazan; prioridad y activado en `mods/mods.ini`), muestra los luchadores, escenarios, modelos y texturas del juego, reemplaza cualquier textura de un luchador, un escenario, la interfaz o los efectos (TEXTURAS), y los exporta para Blender en FBX, USD (USDA/USDC/USDZ) u OBJ con texturas PNG, los escenarios con su animación; las exportaciones y los mods guardan cada luchador, escenario, la interfaz y los efectos en su propia carpeta.
 
 Paquetes disponibles:
 - **Linux:** `.tar.gz` portable y ejecutable `.AppImage`.
@@ -114,4 +114,4 @@ Paquetes disponibles:
 
 *Ultimate Mortal Kombat 3* fue creado por **Midway Games** (1995) y portado a iOS por **EA Mobile** (2011). Este proyecto es un trabajo independiente de ingeniería inversa de sala limpia con fines de interoperabilidad y preservación de software, sin afiliación con Warner Bros. Entertainment ni Electronic Arts. No se distribuye código ni recursos con derechos de autor.
 
-El código propio y las herramientas del proyecto se publican bajo la [Licencia MIT](LICENSE). Renders del banner por [ermaccer](https://github.com/ermaccer) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)); logotipo UHD por [u/JuananoLaGarza](https://www.reddit.com/r/MortalKombat/comments/mvm4uo/ultimate_mortal_kombat_3_logo_redone_in_uhd/).
+El proyecto se publica bajo la [GNU GPL, versión 2 o posterior](LICENSE): contiene código de [Blender](https://www.blender.org) (`src/thirdparty/blender`, el weld y el Catmull-Clark de SUAVIZAR MODELOS). Las versiones hasta la 0.1.9-beta eran MIT y lo siguen siendo. Renders del banner por [ermaccer](https://github.com/ermaccer) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)); logotipo UHD por [u/JuananoLaGarza](https://www.reddit.com/r/MortalKombat/comments/mvm4uo/ultimate_mortal_kombat_3_logo_redone_in_uhd/).

@@ -1212,13 +1212,60 @@ static void get_elem(rgl_vtx *o, int i, const void *ctx)
     from_arrays(o, k);
 }
 
+static int elem_index(GLenum t, const void *idx, int i)
+{
+    return t == E_UNSIGNED_BYTE ? ((const unsigned char *)idx)[i]
+         : t == E_UNSIGNED_INT ? (int)((const unsigned int *)idx)[i]
+         : ((const unsigned short *)idx)[i];
+}
+
+/* Indexed triangles: each vertex the indices reach is transformed once and
+ * then gathered by index, instead of once per index -- a subdivided fighter
+ * (SMOOTH MODELS) is ~180,000 indices over ~32,000 vertices. The same
+ * vertices come out, so the picture is the same. */
+static int tris_indexed(int count, GLenum t, const void *idx)
+{
+    static rgl_vtx *cache;
+    static int ccap;
+    int i, max = 0, n = 0;
+
+    for (i = 0; i < count; i++) {
+        int k = elem_index(t, idx, i);
+        if (k > max)
+            max = k;
+    }
+    if (max + 1 > count)                /* a few indices into a big array */
+        return 0;
+    if (max + 1 > ccap) {
+        rgl_vtx *c = (rgl_vtx *)realloc(cache, (size_t)(max + 1) * 2 * sizeof *cache);
+        if (!c)
+            return 0;
+        cache = c;
+        ccap = (max + 1) * 2;
+    }
+    update_mvp();
+    for (i = 0; i <= max; i++)
+        from_arrays(&cache[i], i);
+    need_out(count + 16);
+    for (i = 0; i + 2 < count; i += 3) {
+        g_out[n++] = cache[elem_index(t, idx, i)];
+        g_out[n++] = cache[elem_index(t, idx, i + 1)];
+        g_out[n++] = cache[elem_index(t, idx, i + 2)];
+    }
+    submit(RGL_TRIS, g_out, n);
+    return 1;
+}
+
 void ff_glDrawElements(GLenum m, GLsizei n, GLenum t, const GLvoid *i)
 {
     elems e;
     e.type = t;
     e.idx = i;
-    if (i)
-        assemble(m, n, get_elem, &e);
+    if (!i)
+        return;
+    if (m == E_TRIANGLES && n >= 3 && tris_indexed(n, t, i))
+        return;
+    assemble(m, n, get_elem, &e);
 }
 
 /* glBegin / glVertex2f / glEnd */

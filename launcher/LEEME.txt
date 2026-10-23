@@ -428,7 +428,6 @@ ERRORES CONOCIDOS EN 0.1.9
 - Duplicar un luchador en un slot nuevo (el 27) todavia no esta.
 - Los cambios de datos de un mod (dano, hitbox) afectan al online: los
   dos jugadores tienen que tener los mismos mods.
-- En 64 bits no sale FLAWLESS VICTORY.
 - Fatalities de Reptile: en uno solo levanta los brazos.
 - La version de Linux no esta probada.
 - Online por internet solo en 64 bits.

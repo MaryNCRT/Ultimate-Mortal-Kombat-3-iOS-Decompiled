@@ -11,10 +11,250 @@
 | **LIME 3D Engine (`src/decomp/lime/`)** | 109 | 109 (100%) | Verified against recompiled oracle (`tests/test_*_diff.c`) |
 | **Game Front-End & Scene (`src/decomp/gamecode/`)** | 291 | 291 (100%) | Verified & running natively (51 front-end screens, HUD, audio, blood) |
 | **Arcade Fight Engine (`src/decomp/gamecode/logic/`)** | 2,172 | 2,172 (100%) | Behaviourally tested file-by-file (`tools/decomp/difftest/`) + 229 data tables verified by `ctest` |
-| **Total Game Core** | **2,572** | **2,572 (100%)** | **98.30% weighted verification score (`tools/decomp/progress.py`)** |
+| **Total Game Core** | **2,572** | **2,572 (100%)** | **100% weighted verification score (`tools/decomp/progress.py`)** |
 | **Cross-Platform Launcher** | Multiplatform (Win/Linux) | 100% pure Node.js / Electron | Standalone compilation via `zig cc` (0.13.0), zero Python/CMake runtime dependency |
 
 ---
+
+## After 0.1.9: smooth models fixed in the game, stage animation export, folders, TEXTURES page (2026-10-23, not released)
+
+**SMOOTH MODELS: dark wedges and black spots (fixed, Mary confirmed both in
+the viewer and the game).** Two causes:
+- UVs: Blender 2.79's subdivided UV mesh moves a UV island's rim like any
+  boundary, and where the rim bends inwards it leaves the island and samples
+  other parts of the texture. Now each output UV is its face's own corner UVs
+  mixed with the loop weights (`umk3_subsurf.c` build_output), so it stays in
+  the face's UV triangle (Blender 2.91+ "UV Smooth: None"). The UV mesh still
+  decides which output vertices are shared. Checked on a flat grid with UV =
+  position: interior UVs equal positions (level 1 exact, level 2 within 0.01).
+- Light: the game took the skin's triangles and positions but the frame
+  record's light through the record's indices; where those differ a corner
+  took another vertex's light, some near black. `smooth_models.c` now builds
+  the surface from the frame record alone, as `LIME_RenderMeshSingleIndexed`
+  draws it: its indices, UVs and light per record vertex, positions from
+  `RenderVerts`. A cache entry is keyed by the skin and an FNV-1a hash of the
+  record's indices and UVs.
+
+**Builds into the test folder take `src/` from the test folder**, not from the
+repository (`node launcher/app/cli.js <ipa> --arch x64 --root <folder>`
+compiles `<folder>/src`). Copy the changed sources there first, then check the
+exe holds a string from the change. Three builds this session missed their
+changes this way.
+
+**Exports and mods by place (Mary).** `launcher/app/ui/src/lib/mods/owners.js`:
+- Exports: `exports/Characters/<fighter>/<FORMAT>`, `exports/Stages/<stage>/<FORMAT>`,
+  `exports/Models/<model>/<FORMAT>`; a texture alone goes to its fighter's or
+  stage's `Textures`, or `Interface`, or `Effects`. The viewer's texture and
+  rig exports and the character editor's go to the same places.
+- Mods: a replaced texture goes into the mod at the same place
+  (`Stages/The Pit III/PIT1.png`); a model imported from Blender into
+  `Characters/<fighter>/`. The game takes a mod's files by name from any of
+  its folders (`runtime/mods.c` walks them), so nothing changed in the game.
+  `lib/mods.js` putFile takes a path and removes a same-named copy elsewhere
+  in the mod; exportSave takes a folder path (each part a safe name, four
+  deep at most).
+- A texture's owner: a texture a stage's meshset uses is that stage's (so
+  JADE_SKY is Jade's Desert's, not Jade's); a `*_COMPLETEMAP` is the
+  interface's; a stem naming a fighter (at its start first) is that
+  fighter's; a texture another meshset uses is an effect; anything else is
+  the interface's. 1582 textures sort into 27 fighters (1065), 16 stages (164),
+  88 effects and 265 interface.
+
+**TEXTURES page in MODS (Mary: stage and menu textures in their own
+section).** Fighters, stages (a list each), interface and menus, effects:
+every texture with SEE, REPLACE (PNG) into the chosen mod and EXPORT (PNG);
+the mod's own ones are marked.
+
+**Issue #101, animated stage export.** EXPORT > STAGES > WITH ITS ANIMATION
+(FBX, USDA, USDC, USDZ): each scene object that is ever shown is a bone of its
+own with its mesh bound to it; each frame's key gives the bone its palette
+rotation, translation and scale relative to its first shown key, and a key at
+alpha 0.03 or below scales it to nothing. FBX gets `Lcl Scaling` curves and
+USD `SkelAnimation` scales samples when a pose has a scale. Checked: frame 0
+equals the static export exactly; on Scorpion's Lair (1001 frames, 43
+objects) every shown vertex at frames 3, 400 and 999 matches the scene's own
+placement within 0.0004. **Not opened in Blender or a USD viewer yet.**
+
+**Issue #114 (Liu Kang's 7-hit kombo, the opponent slides away).** Checked
+against the binary: `t_cc_hi_punch` (4 punches, 6 holding away),
+`t_ccp3`, `t_separate_us`, `inc_p_block` (the punch count at header +0x4c),
+`t_avoid_corner_trap(_b)`. All match. It may be the original's rule; the log
+now prints `separate us:` and `corner trap:` when they act. Needs Mary's log
+of the kombo.
+
+**Death screams in friendships and animalities (open).** `t_friendship_complete`,
+`t_end_friend_proc`, `t_friend_ender` and `death_blow_complete` match the
+binary. The `death scream:` line now also names the handler the thread loop is
+running (`port_mk3_running`, mk3.c) and the caller of `group_sound`. Needs a
+log from the current build (its PDB is kept in `WORK/pdb-0928/`).
+
+## After 0.1.9: SMOOTH MODELS, crash report context, GPL (2026-10-23, not released)
+
+**SMOOTH MODELS** (Mary): an option, OFF / LEVEL 1 / LEVEL 2, that draws the
+fighters through Blender's Weld and Subdivision Surface (Catmull-Clark)
+modifiers, "extracted from Blender's code". Mary chose copying Blender's code
+over a clean reimplementation, knowing it makes the project GPL.
+
+- `src/thirdparty/blender/`: Blender 2.79b's CCGSubSurf files unchanged (the
+  last Blender whose own C does Catmull-Clark; later ones use OpenSubdiv),
+  stand-in headers for the Blender headers they include, and
+  `umk3_subsurf.c`: the weld ported from 4.2.0 (`kdtree_impl.h`
+  calc_duplicates_fast, `mesh_merge_by_distance.cc` "All" mode: mean of a
+  merged group, faces with a repeated vertex removed, the first of faces with
+  the same vertices kept) and the subsurf glue from 2.79b `subsurf_ccg.c`
+  (positions and UVs as two CCG surfaces, `BKE_mesh_uv_vert_map_create` for
+  the UV vertices and seams, `get_ss_weights` for per-corner data). See its
+  README for which file is which.
+- Game: `src/runtime/smooth_models.c`, called from `RenderAnimatedCharacter`
+  (Players.c) for the body, the second skin and the shadow, in place of
+  `LIME_RenderMeshSingleIndexed` when the option is on. Positions are the
+  skin's (`SkinnedVerts`, from the `DrawSkinnedMesh2` just before), topology
+  and UVs the skin's own, the light the frame record's per corner. The weld
+  distance is Blender's default, 0.001 m = 0.1 game units (centimetres). One
+  surface per skin, dropped when `LIME_FreeSkin` frees it.
+- Viewer: SMOOTH MODEL (OFF / LEVEL 1 / LEVEL 2) and SMOOTH next to LOOP for
+  smooth animations: the same C as WebAssembly (`mods/subsurf.js`,
+  `scripts/build-subsurf.js` regenerates `subsurf_wasm.js`; the CSP allows
+  'wasm-unsafe-eval'), and frames blended like the game's GetSlerpedQ
+  (`rig.js` framePoseBlend).
+- Option: `smooth_models=0|1|2` in `umk3.ini`, the launcher's GRAPHICS > VIDEO,
+  the in-game GRAPHICS > VIDEO row (applies at once).
+
+**Verified:** `tests/subsurf_test.c` (a triangulated cube with seam
+duplicates: the weld merges all 16, the result is closed, wound outwards,
+inside the cube, UVs and corner values in range; levels 1 and 2). The
+WebAssembly gives the same counts. On real skins (Kabal, Kano, Scorpion,
+Ermac) no NaN, level 2 evaluates in 1.4-4.4 ms; the open edges left are the
+models' own openings (none within 2 units of another shell for Kano, Scorpion,
+Ermac; Kabal's 41 near ones are merged by the weld). Both exes build from
+Mary's .ipa; 83 of 83 sources compile for Linux. **Not seen in the game or the
+viewer yet:** Mary runs it.
+
+**Linux had no sound at all (issue #104, fixed, not heard on Linux yet).**
+The Linux package builds with `UMK3_NO_SDL_MIXER` (no library beyond SDL2),
+and in that mode every audio entry point of `platform/sdl_audio.c` was empty.
+Now that mode mixes on an SDL2 device itself: 16 effect voices (the mixer
+path's conversion and voice stealing) and one music stream, the MP3 decoded
+by libmpg123 loaded with dlopen when the first song plays (Fedora / Bazzite:
+mpg123-libs). Without libmpg123 the log says so and only the music is
+missing. 83 of 83 sources compile for Linux. The same issue's 6-button High
+Punch on Y and the moves-list button: the SDL pad goes through the same
+configured masks (`port_pad_action`, `g_pad6`) as Windows; the report is from
+0.1.6, before that configuration existed. Not changed; to be checked again on
+0.1.9 or later.
+
+**SMOOTH ANIMATIONS on the select screen and in the intro (fixed, not seen
+yet):** there PlayerAutoSmoothAnims blends with its own windows (40, 20)
+nearly all the time, and `port_smooth_pose` left any blend of the game's
+alone, so the option changed nothing there. With the option on it now blends
+from the frame the game's blend is mostly on.
+
+**Open, from Mary 2026-10-23:**
+- Death screams repeat in friendships and animalities (fatalities fixed).
+  Checked and ruled out: a state that screams and sleeps without moving on
+  (none), the sound-number order before each sound call against the binary
+  (`str [rX, #0x1c]` before `bl`: three candidates, all three false or
+  faithful -- tl_bomb33 stores 0 from `sl`; the script interpreter's opcode 15
+  stores into obj and calls ochar_sound(ref), as the binary does). The
+  `death scream:` diagnostic names the handler: a log of a friendship and an
+  animality from the 2026-10-23 09:28 build (its PDB is in the test folder)
+  will name it.
+- Issue #114: in Liu Kang's 7-hit kombo the opponent slides away and the
+  kombo cannot be finished. Not investigated past the corner rule
+  (`t_avoid_corner_trap`).
+- Issue #101: export the stages with their animations and textures.
+
+**Mary's first look at SMOOTH MODELS: holes and lag (fixed, not seen yet).**
+- Holes in cloth (a fighter's trousers): the weld removed faces with the same
+  three vertices everywhere; Blender's does it only among faces touching a
+  welded vertex (`weld_poly_loop_ctx_alloc`, `is_vert_ctx`). The game's models
+  draw cloth both ways with the same corners, so the back faces went. Now as
+  Blender.
+- A piece over another showing what is under it (Kano's eye plate, Sektor's
+  helmet): Catmull-Clark pulls an open rim inwards. Open edges now get crease
+  1.0 (Blender's own crease, creaseFactor = the level).
+- Closed pieces that overlap (Jax's head in his neck): Catmull-Clark shrinks
+  each, opening a gap. **Not Blender:** one correction pass in
+  `umk_subsurf_eval` -- each control point moved by how far its subdivided
+  self fell short, then subdivided again -- so the surface passes near the
+  model's own vertices (a cube's corner within 0.13 at level 1). Sharp corners
+  bulge a little in exchange.
+- Lag: every frame did a full CCG sync (hash maps, allocations); now one full
+  sync when the mesh is made and CCG's partial sync per frame, and an
+  unchanged pose is not evaluated again. Native cost per fighter per frame,
+  with the correction pass: ~1.2 ms at level 1, ~4 ms at level 2. The shadow
+  draws the plain mesh again. Under Vulkan / Direct3D 12 indexed triangles
+  were transformed once per index (`rgl_ff.c`); each vertex is now
+  transformed once and gathered (`tris_indexed`), rgl_test 0 failed on all
+  three renderers, 64 and 32 bit.
+
+**Crash reports and the session log** start with the version (`UMK3_VERSION`,
+passed by the launcher that compiled the game), 32/64-bit, the system
+(Windows version by RtlGetVersion, Wine if present; uname on Linux), the
+renderer drawing and the one asked, the GPU (GL_RENDERER / GL_VERSION, which
+names the card under Vulkan and Direct3D 12 too), the video settings,
+language, smooth animations / models and how many mods are on
+(`port_report_context`, game_main.c). Linux still has no crash report of its
+own; the session log carries the same block.
+
+**Licence:** GPL-2.0-or-later from here on (`LICENSE`); 0.1.9 and earlier stay
+MIT.
+
+## After 0.1.9: SMOOTH ANIMATIONS (2026-10-22, not released)
+
+Mary asked for an on/off option that makes the fighters' animations look
+smoother, drawing only, without changing the animations.
+
+- **What the game does:** a fight frame is held for several 60 Hz ticks and
+  drawn as a hard cut. The iOS original ran `PlayerAutoSmoothAnims` with a
+  window of 2 in fights (a delayed blend); the port sets it to 0 because the
+  delay felt like input lag (game_main.c).
+- **The option** (`port_smooth_anims`, `smooth_anims=` in `umk3.ini`, the
+  launcher's GRAPHICS > VIDEO checkbox, the in-game GRAPHICS > VIDEO row) runs
+  `port_smooth_pose` (GameCode.c) from `RenderPlayer` (the fight and the
+  select screen) and before both intro draws, with one state per PLAYER; the
+  fight's projectile slots are skipped. The first version only covered the
+  fight, and Mary saw no change in the intro. When the game's frame changes, the drawn pose blends from the
+  previous frame into the new one over as many ticks as the previous one was
+  held, at most 5 (up to 4 ticks, 67 ms, behind the logic frame while
+  blending). It writes only `frameB` (+0x520) and `t` (+0x524); `frameA`
+  stays the game's frame, so the mesh record, the second skin and the scene
+  events are the game's. No blend across a non-skinned frame, a second-skin
+  change, a character/model change, 16/35..41, or IsLiaProblem /
+  IsOstrichProblem; a blend the game set itself is left alone.
+- **Verified:** both exes build from Mary's `.ipa`; launcher tests pass
+  (ini round trip includes `smooth_anims`). **Not seen in the game yet:**
+  Mary runs it.
+
+**Crash when a fighter takes Kabal's zap (fixed).** Mary's next log printed
+`csound: character 297758 out of range (event param 0x48b1e38)`. 0x48b1e38 is
+`G + 0x390` in the 64-bit exe with character 10 (Kabal) added as `10 << 8`:
+player 0's hit queue, which `uhq_entry` leaves in 0x1c at every reaction
+start. `t_r_tusk_zap` (armv7 0x46324), the reaction to Kabal's zap, stores
+`field1c = 0` BEFORE `bl his_ochar_sound` (0x46396 / 0x46398); the port had
+the store after the call, so the sound number was the pointer. On iOS that
+read a wrong entry quietly; on the PC it crashed. `factdiff` compares stores
+as a multiset, so a store moved past a call is invisible to it.
+
+**Fatality death screams repeat, fatalities that do not finish (open).**
+Every fatality, Mary says. Ruled out: the event queue (cleared at every
+`mk3_update`), the scene events (visual only), the rollback probe (off unless
+set), `instck` (no -3 refusals the binary lacks). Diagnostics in the build,
+to find the handler instead of guessing: `death scream: character N, handler
+0x..., token 0x..., level N` (other.c group_sound, kind 9) and `mk3: tick
+abandoned, handler 0x... refused token 0x...` (mk3.c). The handler address
+minus 0x400000 is its offset in the 64-bit exe (llvm-symbolizer with the PDB).
+
+**Crash when two projectiles meet.** SCORPION vs KABAL, both throwing
+at once: `AddNewGameEvents` -> `get_csound` read past `ochar_sound_tables`
+(26 rows) -- a character sound event (MKEvent 2/3, param = char << 8 + n)
+carried a character number of 26 or more. The four senders (`ochar_sound`,
+`ochar_sound_n`, `ochar_sound_c`, `his_ochar_sound`, armv7 0x57b94..0x57bfc)
+match the binary, so the bad number comes from what calls them. Until the
+sender is found, Blood.c skips such an event and prints `csound: character N
+out of range (event param 0x...)` to the log: the next report gives the value.
+Mary also reports screams repeating when a fighter takes a fatality, and
+fatalities whose animation does not finish: not investigated yet.
 
 ## Release 0.1.9 beta (2026-10-22): Vulkan and Direct3D 12, Linux fixes
 
@@ -402,6 +642,7 @@ own rule (FrontEnd.c, modes 3/4/5). Waiting for her steps.
 Not investigated yet; each needs its mechanism traced in the binary first.
 
 - **64-bit:** the FLAWLESS VICTORY text is not shown (fine in 32-bit).
+  Fixed: Mary confirmed it on 2026-10-22.
 - **Reptile's fatalities** sometimes do not work fully; in one of them he
   only raises his arms.
 - **Hitboxes** (the debug view) crash the game. Fixed, see above.

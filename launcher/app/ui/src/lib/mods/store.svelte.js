@@ -3,7 +3,7 @@
 import { api } from '../platform.js';
 import { catalog, loadFighter } from './assets.js';
 
-export const MODS_TABS = [['mgr', 'modsMgr'], ['view', 'modsView'], ['edit', 'modsEdit'], ['exp', 'modsExp']];
+export const MODS_TABS = [['mgr', 'modsMgr'], ['view', 'modsView'], ['edit', 'modsEdit'], ['tex', 'modsTex'], ['exp', 'modsExp']];
 export const VIEW_KINDS = [['characters', 'vwChars'], ['stages', 'vwStages'], ['models', 'vwModels'], ['textures', 'vwTex']];
 
 export const ms = $state({
@@ -16,6 +16,9 @@ export const ms = $state({
     kind: 'characters', pick: null, search: '',
     pose: 'tpose', clip: -1, frame: 0, playing: false, speed: 1, loop: true, solo: false, outfit: '', bones: false, wire: false, extras: true,
     loading: false, error: '',
+    /* SMOOTH MODEL (0 off, 1 or 2: the game's weld + Catmull-Clark level)
+     * and SMOOTH ANIMATIONS (frames blended while playing), as in the game */
+    smoothModel: 0, smoothAnims: false,
     /* what the viewer and the editor read: the game alone (''), the game
      * with every mod that is on ('*'), or with one mod (its folder) */
     layer: '',
@@ -25,6 +28,8 @@ export const ms = $state({
     autoSmall: true,
     /* the CHARACTER EDITOR: the fighter, the mod its changes go to */
     edFighter: 0, edMod: '', edPage: 'attacks',
+    /* TEXTURES: the group (mods/owners.js GROUPS), the fighter or stage */
+    txGroup: 'characters', txItem: '',
 });
 
 /* ------------------------------------------------------------- mods -- */
