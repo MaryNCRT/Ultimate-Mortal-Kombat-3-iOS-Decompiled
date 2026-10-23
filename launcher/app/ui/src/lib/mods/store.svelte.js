@@ -14,7 +14,7 @@ export const ms = $state({
     files: null, cat: null, noGame: false,
     /* the viewer: kind of thing, the chosen one, its settings */
     kind: 'characters', pick: null, search: '',
-    pose: 'tpose', clip: -1, frame: 0, playing: false, speed: 1, outfit: '', bones: false, wire: false,
+    pose: 'tpose', clip: -1, frame: 0, playing: false, speed: 1, outfit: '', bones: false, wire: false, extras: true,
     loading: false, error: '',
     /* what the viewer and the editor read: the game alone (''), the game
      * with every mod that is on ('*'), or with one mod (its folder) */

@@ -270,7 +270,9 @@ export function parseScene(b) {
         const keys = [];
         for (let f = 0; f < frames; f++) {
             const k = off + 64 + f * 12;
-            keys.push({ alpha: d.getFloat32(k, true), pal: d.getUint16(k + 8, true) });
+            /* +4: the bone of the fighter's skin the object rides (Kung Lao's
+             * hat on bone 7, the head; RenderScene.c scene_attach_to_bone), 0 none */
+            keys.push({ alpha: d.getFloat32(k, true), bone: b[k + 4], pal: d.getUint16(k + 8, true) });
         }
         objects.push({ name, keys });
         off += 64 + frames * 12;

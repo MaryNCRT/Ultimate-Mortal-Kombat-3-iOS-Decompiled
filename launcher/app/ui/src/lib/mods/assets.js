@@ -117,9 +117,17 @@ export async function loadFighter(src, ch) {
      * mesh 1, "hair", SINDEL_HAIR_DIFF), else <NAME>_DIFFUSE */
     let meshset = [];
     try { meshset = parseMeshset((await src.read(ch.file + '.meshset')) || new Uint8Array(0)); } catch { /* none */ }
+    /* A fighter's meshset can hold another's skin too: Reptile's and Noob
+     * Saibot's carry a mesh textured SCORPION_DIFFUSE of the same size as
+     * their own, and the game dresses the fighter in <NAME>_DIFFUSE
+     * (Players.c), so the fighter's own texture wins. */
+    const own = ch.id + '_DIFFUSE';
+    const hasOwn = !!textureFile(src.files, own);
     const blockTex = skin.map((blk, i) => {
-        const hit = meshset.find(m => m.faces.length / 3 === blk.numTris) || meshset[i];
-        return (hit && hit.texture) || ch.id + '_DIFFUSE';
+        const same = meshset.filter(m => m.faces.length / 3 === blk.numTris);
+        const hit = same.find(m => m.texture && m.texture.toUpperCase().startsWith(ch.id)) || same[0] || meshset[i];
+        const t = (hit && hit.texture) || own;
+        return hasOwn && /_DIFFUSE\d*$/i.test(t) && !t.toUpperCase().startsWith(ch.id) ? own : t;
     });
     /* the outfits the game ships: <NAME>_DIFFUSE, _DIFFUSE2 (player two),
      * _ICE (frozen), ... -- the full-size ones */
@@ -129,11 +137,33 @@ export async function loadFighter(src, ch) {
         .map(f => f.slice(9).replace(/\.(pvr|png)$/i, ''))
         .filter((v, i, a) => a.indexOf(v) === i);
 
+    /* What rides the fighter's bones (Kung Lao's hat on his head or in a
+     * hand): the scene objects whose key names a bone, each a mesh of the
+     * meshset, placed by its key's matrix and then the bone's, frame by
+     * frame (RenderScene.c LIME_RenderScene, scene_attach_to_bone).
+     * Particles and markers (a quad or two, EVENT...) are left out. */
+    const attach = [];
+    try {
+        const sb = await src.read(ch.file + '.scene');
+        const sc = sb && parseScene(sb);
+        for (const obj of sc ? sc.objects : []) {
+            const mi = meshset.findIndex(m => m.name === obj.name);
+            const m = meshset[mi];
+            if (!m || /^EVENT/i.test(m.name) || m.faces.length / 3 < 20) continue;
+            if (!obj.keys.some(k => k.alpha > 0.03 && k.bone)) continue;
+            const R = sc.palette.map(p => {
+                const [x, y, z, w] = p.q, n = Math.hypot(x, y, z, w) || 1;
+                return { R: rowQuat(x / n, y / n, z / n, w / n), s: p.s, t: p.t };
+            });
+            attach.push({ name: m.name, texture: m.texture, pos: m.pos, uv: m.uv, faces: m.faces, keys: obj.keys, pal: R });
+        }
+    } catch { /* no scene, or one this reader does not know */ }
+
     let frameNames = [];
     const fl = await src.read('framelists/' + ch.id.toLowerCase() + 'frames.txt');
     if (fl) frameNames = parseFrameList(new TextDecoder().decode(fl));
     const clips = findClips(frameNames, anim.frames);
-    return { ch, rig, bind, tpose, names, topo, weights, blockTex, variants: variants.length ? variants : [base], clips, frameNames };
+    return { ch, rig, bind, tpose, names, topo, weights, blockTex, variants: variants.length ? variants : [base], clips, frameNames, attach };
 }
 
 /* opts: { rest: 'tpose' | 'bind', variant, clips: [index into f.clips] or
@@ -230,6 +260,31 @@ function placedDesc(name, scene, set, frame) {
         meshes.push({ name: k > 1 ? nm + '_' + k : nm, pos, uv: m.uv, faces: m.faces, material: matOf.get(tex) });
     }
     return { name, meshes, materials, fps: 30 };
+}
+
+/* An attachment's vertices (loadFighter's `attach`) in a pose, or null when
+ * it is not shown. `frame` is the animation frame the pose is; below 0 a
+ * rest pose, where it shows if the animation mostly shows it (the hat on
+ * the head, not the one in a hand). */
+export function attachVerts(a, frame, pose) {
+    let key;
+    if (frame >= 0)
+        key = a.keys[Math.min(frame, a.keys.length - 1)];
+    else {
+        const on = a.keys.filter(k => k.alpha > 0.03 && k.bone);
+        if (on.length * 2 < a.keys.length) return null;
+        key = on[0];
+    }
+    if (!key || key.alpha <= 0.03 || !key.bone || !pose[key.bone]) return null;
+    const P = a.pal[key.pal], B = pose[key.bone];
+    if (!P) return null;
+    const out = new Float32Array(a.pos.length);
+    for (let i = 0; i < a.pos.length; i += 3) {
+        const q = vmul([a.pos[i] * P.s[0], a.pos[i + 1] * P.s[1], a.pos[i + 2] * P.s[2]], P.R);
+        const r = vmul([q[0] + P.t[0], q[1] + P.t[1], q[2] + P.t[2]], B.R);
+        out[i] = r[0] + B.T[0]; out[i + 1] = r[1] + B.T[1]; out[i + 2] = r[2] + B.T[2];
+    }
+    return out;
 }
 
 const rowQuat = (x, y, z, w) => {

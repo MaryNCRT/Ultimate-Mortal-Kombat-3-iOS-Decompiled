@@ -70,6 +70,16 @@ list of what works and what comes next is now [GOALS.md](GOALS.md).
   the OUTFIT one and is gone); REPLACE TEXTURE takes the outfit shown.
   SPEED 0.1x to 3x beside the frame bar. The home menu keeps its old text
   size (Mary).
+- Viewer: Reptile and Noob Saibot showed Scorpion's texture. Their meshsets
+  carry a mesh textured SCORPION_DIFFUSE of the same triangle count as
+  their own, and the block's texture was taken from the first match; now
+  the fighter's own <NAME>_DIFFUSE wins (assets.js loadFighter).
+- Viewer: Kung Lao's hat. What rides a fighter's bones is in its .scene: a
+  key per frame with the visibility, a placement matrix (palette) and, in
+  byte +4, the bone (RenderScene.c scene_attach_to_bone; parseScene now
+  reads it). The meshset meshes it names are placed by the key's matrix
+  and then the bone's, frame by frame: the hat on bone 7 (head) or in a
+  hand (11, 19) when a throw has it there. ACCESSORIES turns them off.
 - **COVER** takes any picture too, made a PNG no wider than 640 in the
   window. Before, the file was copied as it was and a cover over 4 MB (a
   photo) was never shown.
