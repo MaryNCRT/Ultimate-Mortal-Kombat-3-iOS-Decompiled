@@ -5,6 +5,60 @@
 
 ---
 
+## After 0.1.9: SMOOTH MODELS, crash report context, GPL (2026-10-23, not released)
+
+**SMOOTH MODELS** (Mary): an option, OFF / LEVEL 1 / LEVEL 2, that draws the
+fighters through Blender's Weld and Subdivision Surface (Catmull-Clark)
+modifiers, "extracted from Blender's code". Mary chose copying Blender's code
+over a clean reimplementation, knowing it makes the project GPL.
+
+- `src/thirdparty/blender/`: Blender 2.79b's CCGSubSurf files unchanged (the
+  last Blender whose own C does Catmull-Clark; later ones use OpenSubdiv),
+  stand-in headers for the Blender headers they include, and
+  `umk3_subsurf.c`: the weld ported from 4.2.0 (`kdtree_impl.h`
+  calc_duplicates_fast, `mesh_merge_by_distance.cc` "All" mode: mean of a
+  merged group, faces with a repeated vertex removed, the first of faces with
+  the same vertices kept) and the subsurf glue from 2.79b `subsurf_ccg.c`
+  (positions and UVs as two CCG surfaces, `BKE_mesh_uv_vert_map_create` for
+  the UV vertices and seams, `get_ss_weights` for per-corner data). See its
+  README for which file is which.
+- Game: `src/runtime/smooth_models.c`, called from `RenderAnimatedCharacter`
+  (Players.c) for the body, the second skin and the shadow, in place of
+  `LIME_RenderMeshSingleIndexed` when the option is on. Positions are the
+  skin's (`SkinnedVerts`, from the `DrawSkinnedMesh2` just before), topology
+  and UVs the skin's own, the light the frame record's per corner. The weld
+  distance is Blender's default, 0.001 m = 0.1 game units (centimetres). One
+  surface per skin, dropped when `LIME_FreeSkin` frees it.
+- Viewer: SMOOTH MODEL (OFF / LEVEL 1 / LEVEL 2) and SMOOTH next to LOOP for
+  smooth animations: the same C as WebAssembly (`mods/subsurf.js`,
+  `scripts/build-subsurf.js` regenerates `subsurf_wasm.js`; the CSP allows
+  'wasm-unsafe-eval'), and frames blended like the game's GetSlerpedQ
+  (`rig.js` framePoseBlend).
+- Option: `smooth_models=0|1|2` in `umk3.ini`, the launcher's GRAPHICS > VIDEO,
+  the in-game GRAPHICS > VIDEO row (applies at once).
+
+**Verified:** `tests/subsurf_test.c` (a triangulated cube with seam
+duplicates: the weld merges all 16, the result is closed, wound outwards,
+inside the cube, UVs and corner values in range; levels 1 and 2). The
+WebAssembly gives the same counts. On real skins (Kabal, Kano, Scorpion,
+Ermac) no NaN, level 2 evaluates in 1.4-4.4 ms; the open edges left are the
+models' own openings (none within 2 units of another shell for Kano, Scorpion,
+Ermac; Kabal's 41 near ones are merged by the weld). Both exes build from
+Mary's .ipa; 83 of 83 sources compile for Linux. **Not seen in the game or the
+viewer yet:** Mary runs it.
+
+**Crash reports and the session log** start with the version (`UMK3_VERSION`,
+passed by the launcher that compiled the game), 32/64-bit, the system
+(Windows version by RtlGetVersion, Wine if present; uname on Linux), the
+renderer drawing and the one asked, the GPU (GL_RENDERER / GL_VERSION, which
+names the card under Vulkan and Direct3D 12 too), the video settings,
+language, smooth animations / models and how many mods are on
+(`port_report_context`, game_main.c). Linux still has no crash report of its
+own; the session log carries the same block.
+
+**Licence:** GPL-2.0-or-later from here on (`LICENSE`); 0.1.9 and earlier stay
+MIT.
+
 ## After 0.1.9: SMOOTH ANIMATIONS (2026-10-22, not released)
 
 Mary asked for an on/off option that makes the fighters' animations look

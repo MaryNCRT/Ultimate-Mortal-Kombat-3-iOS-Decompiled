@@ -16,6 +16,9 @@ export const ms = $state({
     kind: 'characters', pick: null, search: '',
     pose: 'tpose', clip: -1, frame: 0, playing: false, speed: 1, loop: true, solo: false, outfit: '', bones: false, wire: false, extras: true,
     loading: false, error: '',
+    /* SMOOTH MODEL (0 off, 1 or 2: the game's weld + Catmull-Clark level)
+     * and SMOOTH ANIMATIONS (frames blended while playing), as in the game */
+    smoothModel: 0, smoothAnims: false,
     /* what the viewer and the editor read: the game alone (''), the game
      * with every mod that is on ('*'), or with one mod (its folder) */
     layer: '',

@@ -25,10 +25,12 @@ CC = sys.argv[1:] or ["clang"]          # the compiler, with any leading argumen
 RUNTIME = ["game_main.c", "debug_menu.c", "settings_menu.c", "pad_nav.c", "profiles.c", "mods.c",
            "draw_gl.c", "gamecode_stubs.c", "mp_net.c", "mp_eos.c", "online_ui.c", "lime_menu.c",
            "lime_platform.c", "lime_app.c", "wav.c", "fight_runtime.c", "savestate.c",
-           "rollback_probe.c", "rollback.c",
+           "rollback_probe.c", "rollback.c", "smooth_models.c",
            "platform/sdl_gl.c", "platform/sdl_audio.c", "platform/ui_alert.c",
            "render/rgl_front.c", "render/rgl_ff.c", "render/rgl_vk.c"]
-DIRS = ["src/decomp/gamecode", "src/decomp/lime", "src/runtime/lime", "src/decomp/gamecode/logic"]
+DIRS = ["src/decomp/gamecode", "src/decomp/lime", "src/runtime/lime", "src/decomp/gamecode/logic",
+        "src/thirdparty/blender"]
+BLENDER = os.path.join(ROOT, "src", "thirdparty", "blender")
 
 
 def sources():
@@ -60,7 +62,9 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         def one(i_src):
             i, src = i_src
-            r = subprocess.run(CC + fl + ["-c", src, "-o", os.path.join(tmp, "%d.o" % i)],
+            extra = (["-I", BLENDER, "-I", os.path.join(BLENDER, "shim")]
+                     if os.path.normpath(os.path.dirname(src)) == os.path.normpath(BLENDER) else [])
+            r = subprocess.run(CC + fl + extra + ["-c", src, "-o", os.path.join(tmp, "%d.o" % i)],
                                capture_output=True, text=True)
             return src, r.returncode, r.stderr
         with ThreadPoolExecutor(os.cpu_count() or 2) as ex:

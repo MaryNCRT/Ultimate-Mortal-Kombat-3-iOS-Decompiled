@@ -15,6 +15,9 @@ Kept current with every release; the detail of each change is in
   or the in-game menu.
 - SMOOTH ANIMATIONS on/off (launcher and in-game menu): the fighters'
   frames blended when drawn, in fights, the select screen and the intro.
+- SMOOTH MODELS off / level 1 / level 2 (launcher, in-game menu, model
+  viewer): Blender's weld + Catmull-Clark. Not yet seen by Mary.
+- Crash reports with version, system, renderer, GPU and settings.
 - Window, borderless or fullscreen; resolution, 3D resolution,
   antialiasing, texture quality, aspect 3:2 / 4:3 / 16:9 / 21:9, interface
   size, on-screen controls.

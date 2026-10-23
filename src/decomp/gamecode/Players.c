@@ -9,6 +9,7 @@
 #include "lime_glapi.h"   /* the GL calls' calling convention */
 #include <string.h>   /* memcpy, strcmp, strcpy */
 #include <stdio.h>    /* sprintf */
+#include "../../runtime/smooth_models.h"   /* port: SMOOTH MODELS */
 
 typedef struct TEXTURE TEXTURE;
 void limeDeleteTexture(TEXTURE *tex);
@@ -1411,7 +1412,10 @@ void RenderAnimatedCharacter(char *name, ANIMATEDCHARACTER *c,
         GenerateFrameVertsBySkinning(c, idxA, idxB, t, RenderVerts);
         LIME_printf(0x1b, "Player SKIN %s at fr %d is VISIBLE\n",
                     name, (int)frameA);
-        LIME_RenderMeshSingleIndexed(frame, tex, grey, pos, 0);
+        /* port: SMOOTH MODELS draws the skin smoothed, or nothing */
+        if (!port_smooth_draw(((void *P32 *)c)[0x30 / 4], frame, 0, tex,
+                              grey, pos))
+            LIME_RenderMeshSingleIndexed(frame, tex, grey, pos, 0);
     } else {
         /* 0x5c2f4: a body not drawn is still posed. A baked frame (Mileena's
          * nail fatality, 310..334) draws scene meshes instead, and what they
@@ -1430,9 +1434,13 @@ void RenderAnimatedCharacter(char *name, ANIMATEDCHARACTER *c,
     if (*(void *P32 *)(uintptr_t)(unsigned long)a[0x30 / 4] != 0 && vis) {
         if (f[0x28 / 4] == 1 || (idxA == 365 && a[2] == 6)) {
             GenerateFrameVertsBySkinningSKIN2(c, idxA, idxB, t, RenderVerts);
-            LIME_RenderMeshSingleIndexed(frame,
-                    (void *)(uintptr_t)(unsigned long)a[0x20 / 4],
-                    grey, pos, 1);
+            if (!port_smooth_draw(*(void *P32 *)(uintptr_t)(unsigned long)
+                                      a[0x30 / 4], frame, 1,
+                                  (void *)(uintptr_t)(unsigned long)a[0x20 / 4],
+                                  grey, pos))      /* port: SMOOTH MODELS */
+                LIME_RenderMeshSingleIndexed(frame,
+                        (void *)(uintptr_t)(unsigned long)a[0x20 / 4],
+                        grey, pos, 1);
         }
     }
     glPopMatrix();
@@ -1445,7 +1453,9 @@ void RenderAnimatedCharacter(char *name, ANIMATEDCHARACTER *c,
                  0.0f);
     glScalef(1.0f, 0.0f, 1.0f);         /* Y collapsed to the ground plane */
 
-    if (f[0x18 / 4] == 1 && vis)
+    if (f[0x18 / 4] == 1 && vis
+        && !port_smooth_draw(((void *P32 *)c)[0x30 / 4], frame, 2, 0,
+                             grey, pos))   /* port: the smoothed body */
         LIME_RenderMeshSingleIndexed(frame, 0, grey, pos, 0);
 
     glPopMatrix();

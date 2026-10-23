@@ -6,6 +6,15 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 
 ## Unreleased
 
+- **SMOOTH MODELS** (off, level 1 or 2): the fighters drawn through Blender's
+  Weld and Subdivision Surface (Catmull-Clark), in the game (GRAPHICS > VIDEO,
+  `smooth_models=` in `umk3.ini`) and the model viewer, which can also play
+  animations smoothed. The code is Blender's (`src/thirdparty/blender`).
+- **The project is now GPL-2.0-or-later**, because it contains Blender's code.
+  Releases up to 0.1.9-beta stay MIT.
+- Crash reports and the session log name the version, the system, the
+  renderer, the GPU and the settings in use.
+
 - **SMOOTH ANIMATIONS** (off by default): the launcher's GRAPHICS > VIDEO, or
   Esc > GRAPHICS > VIDEO in the game (applied at once), `smooth_anims=1` in
   `umk3.ini`. A fighter's frames are held for several ticks and drawn as hard

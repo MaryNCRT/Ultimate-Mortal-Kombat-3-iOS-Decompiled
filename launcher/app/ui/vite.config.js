@@ -22,7 +22,8 @@ export default defineConfig({
             mode: 'hash',
             directives: {
                 'default-src': ['self'],
-                'script-src': ['self'],
+                /* the viewer's SMOOTH MODEL is WebAssembly (mods/subsurf.js) */
+                'script-src': ['self', 'wasm-unsafe-eval'],
                 'style-src': ['self'],
                 'img-src': ['self', 'data:'],
             },

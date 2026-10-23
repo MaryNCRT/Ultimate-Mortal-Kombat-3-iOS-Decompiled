@@ -542,6 +542,96 @@ static void start_app(void)
         Settings[4] = g_cfg_buttons;
 }
 
+/* What a report needs to be read: the build, the system and the settings.
+ * Written into every crash report and at the top of every session log (so a
+ * Linux run, which has no crash report, has it too). UMK3_VERSION comes from
+ * the launcher that compiled the game (lib/compile.js, its package.json). */
+#define UMK3_STR2(x) #x
+#define UMK3_STR(x)  UMK3_STR2(x)
+#ifdef UMK3_VERSION
+#define UMK3_VERSION_STR UMK3_STR(UMK3_VERSION)
+#else
+#define UMK3_VERSION_STR "dev"
+#endif
+
+static char g_gpu[200];                 /* GL_RENDERER / GL_VERSION, read at start */
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/utsname.h>
+#endif
+
+static void system_name(char *out, int n)
+{
+#ifdef _WIN32
+    /* RtlGetVersion: GetVersionEx stops at 6.2 for an exe without a
+     * manifest. Wine says so through wine_get_version. */
+    typedef LONG (WINAPI *rtlver)(OSVERSIONINFOW *);
+    typedef const char *(*winever)(void);
+    HMODULE nt = GetModuleHandleA("ntdll.dll");
+    rtlver rv = nt ? (rtlver)(void *)GetProcAddress(nt, "RtlGetVersion") : NULL;
+    winever wv = nt ? (winever)(void *)GetProcAddress(nt, "wine_get_version") : NULL;
+    OSVERSIONINFOW vi;
+
+    memset(&vi, 0, sizeof vi);
+    vi.dwOSVersionInfoSize = sizeof vi;
+    if (rv && rv(&vi) == 0)
+        snprintf(out, (size_t)n, "Windows %lu.%lu build %lu%s%s",
+                 (unsigned long)vi.dwMajorVersion, (unsigned long)vi.dwMinorVersion,
+                 (unsigned long)vi.dwBuildNumber, wv ? ", Wine " : "", wv ? wv() : "");
+    else
+        snprintf(out, (size_t)n, "Windows (version not read)");
+#else
+    struct utsname u;
+
+    if (uname(&u) == 0)
+        snprintf(out, (size_t)n, "%s %s %s", u.sysname, u.release, u.machine);
+    else
+        snprintf(out, (size_t)n, "Linux (uname failed)");
+#endif
+}
+
+static int port_report_context(char *out, int n)
+{
+    static const char *const mode[3] = { "window", "borderless", "fullscreen" };
+    static const char *const texq[3] = { "IPHONE", "IPAD", "NO LIMIT" };
+    static const char *const rend[3] = { "OpenGL", "Vulkan", "Direct3D 12" };
+    struct port_gfx g;
+    char sys[160], rres[32], aa[16], sm[16];
+
+    system_name(sys, sizeof sys);
+    port_gfx_get(&g);
+    if (g.rw > 0)
+        snprintf(rres, sizeof rres, "%dx%d", g.rw, g.rh);
+    else
+        snprintf(rres, sizeof rres, "the window's");
+    if (g.aa)
+        snprintf(aa, sizeof aa, "x%d", g.aa);
+    else
+        snprintf(aa, sizeof aa, "off");
+    if (port_smooth_models)
+        snprintf(sm, sizeof sm, "level %d", port_smooth_models);
+    else
+        snprintf(sm, sizeof sm, "off");
+    return snprintf(out, (size_t)n,
+                    "Version %s, %d-bit, built %s\r\n"
+                    "System: %s\r\n"
+                    "Renderer: %s (asked: %s)\r\n"
+                    "GPU: %s\r\n"
+                    "Video: %dx%d %s, 3D resolution %s, antialiasing %s, aspect %s, "
+                    "interface %s, textures %s\r\n"
+                    "Language %s, smooth animations %s, smooth models %s, mods on %d\r\n\r\n",
+                    UMK3_VERSION_STR, (int)(sizeof(void *) * 8), __DATE__,
+                    sys,
+                    rend[rgl_renderer % 3], rend[port_renderer() % 3],
+                    g_gpu[0] ? g_gpu : "(not read yet)",
+                    g.w, g.h, mode[g.mode % 3], rres, aa,
+                    g.aspect, g.ui ? "IPAD" : "IPHONE", texq[g.texq % 3],
+                    port_language()[0] ? port_language() : "system",
+                    port_smooth_anims ? "on" : "off", sm, mods_count(NULL));
+}
+
 #ifdef _WIN32
 /* A crash prints where it happened, as offsets into the executable, so that
  *   i686-w64-mingw32-addr2line -f -e umk3-game.exe 0x<image base + offset>
@@ -744,8 +834,12 @@ static LONG WINAPI on_crash(EXCEPTION_POINTERS *ep)
     }
 #endif
 
-    fprintf(stderr, "\ncrash:\n%s", msg);
-    fflush(stderr);
+    {
+        static char ctx[1024];
+        port_report_context(ctx, sizeof ctx);
+        fprintf(stderr, "\ncrash:\n%s%s", ctx, msg);
+        fflush(stderr);
+    }
 
     len = GetModuleFileNameA(NULL, path, MAX_PATH);
     slash = (len > 0 && len < MAX_PATH) ? strrchr(path, '\\') : NULL;
@@ -757,7 +851,10 @@ static LONG WINAPI on_crash(EXCEPTION_POINTERS *ep)
                 t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
         f = fopen(path, "wb");
         if (f) {
+            static char ctx[1024];
+            port_report_context(ctx, sizeof ctx);
             fputs("UMK3 crash report\r\n\r\n", f);
+            fputs(ctx, f);
             fputs(msg, f);
             fclose(f);
         }
@@ -967,6 +1064,10 @@ static void read_config(const char *dir)
         else if (strcmp(line, "smooth_anims") == 0) {  /* GameCode.c */
             extern int port_smooth_anims;
             port_smooth_anims = atoi(v) == 1;
+        }
+        else if (strcmp(line, "smooth_models") == 0) { /* smooth_models.c */
+            extern int port_smooth_models;
+            port_smooth_models = atoi(v) < 0 ? 0 : atoi(v) > 2 ? 2 : atoi(v);
         }
         else if (strcmp(line, "buttons") == 0)
             g_cfg_buttons = atoi(v);
@@ -2831,6 +2932,16 @@ int main(int argc, char **argv)
     {
         extern long AnimSmoothWindowSize;
         AnimSmoothWindowSize = 0;
+    }
+
+    {   /* port: what a report needs (port_report_context), in the log too */
+        const char *r = (const char *)glGetString(GL_RENDERER);
+        const char *v = (const char *)glGetString(GL_VERSION);
+        static char ctx[1024];
+
+        snprintf(g_gpu, sizeof g_gpu, "%s / %s", r ? r : "?", v ? v : "?");
+        port_report_context(ctx, sizeof ctx);
+        printf("%s", ctx);
     }
 
     last = plat_time();

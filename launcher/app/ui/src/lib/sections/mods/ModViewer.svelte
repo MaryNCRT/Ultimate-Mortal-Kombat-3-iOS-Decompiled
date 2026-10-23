@@ -18,7 +18,8 @@
     import { ms, src, loadCatalog, fighter, refreshMods, reloadMods, exportThis, forgetMod, VIEW_KINDS } from '#lib/mods/store.svelte.js';
     import { stageDesc, meshsetDesc, textureFile, pngBytes, exportFiles, isPng, attachVerts } from '#lib/mods/assets.js';
     import { readFbx, fbxScene, fbxTakes, importAnim, importModel, rigDesc } from '#lib/mods/fbxin.js';
-    import { framePose, posedVerts, fitRest } from '#lib/mods/rig.js';
+    import { framePose, framePoseBlend, posedVerts, fitRest } from '#lib/mods/rig.js';
+    import { subsurfCreate } from '#lib/mods/subsurf.js';
     import { decodePvr } from '#lib/mods/formats.js';
     import { putTexture } from '#lib/mods/image.js';
 
@@ -92,6 +93,7 @@
     }
 
     let last = 0, acc = 0;
+    let blendT = 0;                         /* SMOOTH ANIMATIONS: how far to the next frame */
     function loop(t = 0) {
         raf = requestAnimationFrame(loop);
         const dt = Math.min(0.1, (t - last) / 1000);
@@ -106,7 +108,12 @@
                 else if (ms.loop) ms.frame = 0;
                 else ms.playing = false;
             }
-        }
+            /* between two frames: drawn blended, every screen refresh */
+            if (ms.smoothAnims) {
+                blendT = Math.min(1, acc * 30 * ms.speed);
+                pose();
+            }
+        } else blendT = 0;
         controls && controls.update();
         renderer && renderer.render(scene, camera);
     }
@@ -270,9 +277,59 @@
         skel.renderOrder = 10;
         root.add(skel);
         scene.add(root);
-        fighterView = { f, meshes, extras };
+        fighterView = { f, meshes, extras, smooth: { level: 0, blocks: [] } };
         pose();
         frame(root);
+        smoothModel();
+    }
+
+    /* SMOOTH MODEL: each block of the fighter through the game's weld +
+     * Catmull-Clark (mods/subsurf.js), the weld measured in the bind pose.
+     * Built when the level changes; pose() fills it every frame. */
+    async function smoothModel() {
+        const fv = fighterView;
+        if (!fv || fv.smooth.level === ms.smoothModel) return;
+        const level = ms.smoothModel;
+        for (const b of fv.smooth.blocks) {
+            if (b.ss) b.ss.free();
+            if (b.mesh) { root && root.remove(b.mesh); b.mesh.geometry.dispose(); }
+        }
+        fv.smooth = { level, blocks: [] };
+        if (level > 0) {
+            const { f } = fv;
+            const bind = skinOf(f, posedVerts(f.rig, f.topo, f.bind.pose));
+            const blocks = [];
+            for (const [bi, blk] of f.rig.skin.entries()) {
+                const base = f.rig.blockBase[bi];
+                const ss = await subsurfCreate(level, bind.subarray(base * 3, (base + blk.numVerts) * 3), blk.tri, blk.triUv);
+                if (fighterView !== fv || fv.smooth.level !== level) {
+                    if (ss) ss.free();
+                    for (const b of blocks) if (b.ss) b.ss.free();
+                    return;
+                }
+                let mesh = null;
+                if (ss) {
+                    const g = new THREE.BufferGeometry();
+                    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ss.verts * 3), 3));
+                    g.setAttribute('uv', new THREE.BufferAttribute(ss.uv, 2));
+                    g.setIndex(new THREE.BufferAttribute(ss.index, 1));
+                    mesh = new THREE.Mesh(g, fv.meshes[bi].material);
+                    mesh.visible = false;
+                    root.add(mesh);
+                }
+                blocks.push({ ss, mesh, base, n: blk.numVerts });
+            }
+            fv.smooth.blocks = blocks;
+        }
+        pose();
+    }
+    $effect(() => { ms.smoothModel; smoothModel(); });
+
+    /* output-vertex positions (topology order) back to one per skin vertex */
+    function skinOf(f, pos) {
+        const out = new Float32Array(f.rig.numVerts * 3);
+        f.topo.src.forEach((s, o) => { out[s * 3] = pos[o * 3]; out[s * 3 + 1] = pos[o * 3 + 1]; out[s * 3 + 2] = pos[o * 3 + 2]; });
+        return out;
     }
 
     /* the fighter in what the controls say: a rest pose, or a frame of a clip */
@@ -283,7 +340,10 @@
         if (ms.clip >= 0) {
             const c = f.clips[ms.clip];
             at = c.from + Math.min(ms.frame, c.to - c.from);
-            p = framePose(f.rig, at);
+            /* SMOOTH ANIMATIONS: on the way to the next frame (or the first,
+             * looping) while it plays */
+            const next = at < c.to ? at + 1 : ms.loop ? c.from : at;
+            p = ms.smoothAnims && ms.playing && blendT > 0 ? framePoseBlend(f.rig, at, next, blendT) : framePose(f.rig, at);
             pos = posedVerts(f.rig, f.topo, p);
         } else if (ms.pose === 'tpose' && f.tpose) {
             p = f.tpose;
@@ -292,14 +352,23 @@
             p = f.bind.pose;
             pos = posedVerts(f.rig, f.topo, p);
         }
-        for (const m of meshes) {
-            m.geometry.attributes.position.array.set(pos);
-            m.geometry.attributes.position.needsUpdate = true;
-            m.geometry.computeVertexNormals();
-            m.geometry.computeBoundingSphere();
-            m.geometry.computeBoundingBox();
+        /* SMOOTH MODEL: a block drawn smoothed when it has been built */
+        const sm = fighterView.smooth;
+        const smooth = sm && sm.level > 0 && sm.blocks.length === meshes.length;
+        const skin = smooth ? skinOf(f, pos) : null;
+        meshes.forEach((m, bi) => {
+            const b = smooth ? sm.blocks[bi] : null;
+            const sp = b && b.ss ? b.ss.eval(skin.subarray(b.base * 3, (b.base + b.n) * 3)) : null;
+            m.visible = !sp;
+            if (b && b.mesh) b.mesh.visible = !!sp;
+            const g = sp ? b.mesh.geometry : m.geometry;
+            g.attributes.position.array.set(sp || pos);
+            g.attributes.position.needsUpdate = true;
+            g.computeVertexNormals();
+            g.computeBoundingSphere();
+            g.computeBoundingBox();
             m.material.wireframe = ms.wire;
-        }
+        });
         for (const { a, mesh } of fighterView.extras || []) {
             const v = ms.extras ? attachVerts(a, at, p) : null;
             mesh.visible = !!v;
@@ -626,6 +695,7 @@
             <div class="play">
                 <button class="btn" onclick={() => { if (!ms.playing && ms.frame >= fx.clips[ms.clip].to - fx.clips[ms.clip].from) ms.frame = 0; ms.playing = !ms.playing; }}>{ms.playing ? tx('vwPause') : tx('vwPlay')}</button>
                 <label class="chk"><input type="checkbox" bind:checked={ms.loop}><span>{tx('vwLoop')}</span></label>
+                <label class="chk"><input type="checkbox" bind:checked={ms.smoothAnims}><span>{tx('vwSmoothAnims')}</span></label>
                 <input type="range" min="0" max={fx.clips[ms.clip].to - fx.clips[ms.clip].from} bind:value={ms.frame}>
                 <span class="lbl">{tx('vwFrame')} {ms.frame + 1}</span>
                 <select class="sel speed" bind:value={ms.speed} title={tx('vwSpeed')}>
@@ -662,6 +732,12 @@
                     {/each}
                 </span>
             {/if}
+            <span class="lbl">{tx('vwSmoothModel')}</span>
+            <span class="tabs sub q3">
+                {#each tx('smodels') as m, i}
+                    <button class="tab" class:active={ms.smoothModel === i} onclick={() => { selectBlip(); ms.smoothModel = i; }}>{m}</button>
+                {/each}
+            </span>
             <div class="checks">
                 <label class="chk"><input type="checkbox" bind:checked={ms.bones}><span>{tx('vwBones')}</span></label>
                 <label class="chk"><input type="checkbox" bind:checked={ms.wire}><span>{tx('vwWire')}</span></label>

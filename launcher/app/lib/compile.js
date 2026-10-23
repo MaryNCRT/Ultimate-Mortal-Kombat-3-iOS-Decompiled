@@ -180,6 +180,7 @@ async function compileGame({
         path.join(rootDir, 'src/runtime/savestate.c'),
         path.join(rootDir, 'src/runtime/rollback_probe.c'),
         path.join(rootDir, 'src/runtime/rollback.c'),
+        path.join(rootDir, 'src/runtime/smooth_models.c'),
     ];
 
     if (isWindows) {
@@ -204,8 +205,13 @@ async function compileGame({
         path.join(rootDir, 'src/runtime/render/rgl_vk.c')
     );
 
+    /* SMOOTH MODELS: Blender's Weld and Subdivision Surface (GPL), with the
+     * stand-in headers of src/thirdparty/blender/shim */
+    const blenderDir = path.join(rootDir, 'src/thirdparty/blender');
+
     // Glob directory sources
-    for (const d of ['src/decomp/gamecode', 'src/decomp/lime', 'src/runtime/lime', 'src/decomp/gamecode/logic']) {
+    for (const d of ['src/decomp/gamecode', 'src/decomp/lime', 'src/runtime/lime', 'src/decomp/gamecode/logic',
+                     'src/thirdparty/blender']) {
         sources.push(...getCSourceFiles(path.join(rootDir, d)));
     }
 
@@ -234,6 +240,9 @@ async function compileGame({
         '-DUMK3_HAVE_MK3',
         '-DUMK3_REAL_GL',
         '-DUMK3_SHELL',
+        /* the version crash reports and the session log name (game_main.c,
+         * port_report_context): this launcher's, which built the game */
+        '-DUMK3_VERSION=' + require('../package.json').version,
         '-I', path.join(rootDir, 'src/runtime'),
         '-I', path.join(rootDir, 'src/decomp/lime'),
         '-I', path.join(rootDir, 'src/decomp/gamecode/logic'),
@@ -297,6 +306,9 @@ async function compileGame({
         }
         if (baseName === 'text') {
             fileFlags.push('-DUMK3_NO_LONG_REMAP');
+        }
+        if (path.dirname(src) === blenderDir) {
+            fileFlags.push('-I', blenderDir, '-I', path.join(blenderDir, 'shim'));
         }
 
         const compileArgs = [...fileFlags, '-c', src, '-o', objPath];

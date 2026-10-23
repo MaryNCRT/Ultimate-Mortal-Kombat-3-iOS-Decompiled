@@ -211,6 +211,36 @@ export function framePose(rig, f) {
     return pal;
 }
 
+/* Between frames fA and fB, t of the way: the blend the game draws with
+ * SMOOTH ANIMATIONS (CreateMatrixPaletteForGeneratingMesh): per bone the
+ * quaternions through GetSlerpedQ -- a straight lerp, b negated when the two
+ * point apart (dot <= 0), not renormalised -- and the root's position lerped,
+ * before the hierarchy is walked. */
+export function framePoseBlend(rig, fA, fB, t) {
+    if (!(t > 0) || fA === fB) return framePose(rig, fA);
+    const { bones, anim } = rig;
+    const pal = new Array(bones.num);
+    const nb = anim.bones, u = 1 - t;
+    let n = 0;
+    const walk = (i, PR, PT) => {
+        const k = n++;
+        let R;
+        if (k < nb) {
+            const a = (fA * nb + k) * 4, b = (fB * nb + k) * 4, q = anim.quat;
+            let bx = q[b], by = q[b + 1], bz = q[b + 2], bw = q[b + 3];
+            if (q[a] * bx + q[a + 1] * by + q[a + 2] * bz + q[a + 3] * bw <= 0) { bx = -bx; by = -by; bz = -bz; bw = -bw; }
+            R = quatToMat(bx * t + q[a] * u, by * t + q[a + 1] * u, bz * t + q[a + 2] * u, bw * t + q[a + 3] * u);
+        } else R = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+        const r = anim.root;
+        const tr = k === 0 ? [r[fB * 3] * t + r[fA * 3] * u, r[fB * 3 + 1] * t + r[fA * 3 + 1] * u, r[fB * 3 + 2] * t + r[fA * 3 + 2] * u]
+            : [bones.offset[i * 3], bones.offset[i * 3 + 1], bones.offset[i * 3 + 2]];
+        pal[i] = { R: mul3(R, PR), T: add(vmul(tr, PR), PT) };
+        for (const c of bones.children[i]) walk(c, pal[i].R, pal[i].T);
+    };
+    walk(bones.root, [1, 0, 0, 0, 1, 0, 0, 0, 1], [0, 0, 0]);
+    return pal;
+}
+
 /* every vertex through a pose, as DrawSkinnedMesh2: sum of A R + w T */
 export function skinPositions(rig, pose) {
     const { v, b, w, p } = rig.inf;

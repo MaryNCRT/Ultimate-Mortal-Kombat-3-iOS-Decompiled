@@ -216,6 +216,10 @@ if(UMK3_BINARY)
             file(GLOB UMK3_GAME_GAMECODE "${CMAKE_SOURCE_DIR}/src/decomp/gamecode/*.c")
             file(GLOB UMK3_GAME_LIME     "${CMAKE_SOURCE_DIR}/src/decomp/lime/*.c")
             file(GLOB UMK3_GAME_RUNLIME  "${CMAKE_SOURCE_DIR}/src/runtime/lime/*.c")
+            # SMOOTH MODELS: Blender's Weld and Subdivision Surface (GPL)
+            file(GLOB UMK3_GAME_BLENDER  "${CMAKE_SOURCE_DIR}/src/thirdparty/blender/*.c")
+            set_source_files_properties(${UMK3_GAME_BLENDER} PROPERTIES
+                INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/src/thirdparty/blender;${CMAKE_SOURCE_DIR}/src/thirdparty/blender/shim")
 
             add_executable(umk3-game
                 src/runtime/game_main.c
@@ -237,6 +241,8 @@ if(UMK3_BINARY)
                 src/runtime/savestate.c
                 src/runtime/rollback_probe.c
                 src/runtime/rollback.c
+                src/runtime/smooth_models.c
+                ${UMK3_GAME_BLENDER}
                 ${UMK3_GAME_GAMECODE}
                 ${UMK3_GAME_LIME}
                 ${UMK3_GAME_RUNLIME}

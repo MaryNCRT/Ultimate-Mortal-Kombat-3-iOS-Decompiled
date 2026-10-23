@@ -53,6 +53,7 @@ test('round-trip through save/load is lossless', () => {
     c.antialiasing = 8;
     c.hideControls = true;
     c.smoothAnims = true;
+    c.smoothModels = 2;
     c.widescreen = true;
     c.debug = true;
     c.skipIntro = true;

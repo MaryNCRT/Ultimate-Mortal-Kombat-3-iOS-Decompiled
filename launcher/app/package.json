@@ -4,7 +4,7 @@
   "description": "UMK3 PC port launcher - arcade shell (Electron)",
   "main": "main.js",
   "author": "UMK3 Recomp",
-  "license": "MIT",
+  "license": "GPL-2.0-or-later",
   "scripts": {
     "ui": "node scripts/build-ui.js",
     "start": "npm run ui && electron .",
