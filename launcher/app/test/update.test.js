@@ -18,7 +18,9 @@ test('check picks the newest non-draft release with a zip', async () => {
         { draft: true, tag_name: 'v9.9.9', assets: [{ name: 'x.zip' }] },
         { tag_name: 'v0.0.10-alpha', name: 'n', body: 'b', assets: [{ name: 'notes.txt' }] },
         { tag_name: 'v0.0.9-alpha', name: 'UMK3 0.0.9', body: '## hi', html_url: 'u',
-          assets: [{ name: 'UMK3-PC-0.0.9-alpha.zip', size: 5, browser_download_url: 'd', digest: 'sha256:' + 'a'.repeat(64) }] },
+          /* Windows takes the .zip, Linux the linux .tar.gz (lib/update.js) */
+          assets: [{ name: 'UMK3-PC-0.0.9-alpha.zip', size: 5, browser_download_url: 'd', digest: 'sha256:' + 'a'.repeat(64) },
+                   { name: 'UMK3-PC-0.0.9-alpha-linux-x64.tar.gz', size: 5, browser_download_url: 'd', digest: 'sha256:' + 'a'.repeat(64) }] },
     ];
     const f = async () => ({ ok: true, json: async () => list });
     const r = await upd.check(f, '0.0.8-alpha');
