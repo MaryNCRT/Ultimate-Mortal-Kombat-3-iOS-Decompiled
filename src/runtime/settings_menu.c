@@ -149,7 +149,7 @@ static int  g_del_armed;
 static int  g_icon_key = -1;                    /* icon and colour shown */
 
 #define MAX_ROWS 48
-#define VIS_ROWS 15
+#define VIS_ROWS 30                     /* two columns of 15 */
 static struct {
     int  kind, arg;
     char label[40], value[192];
@@ -164,8 +164,9 @@ static int g_framed;
 static int g_fsub;                      /* CONTROLS' page: 0 the keys, 1 the pad */
 void PortControlsPanel(const char *title, const char *const *label,
                        const char *const *value, const int *enabled, int rows,
-                       int sel, const char *footer, float *bx, float *top,
-                       float *bw, float *rowh);
+                       int sel, const char *footer, int split, float *bx,
+                       float *top, float *bw, float *rowh, float *colw,
+                       float *gap);
 extern int limeScreenHeight;
 static struct port_gfx g_gfx;           /* the menu's */
 static int g_disp_mode, g_disp_w, g_disp_h;   /* the window as applied */
@@ -264,6 +265,17 @@ void set_menu_open_controls(void)
     g_page = PAGE_CTL;
     g_fsub = 0;
     g_sel = 0;
+    g_first = 0;
+}
+
+void set_menu_open_video(void)
+{
+    if (g_open || g_want)
+        return;
+    g_want = 1;
+    g_framed = 1;
+    g_page = PAGE_GFX;
+    g_sel = 1;                          /* under the VIDEO heading */
     g_first = 0;
 }
 
@@ -620,7 +632,9 @@ static void build(void)
             tx("BOTONES", "BUTTONS"));
         if (g_fsub)                     /* the pad's page */
             goto pad;
-        head(tx("TECLADO", "KEYBOARD"));
+        /* the fight's keys and the menus' under headings of their own,
+         * so each keeps to one column */
+        head(tx("TECLADO - PELEA", "KEYBOARD - FIGHT"));
         for (i = 0; i < 4; i++)
             key_row(k_dirs[i].code);
         if (five)
@@ -630,6 +644,7 @@ static void build(void)
             for (i = 0; i < 6; i++)
                 key_row(k_six[i].code);
         key_row(PK_SPECIAL);
+        head(tx("TECLADO - MENU", "KEYBOARD - MENU"));
         key_row(PK_PAUSE);              /* player two's too */
         key_row(PK_MOVES);
         if (g_player)
@@ -655,6 +670,10 @@ pad:
                 tx(st_es[st], st_en[st]));
         }
         for (i = 0; i < nd; i++) {
+            if (d[i].code == 14)            /* PAUSE: the menus' rows start */
+                head(tx("MANDO - MENU", "GAMEPAD - MENU"));
+            else if (i == 0)
+                head(tx("MANDO - PELEA", "GAMEPAD - FIGHT"));
             if (g_capture == 2 && g_sel == g_n)
                 snprintf(v, sizeof v, "%s",
                          tx("PULSA UN BOTON...", "PRESS A BUTTON..."));
@@ -1327,6 +1346,8 @@ static void capture(void)
 
 static void turn_page(int d)
 {
+    if (g_framed && g_page == PAGE_GFX)     /* the video settings: one page */
+        return;
     if (g_framed) {                     /* the button setup: keys, pad */
         g_fsub ^= 1;
         g_sel = 0;
@@ -1409,15 +1430,11 @@ void set_menu_tick(void)
             turn_page(t - g_page);
             build();
         }
-    } else if (click && g_geo.rowh > 0 && g_mx >= g_geo.bx && g_mx < g_geo.bx + g_geo.bw) {
-        float mid = g_geo.bx + g_geo.bw * 0.5f;
-        if (g_my >= g_geo.top) {
-            int i = g_first + (int)((g_my - g_geo.top) / g_geo.rowh);
-            if (i < g_n && i - g_first < VIS_ROWS && g_rows[i].en) {
-                g_sel = i;
-                ok = 1;                 /* a row with values opens its list */
-            }
-            (void)mid;
+    } else if (click && ui_geo_row(&g_geo, g_mx, g_my, VIS_ROWS) >= 0) {
+        int i = g_first + ui_geo_row(&g_geo, g_mx, g_my, VIS_ROWS);
+        if (i < g_n && g_rows[i].en) {
+            g_sel = i;
+            ok = 1;                     /* a row with values opens its list */
         }
     }
 
@@ -1500,32 +1517,44 @@ void set_menu_draw(void)
                  k, tx("CIERRA", "CLOSES"));
     {
         if (g_framed) {                 /* the game's own panel */
-            float bx, top, bw, rh, km = 320.0f / (float)limeScreenHeight;
+            float bx, top, bw, rh, cw, gap, km = 320.0f / (float)limeScreenHeight;
+            int split = ui_menu_split(lp, rows);
             char ff[384];
 
             char ft[64];
 
             if (g_capture)
                 snprintf(ff, sizeof ff, "%s", footer);
+            else if (g_page == PAGE_GFX)
+                snprintf(ff, sizeof ff, "%s %s   %s %s", ok, tx("ELIGE", "PICK"),
+                         k, tx("VUELVE", "BACK"));
             else
                 snprintf(ff, sizeof ff, "%s%s %s   %s %s   %s %s", ta, tb,
                          g_fsub ? tx("TECLADO", "KEYBOARD") : tx("MANDO", "GAMEPAD"),
                          ok, tx("ELIGE", "PICK"), k, tx("VUELVE", "BACK"));
-            snprintf(ft, sizeof ft, "%s - %s", tx("CONFIG. BOTONES", "BUTTON SETUP"),
-                     g_fsub ? tx("MANDO", "GAMEPAD") : tx("TECLADO", "KEYBOARD"));
-            PortControlsPanel(ft, lp, vp, en,
-                              rows, g_sel - g_first, ff, &bx, &top, &bw, &rh);
+            if (g_page == PAGE_GFX)
+                snprintf(ft, sizeof ft, "%s", tx("AJUSTES DE VIDEO", "VIDEO SETTINGS"));
+            else
+                snprintf(ft, sizeof ft, "%s - %s", tx("CONFIG. BOTONES", "BUTTON SETUP"),
+                         g_fsub ? tx("MANDO", "GAMEPAD") : tx("TECLADO", "KEYBOARD"));
+            PortControlsPanel(ft, lp, vp, en, rows, g_sel - g_first, ff, split,
+                              &bx, &top, &bw, &rh, &cw, &gap);
             g_geo.bx = bx * km;          /* the mouse's rows, in menu units */
             g_geo.bw = bw * km;
             g_geo.top = top * km;
             g_geo.rowh = rh * km;
+            g_geo.cw = cw * km;
+            g_geo.gap = gap * km;
+            g_geo.split = split;
             g_geo.srow = 0;
             goto drop;
         }
         /* the categories down the side panel, and under them the player's
          * icon, as wide as the panel */
+        ui_menu_cols = 2;
         ui_menu_show(tx("AJUSTES", "SETTINGS"), tabs, -N_PAGES, g_page, lp, vp,
                      en, rows, g_sel - g_first, footer, &g_geo);
+        ui_menu_cols = 1;
         if (prof_get() && g_geo.srow > 0) {
             const struct profile *p = prof_get();
             int key = (int)prof_look_key(p);

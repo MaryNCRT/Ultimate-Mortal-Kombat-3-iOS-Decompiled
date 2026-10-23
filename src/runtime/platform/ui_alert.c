@@ -510,6 +510,51 @@ static void al_put_glyph(al_box *b, const al_glyph *g, int x, int y, int hp,
 /* align: 0 left at x, 1 centred on x, 2 right-aligned to x. "\001name\001"
  * in s is a glyph, a little taller than the text. */
 static void al_say(al_box *b, const char *s, int fontpx, int bold, float x,
+                   float ymid, int align, float r, float g, float bl, float a);
+
+/* al_say's width of s, in pixels */
+static int al_width(const char *s, int fontpx, int bold)
+{
+    int tot = 0, n = 0, gh = (int)(fontpx * 1.4f + 0.5f), gap = fontpx / 5;
+    const char *p = s;
+
+    while (p && *p && n < 16) {
+        const char *q;
+        if (*p == 1) {
+            const al_glyph *gl;
+            q = strchr(p + 1, 1);
+            if (!q)
+                break;
+            gl = al_glyph_get(p + 1, (int)(q - p - 1));
+            if (gl) {
+                tot += gl->w * gh / gl->h + (n ? gap : 0);
+                n++;
+            }
+            p = q + 1;
+        } else {
+            char t[256];
+            size_t len;
+            int w = 0, h = 0;
+            unsigned char *m;
+            q = strchr(p, 1);
+            len = q ? (size_t)(q - p) : strlen(p);
+            if (len > sizeof t - 1)
+                len = sizeof t - 1;
+            memcpy(t, p, len);
+            t[len] = 0;
+            p += len;
+            m = al_line(t, fontpx, bold, &w, &h);
+            if (m) {
+                tot += w + (n ? gap : 0);
+                n++;
+                free(m);
+            }
+        }
+    }
+    return tot;
+}
+
+static void al_say(al_box *b, const char *s, int fontpx, int bold, float x,
                    float ymid, int align, float r, float g, float bl, float a)
 {
     struct { unsigned char *m; const al_glyph *gl; int w, h; } pc[16];
@@ -669,11 +714,12 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
                             int ntab, int tab, const char *const *label,
                             const char *const *value, const int *enabled,
                             int n, int sel, const char *footer, float width,
-                            float s, int *ow, int *oh)
+                            int split, float s, int *ow, int *oh)
 {
     al_box b;
-    float m = 6 * s, top, rowh = 15 * s, x0, x1;
+    float m = 6 * s, top, rowh = 15 * s, x0, x1, cw, gap = 6 * s;
     int side = ntab < 0, nt = side ? -ntab : ntab;
+    int per, fs, cols;
     unsigned char *out;
     int i;
 
@@ -685,7 +731,12 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
     b.by0 = m;
     b.bx1 = m + (width > 0 ? width : 360) * s;
     top = b.by0 + 22 * s + (ntab > 0 ? 20 * s : 0) + 4 * s;  /* under the title and tabs */
-    b.by1 = top + n * rowh + 26 * s;
+    if (split <= 0 || split >= n)
+        split = n;                          /* one column */
+    cols = split < n ? 2 : 1;
+    per = split > n - split ? split : n - split;    /* the taller column */
+    fs = cols > 1 ? 10 : 11;
+    b.by1 = top + per * rowh + 26 * s;
     if (side && b.by1 < top + (nt * 24 + 8 + UI_SIDE) * s + 26 * s)
         b.by1 = top + (nt * 24 + 8 + UI_SIDE) * s + 26 * s;   /* room for the icon */
     b.w = (int)(b.bx1 + m + 1);
@@ -747,14 +798,18 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
         al_say(&b, tabs[i], (int)((ntab > 4 ? 8.5f : 10) * s), 1, (tx0 + tx1) * 0.5f,
                (ty0 + ty1) * 0.5f, 1, 1, 1, 1, i == tab ? 1.0f : 0.75f);
     }
+    cw = (x1 - x0 - gap * (cols - 1)) / cols;
     for (i = 0; i < n; i++) {
-        float y0 = top + i * rowh, a = enabled[i] ? 1.0f : 0.4f;
+        int c = i < split ? 0 : 1;
+        float y0 = top + (i - c * split) * rowh, a = enabled[i] ? 1.0f : 0.4f;
+        float cx0 = x0 + c * (cw + gap), cx1 = cx0 + cw;
+        int f = fs;
         if (i == sel) {                     /* the blue selection bar */
             int x, y;
             for (y = (int)y0; y < (int)(y0 + rowh); y++)
-                for (x = (int)x0 - 1; x <= (int)x1 + 1; x++) {
-                    float c = al_rr((float)x, (float)y, x0, y0 + 0.5f * s,
-                                    x1, y0 + rowh - 0.5f * s, 4 * s);
+                for (x = (int)cx0 - 1; x <= (int)cx1 + 1; x++) {
+                    float c = al_rr((float)x, (float)y, cx0, y0 + 0.5f * s,
+                                    cx1, y0 + rowh - 0.5f * s, 4 * s);
                     float t = (y + 0.5f - y0) / rowh;
                     if (c > 0 && x >= 0 && x < b.w)
                         al_over(&b.px[y * b.w + x],
@@ -764,16 +819,20 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
         }
         if (label[i][0] == 2) {             /* a section's heading */
             int x, y = (int)(y0 + rowh - 2 * s);
-            al_say(&b, label[i] + 1, (int)(10 * s), 1, x0 + 4 * s, y0 + rowh * 0.55f,
+            al_say(&b, label[i] + 1, (int)(10 * s), 1, cx0 + 4 * s, y0 + rowh * 0.55f,
                    0, 0.55f, 0.75f, 1.0f, 1);
-            for (x = (int)(x0 + 4 * s); x < (int)(x1 - 4 * s) && y >= 0 && y < b.h; x++)
+            for (x = (int)(cx0 + 4 * s); x < (int)(cx1 - 4 * s) && y >= 0 && y < b.h; x++)
                 al_over(&b.px[y * b.w + x], 0.55f, 0.75f, 1.0f,
-                        0.45f * (1 - (x - x0) / (x1 - x0)));
+                        0.45f * (1 - (x - cx0) / (cx1 - cx0)));
             continue;
         }
-        al_say(&b, label[i], (int)(11 * s), 1, x0 + 6 * s, y0 + rowh * 0.5f,
+        while (f > 7 && al_width(label[i], (int)(f * s), 1)       /* never */
+                        + al_width(value[i], (int)(f * s), 0)     /* over */
+                        + 18 * s > cx1 - cx0)                    /* each other */
+            f--;
+        al_say(&b, label[i], (int)(f * s), 1, cx0 + 6 * s, y0 + rowh * 0.5f,
                0, 1, 1, 1, a);
-        al_say(&b, value[i], (int)(11 * s), 0, x1 - 6 * s, y0 + rowh * 0.5f,
+        al_say(&b, value[i], (int)(f * s), 0, cx1 - 6 * s, y0 + rowh * 0.5f,
                2, 1, 1, 1, a);
     }
     al_say(&b, footer, (int)(9 * s), 0, (b.bx0 + b.bx1) * 0.5f,

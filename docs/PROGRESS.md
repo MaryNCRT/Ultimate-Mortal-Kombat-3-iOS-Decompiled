@@ -16,6 +16,21 @@
 
 ---
 
+## Release 0.1.10b beta (2026-10-23): video settings, two columns
+
+Published as the GitHub pre-release `v0.1.10b-beta` (package version
+`0.1.10-beta.b`), packaged as 0.1.10. New: the settings screen's
+VIDEO SETTINGS box (`FE_Task_Settings`, port-only BOXRT at 0x145, 0x59,
+answer 5, `set_menu_open_video`); two columns in every settings list
+(`ui_menu_split` in debug_menu.c breaks at a "\002" heading, half way when
+there is none or a column would pass 16 rows; `plat_ui_menu` and
+`PortControlsPanel` take that split; `ui_geo_row` maps the mouse); a row
+too long for its column is drawn smaller (`al_width`, `rich_width`);
+CONTROLS split into FIGHT / MENU headings. **Mary saw the first version**
+(columns split half way) and asked for whole sections and the FIGHT / MENU
+split; that version is built but not yet seen by her. Left/right still
+change a value; they do not move between columns.
+
 ## Release 0.1.10 beta (2026-10-23): kombos, SMOOTH MODELS, GPL
 
 Published as the GitHub pre-release `v0.1.10-beta`, packaged as 0.1.9 was:

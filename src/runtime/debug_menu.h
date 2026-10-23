@@ -43,7 +43,14 @@ void dbg_menu_draw(void);
 /* where the box went: the rows (bx, bw, top, rowh), the tabs' band
  * (title0..top), and with the side panel its column (sx, sw), its first
  * tab (stop) and the tabs' step (srow), all in the menu's space */
-struct ui_geo { float bx, bw, title0, top, rowh, ow, sx, sw, stop, srow; };
+struct ui_geo { float bx, bw, title0, top, rowh, ow, sx, sw, stop, srow,
+                 cw, gap; int split; };
+/* the row under (x, y), 0 the first shown: rows 0..split-1 down the left
+ * column (cw wide), the rest down the right, gap further; -1 none */
+int ui_geo_row(const struct ui_geo *g, float x, float y, int rows);
+/* where the right column starts: at a section's heading, so a section is
+ * never cut in two; rows when it is all one column */
+int ui_menu_split(const char *const *label, int rows);
 void ui_grab(int vx, int vy, int vw, int vh);
 /* a picture beside the box: uploaded once, drawn at (x, y), size points */
 void ui_icon_set(const unsigned char *rgba, int w, int h);
@@ -62,6 +69,8 @@ extern float ui_menu_shift;
 /* 1: the next box goes over the one already drawn (a list it opened):
  * that one dimmed instead of the frozen frame */
 extern int ui_menu_layer;
+/* the rows in this many columns side by side (filled down), 1 one list */
+extern int ui_menu_cols;
 /* The pad's highlight on the game's own menus (pad_nav.c): a glowing frame
  * round a box given in the touch's units, `sh` of them to the screen's
  * height. */

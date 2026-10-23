@@ -300,7 +300,7 @@ enum {
 };
 
 #define MAX_ROWS 40
-#define VIS_ROWS 15
+#define VIS_ROWS 30                     /* two columns of 15 */
 static struct {
     int  kind;
     char label[48], value[192];
@@ -355,7 +355,8 @@ static const char *on_off(int on)
 }
 
 /* Where the box and an open list went, in the menu's space, for the mouse. */
-static float g_bx, g_bw, g_top, g_rowh, g_title0;
+static float g_bx, g_bw, g_top, g_rowh, g_title0, g_cw, g_gap;
+static int   g_split, g_tall;         /* the left column's rows, the taller's */
 static float g_sx, g_sw, g_stop, g_srow;    /* the side panel, if any */
 static struct ui_geo g_geo, g_dgeo;
 static int   g_mouse_was, g_esc_was;
@@ -801,10 +802,9 @@ int dbg_menu_tick(struct dbg_request *rq)
         int t = (int)((g_my - g_geo.stop) / g_geo.srow);   /* a category */
         if (t != g_page)
             turn_page(t - g_page);
-    } else if (click && g_geo.rowh > 0 && g_mx >= g_geo.bx
-               && g_mx < g_geo.bx + g_geo.bw && g_my >= g_geo.top) {
-        int i = g_first + (int)((g_my - g_geo.top) / g_geo.rowh);
-        if (i < g_n && i - g_first < VIS_ROWS && g_rows[i].en) {
+    } else if (click && ui_geo_row(&g_geo, g_mx, g_my, VIS_ROWS) >= 0) {
+        int i = g_first + ui_geo_row(&g_geo, g_mx, g_my, VIS_ROWS);
+        if (i < g_n && g_rows[i].en) {
             g_sel = i;
             ok = 1;
         }
@@ -905,6 +905,45 @@ static void footer_text(char *f, size_t n, int rows)
  * (the settings menu's profile icon); 0 centres them. */
 float ui_menu_shift;
 int ui_menu_layer;
+int ui_menu_cols = 1;
+
+int ui_geo_row(const struct ui_geo *g, float x, float y, int rows)
+{
+    int c, r, split = g->split > 0 && g->split < rows ? g->split : rows;
+    float cw = g->cw > 0 ? g->cw : g->bw;
+
+    if (g->rowh <= 0 || x < g->bx || x >= g->bx + g->bw || y < g->top)
+        return -1;
+    c = split < rows ? (int)((x - g->bx) / (cw + g->gap)) : 0;
+    r = (int)((y - g->top) / g->rowh);
+    if (c > 1 || x - g->bx - c * (cw + g->gap) >= cw)
+        return -1;                      /* the gap */
+    if (c == 0)
+        return r < split ? r : -1;
+    return split + r < rows ? split + r : -1;
+}
+
+/* Where the right column starts: at a section's heading ("\002"), so no
+ * section is cut in two, the one that leaves the columns most even; half
+ * way when there is none or a column would not fit (16 rows). */
+int ui_menu_split(const char *const *label, int rows)
+{
+    int i, best = 0, tall = rows;
+
+    for (i = 1; i < rows; i++)
+        if (label[i][0] == 2) {
+            int t = i > rows - i ? i : rows - i;
+            if (t < tall) {
+                tall = t;
+                best = i;
+            }
+        }
+    if (!best && rows <= 16)
+        return rows;                    /* one section: one column */
+    if (!best || tall > 16)
+        return (rows + 1) / 2;
+    return best;
+}
 
 /* the menu under an open list, dimmed */
 static void dim_all(void)
@@ -934,7 +973,7 @@ static float ui_box_width(int ntabs)
 {
     float w = g_ow - 12.0f;
 
-    if (ntabs >= 0)
+    if (ntabs >= 0 && ui_menu_cols < 2)
         return 360.0f;
     return w > 464.0f ? 464.0f : w;
 }
@@ -962,7 +1001,10 @@ static int draw_ios(const char *title, const char *const *tabs, int ntabs,
     s = view[3] / 320.0f;               /* by height: the shape is kept */
     if (s <= 0)
         return 0;
-    n = snprintf(sig, sizeof sig, "%s|%s|%d|", title, footer, ntabs);
+    g_split = ui_menu_cols > 1 ? ui_menu_split(lp, rows) : rows;
+    g_tall = g_split > rows - g_split ? g_split : rows - g_split;
+    n = snprintf(sig, sizeof sig, "%s|%s|%d|%d|", title, footer, ntabs,
+                 g_split);
     for (i = 0; i < ntabs && n < (int)sizeof sig - 200; i++)
         n += snprintf(sig + n, sizeof sig - n, "%s|", tabs[i]);
     for (i = 0; i < rows && n < (int)sizeof sig - 200; i++)
@@ -973,7 +1015,7 @@ static int draw_ios(const char *title, const char *const *tabs, int ntabs,
         int w, h;
         unsigned char *px = plat_ui_menu(title, tabs, ntabs, page, lp, vp,
                                          en, rows, sel, footer, ui_box_width(ntabs),
-                                         s, &w, &h);
+                                         g_split, s, &w, &h);
         if (!px)
             return 0;
         if (!tex)
@@ -1016,7 +1058,7 @@ static int draw_ios(const char *title, const char *const *tabs, int ntabs,
          * 22 tall, the tab strip 20 (inset 9 at the sides), a 4 gap, rows
          * 15 tall inside a box 360 wide */
         g_bx = x + 6 + 9;
-        g_bw = 360 - 18;
+        g_bw = ui_box_width(ntabs) - 18;
         g_title0 = y + 6 + 22;
         g_top = y + 6 + 22 + (ntabs > 0 ? 20 + 4 : 4);
         g_rowh = 15;
@@ -1029,6 +1071,8 @@ static int draw_ios(const char *title, const char *const *tabs, int ntabs,
             g_stop = g_top + 4;
             g_srow = 24;
         }
+        g_gap = 6;                      /* the columns, 6 apart */
+        g_cw = g_split < rows ? (g_bw - g_gap) * 0.5f : g_bw;
 
         glEnable(GL_TEXTURE_2D);
         glEnable(GL_BLEND);
@@ -1065,6 +1109,10 @@ void ui_menu_show(const char *title, const char *const *tabs, int ntabs,
         g_title0 = y0 - 22;
         g_top = y0 - 4;
         g_rowh = lh;
+        g_gap = 0;
+        g_split = ui_menu_cols > 1 ? ui_menu_split(lp, rows) : rows;
+        g_tall = g_split > rows - g_split ? g_split : rows - g_split;
+        g_cw = g_split < rows ? bw * 0.5f : bw;
         if (g_shot) {
             glEnable(GL_TEXTURE_2D);
             glBindTexture(GL_TEXTURE_2D, g_shot);
@@ -1080,7 +1128,7 @@ void ui_menu_show(const char *title, const char *const *tabs, int ntabs,
 
         glBegin(GL_QUADS);
         glColor4f(0.0f, 0.0f, 0.0f, 0.75f);
-        rect(x0 - 12, y0 - 40, bw, rows * lh + 66);
+        rect(x0 - 12, y0 - 40, bw, g_tall * lh + 66);
         for (i = 0; i < ntabs; i++) {           /* the tabs */
             float tw = bw / ntabs, tx = x0 - 12 + i * tw;
             if (i == page)
@@ -1093,23 +1141,26 @@ void ui_menu_show(const char *title, const char *const *tabs, int ntabs,
                  y0 - 19, px, tabs[i]);
         }
         glColor4f(0.8f, 0.1f, 0.1f, 0.9f);
-        rect(x0 - 8, y0 + sel * lh - 4, bw - 8, lh - 1);
+        if (sel >= 0 && sel < rows)
+            rect(x0 - 8 + (sel >= g_split) * g_cw,
+                 y0 + (sel - (sel >= g_split) * g_split) * lh - 4, g_cw - 8, lh - 1);
 
         glColor4f(1.0f, 0.85f, 0.2f, 1.0f);
         text(x0, y0 - 36, px, title);
         for (i = 0; i < rows; i++) {
-            float y = y0 + i * lh;
+            int c = i >= g_split;
+            float y = y0 + (i - c * g_split) * lh, cx = x0 + c * g_cw;
 
             if (en[i])
                 glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
             else
                 glColor4f(0.45f, 0.45f, 0.45f, 1.0f);
-            text(x0, y, px, lp[i]);
+            text(cx, y, px, lp[i]);
             if (vp[i][0])
-                text(x0 + 100, y, px, vp[i]);
+                text(cx + (g_split < rows ? 70 : 100), y, px, vp[i]);
         }
         glColor4f(0.7f, 0.7f, 0.7f, 1.0f);
-        text(x0, y0 + rows * lh + 6, px, footer);
+        text(x0, y0 + g_tall * lh + 6, px, footer);
         glEnd();
         end_2d();
     }
@@ -1124,6 +1175,9 @@ void ui_menu_show(const char *title, const char *const *tabs, int ntabs,
         geo->sw = g_sw;
         geo->stop = g_stop;
         geo->srow = g_srow;
+        geo->cw = g_cw;
+        geo->gap = g_gap;
+        geo->split = g_split;
     }
 }
 
@@ -1448,8 +1502,10 @@ void dbg_menu_draw(void)
     tabs[PAGE_TOOLS] = tx("OPCIONES", "TOOLS");   /* fits the panel */
     footer_text(footer, sizeof footer, rows);
     /* the categories down the side panel, as the settings menu's */
+    ui_menu_cols = 2;
     ui_menu_show(tx("MENU DEBUG", "DEBUG MENU"), tabs, -N_PAGES, g_page, lp, vp,
                  en, rows, g_sel - g_first, footer, &g_geo);
+    ui_menu_cols = 1;
     if (g_drop) {                       /* the open list, over the menu */
         const char *dl[VIS_DROP], *dv[VIS_DROP];
         int de[VIS_DROP], dn;
