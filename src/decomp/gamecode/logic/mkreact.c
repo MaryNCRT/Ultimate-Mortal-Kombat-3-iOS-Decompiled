@@ -7349,7 +7349,7 @@ long t_r_combo5(MK3THREAD *thread)
  *                  other = obj->field08 ; other->field30 &= ~4
  *                  if ((obj->field00->field10 & 1) == 0)
  *                      install t_separate_us
- *                  -- else falls into the ordinary swing below
+ *                  -- else joins the swing at rsnd_func, without set_no_block
  *              }
  *          }
  *          -- ordinary swing:
@@ -7405,10 +7405,13 @@ long t_r_combo0(MK3THREAD *thread)
 
                 if ((obj->field00->field10 & 1) == 0)
                     return mk3_install(thread, (MK3THREADFUNC)t_separate_us);
+                /* bne 0x45d32 at 0x45da8: past set_no_block */
+                goto swing_sound;
             }
         }
 
         set_no_block(obj);
+swing_sound:
         rsnd_func(obj, 0xa);
 
         obj->field40 = 0x1c;

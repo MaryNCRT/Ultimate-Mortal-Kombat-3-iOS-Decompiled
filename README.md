@@ -18,9 +18,9 @@
 |---|---|---|
 | **Decompilation (`src/decomp/`)** | **2,572 / 2,572 (100%)** | LIME 3D engine (`109`), Front-End & Scene (`291`), Arcade Fight Engine (`2,172`). |
 | **Verification (`tools/decomp/`)** | **100%** | Differential tests against the `armrecomp` ARM→C oracle + build-time table layout verification (`ctest`). |
-| **Native Port (`src/runtime/`)** | **Playable (v0.1.9-beta)** | OpenGL, Vulkan and Direct3D 12 renderers (`src/runtime/render/`), Win32 & SDL2 backends, 3:2 / 4:3 / 16:9 / 21:9 aspect ratios, HD textures, keyboard & gamepad support, local 2P (`DUELO`), LAN/Online multiplayer, and debug tools (`F2`). |
+| **Native Port (`src/runtime/`)** | **Playable (v0.1.10-beta)** | OpenGL, Vulkan and Direct3D 12 renderers (`src/runtime/render/`), Win32 & SDL2 backends, 3:2 / 4:3 / 16:9 / 21:9 aspect ratios, HD textures, keyboard & gamepad support, local 2P (`DUELO`), LAN/Online multiplayer, and debug tools (`F2`). |
 
-**Known problems in 0.1.9 beta:** Reptile's fatalities sometimes fail; the Linux package is still untested on a Linux machine (0.1.9 fixes the link error a tester hit, reads umk3.ini on Linux and adds `build-game.sh` and README-linux.md); the Vulkan and Direct3D 12 renderers are new and checked by `tests/rgl_test.c`, not yet in long play; a fighter cannot be duplicated into a new slot yet. New in 0.1.9: Vulkan and Direct3D 12 renderers beside OpenGL, the language changed from the in-game menu, the fatality page of the move list fixed, mod textures for the game's LOW/LITE copies, and many model-viewer additions. Since 0.1.9 (not released): SMOOTH ANIMATIONS (the fighters' frames blended when drawn) and SMOOTH MODELS (Blender's weld + Catmull-Clark, in the game and the viewer); the project is GPL-2.0-or-later from here on.
+**Known problems in 0.1.10 beta:** Reptile's fatalities sometimes fail; friendships and animalities can repeat a death scream (open, needs a log); the Linux package is still untested on a Linux machine; the Vulkan and Direct3D 12 renderers are checked by `tests/rgl_test.c`, not yet in long play; a fighter cannot be duplicated into a new slot yet. New in 0.1.10: kombos go on with the move that matched (issue #114: a later entry of a combo table ran the first entry's next move, likely Liu Kang's 7-hit kombo breaking; not yet tried in the game), SMOOTH ANIMATIONS and SMOOTH MODELS (Blender's weld + Catmull-Clark, in the game and the viewer), MODS > TEXTURES and exports by folder, stages exported with their animation, Linux sound, and crash reports naming the version and settings; the project is GPL-2.0-or-later from here on.
 
 > [!IMPORTANT]
 > **No copyrighted assets or binaries are distributed in this repository.**
@@ -58,7 +58,7 @@ cmake --build build --target umk3-game
 On Windows and Linux, you can run **`UMK3-Launcher`** (built from [`launcher/app/`](launcher/app/)), which provides a self-contained arcade interface: it receives your `.ipa`, downloads the pinned `zig cc` compiler automatically (zero system compiler dependencies), unpacks the game assets, compiles the native game binary, and lets you configure graphics/controls (`umk3.ini`). Its **MODS** section manages mods (`mods/<mod>/`, files named like the game's replace them; priority and on/off in `mods/mods.ini`), shows the game's fighters, stages, models and textures, replaces any texture of a fighter, a stage, the interface or the effects (TEXTURES), and exports them for Blender as FBX, USD (USDA/USDC/USDZ) or OBJ with PNG textures, stages with their animation; exports and mods keep each fighter, stage, the interface and the effects in a folder of its own.
 
 Available distribution packages:
-- **Linux:** Standalone portable `.tar.gz` (0.1.9 beta: built, not yet tested on a Linux machine; see `launcher/README-linux.md`).
+- **Linux:** Standalone portable `.tar.gz` (0.1.10 beta: built, not yet tested on a Linux machine; see `launcher/README-linux.md`).
 - **Windows:** Portable `.zip` and `.exe`.
 
 ---
