@@ -180,15 +180,23 @@ ipcMain.handle('logo:get', () => {
 });
 
 /* The picture inside the home screen's small ring, as the console's main
- * menu shows the game: "aditional textures/image.png" in the game folder,
- * the player's own (the launcher ships no game art). None: an empty ring. */
+ * menu shows the game: "aditional textures/image.png" -- the game folder's
+ * (the compile copies it there, and the player may replace it), else the
+ * one the release carries under launcher/ (Linux: in resources/), so it is
+ * there before the first compile. None: an empty ring. */
 ipcMain.handle('hero:get', () => {
-    for (const n of ['image.png', 'image.jpg']) {
-        try {
-            const p = path.join(g_root, 'aditional textures', n);
-            return 'data:image/' + (n.endsWith('png') ? 'png' : 'jpeg') + ';base64,'
-                   + fs.readFileSync(p).toString('base64');
-        } catch (err) { /* the next */ }
+    const dirs = [path.join(g_root, 'aditional textures'),
+                  path.join(g_root, 'launcher', 'aditional textures')];
+    if (process.resourcesPath)
+        dirs.push(path.join(process.resourcesPath, 'launcher', 'aditional textures'));
+    dirs.push(path.join(__dirname, '..', 'aditional textures'));
+    for (const d of dirs) {
+        for (const n of ['image.png', 'image.jpg']) {
+            try {
+                return 'data:image/' + (n.endsWith('png') ? 'png' : 'jpeg') + ';base64,'
+                       + fs.readFileSync(path.join(d, n)).toString('base64');
+            } catch (err) { /* the next */ }
+        }
     }
     return null;
 });
