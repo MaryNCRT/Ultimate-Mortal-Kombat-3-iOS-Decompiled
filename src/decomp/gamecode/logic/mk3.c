@@ -39,6 +39,7 @@
  * needs the array grown too.
  */
 
+#include <stdio.h>
 #include "mk3logic.h"
 
 /* Blood.c types the queue; GameCode.c declares the same global as `long *`.
@@ -1650,8 +1651,15 @@ long mk3_update(const long *joy, void **out)
             MK3THREADLONGFUNC f =
                 (MK3THREADLONGFUNC)(uintptr_t)mk3_frame(t, t->frame)[1];
             r = f(t);
-            if (r < 0)
+            if (r < 0) {
+                /* Port diagnostic, not in the binary: which handler refused
+                 * (an unknown token) and stopped the tick. */
+                printf("mk3: tick abandoned, handler %p refused token 0x%x "
+                       "(level %u)\n", (void *)(uintptr_t)f,
+                       (unsigned)*mk3_frame(t, t->frame + 1),
+                       (unsigned)t->frame);
                 return 1;                  /* the whole frame is abandoned */
+            }
         } while (r == 0);                  /* 0 means "ask me again, now" */
 
         next = t->next;

@@ -8768,7 +8768,7 @@ long t_sweep3(struct MK3THREAD *thread)
  *          obj->field34 = 1
  *          push t_reaction_start                        (0x10cd)
  *      state 0x10cd
- *          his_ochar_sound(obj)
+ *          obj->field1c = 0 ; his_ochar_sound(obj)
  *          obj->field1c = 0x40000                          (4.0 in 16.16)
  *          install t_stumble_back_vel
  */
@@ -8778,9 +8778,14 @@ long t_r_tusk_zap(struct MK3THREAD *thread)
     uint32_t token = *mk3_frame(thread, thread->frame + 1);
 
     if (token == 0x10cd) {
+        /* 0x46396: the sound number (0) goes in BEFORE the call. After it,
+         * the call read whatever 0x1c held -- uhq_entry's hit-queue pointer
+         * from reaction_start_chores -- as the sound, and the character
+         * number came out past ochar_sound_tables: the crash when a
+         * fighter took Kabal's zap, two projectiles in the air (Mary). */
+        obj->field1c = 0;
         his_ochar_sound(obj);
 
-        obj->field1c = 0;
         obj->field1c = 0x40000;                  /* 4.0 in 16.16 */
         return mk3_install(thread, (MK3THREADFUNC)t_stumble_back_vel);
     }

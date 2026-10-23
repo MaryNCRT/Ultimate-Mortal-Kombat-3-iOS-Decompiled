@@ -42,7 +42,26 @@ smoother, drawing only, without changing the animations.
   (ini round trip includes `smooth_anims`). **Not seen in the game yet:**
   Mary runs it.
 
-**Crash when two projectiles meet (open).** SCORPION vs KABAL, both throwing
+**Crash when a fighter takes Kabal's zap (fixed).** Mary's next log printed
+`csound: character 297758 out of range (event param 0x48b1e38)`. 0x48b1e38 is
+`G + 0x390` in the 64-bit exe with character 10 (Kabal) added as `10 << 8`:
+player 0's hit queue, which `uhq_entry` leaves in 0x1c at every reaction
+start. `t_r_tusk_zap` (armv7 0x46324), the reaction to Kabal's zap, stores
+`field1c = 0` BEFORE `bl his_ochar_sound` (0x46396 / 0x46398); the port had
+the store after the call, so the sound number was the pointer. On iOS that
+read a wrong entry quietly; on the PC it crashed. `factdiff` compares stores
+as a multiset, so a store moved past a call is invisible to it.
+
+**Fatality death screams repeat, fatalities that do not finish (open).**
+Every fatality, Mary says. Ruled out: the event queue (cleared at every
+`mk3_update`), the scene events (visual only), the rollback probe (off unless
+set), `instck` (no -3 refusals the binary lacks). Diagnostics in the build,
+to find the handler instead of guessing: `death scream: character N, handler
+0x..., token 0x..., level N` (other.c group_sound, kind 9) and `mk3: tick
+abandoned, handler 0x... refused token 0x...` (mk3.c). The handler address
+minus 0x400000 is its offset in the 64-bit exe (llvm-symbolizer with the PDB).
+
+**Crash when two projectiles meet.** SCORPION vs KABAL, both throwing
 at once: `AddNewGameEvents` -> `get_csound` read past `ochar_sound_tables`
 (26 rows) -- a character sound event (MKEvent 2/3, param = char << 8 + n)
 carried a character number of 26 or more. The four senders (`ochar_sound`,
@@ -439,6 +458,7 @@ own rule (FrontEnd.c, modes 3/4/5). Waiting for her steps.
 Not investigated yet; each needs its mechanism traced in the binary first.
 
 - **64-bit:** the FLAWLESS VICTORY text is not shown (fine in 32-bit).
+  Fixed: Mary confirmed it on 2026-10-22.
 - **Reptile's fatalities** sometimes do not work fully; in one of them he
   only raises his arms.
 - **Hitboxes** (the debug view) crash the game. Fixed, see above.

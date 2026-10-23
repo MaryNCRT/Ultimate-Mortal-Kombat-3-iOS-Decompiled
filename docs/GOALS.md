@@ -60,12 +60,9 @@ Kept current with every release; the detail of each change is in
 
 ## Known problems
 
-- Crash when two projectiles meet (SCORPION vs KABAL): a character sound with
-  an out-of-range character; skipped and logged now, sender not found yet.
 - A scream repeats when a fighter takes a fatality; some fatalities do not
   finish their animation.
 
-- FLAWLESS VICTORY text missing in the 64-bit build.
 - Reptile's fatalities: in one he only raises his arms.
 - Internet play is 64-bit only.
 - Not yet tested by Mary: the bosses as players, a mod's damage and hitbox

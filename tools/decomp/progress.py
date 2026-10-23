@@ -50,7 +50,10 @@ import os
 import sys
 import re
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+# tools/decomp/progress.py -> the repository: three levels up. Four (from
+# before the move into tools/decomp/) landed above the repository and counted
+# every module 0%.
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.chdir(ROOT)
 
 EXCLUDE = {"lime_unimplemented.c", "lime_globals.c"}

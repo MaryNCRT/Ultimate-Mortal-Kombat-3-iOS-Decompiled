@@ -11,6 +11,11 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
   `umk3.ini`. A fighter's frames are held for several ticks and drawn as hard
   cuts; with this on, each new frame is reached by blending from the one
   before. Drawing only: the game logic, hit boxes and events are unchanged.
+  It applies to every fighter: fights, the select screen and the intro.
+- Fixed: the game crashed when a fighter took Kabal's projectile (the
+  reaction asked for a sound before setting its number; armv7 0x46396).
+- Fixed: `tools/decomp/progress.py` looked one folder above the repository
+  and counted every module as 0%.
 
 ## 0.1.9-beta (2026-10-22) — Vulkan and Direct3D 12, Linux Fixes
 
