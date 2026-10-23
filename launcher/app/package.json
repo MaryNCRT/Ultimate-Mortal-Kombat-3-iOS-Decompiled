@@ -71,7 +71,7 @@
       "category": "Game",
       "extraResources": [
         {
-          "from": "../../TOOLS/eos",
+          "from": "../../tools/eos",
           "to": "TOOLS/eos",
           "filter": [
             "SDK/Include/**",
