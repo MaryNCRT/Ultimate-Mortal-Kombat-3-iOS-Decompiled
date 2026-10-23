@@ -155,6 +155,7 @@ void PortBackLine(char *line, int n);
 int PortPagesExit(void);
 void PortNavDrawLine(const char *s, int right);
 void set_menu_open_controls(void);      /* runtime/settings_menu.c */
+void set_menu_open_video(void);         /* runtime/settings_menu.c */
 int PortNavHover;
 int PortPadPalette[2];
 /* the same for the moves list's NEXT, drawn from GameCode.c */
@@ -6261,6 +6262,14 @@ void FE_Task_Karnage_Summary(void)
  *
  * The settings are written on both stepper paths and again on Back, so
  * stepping a volume commits immediately rather than on leaving.
+ *
+ * ### Port: VIDEO SETTINGS in the empty top-right slot
+ *
+ * drawPage2x2BigForSettings leaves BOXRT unused. The port puts a box there
+ * (as FE_Task_Button_Config draws BOXRT at 0x145, 0x59) that opens the
+ * settings menu's GRAPHICS page in the game's own panel
+ * (set_menu_open_video, runtime/settings_menu.c), with the on-screen
+ * controls on or off. It answers 5, a value the original never returns.
  */
 void limeSetTuneVol(long vol);
 
@@ -6274,6 +6283,15 @@ void FE_Task_Settings(void)
                    0.0f, 0.0234375f, 1.0f, 0.703125f, col);
 
     choice = drawPage2x2BigForSettings();
+    if (DrawButtonNew(&BUTTON_BOXRT, 0x145, 0x59, 1) && FE_FadeAdd == 0.0f)
+        choice = 5;                     /* port: VIDEO SETTINGS */
+    {
+        int es = Language[0] == 'E' && Language[1] == 'S';
+        limeDrawFONT(&GameFont, es ? "AJUSTES" : "VIDEO", (float)FE_X(325.0f),
+                     (float)FE_Y(72.0f), 1, FE_WidthScale, fontcol);
+        limeDrawFONT(&GameFont, es ? "DE VIDEO" : "SETTINGS", (float)FE_X(325.0f),
+                     (float)FE_Y(88.0f), 1, FE_WidthScale, fontcol);
+    }
 
     limeDrawFONT(&GameFont, GameText(0x118), (float)FE_X(156.0f),
                  (float)FE_Y(72.0f), 1, FE_WidthScale, fontcol);
@@ -6304,6 +6322,8 @@ void FE_Task_Settings(void)
 
     if (choice == 1) {
         PushFETaskDeferred(0x2f);
+    } else if (choice == 5) {
+        set_menu_open_video();
     } else if (choice == 2) {
         Settings[1] ^= 1;
     } else if (choice == 3) {
@@ -15327,8 +15347,9 @@ void PortNavDrawLine(const char *s, int right)
 
 void PortControlsPanel(const char *title, const char *const *label,
                        const char *const *value, const int *enabled, int rows,
-                       int sel, const char *footer, float *bx, float *top,
-                       float *bw, float *rowh)
+                       int sel, const char *footer, int split, float *bx,
+                       float *top, float *bw, float *rowh, float *colw,
+                       float *gap)
 {
     static TEXTURE *bg, *frame;
     static const float yellow[4] = { 1.0f, 1.0f, 0.0f, 1.0f };
@@ -15338,9 +15359,14 @@ void PortControlsPanel(const char *title, const char *const *label,
     float fw = FE_WidthScale * 468.0f, fh = FE_HeightScale * 236.0f;
     float rh = FE_HeightScale * 14.0f, sc = 0.55f * FE_WidthScale;
     float l = fx + FE_WidthScale * 24.0f, r = fx + fw - FE_WidthScale * 24.0f;
-    float y = fy + FE_HeightScale * 14.0f;
+    float y0 = fy + FE_HeightScale * 14.0f, g = FE_WidthScale * 12.0f, cw;
     int i;
 
+    if (split <= 0 || split >= rows)
+        split = rows;                   /* one column */
+    cw = split < rows ? (r - l - g) * 0.5f : r - l;
+    if (split < rows)
+        sc *= 0.92f;
     if (!bg)
         bg = (TEXTURE *)limeLoadTexture("FE_BG_MARBLE.PNG", 0, 0);
     if (!frame)
@@ -15357,18 +15383,24 @@ void PortControlsPanel(const char *title, const char *const *label,
     limeDrawFONT(&GameFont, title, (float)(int)(FE_WidthScale * 240.0f + FE_XC),
                  (float)(int)(FE_HeightScale * 12.0f), 1, FE_WidthScale, col);
 
-    for (i = 0; i < rows; i++, y += rh) {
+    for (i = 0; i < rows; i++) {
         const char *lab = label[i];
         const float *c = !enabled[i] ? grey : i == sel ? yellow : fontcol;
+        int k = i >= split;             /* rows 0..split-1 left, the rest right */
+        float y = y0 + (i - k * split) * rh, cl = l + k * (cw + g), s = sc;
 
         if (lab[0] == 2) {              /* a heading */
-            limeDrawFONT(&GameFont, lab + 1, l, y, 0, sc * 0.9f, red);
+            limeDrawFONT(&GameFont, lab + 1, cl, y, 0, sc * 0.9f, red);
             continue;
         }
-        rich_draw(lab, l + FE_WidthScale * 8.0f, y, rh * 0.8f, sc, c);
+        while (s > sc * 0.6f            /* label and value never overlap */
+               && rich_width(lab, rh * 0.8f, s) + rich_width(value[i], rh * 0.8f, s)
+                  + FE_WidthScale * 16.0f > cw)
+            s *= 0.94f;
+        rich_draw(lab, cl + FE_WidthScale * 8.0f, y, rh * 0.8f, s, c);
         if (value[i][0])
-            rich_draw(value[i], r - rich_width(value[i], rh * 0.8f, sc), y,
-                      rh * 0.8f, sc, c);
+            rich_draw(value[i], cl + cw - rich_width(value[i], rh * 0.8f, s), y,
+                      rh * 0.8f, s, c);
     }
     if (footer && footer[0])
         rich_draw(footer, FE_X(240.0f) - rich_width(footer, rh * 0.8f, sc) * 0.5f,
@@ -15377,4 +15409,6 @@ void PortControlsPanel(const char *title, const char *const *label,
     *bw = r - l;
     *top = fy + FE_HeightScale * 14.0f;
     *rowh = rh;
+    *colw = cw;
+    *gap = g;
 }
