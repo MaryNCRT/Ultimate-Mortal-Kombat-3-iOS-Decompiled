@@ -3,6 +3,7 @@
  *
  *     width=960      height=640      fullscreen=0   borderless=0
  *     hide_controls=1   (no on-screen stick and buttons)
+ *     smooth_anims=1    (fighters' animation frames blended, drawing only)
  *     texture_quality=iphone|ipad|max
  *     arch=x86|x64   (the launcher's own: which game it builds and plays,
  *       umk3-game.exe, 32 bits, or umk3-game64.exe, 64 bits)
@@ -146,6 +147,7 @@ function defaultConfig() {
         debug: false,
         skipIntro: false,            /* skip_intro=1: no publisher logos */
         hideControls: false,         /* hide_controls=1: no on-screen stick and buttons */
+        smoothAnims: false,          /* smooth_anims=1: blend the fighters' frames (drawing only) */
         language: 0,                 /* "" = follow Windows */
         ui: 'EN',                    /* the launcher's own language */
         ipa: '',
@@ -208,6 +210,7 @@ function load(p) {
         else if (key === 'debug_keys') cfg.debug = num === 1;
         else if (key === 'skip_intro') cfg.skipIntro = num === 1;
         else if (key === 'hide_controls') cfg.hideControls = num === 1;
+        else if (key === 'smooth_anims') cfg.smoothAnims = num === 1;
         else if (key === 'language') {
             const i = LANGS.findIndex(l => l.code.toUpperCase() === val.toUpperCase());
             if (i >= 0)
@@ -298,6 +301,7 @@ function save(p, cfg) {
         'debug_keys=' + (cfg.debug ? 1 : 0),
         'skip_intro=' + (cfg.skipIntro ? 1 : 0),
         'hide_controls=' + (cfg.hideControls ? 1 : 0),
+        'smooth_anims=' + (cfg.smoothAnims ? 1 : 0),
         'buttons=' + (cfg.buttons === 6 ? 6 : 5),
         'pad=' + (cfg.pad || 'auto'),
         'arch=' + (cfg.arch === 'x64' ? 'x64' : 'x86'),

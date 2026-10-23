@@ -10919,6 +10919,87 @@ static void RenderLevelPlayers_Pose(const long *w, long chr, float s,
     limeGetCurrentModelMatrix(out);
 }
 
+/* Port, not in the binary: SMOOTH ANIMATIONS (umk3.ini smooth_anims=1, or
+ * the options menu). A fighter's animation frame is held for several ticks
+ * and the fight draws it as a hard cut (AnimSmoothWindowSize 0, game_main.c),
+ * so the motion steps. With this on, a new frame is reached by blending from
+ * the one before it over as many ticks as that one was held (at most
+ * SMOOTH_MAX_TICKS), through the same frameA/frameB/t the front end's
+ * smoothing uses. Only the drawn pose changes: the frame the game logic,
+ * the hit boxes and the scene events run on is the one the game chose.
+ *
+ * frameA stays the game's frame (its record decides the mesh, the second
+ * skin and the events); frameB is the previous one, weighted by t. No blend
+ * across a frame that is not skinned, a change of second skin, a change of
+ * character or model, the 16/35..41 range, or what IsLiaProblem and
+ * IsOstrichProblem refuse -- the cases where the game itself cuts. */
+int port_smooth_anims;
+
+#define SMOOTH_MAX_TICKS 5
+
+int IsLiaProblem(PLAYER *p);
+int IsOstrichProblem(PLAYER *p);
+
+static int smooth_frame_ok(const long *a, long idx, long chr, long *skin2)
+{
+    long count = a[0];
+    const long *f;
+
+    if (chr == 0x10 && (unsigned long)(idx - 0x23) <= 6)
+        return 0;
+    if (idx < 0) idx = 0;               /* RenderAnimatedCharacter's clamp */
+    if (idx >= count - 2) idx = count - 2;
+    if (idx < 0)
+        return 0;
+    f = (const long *)((char *)RLP_PTR(a[1]) + idx * 88);
+    *skin2 = f[0x28 / 4];
+    return f[0x18 / 4] == 1;
+}
+
+static void port_smooth_pose(long *w, long slot)
+{
+    static struct { long chr, anim, cur, prev, held, dur; } st[2] = {
+        { -1, 0, -1, -1, 0, 1 }, { -1, 0, -1, -1, 0, 1 }
+    };
+    const long *a = RLP_PTR(w[4 / 4]);
+    long g = w[0x51c / 4];
+    long s2a, s2b;
+
+    /* the game is already blending (or cutting on purpose): leave it */
+    if (w[0x520 / 4] != g || ((float *)w)[0x524 / 4] != 0.0f || g < 0)
+        return;
+
+    if (st[slot].chr != w[0] || st[slot].anim != w[4 / 4]) {
+        st[slot].chr  = w[0];
+        st[slot].anim = w[4 / 4];
+        st[slot].cur  = st[slot].prev = g;
+        st[slot].held = 0;
+        st[slot].dur  = 1;
+    } else if (g != st[slot].cur) {
+        st[slot].dur  = st[slot].held + 1 < SMOOTH_MAX_TICKS
+                        ? st[slot].held + 1 : SMOOTH_MAX_TICKS;
+        st[slot].prev = st[slot].cur;
+        st[slot].cur  = g;
+        st[slot].held = 0;
+    } else if (!LIME_Paused) {
+        st[slot].held++;
+    }
+
+    if (!port_smooth_anims || a == NULL || st[slot].held + 1 >= st[slot].dur)
+        return;
+    if (!smooth_frame_ok(a, st[slot].cur, w[0], &s2a)
+        || !smooth_frame_ok(a, st[slot].prev, w[0], &s2b) || s2a != s2b)
+        return;
+
+    w[0x520 / 4] = st[slot].prev;
+    ((float *)w)[0x524 / 4] = 1.0f - (float)(st[slot].held + 1)
+                                     / (float)st[slot].dur;
+    if (IsLiaProblem((PLAYER *)w) || IsOstrichProblem((PLAYER *)w)) {
+        w[0x520 / 4] = g;
+        ((float *)w)[0x524 / 4] = 0.0f;
+    }
+}
+
 void RenderLevelPlayers(void)
 {
     float     mtx[16];                  /* sp+0x7c */
@@ -11217,6 +11298,8 @@ void RenderLevelPlayers(void)
                 if (ovrActive)
                     w[4 / 4] = (long)(uintptr_t)ovr;
                 if (pass == 0) {
+                    if (slot <= 1)
+                        port_smooth_pose(w, slot);
                     RenderPlayer((PLAYER *)w, 0, 0);
                     memcpy(att, MatrixPalette2, ATTACH_STRIDE);
                 }

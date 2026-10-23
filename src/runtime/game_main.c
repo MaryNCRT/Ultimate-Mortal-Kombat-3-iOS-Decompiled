@@ -964,6 +964,10 @@ static void read_config(const char *dir)
             snprintf(g_cfg_lang, sizeof g_cfg_lang, "%s", v);
         else if (strcmp(line, "renderer") == 0)        /* render/rgl.h */
             rgl_renderer = g_cfg_renderer = rgl_parse(v);
+        else if (strcmp(line, "smooth_anims") == 0) {  /* GameCode.c */
+            extern int port_smooth_anims;
+            port_smooth_anims = atoi(v) == 1;
+        }
         else if (strcmp(line, "buttons") == 0)
             g_cfg_buttons = atoi(v);
         else if (strncmp(line, "key5_", 5) == 0) {

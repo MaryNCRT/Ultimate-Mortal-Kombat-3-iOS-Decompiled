@@ -52,6 +52,7 @@ test('round-trip through save/load is lossless', () => {
     c.rres = 10;               /* 3D at 1920x1080 */
     c.antialiasing = 8;
     c.hideControls = true;
+    c.smoothAnims = true;
     c.widescreen = true;
     c.debug = true;
     c.skipIntro = true;

@@ -16,6 +16,30 @@
 
 ---
 
+## After 0.1.9: SMOOTH ANIMATIONS (2026-10-22, not released)
+
+Mary asked for an on/off option that makes the fighters' animations look
+smoother, drawing only, without changing the animations.
+
+- **What the game does:** a fight frame is held for several 60 Hz ticks and
+  drawn as a hard cut. The iOS original ran `PlayerAutoSmoothAnims` with a
+  window of 2 in fights (a delayed blend); the port sets it to 0 because the
+  delay felt like input lag (game_main.c).
+- **The option** (`port_smooth_anims`, `smooth_anims=` in `umk3.ini`, the
+  launcher's GRAPHICS > VIDEO checkbox, the in-game GRAPHICS > VIDEO row) runs
+  `port_smooth_pose` (GameCode.c, before `RenderLevelPlayers` draws fighters 0
+  and 1). When the game's frame changes, the drawn pose blends from the
+  previous frame into the new one over as many ticks as the previous one was
+  held, at most 5 (up to 4 ticks, 67 ms, behind the logic frame while
+  blending). It writes only `frameB` (+0x520) and `t` (+0x524); `frameA`
+  stays the game's frame, so the mesh record, the second skin and the scene
+  events are the game's. No blend across a non-skinned frame, a second-skin
+  change, a character/model change, 16/35..41, or IsLiaProblem /
+  IsOstrichProblem; a blend the game set itself is left alone.
+- **Verified:** both exes build from Mary's `.ipa`; launcher tests pass
+  (ini round trip includes `smooth_anims`). **Not seen in the game yet:**
+  Mary runs it.
+
 ## Release 0.1.9 beta (2026-10-22): Vulkan and Direct3D 12, Linux fixes
 
 ### Renderers (src/runtime/render)

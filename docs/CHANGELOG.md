@@ -4,6 +4,14 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 
 ---
 
+## Unreleased
+
+- **SMOOTH ANIMATIONS** (off by default): the launcher's GRAPHICS > VIDEO, or
+  Esc > GRAPHICS > VIDEO in the game (applied at once), `smooth_anims=1` in
+  `umk3.ini`. A fighter's frames are held for several ticks and drawn as hard
+  cuts; with this on, each new frame is reached by blending from the one
+  before. Drawing only: the game logic, hit boxes and events are unchanged.
+
 ## 0.1.9-beta (2026-10-22) — Vulkan and Direct3D 12, Linux Fixes
 
 Built for Windows (64 and 32 bits) and Linux. Not yet played by Mary at release; the Linux package is untested on a Linux machine.

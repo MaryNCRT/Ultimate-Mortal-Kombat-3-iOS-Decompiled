@@ -80,6 +80,8 @@
                     {#each AA as n, i}<option value={i}>{n ? 'x' + n : tx('aaOff')}</option>{/each}
                 </select>
             </div>
+            <label class="chk wide"><input type="checkbox" checked={!!c.smoothAnims}
+                onchange={e => save({ smoothAnims: e.currentTarget.checked })}><span>{tx('smooth')}</span></label>
             <div class="field wide">
                 <span class="lbl">{tx('frame')}</span>
                 <div class="row">
