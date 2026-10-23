@@ -88,7 +88,10 @@
     const seqs = $derived(tables ? Object.keys(tables).filter(k => k.startsWith('seq_' + ROSTER[c][1] + '_')).map(k => k.slice(5 + ROSTER[c][1].length)) : []);
     let selStk = $state('');
     $effect(() => { if (!strikes.includes(selStk)) selStk = strikes.find(x => typeof x === 'string') || ''; });
-    const boxes = $derived(strikes.filter(s => typeof s === 'string').map(name => ({ name, v: [0, 1, 2, 3].map(i => s16(word(name, i)) || 0) })));
+    /* each strike once: Motaro's table names stk_dummy three times, and the
+     * hit box drawing keys its boxes by name (Mary: the editor failed on
+     * Motaro) */
+    const boxes = $derived(strikes.filter((s, i) => typeof s === 'string' && strikes.indexOf(s) === i).map(name => ({ name, v: [0, 1, 2, 3].map(i => s16(word(name, i)) || 0) })));
     function boxTo(v) { v.forEach((x, i) => set(selStk, i, x)); }
     const specials = $derived(seqs.filter(s => !FINISHERS.includes(s)));
 
