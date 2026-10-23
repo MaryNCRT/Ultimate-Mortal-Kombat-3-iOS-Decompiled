@@ -241,7 +241,7 @@
             g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(f.topo.src.length * 3), 3));
             g.setAttribute('uv', new THREE.BufferAttribute(Float32Array.from(f.topo.uv), 2));
             g.setIndex(new THREE.BufferAttribute(f.topo.faces.slice(blk.first * 3, (blk.first + blk.count) * 3), 1));
-            const stem = bi === 0 && ms.outfit ? ms.outfit : f.blockTex[bi];
+            const stem = bi === 0 && ms.outfit ? shownOutfit() : f.blockTex[bi];
             const map = await texture(stem);
             const mat = new THREE.MeshLambertMaterial({ map, color: map ? 0xffffff : 0x9a96c8, side: THREE.DoubleSide, alphaTest: 0.35, wireframe: ms.wire });
             const mesh = new THREE.Mesh(g, mat);
@@ -301,14 +301,31 @@
         }
     });
 
+    /* the outfit at a quality: '' its own texture, LOW or LITE the smaller
+     * copy the game takes at IPHONE quality (X_LOW, X_LITE; for a second
+     * outfit X2 also X_LOW2, X_LITE2), null when the game has none */
+    let quality = $state('');
+    function copyOf(stem, q) {
+        if (!q) return stem;
+        const s = String(stem).toUpperCase(), names = [s + '_' + q];
+        if (/2$/.test(s)) names.push(s.slice(0, -1) + '_' + q + '2');
+        return names.find(n => textureFile(src.files, n)) || null;
+    }
+    const qualities = $derived(fx && ms.outfit ? ['', 'LOW', 'LITE'].filter(q => copyOf(ms.outfit, q)) : []);
+    const shownOutfit = () => copyOf(ms.outfit, quality) || ms.outfit;
+
     async function outfit(v) {
         ms.outfit = v;
-        if (fighterView) {
-            const map = await texture(v);
-            fighterView.meshes[0].material.map = map;
-            fighterView.meshes[0].material.needsUpdate = true;
-        }
+        await showOutfit();
     }
+    async function showOutfit() {
+        if (!fighterView) return;
+        const map = await texture(shownOutfit());
+        fighterView.meshes[0].material.map = map;
+        fighterView.meshes[0].material.color.set(map ? 0xffffff : 0x9a96c8);
+        fighterView.meshes[0].material.needsUpdate = true;
+    }
+    $effect(() => { quality; showOutfit(); });
 
     /* ------------------------------------------------------- textures -- */
 
@@ -596,6 +613,14 @@
                     {#each fx.variants as v}<option value={v}>{v}</option>{/each}
                 </select>
             {/if}
+            {#if qualities.length > 1}
+                <span class="lbl">{tx('vwQuality')}</span>
+                <span class="tabs sub q{qualities.length}">
+                    {#each qualities as q}
+                        <button class="tab" class:active={quality === q} onclick={() => { selectBlip(); quality = q; }}>{q || 'NORMAL'}</button>
+                    {/each}
+                </span>
+            {/if}
             <div class="checks">
                 <label class="chk"><input type="checkbox" bind:checked={ms.bones}><span>{tx('vwBones')}</span></label>
                 <label class="chk"><input type="checkbox" bind:checked={ms.wire}><span>{tx('vwWire')}</span></label>
@@ -618,11 +643,15 @@
                 <button class="btn hot" onclick={() => replaceTexture(texInfo.name)}>{tx('vwImpTex')}</button>
                 <button class="btn" onclick={toMod}>{tx('vwToMod')}</button>
             {:else}
-                <select class="sel" bind:value={texPick}>
-                    {#each stems as s}<option value={s}>{s}</option>{/each}
-                </select>
+                {#if fx}
+                    <span class="lbl">{ms.autoSmall || !quality ? ms.outfit : shownOutfit()}</span>
+                {:else}
+                    <select class="sel" bind:value={texPick}>
+                        {#each stems as s}<option value={s}>{s}</option>{/each}
+                    </select>
+                {/if}
                 <label class="chk"><input type="checkbox" bind:checked={ms.autoSmall}><span>{tx('vwAutoSmall')}</span></label>
-                <button class="btn hot" onclick={() => replaceTexture(texPick || stems[0])}>{tx('vwImpTex')}</button>
+                <button class="btn hot" onclick={() => replaceTexture(fx ? (ms.autoSmall || !quality ? ms.outfit : shownOutfit()) : (texPick || stems[0]))}>{tx('vwImpTex')}</button>
                 <button class="btn" onclick={exportTextures}>{tx('vwExpTex')}</button>
                 {#if fx}<button class="btn" onclick={seeTextures}>{tx('vwSeeTex')}</button>{/if}
             {/if}
@@ -669,6 +698,7 @@
     .side .sel, .side .btn { flex: none; }
     .opts { overflow-x: hidden; overflow-y: auto; padding-right: calc(var(--u) * .3); }
     .opts .btn { white-space: normal; height: auto; min-height: var(--ctl-h); padding-top: calc(var(--u) * .4); padding-bottom: calc(var(--u) * .4); }
+    .opts .sub.q3 { grid-template-columns: 1fr 1fr 1fr; }
     .opts .sub { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u) * .4); }
     .opts .sub .tab { font-size: calc(var(--t) * 1.15); padding: calc(var(--u) * .5) calc(var(--u) * .3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .opts .btn, .opts .sel, .opts .edt { width: 100%; flex: none; }
