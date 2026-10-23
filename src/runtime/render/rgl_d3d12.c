@@ -174,8 +174,18 @@ static void to_state(dx_res *r, D3D12_RESOURCE_STATES s)
     r->state = s;
 }
 
+static int g_ulist_on;                  /* uploads recorded, not yet run (upload) */
+static ID3D12CommandAllocator *g_ualloc;
+static ID3D12GraphicsCommandList *g_ulist;
+static ID3D12Resource **g_ubufs;
+static int g_nubufs, g_cubufs;
+static UINT64 g_ubytes;
+static void upload_submit(void);
+
 static void release(dx_res *r)
 {
+    if (r->res && g_ulist_on)           /* a recorded upload may write it */
+        upload_submit();
     if (r->res)
         ID3D12Resource_Release(r->res);
     r->res = NULL;
@@ -255,6 +265,7 @@ static void wait_gpu(void)
 static void flush(void)
 {
     ID3D12CommandList *l;
+    upload_submit();                    /* the textures this list draws with */
     if (!g_list_on)
         return;
     ID3D12GraphicsCommandList_Close(g_list);
@@ -571,6 +582,14 @@ static void dx_close(void)
             release(&g_tg[i].dep);
         }
     free_window();
+    upload_submit();
+    if (g_ulist) ID3D12GraphicsCommandList_Release(g_ulist);
+    if (g_ualloc) ID3D12CommandAllocator_Release(g_ualloc);
+    g_ulist = NULL;
+    g_ualloc = NULL;
+    free(g_ubufs);
+    g_ubufs = NULL;
+    g_cubufs = 0;
     if (g_vbuf) ID3D12Resource_Release(g_vbuf);
     if (g_root) ID3D12RootSignature_Release(g_root);
     if (g_list) ID3D12GraphicsCommandList_Release(g_list);
@@ -611,14 +630,57 @@ static int dx_tex_new(void)
     return i;
 }
 
-/* rows into a texture's levels through an upload buffer, run at once in a
- * list of their own */
+/* Rows into a texture's levels through an upload buffer, recorded in a list
+ * of their own that runs before the next draws (flush, the same queue, so in
+ * order) -- or sooner, when the buffers pass 64 MB or a resource is
+ * released. Each upload used to make its own allocator and list, run them
+ * and wait for the GPU: one wait per texture, hundreds in a load. */
+static void upload_submit(void)
+{
+    ID3D12CommandList *one;
+    int i;
+    if (!g_ulist_on)
+        return;
+    g_ulist_on = 0;
+    ID3D12GraphicsCommandList_Close(g_ulist);
+    one = (ID3D12CommandList *)g_ulist;
+    ID3D12CommandQueue_ExecuteCommandLists(g_queue, 1, &one);
+    wait_gpu();
+    for (i = 0; i < g_nubufs; i++)
+        ID3D12Resource_Release(g_ubufs[i]);
+    g_nubufs = 0;
+    g_ubytes = 0;
+}
+
+static int upload_begin(UINT64 bytes)
+{
+    if (g_ulist_on && g_ubytes + bytes > ((UINT64)64 << 20))
+        upload_submit();
+    if (!g_ualloc) {
+        if (!ok(ID3D12Device_CreateCommandAllocator(g_dev, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                    &IID_ID3D12CommandAllocator, (void **)&g_ualloc), "upload allocator"))
+            return 0;
+        if (!ok(ID3D12Device_CreateCommandList(g_dev, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, g_ualloc, NULL,
+                                               &IID_ID3D12GraphicsCommandList, (void **)&g_ulist), "upload list")) {
+            ID3D12CommandAllocator_Release(g_ualloc);
+            g_ualloc = NULL;
+            return 0;
+        }
+        ID3D12GraphicsCommandList_Close(g_ulist);
+    }
+    if (!g_ulist_on) {
+        ID3D12CommandAllocator_Reset(g_ualloc);
+        ID3D12GraphicsCommandList_Reset(g_ulist, g_ualloc, NULL);
+        g_ulist_on = 1;
+    }
+    return 1;
+}
+
 static void upload(dx_res *r, int x, int y, int w, int h, int levels, const unsigned char *const *rgba)
 {
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp[16];
     ID3D12Resource *ub;
-    ID3D12CommandAllocator *al = NULL;
-    ID3D12GraphicsCommandList *cl = NULL, *keep = g_list;
+    ID3D12GraphicsCommandList *keep = g_list;
     unsigned char *map;
     UINT64 total = 0;
     int l, lw = w, lh = h;
@@ -638,6 +700,8 @@ static void upload(dx_res *r, int x, int y, int w, int h, int levels, const unsi
         lw = lw > 1 ? lw / 2 : 1;
         lh = lh > 1 ? lh / 2 : 1;
     }
+    if (!upload_begin(total))
+        return;
     ub = buffer(total, D3D12_HEAP_TYPE_UPLOAD);
     if (!ub || FAILED(ID3D12Resource_Map(ub, 0, NULL, (void **)&map))) {
         if (ub) ID3D12Resource_Release(ub);
@@ -650,10 +714,19 @@ static void upload(dx_res *r, int x, int y, int w, int h, int levels, const unsi
                    rgba[l] + (size_t)row * fp[l].Footprint.Width * 4, (size_t)fp[l].Footprint.Width * 4);
     }
     ID3D12Resource_Unmap(ub, 0, NULL);
-    ID3D12Device_CreateCommandAllocator(g_dev, D3D12_COMMAND_LIST_TYPE_DIRECT, &IID_ID3D12CommandAllocator, (void **)&al);
-    ID3D12Device_CreateCommandList(g_dev, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, al, NULL,
-                                   &IID_ID3D12GraphicsCommandList, (void **)&cl);
-    g_list = cl;
+    if (g_nubufs == g_cubufs) {
+        int n = g_cubufs ? g_cubufs * 2 : 256;
+        ID3D12Resource **nb = (ID3D12Resource **)realloc(g_ubufs, (size_t)n * sizeof *nb);
+        if (!nb) {
+            ID3D12Resource_Release(ub);
+            return;
+        }
+        g_ubufs = nb;
+        g_cubufs = n;
+    }
+    g_ubufs[g_nubufs++] = ub;
+    g_ubytes += total;
+    g_list = g_ulist;
     to_state(r, D3D12_RESOURCE_STATE_COPY_DEST);
     for (l = 0; l < levels; l++) {
         D3D12_TEXTURE_COPY_LOCATION dst, src;
@@ -665,19 +738,10 @@ static void upload(dx_res *r, int x, int y, int w, int h, int levels, const unsi
         src.pResource = ub;
         src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
         src.PlacedFootprint = fp[l];
-        ID3D12GraphicsCommandList_CopyTextureRegion(cl, &dst, l ? 0 : (UINT)x, l ? 0 : (UINT)y, 0, &src, NULL);
+        ID3D12GraphicsCommandList_CopyTextureRegion(g_ulist, &dst, l ? 0 : (UINT)x, l ? 0 : (UINT)y, 0, &src, NULL);
     }
     to_state(r, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     g_list = keep;
-    ID3D12GraphicsCommandList_Close(cl);
-    {
-        ID3D12CommandList *one = (ID3D12CommandList *)cl;
-        ID3D12CommandQueue_ExecuteCommandLists(g_queue, 1, &one);
-    }
-    wait_gpu();
-    ID3D12GraphicsCommandList_Release(cl);
-    ID3D12CommandAllocator_Release(al);
-    ID3D12Resource_Release(ub);
 }
 
 static void before_write(dx_tex *t)
