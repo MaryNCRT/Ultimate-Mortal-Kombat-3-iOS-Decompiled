@@ -28,7 +28,8 @@ Kept current with every release; the detail of each change is in
 - GRAPHICS, CONTROLS, PROFILE, PLAY sections.
 - MODS: mod manager (priority, on/off, categories, cover, refresh), model
   viewer (fighters with animations, stages, models, textures by fighter;
-  with the game alone, the mods on or one mod; full screen), character
+  with the game alone, the mods on or one mod; full screen; texture
+  quality NORMAL / LOW / LITE; playback speed), character
   editor (strikes, visual hitbox editor, specials and finishers, data,
   texts, textures), export to FBX / USD / OBJ, Blender round trip
   (replace an animation or the model from an FBX on the exported rig),
@@ -37,7 +38,11 @@ Kept current with every release; the detail of each change is in
 
 ## Next (in Mary's order)
 
-1. Vulkan and DirectX 12 renderer options.
+1. Native Vulkan and DirectX 12 renderers, chosen like OpenGL (Mary chose
+   renderers written for the game over a translation layer).
+2. The Linux build to a working game (0.1.8 stopped at the link; fixed for
+   the next release, then whatever comes next on Mary's Linux machine).
+3. Release the next build (0.1.9) with all of the above.
 
 ## Later
 
@@ -46,6 +51,8 @@ Kept current with every release; the detail of each change is in
 - Edit a fighter's scripts and code (specials, finishers); attacks for Noob
   Saibot, Shao Kahn and Motaro.
 - Outfit 3.
+- The viewer's T-pose: some fighters' corrected T-pose looks wrong, the
+  ninjas most of all (Mary, 2026-10-22).
 
 ## Known problems
 

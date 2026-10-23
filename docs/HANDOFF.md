@@ -65,6 +65,11 @@ list of what works and what comes next is now [GOALS.md](GOALS.md).
   written as the texture's PNG, and with MAKE THE LOW AND LITE COPIES (on
   by default) each smaller copy the game has, at that copy's own size.
   With it off the editor lists the copies to replace one by one.
+- Viewer, fighters: TEXTURE QUALITY NORMAL / LOW / LITE shows the outfit
+  with the game's smaller copy (the separate TEXTURES list there repeated
+  the OUTFIT one and is gone); REPLACE TEXTURE takes the outfit shown.
+  SPEED 0.1x to 3x beside the frame bar. The home menu keeps its old text
+  size (Mary).
 - **COVER** takes any picture too, made a PNG no wider than 640 in the
   window. Before, the file was copied as it was and a cover over 4 MB (a
   photo) was never shown.

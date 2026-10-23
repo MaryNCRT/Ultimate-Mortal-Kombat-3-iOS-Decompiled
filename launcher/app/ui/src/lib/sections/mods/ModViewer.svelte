@@ -70,6 +70,7 @@
     /* FULL SCREEN: the view and its controls over the whole screen (the
      * page's own fullscreen; Esc or the button leaves it) */
     let mainEl = $state(), full = $state(false);
+    const SPEEDS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3];
     let texPick = $state('');               /* the texture REPLACE TEXTURE takes */
     const onFull = () => { full = document.fullscreenElement === mainEl; };
     function toggleFull() {
@@ -97,7 +98,7 @@
         last = t;
         if (ms.playing && fighterView && ms.clip >= 0) {
             acc += dt;
-            if (acc >= 1 / 30) {
+            if (acc >= 1 / (30 * ms.speed)) {          /* the game's 30 a second, times SPEED */
                 acc = 0;
                 const c = fighterView.f.clips[ms.clip];
                 ms.frame = ms.frame >= c.to - c.from ? 0 : ms.frame + 1;
@@ -590,6 +591,9 @@
                 <button class="btn" onclick={() => ms.playing = !ms.playing}>{ms.playing ? tx('vwPause') : tx('vwPlay')}</button>
                 <input type="range" min="0" max={fx.clips[ms.clip].to - fx.clips[ms.clip].from} bind:value={ms.frame}>
                 <span class="lbl">{tx('vwFrame')} {ms.frame + 1}</span>
+                <select class="sel speed" bind:value={ms.speed} title={tx('vwSpeed')}>
+                    {#each SPEEDS as v}<option value={v}>{v}x</option>{/each}
+                </select>
             </div>
         {/if}
     </section>
@@ -737,5 +741,6 @@
     .fullbtn { position: absolute; right: calc(var(--u) * .8); top: calc(var(--u) * .6); height: auto; padding: calc(var(--u) * .35) calc(var(--u) * .9); font-size: calc(var(--t) * 1.2); opacity: .85; }
     .play { display: flex; align-items: center; gap: calc(var(--u) * .9); margin-top: calc(var(--u) * .6); }
     .play input[type=range] { flex: 1; accent-color: var(--blue); }
+    .play .speed { flex: 0 0 calc(var(--u) * 8); }
     .ok { color: var(--ok-text); word-break: break-all; }
 </style>
