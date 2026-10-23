@@ -16,7 +16,7 @@
     import { api } from '#lib/platform.js';
     import { hoverBlip, selectBlip } from '#lib/sound.js';
     import { ms, src, loadCatalog, fighter, refreshMods, reloadMods, exportThis, forgetMod, VIEW_KINDS } from '#lib/mods/store.svelte.js';
-    import { stageDesc, meshsetDesc, textureFile, pngBytes, exportFiles, isPng } from '#lib/mods/assets.js';
+    import { stageDesc, meshsetDesc, textureFile, pngBytes, exportFiles, isPng, attachVerts } from '#lib/mods/assets.js';
     import { readFbx, fbxScene, fbxTakes, importAnim, importModel, rigDesc } from '#lib/mods/fbxin.js';
     import { framePose, posedVerts, fitRest } from '#lib/mods/rig.js';
     import { decodePvr } from '#lib/mods/formats.js';
@@ -249,11 +249,25 @@
             root.add(mesh);
             meshes.push(mesh);
         }
+        /* what rides his bones (Kung Lao's hat), placed per frame in pose() */
+        const extras = [];
+        for (const a of f.attach || []) {
+            const g = new THREE.BufferGeometry();
+            g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(a.pos.length), 3));
+            g.setAttribute('uv', new THREE.BufferAttribute(Float32Array.from(a.uv), 2));
+            g.setIndex(new THREE.BufferAttribute(Uint32Array.from(a.faces), 1));
+            const map = await texture(a.texture === f.blockTex[0] ? shownOutfit() : a.texture);
+            const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map, color: map ? 0xffffff : 0x9a96c8,
+                side: THREE.DoubleSide, alphaTest: 0.35, wireframe: ms.wire }));
+            mesh.visible = false;
+            root.add(mesh);
+            extras.push({ a, mesh });
+        }
         skel = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xff5a5a, depthTest: false }));
         skel.renderOrder = 10;
         root.add(skel);
         scene.add(root);
-        fighterView = { f, meshes };
+        fighterView = { f, meshes, extras };
         pose();
         frame(root);
     }
@@ -262,10 +276,11 @@
     function pose() {
         if (!fighterView) return;
         const { f, meshes } = fighterView;
-        let p, pos;
+        let p, pos, at = -1;
         if (ms.clip >= 0) {
             const c = f.clips[ms.clip];
-            p = framePose(f.rig, c.from + Math.min(ms.frame, c.to - c.from));
+            at = c.from + Math.min(ms.frame, c.to - c.from);
+            p = framePose(f.rig, at);
             pos = posedVerts(f.rig, f.topo, p);
         } else if (ms.pose === 'tpose' && f.tpose) {
             p = f.tpose;
@@ -282,6 +297,16 @@
             m.geometry.computeBoundingBox();
             m.material.wireframe = ms.wire;
         }
+        for (const { a, mesh } of fighterView.extras || []) {
+            const v = ms.extras ? attachVerts(a, at, p) : null;
+            mesh.visible = !!v;
+            if (!v) continue;
+            mesh.geometry.attributes.position.array.set(v);
+            mesh.geometry.attributes.position.needsUpdate = true;
+            mesh.geometry.computeVertexNormals();
+            mesh.geometry.computeBoundingSphere();
+            mesh.material.wireframe = ms.wire;
+        }
         const seg = [];
         if (ms.bones)
             f.rig.bones.parent.forEach((par, b) => { if (par >= 0) seg.push(...p[par].T, ...p[b].T); });
@@ -289,7 +314,7 @@
     }
 
     $effect(() => {
-        ms.clip; ms.frame; ms.pose; ms.bones; ms.wire;
+        ms.clip; ms.frame; ms.pose; ms.bones; ms.wire; ms.extras;
         pose();
     });
     /* a clip moves the fighter about (its root travels): framed again */
@@ -325,6 +350,11 @@
         fighterView.meshes[0].material.map = map;
         fighterView.meshes[0].material.color.set(map ? 0xffffff : 0x9a96c8);
         fighterView.meshes[0].material.needsUpdate = true;
+        for (const { a, mesh } of fighterView.extras || [])
+            if (a.texture === fighterView.f.blockTex[0]) {
+                mesh.material.map = map;
+                mesh.material.needsUpdate = true;
+            }
     }
     $effect(() => { quality; showOutfit(); });
 
@@ -628,6 +658,9 @@
             <div class="checks">
                 <label class="chk"><input type="checkbox" bind:checked={ms.bones}><span>{tx('vwBones')}</span></label>
                 <label class="chk"><input type="checkbox" bind:checked={ms.wire}><span>{tx('vwWire')}</span></label>
+                {#if fx.attach && fx.attach.length}
+                    <label class="chk"><input type="checkbox" bind:checked={ms.extras}><span>{tx('vwExtras')}</span></label>
+                {/if}
             </div>
         {:else if ms.pick && ms.kind !== 'textures' && !ms.loading}
             <div class="checks">
