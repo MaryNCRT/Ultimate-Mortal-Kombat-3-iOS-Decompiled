@@ -702,6 +702,309 @@ unsigned char *plat_ui_badge(const char *name, const unsigned char *icon,
     return out;
 }
 
+/* ------------------------------------------------------- gradient picker
+ *
+ * PROFILE's background in the settings menu, drawn as the launcher draws it
+ * (launcher/app/ui/src/lib/components/GradientPicker.svelte, Mary's design):
+ * the same box, colours and layout, measured in the component's CSS pixels
+ * and scaled by `k` texture pixels each -- the label, the big preview, the
+ * angle dial (ring, arm, handle, centre), FROM and TO with their colours,
+ * the angle in pink, the presets eight across, the CSS and COPY / CLEAR.
+ * `focus` lights a control for the keys and the pad (the dial, FROM, TO,
+ * the presets with `cursor`, COPY, CLEAR) the way the launcher lights a
+ * swatch under the pointer. `hit` gets each control's box in texture
+ * pixels, for the mouse. Returns RGBA8, premultiplied, malloc'd. */
+
+static void gp_rgb(unsigned c, float *o)
+{
+    o[0] = ((c >> 16) & 255) / 255.0f;
+    o[1] = ((c >> 8) & 255) / 255.0f;
+    o[2] = (c & 255) / 255.0f;
+}
+
+/* CSS's linear-gradient(angle, a, b) over a box: the line through its
+ * centre at the angle (0 up, clockwise), long enough for the corners */
+static void gp_fill_grad(al_box *b, float x0, float y0, float x1, float y1,
+                         unsigned from, unsigned to, int angle)
+{
+    float a = (float)angle * 3.14159265f / 180.0f, dx = sinf(a), dy = -cosf(a);
+    float w = x1 - x0, h = y1 - y0, half = (fabsf(w * dx) + fabsf(h * dy)) * 0.5f;
+    float c0[3], c1[3];
+    int x, y;
+
+    gp_rgb(from, c0);
+    gp_rgb(to, c1);
+    if (half <= 0)
+        half = 1;
+    for (y = (int)y0; y < (int)ceilf(y1); y++)
+        for (x = (int)x0; x < (int)ceilf(x1); x++) {
+            float u, cx, cy;
+            if (x < 0 || y < 0 || x >= b->w || y >= b->h)
+                continue;
+            cx = x + 0.5f - (x0 + x1) * 0.5f;
+            cy = y + 0.5f - (y0 + y1) * 0.5f;
+            u = (cx * dx + cy * dy) / (2 * half) + 0.5f;
+            u = u < 0 ? 0 : u > 1 ? 1 : u;
+            al_over(&b->px[y * b->w + x], c0[0] + (c1[0] - c0[0]) * u,
+                    c0[1] + (c1[1] - c0[1]) * u, c0[2] + (c1[2] - c0[2]) * u, 1);
+        }
+}
+
+static void gp_rect(al_box *b, float x0, float y0, float x1, float y1,
+                    unsigned c, float a)
+{
+    float col[3];
+    int x, y;
+
+    gp_rgb(c, col);
+    for (y = (int)y0; y < (int)ceilf(y1); y++)
+        for (x = (int)x0; x < (int)ceilf(x1); x++)
+            if (x >= 0 && y >= 0 && x < b->w && y < b->h)
+                al_over(&b->px[y * b->w + x], col[0], col[1], col[2], a);
+}
+
+/* a 1-px CSS border, t texture pixels thick, inside the box */
+static void gp_border(al_box *b, float x0, float y0, float x1, float y1,
+                      float t, unsigned c, float a)
+{
+    gp_rect(b, x0, y0, x1, y0 + t, c, a);
+    gp_rect(b, x0, y1 - t, x1, y1, c, a);
+    gp_rect(b, x0, y0 + t, x0 + t, y1 - t, c, a);
+    gp_rect(b, x1 - t, y0 + t, x1, y1 - t, c, a);
+}
+
+/* the launcher's glow (box-shadow 0 0 r colour): a soft halo round a box */
+static void gp_glow(al_box *b, float x0, float y0, float x1, float y1,
+                    float r, unsigned c, float a)
+{
+    float col[3];
+    int x, y;
+
+    gp_rgb(c, col);
+    for (y = (int)(y0 - r); y < (int)ceilf(y1 + r); y++)
+        for (x = (int)(x0 - r); x < (int)ceilf(x1 + r); x++) {
+            float dx, dy, d;
+            if (x < 0 || y < 0 || x >= b->w || y >= b->h)
+                continue;
+            dx = x + 0.5f < x0 ? x0 - x - 0.5f : x + 0.5f > x1 ? x + 0.5f - x1 : 0;
+            dy = y + 0.5f < y0 ? y0 - y - 0.5f : y + 0.5f > y1 ? y + 0.5f - y1 : 0;
+            d = sqrtf(dx * dx + dy * dy);
+            if (d <= 0 || d >= r)
+                continue;
+            al_over(&b->px[y * b->w + x], col[0], col[1], col[2], a * (1 - d / r) * (1 - d / r));
+        }
+}
+
+/* the glow round a circle: a soft ring outside radius rad */
+static void gp_glow_disc(al_box *b, float cx, float cy, float rad, float r,
+                         unsigned c, float a)
+{
+    float col[3];
+    int x, y;
+
+    gp_rgb(c, col);
+    for (y = (int)(cy - rad - r); y <= (int)(cy + rad + r); y++)
+        for (x = (int)(cx - rad - r); x <= (int)(cx + rad + r); x++) {
+            float d;
+            if (x < 0 || y < 0 || x >= b->w || y >= b->h)
+                continue;
+            d = sqrtf((x + 0.5f - cx) * (x + 0.5f - cx) + (y + 0.5f - cy) * (y + 0.5f - cy)) - rad;
+            if (d <= 0 || d >= r)
+                continue;
+            al_over(&b->px[y * b->w + x], col[0], col[1], col[2], a * (1 - d / r) * (1 - d / r));
+        }
+}
+
+/* a filled disc, anti-aliased */
+static void gp_disc(al_box *b, float cx, float cy, float rad, unsigned c, float a)
+{
+    float col[3];
+    int x, y;
+
+    gp_rgb(c, col);
+    for (y = (int)(cy - rad - 1); y <= (int)(cy + rad + 1); y++)
+        for (x = (int)(cx - rad - 1); x <= (int)(cx + rad + 1); x++) {
+            float d, cov;
+            if (x < 0 || y < 0 || x >= b->w || y >= b->h)
+                continue;
+            d = sqrtf((x + 0.5f - cx) * (x + 0.5f - cx) + (y + 0.5f - cy) * (y + 0.5f - cy));
+            cov = rad + 0.5f - d;
+            if (cov <= 0)
+                continue;
+            al_over(&b->px[y * b->w + x], col[0], col[1], col[2], a * (cov > 1 ? 1 : cov));
+        }
+}
+
+static unsigned gp_hex(const char *h)
+{
+    return (unsigned)strtoul(h + 1, NULL, 16) & 0xffffff;
+}
+
+unsigned char *plat_ui_gradient(const struct plat_grad *g, float k,
+                                struct plat_grad_hit *hit, int *ow, int *oh)
+{
+    al_box b;
+    const float pad = 16 * k, gap = 10 * k, inner = 408 * k, t1 = k < 1 ? 1 : k;
+    const float W = 440 * k;
+    float y, x0 = pad, x1 = pad + inner, cell, dcx, dcy, ang;
+    int i, px_, py_;
+    char v[32];
+    unsigned char *out;
+    const unsigned PINK = gp_hex("#ff5fa8"), HOT = gp_hex("#ff2f8f"),
+                   LINE = gp_hex("#542637"), MUTE = gp_hex("#a98796"),
+                   TEXT = gp_hex("#f5e6ef");
+    float mute[3], text[3], pink[3];
+
+    gp_rgb(MUTE, mute);
+    gp_rgb(TEXT, text);
+    gp_rgb(PINK, pink);
+    memset(&b, 0, sizeof b);
+    memset(hit, 0, sizeof *hit);
+    b.s = k;
+    /* the label 11, the preview 52, the controls 56, three rows of
+     * swatches (26 and 5 between), the output 28; gap 10 between each */
+    b.w = (int)ceilf(W);
+    b.h = (int)ceilf(pad * 2 + 11 * k + 52 * k + 56 * k + (26 * 3 + 5 * 2) * k + 28 * k + gap * 4);
+    b.px = (al_px *)calloc((size_t)b.w * b.h, sizeof(al_px));
+    if (!b.px)
+        return NULL;
+    gp_rect(&b, 0, 0, (float)b.w, (float)b.h, gp_hex("#0f080c"), 1);
+    gp_border(&b, 0, 0, (float)b.w, (float)b.h, t1, LINE, 1);
+    hit->panel[0] = 0; hit->panel[1] = 0; hit->panel[2] = (float)b.w; hit->panel[3] = (float)b.h;
+
+    /* the label, uppercase, muted */
+    y = pad;
+    al_say(&b, g->label, (int)(10.6f * k + 0.5f), 0, x0, y + 5.5f * k, 0, mute[0], mute[1], mute[2], 1);
+    y += 11 * k + gap;
+
+    /* the big preview */
+    if (g->empty) {
+        gp_rect(&b, x0, y, x1, y + 52 * k, gp_hex("#050505"), 1);
+        al_say(&b, g->none, (int)(10.6f * k + 0.5f), 0, (x0 + x1) * 0.5f, y + 26 * k, 1,
+               mute[0], mute[1], mute[2], 1);
+    } else
+        gp_fill_grad(&b, x0, y, x1, y + 52 * k, g->from, g->to, g->from == g->to ? 180 : g->angle);
+    gp_border(&b, x0, y, x1, y + 52 * k, t1, LINE, 1);
+    y += 52 * k + gap;
+
+    /* the dial: ring, arm, handle, centre */
+    dcx = x0 + 28 * k;
+    dcy = y + 28 * k;
+    hit->dial[0] = dcx; hit->dial[1] = dcy; hit->dial[2] = 28 * k;
+    if (g->focus == 0)
+        gp_glow_disc(&b, dcx, dcy, 28 * k, 6 * k, HOT, 0.45f);
+    for (py_ = (int)(dcy - 29 * k); py_ <= (int)(dcy + 29 * k); py_++)
+        for (px_ = (int)(dcx - 29 * k); px_ <= (int)(dcx + 29 * k); px_++) {
+            float d = sqrtf((px_ + 0.5f - dcx) * (px_ + 0.5f - dcx) + (py_ + 0.5f - dcy) * (py_ + 0.5f - dcy));
+            float r = 28 * k, cov = r + 0.5f - d, u, c0[3], c1[3];
+            if (cov <= 0 || px_ < 0 || py_ < 0 || px_ >= b.w || py_ >= b.h)
+                continue;
+            /* radial-gradient(#1d0c17, #0a0509) and the inset shadow */
+            gp_rgb(gp_hex("#1d0c17"), c0);
+            gp_rgb(gp_hex("#0a0509"), c1);
+            u = d / r;
+            al_over(&b.px[py_ * b.w + px_], c0[0] + (c1[0] - c0[0]) * u,
+                    c0[1] + (c1[1] - c0[1]) * u, c0[2] + (c1[2] - c0[2]) * u, cov > 1 ? 1 : cov);
+            if (d > r - 8 * k)
+                al_over(&b.px[py_ * b.w + px_], 0, 0, 0, 0.5f * (d - (r - 8 * k)) / (8 * k));
+            if (d > r - t1 && d < r + 0.5f)
+                al_over(&b.px[py_ * b.w + px_], ((LINE >> 16) & 255) / 255.0f,
+                        ((LINE >> 8) & 255) / 255.0f, (LINE & 255) / 255.0f, 1);
+        }
+    ang = (float)g->angle * 3.14159265f / 180.0f;
+    for (i = 0; i <= 40; i++) {                 /* the arm: 2 px, fading in */
+        float f = i / 40.0f, ax = dcx + sinf(ang) * 20 * k * f, ay = dcy - cosf(ang) * 20 * k * f;
+        gp_disc(&b, ax, ay, 1.0f * k, PINK, f);
+    }
+    {
+        float hx = dcx + sinf(ang) * 20 * k, hy = dcy - cosf(ang) * 20 * k;
+        gp_glow_disc(&b, hx, hy, 5 * k, 6 * k, HOT, 0.7f);
+        gp_disc(&b, hx, hy, 5 * k, PINK, 1);            /* the border */
+        gp_disc(&b, hx, hy, 5 * k - t1, HOT, 1);
+    }
+    gp_disc(&b, dcx, dcy, 2 * k, PINK, 1);
+
+    /* FROM and TO: a 36 x 30 colour field, its word under it */
+    {
+        float fx = x0 + 56 * k + 14 * k;
+        const unsigned cols[2] = { g->from, g->to };
+        const char *words[2] = { g->lfrom, g->lto };
+        for (i = 0; i < 2; i++) {
+            float bx0 = fx + i * (36 + 12) * k, by0 = dcy - 15 * k - 6 * k;
+            float bx1 = bx0 + 36 * k, by1 = by0 + 30 * k;
+            if (g->focus == 1 + i)
+                gp_glow(&b, bx0, by0, bx1, by1, 6 * k, HOT, 0.6f);
+            gp_rect(&b, bx0, by0, bx1, by1, gp_hex("#0a0a0a"), 1);
+            gp_rect(&b, bx0 + 2 * k, by0 + 2 * k, bx1 - 2 * k, by1 - 2 * k, cols[i], 1);
+            gp_border(&b, bx0, by0, bx1, by1, t1, g->focus == 1 + i ? HOT : LINE, 1);
+            al_say(&b, words[i], (int)(9.6f * k + 0.5f), 0, (bx0 + bx1) * 0.5f, by1 + 8 * k, 1,
+                   mute[0], mute[1], mute[2], 1);
+            hit->field[i][0] = bx0; hit->field[i][1] = by0; hit->field[i][2] = bx1; hit->field[i][3] = by1;
+        }
+        snprintf(v, sizeof v, "%d\xc2\xb0", g->angle);     /* 135 and a degree sign */
+        al_say(&b, v, (int)(12 * k + 0.5f), 0, x1, dcy, 2, pink[0], pink[1], pink[2], 1);
+    }
+    y += 56 * k + gap;
+
+    /* the presets, eight across: (408 - 7 * 5) / 8 wide, 26 high */
+    cell = (inner - 7 * 5 * k) / 8;
+    for (i = 0; i < g->npre && i < PLAT_GRAD_PRESETS; i++) {
+        float sx0 = x0 + (i % 8) * (cell + 5 * k), sy0 = y + (i / 8) * (26 + 5) * k;
+        float sx1 = sx0 + cell, sy1 = sy0 + 26 * k;
+        int lit = (g->focus == 3 && g->cursor == i), on = g->active == i;
+        if (lit || on)
+            gp_glow(&b, sx0, sy0, sx1, sy1, (on ? 8 : 6) * k, HOT, on ? 0.6f : 0.45f);
+        gp_fill_grad(&b, sx0, sy0, sx1, sy1, g->pfrom[i], g->pto[i], g->pangle[i]);
+        gp_border(&b, sx0, sy0, sx1, sy1, t1, on ? HOT : lit ? PINK : gp_hex("#3a1a28"), 1);
+        if (on)                                 /* outline: 1px #ff2f8f */
+            gp_border(&b, sx0 - t1, sy0 - t1, sx1 + t1, sy1 + t1, t1, HOT, 1);
+        hit->swatch[i][0] = sx0; hit->swatch[i][1] = sy0; hit->swatch[i][2] = sx1; hit->swatch[i][3] = sy1;
+    }
+    y += (26 * 3 + 5 * 2) * k + gap;
+
+    /* the output: the CSS, COPY, CLEAR */
+    {
+        float bh = 28 * k, bw0 = (float)al_width(g->copy, (int)(11.2f * k + 0.5f), 0) + 24 * k;
+        float bw1 = (float)al_width(g->clear, (int)(11.2f * k + 0.5f), 0) + 24 * k;
+        float cx1 = x1, cx0 = cx1 - bw1, px1 = cx0 - 8 * k, px0 = px1 - bw0, ix1 = px0 - 8 * k;
+        gp_rect(&b, x0, y, ix1, y + bh, gp_hex("#050505"), 1);
+        gp_border(&b, x0, y, ix1, y + bh, t1, LINE, 1);
+        /* the CSS, cut to fit the field */
+        {
+            char css[160];
+            int fp = (int)(11.2f * k + 0.5f), n;
+            snprintf(css, sizeof css, "%s", g->css ? g->css : "");
+            for (n = (int)strlen(css); n > 0 && al_width(css, fp, 0) > ix1 - x0 - 16 * k; n--)
+                css[n - 1] = 0;
+            al_say(&b, css, fp, 0, x0 + 8 * k, y + bh * 0.5f, 0, text[0], text[1], text[2], 1);
+        }
+        for (i = 0; i < 2; i++) {
+            float bx0 = i ? cx0 : px0, bx1 = i ? cx1 : px1;
+            if (g->focus == 4 + i) {
+                gp_glow(&b, bx0, y, bx1, y + bh, 6 * k, HOT, 0.4f);
+                gp_rect(&b, bx0, y, bx1, y + bh, PINK, 0.12f);
+            }
+            gp_border(&b, bx0, y, bx1, y + bh, t1, PINK, 1);
+            al_say(&b, i ? g->clear : g->copy, (int)(11.2f * k + 0.5f), 0, (bx0 + bx1) * 0.5f, y + bh * 0.5f, 1,
+                   pink[0], pink[1], pink[2], 1);
+            hit->button[i][0] = bx0; hit->button[i][1] = y; hit->button[i][2] = bx1; hit->button[i][3] = y + bh;
+        }
+    }
+
+    out = (unsigned char *)malloc((size_t)b.w * b.h * 4);
+    if (out)
+        for (i = 0; i < b.w * b.h; i++) {
+            out[i * 4 + 0] = (unsigned char)(b.px[i].r * 255 + 0.5f);
+            out[i * 4 + 1] = (unsigned char)(b.px[i].g * 255 + 0.5f);
+            out[i * 4 + 2] = (unsigned char)(b.px[i].b * 255 + 0.5f);
+            out[i * 4 + 3] = (unsigned char)(b.px[i].a * 255 + 0.5f);
+        }
+    free(b.px);
+    *ow = b.w;
+    *oh = b.h;
+    return out;
+}
+
 /* The debug menu (runtime/debug_menu.c) in the alerts' iPhone OS 3 dress:
  * the same translucent box, the title on top, one row per entry -- the
  * label on the left, its value on the right -- the selected row in the

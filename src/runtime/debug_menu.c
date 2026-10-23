@@ -1285,6 +1285,88 @@ void ui_grid_show(const char *title, const unsigned char *const *cells,
     }
 }
 
+/* PROFILE's gradient picker over the menu, dimmed, as the launcher draws it
+ * (plat_ui_gradient): sized so its 440 CSS pixels fit the menu's space,
+ * made again only when `key` changes. `hit` gets the controls' boxes in the
+ * menu's points (the dial: centre and radius), for the mouse. */
+void ui_gradient_show(const struct plat_grad *g, unsigned key, struct plat_grad_hit *hit)
+{
+    static GLuint tex;
+    static unsigned last;
+    static int tw, th;
+    static float ts, tk;
+    static struct plat_grad_hit th_hit;
+    GLint view[4];
+    float s, k, w, h, x, y, p;
+    int i, j;
+
+    glGetIntegerv(GL_VIEWPORT, view);
+    s = view[3] / 320.0f;
+    if (s <= 0)
+        return;
+    begin_2d();
+    end_2d();                           /* g_ow, the menu space's width */
+    /* points per CSS pixel: the panel (440 x 307) within 92% of the space */
+    p = 0.92f * 320.0f / 307.0f;
+    if (440.0f * p > 0.92f * g_ow)
+        p = 0.92f * g_ow / 440.0f;
+    k = p * s;
+    key = (key ^ (unsigned)(k * 1000.0f)) * 16777619u;
+    if (!tex || key != last) {
+        unsigned char *px = plat_ui_gradient(g, k, &th_hit, &tw, &th);
+        if (!px)
+            return;
+        if (!tex)
+            glGenTextures(1, &tex);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tw, th, 0, GL_RGBA,
+                     GL_UNSIGNED_BYTE, px);
+        free(px);
+        ts = s;
+        tk = k;
+        last = key;
+    }
+    (void)tk;
+    w = tw / ts;
+    h = th / ts;
+    x = (g_ow - w) * 0.5f;
+    y = (320 - h) * 0.5f;
+    begin_2d();
+    dim_all();
+    glEnable(GL_TEXTURE_2D);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);        /* premultiplied */
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glColor4f(1, 1, 1, 1);
+    glBegin(GL_QUADS);
+    glTexCoord2f(0, 0); glVertex2f(x, y);
+    glTexCoord2f(1, 0); glVertex2f(x + w, y);
+    glTexCoord2f(1, 1); glVertex2f(x + w, y + h);
+    glTexCoord2f(0, 1); glVertex2f(x, y + h);
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+    end_2d();
+    if (hit) {                          /* texture pixels -> the menu's points */
+#define GP_BOX(b) do { (b)[0] = x + (b)[0] / ts; (b)[1] = y + (b)[1] / ts;                        (b)[2] = x + (b)[2] / ts; (b)[3] = y + (b)[3] / ts; } while (0)
+        *hit = th_hit;
+        GP_BOX(hit->panel);
+        for (i = 0; i < 2; i++) {
+            GP_BOX(hit->field[i]);
+            GP_BOX(hit->button[i]);
+        }
+        for (j = 0; j < PLAT_GRAD_PRESETS; j++)
+            GP_BOX(hit->swatch[j]);
+#undef GP_BOX
+        hit->dial[0] = x + hit->dial[0] / ts;
+        hit->dial[1] = y + hit->dial[1] / ts;
+        hit->dial[2] = hit->dial[2] / ts;
+    }
+}
+
 /* A picture beside the box (the settings menu's profile icon): uploaded
  * once by ui_icon_set, drawn each frame by ui_icon_draw in the menu's
  * space. Straight alpha. */

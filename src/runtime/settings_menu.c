@@ -110,7 +110,31 @@ enum {
     R_DISPLAY, R_MONITOR, R_RES, R_APPLY, R_RRES, R_AA, R_TEXQ, R_ASPECT, R_UI, R_HIDE, R_LANG, R_REND, R_SMOOTH, R_SMODEL,
     R_PLAYER, R_LAYOUT, R_KEY, R_KRESET, R_DEVICE, R_PICONS, R_PADB, R_PRESET,
     R_PNAME, R_PICON, R_PCOLOR, R_PSHADE, R_PCOLOR2, R_PID, R_PRESET2,
-    R_CLOSE, R_QUIT, R_HEAD, R_CSUB
+    R_CLOSE, R_QUIT, R_HEAD, R_CSUB,
+    R_SHARPA, R_SHARPS,                 /* SMOOTH MODELS' sharp edges */
+    R_PALT, R_PGRAD                     /* the outfit; the gradient picker */
+};
+
+/* PROFILE's gradient picker (plat_ui_gradient, the launcher's
+ * GradientPicker.svelte): open over the menu, the control the keys and the
+ * pad have (0 the dial, 1 FROM, 2 TO, 3 the presets, 4 COPY, 5 CLEAR), the
+ * preset under the cursor, a drag on the dial, where its controls went. */
+static int g_gp, g_gp_focus, g_gp_cursor, g_gp_drag;
+static struct plat_grad_hit g_gp_hit;
+static void gp_state(struct plat_grad *g);
+static void gp_set(unsigned from, unsigned to, int angle);
+static void gp_turn(int d);
+
+/* The launcher's presets (GradientPicker.svelte PRESETS), the same colours
+ * and angles: "to bottom" is 180, a single colour is both ends. */
+static const struct { unsigned from, to; int angle; } k_gp_pre[PLAT_GRAD_PRESETS] = {
+    { 0x600020, 0x200010, 180 }, { 0x7a1f45, 0x1d0c17, 180 }, { 0x5c0931, 0x0a0509, 180 },
+    { 0xff2f8f, 0x5c0931, 180 }, { 0xff5fa8, 0x3d1224, 180 }, { 0xb3001b, 0x2a0f1e, 135 },
+    { 0xff0040, 0x08040a, 135 }, { 0x0b1030, 0x08040a, 180 }, { 0x4d6fd1, 0x1a2340, 135 },
+    { 0x000000, 0x5c0931, 180 },
+    { 0x000000, 0x000000, 180 }, { 0x1a0c13, 0x1a0c13, 180 }, { 0x3d1224, 0x3d1224, 180 },
+    { 0x5c0931, 0x5c0931, 180 }, { 0x7a1f45, 0x7a1f45, 180 }, { 0xff2f8f, 0xff2f8f, 180 },
+    { 0xff5fa8, 0xff5fa8, 180 }, { 0xffffff, 0xffffff, 180 },
 };
 
 /* The profile icons' names, in CharacterNames order. */
@@ -496,20 +520,6 @@ static void head(const char *name)
     g_rows[g_n - 1].en = 0;
 }
 
-/* A colour row: its name in the palette, or #RRGGBB for one the launcher's
- * picker chose. */
-static void add_colour(int kind, const char *label, unsigned rgb)
-{
-    int i;
-
-    for (i = 0; i < N_PCOL && k_pcol[i].rgb != rgb; i++)
-        ;
-    if (i < N_PCOL)
-        add(kind, 0, label, "< %s >", tx(k_pcol[i].es, k_pcol[i].en));
-    else
-        add(kind, 0, label, "< #%06X >", rgb);
-}
-
 static int res_index(int w, int h)
 {
     int i;
@@ -603,6 +613,14 @@ static void build(void)
         else
             add(R_SMODEL, 0, tx("SUAVIZAR MODELOS", "SMOOTH MODELS"), "< %s >",
                 tx("DESACTIVADO", "OFF"));
+        /* GRAPHICS' two sliders in the launcher (SharpSliders.svelte): which
+         * edges the smoothing keeps, and how much; off with the smoothing */
+        add(R_SHARPA, 0, tx("ANGULO DE BORDES AFILADOS", "SHARP EDGE ANGLE"), "< %d\xc2\xb0 >",
+            (int)(port_sharp_angle + 0.5f));
+        g_rows[g_n - 1].en = port_smooth_models != 0;
+        add(R_SHARPS, 0, tx("CONSERVACION DE BORDES AFILADOS", "SHARP EDGE PRESERVATION"), "< %d%% >",
+            (int)(port_sharp_strength * 100.0f + 0.5f));
+        g_rows[g_n - 1].en = port_smooth_models != 0;
         head(tx("TEXTURAS", "TEXTURES"));
         add(R_TEXQ, 0, tx("CALIDAD", "QUALITY"), "< %s >",
             tx(tq_es[g_gfx.texq], tq_en[g_gfx.texq]));
@@ -697,14 +715,16 @@ pad:
                 add(R_PNAME, 0, tx("NOMBRE", "NAME"), "%s", p->name[0] ? p->name : "-");
             add(R_PICON, 0, tx("ICONO", "ICON"), "< %s >",
                 tx(k_fighter_es[p->icon], k_fighter_en[p->icon]));
-            add_colour(R_PCOLOR, tx("COLOR DE FONDO", "BACKGROUND COLOUR"), p->color);
-            add(R_PSHADE, 0, tx("DEGRADADO", "GRADIENT"), "< %s >",
-                p->dark == 2 ? tx("PERSONALIZADO", "CUSTOM")
-                : p->dark ? tx("OSCURO", "DARK")
-                          : tx("CLARO", "LIGHT"));
-            add_colour(R_PCOLOR2, p->dark == 2 ? tx("HACIA EL COLOR", "INTO THE COLOUR")
-                                  : p->dark ? tx("COLOR OSCURO", "DARK COLOUR")
-                                            : tx("COLOR CLARO", "LIGHT COLOUR"), p->color2);
+            /* the launcher's OUTFIT 1 / OUTFIT 2 (SecProfile.svelte) */
+            add(R_PALT, 0, tx("TRAJE", "OUTFIT"), "< %s >",
+                p->alt ? tx("2 (COLORES ALTERNATIVOS)", "2 (ALTERNATE COLOURS)") : "1");
+            /* the background: the launcher's gradient picker, opened */
+            {
+                struct plat_grad g;
+                gp_state(&g);
+                add(R_PGRAD, 0, tx("FONDO DEL PERFIL", "PROFILE BACKGROUND"), "%s",
+                    g.empty ? tx("SIN FONDO", "NO BACKGROUND") : g.css);
+            }
             add(R_PID, 0, tx("ID DE JUGADOR", "PLAYER ID"), "%s", p->id);
             g_rows[g_n - 1].en = 0;     /* shown, not chosen */
             add(R_PRESET2, 0, tx("REINICIAR DATOS", "RESET DATA"), "%s",
@@ -732,6 +752,122 @@ static int has_value(int kind)
 }
 
 static int wrap(int v, int n) { return (v % n + n) % n; }
+
+/* ----------------------------------------------------- gradient picker */
+
+/* The profile as the picker shows it, as the launcher's PROFILE page does
+ * (SecProfile.svelte gradCss): a custom gradient with an angle as it is;
+ * an older one -- light, dark, custom without an angle -- as the straight
+ * gradient nearest to it, top to bottom. */
+static void gp_state(struct plat_grad *g)
+{
+    const struct profile *p = prof_get();
+    static char css[96];
+    int i;
+
+    memset(g, 0, sizeof *g);
+    g->active = -1;
+    g->focus = g_gp ? g_gp_focus : -1;
+    g->cursor = g_gp_cursor;
+    g->npre = PLAT_GRAD_PRESETS;
+    for (i = 0; i < PLAT_GRAD_PRESETS; i++) {
+        g->pfrom[i] = k_gp_pre[i].from;
+        g->pto[i] = k_gp_pre[i].to;
+        g->pangle[i] = k_gp_pre[i].angle;
+    }
+    g->label = tx("FONDO DEL PERFIL", "PROFILE BACKGROUND");
+    g->none = tx("Sin fondo", "No background");
+    g->lfrom = tx("Desde", "From");
+    g->lto = tx("Hasta", "To");
+    g->copy = tx("Copiar", "Copy");
+    g->clear = tx("Quitar", "Clear");
+    g->css = css;
+    if (!p) {
+        g->empty = 1;
+        css[0] = 0;
+        return;
+    }
+    if (p->dark == 2 && p->angle >= 0) {
+        g->from = p->color;
+        g->to = p->color2;
+        g->angle = p->angle;
+    } else {
+        g->from = p->dark == 0 ? p->color2 : p->color;
+        g->to = p->dark == 0 ? p->color : p->color2;
+        g->angle = 180;
+    }
+    if (g->from == g->to)
+        snprintf(css, sizeof css, "#%06x", g->from & 0xffffff);
+    else
+        snprintf(css, sizeof css, "linear-gradient(%ddeg, #%06x, #%06x)", g->angle,
+                 g->from & 0xffffff, g->to & 0xffffff);
+    if (p->dark == 2 && p->angle >= 0)
+        for (i = 0; i < PLAT_GRAD_PRESETS; i++)
+            if (k_gp_pre[i].from == g->from && k_gp_pre[i].to == g->to
+                && (g->from == g->to || k_gp_pre[i].angle == g->angle))
+                g->active = i;
+}
+
+/* The picker's change into the profile, as the launcher's setGradient: a
+ * custom gradient, the two colours and the angle; saved at once. */
+static void gp_set(unsigned from, unsigned to, int angle)
+{
+    struct profile *p = prof_get();
+
+    if (!p)
+        return;
+    p->dark = 2;
+    p->color = from & 0xffffff;
+    p->color2 = to & 0xffffff;
+    p->angle = wrap(angle, 360);
+    prof_save();
+}
+
+static void gp_turn(int d)
+{
+    struct plat_grad g;
+    gp_state(&g);
+    gp_set(g.from, g.to, g.angle + d);
+}
+
+/* QUITAR / CLEAR: the launcher's default, the light gradient of blue */
+static void gp_clear(void)
+{
+    struct profile *p = prof_get();
+
+    if (!p)
+        return;
+    p->dark = 0;
+    p->color = 0x3A8EE6;
+    p->color2 = prof_shade_default(0);
+    p->angle = -1;
+    prof_save();
+}
+
+static void gp_copy(void)
+{
+    struct plat_grad g;
+    gp_state(&g);
+    if (g.css && g.css[0])
+        plat_clipboard_set(g.css);
+}
+
+/* The dial under the mouse: the angle from its centre, 0 up, clockwise
+ * (the launcher's dialAngle) */
+static void gp_dial_at(float x, float y)
+{
+    struct plat_grad g;
+    float dx = x - g_gp_hit.dial[0], dy = y - g_gp_hit.dial[1];
+    int a = (int)floorf(atan2f(dx, -dy) * 180.0f / 3.14159265f + 360.0f + 0.5f) % 360;
+
+    gp_state(&g);
+    gp_set(g.from, g.to, a);
+}
+
+static int gp_in(const float *b, float x, float y)
+{
+    return x >= b[0] && x < b[2] && y >= b[1] && y < b[3];
+}
 
 static void change(int kind, int d)
 {
@@ -843,6 +979,26 @@ static void change(int kind, int d)
     case R_SMODEL:                      /* at once (smooth_models.c) */
         port_smooth_models = wrap(port_smooth_models + d, 3);
         g_dirty = 1;
+        return;
+    case R_SHARPA:                      /* at once, at the next frame drawn */
+        port_sharp_angle += 5.0f * (float)d;
+        port_sharp_angle = port_sharp_angle < 0 ? 0 : port_sharp_angle > 180 ? 180 : port_sharp_angle;
+        g_dirty = 1;
+        return;
+    case R_SHARPS:
+        port_sharp_strength += 0.05f * (float)d;
+        port_sharp_strength = port_sharp_strength < 0 ? 0 : port_sharp_strength > 1 ? 1 : port_sharp_strength;
+        port_sharp_strength = floorf(port_sharp_strength * 100.0f + 0.5f) / 100.0f;
+        g_dirty = 1;
+        return;
+    case R_PALT:
+        if (prof_get()) {
+            prof_get()->alt = !prof_get()->alt;
+            prof_save();
+        }
+        return;
+    case R_PGRAD:                       /* the dial, 5 degrees a press */
+        gp_turn(5 * d);
         return;
     case R_LANG:                        /* at once, texts and menus */
         port_language_set(k_lang[wrap(lang_index() + d, N_LANG)].code);
@@ -1113,8 +1269,13 @@ static void drop_apply(int i)
         g_gfx.h = k_res[i].h;
     } else if (kind == R_PCOLOR || kind == R_PCOLOR2) {
         if (p) {
-            *(kind == R_PCOLOR ? &p->color : &p->color2) = g_pal[i];
-            prof_save();
+            struct plat_grad g;
+            gp_state(&g);               /* what the picker shows, then the pick */
+            if (kind == R_PCOLOR)
+                g.from = g_pal[i];
+            else
+                g.to = g_pal[i];
+            gp_set(g.from, g.to, g.angle);
         }
     } else if (kind == R_PICON) {
         if (p) {
@@ -1182,6 +1343,98 @@ static void drop_tick(int up, int down, int left, int right, int ok, int back,
         drop_apply(g_drop_sel);
 }
 
+/* The picker's turn, over the menu: up and down go from control to control
+ * (through the presets' rows), left and right turn the dial 5 degrees -- the
+ * launcher's arrow keys -- or move along FROM / TO, the presets, COPY /
+ * CLEAR; Enter opens FROM's or TO's colours, applies the preset, copies or
+ * clears; Esc or the pad's east button closes it. The mouse: the dial is
+ * dragged, a colour opens its list, a preset applies, outside closes. */
+static void gp_tick(int up, int down, int left, int right, int ok, int back, int click)
+{
+    struct plat_grad g;
+
+    if (back) {
+        g_gp = 0;
+        return;
+    }
+    if (g_gp_drag) {                    /* held on the dial */
+        if (g_mdown)
+            gp_dial_at(g_mx, g_my);
+        else
+            g_gp_drag = 0;
+        return;
+    }
+    if (click) {
+        int i;
+
+        if (!gp_in(g_gp_hit.panel, g_mx, g_my)) {
+            g_gp = 0;
+            return;
+        }
+        if ((g_mx - g_gp_hit.dial[0]) * (g_mx - g_gp_hit.dial[0])
+            + (g_my - g_gp_hit.dial[1]) * (g_my - g_gp_hit.dial[1])
+            <= g_gp_hit.dial[2] * g_gp_hit.dial[2]) {
+            g_gp_focus = 0;
+            g_gp_drag = 1;
+            gp_dial_at(g_mx, g_my);
+            return;
+        }
+        for (i = 0; i < 2; i++)
+            if (gp_in(g_gp_hit.field[i], g_mx, g_my)) {
+                g_gp_focus = 1 + i;
+                drop_open(i ? R_PCOLOR2 : R_PCOLOR);
+                return;
+            }
+        for (i = 0; i < PLAT_GRAD_PRESETS; i++)
+            if (gp_in(g_gp_hit.swatch[i], g_mx, g_my)) {
+                g_gp_focus = 3;
+                g_gp_cursor = i;
+                gp_set(k_gp_pre[i].from, k_gp_pre[i].to, k_gp_pre[i].angle);
+                return;
+            }
+        if (gp_in(g_gp_hit.button[0], g_mx, g_my)) {
+            g_gp_focus = 4;
+            gp_copy();
+        } else if (gp_in(g_gp_hit.button[1], g_mx, g_my)) {
+            g_gp_focus = 5;
+            gp_clear();
+        }
+        return;
+    }
+    if (up || down) {
+        if (g_gp_focus == 3 && up && g_gp_cursor >= 8)
+            g_gp_cursor -= 8;           /* the presets' rows first */
+        else if (g_gp_focus == 3 && down && g_gp_cursor + 8 < PLAT_GRAD_PRESETS)
+            g_gp_cursor += 8;
+        else {
+            static const int order_down[6] = { 1, 3, 3, 4, 0, 0 }, order_up[6] = { 4, 0, 0, 1, 3, 3 };
+            g_gp_focus = up ? order_up[g_gp_focus] : order_down[g_gp_focus];
+        }
+    }
+    if (left || right) {
+        int d = right ? 1 : -1;
+        switch (g_gp_focus) {
+        case 0: gp_turn(5 * d); break;
+        case 1: case 2: g_gp_focus = g_gp_focus == 1 ? 2 : 1; break;
+        case 3: g_gp_cursor = wrap(g_gp_cursor + d, PLAT_GRAD_PRESETS); break;
+        default: g_gp_focus = g_gp_focus == 4 ? 5 : 4; break;
+        }
+    }
+    if (ok) {
+        switch (g_gp_focus) {
+        case 1: drop_open(R_PCOLOR); break;
+        case 2: drop_open(R_PCOLOR2); break;
+        case 3:
+            gp_set(k_gp_pre[g_gp_cursor].from, k_gp_pre[g_gp_cursor].to,
+                   k_gp_pre[g_gp_cursor].angle);
+            break;
+        case 4: gp_copy(); break;
+        case 5: gp_clear(); break;
+        }
+    }
+    (void)g;
+}
+
 static void pick(int kind)
 {
     switch (kind) {
@@ -1218,6 +1471,16 @@ static void pick(int kind)
             snprintf(g_edit, sizeof g_edit, "%s", prof_get()->name);
             plat_text_clear();
             g_capture = 3;
+        }
+        break;
+    case R_PGRAD:
+        g_gp = 1;
+        g_gp_focus = 0;
+        g_gp_drag = 0;
+        {
+            struct plat_grad g;
+            gp_state(&g);
+            g_gp_cursor = g.active >= 0 ? g.active : 0;
         }
         break;
     case R_PRESET2:
@@ -1414,6 +1677,11 @@ void set_menu_tick(void)
         build();
         return;
     }
+    if (g_gp) {                         /* PROFILE's gradient picker, open */
+        gp_tick(up, down, left, right, ok, esc || back, click);
+        build();
+        return;
+    }
     if (esc || back) {
         close_menu();
         return;
@@ -1572,6 +1840,22 @@ void set_menu_draw(void)
         }
     }
 drop:
+    if (g_gp && g_page == PAGE_PROF) {  /* the gradient picker, over the menu */
+        struct plat_grad g;
+        unsigned key = 2166136261u;
+        const char *c;
+
+        gp_state(&g);
+        for (c = g.css; *c; c++)
+            key = (key ^ (unsigned char)*c) * 16777619u;
+        for (c = g.lfrom; *c; c++)      /* the language */
+            key = (key ^ (unsigned char)*c) * 16777619u;
+        key = (key ^ (unsigned)(g.focus + 1)) * 16777619u;
+        key = (key ^ (unsigned)g.cursor) * 16777619u;
+        key = (key ^ (unsigned)(g.active + 1)) * 16777619u;
+        key = (key ^ (unsigned)g.empty) * 16777619u;
+        ui_gradient_show(&g, key, &g_gp_hit);
+    }
     if (g_drop) {                       /* the open list, over the menu */
         char df[384];
 
