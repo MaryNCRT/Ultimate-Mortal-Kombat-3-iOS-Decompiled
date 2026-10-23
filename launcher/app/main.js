@@ -438,6 +438,7 @@ ipcMain.handle('profile:load', (_ev, name) => prof.load(g_root, name));
 ipcMain.handle('profile:update', (_ev, fields) => prof.update(g_root, fields || {}));
 ipcMain.handle('profile:reset', (_ev, name) => prof.reset(g_root, name));
 ipcMain.handle('profile:icon', (_ev, i) => prof.iconData(g_root, Number(i)));
+ipcMain.handle('profile:iconAlt', (_ev, i) => prof.iconAltData(g_root, Number(i)));
 
 /* The key and button pictures (Julio Cacko's Free Input Prompts, CC0), the
  * same the game's menus draw: "aditional textures/glyphs/<set>/<file>.png"

@@ -29,7 +29,7 @@ struct mpnet_peer {
     char     name[100];                 /* UTF-8 */
     int      icon;
     unsigned color, color2;
-    int      dark;
+    int      dark, angle, alt;          /* struct profile's */
 };
 
 enum { MPNET_IDLE, MPNET_SEARCHING, MPNET_NOT_FOUND, MPNET_CONNECTED,

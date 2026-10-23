@@ -10,7 +10,13 @@
  * One profile per installation: the id, the name (UTF-8, anything but "|"
  * and line breaks, up to 24 characters), the icon (a fighter 0..23) and the
  * colour (RRGGBB), and the gradient behind the fighter: L from white to
- * the colour, D from black to it (absent: L). The id is given once, the first time there is no
+ * the colour, D from black to it, C custom (absent: L); then the second
+ * colour, the custom gradient's angle ("-": none) and 1 for the fighter's
+ * second outfit (lib/profiles.js has the whole line):
+ *
+ *     profile=7KQ2-9XMD-4TPA|MARY|18|7A1F45|C|1D0C17|135|1
+ *
+ * The id is given once, the first time there is no
  * profile -- 60 random bits from the system's cryptographic generator
  * (rand_s) as twelve Crockford base-32 digits -- and never changes: RESET
  * puts the name, icon and colour back and keeps it.
@@ -27,6 +33,7 @@
 
 #include "profiles.h"
 #include "lime/png.h"
+#include "lime/pvr.h"
 
 const char *lime_platform_asset_root(void);
 #ifdef _WIN32
@@ -118,9 +125,16 @@ void prof_save(void)
     }
     fprintf(f, "; UMK3 player profile: the launcher and the game both edit this;\n");
     fprintf(f, "; the id belongs to this installation and never changes\n");
-    fprintf(f, "profile=%s|%s|%d|%06X|%c|%06X\n", g_prof.id, g_prof.name, g_prof.icon,
-            g_prof.color & 0xffffff, "LDC"[g_prof.dark >= 0 && g_prof.dark <= 2 ? g_prof.dark : 0],
-            g_prof.color2 & 0xffffff);
+    {
+        char ang[8];
+        if (g_prof.angle >= 0)
+            snprintf(ang, sizeof ang, "%d", g_prof.angle % 360);
+        else
+            snprintf(ang, sizeof ang, "-");
+        fprintf(f, "profile=%s|%s|%d|%06X|%c|%06X|%s|%d\n", g_prof.id, g_prof.name, g_prof.icon,
+                g_prof.color & 0xffffff, "LDC"[g_prof.dark >= 0 && g_prof.dark <= 2 ? g_prof.dark : 0],
+                g_prof.color2 & 0xffffff, ang, g_prof.alt ? 1 : 0);
+    }
     fclose(f);
 }
 
@@ -188,6 +202,19 @@ void prof_load(const char *ini_path, const char *default_name)
             if (v && (v = strchr(v, '|')) != NULL && strspn(v + 1, "0123456789ABCDEFabcdef") >= 6)
                 g_prof.color2 = (unsigned)strtoul(v + 1, NULL, 16) & 0xffffff;
         }
+        /* the angle and the outfit, after the second colour (v is on the
+         * "|" before it, or on it in an older file's lone RRGGBB) */
+        g_prof.angle = -1;
+        g_prof.alt = 0;
+        if (v && *v != '|')
+            v = strchr(v, '|');
+        if (v && (v = strchr(v + 1, '|')) != NULL) {
+            v++;
+            if (*v >= '0' && *v <= '9')
+                g_prof.angle = atoi(v) % 360;
+            if ((v = strchr(v, '|')) != NULL)
+                g_prof.alt = v[1] == '1';
+        }
         g_have = 1;
     }
     if (f)
@@ -200,6 +227,8 @@ void prof_load(const char *ini_path, const char *default_name)
         g_prof.color = DEF_COLOR;
         g_prof.dark = 0;
         g_prof.color2 = prof_shade_default(0);
+        g_prof.angle = -1;
+        g_prof.alt = 0;
         g_have = 1;
         prof_save();
         printf("profiles: new profile %s\n", g_prof.id);
@@ -215,6 +244,8 @@ void prof_reset(const char *default_name)
     g_prof.color = DEF_COLOR;
     g_prof.dark = 0;
     g_prof.color2 = prof_shade_default(0);
+    g_prof.angle = -1;
+    g_prof.alt = 0;
     prof_save();
 }
 
@@ -231,6 +262,8 @@ unsigned prof_look_key(const struct profile *p)
     k = (k ^ p->color) * 16777619u;
     k = (k ^ (unsigned)p->dark) * 16777619u;
     k = (k ^ p->color2) * 16777619u;
+    k = (k ^ (unsigned)p->angle) * 16777619u;
+    k = (k ^ (unsigned)p->alt) * 16777619u;
     return k;
 }
 
@@ -249,22 +282,71 @@ static float sd_round(float x, float y, float c, float h, float r)
     return sqrtf(ox * ox + oy * oy) + (in < 0 ? in : 0) - r;
 }
 
-unsigned char *prof_icon_rgba(int icon, unsigned color, int dark,
-                              unsigned color2, int S)
+/* The second outfit's picture: <NAME>_VERSUS2.pvr framed as the first one's
+ * PNG, which is the .pvr shrunk about 2.12 times on its bottom left corner
+ * (measured on the art; the launcher's profileIcon.js altArt does the same).
+ * Sonya has none: 0, and her first is drawn. */
+#define ALT_FRAME 1.061f
+
+static int alt_art(const char *root, int icon, uint8_t **art, int *aw, int *ah)
+{
+    char path[1200];
+    LimeImage im;
+    uint8_t *out;
+    int n = 256, x, y;
+
+    snprintf(path, sizeof path, "%s/Textures/%s_VERSUS2.pvr", root ? root : "res", k_art[icon]);
+    memset(&im, 0, sizeof im);
+    if (!lime_pvr_load(path, &im) || !im.rgba)
+        return 0;
+    out = calloc((size_t)n * n, 4);
+    if (out)
+        for (y = 0; y < n; y++)
+            for (x = 0; x < n; x++) {
+                int sx = (int)floorf((x + 0.5f) / n * ALT_FRAME * im.width);
+                int sy = (int)floorf(im.height - (1.0f - (y + 0.5f) / n) * ALT_FRAME * im.height);
+                if (sx < 0 || sy < 0 || sx >= im.width || sy >= im.height)
+                    continue;
+                memcpy(out + ((size_t)y * n + x) * 4, im.rgba + ((size_t)sy * im.width + sx) * 4, 4);
+            }
+    lime_image_free(&im);
+    if (!out)
+        return 0;
+    *art = out;
+    *aw = *ah = n;
+    return 1;
+}
+
+unsigned char *prof_icon_rgba(int icon, int alt, unsigned color, int dark,
+                              unsigned color2, int angle, int S)
 {
     uint8_t *art = NULL;
     int aw = 0, ah = 0, x, y;
     unsigned char *out;
     float c[3], c2[3], top[3], mid[3], bot[3], glow[3], ga, g0, g1;
+    float ldx = 0, ldy = 0, lhalf = 1;  /* the straight gradient's line */
+    int straight = dark == 2 && angle >= 0;
     char path[1200];
     const char *root = lime_platform_asset_root();
 
     if (icon < 0 || icon >= PROF_ICONS || S <= 0)
         return NULL;
-    snprintf(path, sizeof path, "%s/Textures/%s_VERSUS.PNG", root ? root : "res",
-             k_art[icon]);
-    if (!lime_png_load(path, &art, &aw, &ah))
-        art = NULL;                     /* the gradient alone */
+    if (!alt || !alt_art(root, icon, &art, &aw, &ah)) {
+        snprintf(path, sizeof path, "%s/Textures/%s_VERSUS.PNG", root ? root : "res",
+                 k_art[icon]);
+        if (!lime_png_load(path, &art, &aw, &ah))
+            art = NULL;                 /* the gradient alone */
+    }
+    if (straight) {
+        /* CSS's gradient line: through the centre at the angle, long enough
+         * for the corners to fall on its ends (profileIcon.js drawIcon) */
+        float a = (float)(angle % 360) * 3.14159265f / 180.0f;
+        ldx = sinf(a);
+        ldy = -cosf(a);
+        lhalf = (fabsf(S * ldx) + fabsf(S * ldy)) * 0.5f;
+        if (lhalf <= 0)
+            lhalf = 1;
+    }
     out = malloc((size_t)S * S * 4);
     if (!out) {
         free(art);
@@ -310,9 +392,14 @@ unsigned char *prof_icon_rgba(int icon, unsigned color, int dark,
             float rim, ra, outa;
             int i;
 
-            for (i = 0; i < 3; i++)             /* the sky */
-                col[i] = t < 0.5f ? top[i] + (mid[i] - top[i]) * (t / 0.5f)
-                                  : mid[i] + (bot[i] - mid[i]) * ((t - 0.5f) / 0.5f);
+            if (straight) {                     /* the sky: colour to color2 */
+                float u = clampf(((px - S * 0.5f) * ldx + (py - S * 0.5f) * ldy) / (2 * lhalf) + 0.5f, 0, 1);
+                for (i = 0; i < 3; i++)
+                    col[i] = c[i] + (c2[i] - c[i]) * u;
+            } else
+                for (i = 0; i < 3; i++)         /* the sky */
+                    col[i] = t < 0.5f ? top[i] + (mid[i] - top[i]) * (t / 0.5f)
+                                      : mid[i] + (bot[i] - mid[i]) * ((t - 0.5f) / 0.5f);
             k = sqrtf((px - S * 0.5f) * (px - S * 0.5f)
                       + (py - S * 1.05f) * (py - S * 1.05f));
             a = ga * clampf(1.0f - k / (S * 0.6f), 0, 1);   /* the glow */

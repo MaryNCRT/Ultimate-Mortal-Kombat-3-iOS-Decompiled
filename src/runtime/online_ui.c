@@ -29,7 +29,7 @@ extern long GameMode;
 
 #define ICON_PX 96
 
-struct look { int icon; unsigned color, color2; int dark; };
+struct look { int icon; unsigned color, color2; int dark, angle, alt; };
 
 /* The icon for a slot, made again only when the look changes. */
 static const unsigned char *slot_icon(int slot, const struct look *l)
@@ -40,7 +40,7 @@ static const unsigned char *slot_icon(int slot, const struct look *l)
 
     if (!made[slot] || memcmp(&have[slot], l, sizeof *l) != 0) {
         free(px[slot]);
-        px[slot] = prof_icon_rgba(l->icon, l->color, l->dark, l->color2, ICON_PX);
+        px[slot] = prof_icon_rgba(l->icon, l->alt, l->color, l->dark, l->color2, l->angle, ICON_PX);
         have[slot] = *l;
         made[slot] = 1;
     }
@@ -79,7 +79,10 @@ static void my_look(struct look *l)
         l->color = p->color;
         l->color2 = p->color2;
         l->dark = p->dark;
-    }
+        l->angle = p->angle;
+        l->alt = p->alt;
+    } else
+        l->angle = -1;
 }
 
 static void peer_look(const struct mpnet_peer *o, struct look *l)
@@ -89,6 +92,8 @@ static void peer_look(const struct mpnet_peer *o, struct look *l)
     l->color = o->color;
     l->color2 = o->color2;
     l->dark = o->dark;
+    l->angle = o->angle;
+    l->alt = o->alt;
 }
 
 void online_after_frame(void)

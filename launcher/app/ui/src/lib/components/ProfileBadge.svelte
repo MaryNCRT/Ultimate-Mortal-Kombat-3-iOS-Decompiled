@@ -13,7 +13,8 @@
 
 {#if app.prof}
     <button class="badge" onclick={open}>
-        <IconCanvas icon={app.prof.icon} color={app.prof.color} shade={app.prof.shade} color2={app.prof.color2} />
+        <IconCanvas icon={app.prof.icon} color={app.prof.color} shade={app.prof.shade} color2={app.prof.color2}
+                    angle={app.prof.angle} alt={app.prof.alt} />
         <span>{app.prof.name || tx('profDefault')}</span>
     </button>
 {/if}

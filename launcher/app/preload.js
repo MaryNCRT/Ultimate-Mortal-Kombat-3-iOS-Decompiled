@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('umk3', {
     updateProfile: fields => ipcRenderer.invoke('profile:update', fields),
     resetProfile: name => ipcRenderer.invoke('profile:reset', name),
     profileIcon: i => ipcRenderer.invoke('profile:icon', i),
+    profileIconAlt: i => ipcRenderer.invoke('profile:iconAlt', i),
     glyphs: () => ipcRenderer.invoke('glyphs:all'),
     listPads: () => ipcRenderer.invoke('pads:list'),
     listMonitors: () => ipcRenderer.invoke('monitors:list'),
