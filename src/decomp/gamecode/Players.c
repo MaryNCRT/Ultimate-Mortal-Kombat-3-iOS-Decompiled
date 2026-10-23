@@ -1453,9 +1453,10 @@ void RenderAnimatedCharacter(char *name, ANIMATEDCHARACTER *c,
                  0.0f);
     glScalef(1.0f, 0.0f, 1.0f);         /* Y collapsed to the ground plane */
 
-    if (f[0x18 / 4] == 1 && vis
-        && !port_smooth_draw(((void *P32 *)c)[0x30 / 4], frame, 2, 0,
-                             grey, pos))   /* port: the smoothed body */
+    /* port: SMOOTH MODELS leaves the shadow alone -- flattened onto the
+     * floor the smoothing does not show, and it would cost a second draw of
+     * the subdivided body (Mary: lag) */
+    if (f[0x18 / 4] == 1 && vis)
         LIME_RenderMeshSingleIndexed(frame, 0, grey, pos, 0);
 
     glPopMatrix();

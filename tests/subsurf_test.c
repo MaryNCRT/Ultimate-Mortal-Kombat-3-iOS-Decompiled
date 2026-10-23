@@ -13,7 +13,9 @@
  *   - the weld merges the 16 seam duplicates of the cube (24 vertices -> 8)
  *   - the result is closed: every edge has exactly two triangles (no holes)
  *   - every triangle faces the way the face it came from faces
- *   - every point lies inside the cube (Catmull-Clark shrinks a cube)
+ *   - the surface stays near the cube: the correction pass (umk3_subsurf.c)
+ *     undoes Catmull-Clark's shrink, so it may bulge a little, never far,
+ *     and a corner of the cube is met within a quarter of the side
  *   - UVs and the per-corner value stay inside the range they started in
  *   - without the weld the cube stays open along its seams
  */
@@ -143,7 +145,7 @@ static void run(int levels)
 	for (i = 0; i < nv; i++) {
 		int k;
 		for (k = 0; k < 3; k++)
-			if (fabsf(p[i * 3 + k]) > 1.0f + 1e-5f)
+			if (fabsf(p[i * 3 + k]) > 1.5f)
 				outside++;
 		if (uv[i * 2] < -1e-5f || uv[i * 2] > 1.00001f || uv[i * 2 + 1] < -1e-5f || uv[i * 2 + 1] > 1.00001f)
 			bad_uv++;
@@ -162,7 +164,17 @@ static void run(int levels)
 		if (n[0] * c[0] + n[1] * c[1] + n[2] * c[2] <= 0.0f)
 			bad_wind++;
 	}
-	CHECK(outside == 0, "level %d: %d coordinates outside the cube", levels, outside);
+	CHECK(outside == 0, "level %d: %d coordinates far outside the cube", levels, outside);
+	{   /* the corner (1,1,1) is met closely after the correction */
+		float best = 1e9f;
+		for (i = 0; i < nv; i++) {
+			float dx = p[i * 3] - 1.0f, dy = p[i * 3 + 1] - 1.0f, dz = p[i * 3 + 2] - 1.0f;
+			float dd = sqrtf(dx * dx + dy * dy + dz * dz);
+			if (dd < best) best = dd;
+		}
+		CHECK(best < 0.5f, "level %d: the corner is %.3f away", levels, best);
+		printf("level %d: corner (1,1,1) met within %.3f\n", levels, best);
+	}
 	CHECK(bad_wind == 0, "level %d: %d triangles wound inwards", levels, bad_wind);
 	CHECK(bad_uv == 0, "level %d: %d UVs out of [0,1]", levels, bad_uv);
 	CHECK(bad_attr == 0, "level %d: %d corner values out of range", levels, bad_attr);

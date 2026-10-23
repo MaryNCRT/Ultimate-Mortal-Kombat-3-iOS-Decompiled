@@ -604,6 +604,11 @@ struct UmkSubsurf {
 	int *face_v;                /* x 3, welded vertices */
 	int nedges;
 	EdgeKey *edges;
+	float *edge_crease;         /* per edge, Blender's crease * creaseFactor */
+	float *fit_base;            /* scratch, nwelded x 3 */
+	int ntris;                  /* input triangles */
+	float *last_pos, *last_attr;/* the last call's input, to skip a repeat */
+	int have_last, last_had_attr;
 
 	CCGSubSurf *ss;             /* positions, 3 layers */
 	CCGSubSurf *uvss;           /* UVs, 2 layers, synced once */
@@ -655,7 +660,24 @@ static int edge_lookup_or_add(EdgeKey **edges, int *n, int *cap, int **hash, int
 	return (*n)++;
 }
 
-/* ss_sync_ccg_from_derivedmesh: a full sync, every call, as Blender did. */
+/* Only the positions changed: CCG's partial sync (ccgSubSurf_initPartialSync,
+ * the path Blender's own edit-mode updates take) re-sends the vertices; the
+ * edges and faces of the full sync stay, so does the face map, and nothing
+ * is allocated. An unchanged vertex is skipped by syncVert itself. */
+static int sync_positions_partial(UmkSubsurf *s)
+{
+	int i;
+
+	if (ccgSubSurf_initPartialSync(s->ss) != eCCGError_None)
+		return 0;
+	for (i = 0; i < s->nwelded; i++) {
+		CCGVert *v;
+		ccgSubSurf_syncVert(s->ss, POINTER_FROM_INT(i), s->welded_pos + i * 3, 0, &v);
+	}
+	return ccgSubSurf_processSync(s->ss) == eCCGError_None;
+}
+
+/* ss_sync_ccg_from_derivedmesh: the full sync, once, when the mesh is made. */
 static int sync_positions(UmkSubsurf *s)
 {
 	CCGVertHDL fVerts[3];
@@ -670,9 +692,10 @@ static int sync_positions(UmkSubsurf *s)
 
 	for (i = 0; i < s->nedges; i++) {
 		CCGEdge *e;
-		/* me->crease is 0: the game's meshes carry no creases */
+		/* ss_sync_ccg_from_derivedmesh: me->crease * creaseFactor / 255 --
+		 * the open edges at 255, the rest at 0 (see umk_subsurf_new) */
 		ccgSubSurf_syncEdge(s->ss, POINTER_FROM_INT(i), POINTER_FROM_INT(s->edges[i].v0),
-		                    POINTER_FROM_INT(s->edges[i].v1), 0.0f, &e);
+		                    POINTER_FROM_INT(s->edges[i].v1), s->edge_crease[i], &e);
 	}
 
 	for (i = 0; i < s->nfaces; i++) {
@@ -916,7 +939,7 @@ UmkSubsurf *umk_subsurf_new(int levels, float weld_dist,
 	int *dup, i, j, n;
 	float (*face_uv)[2];
 	int *linked_off, *linked;       /* faces by welded vertex, for doubles */
-	unsigned char *dead;
+	unsigned char *dead, *in_ctx, *face_ctx;
 	EdgeKey *edges = NULL;
 	int nedges = 0, cap = 0, *hash = NULL, hcap = 0, nuv;
 
@@ -941,6 +964,13 @@ UmkSubsurf *umk_subsurf_new(int levels, float weld_dist,
 	}
 
 	/* surviving vertices keep their order; a merged one joins its target */
+	/* in the weld's context: a vertex it merged, or merged others into
+	 * (vert_dest_map != OUT_OF_CONTEXT) -- only faces touching one are
+	 * looked at for doubles, as weld_poly_loop_ctx_alloc does */
+	in_ctx = MEM_callocN((size_t)nverts, "in_ctx");
+	for (i = 0; i < nverts; i++)
+		in_ctx[i] = dup[i] != -1;
+
 	s->weld_map = MEM_mallocN(sizeof(int) * (size_t)nverts, "weld_map");
 	n = 0;
 	for (i = 0; i < nverts; i++)
@@ -968,7 +998,14 @@ UmkSubsurf *umk_subsurf_new(int levels, float weld_dist,
 	}
 
 	/* ---- poly_find_doubles: of faces with the same vertices the first
-	 * stays (for triangles, the same set in any order) ---- */
+	 * stays (for triangles, the same set in any order) -- among the faces in
+	 * the weld's context only. A game model has faces drawn both ways
+	 * (cloth: the same three corners, front and back); outside the weld
+	 * they are kept, as Blender keeps them. Removing them all opened holes
+	 * in the fighters (Mary). ---- */
+	face_ctx = MEM_callocN((size_t)ntris, "face_ctx");
+	for (i = 0; i < ntris; i++)
+		face_ctx[i] = in_ctx[tri[i * 3 + 0]] || in_ctx[tri[i * 3 + 1]] || in_ctx[tri[i * 3 + 2]];
 	linked_off = MEM_callocN(sizeof(int) * (size_t)(n + 1), "linked_off");
 	for (i = 0; i < ntris; i++)
 		if (!dead[i])
@@ -990,14 +1027,14 @@ UmkSubsurf *umk_subsurf_new(int levels, float weld_dist,
 	}
 	for (i = 0; i < ntris; i++) {
 		int a, b, c, k;
-		if (dead[i])
+		if (dead[i] || !face_ctx[i])
 			continue;
 		a = s->weld_map[tri[i * 3 + 0]];
 		b = s->weld_map[tri[i * 3 + 1]];
 		c = s->weld_map[tri[i * 3 + 2]];
 		for (k = linked_off[a]; k < linked_off[a + 1]; k++) {
 			int g = linked[k], ga, gb, gc;
-			if (g <= i || dead[g])
+			if (g <= i || dead[g] || !face_ctx[g])
 				continue;
 			ga = s->weld_map[tri[g * 3 + 0]];
 			gb = s->weld_map[tri[g * 3 + 1]];
@@ -1009,6 +1046,8 @@ UmkSubsurf *umk_subsurf_new(int levels, float weld_dist,
 	}
 	MEM_freeN(linked);
 	MEM_freeN(linked_off);
+	MEM_freeN(face_ctx);
+	MEM_freeN(in_ctx);
 
 	face_uv = MEM_mallocN(sizeof(float) * 6 * (size_t)ntris, "face_uv");
 	for (i = 0; i < ntris; i++) {
@@ -1037,6 +1076,36 @@ UmkSubsurf *umk_subsurf_new(int levels, float weld_dist,
 	if (hash) MEM_freeN(hash);
 	s->edges = edges;
 	s->nedges = nedges;
+
+	/* Port, not Blender's choice of data: an edge with one face -- the rim
+	 * of a piece that sits over another, Kano's eye plate, a helmet part --
+	 * gets crease 1.0 (255), Blender's own way to keep an edge where it is.
+	 * Without it Catmull-Clark pulls the rim in and what is under the piece
+	 * shows through (Mary: Kano, Sektor). creaseFactor is the level, as in
+	 * ss_sync_ccg_from_derivedmesh. */
+	{
+		int *uses = MEM_callocN(sizeof(int) * (size_t)(nedges > 0 ? nedges : 1), "edge uses");
+		int *eh = NULL, ecap = 0, ehcap = 0, en = nedges;
+		EdgeKey *ek = MEM_mallocN(sizeof(EdgeKey) * (size_t)(nedges > 0 ? nedges : 1), "edge copy");
+
+		memcpy(ek, edges, sizeof(EdgeKey) * (size_t)nedges);
+		ecap = nedges;
+		en = 0;
+		for (i = 0; i < s->nfaces; i++)
+			for (j = 0; j < 3; j++)
+				uses[edge_lookup_or_add(&ek, &en, &ecap, &eh, &ehcap,
+				                        s->face_v[i * 3 + j], s->face_v[i * 3 + (j + 1) % 3])]++;
+		s->edge_crease = MEM_mallocN(sizeof(float) * (size_t)(nedges > 0 ? nedges : 1), "edge_crease");
+		for (i = 0; i < nedges; i++)
+			s->edge_crease[i] = uses[i] == 1 ? (float)levels : 0.0f;
+		if (eh) MEM_freeN(eh);
+		MEM_freeN(ek);
+		MEM_freeN(uses);
+	}
+	s->fit_base = MEM_mallocN(sizeof(float) * 3 * (size_t)(s->nwelded > 0 ? s->nwelded : 1), "fit_base");
+	s->ntris = ntris;
+	s->last_pos = MEM_mallocN(sizeof(float) * 3 * (size_t)nverts, "last_pos");
+	s->last_attr = MEM_mallocN(sizeof(float) * 3 * (size_t)ntris, "last_attr");
 
 	/* ---- the two subdivision surfaces ---- */
 	s->ss = getSubSurf(levels, 3);
@@ -1075,11 +1144,41 @@ int umk_subsurf_eval(UmkSubsurf *s, const float *pos, const float *corner_attr)
 	int i, j;
 	const int gs = s->gridSize;
 
+	/* the same pose as last time (a pause, a held frame): nothing to do */
+	if (s->have_last && memcmp(s->last_pos, pos, sizeof(float) * 3 * (size_t)s->nverts) == 0
+	    && (corner_attr == NULL) == (s->last_had_attr == 0)
+	    && (corner_attr == NULL || memcmp(s->last_attr, corner_attr, sizeof(float) * 3 * (size_t)s->ntris) == 0))
+		return 1;
+
 	weld_positions(s, pos);
-	if (!sync_positions(s))
+	if (!sync_positions_partial(s))
 		return 0;
-	/* a full sync rebuilds the faces: look them up again */
-	face_maps(s->ss, s->faceMap);
+
+	/* Port, not Blender: Catmull-Clark shrinks a closed piece, and where
+	 * two pieces of a fighter overlap (Jax's head in his neck, Sektor's
+	 * helmet) the shrink opens a gap. One correction pass: each control
+	 * point moved by how far its subdivided self fell short of it, and the
+	 * surface subdivided again -- the same CCG, so the result still passes
+	 * (nearly) through the model's own vertices. */
+	memcpy(s->fit_base, s->welded_pos, sizeof(float) * 3 * (size_t)s->nwelded);
+	for (i = 0; i < s->nwelded; i++) {
+		CCGVert *v = ccgSubSurf_getVert(s->ss, POINTER_FROM_INT(i));
+		const float *lim;
+
+		if (v == NULL)
+			continue;
+		lim = ccgSubSurf_getVertData(s->ss, v);
+		for (j = 0; j < 3; j++)
+			s->welded_pos[i * 3 + j] = s->fit_base[i * 3 + j] * 2.0f - lim[j];
+	}
+	if (!sync_positions_partial(s))
+		return 0;
+
+	memcpy(s->last_pos, pos, sizeof(float) * 3 * (size_t)s->nverts);
+	s->last_had_attr = corner_attr != NULL;
+	if (corner_attr)
+		memcpy(s->last_attr, corner_attr, sizeof(float) * 3 * (size_t)s->ntris);
+	s->have_last = 1;
 
 	for (i = 0; i < s->out_nverts; i++) {
 		const int *r = s->out_ref + i * 4;
@@ -1122,6 +1221,10 @@ void umk_subsurf_free(UmkSubsurf *s)
 	if (s->face_src) MEM_freeN(s->face_src);
 	if (s->face_v) MEM_freeN(s->face_v);
 	if (s->edges) MEM_freeN(s->edges);
+	if (s->edge_crease) MEM_freeN(s->edge_crease);
+	if (s->fit_base) MEM_freeN(s->fit_base);
+	if (s->last_pos) MEM_freeN(s->last_pos);
+	if (s->last_attr) MEM_freeN(s->last_attr);
 	if (s->weights) MEM_freeN(s->weights);
 	if (s->out_ref) MEM_freeN(s->out_ref);
 	if (s->out_pos) MEM_freeN(s->out_pos);

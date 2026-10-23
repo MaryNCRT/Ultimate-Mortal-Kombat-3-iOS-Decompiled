@@ -47,6 +47,30 @@ Ermac; Kabal's 41 near ones are merged by the weld). Both exes build from
 Mary's .ipa; 83 of 83 sources compile for Linux. **Not seen in the game or the
 viewer yet:** Mary runs it.
 
+**Mary's first look at SMOOTH MODELS: holes and lag (fixed, not seen yet).**
+- Holes in cloth (a fighter's trousers): the weld removed faces with the same
+  three vertices everywhere; Blender's does it only among faces touching a
+  welded vertex (`weld_poly_loop_ctx_alloc`, `is_vert_ctx`). The game's models
+  draw cloth both ways with the same corners, so the back faces went. Now as
+  Blender.
+- A piece over another showing what is under it (Kano's eye plate, Sektor's
+  helmet): Catmull-Clark pulls an open rim inwards. Open edges now get crease
+  1.0 (Blender's own crease, creaseFactor = the level).
+- Closed pieces that overlap (Jax's head in his neck): Catmull-Clark shrinks
+  each, opening a gap. **Not Blender:** one correction pass in
+  `umk_subsurf_eval` -- each control point moved by how far its subdivided
+  self fell short, then subdivided again -- so the surface passes near the
+  model's own vertices (a cube's corner within 0.13 at level 1). Sharp corners
+  bulge a little in exchange.
+- Lag: every frame did a full CCG sync (hash maps, allocations); now one full
+  sync when the mesh is made and CCG's partial sync per frame, and an
+  unchanged pose is not evaluated again. Native cost per fighter per frame,
+  with the correction pass: ~1.2 ms at level 1, ~4 ms at level 2. The shadow
+  draws the plain mesh again. Under Vulkan / Direct3D 12 indexed triangles
+  were transformed once per index (`rgl_ff.c`); each vertex is now
+  transformed once and gathered (`tris_indexed`), rgl_test 0 failed on all
+  three renderers, 64 and 32 bit.
+
 **Crash reports and the session log** start with the version (`UMK3_VERSION`,
 passed by the launcher that compiled the game), 32/64-bit, the system
 (Windows version by RtlGetVersion, Wine if present; uname on Linux), the
