@@ -14,7 +14,7 @@ Kept current with every release; the detail of each change is in
 - Renderers: OpenGL, Vulkan, DirectX 12 (Windows), chosen in the launcher
   or the in-game menu.
 - SMOOTH ANIMATIONS on/off (launcher and in-game menu): the fighters'
-  frames blended when drawn. Not yet seen by Mary.
+  frames blended when drawn, in fights, the select screen and the intro.
 - Window, borderless or fullscreen; resolution, 3D resolution,
   antialiasing, texture quality, aspect 3:2 / 4:3 / 16:9 / 21:9, interface
   size, on-screen controls.
@@ -59,6 +59,11 @@ Kept current with every release; the detail of each change is in
   ninjas most of all (Mary, 2026-10-22).
 
 ## Known problems
+
+- Crash when two projectiles meet (SCORPION vs KABAL): a character sound with
+  an out-of-range character; skipped and logged now, sender not found yet.
+- A scream repeats when a fighter takes a fatality; some fatalities do not
+  finish their animation.
 
 - FLAWLESS VICTORY text missing in the 64-bit build.
 - Reptile's fatalities: in one he only raises his arms.

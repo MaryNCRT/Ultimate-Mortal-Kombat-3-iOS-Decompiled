@@ -27,8 +27,10 @@ smoother, drawing only, without changing the animations.
   delay felt like input lag (game_main.c).
 - **The option** (`port_smooth_anims`, `smooth_anims=` in `umk3.ini`, the
   launcher's GRAPHICS > VIDEO checkbox, the in-game GRAPHICS > VIDEO row) runs
-  `port_smooth_pose` (GameCode.c, before `RenderLevelPlayers` draws fighters 0
-  and 1). When the game's frame changes, the drawn pose blends from the
+  `port_smooth_pose` (GameCode.c) from `RenderPlayer` (the fight and the
+  select screen) and before both intro draws, with one state per PLAYER; the
+  fight's projectile slots are skipped. The first version only covered the
+  fight, and Mary saw no change in the intro. When the game's frame changes, the drawn pose blends from the
   previous frame into the new one over as many ticks as the previous one was
   held, at most 5 (up to 4 ticks, 67 ms, behind the logic frame while
   blending). It writes only `frameB` (+0x520) and `t` (+0x524); `frameA`
@@ -39,6 +41,17 @@ smoother, drawing only, without changing the animations.
 - **Verified:** both exes build from Mary's `.ipa`; launcher tests pass
   (ini round trip includes `smooth_anims`). **Not seen in the game yet:**
   Mary runs it.
+
+**Crash when two projectiles meet (open).** SCORPION vs KABAL, both throwing
+at once: `AddNewGameEvents` -> `get_csound` read past `ochar_sound_tables`
+(26 rows) -- a character sound event (MKEvent 2/3, param = char << 8 + n)
+carried a character number of 26 or more. The four senders (`ochar_sound`,
+`ochar_sound_n`, `ochar_sound_c`, `his_ochar_sound`, armv7 0x57b94..0x57bfc)
+match the binary, so the bad number comes from what calls them. Until the
+sender is found, Blood.c skips such an event and prints `csound: character N
+out of range (event param 0x...)` to the log: the next report gives the value.
+Mary also reports screams repeating when a fighter takes a fatality, and
+fatalities whose animation does not finish: not investigated yet.
 
 ## Release 0.1.9 beta (2026-10-22): Vulkan and Direct3D 12, Linux fixes
 

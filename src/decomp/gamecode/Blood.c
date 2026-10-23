@@ -6,6 +6,7 @@
  */
 
 #include <stdint.h>
+#include <stdio.h>     /* port: the csound diagnostic */
 
 /* `_GameEvents` — 0x00370e18.
  *
@@ -760,6 +761,16 @@ void AddNewGameEvents(void)
                     PlaySoundId(get_rsound(arg, limeRand()));
                 break;
             case 3:
+                /* Port, not in the binary: ochar_sound_tables has 26 rows,
+                 * and two projectiles meeting (SCORPION vs KABAL, Mary)
+                 * queued a character number past them -- the read crashed.
+                 * Logged and skipped until the sender is found. */
+                if ((unsigned long)(arg >> 8) >= 26) {
+                    printf("csound: character %ld out of range "
+                           "(event param 0x%lx), skipped\n",
+                           (long)(arg >> 8), (unsigned long)arg);
+                    break;
+                }
                 if (Settings[3])
                     PlaySoundId(get_csound(arg & 0xff, arg >> 8));
                 break;
