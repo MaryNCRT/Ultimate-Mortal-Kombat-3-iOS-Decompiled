@@ -8,6 +8,8 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 
 Built for Windows (64 and 32 bits) and Linux. Mary tried the two-column
 menus and the new box before the last two changes below; those are untested.
+Mary has now run the Linux package on a Linux machine, and played the
+Vulkan and Direct3D 12 renderers: all three work.
 
 - **VIDEO SETTINGS** on the settings screen, in the empty top-right box above
   SOUND VOLUME: it opens the settings menu's GRAPHICS page in the game's own
