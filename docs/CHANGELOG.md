@@ -14,6 +14,9 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
   Releases up to 0.1.9-beta stay MIT.
 - Crash reports and the session log name the version, the system, the
   renderer, the GPU and the settings in use.
+- Linux: sound and music (the Linux game was silent); music needs libmpg123.
+- SMOOTH ANIMATIONS also on the select screen and in the intro.
+- Faster drawing of large models with Vulkan and DirectX 12.
 
 - **SMOOTH ANIMATIONS** (off by default): the launcher's GRAPHICS > VIDEO, or
   Esc > GRAPHICS > VIDEO in the game (applied at once), `smooth_anims=1` in

@@ -58,6 +58,40 @@ Ermac; Kabal's 41 near ones are merged by the weld). Both exes build from
 Mary's .ipa; 83 of 83 sources compile for Linux. **Not seen in the game or the
 viewer yet:** Mary runs it.
 
+**Linux had no sound at all (issue #104, fixed, not heard on Linux yet).**
+The Linux package builds with `UMK3_NO_SDL_MIXER` (no library beyond SDL2),
+and in that mode every audio entry point of `platform/sdl_audio.c` was empty.
+Now that mode mixes on an SDL2 device itself: 16 effect voices (the mixer
+path's conversion and voice stealing) and one music stream, the MP3 decoded
+by libmpg123 loaded with dlopen when the first song plays (Fedora / Bazzite:
+mpg123-libs). Without libmpg123 the log says so and only the music is
+missing. 83 of 83 sources compile for Linux. The same issue's 6-button High
+Punch on Y and the moves-list button: the SDL pad goes through the same
+configured masks (`port_pad_action`, `g_pad6`) as Windows; the report is from
+0.1.6, before that configuration existed. Not changed; to be checked again on
+0.1.9 or later.
+
+**SMOOTH ANIMATIONS on the select screen and in the intro (fixed, not seen
+yet):** there PlayerAutoSmoothAnims blends with its own windows (40, 20)
+nearly all the time, and `port_smooth_pose` left any blend of the game's
+alone, so the option changed nothing there. With the option on it now blends
+from the frame the game's blend is mostly on.
+
+**Open, from Mary 2026-10-23:**
+- Death screams repeat in friendships and animalities (fatalities fixed).
+  Checked and ruled out: a state that screams and sleeps without moving on
+  (none), the sound-number order before each sound call against the binary
+  (`str [rX, #0x1c]` before `bl`: three candidates, all three false or
+  faithful -- tl_bomb33 stores 0 from `sl`; the script interpreter's opcode 15
+  stores into obj and calls ochar_sound(ref), as the binary does). The
+  `death scream:` diagnostic names the handler: a log of a friendship and an
+  animality from the 2026-10-23 09:28 build (its PDB is in the test folder)
+  will name it.
+- Issue #114: in Liu Kang's 7-hit kombo the opponent slides away and the
+  kombo cannot be finished. Not investigated past the corner rule
+  (`t_avoid_corner_trap`).
+- Issue #101: export the stages with their animations and textures.
+
 **Mary's first look at SMOOTH MODELS: holes and lag (fixed, not seen yet).**
 - Holes in cloth (a fighter's trousers): the weld removed faces with the same
   three vertices everywhere; Blender's does it only among faces touching a
