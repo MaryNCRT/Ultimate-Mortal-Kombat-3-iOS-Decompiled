@@ -29,9 +29,10 @@
  *     blenkernel/intern/mesh_mapping.c    BKE_mesh_uv_vert_map_create
  *     blenlib/intern/math_geom.c          cross_poly_v2
  *
- * The UV mesh is subdivided on its own, as Blender's subsurf does with
- * "Subdivide UVs", and per-corner data (the light) is carried with the face
- * weights Blender uses for loop custom data.
+ * The UV mesh is synced on its own, as Blender's subsurf does with
+ * "Subdivide UVs", to tell which output vertices are shared; the UVs and
+ * the per-corner data (the light) are carried with the face weights Blender
+ * uses for loop custom data.
  *
  * What is not Blender: the glue -- arrays in, arrays out, vertices shared
  * between grids by their CCG element, triangles from the grid quads -- and
@@ -825,7 +826,7 @@ static void face_maps(CCGSubSurf *ss, CCGFace **map)
 /* The output vertices: one per pair (position element, UV element), found
  * through getFaceIndex on both meshes; and the triangles of every grid quad,
  * a, d, c, b as set_subsurf_legacy_uv reads them. */
-static int build_output(UmkSubsurf *s, int nuv)
+static int build_output(UmkSubsurf *s, int nuv, const float (*face_uv)[2])
 {
 	ElemBases pb, ub;
 	int gridSize = s->gridSize, edgeSize = s->edgeSize, gridFaces = gridSize - 1;
@@ -894,12 +895,19 @@ static int build_output(UmkSubsurf *s, int nuv)
 	s->out_uv = MEM_mallocN(sizeof(float) * 2 * (size_t)n, "out_uv");
 	s->out_attr = MEM_callocN(sizeof(float) * (size_t)n, "out_attr");
 
-	/* the UVs do not change: read them once */
+	/* The UVs do not change: worked out once. Port, not Blender 2.79: the
+	 * subdivided UV mesh moves the rim of a UV island like any boundary, and
+	 * where the rim bends inwards it moves out of the island onto other
+	 * parts of the texture (a dark wedge on Jax, Sektor, Kitana...). The UV
+	 * mesh still decides which output vertices are shared; each UV is the
+	 * face's own corner UVs mixed with the loop weights, so it stays inside
+	 * the face's UV triangle (Blender 2.91+ "UV Smooth: None"). */
 	for (i = 0; i < n; i++) {
 		const int *r = s->out_ref + i * 4;
-		const float *uv = ccgSubSurf_getFaceGridData(s->uvss, s->uvFaceMap[r[0]], r[1], r[2], r[3]);
-		s->out_uv[i * 2 + 0] = uv[0];
-		s->out_uv[i * 2 + 1] = uv[1];
+		const float *w = s->weights + ((r[1] * gridSize + r[3]) * gridSize + r[2]) * 3;
+		const float (*c)[2] = face_uv + r[0] * 3;
+		s->out_uv[i * 2 + 0] = w[0] * c[0][0] + w[1] * c[1][0] + w[2] * c[2][0];
+		s->out_uv[i * 2 + 1] = w[0] * c[0][1] + w[1] * c[1][1] + w[2] * c[2][1];
 	}
 
 	MEM_freeN(idx);
@@ -1119,8 +1127,8 @@ UmkSubsurf *umk_subsurf_new(int levels, float weld_dist,
 
 	weld_positions(s, pos);
 	nuv = sync_uvs(s, (const float (*)[2])face_uv);
-	MEM_freeN(face_uv);
 	if (nuv == 0 || !sync_positions(s)) {
+		MEM_freeN(face_uv);
 		umk_subsurf_free(s);
 		return NULL;
 	}
@@ -1128,11 +1136,14 @@ UmkSubsurf *umk_subsurf_new(int levels, float weld_dist,
 	face_maps(s->uvss, s->uvFaceMap);
 	for (i = 0; i < s->nfaces; i++)
 		if (!s->faceMap[i] || !s->uvFaceMap[i]) {
+			MEM_freeN(face_uv);
 			umk_subsurf_free(s);
 			return NULL;
 		}
 
-	if (!build_output(s, nuv)) {
+	i = build_output(s, nuv, (const float (*)[2])face_uv);
+	MEM_freeN(face_uv);
+	if (!i) {
 		umk_subsurf_free(s);
 		return NULL;
 	}
