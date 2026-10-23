@@ -72,22 +72,28 @@ def main(argv):
             add(tf, os.path.join(ROOT, "launcher", e), top + "/" + e)
             n += 1
         eos = eos_dir()
-        have = os.path.join(src, "resources", "TOOLS", "eos")
+        # the folder's real name in the package: made on Windows, TOOLS/eos
+        # and tools/build share one folder, named as the first came; Linux
+        # tells TOOLS from tools, so eos.ini goes beside the SDK, whatever it is
+        res = os.path.join(src, "resources")
+        tdir = next((n for n in os.listdir(res) if n.lower() == "tools"
+                     and os.path.isdir(os.path.join(res, n, "eos"))), "TOOLS")
+        have = os.path.join(res, tdir, "eos")
         if eos and not os.path.exists(os.path.join(have, "SDK", "Include", "eos_sdk.h")):
             for sub in ("SDK/Include", "ThirdPartyNotices"):
                 for dp, dns, fns in os.walk(os.path.join(eos, sub)):
                     dns.sort()
                     rel = os.path.relpath(dp, eos).replace("\\", "/")
-                    add(tf, dp, top + "/resources/TOOLS/eos/" + rel)
+                    add(tf, dp, top + "/resources/" + tdir + "/eos/" + rel)
                     for fn in sorted(fns):
-                        add(tf, os.path.join(dp, fn), top + "/resources/TOOLS/eos/" + rel + "/" + fn)
+                        add(tf, os.path.join(dp, fn), top + "/resources/" + tdir + "/eos/" + rel + "/" + fn)
                         n += 1
             add(tf, os.path.join(eos, "SDK", "Bin", "libEOSSDK-Linux-Shipping.so"),
-                top + "/resources/TOOLS/eos/SDK/Bin/libEOSSDK-Linux-Shipping.so")
+                top + "/resources/" + tdir + "/eos/SDK/Bin/libEOSSDK-Linux-Shipping.so")
             n += 1
         ini = find_eos_ini()
         if ini and not os.path.exists(os.path.join(have, "eos.ini")):
-            add(tf, ini, top + "/resources/TOOLS/eos/eos.ini")
+            add(tf, ini, top + "/resources/" + tdir + "/eos/eos.ini")
             n += 1
     print("%s: %d files, %.1f MB" % (out, n, os.path.getsize(out) / 1e6))
 

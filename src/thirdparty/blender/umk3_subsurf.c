@@ -611,6 +611,8 @@ struct UmkSubsurf {
 	                               more faces, a degenerate one) */
 	float sharp_angle, sharp_strength;
 	int nsharp;
+	float *fit_w;               /* per welded vertex, the correction's share;
+	                               NULL all of it (umk_subsurf_set_fit) */
 	float *fit_base;            /* scratch, nwelded x 3 */
 	int ntris;                  /* input triangles */
 	float *last_pos, *last_attr;/* the last call's input, to skip a repeat */
@@ -1260,6 +1262,48 @@ void umk_subsurf_set_sharp(UmkSubsurf *s, float angle_deg, float strength)
 
 int umk_subsurf_sharp_edges(const UmkSubsurf *s) { return s ? s->nsharp : 0; }
 
+void umk_subsurf_set_fit(UmkSubsurf *s, const float *w)
+{
+	int i, changed = 0;
+
+	if (!s)
+		return;
+	if (!w) {
+		if (s->fit_w) {
+			MEM_freeN(s->fit_w);
+			s->fit_w = NULL;
+			s->have_last = 0;
+		}
+		return;
+	}
+	if (!s->fit_w) {
+		s->fit_w = MEM_mallocN(sizeof(float) * (size_t)(s->nwelded > 0 ? s->nwelded : 1), "fit_w");
+		for (i = 0; i < s->nwelded; i++)
+			s->fit_w[i] = 1.0f;
+		changed = 1;
+	}
+	{
+		float *m = MEM_mallocN(sizeof(float) * (size_t)(s->nwelded > 0 ? s->nwelded : 1), "fit_min");
+		for (i = 0; i < s->nwelded; i++)
+			m[i] = 1.0f;
+		for (i = 0; i < s->nverts; i++) {
+			float v = w[i];
+			if (!(v >= 0.0f)) v = 0.0f;     /* NaN too */
+			if (v > 1.0f) v = 1.0f;
+			if (v < m[s->weld_map[i]])
+				m[s->weld_map[i]] = v;
+		}
+		for (i = 0; i < s->nwelded; i++)
+			if (m[i] != s->fit_w[i]) {
+				s->fit_w[i] = m[i];
+				changed = 1;
+			}
+		MEM_freeN(m);
+	}
+	if (changed)
+		s->have_last = 0;
+}
+
 int umk_subsurf_eval(UmkSubsurf *s, const float *pos, const float *corner_attr)
 {
 	int i, j;
@@ -1289,8 +1333,13 @@ int umk_subsurf_eval(UmkSubsurf *s, const float *pos, const float *corner_attr)
 		if (v == NULL)
 			continue;
 		lim = ccgSubSurf_getVertData(s->ss, v);
-		for (j = 0; j < 3; j++)
-			s->welded_pos[i * 3 + j] = s->fit_base[i * 3 + j] * 2.0f - lim[j];
+		if (!s->fit_w || s->fit_w[i] == 1.0f)
+			for (j = 0; j < 3; j++)
+				s->welded_pos[i * 3 + j] = s->fit_base[i * 3 + j] * 2.0f - lim[j];
+		else
+			for (j = 0; j < 3; j++)    /* umk_subsurf_set_fit: a share */
+				s->welded_pos[i * 3 + j] = s->fit_base[i * 3 + j]
+				                         + s->fit_w[i] * (s->fit_base[i * 3 + j] - lim[j]);
 	}
 	if (!sync_positions_partial(s))
 		return 0;
@@ -1344,6 +1393,7 @@ void umk_subsurf_free(UmkSubsurf *s)
 	if (s->edges) MEM_freeN(s->edges);
 	if (s->edge_crease) MEM_freeN(s->edge_crease);
 	if (s->edge_angle) MEM_freeN(s->edge_angle);
+	if (s->fit_w) MEM_freeN(s->fit_w);
 	if (s->fit_base) MEM_freeN(s->fit_base);
 	if (s->last_pos) MEM_freeN(s->last_pos);
 	if (s->last_attr) MEM_freeN(s->last_attr);

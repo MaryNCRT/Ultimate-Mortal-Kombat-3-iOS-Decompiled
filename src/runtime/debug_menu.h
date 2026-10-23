@@ -55,6 +55,11 @@ void ui_grab(int vx, int vy, int vw, int vh);
 /* a picture beside the box: uploaded once, drawn at (x, y), size points */
 void ui_icon_set(const unsigned char *rgba, int w, int h);
 void ui_icon_draw(float x, float y, float size);
+/* PROFILE's gradient picker over the menu (debug_menu.c); include
+ * platform/platform.h first */
+struct plat_grad;
+struct plat_grad_hit;
+void ui_gradient_show(const struct plat_grad *g, unsigned key, struct plat_grad_hit *hit);
 void ui_badge_at(int slot, const char *name, const unsigned char *icon,
                  int icon_px, unsigned key, float x, float y, int align,
                  float size);

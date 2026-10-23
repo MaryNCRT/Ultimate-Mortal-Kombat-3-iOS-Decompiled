@@ -36,6 +36,9 @@
  *      NaN
  *   H  180 degrees and strength 0 give the same surface: the subdivision as
  *      it was before sharp edges
+ *   I  the correction per vertex (umk_subsurf_set_fit): none under one
+ *      corner of the cube leaves that corner inside the cube, the others where
+ *      they were; NULL gives the surface as made, exactly
  */
 #include <math.h>
 #include <stdio.h>
@@ -440,6 +443,33 @@ static void sharp_tests(void)
 	CHECK(a && b && differ(a, b) == 0.0f, "H: 180 degrees and strength 0 differ");
 	CHECK(a && umk_subsurf_sharp_edges(a) == 0 && b && umk_subsurf_sharp_edges(b) == 0, "H: sharp edges where none should be");
 	printf("H: 180 degrees and strength 0, the same surface\n");
+	umk_subsurf_free(a);
+	umk_subsurf_free(b);
+
+	/* I: no correction at the corner (1,1,1), full elsewhere; no sharp
+	 * edges, so the corner is rounded */
+	a = made(2, &cube, 180.0f, 1.0f);
+	b = made(2, &cube, 180.0f, 1.0f);
+	CHECK(a && b, "I: no result");
+	if (a && b) {
+		float w[24], before_far, after_near, after_far;
+		before_far = nearest(b, -1, -1, -1);
+		for (i = 0; i < 24; i++)
+			w[i] = (cube.pos[i * 3] > 0 && cube.pos[i * 3 + 1] > 0 && cube.pos[i * 3 + 2] > 0) ? 0.0f : 1.0f;
+		umk_subsurf_set_fit(b, w);
+		umk_subsurf_eval(b, cube.pos, NULL);
+		after_near = nearest(b, 1, 1, 1);
+		after_far = nearest(b, -1, -1, -1);
+		CHECK(after_near > nearest(a, 1, 1, 1) + 0.05f, "I: the corner %.4f did not draw in (with the correction %.4f)",
+		      after_near, nearest(a, 1, 1, 1));
+		CHECK(fabsf(after_far - before_far) < 0.02f, "I: the far corner moved, %.4f to %.4f", before_far, after_far);
+		CHECK(all_finite(b), "I: not finite");
+		umk_subsurf_set_fit(b, NULL);
+		umk_subsurf_eval(b, cube.pos, NULL);
+		CHECK(differ(a, b) == 0.0f, "I: NULL is not the surface as made (%g)", differ(a, b));
+		printf("I: corner without correction %.4f (with %.4f), far corner %.4f -> %.4f\n",
+		       after_near, nearest(a, 1, 1, 1), before_far, after_far);
+	}
 	umk_subsurf_free(a);
 	umk_subsurf_free(b);
 }

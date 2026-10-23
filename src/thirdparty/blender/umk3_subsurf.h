@@ -62,6 +62,17 @@ void umk_subsurf_set_sharp(UmkSubsurf *s, float angle_deg, float strength);
 /* How many interior edges are sharp now, for the log and the tests. */
 int umk_subsurf_sharp_edges(const UmkSubsurf *s);
 
+/* The correction pass (umk_subsurf_eval) per vertex: `w` is nverts floats,
+ * 0..1, how much of it each input vertex gets (a welded vertex takes the
+ * least of its members); NULL, all of it, as made. The pass moves the
+ * control points so the surface passes through the model's vertices; between
+ * them a convex part then bulges a little past the model's faces, and where a
+ * rigid piece sits tight on the skin -- Kung Lao's hat on his head -- the
+ * skin came through it. 0 there leaves Catmull-Clark's own surface, which
+ * stays inside the model's (Mary: the hat, measured: 45 points of the head
+ * through it at level 2, none with 0 under it). */
+void umk_subsurf_set_fit(UmkSubsurf *s, const float *w);
+
 /* One evaluation: nverts x 3 positions, and optionally one float per
  * triangle corner (ntris x 3, e.g. the light value) that is carried the way
  * Blender carries loop data through a subdivision. 0 on failure. */

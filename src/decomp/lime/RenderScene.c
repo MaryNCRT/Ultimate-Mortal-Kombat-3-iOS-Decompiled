@@ -13,6 +13,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "lime.h"
+#include "../../runtime/smooth_models.h"  /* port: SMOOTH MODELS, what covers a skin */
 
 
 /* -------------------------------------------------- GetMatrixFromPalette
@@ -943,8 +944,12 @@ void LIME_RenderScene(long arg1, SCENEINFO *scene,
                                   blend, &q);
                     ConvertQSTMatrixtoPCMatrix(&q, m44);
                 }
-                if (ka->field05 != 0)
+                if (ka->field05 != 0) {
                     scene_attach_to_bone(flushMatrix, ka->field05);
+                    /* port: the skin under this piece is not pushed out
+                     * by SMOOTH MODELS' correction (smooth_models.c) */
+                    port_smooth_cover_mesh(set->meshes[mi], m44, scene->scale);
+                }
 
                 glTranslatef(m44[12], m44[13], m44[14]);
                 m44[12] = m44[13] = m44[14] = 0.0f;

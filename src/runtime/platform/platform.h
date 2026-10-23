@@ -160,6 +160,27 @@ void plat_language(char *out, int n);
 unsigned char *plat_ui_badge(const char *name, const unsigned char *icon,
                              int icon_px, float s, int *w, int *h);
 
+/* PROFILE's gradient picker as the launcher draws it (port; ui_alert.c,
+ * plat_ui_gradient): the colours, the angle (0 up, clockwise), `empty` for
+ * no background, the presets, which one is the profile's (`active`, -1
+ * none), the control lit for the keys (`focus`: 0 the dial, 1 FROM, 2 TO,
+ * 3 the presets at `cursor`, 4 COPY, 5 CLEAR, -1 none) and the words. `k` is
+ * texture pixels per CSS pixel of the launcher's component. `hit` gets the
+ * controls' boxes in texture pixels. */
+#define PLAT_GRAD_PRESETS 18
+struct plat_grad {
+    unsigned from, to;
+    int angle, empty, active, focus, cursor, npre;
+    unsigned pfrom[PLAT_GRAD_PRESETS], pto[PLAT_GRAD_PRESETS];
+    int pangle[PLAT_GRAD_PRESETS];
+    const char *label, *none, *lfrom, *lto, *copy, *clear, *css;
+};
+struct plat_grad_hit {
+    float panel[4], dial[3], field[2][4], swatch[PLAT_GRAD_PRESETS][4], button[2][4];
+};
+unsigned char *plat_ui_gradient(const struct plat_grad *g, float k,
+                                struct plat_grad_hit *hit, int *w, int *h);
+
 /* ------------------------------------------------------------------ input
  *
  * The fight engine takes ONE TEN-BIT WORD PER PLAYER and nothing else -- see

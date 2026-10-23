@@ -19,4 +19,13 @@ int  port_smooth_draw(const void *skin, const void *rec, long second,
 /* LIME_FreeSkin: drop what was built for this skin. */
 void port_smooth_forget(const void *skin);
 
+/* What covers a skin: RenderPlayer names the skin (its first) before it
+ * draws the fighter's scene and NULL after; LIME_RenderScene hands each
+ * mesh it draws on a bone of that skin -- Kung Lao's hat -- with the
+ * matrix it is drawn with and the scene's scale. The skin's vertices inside
+ * such a piece get no correction pass (umk_subsurf_set_fit), so the
+ * smoothed skin does not come through it. */
+void port_smooth_cover_owner(const void *skin);
+void port_smooth_cover_mesh(const void *mesh, const float *m44, float scene_scale);
+
 #endif
