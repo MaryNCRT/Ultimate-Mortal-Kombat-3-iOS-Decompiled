@@ -306,6 +306,11 @@ static int make_window(void)
     return 1;
 }
 
+/* The window's buffers follow its size. ResizeBuffers starts the swap chain
+ * again at its first buffer, so the index is read again (it was not, and a
+ * resize drew into one buffer and presented another); a resize that fails
+ * keeps the buffers it had, at their old size, instead of going on with
+ * none (Mary: resizing and moving the window a few times closed the game). */
 static void check_size(void)
 {
     int w = 0, h = 0;
@@ -315,10 +320,17 @@ static void check_size(void)
     flush();
     wait_gpu();
     free_window();
-    g_bw = w;
-    g_bh = h;
-    ok(IDXGISwapChain3_ResizeBuffers(g_swap, NBUF, (UINT)w, (UINT)h, COLOR_FMT, 0), "ResizeBuffers");
-    make_window();
+    if (ok(IDXGISwapChain3_ResizeBuffers(g_swap, NBUF, (UINT)w, (UINT)h, COLOR_FMT, 0), "ResizeBuffers")) {
+        g_bw = w;
+        g_bh = h;
+    }
+    if (!make_window()) {
+        free_window();
+        fprintf(stderr, "d3d12: the window's buffers could not be made again at %dx%d\n", g_bw, g_bh);
+        g_bw = g_bh = 0;                /* tried again next frame */
+    }
+    g_bi = IDXGISwapChain3_GetCurrentBackBufferIndex(g_swap);
+    g_bound_target = -1;
 }
 
 static void frame_begin(void)
@@ -337,6 +349,9 @@ static void tsize(int t, int *w, int *h)
 }
 
 static dx_res *tcolor(int t) { return t > 0 ? &g_tg[t].color : &g_back[g_bi]; }
+
+/* the window has no buffers: a resize that could not make them again */
+static int no_window(int t) { return t <= 0 && !g_back[g_bi].res; }
 
 static void bind_target(void)
 {
@@ -804,6 +819,8 @@ static void dx_clear(const rgl_rect *sc, int color, const float rgba[4], int dep
         return;
     if (!g_list_on)
         check_size();
+    if (no_window(t))
+        return;
     bind_target();
     tsize(t, &w, &h);
     if (sc)
@@ -1002,6 +1019,8 @@ static void dx_draw(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_sam
         return;
     if (!g_list_on)
         check_size();
+    if (no_window(g_cur))
+        return;
     if (tex <= 0 || tex >= g_ntex || !g_tex[tex].used || !g_tex[tex].r.res) {
         tex = g_white;
         memset(&plain, 0, sizeof plain);
@@ -1037,6 +1056,8 @@ static void dx_blit(int src, const rgl_rect *a, int dst, const rgl_rect *b, int 
     if (dst > 0 && (dst >= g_ntg || !g_tg[dst].used)) return;
     if (!g_list_on)
         check_size();
+    if (no_window(src) || no_window(dst))
+        return;
     frame_begin();
     tsize(src, &sw, &sh);
     tsize(dst, &dw, &dh);
@@ -1115,6 +1136,10 @@ static void dx_read(int t, const rgl_rect *r, unsigned char *out)
         t = 0;
     if (!g_list_on)
         check_size();
+    if (no_window(t)) {
+        memset(out, 0, (size_t)r->w * r->h * 4);
+        return;
+    }
     frame_begin();
     tsize(t, &tw, &th);
     rr = gl_rect(r, tw, th);

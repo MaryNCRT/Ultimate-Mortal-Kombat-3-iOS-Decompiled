@@ -167,6 +167,7 @@ static VkFormat g_depth_fmt;
 static int g_win_pass = -1;
 static unsigned g_image;                /* the swapchain image this frame */
 static int g_need_resize;
+static int g_made_w, g_made_h;         /* the window's size when the chain was made */
 
 static VkCommandPool g_pool;
 static VkCommandBuffer g_cmd;
@@ -399,15 +400,23 @@ static void frame_begin(void)
     if (g_frame_on)
         return;
     plat_size(&w, &h);
-    if (w > 0 && h > 0 && (g_need_resize || (unsigned)w != g_extent.width || (unsigned)h != g_extent.height))
+    /* against the window's size when the chain was made, not the chain's
+     * own: the surface can give an extent a pixel off the window's, and the
+     * chain was then made again every frame */
+    if (w > 0 && h > 0 && (g_need_resize || !g_swap || w != g_made_w || h != g_made_h))
         recreate_swapchain();
+    if (!g_swap)                        /* none for now: tried next frame */
+        return;
     r = vkAcquireNextImageKHR(g_dev, g_swap, ~0ull, g_sem_acquire, VK_NULL_HANDLE, &g_image);
     if (r == VK_ERROR_OUT_OF_DATE_KHR) {
-        recreate_swapchain();
+        if (!recreate_swapchain())
+            return;
         r = vkAcquireNextImageKHR(g_dev, g_swap, ~0ull, g_sem_acquire, VK_NULL_HANDLE, &g_image);
     }
-    if (!vk_ok(r, "vkAcquireNextImageKHR"))
+    if (!vk_ok(r, "vkAcquireNextImageKHR")) {
+        g_need_resize = 1;
         return;
+    }
     g_acquire_wait = 1;
     g_img_layout[g_image] = VK_IMAGE_LAYOUT_UNDEFINED;
     g_frame_on = 1;
@@ -581,6 +590,7 @@ static int recreate_swapchain(void)
     VkSurfaceCapabilitiesKHR caps;
     VkSwapchainCreateInfoKHR si;
     VkSwapchainKHR old = g_swap;
+    VkResult r;
     int w = 0, h = 0;
     unsigned i, n;
 
@@ -616,10 +626,20 @@ static int recreate_swapchain(void)
     si.presentMode = VK_PRESENT_MODE_FIFO_KHR;     /* every driver has it: vsync */
     si.clipped = VK_TRUE;
     si.oldSwapchain = old;
-    if (!vk_ok(vkCreateSwapchainKHR(g_dev, &si, NULL, &g_swap), "vkCreateSwapchainKHR"))
-        return 0;
+    /* the old chain is retired even when the new one fails: then there is
+     * none, and the next frame tries again (Mary: resizing and moving the
+     * window a few times closed the game) */
+    g_swap = VK_NULL_HANDLE;
+    g_nimages = 0;
+    r = vkCreateSwapchainKHR(g_dev, &si, NULL, &g_swap);
     if (old)
         vkDestroySwapchainKHR(g_dev, old, NULL);
+    if (!vk_ok(r, "vkCreateSwapchainKHR")) {
+        g_swap = VK_NULL_HANDLE;
+        g_need_resize = 1;
+        return 0;
+    }
+    plat_size(&g_made_w, &g_made_h);
     n = 8;
     vkGetSwapchainImagesKHR(g_dev, g_swap, &n, g_images);
     g_nimages = n;

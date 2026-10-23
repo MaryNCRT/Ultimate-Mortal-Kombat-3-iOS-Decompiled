@@ -1814,8 +1814,25 @@ static void clear_frame(int ww, int wh, int vx, int vy, int vw, int vh)
 
         if (g_cfg_rw > 0 && g_cfg_rh > 0)
             fit_view(g_cfg_rw, g_cfg_rh, &x, &y, &bw, &bh);
-        if ((bw != g_rs_w || bh != g_rs_h || !g_rs_fbo) && bw > 0 && bh > 0)
-            render_alloc(bw, bh);
+        /* While the window is being resized its size changes every frame,
+         * and so did the buffers -- multisampled, window-sized, made and
+         * dropped sixty times a second (Mary: resizing the window a few
+         * times closed the game). The old buffer is stretched onto the
+         * window meanwhile; a new one once the size has held a quarter of a
+         * second. */
+        if ((bw != g_rs_w || bh != g_rs_h || !g_rs_fbo) && bw > 0 && bh > 0) {
+            static int want_w, want_h;
+            static double since;
+            double now = plat_time();
+
+            if (bw != want_w || bh != want_h) {
+                want_w = bw;
+                want_h = bh;
+                since = now;
+            }
+            if (!g_rs_fbo || now - since >= 0.25)
+                render_alloc(bw, bh);
+        }
     }
     if (g_rs_on) {
         g_rs_vx = vx;
