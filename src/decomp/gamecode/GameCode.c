@@ -8483,7 +8483,21 @@ static void DrawFinisherBanner(void)
 }
 
 /* One half of the round-end test. `loser` is the player whose health hit zero,
- * so the round goes to the other one. */
+ * so the round goes to the other one.
+ *
+ * The binary has one block per loser (0x2902c player one, 0x290a6 player
+ * two) and they are not mirror images:
+ *  - the round that wins the match calls updateMPWins and goes ON to the
+ *    flawless test (0x2a816 / 0x2a81e branch back), so the last round shows
+ *    FLAWLESS VICTORY too; returning there lost it on every match point;
+ *  - only player one losing clears flawlessVictories and sets
+ *    playerLostRound; player one winning clears the streak only when the
+ *    win is not flawless (0x29100), so five in a row can be reached;
+ *  - the one-round kode (0x13) gives the match to the winner, and the
+ *    flawless test still follows;
+ *  - player two winning flawless shows the message and counts nothing,
+ *    except the network client counting its own (0x2acb2); Karnage skips
+ *    the test, and there player one's flawless does not clear the streak. */
 static void RoundEndedAgainst(long loser)
 {
     long winner = loser ^ 1;
@@ -8495,24 +8509,35 @@ static void RoundEndedAgainst(long loser)
     RoundWins[winner]++;
     Round++;
 
-    if (RoundWins[0] == WinsNeeded || RoundWins[1] == WinsNeeded) {
+    if (RoundWins[0] == WinsNeeded || RoundWins[1] == WinsNeeded)
         updateMPWins();
-        return;
-    }
 
-    flawlessVictories = 0;
-    playerLostRound  = 1;
+    if (loser == 0) {
+        flawlessVictories = 0;
+        playerLostRound  = 1;
+    }
 
     /* The one-round kode hands the match over immediately. */
     if (GameMode == 1 && *theKode == 0x13) {
-        RoundWins[loser]  = WinsNeeded;
-        RoundWins[winner] = WinsNeeded - 1;
+        RoundWins[winner] = WinsNeeded;
+        RoundWins[loser]  = WinsNeeded - 1;
+    }
+
+    if (loser == 0) {
+        if (GameMode == 3)
+            return;
+        if (Health[1] == 100)
+            FlawlessMessage = 1;
+        /* the network client counts its own flawless */
+        if (GameMode == 1 && !(rb_active() ? isParent() : isParentBasedOnSpeed())
+            && Health[0] == 0 && Health[1] == 100)
+            Stats[6]++;
         return;
     }
-    if (GameMode == 3)
-        return;
 
-    if (Health[winner] == 100) {
+    if (GameMode == 3 && Health[0] == 100)
+        return;
+    if (GameMode != 3 && Health[0] == 100) {
         FlawlessMessage = 1;
         if (GameMode == 4 || GameMode == 0) {
             Stats[6]++;
@@ -8521,11 +8546,13 @@ static void RoundEndedAgainst(long loser)
             if (flawlessVictories == 5)
                 achievementsUnlock(3);
         }
-    } else if (GameMode == 1 && (rb_active() ? isParent() : isParentBasedOnSpeed())
-               && Health[1] == 0 && Health[0] == 100) {
-        /* the network half counts the host's flawless without the message */
-        Stats[6]++;
+    } else {
+        flawlessVictories = 0;
     }
+    /* the network host counts its flawless */
+    if (GameMode == 1 && (rb_active() ? isParent() : isParentBasedOnSpeed())
+        && Health[1] == 0 && Health[0] == 100)
+        Stats[6]++;
 }
 
 void DrawHUD(void)

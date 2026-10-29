@@ -56,6 +56,7 @@
  *   UMK3_DBG_STATE="t:s1;t:l1" save / load a state slot by script
  *   UMK3_SHOTS=<t,t,...>       write umk3-shot-<t>.ppm at each tick, go on
  *   UMK3_ARCADE=<destiny,stage> with --fight: that rung of an Arcade ladder
+ *   UMK3_PRACTICE=1            with --fight: as TRAINING, player two stands still
  *   UMK3_PADS=<tick:buttons:hold;...>  player one's pad by script (scripted_pad)
  *   UMK3_SCREENS=<tick:n;...>  open front-end screen n at that tick, so one
  *                              session can walk the whole menu
@@ -3497,6 +3498,13 @@ int main(int argc, char **argv)
                     Destiny = atol(getenv("UMK3_ARCADE"));
                     if (strchr(getenv("UMK3_ARCADE"), ','))
                         Stage = atoi(strchr(getenv("UMK3_ARCADE"), ',') + 1);
+                }
+                /* UMK3_PRACTICE=1: the fight as TRAINING (player two
+                 * stands still), so a test can land a kombo */
+                if (getenv("UMK3_PRACTICE")) {
+                    extern int PortPractice;
+                    GameMode = 6;               /* PLAY_MODE_TWOUP */
+                    PortPractice = 1;
                 }
                 CurrentTask = 4;                /* Task_FEDestroy */
                 g_fight_p1 = -1;
