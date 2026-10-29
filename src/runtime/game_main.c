@@ -447,6 +447,7 @@ static void keyboard_buttons(void)
 /* --fight: -1 until parsed. */
 static long g_fight_p1 = -1, g_fight_p2 = -1, g_fight_stage = 0;
 static int  g_rp_hover = -1;            /* REPLAYS: the button under the mouse */
+static int  g_quit_now;                 /* REPLAYS: the player's X */
 static int  g_fight_override;           /* Character2Override is ours */
 extern int  DbgPalette[2], DbgFightActive;      /* runtime/debug_menu.c */
 
@@ -3074,7 +3075,7 @@ int main(int argc, char **argv)
     }
 
     last = plat_time();
-    while (plat_poll()) {
+    while (plat_poll() && !g_quit_now) {
         int mx, my, down, ww, wh, vx, vy, vw, vh;
 
         /* The window's focus is the app's foreground; see runtime/lime_app.c. */
@@ -3141,12 +3142,16 @@ int main(int argc, char **argv)
                 set_menu_mouse(tx / g_virt_w, ty / g_virt_h,
                                plat_mouse(&mx, &my) && g_ntaps == 0);
             else if (rp_playing() && !dbg_menu_is_open()) {     /* the replay's panel */
+                const char *labels[16];
                 float at;
+                int nr, cur, n = rp_list(labels, 16, &nr, &cur), r;
 
-                g_rp_hover = dbg_replay_hit(tx / g_virt_w, ty / g_virt_h, &at);
-                if (rp_ui(g_rp_hover, at, plat_mouse(&mx, &my) && g_ntaps == 0)
-                    == RPB_SETTINGS)
+                g_rp_hover = dbg_replay_hit(tx / g_virt_w, ty / g_virt_h, &at, n, nr);
+                r = rp_ui(g_rp_hover, at, plat_mouse(&mx, &my) && g_ntaps == 0);
+                if (r == RPB_SETTINGS)
                     set_menu_toggle();
+                else if (r == RPB_CLOSE)    /* the X, or another replay begun */
+                    g_quit_now = 1;
             }
 
             if (down && !was_down) {
@@ -3488,7 +3493,11 @@ int main(int argc, char **argv)
                 int state;
                 float at = rp_info(clock, sizeof clock, &state);
 
-                dbg_replay_draw(at, clock, state, g_rp_hover);
+                const char *labels[16];
+                int nr, cur, n = rp_list(labels, 16, &nr, &cur);
+
+                dbg_replay_draw(at, clock, state, g_rp_hover, rp_title(),
+                                labels, n, nr, cur);
             }
             if (g_cfg_debug_keys) {
                 if (dbg_info_on()) {

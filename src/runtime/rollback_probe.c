@@ -197,15 +197,18 @@ static void make_dir(const char *p)
 #endif
 }
 
-/* replays/recent: the oldest go until RB_RECENT are left. The names begin
- * with the date, so the oldest sort first. */
-static void keep_recent(void)
+/* The .umkr files of replays/<folder>, oldest first (the game's own names
+ * begin with the date; others sort by name), at most `max`. */
+#define RB_NAME 160
+
+static int scan_replays(const char *folder, char names[][RB_NAME], int max)
 {
-    char dir[1024], names[64][160], p[1200];
+    char dir[1024], p[1200], rel[64];
     int n = 0, i, j;
 
-    if (!in_exe_dir("replays/recent", dir, sizeof dir))
-        return;
+    snprintf(rel, sizeof rel, "replays/%s", folder);
+    if (!in_exe_dir(rel, dir, sizeof dir))
+        return 0;
 #ifdef _WIN32
     {
         WIN32_FIND_DATAA fd;
@@ -214,9 +217,9 @@ static void keep_recent(void)
         snprintf(p, sizeof p, "%s\\*.umkr", dir);
         h = FindFirstFileA(p, &fd);
         if (h == INVALID_HANDLE_VALUE)
-            return;
+            return 0;
         do
-            if (n < 64 && strlen(fd.cFileName) < 160)
+            if (n < max && strlen(fd.cFileName) < RB_NAME)
                 strcpy(names[n++], fd.cFileName);
         while (FindNextFileA(h, &fd));
         FindClose(h);
@@ -227,22 +230,33 @@ static void keep_recent(void)
         struct dirent *e;
 
         if (!d)
-            return;
+            return 0;
         while ((e = readdir(d)) != NULL) {
             size_t k = strlen(e->d_name);
-            if (n < 64 && k > 5 && k < 160 && !strcmp(e->d_name + k - 5, ".umkr"))
+            if (n < max && k > 5 && k < RB_NAME && !strcmp(e->d_name + k - 5, ".umkr"))
                 strcpy(names[n++], e->d_name);
         }
         closedir(d);
     }
 #endif
-    for (i = 1; i < n; i++)             /* oldest first */
+    for (i = 1; i < n; i++)
         for (j = i; j > 0 && strcmp(names[j - 1], names[j]) > 0; j--) {
-            char t[160];
+            char t[RB_NAME];
             strcpy(t, names[j]);
             strcpy(names[j], names[j - 1]);
             strcpy(names[j - 1], t);
         }
+    return n;
+}
+
+/* replays/recent: the oldest go until RB_RECENT are left. */
+static void keep_recent(void)
+{
+    char names[64][RB_NAME], p[1200], dir[1024];
+    int n = scan_replays("recent", names, 64), i;
+
+    if (!in_exe_dir("replays/recent", dir, sizeof dir))
+        return;
     for (i = 0; i < n - RB_RECENT; i++) {
         snprintf(p, sizeof p, "%s/%s", dir, names[i]);
         remove(p);
@@ -1023,12 +1037,149 @@ void rp_frame(void (*frame)(void))
     rp_run(frame, 0, 0);
 }
 
+/* ------------------------------------------------- the player's list */
+
+/* The list the panel's REPLAYS button opens: the last fights, then the kept
+ * ones, newest first. Picking another starts the game again on it (a fight
+ * is loaded for its two fighters and its level, so it cannot simply swap). */
+
+#define RL_RECENT 5
+#define RL_SAVED  8
+
+static char g_rl_rel[RL_RECENT + RL_SAVED][RB_NAME + 16];
+static char g_rl_label[RL_RECENT + RL_SAVED][48];
+static int  g_rl_n, g_rl_recent, g_rl_open;
+
+/* "20261029-120102_sub-zero_vs_kitana.umkr" -> "SUB-ZERO VS KITANA  10-29 12:01";
+ * another name, itself without ".umkr". */
+static void rl_label(char *out, int n, const char *file)
+{
+    char a[40], b[40];
+    unsigned d, t;
+
+    if (sscanf(file, "%8u-%6u_%39[^_]_vs_%39[^.].umkr", &d, &t, a, b) == 4)
+        snprintf(out, (size_t)n, "%s VS %s  %02u-%02u %02u:%02u", a, b,
+                 d / 100 % 100, d % 100, t / 10000, t / 100 % 100);
+    else {
+        snprintf(out, (size_t)n, "%s", file);
+        if (strlen(out) > 5 && !strcmp(out + strlen(out) - 5, ".umkr"))
+            out[strlen(out) - 5] = 0;
+    }
+}
+
+static void rl_scan(void)
+{
+    char names[64][RB_NAME];
+    int n, i, k;
+
+    g_rl_n = 0;
+    n = scan_replays("recent", names, 64);
+    for (i = n - 1, k = 0; i >= 0 && k < RL_RECENT; i--, k++) {
+        snprintf(g_rl_rel[g_rl_n], sizeof g_rl_rel[0], "replays/recent/%s", names[i]);
+        rl_label(g_rl_label[g_rl_n++], sizeof g_rl_label[0], names[i]);
+    }
+    g_rl_recent = g_rl_n;
+    n = scan_replays("saved", names, 64);
+    for (i = n - 1, k = 0; i >= 0 && k < RL_SAVED; i--, k++) {
+        snprintf(g_rl_rel[g_rl_n], sizeof g_rl_rel[0], "replays/saved/%s", names[i]);
+        rl_label(g_rl_label[g_rl_n++], sizeof g_rl_label[0], names[i]);
+    }
+}
+
+/* The list for drawing: its labels, how many are recent, which is playing
+ * (-1 none); -1 when it is closed. */
+int rp_list(const char **labels, int max, int *n_recent, int *current)
+{
+    int i;
+
+    *current = -1;
+    *n_recent = g_rl_recent;
+    if (!g_rl_open || !rp_playing())
+        return -1;
+    for (i = 0; i < g_rl_n && i < max; i++) {
+        labels[i] = g_rl_label[i];
+        if (!strcmp(g_rl_rel[i], g_play_rel))
+            *current = i;
+    }
+    return i;
+}
+
+/* The game again, on `rel`. 1 once it is on its way. */
+static int rp_switch(const char *rel)
+{
+    char exe[1024];
+
+#ifdef _WIN32
+    char cmd[2200];
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+
+    if (!GetModuleFileNameA(NULL, exe, sizeof exe))
+        return 0;
+    snprintf(cmd, sizeof cmd, "\"%s\" --replay \"%s\"", exe, rel);
+    memset(&si, 0, sizeof si);
+    si.cb = sizeof si;
+    if (!CreateProcessA(exe, cmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
+        return 0;
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    return 1;
+#else
+    ssize_t k = readlink("/proc/self/exe", exe, sizeof exe - 1);
+    pid_t pid;
+
+    if (k <= 0)
+        return 0;
+    exe[k] = 0;
+    pid = fork();
+    if (pid == 0) {
+        execl(exe, exe, "--replay", rel, (char *)NULL);
+        _exit(127);
+    }
+    return pid > 0;
+#endif
+}
+
+/* A row of the list picked: the one playing closes the list; another
+ * starts, and this game should close (1). */
+static int rl_pick(int i)
+{
+    if (i < 0 || i >= g_rl_n)
+        return 0;
+    if (!strcmp(g_rl_rel[i], g_play_rel)) {
+        g_rl_open = 0;
+        return 0;
+    }
+    printf("replay: switching to %s\n", g_rl_rel[i]);
+    fflush(stdout);
+    return rp_switch(g_rl_rel[i]);
+}
+
+/* The playing replay's label without its date, for the status line. */
+const char *rp_title(void)
+{
+    static char t[48];
+    const char *s = strrchr(g_play_rel, '/');
+    char *date;
+
+    rl_label(t, sizeof t, s ? s + 1 : g_play_rel);
+    if ((date = strstr(t, "  ")) != NULL)
+        *date = 0;
+    t[34] = 0;
+    return t;
+}
+
 /* One of the player's buttons (rollback.h, RPB_*), from a key or a click. */
 void rp_press(int id)
 {
     if (!rp_playing())
         return;
     switch (id) {
+    case RPB_LIST:
+        g_rl_open = !g_rl_open;
+        if (g_rl_open)
+            rl_scan();
+        break;
     case RPB_START:
         rp_seek(0);
         break;
@@ -1126,8 +1277,14 @@ int rp_ui(int id, float at, int down)
 
         was = id;
         held = 0;
-        if (!first || id < 0)
+        if (!first)
             return -1;                  /* slid onto it: not a press */
+        if (id < 0) {                   /* a click beside the list closes it */
+            g_rl_open = 0;
+            return -1;
+        }
+        if (id >= RPB_ROW)
+            return rl_pick(id - RPB_ROW) ? RPB_CLOSE : -1;
         rp_press(id);
         return id;
     }

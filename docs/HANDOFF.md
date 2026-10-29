@@ -47,6 +47,14 @@ last-5 switch, the last fights and the kept ones, each with WATCH, KEEP FOR
 GOOD (recent to `replays/saved/`), EXPORT… and DELETE, and IMPORT… and OPEN
 FOLDER for the kept ones. `play` passes `--replay` to the game.
 
+**The player's top corners** (asked after the first look at the plan). A
+REPLAYS button at the top left opens a list of the last fights and the kept
+ones (the newest 8), the one playing marked; picking another starts the game
+again on it (`CreateProcess` / `fork` of the exe with `--replay`) and this
+one closes, since a fight is loaded for its own fighters and level. An X at
+the top right closes the game. Nothing else is drawn across the top, so the
+health bars stay in sight; the replay's name moved into the status line.
+
 Checks: Windows build without warnings in the new code, Linux compile 84/84,
 launcher tests pass, the page and the menu seen in launcher captures. The
 panel and playback have not been seen in the game yet.
