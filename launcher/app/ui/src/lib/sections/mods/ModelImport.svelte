@@ -3,8 +3,11 @@
      * the fighter's .skin and shown on the fighter's own bones -- as the game
      * will draw it -- before anything is saved. Its animations play on it;
      * on the right, the model's textures, each kept on its own: its picture
-     * (seen large on a click), the fighter's block it goes to, a picture to
-     * put in its place, and an eye to hide its part or see it alone. */
+     * (seen large on a click), the fighter's block it goes to and the game
+     * texture it replaces (its picture is saved as that texture, and the
+     * game draws it on the model's own UVs) or a new texture of its own, a
+     * picture to put in its place, and an eye to hide its part or see it
+     * alone. */
     import { onMount, onDestroy } from 'svelte';
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -120,7 +123,7 @@
                         maps.set(p.mat, t);
                     }
                     map = maps.get(p.mat);
-                } else map = await texture(bi === 0 && outfit ? outfit : f.blockTex[bi]);
+                } else map = await texture((M && M.rep) || (bi === 0 && outfit ? outfit : f.blockTex[bi]));
                 const see = !!(M && M.alpha);
                 const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map, color: map ? 0xffffff : 0x9a96c8,
                     side: THREE.DoubleSide, alphaTest: see ? 0.1 : 0.35, transparent: see }));
@@ -210,8 +213,21 @@
         return dataUrl(await c.convertToBlob({ type: 'image/png' }));
     }
 
-    async function setBlock(i, b) {
+    /* the block a material goes to and what its picture becomes: "b|STEM"
+     * replaces that game texture, "b|" a new texture of its own */
+    const choices = () => (f ? f.rig.skin.flatMap((_, b) => [
+        ...(b === 0 ? texOutfits() : [f.blockTex[b]]).map(t => ({ v: b + '|' + t, b, t })),
+        { v: b + '|', b, t: '' },
+    ]) : []);
+    const texOutfits = () => {
+        const v = (f.variants || []).filter(t => !/_ICE$/i.test(t));
+        return v.length ? v : [outfit || f.blockTex[0]];
+    };
+    const choiceOf = i => blockOf[i] + '|' + (mdl.materials[i].rep || '');
+    async function setChoice(i, v) {
+        const [b, t] = v.split('|');
         blockOf[i] = Number(b);
+        mdl.materials[i].rep = t;
         await rebuild();
     }
 
@@ -239,6 +255,14 @@
         try {
             mdl = await readModel(file);
             blockOf = mdl.materials.map((_, i) => Math.min(i, f.rig.skin.length - 1));
+            /* each picture replaces its block's texture (the outfit shown),
+             * once: a second material on the same block gets its own */
+            const taken = new Set();
+            mdl.materials.forEach((m, i) => {
+                const t = blockOf[i] === 0 ? (outfit || f.blockTex[0]) : f.blockTex[blockOf[i]];
+                m.rep = m.image && !taken.has(t) ? t : '';
+                if (m.rep) taken.add(t);
+            });
             await makeThumbs();
             await rebuild();
         } catch (e) {
@@ -253,7 +277,6 @@
         if (root) root.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
         renderer && renderer.dispose();
     });
-    const blockName = b => (b === 0 ? (outfit || f.blockTex[0]) : f.blockTex[b]);
 </script>
 
 <div class="veil" role="presentation">
@@ -298,8 +321,8 @@
                                     <button class="eye" class:off={hidden[i]} onclick={() => toggle(i)} title={tx('imHide')}>{hidden[i] ? '◌' : '◉'}</button>
                                     <button class="eye" onclick={() => alone(i)} title={tx('imAlone')}>1</button>
                                 </div>
-                                <select class="sel" value={blockOf[i]} onchange={e => setBlock(i, e.currentTarget.value)} title={tx('imBlock')}>
-                                    {#each f.rig.skin as _, b}<option value={b}>{tx('imBlock')} {b + 1}: {blockName(b)}</option>{/each}
+                                <select class="sel" value={choiceOf(i)} onchange={e => setChoice(i, e.currentTarget.value)} title={tx('imReplaces')}>
+                                    {#each choices() as c}<option value={c.v}>{tx('imBlock')} {c.b + 1} · {c.t ? tx('imReplaces') + ' ' + c.t : tx('imNewTex')}</option>{/each}
                                 </select>
                                 <div class="pair">
                                     <button class="btn" onclick={() => pickTex(i)}>{tx('imPickTex')}</button>

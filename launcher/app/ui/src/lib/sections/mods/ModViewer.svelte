@@ -742,6 +742,15 @@
             const texOf = new Map();
             for (const [i, m] of mdl.materials.entries()) {
                 if (!r.parts.some(ps => ps.some(p => p.mat === i))) continue;
+                /* a game texture replaced: the picture saved as it, and the
+                 * part drawn with the block's own texture */
+                if (m.rep) {
+                    if (m.image) {
+                        const w = await putTexture(api, src, name, m.rep, await sheetPng(m.image), false, dir, true);
+                        if (w) files.push(...w);
+                    }
+                    continue;
+                }
                 const own = m.image || (m.game && await gamePicture(shownOutfit())) || solidPicture(m.color);
                 const st = (fx.ch.file + '_M' + (i + 1)).toUpperCase();
                 const w = await putTexture(api, src, name, st, await sheetPng(own), false, dir, true);

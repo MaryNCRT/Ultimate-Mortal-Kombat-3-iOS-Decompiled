@@ -35,7 +35,7 @@
 {#if app.cfg}
     <div class="app">
         <TitleBar />
-        <ProfileBadge />
+        {#if !app.overlay}<ProfileBadge />{/if}
         {#if app.full && Sec}
             <main class="stage" class:wide={app.sec === 'mods'}>
                 <SecHead />

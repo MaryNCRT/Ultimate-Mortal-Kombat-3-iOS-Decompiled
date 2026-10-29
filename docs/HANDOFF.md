@@ -42,6 +42,13 @@ yet**. Asked by Mary after trying the first round:
     the path).
   - The materials' textures are listed in REPLACE TEXTURE after the model
     is saved.
+  - **Each picture chooses the game texture it replaces** (REPLACES
+    `SONYA_DIFFUSE`, an outfit, block 2's texture, or NEW TEXTURE): it is
+    saved as that texture (and its `_ICE`), and the game draws it on the
+    model's own UVs with no `.mats` part. By default each picture replaces
+    its block's texture. Mary saw the model's pictures not arrive in the
+    game; this is the direct route. The player's badge is hidden while the
+    importer is open.
   - **Humanoid retarget** (`mods/retarget.js`): the file's bones are known
     by name from Mixamo, AccuRig / Character Creator (`CC_Base_*`),
     ValveBiped, 3ds Max Biped, Unreal, Unity / VRM, Blender / Rigify and
