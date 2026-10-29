@@ -7675,6 +7675,10 @@ long GameInit_LoadABit(long step)
 
     case 48:
         puts("########## TASK_GAME_INIT: 7");
+        /* port: the rival as loaded -- Arcade's can still change between
+         * step 42 and here (Mary: "liukang_vs_stryker" fought Kitana, the
+         * file's setup still Stryker) -- recorded, or put back replaying */
+        rb_fight_rival(&PLAYER2MODEL);
         LoadLevelCharacters(PLAYER1MODEL, PLAYER2MODEL);
         return 0;
 

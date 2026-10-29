@@ -104,7 +104,7 @@
         if (!got) return;
         busy = true;
         try {
-            const files = await putTexture(api, src, ms.edMod, t.name, got.bytes, ms.autoSmall, home(t));
+            const files = await putTexture(api, src, ms.edMod, t.name, got.bytes, ms.autoSmall, home(t), ms.autoIce);
             if (!files) { note = tx('vwNotPicture'); return; }
             forgetMod();
             forgetThumbs();
@@ -159,6 +159,7 @@
             <span class="dim">{shown.length} {tx('txCount')}</span>
             <span class="grow"></span>
             <label class="chk"><input type="checkbox" bind:checked={ms.autoSmall}><span>{tx('vwAutoSmall')}</span></label>
+            <label class="chk"><input type="checkbox" bind:checked={ms.autoIce}><span>{tx('vwAutoIce')}</span></label>
         </div>
         <p class="note">{tx('txNote')}</p>
         {#if note}<p class="note ok">{note}</p>{/if}

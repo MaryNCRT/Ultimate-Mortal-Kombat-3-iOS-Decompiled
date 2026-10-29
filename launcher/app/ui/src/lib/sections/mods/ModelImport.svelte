@@ -8,7 +8,7 @@
     import { onMount, onDestroy } from 'svelte';
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-    import { tx } from '#lib/app.svelte.js';
+    import { app, tx } from '#lib/app.svelte.js';
     import { api } from '#lib/platform.js';
     import { selectBlip } from '#lib/sound.js';
     import { readModel, buildSkin, withSkin } from '#lib/mods/modelin.js';
@@ -27,6 +27,7 @@
     let err = $state('');
     let busy = $state(true);
     let turn = $state(0);
+    let keep = $state(false);               /* PROPORTION TRICK (a humanoid rig) */
     let blockOf = $state([]);
     let thumbs = $state([]);
     let clip = $state(-1), frame = $state(0), playing = $state(false), loop = $state(true);
@@ -81,8 +82,8 @@
         if (!mdl) return;
         err = '';
         try {
-            res = buildSkin(f, mdl, { turn, blockOf });
-            pf = withSkin(f, res.bytes);
+            res = buildSkin(f, mdl, { turn, blockOf, keep });
+            pf = withSkin(f, res.bytes, res.bones);
             await show();
         } catch (e) {
             err = String(e && e.message || e);
@@ -178,12 +179,14 @@
         if (!pic) { err = tx('vwNotPicture'); return; }
         mdl.materials[i].image = pic;
         mdl.materials[i].file = got.name;
+        mdl.materials[i].game = false;
         await makeThumbs();
         await rebuild();
     }
     async function gameTex(i) {
         selectBlip();
         mdl.materials[i].image = null;
+        mdl.materials[i].game = true;    /* a copy of the outfit's, saved as its own */
         await makeThumbs();
         await rebuild();
     }
@@ -212,6 +215,12 @@
         await rebuild();
     }
 
+    async function setKeep(v) {
+        selectBlip();
+        keep = v;
+        await rebuild();
+    }
+
     async function turnIt() {
         selectBlip();
         turn = (turn + 1) % 4;
@@ -225,6 +234,7 @@
     }
 
     onMount(async () => {
+        app.overlay++;
         setup();
         try {
             mdl = await readModel(file);
@@ -238,6 +248,7 @@
         }
     });
     onDestroy(() => {
+        app.overlay--;
         cancelAnimationFrame(raf);
         if (root) root.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
         renderer && renderer.dispose();
@@ -259,7 +270,7 @@
                     {:else if err}<span class="msg bad">{err}</span>{/if}
                 </div>
                 {#if res}
-                    <div class="info">{res.verts} verts · {res.tris} tris · {res.matched ? res.matched + '/' + res.of + ' ' + tx('imBones') : tx('imNoBones')}{res.auto ? ' · ' + res.auto + ' ' + tx('imAuto') : ''}</div>
+                    <div class="info">{res.verts} verts · {res.tris} tris · {res.matched ? res.matched + '/' + res.of + ' ' + tx(res.rig === 'humanoid' ? 'imHumanoid' : 'imBones') : tx('imNoBones')}{res.auto ? ' · ' + res.auto + ' ' + tx('imAuto') : ''}</div>
                 {/if}
                 {#if pf}
                     <div class="play">
@@ -300,6 +311,15 @@
                 </ul>
                 {#if res && !res.matched}
                     <button class="btn" onclick={turnIt}>{tx('imTurn')}</button>
+                {/if}
+                {#if res && res.rig === 'humanoid'}
+                    <!-- a humanoid rig (Mixamo, AccuRig, ValveBiped...): fitted
+                         to the fighter's bones, or the proportion trick -->
+                    <div class="pair">
+                        <button class="btn" class:hot={!keep} onclick={() => setKeep(false)}>{tx('imFit')}</button>
+                        <button class="btn" class:hot={keep} onclick={() => setKeep(true)}>{tx('imKeep')}</button>
+                    </div>
+                    <p class="note">{tx(keep ? 'imKeepNote' : 'imFitNote')}</p>
                 {/if}
                 <p class="note">{tx('imNote')}</p>
                 <div class="pair">

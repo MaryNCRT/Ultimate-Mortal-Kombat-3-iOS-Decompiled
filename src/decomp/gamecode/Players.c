@@ -1905,6 +1905,7 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
 
     c->skin = LIME_LoadSkin(skinFile);
     c->bones = LIME_LoadBones(bonesFile);
+    port_skin_bones_loaded(c->bones, skinFile); /* port: skin_mats.c */
     c->frameList = limeLoadFile(framePath);
 
     /* ---- the frame list, and the finisher-frame gate ---- */

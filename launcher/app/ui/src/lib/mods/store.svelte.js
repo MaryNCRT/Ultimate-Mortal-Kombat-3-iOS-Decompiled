@@ -26,6 +26,7 @@ export const ms = $state({
     texFighter: '', rev: 0,
     /* REPLACE TEXTURE also writes the game's smaller copies (_LOW, _LITE) */
     autoSmall: true,
+    autoIce: true,                      /* REPLACE TEXTURE: its _ICE copy too (image.js icePicture) */
     /* the CHARACTER EDITOR: the fighter, the mod its changes go to */
     edFighter: 0, edMod: '', edPage: 'attacks',
     /* TEXTURES: the group (mods/owners.js GROUPS), the fighter or stage */

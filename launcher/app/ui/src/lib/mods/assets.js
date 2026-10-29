@@ -5,7 +5,7 @@
  * `src` is the file access: { files: ['KANO_STANDARD.skin', 'Textures/x.pvr',
  * ...] relative to res/, read(path) -> Promise<Uint8Array|null> }. */
 import { parseMeshset, parseSkin, parseBones, parseAnim, parseScene, parseFrameList, findClips, decodePvr } from './formats.js';
-import { makeRig, bindPose, tPose, framePose, meshTopology, vertexWeights, posedVerts, boneNames, fitRest, vmul } from './rig.js';
+import { makeRig, bindPose, tPose, framePose, meshTopology, vertexWeights, posedVerts, boneNames, fitRest, vmul, parseBonesText, withOffsets, withRootY } from './rig.js';
 import { toObj, toUsd, toFbx, encodePng, poseMeshes } from './export.js';
 
 /* the fighters by the name the game files use (PlayerDefs, the roster) */
@@ -102,9 +102,16 @@ export async function loadFighter(src, ch) {
         if (!b) throw new Error(ch.file + ext + ' is missing');
         return b;
     };
-    const bones = parseBones(await rd('.bones'));
+    let bones = parseBones(await rd('.bones'));
     const skin = parseSkin(await rd('.skin'));
-    const anim = parseAnim(await rd('.skinanim'));
+    let anim = parseAnim(await rd('.skinanim'));
+    /* a model brought in with the proportion trick: its bone offsets and
+     * root height (<skin>.bones, modelin.js), as the game applies them */
+    const ov = parseBonesText(await src.read(ch.file + '.skin.bones'));
+    if (ov) {
+        bones = withOffsets(bones, ov);
+        anim = withRootY(anim, ov.rootY);
+    }
     const rig = makeRig(bones, skin, anim);
     const bind = bindPose(rig);
     const tpose = tPose(rig, bind.pose);

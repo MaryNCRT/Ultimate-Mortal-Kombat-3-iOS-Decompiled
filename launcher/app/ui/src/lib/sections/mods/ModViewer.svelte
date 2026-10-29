@@ -27,7 +27,8 @@
     import { stageDesc, meshsetDesc, textureFile, pngBytes, exportFiles, isPng, attachVerts } from '#lib/mods/assets.js';
     import { tuckUnder } from '#lib/mods/tuck.js';
     import { readFbx, fbxScene, fbxTakes, importAnim, rigDesc } from '#lib/mods/fbxin.js';
-    import { sheetPng, matsText } from '#lib/mods/modelin.js';
+    import { sheetPng, matsText, solidPicture, bonesText } from '#lib/mods/modelin.js';
+    import { decodePicture } from '#lib/mods/image.js';
     import { derivedModels } from '#lib/mods/derived.js';
     import { thumb, forgetThumbs, lazy } from '#lib/mods/thumbs.js';
     import ModelImport from './ModelImport.svelte';
@@ -252,7 +253,9 @@
                 const f = await fighter(item);
                 if (my !== token) return;
                 fx = f;
-                stems = [...new Set([...f.blockTex, ...f.variants])];
+                /* with a replaced model, each material's own texture too
+                 * (<skin>_M<n>), so REPLACE TEXTURE can change it */
+                stems = [...new Set([...f.blockTex, ...f.variants, ...(f.parts || []).flat().map(p => p.stem).filter(Boolean)])];
                 if (!f.variants.includes(ms.outfit)) ms.outfit = f.variants[0];
                 if (ms.clip >= f.clips.length) ms.clip = -1;
                 await buildFighter(f);
@@ -625,7 +628,7 @@
         try {
             await refreshMods();
             if (!ms.list.some(m => m.folder === name)) await api.modsCreate({ name, category: 'textures' });
-            const files = await putTexture(api, src, name, stem, got.bytes, ms.autoSmall, await textureDir(src, ms.cat, stem));
+            const files = await putTexture(api, src, name, stem, got.bytes, ms.autoSmall, await textureDir(src, ms.cat, stem), ms.autoIce);
             if (!files) { ms.error = tx('vwNotPicture'); return; }
             await refreshMods();
             forgetMod();
@@ -720,8 +723,11 @@
      * tinted as ice) */
     /* REPLACE MODEL saved: the .skin, each material's picture as its own
      * texture (<skin>_M<n>, and _M<n>_ICE for frozen), and the .mats that
-     * says which triangles each one covers (runtime/skin_mats.c). A
-     * material left on the game's texture draws with the outfit's. */
+     * says which triangles each one covers (runtime/skin_mats.c). Every
+     * part gets a texture of its own, so the model's UVs are kept and no
+     * texture the game shares with other models (derived models, other
+     * fighters) is touched: a material without a picture is its colour, one
+     * left on THE GAME'S a copy of the outfit's. */
     async function applyModel({ r, mdl }) {
         const name = target.trim() || defaultTarget();
         model = null;
@@ -735,17 +741,20 @@
             const dir = await textureDir(src, ms.cat, fx.blockTex[0]);
             const texOf = new Map();
             for (const [i, m] of mdl.materials.entries()) {
-                if (!m.image || !r.parts.some(ps => ps.some(p => p.mat === i))) continue;
+                if (!r.parts.some(ps => ps.some(p => p.mat === i))) continue;
+                const own = m.image || (m.game && await gamePicture(shownOutfit())) || solidPicture(m.color);
                 const st = (fx.ch.file + '_M' + (i + 1)).toUpperCase();
-                for (const [stem, pic] of [[st, m.image], [st + '_ICE', iced(m.image)]]) {
-                    const w = await putTexture(api, src, name, stem, await sheetPng(pic), false, dir);
-                    if (w) files.push(...w);
-                }
+                const w = await putTexture(api, src, name, st, await sheetPng(own), false, dir, true);
+                if (w) files.push(...w);
                 texOf.set(i, st + '.png');
             }
             const mats = file + '.mats';
             await api.modsPut(name, mats, matsText(r.parts, mdl, i => texOf.get(i) || '-'));
             files.push(mats);
+            /* the proportion trick's bones; without it one that changes
+             * nothing, so an earlier import's does not stay */
+            await api.modsPut(name, file + '.bones', bonesText(r.bones || { offsets: new Map(), rootY: 1 }));
+            files.push(file + '.bones');
             await refreshMods();
             forgetMod();
             forgetThumbs();
@@ -759,12 +768,16 @@
             ms.error = String(e && e.message || e);
         }
     }
-    function iced(sheet) {
-        const c = new OffscreenCanvas(sheet.width || sheet.naturalWidth, sheet.height || sheet.naturalHeight), g = c.getContext('2d');
-        g.drawImage(sheet, 0, 0);
-        g.globalCompositeOperation = 'source-atop';
-        g.fillStyle = 'rgba(170, 215, 255, .6)';
-        g.fillRect(0, 0, c.width, c.height);
+    /* a texture of the game's as a picture (PNG or PVR), or null */
+    async function gamePicture(stem) {
+        const file = stem && textureFile(src.files, stem);
+        const b = file && await src.read(file);
+        if (!b) return null;
+        if (isPng(b)) return decodePicture(b).catch(() => null);
+        const img = decodePvr(b);
+        if (!img) return null;
+        const c = new OffscreenCanvas(img.width, img.height);
+        c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(img.rgba.buffer, img.rgba.byteOffset, img.rgba.length), img.width, img.height), 0, 0);
         return c;
     }
 
@@ -990,6 +1003,7 @@
             <input class="edt" list="modnames" spellcheck="false" bind:value={target} placeholder={defaultTarget()}>
             <datalist id="modnames">{#each ms.list as m}<option value={m.folder}></option>{/each}</datalist>
             <label class="chk"><input type="checkbox" bind:checked={ms.autoSmall}><span>{tx('vwAutoSmall')}</span></label>
+            <label class="chk"><input type="checkbox" bind:checked={ms.autoIce}><span>{tx('vwAutoIce')}</span></label>
             {#if ms.kind === 'textures'}
                 <button class="btn hot" onclick={() => replaceTexture(texInfo.name)}>{tx('vwImpTex')}</button>
                 <button class="btn" onclick={toMod}>{tx('vwToMod')}</button>

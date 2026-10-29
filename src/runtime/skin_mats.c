@@ -236,3 +236,78 @@ int port_skin_mats_draw(const unsigned short *indices, long nfaces,
     glBindTexture(GL_TEXTURE_2D, tex_name);
     return 1;
 }
+
+
+/* ------------------------------------------------- the proportion trick
+ *
+ * A model brought in with KEEP PROPORTIONS (launcher modelin.js) has, beside
+ * its skin, `<skin>.bones` -- text:
+ *
+ *      rooty <scale>           the animations' root height times this
+ *      <bone> <x> <y> <z>      that bone's offset from its parent
+ *
+ * The offsets are the .bones file's own words (BONE x, y, z), which the
+ * animations turn but never change: with the model's in their place the
+ * game's moves play on its lengths. Read when the fighter's bones are
+ * (LoadAnimatedCharacter), the scale given to the palette's root
+ * (CreateMatrixPaletteForGeneratingMesh) and forgotten with the bones. */
+#define BONES_MAX 8
+static struct { const void *bones; float rooty; } g_rooty[BONES_MAX];
+
+void port_skin_bones_loaded(void *bones, const char *skinfile)
+{
+    char rel[160], path[1024], line[160];
+    BONESINFO *info = (BONESINFO *)bones;
+    FILE *f;
+    int n = 0, i;
+    float rooty = 1.0f;
+
+    if (!info || !skinfile)
+        return;
+    snprintf(rel, sizeof rel, "%s.bones", skinfile);
+    if (!mods_find(rel, path, sizeof path) || !(f = fopen(path, "r")))
+        return;
+    while (fgets(line, sizeof line, f)) {
+        int b;
+        float x, y, z;
+        if (line[0] == '#')
+            continue;
+        if (sscanf(line, "rooty %f", &x) == 1) {
+            if (x > 0.1f && x < 10.0f)
+                rooty = x;
+        } else if (sscanf(line, "%d %f %f %f", &b, &x, &y, &z) == 4
+                   && b >= 0 && b < info->numBones) {
+            info->bones[b].x = x;
+            info->bones[b].y = y;
+            info->bones[b].z = z;
+            n++;
+        }
+    }
+    fclose(f);
+    if (rooty != 1.0f)
+        for (i = 0; i < BONES_MAX; i++)
+            if (!g_rooty[i].bones) {
+                g_rooty[i].bones = bones;
+                g_rooty[i].rooty = rooty;
+                break;
+            }
+    printf("skin_mats: %s, %d bone offsets, root height x%.3f\n", rel, n,
+           (double)rooty);
+}
+
+float port_skin_root_y(const void *bones)
+{
+    int i;
+    for (i = 0; i < BONES_MAX; i++)
+        if (g_rooty[i].bones == bones)
+            return g_rooty[i].rooty;
+    return 1.0f;
+}
+
+void port_skin_bones_forget(const void *bones)
+{
+    int i;
+    for (i = 0; i < BONES_MAX; i++)
+        if (g_rooty[i].bones == bones)
+            g_rooty[i].bones = NULL;
+}

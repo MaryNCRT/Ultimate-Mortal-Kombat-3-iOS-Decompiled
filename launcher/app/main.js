@@ -588,6 +588,19 @@ ipcMain.handle('mods:cover', (_ev, folder, png) => mods.setCover(g_root, folder,
 ipcMain.handle('mods:dataRead', (_ev, folder) => mods.dataRead(g_root, folder));
 ipcMain.handle('mods:dataWrite', (_ev, folder, entries) => mods.dataWrite(g_root, folder, entries));
 ipcMain.handle('res:files', () => mods.resFiles(g_root));
+/* The stage pictures the launcher renders for STAGE SELECT (a stage the
+ * game has no CS_BG picture for), in "aditional textures/stages/<ID>.png",
+ * where the game looks for them (debug_menu.c st_thumb). */
+const stagePicDir = () => path.join(g_root, 'aditional textures', 'stages');
+ipcMain.handle('stagepics:list', () => {
+    try { return fs.readdirSync(stagePicDir()).filter(n => /\.png$/i.test(n)).map(n => n.slice(0, -4).toUpperCase()); } catch { return []; }
+});
+ipcMain.handle('stagepics:put', (_ev, id, bytes) => {
+    if (!g_root || !/^[A-Z0-9_]+$/.test(String(id)) || !(bytes instanceof Uint8Array)) return false;
+    fs.mkdirSync(stagePicDir(), { recursive: true });
+    fs.writeFileSync(path.join(stagePicDir(), id + '.png'), bytes);
+    return true;
+});
 ipcMain.handle('res:read', (_ev, rel, layer) => mods.resRead(g_root, rel, layer));
 ipcMain.handle('game:tables', () => mods.gameTables(g_root));
 /* a model or an animation from Blender, for the viewer to bring in */

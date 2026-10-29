@@ -17,6 +17,7 @@ import { hoverBlip, selectBlip, doneChord, failChord } from './sound.js';
 import { ms, MODS_TABS } from './mods/store.svelte.js';
 import { decodePvr } from './mods/formats.js';
 import { altArt } from './profileIcon.js';
+import { stagePictures } from './mods/stagepics.js';
 
 /* ------------------------------------------------------------ tables -- */
 
@@ -117,6 +118,7 @@ export const app = $state({
     pl: 1,                              /* the player KEYBOARD and GAMEPAD edit */
     waitingKey: null,                   /* the action waiting for its key */
     usingPad: false,                    /* the last input: the pad's pictures show */
+    overlay: 0,                         /* windows over the page (REPLACE MODEL's preview): the command bar hides */
     glyphs: {},
     seenPads: {}, padLooking: false,
     monitors: [],
@@ -164,6 +166,8 @@ export async function refreshRoot() {
     if (info.version)                   /* 0.1.3-beta: "0.1.3 beta" */
         app.version = info.version.replace('-', ' ');
     paintState();
+    /* the game is there: STAGE SELECT's pictures for the stages without one */
+    if (app.ready && !app.build.on) setTimeout(stagePictures, 1500);
 }
 
 export function setLang(ui) {

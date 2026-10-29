@@ -169,16 +169,17 @@ function iconData(root, i) {
     }
 }
 
-/* The second outfit's art: <NAME>_VERSUS2.pvr, as it is (the window decodes
- * it, mods/formats.js), or null -- Sonya has none. */
+/* The second outfit's art: <NAME>_VERSUS2.pvr (Sonya's is SONYA_2_VERSUS.pvr),
+ * as it is (the window decodes it, mods/formats.js), or null. */
 function iconAltData(root, i) {
     const f = ICON_FILES[i];
     if (!f) return null;
-    try {
-        return fs.readFileSync(path.join(root, 'res', 'Textures', f.replace('_VERSUS.PNG', '_VERSUS2.pvr')));
-    } catch (err) {
-        return null;
+    for (const alt of [f.replace('_VERSUS.PNG', '_VERSUS2.pvr'), f.replace('_VERSUS.PNG', '_2_VERSUS.pvr')]) {
+        try {
+            return fs.readFileSync(path.join(root, 'res', 'Textures', alt));
+        } catch (err) { /* the next name */ }
     }
+    return null;
 }
 
 module.exports = { load, update, reset, newId, cleanName, cleanColor, cleanAngle, iconData, iconAltData, ICONS, NAME_MAX };

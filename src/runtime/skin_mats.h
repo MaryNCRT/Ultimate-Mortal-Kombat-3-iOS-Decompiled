@@ -21,4 +21,12 @@ void port_skin_mats_use(const void *skin, int ice);
 int  port_skin_mats_draw(const unsigned short *indices, long nfaces,
                          unsigned tex_name);
 
+/* The proportion trick (<skin>.bones): LoadAnimatedCharacter, after the
+ * bones load, puts the model's offsets in them; the palette scales the
+ * animations' root height by port_skin_root_y (1 without); LIME_FreeBones
+ * forgets them. */
+void  port_skin_bones_loaded(void *bones, const char *skinfile);
+float port_skin_root_y(const void *bones);
+void  port_skin_bones_forget(const void *bones);
+
 #endif

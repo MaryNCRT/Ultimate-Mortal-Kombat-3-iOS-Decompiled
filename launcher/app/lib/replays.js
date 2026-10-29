@@ -8,7 +8,7 @@
  *   <root>/replays/saved/    kept for good: a recent one moved here, or one
  *                            imported from another player
  *
- * A file is "UMK3RPL3", the build, the setup's word count and words (the two
+ * A file is "UMK3RPL4" (or the older "UMK3RPL3"), the build, the setup's word count and words (the two
  * fighters first, the level sixth), the two seeds, then 120 bytes a tick.
  * The game plays one with `--replay replays/<folder>/<file>`.
  */
@@ -16,7 +16,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const MAGIC = 'UMK3RPL3';
+/* RPL4 since the rival is the one actually fought (rollback_probe.c
+ * rb_fight_rival); RPL3 files still play */
+const MAGICS = ['UMK3RPL4', 'UMK3RPL3'];
 const TICK_BYTES = 120;
 const FOLDERS = ['recent', 'saved'];
 
@@ -36,7 +38,7 @@ function readHeader(file) {
         fd = fs.openSync(file, 'r');
         const b = Buffer.alloc(16 + 4 * 24);
         const got = fs.readSync(fd, b, 0, b.length, 0);
-        if (got < 16 || b.toString('latin1', 0, 8) !== MAGIC)
+        if (got < 16 || !MAGICS.includes(b.toString('latin1', 0, 8)))
             return null;
         const n = b.readUInt32LE(12);
         if (n < 7 || n > 24 || got < 16 + 4 * n)

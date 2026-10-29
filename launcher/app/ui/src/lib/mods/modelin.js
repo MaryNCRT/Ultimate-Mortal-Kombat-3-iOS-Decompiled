@@ -2,7 +2,8 @@
  * binary, read with three.js's GLTFLoader) or an OBJ (three.js's OBJLoader)
  * becomes one description --
  *
- *   { bones: [{ name, rest }],            rest: global, 4x4 column-major
+ *   { bones: [{ name, rest, parent }],    rest: global, 4x4 column-major;
+ *                                         parent: index, -1 at the top
  *     meshes: [{ name, pos,               the vertices, in the file's space
  *                inf,                     per vertex [[bone, weight]], or null
  *                tv, tuv, tn, tm }],      per triangle: its three vertices,
@@ -23,8 +24,10 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
-import { readFbx, fbxScene, similarity, writeSkin, clusters, globalM, xform, xdir, kid, plain, I4 } from './fbxin.js';
-import { posedVerts, makeRig, meshTopology, vertexWeights } from './rig.js';
+import { readFbx, fbxScene, similarity, writeSkin, clusters, globalM, xform, xdir, kid, kids, plain, I4 } from './fbxin.js';
+import { posedVerts, makeRig, meshTopology, vertexWeights, rotBetween, vmul, tr3, localOf, withOffsets, withRootY } from './rig.js';
+export { parseBonesText } from './rig.js';
+import { mapBones } from './retarget.js';
 import { parseSkin } from './formats.js';
 import { decodePicture } from './image.js';
 
@@ -88,13 +91,22 @@ async function fbxModel(sc, beside) {
     for (const c of cl) addBone(c.bone, c.link);
     if (!bones.length)
         for (const [id, m] of sc.models) if (m.type === 'LimbNode') addBone(id, globalM(sc, id, null, memo));
+    /* each bone's parent among them (past nulls between), -1 at the top */
+    for (const [id, i] of boneOf) {
+        let p = sc.models.get(id).parent;
+        while (p !== null && p !== undefined && !boneOf.has(p)) p = sc.models.has(p) ? sc.models.get(p).parent : null;
+        bones[i].parent = p !== null && p !== undefined ? boneOf.get(p) : -1;
+    }
 
     /* a material and its diffuse picture: embedded (Video Content) or a
      * file beside the FBX */
     const materials = [], matOf = new Map();
     async function material(id) {
         if (matOf.has(id)) return matOf.get(id);
-        const m = { name: plain(sc.byId.get(id).props[1]), image: null, file: '' };
+        const node = sc.byId.get(id);
+        const dc = kids(kid(node, 'Properties70'), 'P').find(p => p.props[0] === 'DiffuseColor');
+        const m = { name: plain(node.props[1]), image: null, file: '',
+            color: dc ? dc.props.slice(4, 7).map(x => Math.round(255 * Math.min(1, Math.max(0, Number(x) || 0)))) : null };
         matOf.set(id, materials.length);
         materials.push(m);
         const link = sc.propLinks.find(l => l.parent === id && /diffuse|basecolor/i.test(l.what || ''));
@@ -245,13 +257,20 @@ async function glbModel(bytes, beside) {
             for (const b of o.skeleton.bones)
                 if (!boneOf.has(b)) { boneOf.set(b, bones.length); bones.push({ name: b.name, rest: b.matrixWorld.elements.slice() }); }
     });
+    for (const [b, i] of boneOf) {
+        let p = b.parent;
+        while (p && !boneOf.has(p)) p = p.parent;
+        bones[i].parent = p ? boneOf.get(p) : -1;
+    }
     const materials = [], matOf = new Map();
     const material = m => {
         if (!matOf.has(m)) {
             const a = gltf.parser.associations.get(m);
             const p = a && a.materials !== undefined ? matPic[a.materials] : null;
             matOf.set(m, materials.length);
+            const c = m.color ? m.color.clone().convertLinearToSRGB() : null;
             materials.push({ name: m.name || 'material' + materials.length, image: p ? p.image : null, file: p ? p.file : '',
+                color: c ? [c.r, c.g, c.b].map(x => Math.round(255 * x)) : null,
                 alpha: !!(p && p.alpha) || m.transparent || m.alphaTest > 0, set: p ? p.set : 0, xf: p ? p.xf : null });
         }
         return matOf.get(m);
@@ -371,26 +390,30 @@ async function objModel(bytes, beside) {
 /* ------------------------------------------------- onto the fighter -- */
 
 /* Where the file goes in the game's space (x_game = toGame x_file) and on
- * which of the fighter's rests: by its bones when they are the fighter's,
- * else stood on the fighter's feet at its height (the game is Y up, the
- * fighter facing +Z, as glTF and OBJ are), turned `turn` quarter turns. */
+ * which of the fighter's rests: by its bones when they are the fighter's
+ * or a humanoid rig's (retarget.js; fitted on the body's joints), else
+ * stood on the fighter's feet at its height (the game is Y up, the fighter
+ * facing +Z, as glTF and OBJ are), turned `turn` quarter turns. */
 function placeModel(f, mdl, turn) {
-    const byName = new Map(f.names.map((n, i) => [n.toLowerCase(), i]));
-    const restOf = new Map();
-    mdl.bones.forEach((b, i) => {
-        const g = byName.get(String(b.name).toLowerCase());
-        if (g !== undefined && !restOf.has(g)) restOf.set(g, i);
-    });
-    if (restOf.size >= 3) {
+    const map = mapBones(f, mdl);
+    if (map) {
         let best = null;
         for (const [kind, pose] of [['tpose', f.tpose], ['bind', f.bind.pose]]) {
             if (!pose) continue;
-            const P = [], Q = [], W = [];
-            for (const [g, i] of restOf) { const m = mdl.bones[i].rest; P.push(...pose[g].T); Q.push(m[12], m[13], m[14]); W.push(1); }
-            const s = similarity(P, Q, W);
-            if (!best || s.err < best.s.err) best = { kind, pose, s };
+            for (const core of [true, false]) {
+                const P = [], Q = [], W = [];
+                for (const [g, i] of map.prim) {
+                    if (core && !map.core(g)) continue;
+                    const m = mdl.bones[i].rest;
+                    P.push(...pose[g].T); Q.push(m[12], m[13], m[14]); W.push(1);
+                }
+                if (W.length < 3) continue;
+                const s = similarity(P, Q, W);
+                if (!best || s.err < best.s.err) best = { kind, pose, s };
+                break;
+            }
         }
-        return { toGame: best.s.Ginv, kind: best.kind, rest: best.pose, matched: restOf.size, byFile: mdl.bones.map(b => byName.get(String(b.name).toLowerCase()) ?? -1) };
+        if (best) return { toGame: best.s.Ginv, kind: best.kind, rest: best.pose, matched: map.prim.size, byFile: map.byFile, map };
     }
     const rest = f.tpose || f.bind.pose;
     const gp = posedVerts(f.rig, f.topo, rest);
@@ -412,7 +435,124 @@ function placeModel(f, mdl, turn) {
     const at = [(g.lo[0] + g.hi[0]) / 2 - k * (b.lo[0] + b.hi[0]) / 2, g.lo[1] - k * b.lo[1], (g.lo[2] + g.hi[2]) / 2 - k * (b.lo[2] + b.hi[2]) / 2];
     const toGame = R.map((x, i) => (i % 4 !== 3 && i < 12 ? x * k : x));
     toGame[12] = at[0]; toGame[13] = at[1]; toGame[14] = at[2];
-    return { toGame, kind: f.tpose ? 'tpose' : 'bind', rest, matched: 0, byFile: mdl.bones.map(() => -1) };
+    return { toGame, kind: f.tpose ? 'tpose' : 'bind', rest, matched: 0, byFile: mdl.bones.map(() => -1), map: null };
+}
+
+/* the file's joints in the game's space, per fighter bone */
+function fileJoints(mdl, place) {
+    const J = new Map();
+    for (const [g, i] of place.map.prim) {
+        const m = mdl.bones[i].rest;
+        J.set(g, xform(place.toGame, [m[12], m[13], m[14]]));
+    }
+    return J;
+}
+
+const vsub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const vlen = a => Math.hypot(a[0], a[1], a[2]);
+const I3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+
+/* RETARGET (FIT TO THE FIGHTER): the model brought to the fighter's own
+ * rest, bone by bone. Each fighter bone with a joint in the file takes the
+ * file's segment (its joint to the next one's) onto its own: turned to
+ * point the same way and stretched along it to the same length, so the
+ * model fits the bones the game's animations were made for. An end bone
+ * (hand, head, toe) turns with the bone it hangs from. A vertex is moved by
+ * its weights, as a skin moves it. */
+function conformers(f, mdl, place) {
+    const J = fileJoints(mdl, place), rest = place.rest, out = new Map();
+    for (const [g, Pf] of J) {
+        const c = (place.map.link.get(g) || { child: -1 }).child;
+        const Pg = rest[g].T;
+        if (c >= 0 && J.has(c)) {
+            const df = vsub(J.get(c), Pf), dg = vsub(rest[c].T, Pg);
+            const lf = vlen(df), lg = vlen(dg);
+            if (lf > 1e-6 && lg > 1e-6) {
+                out.set(g, { Pf, Pg, R: rotBetween(df, dg), ax: dg.map(x => x / lg), s: Math.min(2, Math.max(0.5, lg / lf)) });
+                continue;
+            }
+        }
+        out.set(g, { Pf, Pg, R: null, ax: null, s: 1 });
+    }
+    for (const [g, c] of out)
+        if (!c.R) {
+            const fr = (place.map.link.get(g) || { from: -1 }).from;
+            c.R = (fr >= 0 && out.get(fr) && out.get(fr).R) || I3;
+        }
+    return out;
+}
+function conformPoint(conf, p, inf) {
+    let sw = 0;
+    const o = [0, 0, 0];
+    for (const [g, w] of inf) {
+        const c = conf.get(g);
+        let q = p;
+        if (c) {
+            const d = vmul(vsub(p, c.Pf), c.R);
+            if (c.ax) {
+                const along = (c.s - 1) * (d[0] * c.ax[0] + d[1] * c.ax[1] + d[2] * c.ax[2]);
+                for (let k = 0; k < 3; k++) d[k] += along * c.ax[k];
+            }
+            q = [c.Pg[0] + d[0], c.Pg[1] + d[1], c.Pg[2] + d[2]];
+        }
+        for (let k = 0; k < 3; k++) o[k] += w * q[k];
+        sw += w;
+    }
+    return sw > 0 ? o.map(x => x / sw) : p;
+}
+function conformDir(conf, n, inf) {
+    const o = [0, 0, 0];
+    for (const [g, w] of inf) {
+        const c = conf.get(g);
+        const q = c ? vmul(n, c.R) : n;
+        for (let k = 0; k < 3; k++) o[k] += w * q[k];
+    }
+    return o;
+}
+
+/* PROPORTION TRICK (KEEP THE MODEL'S PROPORTIONS): the model is left as it
+ * is and the fighter's bones are moved to its joints instead -- each bone's
+ * offset from its parent (the .bones file's, which the game's animations
+ * turn but never change) becomes the model's, written beside the skin as
+ * <skin>.bones (runtime/skin_mats.c reads it). The game's animations then
+ * play on the model's own lengths: long legs stay long. The root's height
+ * in the animations is scaled by the model's hips over the fighter's, so
+ * the feet stay on the floor. Returns the rest to bind to and the
+ * override. */
+function proportions(f, mdl, place) {
+    const J = fileJoints(mdl, place), rest = place.rest, bones = f.rig.bones;
+    /* the root's height, as the game scales the animations' (about y 0,
+     * the floor the fighters stand on): the model's hips over the
+     * fighter's */
+    const hips = f.names.indexOf('hips');
+    let rootY = 1;
+    if (hips >= 0 && J.has(hips) && rest[hips].T[1] > 1e-3 && J.get(hips)[1] > 1e-3)
+        rootY = Math.min(3, Math.max(0.3, J.get(hips)[1] / rest[hips].T[1]));
+    const out = new Array(bones.num), offs = new Map();
+    const walk = i => {
+        const p = bones.parent[i];
+        if (p < 0) out[i] = { R: rest[i].R, T: [rest[i].T[0], rest[i].T[1] * rootY, rest[i].T[2]] };
+        else {
+            let T;
+            if (J.has(i)) T = J.get(i);
+            else {
+                const v = vmul(localOf(rest, bones, i).T, rest[p].R);
+                T = [out[p].T[0] + v[0], out[p].T[1] + v[1], out[p].T[2] + v[2]];
+            }
+            out[i] = { R: rest[i].R, T };
+            if (J.has(i)) offs.set(i, vmul(vsub(T, out[p].T), tr3(rest[p].R)));
+        }
+        for (const c of bones.children[i]) walk(c);
+    };
+    walk(bones.root);
+    return { rest: out, bones: { offsets: offs, rootY } };
+}
+
+/* <skin>.bones: a comment, `rooty <scale>`, then `<bone> <x> <y> <z>` a line */
+export function bonesText(ov) {
+    const lines = ["# bone x y z: the model's offsets from the parent (REPLACE MODEL, proportion trick)", 'rooty ' + ov.rootY.toFixed(5)];
+    for (const [i, v] of [...ov.offsets].sort((a, b) => a[0] - b[0])) lines.push([i, ...v.map(x => x.toFixed(5))].join(' '));
+    return new TextEncoder().encode(lines.join('\n') + '\n');
 }
 
 /* Each bone the fighter has, as segments from its joint to its children's:
@@ -446,13 +586,21 @@ function autoWeights(f, rest, p) {
 
 /* The description as the fighter's .skin.
  *   o.turn       quarter turns, for a file without the fighter's bones
+ *   o.keep       a humanoid rig: keep the model's proportions (the
+ *                proportion trick) instead of fitting it to the fighter's
  *   o.blockOf    per material, the fighter's block it goes to (default:
  *                one each in order, the rest sharing the last)
  * Returns { bytes, verts, tris, kind, matched, of, auto (vertices weighted
- * here), parts: per block, its runs of triangles [{ mat, first, count }] }. */
+ * here), parts: per block, its runs of triangles [{ mat, first, count }],
+ * rig ('names', 'humanoid' or ''), bones (the proportion trick's override,
+ * for <skin>.bones, or null) }. */
 export function buildSkin(f, mdl, o = {}) {
     const nblocks = f.rig.skin.length;
     const place = placeModel(f, mdl, o.turn || 0);
+    const human = place.map && place.map.kind === 'humanoid';
+    const prop = human && o.keep ? proportions(f, mdl, place) : null;
+    const conf = human && !o.keep ? conformers(f, mdl, place) : null;
+    const bindRest = prop ? prop.rest : place.rest;
     const blockOf = mdl.materials.map((_, i) => (o.blockOf && o.blockOf[i] !== undefined ? o.blockOf[i] : Math.min(i, nblocks - 1)));
 
     /* a block's triangles, per material, put in a row at the end */
@@ -462,10 +610,15 @@ export function buildSkin(f, mdl, o = {}) {
         const nv = m.pos.length / 3;
         const gpos = [], ginf = [];
         for (let v = 0; v < nv; v++) {
-            const p = xform(place.toGame, [m.pos[v * 3], m.pos[v * 3 + 1], m.pos[v * 3 + 2]]);
+            let p = xform(place.toGame, [m.pos[v * 3], m.pos[v * 3 + 1], m.pos[v * 3 + 2]]);
+            /* the file's weights on the fighter's bones, those that land on
+             * the same bone summed */
+            const sum = new Map();
+            if (m.inf) for (const [b, w] of m.inf[v]) { const g = place.byFile[b]; if (g >= 0) sum.set(g, (sum.get(g) || 0) + w); }
+            let l = [...sum];
+            if (!l.length) { l = autoWeights(f, bindRest, p); auto++; }
+            else if (conf) p = conformPoint(conf, p, l);
             gpos.push(p);
-            let l = m.inf ? m.inf[v].map(([b, w]) => [place.byFile[b], w]).filter(([b]) => b >= 0) : [];
-            if (!l.length) { l = autoWeights(f, place.rest, p); auto++; }
             ginf.push(l);
         }
         const nt = m.tm.length;
@@ -481,7 +634,8 @@ export function buildSkin(f, mdl, o = {}) {
                     blk.map.set(key, oi);
                     blk.verts.push({ p, n: [0, 0, 0], inf: ginf[v] });
                 }
-                const n = m.tn ? xdir(place.toGame, [m.tn[k * 3], m.tn[k * 3 + 1], m.tn[k * 3 + 2]]) : null;
+                let n = m.tn ? xdir(place.toGame, [m.tn[k * 3], m.tn[k * 3 + 1], m.tn[k * 3 + 2]]) : null;
+                if (n && conf) n = conformDir(conf, n, ginf[v]);
                 if (n) for (let q = 0; q < 3; q++) blk.verts[oi].n[q] += n[q];
                 tri.push({ o: oi, uv: [m.tuv[k * 2], m.tuv[k * 2 + 1]] });
             }
@@ -511,14 +665,15 @@ export function buildSkin(f, mdl, o = {}) {
     /* the game draws every block: an empty one keeps one invisible triangle */
     for (const b of blocks)
         if (!b.tris.length) {
-            const p = place.rest[f.rig.bones.root].T;
+            const p = bindRest[f.rig.bones.root].T;
             b.verts.push({ p, n: [0, 1, 0], inf: [[f.rig.bones.root, 1]] });
             b.tris.push([0, 0, 0].map(() => ({ o: 0, uv: [0, 0] })));
         }
     return {
-        bytes: writeSkin(blocks, place.rest, f.rig.skin.counted !== false),
+        bytes: writeSkin(blocks, bindRest, f.rig.skin.counted !== false),
         verts: blocks.reduce((s, b) => s + b.verts.length, 0), tris: blocks.reduce((s, b) => s + b.tris.length, 0),
         kind: place.kind, matched: place.matched, of: f.names.length, auto, parts,
+        rig: place.map ? place.map.kind : '', bones: prop ? prop.bones : null,
     };
 }
 
@@ -533,11 +688,23 @@ export function matsText(parts, mdl, texFile) {
     return new TextEncoder().encode(lines.join('\n') + '\n');
 }
 
-/* the fighter with another .skin: the same bones and animations */
-export function withSkin(f, bytes) {
-    const rig = makeRig(f.rig.bones, parseSkin(bytes), f.rig.anim);
+/* the fighter with another .skin: the same bones and animations, or with
+ * the proportion trick's offsets (`ov`, buildSkin's bones) */
+export function withSkin(f, bytes, ov) {
+    const rig = makeRig(ov ? withOffsets(f.rig.bones, ov) : f.rig.bones, parseSkin(bytes), ov ? withRootY(f.rig.anim, ov.rootY) : f.rig.anim);
     const topo = meshTopology(rig);
     return { ...f, rig, topo, weights: vertexWeights(rig, topo), fitted: null };
+}
+
+/* A material with no picture of its own: its colour (the file's, else a
+ * grey) as a small picture, so the part has a texture of its own and never
+ * draws with one the game shares with other models. */
+export function solidPicture(color) {
+    const c = new OffscreenCanvas(8, 8), g = c.getContext('2d');
+    const [r, gr, b] = color || [180, 180, 180];
+    g.fillStyle = 'rgb(' + r + ',' + gr + ',' + b + ')';
+    g.fillRect(0, 0, 8, 8);
+    return c;
 }
 
 /* a picture as PNG bytes */

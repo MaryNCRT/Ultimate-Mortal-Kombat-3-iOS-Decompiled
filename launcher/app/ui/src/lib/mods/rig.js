@@ -75,7 +75,7 @@ const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
 /* the row-vector rotation taking direction u onto v */
-function rotBetween(u, v) {
+export function rotBetween(u, v) {
     u = norm(u); v = norm(v);
     const c = dot(u, v);
     let ax = cross(u, v);
@@ -656,3 +656,32 @@ export function fitRest(rig, topo, weights, rest, sample = 48) {
     }
     return out;
 }
+
+/* ------------------------------------------- the proportion trick -- */
+
+/* the .bones with a model's offsets, and the animations' root height
+ * scaled (what runtime/skin_mats.c does in the game; modelin.js writes them) */
+export function withOffsets(bones, ov) {
+    const offset = Float32Array.from(bones.offset);
+    for (const [i, v] of ov.offsets) if (i < bones.num) offset.set(v, i * 3);
+    return { ...bones, offset };
+}
+export function withRootY(anim, k) {
+    if (!k || k === 1) return anim;
+    const root = Float32Array.from(anim.root);
+    for (let i = 1; i < root.length; i += 3) root[i] *= k;
+    return { ...anim, root };
+}
+/* <skin>.bones read back: { offsets, rootY } or null */
+export function parseBonesText(bytes) {
+    if (!bytes) return null;
+    const ov = { offsets: new Map(), rootY: 1 };
+    for (const line of new TextDecoder().decode(bytes).split(/\r?\n/)) {
+        const w = line.trim().split(/\s+/);
+        if (!w[0] || w[0].startsWith('#')) continue;
+        if (w[0] === 'rooty') ov.rootY = Number(w[1]) || 1;
+        else if (w.length >= 4) ov.offsets.set(Number(w[0]), [Number(w[1]), Number(w[2]), Number(w[3])]);
+    }
+    return ov;
+}
+

@@ -506,6 +506,12 @@ void MatrixIdentity2(SKINMATRIX43 *m)
 }
 
 
+/* Port, not in the binary: the proportion trick (runtime/skin_mats.c) --
+ * the animations' root height scaled for a model with its own bone
+ * lengths, and told when the bones go. NULL until set. */
+float (*lime_port_root_y)(const void *bones);
+void (*lime_port_bones_freed)(const void *bones);
+
 /* --------------------------------------------------------- LIME_FreeBones
  *
  * armv6 0x00083644, 24 bytes.
@@ -520,6 +526,8 @@ void LIME_FreeBones(BONESINFO *info)
 {
     if (info == NULL)
         return;
+    if (lime_port_bones_freed)           /* port: skin_mats.c */
+        lime_port_bones_freed(info);
     limeFree(info->bones);
     limeFree(info);
 }
@@ -1163,6 +1171,8 @@ void CreateMatrixPaletteForGeneratingMesh(char *data, long stride,
                     DecompAnimFrames1, &Root_Trans1, bones->numBones);
 
     LerpVector3(&Root_Trans1, &Root_Trans0, t, &Root_Trans0);
+    if (lime_port_root_y)               /* port: the proportion trick */
+        Root_Trans0.y *= lime_port_root_y(bones);
 
     for (i = 0; i < bones->numBones; i++)
         GetSlerpedQ(&DecompAnimFrames0[i], &DecompAnimFrames1[i], t,

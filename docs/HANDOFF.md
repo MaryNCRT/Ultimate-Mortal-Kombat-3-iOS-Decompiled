@@ -5,6 +5,70 @@
 
 ---
 
+## After 0.1.13, second round: retarget, proportion trick, own materials, stage pictures, replay fixes (2026-10-29, not released)
+
+Branch `claude/viewer-tabs`. Built into
+`WORK\release-0.1.12\UMK3-PC-0.1.12-beta` for Mary to try; **not played
+yet**. Asked by Mary after trying the first round:
+
+- **Replays were not recorded right and did not show in the launcher.**
+  Two causes, found in her logs and files:
+  - Arcade's rival still changed after Task_GameInit step 42 (her
+    `20261029-162545_liukang_vs_stryker.umkr` keeps Stryker, 5, in its
+    setup, and the log loads LIUKANG vs KITANA, 15). `rb_fight_rival` is
+    now also called at step 48 with `PLAYER2MODEL`, right before
+    `LoadLevelCharacters`: the recording keeps (and is named after) the
+    rival loaded; a replay puts it back there.
+  - The launcher's REPLAYS page accepted only `UMK3RPL3` files; every
+    recording since the rival fix is `UMK3RPL4` (`lib/replays.js`).
+- **Replay HIDE is a toggle**: the click that hid the player also brought
+  it back on release (it only stayed hidden while held). Now a new click
+  is needed (`game_main.c`, `g_rp_hide_wait`).
+- **STAGE SELECT**: smaller buttons that no longer cover the names, a
+  RANDOM button, and a picture for every stage: `STAGE_<SCENE>.PNG` (a mod
+  or res, for pictures added later), else the game's CS_BG sheet, else the
+  stage **rendered by the launcher** (`mods/stagepics.js`, once per stage
+  into `aditional textures/stages/<SCENE>.png`, when the game is ready),
+  else one drawn in the game (a gradient with the name).
+- **REPLACE MODEL**:
+  - The bar at the foot (Enter / Esc / F11) no longer shows over the
+    preview window (`app.overlay`).
+  - **Every material gets its own texture** (`<skin>_M<n>`, and its
+    `_ICE`): a material with no picture is its colour (FBX DiffuseColor,
+    GLB baseColor, else grey); THE GAME'S is a copy of the outfit's. So the
+    model's UVs are kept and no texture other models share is touched
+    (Mary's Sonya mod had turned other models black; the cause was not
+    found in the game's draw code, this removes any shared texture from
+    the path).
+  - The materials' textures are listed in REPLACE TEXTURE after the model
+    is saved.
+  - **Humanoid retarget** (`mods/retarget.js`): the file's bones are known
+    by name from Mixamo, AccuRig / Character Creator (`CC_Base_*`),
+    ValveBiped, 3ds Max Biped, Unreal, Unity / VRM, Blender / Rigify and
+    Daz, and the file's **own weights** move the model on the fighter's
+    bones (twist and helper bones with their limb, fingers with the hand,
+    the rest with the nearest bone above). The placement is fitted on the
+    body's joints (not the arms: T or A pose). Two ways, chosen in the
+    preview: FIT TO THE FIGHTER (each part turned and stretched to its
+    bone) or KEEP PROPORTIONS -- the **proportion trick**: the fighter's
+    bone offsets become the model's, written as `<skin>.bones`; the game
+    puts them in the bones it loads (`skin_mats.c`
+    `port_skin_bones_loaded`) and scales the animations' root height
+    (`lime_port_root_y` in `CreateMatrixPaletteForGeneratingMesh`), and the
+    viewer reads them the same (`assets.js`).
+- **Frozen copies of custom textures**: REPLACE TEXTURE (viewer, editor,
+  TEXTURES) writes `<stem>_ICE` too when the game has one (a fighter's
+  `_DIFFUSE_ICE`) or it is a replaced model's material, as the game's are
+  made: brightness on pale blue (blue 255, red 113 + 0.55 L, green
+  205 + 0.19 L, measured on four fighters). A box turns it off.
+- **Sonya's second outfit picture** is `SONYA_2_VERSUS.pvr` (the others
+  `<NAME>_VERSUS2.pvr`): the profile icon finds it, in the launcher and
+  the game.
+
+Checked here: the C files pass `gcc -fsyntax-only`; the launcher UI
+builds; the bone roles were checked on 40 names from those rigs. Not
+checked: any of it in the game or with a real Mixamo/AccuRig/Valve file.
+
 ## After 0.1.13: model viewer, REPLACE MODEL (FBX/GLB/OBJ, a texture per material), replays, VSYNC (2026-10-29, not released)
 
 Branch `claude/viewer-tabs`. **Nothing here has been built into a game exe

@@ -449,6 +449,7 @@ static long g_fight_p1 = -1, g_fight_p2 = -1, g_fight_stage = 0;
 static int  g_rp_hover = -1;            /* REPLAYS: the button under the mouse */
 static int  g_rp_hidden;                /* REPLAYS: HIDE, the fight alone */
 static int  g_rp_hint;                  /* frames left of the "how back" line */
+static int  g_rp_hide_wait;             /* HIDE: the click that hid it still down */
 static int  g_quit_now;                 /* REPLAYS: the player's X */
 static int  g_fight_override;           /* Character2Override is ours */
 extern int  DbgPalette[2], DbgFightActive;      /* runtime/debug_menu.c */
@@ -3151,14 +3152,22 @@ int main(int argc, char **argv)
                 stage_menu_mouse(tx / g_virt_w, ty / g_virt_h,
                                  plat_mouse(&mx, &my) && g_ntaps == 0);
             else if (rp_playing() && !dbg_menu_is_open() && g_rp_hidden) {
-                /* HIDE: a click anywhere has the player back */
+                /* HIDE: a click anywhere has the player back -- a new one:
+                 * the click that hid it is let go first (a toggle, not a
+                 * button held down) */
                 static int was;
                 int now = plat_mouse(&mx, &my) && g_ntaps == 0;
 
                 g_rp_hover = -1;
-                if (was && !now)
-                    g_rp_hidden = 0;
-                was = now;
+                if (g_rp_hide_wait) {
+                    if (!now)
+                        g_rp_hide_wait = 0;
+                    was = 0;
+                } else {
+                    if (was && !now)
+                        g_rp_hidden = 0;
+                    was = now;
+                }
             }
             else if (rp_playing() && !dbg_menu_is_open()) {     /* the replay's panel */
                 const char *labels[16];
@@ -3169,6 +3178,7 @@ int main(int argc, char **argv)
                 r = rp_ui(g_rp_hover, at, plat_mouse(&mx, &my) && g_ntaps == 0);
                 if (r == RPB_HIDE) {
                     g_rp_hidden = 1;
+                    g_rp_hide_wait = 1;
                     g_rp_hint = 180;
                 } else if (r == RPB_SIZE) {
                     dbg_replay_size();
