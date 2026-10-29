@@ -356,6 +356,7 @@ static void to_layout(vk_image *im, VkImageLayout l)
 /* ------------------------------------------------------------ the frame */
 
 static int recreate_swapchain(void);
+static int g_made_vsync = 1;          /* the chain's VSYNC (rgl_vsync) */
 static void end_pass(void);
 
 static void cmd_begin(void)
@@ -423,7 +424,8 @@ static void frame_begin(void)
     /* against the window's size when the chain was made, not the chain's
      * own: the surface can give an extent a pixel off the window's, and the
      * chain was then made again every frame */
-    if (w > 0 && h > 0 && (g_need_resize || !g_swap || w != g_made_w || h != g_made_h))
+    if (w > 0 && h > 0 && (g_need_resize || !g_swap || w != g_made_w || h != g_made_h
+                           || g_made_vsync != rgl_vsync))
         recreate_swapchain();
     if (!g_swap)                        /* none for now: tried next frame */
         return;
@@ -469,7 +471,7 @@ static void present(void)
     VkResult r;
     int k, n = rgl_swap_interval < 1 ? 1 : rgl_swap_interval > 4 ? 4 : rgl_swap_interval;
 
-    if (!g_hold.img)
+    if (!g_hold.img || !rgl_vsync)
         n = 1;
     for (k = 0; k < n; k++) {
         frame_begin();
@@ -687,6 +689,19 @@ static int recreate_swapchain(void)
                       ? VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR : (VkCompositeAlphaFlagBitsKHR)
                         (caps.supportedCompositeAlpha & -caps.supportedCompositeAlpha);
     si.presentMode = VK_PRESENT_MODE_FIFO_KHR;     /* every driver has it: vsync */
+    if (!rgl_vsync) {                   /* VSYNC off: mailbox, else immediate */
+        VkPresentModeKHR modes[16];
+        uint32_t nm = 16, k;
+        int best = -1;
+        if (vkGetPhysicalDeviceSurfacePresentModesKHR(g_gpu, g_surf, &nm, modes) >= 0)
+            for (k = 0; k < nm; k++) {
+                if (modes[k] == VK_PRESENT_MODE_MAILBOX_KHR) best = 0;
+                else if (modes[k] == VK_PRESENT_MODE_IMMEDIATE_KHR && best < 0) best = 1;
+            }
+        if (best >= 0)
+            si.presentMode = best == 0 ? VK_PRESENT_MODE_MAILBOX_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
+    }
+    g_made_vsync = rgl_vsync;
     si.clipped = VK_TRUE;
     si.oldSwapchain = old;
     /* the old chain is retired even when the new one fails: then there is

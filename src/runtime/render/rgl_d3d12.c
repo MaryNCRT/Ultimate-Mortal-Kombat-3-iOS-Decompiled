@@ -1436,8 +1436,8 @@ static void dx_present(void)
     frame_begin();
     to_state(&g_back[g_bi], D3D12_RESOURCE_STATE_PRESENT);
     flush();
-    IDXGISwapChain3_Present(g_swap, rgl_swap_interval < 1 ? 1 : rgl_swap_interval > 4 ? 4
-                                    : (UINT)rgl_swap_interval, 0);
+    IDXGISwapChain3_Present(g_swap, !rgl_vsync ? 0 : rgl_swap_interval < 1 ? 1
+                                    : rgl_swap_interval > 4 ? 4 : (UINT)rgl_swap_interval, 0);
     wait_gpu();
     g_bi = IDXGISwapChain3_GetCurrentBackBufferIndex(g_swap);
     g_bound_target = -1;

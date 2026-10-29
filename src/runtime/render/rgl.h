@@ -38,6 +38,9 @@ void rgl_present(void);                    /* the frame to the screen */
 /* Refreshes each present stays on the screen: 1, or 2/3/4 on a 120/180/240 Hz
  * screen, so every 60 Hz frame shows for the same time (game_main.c). */
 extern int rgl_swap_interval;
+/* VSYNC (umk3.ini vsync=0/1, the options menu): 0 presents without waiting
+ * for the refresh. Read every present, so it changes at once. */
+extern int rgl_vsync;
 
 /* COMPILE SHADERS (the launcher's PLAY): every pipeline a backend has made is
  * a line in a file in the game's folder, made again when the backend opens --
