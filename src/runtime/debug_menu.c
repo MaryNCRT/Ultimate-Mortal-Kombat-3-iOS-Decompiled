@@ -1737,15 +1737,68 @@ static void rp_layout(float w, float x[RPB_COUNT], float bw[RPB_COUNT])
     x[RPB_SETTINGS] = w * 0.96f - RPP_BTN_W;
 }
 
+/* The top corners: the REPLAYS button on the left, the X on the right;
+ * the list hangs under the button. */
+#define RPT_BTN_Y  4.0f
+#define RPT_BTN_H  20.0f
+#define RPT_LIST_W 84.0f
+#define RPT_X_W    24.0f
+#define RL_TOP     34.0f
+#define RL_W       230.0f
+#define RL_ROW     14.0f
+#define RL_HEAD    13.0f
+#define RL_MAX     16
+
+/* Where the list's rows are: their tops in `y`, the two headings' in `h`
+ * (h[2]: the box's bottom); an empty part has one "NONE" row, not counted. */
+static void rl_layout(int n, int n_recent, float *y, float h[3])
+{
+    float at = RL_TOP + 5;
+    int i;
+
+    h[0] = at;
+    at += RL_HEAD;
+    for (i = 0; i < n_recent; i++, at += RL_ROW)
+        y[i] = at;
+    if (!n_recent)
+        at += RL_ROW;
+    at += 4;
+    h[1] = at;
+    at += RL_HEAD;
+    for (; i < n; i++, at += RL_ROW)
+        y[i] = at;
+    if (n == n_recent)
+        at += RL_ROW;
+    h[2] = at + 4;
+}
+
 /* The button under (fx, fy), fractions of the view, -1 for none, RPB_BAR on
- * the bar; `at` is where along the bar, 0..1, wherever the mouse is. */
-int dbg_replay_hit(float fx, float fy, float *at)
+ * the bar, RPB_ROW + i on the open list's row i (`list_n` rows, the first
+ * `n_recent` the recent ones; 0 when it is closed); `at` is where along the
+ * bar, 0..1, wherever the mouse is. */
+int dbg_replay_hit(float fx, float fy, float *at, int list_n, int n_recent)
 {
     float x[RPB_COUNT], bw[RPB_COUNT], w = g_rp_w;
     float px = fx * w, py = fy * 320.0f, b0 = w * 0.04f, b1 = w * 0.96f;
+    float ry[RL_MAX], rh[3];
     int i;
 
     *at = (px - b0) / (b1 - b0);
+    if (py >= RPT_BTN_Y && py <= RPT_BTN_Y + RPT_BTN_H) {
+        if (px >= b0 && px <= b0 + RPT_LIST_W)
+            return RPB_LIST;
+        if (px >= b1 - RPT_X_W && px <= b1)
+            return RPB_CLOSE;
+    }
+    if (list_n > 0) {
+        if (list_n > RL_MAX)
+            list_n = RL_MAX;
+        rl_layout(list_n, n_recent, ry, rh);
+        if (px >= b0 && px <= b0 + RL_W)
+            for (i = 0; i < list_n; i++)
+                if (py >= ry[i] && py < ry[i] + RL_ROW)
+                    return RPB_ROW + i;
+    }
     if (py >= RPP_BAR_Y - 7 && py <= RPP_BAR_Y + RPP_BAR_H + 7
         && px >= b0 - 6 && px <= b1 + 6)
         return RPB_BAR;
@@ -1854,6 +1907,22 @@ static void rp_icon(int id, float cx, float cy, int paused)
         rect(cx - 5, cy - 1, 10, 2);
         rect(cx - 1, cy - 5, 2, 10);
         break;
+    case RPB_LIST:                      /* a list: dots and lines */
+        for (t = cy - 5; t < cy + 6; t += 4) {
+            rect(cx - 6, t, 2, 2);
+            rect(cx - 2, t, 8, 2);
+        }
+        break;
+    case RPB_CLOSE:                     /* an X: two bars across */
+        glVertex2f(cx - 6, cy - 5);
+        glVertex2f(cx - 4.5f, cy - 6.5f);
+        glVertex2f(cx + 6, cy + 5);
+        glVertex2f(cx + 4.5f, cy + 6.5f);
+        glVertex2f(cx + 4.5f, cy - 6.5f);
+        glVertex2f(cx + 6, cy - 5);
+        glVertex2f(cx - 4.5f, cy + 6.5f);
+        glVertex2f(cx - 6, cy + 5);
+        break;
     case RPB_SETTINGS:                  /* the menu's three lines */
         rect(cx - 6, cy - 5, 12, 2);
         rect(cx - 6, cy - 1, 12, 2);
@@ -1863,8 +1932,12 @@ static void rp_icon(int id, float cx, float cy, int paused)
 }
 
 /* `at` how far the fight is, 0..1; `time` its clock; `state` rp_info's;
- * `hover` the button under the mouse, -1 none. */
-void dbg_replay_draw(float at, const char *time, int state, int hover)
+ * `hover` the button under the mouse, -1 none; `title` the replay's name;
+ * the list's `list_n` labels (-1 while it is closed), the first `n_recent`
+ * the last fights, `current` the one playing. */
+void dbg_replay_draw(float at, const char *time, int state, int hover,
+                     const char *title, const char *const *labels, int list_n,
+                     int n_recent, int current)
 {
     static const float veil0[4] = { 0.086f, 0.078f, 0.26f, 0.88f };
     static const float veil1[4] = { 0.031f, 0.027f, 0.12f, 0.93f };
@@ -1889,20 +1962,22 @@ void dbg_replay_draw(float at, const char *time, int state, int hover)
     vgrad(0, RPP_TOP, w, 320.0f - RPP_TOP, veil0, veil1);
     rule(0, RPP_TOP, w, 0.84f, 0.86f, 1.0f, 0.5f);
 
-    /* the status line: REPLAY and the clock on the left, what it is doing
-     * on the right, a warning in the middle when it differs */
+    /* the status line: the replay's name and the clock on the left, what it
+     * is doing on the right, a warning before it when it differs */
+    if (!title || !*title)
+        title = "REPLAY";
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-    text(b0, RPP_TEXT, 1.0f, "REPLAY");
+    text(b0, RPP_TEXT, 1.0f, title);
     glColor4f(0.70f, 0.67f, 0.95f, 1.0f);
-    text(b0 + 7 * CH_W, RPP_TEXT, 1.0f, time);
+    text(b0 + ((float)strlen(title) + 2) * CH_W, RPP_TEXT, 1.0f, time);
     what = state & RPS_SEEKING ? "SEEKING" : state & RPS_END ? "END"
          : state & RPS_PAUSED ? "PAUSED" : "PLAYING";
     glColor4f(0.62f, 0.6f, 0.85f, 1.0f);
     text(b1 - (float)strlen(what) * CH_W, RPP_TEXT, 1.0f, what);
     if (state & RPS_DIFFERS) {
-        const char *d = "DIFFERS FROM THE RECORDING - SEE THE LOG";
+        const char *d = "DIFFERS - SEE THE LOG";
         glColor4f(1.0f, 0.45f, 0.5f, 1.0f);
-        text(w / 2 - (float)strlen(d) * CH_W / 2, RPP_TEXT, 1.0f, d);
+        text(b1 - ((float)strlen(what) + 2 + (float)strlen(d)) * CH_W, RPP_TEXT, 1.0f, d);
     }
 
     /* the bar: a well, the part played lit, a knob where the fight is */
@@ -1956,6 +2031,63 @@ void dbg_replay_draw(float at, const char *time, int state, int hover)
         frame_rect(tx, RPP_TOP - 18, tw, 14, 0.75f);
         glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
         text(tx + 5, RPP_TOP - 15, 1.0f, tip);
+    }
+
+    /* the top corners: REPLAYS (the list) and the X, with nothing between
+     * them, so the health bars stay in sight */
+    for (i = 0; i < 2; i++) {
+        int id = i ? RPB_CLOSE : RPB_LIST, on = hover == id || (!i && list_n >= 0);
+        float bx = i ? b1 - RPT_X_W : b0, bwid = i ? RPT_X_W : RPT_LIST_W;
+
+        if (hover == id) {
+            glColor4f(i ? 1.0f : 0.67f, i ? 0.4f : 0.63f, i ? 0.45f : 1.0f, 0.35f);
+            rect(bx - 2, RPT_BTN_Y - 2, bwid + 4, RPT_BTN_H + 4);
+        }
+        vgrad(bx, RPT_BTN_Y, bwid, RPT_BTN_H, on && !i ? hot0 : btn0, on && !i ? hot1 : btn1);
+        glColor4f(1.0f, 1.0f, 1.0f, 0.07f);
+        rect(bx, RPT_BTN_Y, bwid, RPT_BTN_H / 2);
+        if (hover == id)
+            glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+        else
+            glColor4f(0.8f, 0.82f, 1.0f, 0.45f);
+        frame_rect(bx, RPT_BTN_Y, bwid, RPT_BTN_H, 0.75f);
+        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+        rp_icon(id, i ? bx + bwid / 2 : bx + 12, RPT_BTN_Y + RPT_BTN_H / 2, 0);
+        if (!i)
+            text(bx + 24, RPT_BTN_Y + RPT_BTN_H / 2 - 3.5f, 1.0f, "REPLAYS");
+    }
+    /* the list, under its button: the last fights, then the kept ones */
+    if (list_n >= 0) {
+        float ry[RL_MAX], rh[3];
+
+        if (list_n > RL_MAX)
+            list_n = RL_MAX;
+        rl_layout(list_n, n_recent, ry, rh);
+        glColor4f(0.67f, 0.63f, 1.0f, 0.25f);   /* the glow around it */
+        rect(b0 - 2, RL_TOP - 2, RL_W + 4, rh[2] - RL_TOP + 4);
+        vgrad(b0, RL_TOP, RL_W, rh[2] - RL_TOP, veil0, veil1);
+        glColor4f(0.8f, 0.82f, 1.0f, 0.45f);
+        frame_rect(b0, RL_TOP, RL_W, rh[2] - RL_TOP, 0.75f);
+        glColor4f(0.62f, 0.6f, 0.85f, 1.0f);
+        text(b0 + 6, rh[0] + 2, 1.0f, "LAST FIGHTS");
+        text(b0 + 6, rh[1] + 2, 1.0f, "KEPT");
+        if (!n_recent)
+            text(b0 + 12, rh[0] + RL_HEAD + 3, 1.0f, "NONE");
+        if (list_n == n_recent)
+            text(b0 + 12, rh[1] + RL_HEAD + 3, 1.0f, "NONE");
+        for (i = 0; i < list_n; i++) {
+            int on = hover == RPB_ROW + i, cur = i == current;
+
+            if (on || cur)
+                vgrad(b0 + 3, ry[i], RL_W - 6, RL_ROW - 1,
+                      on ? hot0 : btn0, on ? hot1 : btn1);
+            if (cur) {
+                glColor4f(0.88f, 0.89f, 1.0f, 0.9f);
+                tri(b0 + 6, ry[i] + 3.5f, b0 + 10, ry[i] + 10.5f, 1);
+            }
+            glColor4f(1.0f, 1.0f, 1.0f, on || cur ? 1.0f : 0.85f);
+            text(b0 + 14, ry[i] + 3.5f, 1.0f, labels[i]);
+        }
     }
     glEnd();
     end_2d();
