@@ -1,6 +1,6 @@
 # Project Status & Verification Progress
 
-**Last updated:** 2026-10-23 · See [CHANGELOG.md](CHANGELOG.md) for release history and [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md) for architecture.
+**Last updated:** 2026-10-29 · See [CHANGELOG.md](CHANGELOG.md) for release history and [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md) for architecture.
 
 ---
 
@@ -15,6 +15,50 @@
 | **Cross-Platform Launcher** | Multiplatform (Win/Linux) | 100% pure Node.js / Electron | Standalone compilation via `zig cc` (0.13.0), zero Python/CMake runtime dependency |
 
 ---
+
+## After 0.1.11: fatality lag, several cores, no vertex-buffer ceiling, shadows, flawless (2026-10-29, not released yet)
+
+**Scorpion's fatality lag (Mary: lag in that fatality only).** Measured
+with a per-second log of the draws (Scorpion vs Sonya, practice, finisher 2):
+in the late phase ~150 draws of 180,216 vertices a frame (the copies of
+Scorpion, each a smoothed body expanded to one vertex per triangle corner),
+~1 GB sent to the GPU, frames of 889-968 ms (651-679 ms in the scene's
+draws). Two causes:
+- SMOOTH MODELS' budget of smoothed triangles read `limeRenderedPolyCount`,
+  which the game's tick clears; a slow frame runs several ticks between its
+  draws, so the budget never filled (logged: 0 draws over it). Now its own
+  count, cleared before each present (`port_smooth_frame`, game_main.c),
+  250,000 triangles: the two fighters and a third body; copies past it are
+  drawn as the model is.
+- Direct3D 12 and Vulkan grew their vertex buffer up to 256 MB; past that,
+  every overflow waited for the GPU and made a new 256 MB buffer, 3-4 times a
+  frame. Now the buffer grows to what the frame needs with no ceiling, and the
+  old one is kept until the next flush instead of waiting partway.
+After: one 52 ms frame in the whole fatality, the rest under the slow-frame
+threshold. rgl_test 0 failed on OpenGL, Vulkan and Direct3D 12; Linux
+compile 84/84. Not yet played by Mary.
+
+**Several cores.** zig cc ships no OpenMP runtime, so Blender's subdivision
+ran on one core: `src/thirdparty/blender/omp_lite.c` implements the
+`__kmpc_*` calls (a pool of at most 4 threads, measured fastest; `UMK3_THREADS`
+overrides), `CCG_OMP_LIMIT` lowered to 20000, rgl_ff's indexed expansion in
+parallel, a ring of 8 recent poses per smoothed mesh.
+
+**Engine memory (Mary asked for more).** The game keeps pointers in 32-bit
+words and longs that sign-extend, as on iOS, so its two heaps must sit below
+2 GB: the save states' arena reserves 1024 MB and limeMalloc's heap 768 MB
+(read at start). A 1024 or 896 MB heap was tried and does not fit beside the
+exe; that space is full. Going past 2 GB would mean every pointer read in the
+decompiled code zero-extended instead, a change across the whole game.
+Measured use is ~386 MB for the whole process, so the heap is not what
+limits the frame rate. Everything else (textures, vertex buffers, smoothed
+meshes, shadows) is ordinary 64-bit memory with no limit of the engine's.
+
+**Also since 0.1.11:** REAL-TIME SHADOWS drawn the same frame with a steady
+light box; Kung Lao's hat in the fight, not only the intro; round end as the
+binary's two blocks (FLAWLESS VICTORY on match point, DrawHUD 0x2902c /
+0x290a6); Linux keys mapped by scancode (not tested on Linux);
+`UMK3_PRACTICE=1` runs a `--fight` as TRAINING.
 
 ## Release 0.1.11 beta (2026-10-23): updates that finish, window resize, loads, profile picker, sharp edges
 
