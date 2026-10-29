@@ -14,7 +14,7 @@
     import { app, tx } from '#lib/app.svelte.js';
     import { api } from '#lib/platform.js';
     import { selectBlip } from '#lib/sound.js';
-    import { readModel, buildSkin, withSkin } from '#lib/mods/modelin.js';
+    import { readModel, buildSkin, withSkin, solidPicture } from '#lib/mods/modelin.js';
     import { framePose, posedVerts } from '#lib/mods/rig.js';
     import { decodePicture } from '#lib/mods/image.js';
     import { dataUrl } from '#lib/mods/thumbs.js';
@@ -31,6 +31,7 @@
     let busy = $state(true);
     let turn = $state(0);
     let keep = $state(false);               /* PROPORTION TRICK (a humanoid rig) */
+    let scale = $state(1);                  /* about the pivot (buildSkin o.scale) */
     let blockOf = $state([]);
     let thumbs = $state([]);
     let clip = $state(-1), frame = $state(0), playing = $state(false), loop = $state(true);
@@ -85,7 +86,7 @@
         if (!mdl) return;
         err = '';
         try {
-            res = buildSkin(f, mdl, { turn, blockOf, keep });
+            res = buildSkin(f, mdl, { turn, blockOf, keep, scale });
             pf = withSkin(f, res.bytes, res.bones);
             await show();
         } catch (e) {
@@ -103,6 +104,18 @@
         /* a mesh a part: each material with its own picture, as the game
          * draws them (runtime/skin_mats.c) */
         const maps = new Map();
+        const pic = (key, im) => {
+            if (!im) return null;
+            if (!maps.has(key)) {
+                const t = new THREE.Texture(im);
+                t.flipY = false;
+                if (!key.startsWith('n')) t.colorSpace = THREE.SRGBColorSpace;
+                t.wrapS = t.wrapT = THREE.RepeatWrapping;
+                t.needsUpdate = true;
+                maps.set(key, t);
+            }
+            return maps.get(key);
+        };
         for (const [bi, blk] of pf.topo.blocks.entries()) {
             const ps = res.parts[bi].length ? res.parts[bi] : [{ mat: -1, first: 0, count: blk.count }];
             for (const p of ps) {
@@ -112,20 +125,16 @@
                 const a = blk.first + p.first;
                 g.setIndex(new THREE.BufferAttribute(pf.topo.faces.slice(a * 3, (a + p.count) * 3), 1));
                 const M = p.mat >= 0 ? mdl.materials[p.mat] : null;
-                let map = null;
-                if (M && M.image) {
-                    if (!maps.has(p.mat)) {
-                        const t = new THREE.Texture(M.image);
-                        t.flipY = false;
-                        t.colorSpace = THREE.SRGBColorSpace;
-                        t.wrapS = t.wrapT = THREE.RepeatWrapping;
-                        t.needsUpdate = true;
-                        maps.set(p.mat, t);
-                    }
-                    map = maps.get(p.mat);
-                } else map = await texture((M && M.rep) || (bi === 0 && outfit ? outfit : f.blockTex[bi]));
+                /* the material as the file has it: its picture, else its
+                 * colour; the game's texture only when chosen */
+                let map = null, color = 0xffffff;
+                if (M && M.image) map = pic('d' + p.mat, M.image);
+                else if (!M || M.game || M.rep) map = await texture((M && M.rep) || (bi === 0 && outfit ? outfit : f.blockTex[bi]));
+                else color = M.color ? new THREE.Color().setRGB(M.color[0] / 255, M.color[1] / 255, M.color[2] / 255, THREE.SRGBColorSpace) : 0xb4b4b4;
                 const see = !!(M && M.alpha);
-                const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map, color: map ? 0xffffff : 0x9a96c8,
+                const mesh = new THREE.Mesh(g, new THREE.MeshPhongMaterial({ map, color,
+                    normalMap: M ? pic('n' + p.mat, M.normal) : null, specularMap: M ? pic('s' + p.mat, M.specular) : null,
+                    specular: M && M.specular ? 0xffffff : 0x111111, shininess: 30,
                     side: THREE.DoubleSide, alphaTest: see ? 0.1 : 0.35, transparent: see }));
                 mesh.userData.mat = p.mat;
                 mesh.renderOrder = see ? 1 : 0;
@@ -164,11 +173,13 @@
 
     async function makeThumbs() {
         thumbs = await Promise.all(mdl.materials.map(async m => {
-            if (!m.image) return null;
-            const w = m.image.width || m.image.naturalWidth, h = m.image.height || m.image.naturalHeight;
+            /* its picture, else its colour (a game texture: no thumb) */
+            const im = m.image || (m.game || m.rep ? null : solidPicture(m.color));
+            if (!im) return null;
+            const w = im.width || im.naturalWidth, h = im.height || im.naturalHeight;
             const k = Math.min(1, 96 / Math.max(w, h));
             const c = new OffscreenCanvas(Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k)));
-            c.getContext('2d').drawImage(m.image, 0, 0, c.width, c.height);
+            c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
             return dataUrl(await c.convertToBlob({ type: 'image/png' }));
         }));
     }
@@ -228,7 +239,15 @@
         const [b, t] = v.split('|');
         blockOf[i] = Number(b);
         mdl.materials[i].rep = t;
+        await makeThumbs();
         await rebuild();
+    }
+
+    let scaleWait;
+    function setScale(v) {
+        scale = Math.min(4, Math.max(0.25, Number(v) || 1));
+        clearTimeout(scaleWait);
+        scaleWait = setTimeout(rebuild, 150);
     }
 
     async function setKeep(v) {
@@ -255,14 +274,9 @@
         try {
             mdl = await readModel(file);
             blockOf = mdl.materials.map((_, i) => Math.min(i, f.rig.skin.length - 1));
-            /* each picture replaces its block's texture (the outfit shown),
-             * once: a second material on the same block gets its own */
-            const taken = new Set();
-            mdl.materials.forEach((m, i) => {
-                const t = blockOf[i] === 0 ? (outfit || f.blockTex[0]) : f.blockTex[blockOf[i]];
-                m.rep = m.image && !taken.has(t) ? t : '';
-                if (m.rep) taken.add(t);
-            });
+            /* every material its own texture, as the model has them; a game
+             * texture is replaced only when chosen */
+            for (const m of mdl.materials) m.rep = '';
             await makeThumbs();
             await rebuild();
         } catch (e) {
@@ -335,6 +349,11 @@
                 {#if res && !res.matched}
                     <button class="btn" onclick={turnIt}>{tx('imTurn')}</button>
                 {/if}
+                <label class="scale" title={tx('imScaleNote')}>
+                    <span class="lbl">{tx('imScale')} ×{scale.toFixed(2)}</span>
+                    <input type="range" min="0.25" max="4" step="0.01" value={scale} oninput={e => setScale(e.currentTarget.value)}>
+                    <button class="eye" onclick={() => setScale(1)} title="1">1</button>
+                </label>
                 {#if res && res.rig === 'humanoid'}
                     <!-- a humanoid rig (Mixamo, AccuRig, ValveBiped...): fitted
                          to the fighter's bones, or the proportion trick -->
@@ -375,6 +394,8 @@
     .view { flex: 1; min-height: 0; border-radius: var(--r-sm); overflow: hidden; border: 1px solid var(--line);
         background: radial-gradient(ellipse at 50% 35%, #2a2560, #0a0820 75%); }
     .view :global(canvas) { width: 100%; height: 100%; display: block; }
+    .scale { display: flex; align-items: center; gap: 8px; }
+    .scale input { flex: 1; min-width: 0; }
     .over { position: absolute; inset: 0 0 auto 0; height: 60%; display: grid; place-items: center; pointer-events: none; }
     .msg { color: var(--dim); letter-spacing: .08em; }
     .msg.bad { color: #ff9aa0; max-width: 80%; text-align: center; }

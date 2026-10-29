@@ -283,6 +283,10 @@ long DrawSkinnedMesh2(SKININFO *skin, unsigned a, unsigned b, long flags,
 
     if (uvCount == 0)
         uvCount = 5000;
+    /* port: a larger skin (REPLACE MODEL) unwelds past 5000; clear what it
+     * can use, within the scratch (lime_globals.c) */
+    if (uvCount < nfaces * 3)
+        uvCount = nfaces * 3 < PORT_SKIN_VERTS ? nfaces * 3 : PORT_SKIN_VERTS;
 
     if (flags != 0) {
         NormaliseLDirs();

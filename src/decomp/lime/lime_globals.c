@@ -106,8 +106,13 @@ const float      LIGHT_SCALE = 255.0f;
  * reads the palette and writes SkinnedVerts and RenderIndexes.
  */
 SKINMATRIX43     MatrixPalette2[150];       /* 0x002c3f48, 7,200 bytes */
-unsigned char    SkinnedVerts[360000];      /* 0x002c5b68, 24 bytes a vertex */
-uint16_t         RenderIndexes[10000];      /* 0x0036a820, 20,000 bytes */
+/* The binary's are 360,000 bytes (15,000 vertices) and 20,000 (3,333
+ * faces), enough for its own fighters. A model brought in with REPLACE MODEL
+ * can be larger, and DrawSkinnedMesh2 writes past them into the animation
+ * frames and the palette that follow -- every fighter drawn after it went
+ * black. The port's hold what a uint16 index can reach (PORT_SKIN_VERTS). */
+unsigned char    SkinnedVerts[PORT_SKIN_VERTS * 24];   /* 0x002c5b68 */
+uint16_t         RenderIndexes[PORT_SKIN_VERTS * 3];   /* 0x0036a820 */
 BONEANIMFRAME    DecompAnimFrames0[150];    /* 0x0036f640, 3,000 bytes */
 BONEANIMFRAME    DecompAnimFrames1[150];    /* 0x003701f8, 3,000 bytes */
 limeVECTOR3      Root_Trans0;               /* 0x00370db0 */

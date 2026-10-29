@@ -7,6 +7,10 @@
 #include <stddef.h>
 #include "gamecode_globals.h"
 
+#ifndef PORT_SKIN_VERTS
+#define PORT_SKIN_VERTS 65536   /* lime.h */
+#endif
+
 #define SLOT_WORDS    64
 #define UNSIZED_BYTES 65536
 
@@ -21129,11 +21133,12 @@ float *PlayerZPosPtr = (float *)(void *)PlayerZPos;  /* the slot holding &Player
 char *PlayersP = (char *)(void *)&Players;  /* the slot holding &Players */
 static void *RedFrameTexture__store[1];
 void **RedFrameTexture = RedFrameTexture__store;
-static unsigned char RenderRGBs__store[15000];
+/* port: sized for PORT_SKIN_VERTS (lime.h), the binary's for 15,000 */
+static unsigned char RenderRGBs__store[PORT_SKIN_VERTS];
 unsigned char *RenderRGBs = RenderRGBs__store;
-static unsigned char RenderUVs__store[120000] __attribute__((aligned(16)));
+static unsigned char RenderUVs__store[PORT_SKIN_VERTS * 8] __attribute__((aligned(16)));
 limeVECTOR2 *RenderUVs = (limeVECTOR2 *)(void *)RenderUVs__store;
-static unsigned char RenderVerts__store[180000] __attribute__((aligned(16)));
+static unsigned char RenderVerts__store[PORT_SKIN_VERTS * 12] __attribute__((aligned(16)));
 limeVECTOR3 *RenderVerts = (limeVECTOR3 *)(void *)RenderVerts__store;
 void *RocksScene = 0;  /* NULL until loaded, as in __common */
 static long RoundParam__store[17];

@@ -53,6 +53,33 @@ yet**. Asked by Mary after trying the first round:
     the path).
   - The materials' textures are listed in REPLACE TEXTURE after the model
     is saved.
+  - **Fighters drawn black with a large model, found and fixed.** Mary's
+    Sonya (6,009 faces) unwelds to ~18,000 vertices; the binary's skinning
+    scratch holds 15,000 vertices and 3,333 faces (`SkinnedVerts`,
+    `RenderIndexes`, `RenderUVs/RGBs/Verts`), so `DrawSkinnedMesh2` wrote
+    past them into the animation frames and palette. And the fighter's
+    baked `STATICLIGHTING/<name>.lighting` is sliced by the skin's own
+    vertex count: read past its end, colours came from the heap. Now the
+    scratch holds `PORT_SKIN_VERTS` (65,536, a uint16 index's reach;
+    `lime.h`), and a lighting file that does not fit the skin is replaced by
+    its average light (`Players.c port_fit_lighting`, logged `flat light`).
+    The importer refuses a block over 65,535 vertices once unwelded.
+  - Every material is its own texture by default again (the materials as
+    the model has them); REPLACES a game texture only when chosen.
+  - **SCALE** in the importer: the model's size about its pivot (the floor
+    under the fighter's root): mesh, every bone offset and the root height
+    together, written in `<skin>.bones`, so the animations play on it.
+  - **FBX**: parts with pivots (`RotationOffset/Pivot`, `ScalingOffset/
+    Pivot`) and a geometric offset (`GeometricTranslation/Rotation/
+    Scaling`) are placed right; a part with no material gets its own grey
+    one; a part not skinned but hanging under a bone moves with that bone;
+    diffuse, normal and specular maps are read (the preview shows all
+    three; the game's fixed-function renderer draws the diffuse only); a
+    material without pictures shows its colour (`DiffuseColor` times
+    `DiffuseFactor`).
+  - **STAGE SELECT pictures** rendered from the camera a round starts with
+    (eye 1.5 over the floor, 8 back, looking at 1.25, 25 degrees); the
+    older renders are made again once (`<ID>.auto2`, `.v2`).
   - **Each picture chooses the game texture it replaces** (REPLACES
     `SONYA_DIFFUSE`, an outfit, block 2's texture, or NEW TEXTURE): it is
     saved as that texture (and its `_ICE`), and the game draws it on the

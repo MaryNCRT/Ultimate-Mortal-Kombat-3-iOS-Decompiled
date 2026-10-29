@@ -24,7 +24,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
-import { readFbx, fbxScene, similarity, writeSkin, clusters, globalM, xform, xdir, kid, kids, plain, I4 } from './fbxin.js';
+import { readFbx, fbxScene, similarity, writeSkin, clusters, globalM, geomM, mm, xform, xdir, kid, kids, plain, I4 } from './fbxin.js';
 import { posedVerts, makeRig, meshTopology, vertexWeights, rotBetween, vmul, tr3, localOf, withOffsets, withRootY } from './rig.js';
 export { parseBonesText } from './rig.js';
 import { mapBones } from './retarget.js';
@@ -98,36 +98,62 @@ async function fbxModel(sc, beside) {
         bones[i].parent = p !== null && p !== undefined ? boneOf.get(p) : -1;
     }
 
-    /* a material and its diffuse picture: embedded (Video Content) or a
-     * file beside the FBX */
+    /* a material: its colour and its pictures -- diffuse (what the game
+     * draws), normal and specular (seen in the preview; the game's renderer
+     * has no use for them) -- each embedded (Video Content) or a file beside
+     * the FBX */
     const materials = [], matOf = new Map();
+    async function texOf(id, what) {
+        const link = sc.propLinks.find(l => l.parent === id && what.test(l.what || '') && sc.byId.get(l.child) && sc.byId.get(l.child).name === 'Texture');
+        const tex = link && sc.byId.get(link.child);
+        if (!tex) return { image: null, file: '' };
+        const vid = (sc.childrenOf.get(link.child) || []).map(x => sc.byId.get(x)).find(v => v && v.name === 'Video');
+        const raw = vid && kid(vid, 'Content') && kid(vid, 'Content').props[0];
+        const file = String((kid(tex, 'RelativeFilename') || kid(tex, 'FileName') || { props: [''] }).props[0] || '');
+        return { image: await picture(raw instanceof Uint8Array && raw.length ? raw : findBeside(beside, file)), file };
+    }
     async function material(id) {
         if (matOf.has(id)) return matOf.get(id);
         const node = sc.byId.get(id);
-        const dc = kids(kid(node, 'Properties70'), 'P').find(p => p.props[0] === 'DiffuseColor');
+        const P = kids(kid(node, 'Properties70'), 'P');
+        const val = n => { const p = P.find(q => q.props[0] === n); return p ? p.props.slice(4).map(Number) : null; };
+        const dc = val('DiffuseColor') || val('Diffuse'), df = val('DiffuseFactor');
+        const k = df && Number.isFinite(df[0]) ? df[0] : 1;
         const m = { name: plain(node.props[1]), image: null, file: '',
-            color: dc ? dc.props.slice(4, 7).map(x => Math.round(255 * Math.min(1, Math.max(0, Number(x) || 0)))) : null };
+            color: dc ? dc.slice(0, 3).map(x => Math.round(255 * Math.min(1, Math.max(0, (Number(x) || 0) * k)))) : null };
         matOf.set(id, materials.length);
         materials.push(m);
-        const link = sc.propLinks.find(l => l.parent === id && /diffuse|basecolor/i.test(l.what || ''));
-        const tex = link && sc.byId.get(link.child);
-        if (tex) {
-            const vid = (sc.childrenOf.get(link.child) || []).map(x => sc.byId.get(x)).find(v => v && v.name === 'Video');
-            const raw = vid && kid(vid, 'Content') && kid(vid, 'Content').props[0];
-            m.file = String((kid(tex, 'RelativeFilename') || kid(tex, 'FileName') || { props: [''] }).props[0] || '');
-            m.image = await picture(raw instanceof Uint8Array && raw.length ? raw : findBeside(beside, m.file));
-        }
+        const d = await texOf(id, /diffuse|basecolor|base_color|albedo/i);
+        m.image = d.image;
+        m.file = d.file;
+        m.normal = (await texOf(id, /normal|bump/i)).image;
+        m.specular = (await texOf(id, /specular|reflection|shininess|gloss/i)).image;
         return matOf.get(id);
     }
+    /* a part with no material of its own: one, grey, named after it */
+    function bare(name) {
+        if (matOf.has('bare:' + name)) return matOf.get('bare:' + name);
+        matOf.set('bare:' + name, materials.length);
+        materials.push({ name, image: null, file: '', color: null });
+        return matOf.get('bare:' + name);
+    }
+    /* a part that is not skinned but hangs under a bone (a helmet, a
+     * weapon): it moves with that bone */
+    const boneAbove = id => {
+        for (let p = id; p !== null && p !== undefined; p = sc.models.has(p) ? sc.models.get(p).parent : null)
+            if (boneOf.has(p)) return boneOf.get(p);
+        return -1;
+    };
 
     const meshes = [];
     for (const [gid, gn] of sc.byId) {
         if (gn.name !== 'Geometry' || gn.props[2] !== 'Mesh') continue;
         const modelId = (sc.parentOf.get(gid) || []).find(x => sc.models.has(x));
-        const place = modelId !== undefined ? globalM(sc, modelId, null, memo) : I4();
+        const place = modelId !== undefined ? mm(globalM(sc, modelId, null, memo), geomM(sc.models.get(modelId))) : I4();
         const mats = [];
         for (const id of (modelId !== undefined && sc.childrenOf.get(modelId)) || [])
             if (sc.byId.get(id) && sc.byId.get(id).name === 'Material') mats.push(await material(id));
+        if (!mats.length) mats.push(bare(modelId !== undefined ? sc.models.get(modelId).name : 'mesh'));
         const V = kid(gn, 'Vertices').props[0], PVI = kid(gn, 'PolygonVertexIndex').props[0];
         const nv = V.length / 3;
         const pos = [];
@@ -137,6 +163,9 @@ async function fbxModel(sc, beside) {
         if (mine.length) {
             inf = Array.from({ length: nv }, () => []);
             for (const c of mine) c.idx.forEach((v, k) => { if (c.wt[k] > 0) inf[v].push([boneOf.get(c.bone), c.wt[k]]); });
+        } else if (modelId !== undefined && boneAbove(modelId) >= 0) {
+            const b = boneAbove(modelId);
+            inf = Array.from({ length: nv }, () => [[b, 1]]);
         }
         const uvEl = kid(gn, 'LayerElementUV'), nEl = kid(gn, 'LayerElementNormal'), mEl = kid(gn, 'LayerElementMaterial');
         const corner = (el, field, idxField, k, v, poly, size) => {
@@ -548,6 +577,19 @@ function proportions(f, mdl, place) {
     return { rest: out, bones: { offsets: offs, rootY } };
 }
 
+/* The bones' offsets and the root's height times the scale: every bone's
+ * (the proportion trick's where it has one, else the fighter's own) */
+function scaledBones(f, ov, k) {
+    if (k === 1) return ov;
+    const b = f.rig.bones, offsets = new Map();
+    for (let i = 0; i < b.num; i++) {
+        if (i === b.root) continue;
+        const v = (ov && ov.offsets.get(i)) || [b.offset[i * 3], b.offset[i * 3 + 1], b.offset[i * 3 + 2]];
+        offsets.set(i, v.map(x => x * k));
+    }
+    return { offsets, rootY: (ov ? ov.rootY : 1) * k };
+}
+
 /* <skin>.bones: a comment, `rooty <scale>`, then `<bone> <x> <y> <z>` a line */
 export function bonesText(ov) {
     const lines = ["# bone x y z: the model's offsets from the parent (REPLACE MODEL, proportion trick)", 'rooty ' + ov.rootY.toFixed(5)];
@@ -590,6 +632,9 @@ function autoWeights(f, rest, p) {
  *                proportion trick) instead of fitting it to the fighter's
  *   o.blockOf    per material, the fighter's block it goes to (default:
  *                one each in order, the rest sharing the last)
+ *   o.scale      the model's size, about its pivot: the floor under the
+ *                fighter's root. Mesh, bones and the root's height together
+ *                (written as <skin>.bones), so the animations play on it
  * Returns { bytes, verts, tris, kind, matched, of, auto (vertices weighted
  * here), parts: per block, its runs of triangles [{ mat, first, count }],
  * rig ('names', 'humanoid' or ''), bones (the proportion trick's override,
@@ -600,7 +645,12 @@ export function buildSkin(f, mdl, o = {}) {
     const human = place.map && place.map.kind === 'humanoid';
     const prop = human && o.keep ? proportions(f, mdl, place) : null;
     const conf = human && !o.keep ? conformers(f, mdl, place) : null;
-    const bindRest = prop ? prop.rest : place.rest;
+    const k = o.scale && o.scale !== 1 ? o.scale : 1;
+    const rest0 = prop ? prop.rest : place.rest;
+    const rT = rest0[f.rig.bones.root].T;
+    /* about the pivot: x and z about the root's, y about the floor */
+    const scaled = p => (k === 1 ? p : [rT[0] + (p[0] - rT[0]) * k, p[1] * k, rT[2] + (p[2] - rT[2]) * k]);
+    const bindRest = k === 1 ? rest0 : rest0.map(r => ({ ...r, T: scaled(r.T) }));
     const blockOf = mdl.materials.map((_, i) => (o.blockOf && o.blockOf[i] !== undefined ? o.blockOf[i] : Math.min(i, nblocks - 1)));
 
     /* a block's triangles, per material, put in a row at the end */
@@ -616,9 +666,9 @@ export function buildSkin(f, mdl, o = {}) {
             const sum = new Map();
             if (m.inf) for (const [b, w] of m.inf[v]) { const g = place.byFile[b]; if (g >= 0) sum.set(g, (sum.get(g) || 0) + w); }
             let l = [...sum];
-            if (!l.length) { l = autoWeights(f, bindRest, p); auto++; }
+            if (!l.length) { l = autoWeights(f, rest0, p); auto++; }
             else if (conf) p = conformPoint(conf, p, l);
-            gpos.push(p);
+            gpos.push(scaled(p));
             ginf.push(l);
         }
         const nt = m.tm.length;
@@ -661,7 +711,12 @@ export function buildSkin(f, mdl, o = {}) {
             const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
             for (const v of [a, b, c]) for (let i = 0; i < 3; i++) v.n[i] += n[i];
         }
-    for (const b of blocks) if (b.verts.length > 65535) throw new Error('a block has more than 65535 vertices');
+    /* the game unwelds a block (a vertex a UV) into uint16 indices */
+    for (const b of blocks) {
+        const seen = new Set();
+        for (const t of b.tris) for (const x of t) seen.add(x.o + '|' + x.uv[0] + ',' + x.uv[1]);
+        if (Math.max(seen.size, b.verts.length) > 65535) throw new Error('a block has more than 65535 vertices once unwelded (' + seen.size + ')');
+    }
     /* the game draws every block: an empty one keeps one invisible triangle */
     for (const b of blocks)
         if (!b.tris.length) {
@@ -673,7 +728,7 @@ export function buildSkin(f, mdl, o = {}) {
         bytes: writeSkin(blocks, bindRest, f.rig.skin.counted !== false),
         verts: blocks.reduce((s, b) => s + b.verts.length, 0), tris: blocks.reduce((s, b) => s + b.tris.length, 0),
         kind: place.kind, matched: place.matched, of: f.names.length, auto, parts,
-        rig: place.map ? place.map.kind : '', bones: prop ? prop.bones : null,
+        rig: place.map ? place.map.kind : '', bones: scaledBones(f, prop ? prop.bones : null, k),
     };
 }
 

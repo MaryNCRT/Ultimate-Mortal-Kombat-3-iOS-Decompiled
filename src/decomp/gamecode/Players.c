@@ -1855,6 +1855,35 @@ static TEXTURE *port_load_lite(const char *path)
     return limeLoadTexture((char *)path, 0, 0);
 }
 
+/* Port, not in the binary. The `.lighting` file is baked for the game's own
+ * skin: `need` bytes, a colour per unwelded vertex per frame. A skin brought
+ * in with REPLACE MODEL has its own vertex count, and slicing the file by it
+ * read past its end -- colours from the heap, the fighter drawn black. When
+ * the file does not fit, every frame gets the file's average light (a mid
+ * grey without one), flat but the model's own. */
+long limeFileSize(const char *name);    /* the platform's, as text.c */
+
+static void *port_fit_lighting(void *lighting, const char *path, size_t need)
+{
+    size_t have = lighting ? (size_t)limeFileSize(path) : 0, k;
+    unsigned long sum = 0;
+    unsigned char *out;
+
+    if (lighting && have >= need)
+        return lighting;
+    for (k = 0; k < have; k++)
+        sum += ((const unsigned char *)lighting)[k];
+    out = (unsigned char *)limeMalloc("port_lighting", need ? need : 1);
+    if (out == NULL)
+        return lighting;
+    memset(out, have ? (int)(sum / have) : 0xb4, need);
+    printf("LAC: %s is %lu bytes, the skin needs %lu: flat light\n", path,
+           (unsigned long)have, (unsigned long)need);
+    if (lighting)
+        limeFree(lighting);
+    return out;
+}
+
 ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
                                          char *bonesFile, char *lightingName,
                                          char *meshbaseFile, char *texBase,
@@ -2048,6 +2077,9 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
                                : 0;
                     size1 = DrawSkinnedMesh2(skin, 0, 0, 1, RenderVerts,
                                              RenderUVs, RenderRGBs, 0, 1);
+                    lighting = port_fit_lighting(lighting, lightingPath,
+                                                 (size_t)(meshCount - 1)
+                                                 * (size_t)(size1 + size2));
                 }
 
                 m->cols = limeMalloc("animatedcharacter_cols", size1);

@@ -1,7 +1,7 @@
 /* STAGE SELECT's pictures for the stages the game has none for. The game
  * ships a CS_BG sheet for five of its stages (debug_menu.c k_stages); for
  * the rest the launcher renders the stage itself -- its scene and meshset,
- * textured, from the front as the viewer opens it -- into
+ * textured, from where the fight's camera stands when a round starts -- into
  * "aditional textures/stages/<ID>.png", where the game's st_thumb finds it.
  * Once per stage: a picture already there is kept (the player may have put
  * a better one). */
@@ -45,8 +45,8 @@ async function make() {
             const d = await stageDesc(src, st);
             for (const m of d.meshes) root.add(await mesh(m, d.materials[m.material].stem, textures));
             scene.add(root);
-            const camera = new THREE.PerspectiveCamera(45, W / H, 1, 10);
-            aim(camera, root);
+            const camera = new THREE.PerspectiveCamera(25, W / H, 1, 10);
+            fightCamera(camera);
             renderer.render(scene, camera);
             const png = new Uint8Array(await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer());
             await api.stagePicPut(st.id, png);
@@ -58,21 +58,20 @@ async function make() {
     }
 }
 
-/* the camera as the viewer frames a stage: on its core (the larger,
- * far-off pieces -- sky, distant walls -- left out), from the front */
-function aim(camera, obj) {
-    let box = new THREE.Box3().setFromObject(obj);
-    const parts = obj.children.map(o => new THREE.Box3().setFromObject(o)).filter(b => !b.isEmpty());
-    const sizes = parts.map(b => b.getSize(new THREE.Vector3()).length()).sort((a, b) => a - b);
-    const cut = sizes[Math.floor(sizes.length * 0.7)] || Infinity;
-    const near = new THREE.Box3();
-    for (const b of parts) if (b.getSize(new THREE.Vector3()).length() <= cut && b.getCenter(new THREE.Vector3()).length() < cut * 3) near.union(b);
-    if (!near.isEmpty()) box = near;
-    const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3()).length() || 1;
-    camera.near = size / 500;
-    camera.far = size * 50;
-    camera.position.set(c.x + size * 0.15, c.y + size * 0.1, c.z + size * 1.1);
-    camera.lookAt(c);
+/* The camera as a round starts (GameCode.c, the new camera and
+ * SetToUseCamera): the look-at between the fighters at x 0, 1.25 over the
+ * floor; the eye 1.5 over it and pulled back 8 -- the farthest of its 6..8,
+ * the fighters starting apart -- with the game's 25 degree view
+ * (LIMEDS_Misc.c). The game's world has z up and the camera behind on -y;
+ * here y is up and the front is +z, in fighter units (the world over
+ * PlayerSize, 0.0102: assets.js STAGE_SCALE). */
+const PLAYER_SIZE = 0.0101562496;
+function fightCamera(camera) {
+    const u = v => v / PLAYER_SIZE;
+    camera.near = u(0.5);
+    camera.far = u(400);
+    camera.position.set(0, u(1.5), u(8));
+    camera.lookAt(0, u(1.25), 0);
     camera.updateProjectionMatrix();
 }
 
