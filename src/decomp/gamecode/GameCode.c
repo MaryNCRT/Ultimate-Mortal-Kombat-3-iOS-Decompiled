@@ -6101,6 +6101,7 @@ long GameInit_LoadABit(long step);
  * A recorded fight keeps its setup; a replayed one gets the recorded setup
  * back before anything loads. */
 int  rb_fight_setup(int32_t *setup, int n);
+void rb_fight_rival(long *c2);
 void rb_online_begin(int c1, int c2, int level);
 int  rb_host_level(long *level);
 int  rb_step_begin(int32_t joy[2]);
@@ -7570,6 +7571,7 @@ long GameInit_LoadABit(long step)
             Character2   = Character2Override;
             PLAYER2MODEL = Character2Override;
         }
+        rb_fight_rival(&Character2);    /* port: the replay's real rival */
         PLAYER2MODEL = Character2;
 
         HUDANIM_Init();
