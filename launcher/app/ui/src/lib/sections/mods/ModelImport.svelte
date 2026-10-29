@@ -2,8 +2,9 @@
     /* REPLACE MODEL's window: the model brought in (mods/modelin.js), made
      * the fighter's .skin and shown on the fighter's own bones -- as the game
      * will draw it -- before anything is saved. Its animations play on it;
-     * on the right, the model's textures: each one's picture, the fighter's
-     * block it goes to, and a picture to put in its place. */
+     * on the right, the model's textures, each kept on its own: its picture
+     * (seen large on a click), the fighter's block it goes to, a picture to
+     * put in its place, and an eye to hide its part or see it alone. */
     import { onMount, onDestroy } from 'svelte';
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -16,8 +17,8 @@
     import { dataUrl } from '#lib/mods/thumbs.js';
 
     /* f the fighter; file what main.js file:pick gave; texture(stem) the
-     * viewer's game textures; outfit the outfit shown; onApply({ r, sheets,
-     * allOutfits }), onClose() */
+     * viewer's game textures; outfit the outfit shown; onApply({ r, mdl }),
+     * onClose() */
     let { f, file, texture, outfit, onApply, onClose } = $props();
 
     let host = $state();
@@ -29,7 +30,8 @@
     let blockOf = $state([]);
     let thumbs = $state([]);
     let clip = $state(-1), frame = $state(0), playing = $state(false), loop = $state(true);
-    let allOutfits = $state(true);
+    let hidden = $state({});                /* material -> hidden */
+    let big = $state(-1);                   /* the material seen large */
 
     let renderer, scene, camera, controls, root, raf, pf = null, meshes = [];
 
@@ -94,23 +96,39 @@
         }
         root = new THREE.Group();
         meshes = [];
+        /* a mesh a part: each material with its own picture, as the game
+         * draws them (runtime/skin_mats.c) */
+        const maps = new Map();
         for (const [bi, blk] of pf.topo.blocks.entries()) {
-            const g = new THREE.BufferGeometry();
-            g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pf.topo.src.length * 3), 3));
-            g.setAttribute('uv', new THREE.BufferAttribute(Float32Array.from(pf.topo.uv), 2));
-            g.setIndex(new THREE.BufferAttribute(pf.topo.faces.slice(blk.first * 3, (blk.first + blk.count) * 3), 1));
-            let map = null;
-            const sheet = res.sheets[bi];
-            if (sheet) {
-                map = new THREE.CanvasTexture(sheet);
-                map.flipY = false;
-                map.colorSpace = THREE.SRGBColorSpace;
-                map.wrapS = map.wrapT = THREE.RepeatWrapping;
-            } else map = await texture(bi === 0 && outfit ? outfit : f.blockTex[bi]);
-            const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map, color: map ? 0xffffff : 0x9a96c8,
-                side: THREE.DoubleSide, alphaTest: 0.35 }));
-            root.add(mesh);
-            meshes.push(mesh);
+            const ps = res.parts[bi].length ? res.parts[bi] : [{ mat: -1, first: 0, count: blk.count }];
+            for (const p of ps) {
+                const g = new THREE.BufferGeometry();
+                g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pf.topo.src.length * 3), 3));
+                g.setAttribute('uv', new THREE.BufferAttribute(Float32Array.from(pf.topo.uv), 2));
+                const a = blk.first + p.first;
+                g.setIndex(new THREE.BufferAttribute(pf.topo.faces.slice(a * 3, (a + p.count) * 3), 1));
+                const M = p.mat >= 0 ? mdl.materials[p.mat] : null;
+                let map = null;
+                if (M && M.image) {
+                    if (!maps.has(p.mat)) {
+                        const t = new THREE.Texture(M.image);
+                        t.flipY = false;
+                        t.colorSpace = THREE.SRGBColorSpace;
+                        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+                        t.needsUpdate = true;
+                        maps.set(p.mat, t);
+                    }
+                    map = maps.get(p.mat);
+                } else map = await texture(bi === 0 && outfit ? outfit : f.blockTex[bi]);
+                const see = !!(M && M.alpha);
+                const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map, color: map ? 0xffffff : 0x9a96c8,
+                    side: THREE.DoubleSide, alphaTest: see ? 0.1 : 0.35, transparent: see }));
+                mesh.userData.mat = p.mat;
+                mesh.renderOrder = see ? 1 : 0;
+                mesh.visible = !hidden[p.mat];
+                root.add(mesh);
+                meshes.push(mesh);
+            }
         }
         scene.add(root);
         pose();
@@ -170,6 +188,25 @@
         await rebuild();
     }
 
+    /* the eye: hide a material's part; 1: it alone (again: all) */
+    function toggle(i) {
+        selectBlip();
+        hidden = { ...hidden, [i]: !hidden[i] };
+        for (const m of meshes) m.visible = !hidden[m.userData.mat];
+    }
+    function alone(i) {
+        selectBlip();
+        const only = !hidden[i] && mdl.materials.every((_, k) => k === i || hidden[k]);
+        hidden = Object.fromEntries(mdl.materials.map((_, k) => [k, only ? false : k !== i]));
+        for (const m of meshes) m.visible = !hidden[m.userData.mat];
+    }
+    async function bigUrl(i) {
+        const im = mdl.materials[i].image;
+        const c = new OffscreenCanvas(im.width || im.naturalWidth, im.height || im.naturalHeight);
+        c.getContext('2d').drawImage(im, 0, 0);
+        return dataUrl(await c.convertToBlob({ type: 'image/png' }));
+    }
+
     async function setBlock(i, b) {
         blockOf[i] = Number(b);
         await rebuild();
@@ -184,7 +221,7 @@
     function apply() {
         if (!res) return;
         selectBlip();
-        onApply({ r: res, allOutfits });
+        onApply({ r: res, mdl });
     }
 
     onMount(async () => {
@@ -243,9 +280,13 @@
                 <ul class="mats">
                     {#each mdl ? mdl.materials : [] as m, i}
                         <li>
-                            <div class="pic">{#if thumbs[i]}<img src={thumbs[i]} alt="">{:else}<span>{tx('imGameTex')}</span>{/if}</div>
+                            <button class="pic" class:off={hidden[i]} onclick={() => { if (m.image) big = i; }} title={m.file || m.name}>{#if thumbs[i]}<img src={thumbs[i]} alt="">{:else}<span>{tx('imGameTex')}</span>{/if}</button>
                             <div class="what">
-                                <span class="nm" title={m.file || m.name}>{m.name}</span>
+                                <div class="row">
+                                    <span class="nm" title={m.file || m.name}>{m.name}{m.alpha ? ' · ' + tx('imAlpha') : ''}</span>
+                                    <button class="eye" class:off={hidden[i]} onclick={() => toggle(i)} title={tx('imHide')}>{hidden[i] ? '◌' : '◉'}</button>
+                                    <button class="eye" onclick={() => alone(i)} title={tx('imAlone')}>1</button>
+                                </div>
                                 <select class="sel" value={blockOf[i]} onchange={e => setBlock(i, e.currentTarget.value)} title={tx('imBlock')}>
                                     {#each f.rig.skin as _, b}<option value={b}>{tx('imBlock')} {b + 1}: {blockName(b)}</option>{/each}
                                 </select>
@@ -260,7 +301,6 @@
                 {#if res && !res.matched}
                     <button class="btn" onclick={turnIt}>{tx('imTurn')}</button>
                 {/if}
-                <label class="chk"><input type="checkbox" bind:checked={allOutfits}><span>{tx('imAllOutfits')}</span></label>
                 <p class="note">{tx('imNote')}</p>
                 <div class="pair">
                     <button class="btn hot" disabled={!res || !!err} onclick={apply}>{tx('imApply')}</button>
@@ -269,6 +309,12 @@
             </aside>
         </div>
     </div>
+    {#if big >= 0 && mdl && mdl.materials[big] && mdl.materials[big].image}
+        <div class="bigpic" role="presentation" onclick={() => big = -1}>
+            <span class="nm">{mdl.materials[big].name} · {mdl.materials[big].image.width}×{mdl.materials[big].image.height}{mdl.materials[big].alpha ? ' · ' + tx('imAlpha') : ''}</span>
+            {#await bigUrl(big) then u}<img src={u} alt="">{/await}
+        </div>
+    {/if}
 </div>
 
 <style>
@@ -300,6 +346,17 @@
     .pic { flex: 0 0 calc(var(--u) * 7); height: calc(var(--u) * 7); display: grid; place-items: center; border-radius: var(--r-sm);
         background: repeating-conic-gradient(#1b1840 0 25%, #14112f 0 50%) 0 0 / 12px 12px; font-size: calc(var(--t) * 1); color: var(--dim); text-align: center; }
     .pic img { max-width: 100%; max-height: 100%; }
+    .pic { border: 0; padding: 0; cursor: zoom-in; }
+    .pic.off { opacity: .35; }
+    .row { display: flex; align-items: center; gap: calc(var(--u) * .4); }
+    .row .nm { flex: 1; min-width: 0; }
+    .eye { flex: none; width: calc(var(--u) * 2.6); height: calc(var(--u) * 2.6); border: 1px solid var(--line); border-radius: var(--r-sm);
+        background: var(--bg); color: #fff; cursor: pointer; font-size: calc(var(--t) * 1.2); padding: 0; }
+    .eye.off { color: var(--dim); }
+    .bigpic { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: calc(var(--u) * .8); background: rgba(5, 4, 20, .9); cursor: zoom-out; }
+    .bigpic img { max-width: 90%; max-height: 82%;
+        background: repeating-conic-gradient(#1b1840 0 25%, #14112f 0 50%) 0 0 / 16px 16px; }
     .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: calc(var(--u) * .35); }
     .nm { color: #fff; font-size: calc(var(--t) * 1.3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .what .sel { width: 100%; font-size: calc(var(--t) * 1.15); }

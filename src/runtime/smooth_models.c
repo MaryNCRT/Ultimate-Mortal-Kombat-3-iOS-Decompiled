@@ -33,6 +33,7 @@
 #include "../decomp/lime/lime.h"
 #include "../thirdparty/blender/umk3_subsurf.h"
 #include "smooth_models.h"
+#include "skin_mats.h"
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -785,6 +786,8 @@ int port_smooth_draw(const void *skin, const void *rec, long second,
             tuck(skin, (int)*(const long *)r);
         return 0;
     }
+    if (port_skin_mats_has(skin))       /* parts with their own textures */
+        return 0;
     lime_port_skin_freed = port_smooth_forget;
 
     /* A frame's smoothed triangles have a budget: a fatality that draws the

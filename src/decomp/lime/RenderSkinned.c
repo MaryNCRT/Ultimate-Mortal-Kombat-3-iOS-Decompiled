@@ -575,6 +575,11 @@ void GenerateMatrices(char *data, BONESINFO *bones, long frameA, long frameB,
 /* Port, not in the binary: told when a skin goes, so what SMOOTH MODELS
  * built for it (runtime/smooth_models.c) goes too. NULL until set. */
 void (*lime_port_skin_freed)(const void *skin);
+/* Port, not in the binary: a modded skin's own textures, one per part
+ * (runtime/skin_mats.c), read when the skin is and dropped with it. NULL
+ * until set. */
+void (*lime_port_skin_loaded)(const void *skin, const char *filename);
+void (*lime_port_skin_parts_freed)(const void *skin);
 
 void LIME_FreeSkin(SKININFO *skin)
 {
@@ -585,6 +590,8 @@ void LIME_FreeSkin(SKININFO *skin)
 
     if (lime_port_skin_freed)
         lime_port_skin_freed(skin);
+    if (lime_port_skin_parts_freed)
+        lime_port_skin_parts_freed(skin);
 
     limeFree(skin->vertExtra);      /* +0x18 */
     limeFree(skin->uvs);            /* +0x1c */
@@ -758,6 +765,8 @@ SKININFO *LIME_LoadSkin(const char *filename)
     }
 
     limeFree((void *)data);              /* 0x60684: the file buffer goes */
+    if (lime_port_skin_loaded)           /* port: runtime/skin_mats.c */
+        lime_port_skin_loaded(skin, filename);
     return skin;
 }
 

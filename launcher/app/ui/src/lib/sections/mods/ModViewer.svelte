@@ -27,7 +27,7 @@
     import { stageDesc, meshsetDesc, textureFile, pngBytes, exportFiles, isPng, attachVerts } from '#lib/mods/assets.js';
     import { tuckUnder } from '#lib/mods/tuck.js';
     import { readFbx, fbxScene, fbxTakes, importAnim, rigDesc } from '#lib/mods/fbxin.js';
-    import { sheetPng } from '#lib/mods/modelin.js';
+    import { sheetPng, matsText } from '#lib/mods/modelin.js';
     import { derivedModels } from '#lib/mods/derived.js';
     import { thumb, forgetThumbs, lazy } from '#lib/mods/thumbs.js';
     import ModelImport from './ModelImport.svelte';
@@ -288,7 +288,21 @@
             g.setIndex(new THREE.BufferAttribute(f.topo.faces.slice(blk.first * 3, (blk.first + blk.count) * 3), 1));
             const stem = bi === 0 && ms.outfit ? shownOutfit() : f.blockTex[bi];
             const map = await texture(stem);
-            const mat = new THREE.MeshLambertMaterial({ map, color: map ? 0xffffff : 0x9a96c8, side: THREE.DoubleSide, alphaTest: 0.35, wireframe: ms.wire });
+            let mat = new THREE.MeshLambertMaterial({ map, color: map ? 0xffffff : 0x9a96c8, side: THREE.DoubleSide, alphaTest: 0.35, wireframe: ms.wire });
+            /* a model with parts (REPLACE MODEL): each its own texture, as
+             * the game draws them (runtime/skin_mats.c) */
+            const ps = (f.parts && f.parts[bi]) || [];
+            if (ps.length) {
+                const own = mat;
+                mat = [];
+                for (const [k, p] of ps.entries()) {
+                    g.addGroup(p.first * 3, p.count * 3, k);
+                    const m = p.stem ? await texture(p.stem) : map;
+                    if (m && p.stem) m.wrapS = m.wrapT = THREE.RepeatWrapping;
+                    mat.push(p.stem ? new THREE.MeshLambertMaterial({ map: m, color: m ? 0xffffff : 0x9a96c8, side: THREE.DoubleSide,
+                        alphaTest: p.alpha ? 0.1 : 0.35, transparent: p.alpha, wireframe: ms.wire }) : own);
+                }
+            }
             const mesh = new THREE.Mesh(g, mat);
             root.add(mesh);
             meshes.push(mesh);
@@ -312,7 +326,8 @@
         root.add(skel);
         scene.add(root);
         fighterView = { f, meshes, extras, smooth: { level: 0, blocks: [] } };
-        layers = [...f.topo.blocks.map((_, bi) => ({ key: 'b' + bi, name: (bi === 0 ? tx('vwBody') : tx('vwPart') + ' ' + (bi + 1)) + ' · ' + f.blockTex[bi], on: true })),
+        layers = [...f.topo.blocks.flatMap((_, bi) => [{ key: 'b' + bi, name: (bi === 0 ? tx('vwBody') : tx('vwPart') + ' ' + (bi + 1)) + ' · ' + f.blockTex[bi], on: true },
+            ...((f.parts && f.parts[bi]) || []).map((p, k) => ({ key: 'p' + bi + '_' + k, name: '  ' + tx('vwTexPart') + ' ' + (k + 1) + ' · ' + (p.stem || f.blockTex[bi]) + ' · ' + p.count + ' tris', on: true }))]),
             ...extras.map(({ a }, ei) => ({ key: 'e' + ei, name: a.name + ' · ' + (a.texture || ''), on: true }))];
         pose();
         frame(root);
@@ -337,6 +352,8 @@
             const blocks = [];
             for (const [bi, blk] of f.rig.skin.entries()) {
                 const base = f.rig.blockBase[bi];
+                /* a block with parts is not smoothed, as in the game */
+                if (f.parts && f.parts[bi] && f.parts[bi].length) { blocks.push({ ss: null, mesh: null, base, n: blk.numVerts }); continue; }
                 const ss = await subsurfCreate(level, bind.subarray(base * 3, (base + blk.numVerts) * 3), blk.tri, blk.triUv);
                 if (ss) ss.setSharp(sharpAngle(), sharpStrength());
                 if (fighterView !== fv || fv.smooth.level !== level) {
@@ -441,6 +458,7 @@
             }
             const sp = b && b.ss ? b.ss.eval(skin.subarray(b.base * 3, (b.base + b.n) * 3)) : null;
             m.visible = !sp && shown('b' + bi);
+            if (Array.isArray(m.material)) m.material.forEach((mt, k) => { mt.visible = shown('p' + bi + '_' + k); });
             if (b && b.mesh) b.mesh.visible = !!sp && shown('b' + bi);
             const g = sp ? b.mesh.geometry : m.geometry;
             g.attributes.position.array.set(sp || pos);
@@ -448,7 +466,7 @@
             g.computeVertexNormals();
             g.computeBoundingSphere();
             g.computeBoundingBox();
-            m.material.wireframe = ms.wire;
+            for (const mt of [].concat(m.material)) mt.wireframe = ms.wire;
         });
         for (const [ei, { mesh }] of (fighterView.extras || []).entries()) {
             const v = extraPos[ei];
@@ -527,9 +545,14 @@
     async function showOutfit() {
         if (!fighterView) return;
         const map = await texture(shownOutfit());
-        fighterView.meshes[0].material.map = map;
-        fighterView.meshes[0].material.color.set(map ? 0xffffff : 0x9a96c8);
-        fighterView.meshes[0].material.needsUpdate = true;
+        const m0 = fighterView.meshes[0].material;
+        /* with parts: the ones on the block's own texture */
+        const own = Array.isArray(m0) ? m0.filter((_, k) => !fighterView.f.parts[0][k].stem) : [m0];
+        for (const mt of own) {
+            mt.map = map;
+            mt.color.set(map ? 0xffffff : 0x9a96c8);
+            mt.needsUpdate = true;
+        }
         for (const { a, mesh } of fighterView.extras || [])
             if (a.texture === fighterView.f.blockTex[0]) {
                 mesh.material.map = map;
@@ -695,7 +718,11 @@
     /* the window's SAVE: the .skin, and each block's sheet of pictures as
      * its texture (the outfit's in every outfit when asked; the frozen one
      * tinted as ice) */
-    async function applyModel({ r, allOutfits }) {
+    /* REPLACE MODEL saved: the .skin, each material's picture as its own
+     * texture (<skin>_M<n>, and _M<n>_ICE for frozen), and the .mats that
+     * says which triangles each one covers (runtime/skin_mats.c). A
+     * material left on the game's texture draws with the outfit's. */
+    async function applyModel({ r, mdl }) {
         const name = target.trim() || defaultTarget();
         model = null;
         ms.error = '';
@@ -705,15 +732,20 @@
             const file = homeOf('characters', fx.ch) + '/' + fx.ch.file + '.skin';
             await api.modsPut(name, file, r.bytes);
             const files = [file];
-            for (const [b, sheet] of r.sheets.entries()) {
-                if (!sheet) continue;
-                const stems = b > 0 ? [fx.blockTex[b]] : allOutfits ? fx.variants : [ms.outfit || fx.blockTex[0]];
-                for (const st of stems) {
-                    const png = await sheetPng(/_ICE$/i.test(st) ? iced(sheet) : sheet);
-                    const w = await putTexture(api, src, name, st, png, ms.autoSmall, await textureDir(src, ms.cat, st));
+            const dir = await textureDir(src, ms.cat, fx.blockTex[0]);
+            const texOf = new Map();
+            for (const [i, m] of mdl.materials.entries()) {
+                if (!m.image || !r.parts.some(ps => ps.some(p => p.mat === i))) continue;
+                const st = (fx.ch.file + '_M' + (i + 1)).toUpperCase();
+                for (const [stem, pic] of [[st, m.image], [st + '_ICE', iced(m.image)]]) {
+                    const w = await putTexture(api, src, name, stem, await sheetPng(pic), false, dir);
                     if (w) files.push(...w);
                 }
+                texOf.set(i, st + '.png');
             }
+            const mats = file + '.mats';
+            await api.modsPut(name, mats, matsText(r.parts, mdl, i => texOf.get(i) || '-'));
+            files.push(mats);
             await refreshMods();
             forgetMod();
             forgetThumbs();
@@ -728,7 +760,7 @@
         }
     }
     function iced(sheet) {
-        const c = new OffscreenCanvas(sheet.width, sheet.height), g = c.getContext('2d');
+        const c = new OffscreenCanvas(sheet.width || sheet.naturalWidth, sheet.height || sheet.naturalHeight), g = c.getContext('2d');
         g.drawImage(sheet, 0, 0);
         g.globalCompositeOperation = 'source-atop';
         g.fillStyle = 'rgba(170, 215, 255, .6)';
@@ -933,7 +965,7 @@
             {:else if ms.pick && ms.kind !== 'textures' && !ms.loading}
                 <div class="checks">
                     <label class="chk"><input type="checkbox" bind:checked={ms.wire}
-                        onchange={() => root && root.traverse(o => { if (o.material) o.material.wireframe = ms.wire; })}><span>{tx('vwWire')}</span></label>
+                        onchange={() => root && root.traverse(o => { if (o.material) for (const mt of [].concat(o.material)) mt.wireframe = ms.wire; })}><span>{tx('vwWire')}</span></label>
                 </div>
             {:else if ms.kind === 'textures' && texInfo}
                 <span class="lbl">{texInfo.name}</span>

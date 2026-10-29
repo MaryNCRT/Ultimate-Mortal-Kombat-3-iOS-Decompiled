@@ -315,13 +315,13 @@ void mods_init(const char *res_root)
 }
 
 /* Online, only what is seen and changes nothing of the fight: models
- * (.skin .meshset) and textures. Animations, scenes, events, sounds and the
+ * (.skin .meshset, a skin's .mats) and textures. Animations, scenes, events, sounds and the
  * CHARACTER EDITOR's numbers stay the game's, the same on both machines. */
 static int online_file(const char *key)
 {
     const char *dot = strrchr(key, '.');
     return dot && (strcmp(dot, ".skin") == 0 || strcmp(dot, ".meshset") == 0
-                   || is_picture(key));
+                   || strcmp(dot, ".mats") == 0 || is_picture(key));
 }
 
 int mods_find(const char *rel, char *out, size_t n)

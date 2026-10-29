@@ -242,6 +242,7 @@ if(UMK3_BINARY)
                 src/runtime/rollback_probe.c
                 src/runtime/rollback.c
                 src/runtime/smooth_models.c
+                src/runtime/skin_mats.c
                 ${UMK3_GAME_BLENDER}
                 ${UMK3_GAME_GAMECODE}
                 ${UMK3_GAME_LIME}

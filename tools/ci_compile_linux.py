@@ -25,7 +25,7 @@ CC = sys.argv[1:] or ["clang"]          # the compiler, with any leading argumen
 RUNTIME = ["game_main.c", "debug_menu.c", "settings_menu.c", "pad_nav.c", "profiles.c", "mods.c",
            "draw_gl.c", "gamecode_stubs.c", "mp_net.c", "mp_eos.c", "online_ui.c", "lime_menu.c",
            "lime_platform.c", "lime_app.c", "wav.c", "fight_runtime.c", "savestate.c",
-           "rollback_probe.c", "rollback.c", "smooth_models.c",
+           "rollback_probe.c", "rollback.c", "smooth_models.c", "skin_mats.c",
            "platform/sdl_gl.c", "platform/sdl_audio.c", "platform/ui_alert.c",
            "render/rgl_front.c", "render/rgl_ff.c", "render/rgl_vk.c"]
 DIRS = ["src/decomp/gamecode", "src/decomp/lime", "src/runtime/lime", "src/decomp/gamecode/logic",

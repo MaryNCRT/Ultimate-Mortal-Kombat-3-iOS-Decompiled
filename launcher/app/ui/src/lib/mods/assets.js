@@ -159,11 +159,23 @@ export async function loadFighter(src, ch) {
         }
     } catch { /* no scene, or one this reader does not know */ }
 
+    /* a model brought in by REPLACE MODEL: its parts, each with its own
+     * texture (the skin's .mats, runtime/skin_mats.c) -- per block
+     * [{ first, count, alpha, stem }], stem null for the block's own */
+    const parts = skin.map(() => []);
+    const mt = await src.read(ch.file + '.skin.mats');
+    if (mt)
+        for (const line of new TextDecoder().decode(mt).split(/\r?\n/)) {
+            const w = line.trim().split(/\s+/);
+            if (line.startsWith('#') || w.length < 5 || !parts[+w[0]]) continue;
+            parts[+w[0]].push({ first: +w[1], count: +w[2], alpha: w[3] === '1', stem: w[4] === '-' ? null : w[4].replace(/\.\w+$/, '') });
+        }
+
     let frameNames = [];
     const fl = await src.read('framelists/' + ch.id.toLowerCase() + 'frames.txt');
     if (fl) frameNames = parseFrameList(new TextDecoder().decode(fl));
     const clips = findClips(frameNames, anim.frames);
-    return { ch, rig, bind, tpose, names, topo, weights, blockTex, variants: variants.length ? variants : [base], clips, frameNames, attach };
+    return { ch, rig, bind, tpose, names, topo, weights, blockTex, parts, variants: variants.length ? variants : [base], clips, frameNames, attach };
 }
 
 /* opts: { rest: 'tpose' | 'bind', variant, clips: [index into f.clips] or

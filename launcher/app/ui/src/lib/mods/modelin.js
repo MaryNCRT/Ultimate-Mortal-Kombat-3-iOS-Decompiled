@@ -8,14 +8,18 @@
  *                tv, tuv, tn, tm }],      per triangle: its three vertices,
  *                                         UVs (v down, as the game), normals
  *                                         (or null) and material
- *     materials: [{ name, image, file }] } image: something to draw, or null
+ *     materials: [{ name, image, file,    image: something to draw, or null
+ *                   alpha }] }            alpha: it sees through somewhere
  *
  * -- and that becomes the fighter's .skin (buildSkin). A file with the
  * fighter's bones (the exporter's rig, its names kept) is fitted to them as
  * fbxin.js fits an FBX; one without (an OBJ, a statue) is stood where the
  * fighter stands, at its height, and each vertex weighted to the bones
- * nearest it. Several materials share a block of the fighter as one texture
- * sheet: their pictures side by side, the UVs moved onto each one's part. */
+ * nearest it. Each material keeps its own picture and the file's UVs as
+ * they are (past 0..1 they repeat): a block's triangles are written grouped
+ * by material, and the parts listed in the skin's .mats (the game's
+ * runtime/skin_mats.c draws each with its texture, the transparent ones
+ * last). */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
@@ -37,6 +41,7 @@ export async function readModel(file) {
     else throw new Error('FBX, GLB or OBJ');
     if (!mdl.meshes.some(m => m.tm.length)) throw new Error('the file has no faces');
     if (!mdl.materials.length) mdl.materials.push({ name: 'default', image: null, file: '' });
+    for (const m of mdl.materials) m.alpha = !!m.alpha || seeThrough(m.image);
     mdl.format = ext;
     return mdl;
 }
@@ -51,6 +56,19 @@ function findBeside(beside, ref) {
     return null;
 }
 const picture = async bytes => (bytes ? decodePicture(bytes).catch(() => null) : null);
+
+/* does a picture see through anywhere (looked at no larger than 256) */
+export function seeThrough(image) {
+    if (!image) return false;
+    const w = image.width || image.naturalWidth, h = image.height || image.naturalHeight;
+    const k = Math.min(1, 256 / Math.max(w, h));
+    const c = new OffscreenCanvas(Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k)));
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(image, 0, 0, c.width, c.height);
+    const d = g.getImageData(0, 0, c.width, c.height).data;
+    for (let i = 3; i < d.length; i += 4) if (d[i] < 250) return true;
+    return false;
+}
 
 /* a mesh's arrays from plain lists */
 function meshOf(name, pos, inf, tv, tuv, tn, tm) {
@@ -189,12 +207,25 @@ async function glbModel(bytes, beside) {
         }
         return picture(findBeside(beside, decodeURIComponent(im.uri || '')));
     }));
+    /* and which UV set it reads, moved by KHR_texture_transform if it says
+     * so, and whether the material sees through */
     const matPic = (json.materials || []).map(m => {
         const t = m.pbrMetallicRoughness && m.pbrMetallicRoughness.baseColorTexture;
         const tex = t && json.textures && json.textures[t.index];
         const src = tex && (tex.source ?? (tex.extensions && Object.values(tex.extensions).map(e => e.source).find(x => x !== undefined)));
-        return src !== undefined ? { image: images[src], file: (json.images[src] && (json.images[src].name || json.images[src].uri)) || '' } : null;
+        const tt = t && t.extensions && t.extensions.KHR_texture_transform;
+        const out = { image: null, file: '', set: (tt && tt.texCoord) ?? (t && t.texCoord) ?? 0, xf: tt || null,
+            alpha: m.alphaMode === 'BLEND' || m.alphaMode === 'MASK' };
+        if (src !== undefined) { out.image = images[src]; out.file = (json.images[src] && (json.images[src].name || json.images[src].uri)) || ''; }
+        return out;
     });
+    /* KHR_texture_transform: scale, then rotate, then offset */
+    const moveUv = (xf, u, v) => {
+        if (!xf) return [u, v];
+        const s = xf.scale || [1, 1], r = xf.rotation || 0, o = xf.offset || [0, 0];
+        const x = u * s[0], y = v * s[1], c = Math.cos(r), sn = Math.sin(r);
+        return [c * x + sn * y + o[0], -sn * x + c * y + o[1]];
+    };
     const bare = JSON.parse(JSON.stringify(json));
     delete bare.images; delete bare.textures; delete bare.samplers;
     for (const m of bare.materials || []) {
@@ -220,7 +251,8 @@ async function glbModel(bytes, beside) {
             const a = gltf.parser.associations.get(m);
             const p = a && a.materials !== undefined ? matPic[a.materials] : null;
             matOf.set(m, materials.length);
-            materials.push({ name: m.name || 'material' + materials.length, image: p ? p.image : null, file: p ? p.file : '' });
+            materials.push({ name: m.name || 'material' + materials.length, image: p ? p.image : null, file: p ? p.file : '',
+                alpha: !!(p && p.alpha) || m.transparent || m.alphaTest > 0, set: p ? p.set : 0, xf: p ? p.xf : null });
         }
         return matOf.get(m);
     };
@@ -259,17 +291,23 @@ async function glbModel(bytes, beside) {
         const index = g.index ? g.index.array : null;
         const count = index ? index.length : n;
         const groups = g.groups.length ? g.groups : [{ start: 0, count, materialIndex: 0 }];
+        /* the UV set each material reads (three.js names TEXCOORD_n uv, uv1,
+         * uv2, ...), else the first there is */
+        const uvSet = s => g.attributes[s ? 'uv' + s : 'uv'] || U || g.attributes.uv1 || null;
         const tv = [], tuv = [], tn = nrm ? [] : null, tm = [];
-        for (const gr of groups)
+        for (const gr of groups) {
+            const mi = mats[Math.min(gr.materialIndex || 0, mats.length - 1)];
+            const M = materials[mi], A = uvSet(M.set);
             for (let t = gr.start; t + 2 < Math.min(count, gr.start + gr.count); t += 3) {
                 for (let c = 0; c < 3; c++) {
                     const v = index ? index[t + c] : t + c;
                     tv.push(v);
-                    tuv.push(U ? U.getX(v) : 0, U ? U.getY(v) : 0);
+                    tuv.push(...(A ? moveUv(M.xf, A.getX(v), A.getY(v)) : [0, 0]));
                     if (tn) tn.push(nrm[v * 3], nrm[v * 3 + 1], nrm[v * 3 + 2]);
                 }
-                tm.push(mats[Math.min(gr.materialIndex || 0, mats.length - 1)]);
+                tm.push(mi);
             }
+        }
         meshes.push(meshOf(o.name || 'mesh', pos, inf, tv, tuv, tn, tm));
     });
     return { bones, meshes, materials };
@@ -411,39 +449,14 @@ function autoWeights(f, rest, p) {
  *   o.blockOf    per material, the fighter's block it goes to (default:
  *                one each in order, the rest sharing the last)
  * Returns { bytes, verts, tris, kind, matched, of, auto (vertices weighted
- * here), sheets: per block, a canvas of its materials' pictures or null }. */
+ * here), parts: per block, its runs of triangles [{ mat, first, count }] }. */
 export function buildSkin(f, mdl, o = {}) {
     const nblocks = f.rig.skin.length;
     const place = placeModel(f, mdl, o.turn || 0);
     const blockOf = mdl.materials.map((_, i) => (o.blockOf && o.blockOf[i] !== undefined ? o.blockOf[i] : Math.min(i, nblocks - 1)));
 
-    /* the sheets: a block's materials' pictures side by side */
-    const sheets = [], cell = [];
-    for (let b = 0; b < nblocks; b++) {
-        const mats = mdl.materials.map((m, i) => i).filter(i => blockOf[i] === b);
-        if (!mats.some(i => mdl.materials[i].image)) { sheets.push(null); continue; }
-        const cols = Math.ceil(Math.sqrt(mats.length)), rows = Math.ceil(mats.length / cols);
-        const big = Math.max(...mats.map(i => { const im = mdl.materials[i].image; return im ? Math.max(im.width || im.naturalWidth, im.height || im.naturalHeight) : 64; }));
-        const side = Math.max(16, Math.min(big, Math.floor(2048 / Math.max(cols, rows))));
-        const cv = new OffscreenCanvas(cols * side, rows * side), g = cv.getContext('2d');
-        g.fillStyle = '#808080';
-        g.fillRect(0, 0, cv.width, cv.height);
-        mats.forEach((i, k) => {
-            const cx = k % cols, cy = Math.floor(k / cols);
-            cell[i] = mats.length > 1 ? { cx, cy, cols, rows, pad: 0.5 / side } : null;
-            if (mdl.materials[i].image) g.drawImage(mdl.materials[i].image, cx * side, cy * side, side, side);
-        });
-        sheets.push(cv);
-    }
-    const onSheet = (i, u, v) => {
-        const c = cell[i];
-        if (!c) return [u, v];
-        const fr = x => (x < 0 || x > 1 ? x - Math.floor(x) : x);
-        const cl = x => Math.min(1 - c.pad, Math.max(c.pad, fr(x)));
-        return [(c.cx + cl(u)) / c.cols, (c.cy + cl(v)) / c.rows];
-    };
-
-    const blocks = Array.from({ length: nblocks }, () => ({ verts: [], map: new Map(), tris: [] }));
+    /* a block's triangles, per material, put in a row at the end */
+    const blocks = Array.from({ length: nblocks }, () => ({ verts: [], map: new Map(), tris: [], byMat: new Map() }));
     let auto = 0;
     for (const m of mdl.meshes) {
         const nv = m.pos.length / 3;
@@ -470,11 +483,21 @@ export function buildSkin(f, mdl, o = {}) {
                 }
                 const n = m.tn ? xdir(place.toGame, [m.tn[k * 3], m.tn[k * 3 + 1], m.tn[k * 3 + 2]]) : null;
                 if (n) for (let q = 0; q < 3; q++) blk.verts[oi].n[q] += n[q];
-                tri.push({ o: oi, uv: onSheet(mi, m.tuv[k * 2], m.tuv[k * 2 + 1]) });
+                tri.push({ o: oi, uv: [m.tuv[k * 2], m.tuv[k * 2 + 1]] });
             }
-            blk.tris.push(tri);
+            if (!blk.byMat.has(mi)) blk.byMat.set(mi, []);
+            blk.byMat.get(mi).push(tri);
         }
     }
+    /* the parts: { mat, first, count } per block, in the order written */
+    const parts = blocks.map(blk => {
+        const out = [];
+        for (const [mat, tris] of [...blk.byMat].sort((a, b) => a[0] - b[0])) {
+            out.push({ mat, first: blk.tris.length, count: tris.length });
+            for (const t of tris) blk.tris.push(t);
+        }
+        return out;
+    });
     /* normals the file did not give: from the faces */
     for (const blk of blocks)
         for (const tri of blk.tris) {
@@ -495,8 +518,19 @@ export function buildSkin(f, mdl, o = {}) {
     return {
         bytes: writeSkin(blocks, place.rest, f.rig.skin.counted !== false),
         verts: blocks.reduce((s, b) => s + b.verts.length, 0), tris: blocks.reduce((s, b) => s + b.tris.length, 0),
-        kind: place.kind, matched: place.matched, of: f.names.length, auto, sheets,
+        kind: place.kind, matched: place.matched, of: f.names.length, auto, parts,
     };
+}
+
+/* The skin's .mats (runtime/skin_mats.c): a line a part, `block first
+ * count alpha texture`; texFile(mat) the part's picture file or '-' for
+ * the block's own texture */
+export function matsText(parts, mdl, texFile) {
+    const lines = ['# block first count alpha texture (REPLACE MODEL)'];
+    parts.forEach((ps, b) => {
+        for (const p of ps) lines.push([b, p.first, p.count, mdl.materials[p.mat].alpha ? 1 : 0, texFile(p.mat)].join(' '));
+    });
+    return new TextEncoder().encode(lines.join('\n') + '\n');
 }
 
 /* the fighter with another .skin: the same bones and animations */
@@ -506,7 +540,12 @@ export function withSkin(f, bytes) {
     return { ...f, rig, topo, weights: vertexWeights(rig, topo), fitted: null };
 }
 
-/* a sheet as PNG bytes */
-export async function sheetPng(cv) {
+/* a picture as PNG bytes */
+export async function sheetPng(pic) {
+    let cv = pic;
+    if (!cv.convertToBlob) {
+        cv = new OffscreenCanvas(pic.width || pic.naturalWidth, pic.height || pic.naturalHeight);
+        cv.getContext('2d').drawImage(pic, 0, 0);
+    }
     return new Uint8Array(await (await cv.convertToBlob({ type: 'image/png' })).arrayBuffer());
 }
