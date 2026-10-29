@@ -5,6 +5,31 @@
 
 ---
 
+## After 0.1.12: online lag over the internet (2026-10-29, not released)
+
+Not yet played by Mary. She saw lag in an online fight against another PC.
+No 0.1.12 online log was on hand; the last one (0.1.11, over EOS) showed, per
+600 frames, 75 to 128 holds (a frame shown again while waiting for the other
+side), rollbacks always at the deepest the window allowed (7), and the other
+side 6 to 9 frames behind. The input delay was fixed at 2 frames, enough on a
+local network, not over the internet. Changes (`rollback.c`, `mp_net.c`):
+
+- Inputs go on the wire when they are taken (`mpnet_flush` ticks EOS), not at
+  the next frame's poll: about a frame less each way.
+- The input delay follows the round trip, measured from the other side's
+  acknowledgements: once a second, one frame toward the delay that keeps
+  rollbacks near 3 frames, between 2 and 6. Each side's delay is its own (the
+  other only receives inputs by frame), so it can move mid-fight: frames it
+  skips take the same input, a frame it overlaps drops the newer one.
+  `UMK3_RB_DELAY` still fixes it.
+- Rollback window 8 -> 12 frames (4 more snapshots, ~25 MB).
+- The log's `rollback: frame ...` line and NET STATS show the ping, the delay
+  and the longest rollback in ms.
+
+Also seen in that 0.1.11 log, not touched: the second fight (this side player
+2) logged a DESYNC every second. Built into Mary's 0.1.12 test folder; not
+yet tried between two PCs.
+
 ## After 0.1.12: REAL-TIME SHADOWS' note on a row of its own (2026-10-29, not released)
 
 Mary saw the note beside REAL-TIME SHADOWS' value ("WITH VULKAN OR DIRECT3D

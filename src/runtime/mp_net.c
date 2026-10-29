@@ -580,6 +580,12 @@ static void on_packet(const unsigned char *b, int n, const struct paddr *a)
     }
 }
 
+void mpnet_flush(void)
+{
+    if (g_connected)
+        mpeos_tick();
+}
+
 void mpnet_poll(void)
 {
     unsigned char b[MAX_PACKET + 16];
