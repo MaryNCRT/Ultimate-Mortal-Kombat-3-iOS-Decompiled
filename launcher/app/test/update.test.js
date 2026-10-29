@@ -32,3 +32,40 @@ test('check picks the newest non-draft release with a zip', async () => {
     assert.equal(r.sha256, 'a'.repeat(64));
     assert.equal((await upd.check(f, '0.0.9-alpha')).newer, false);
 });
+
+/* Mary: "ENOTEMPTY: directory not empty, rmdir ...\update\new\...\resources"
+ * stopped an update. A leftover update/new Windows will not let go of no
+ * longer does: the update unpacks beside it. */
+test('unpack gets past an update/new that cannot be removed', { skip: process.platform !== 'win32' }, () => {
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+    const { spawnSync } = require('child_process');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'umk3-upd-'));
+    const rel = path.join(root, 'pack', 'UMK3-PC-9.9.9');
+    fs.mkdirSync(path.join(rel, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(rel, 'UMK3-Launcher.exe'), '');
+    fs.writeFileSync(path.join(rel, 'src', 'a.c'), '');
+    const zip = path.join(root, 'r.zip');
+    const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+    assert.strictEqual(spawnSync(tar, ['-a', '-cf', zip, '-C', path.join(root, 'pack'), 'UMK3-PC-9.9.9']).status, 0);
+    const left = path.join(root, 'update', 'new', 'old', 'resources');
+    fs.mkdirSync(left, { recursive: true });
+    fs.writeFileSync(path.join(left, 'app.asar'), 'x');
+
+    const rm = fs.rmSync;
+    fs.rmSync = (p, o) => {
+        if (String(p).includes(path.join('update', 'new')))
+            throw Object.assign(new Error('ENOTEMPTY: directory not empty, rmdir'), { code: 'ENOTEMPTY' });
+        return rm(p, o);
+    };
+    let r;
+    try { r = upd.unpack(root, zip); } finally { fs.rmSync = rm; }
+    assert.notStrictEqual(r.dest, path.join(root, 'update', 'new'));
+    assert.ok(fs.existsSync(path.join(r.src, 'src', 'a.c')));
+
+    r = upd.unpack(root, zip);          /* the next update clears them both */
+    assert.strictEqual(r.dest, path.join(root, 'update', 'new'));
+    assert.deepStrictEqual(fs.readdirSync(path.join(root, 'update')), ['new']);
+    fs.rmSync(root, { recursive: true, force: true });
+});

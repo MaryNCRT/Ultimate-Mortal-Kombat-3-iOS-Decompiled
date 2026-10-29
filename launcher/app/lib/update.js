@@ -140,10 +140,34 @@ function psq(s) {
     return "'" + String(s).replace(/'/g, "''") + "'";
 }
 
-/* Unpacks zip into <root>/update/new and returns the release folder in it. */
+/* A folder away, false when Windows will not let it go yet: a file in it
+ * still open (an antivirus reading what was just unpacked, a launcher left
+ * running from it) makes rmdir answer ENOTEMPTY or EBUSY. Two seconds of
+ * retries. */
+function removeDir(p) {
+    try {
+        fs.rmSync(p, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+/* Unpacks zip into <root>/update/new and returns { src: the release folder
+ * in it, dest }. What an earlier try left there goes first; when Windows
+ * holds on to it (Mary: "ENOTEMPTY: directory not empty, rmdir
+ * ...\update\new\UMK3-PC-0.1.11-beta\launcher\bin\resources", which
+ * stopped the update), this one unpacks into update/new-<time> instead and
+ * the leftovers go at the next update. */
 function unpack(root, zip) {
-    const dest = path.join(root, 'update', 'new');
-    fs.rmSync(dest, { recursive: true, force: true });
+    const upd = path.join(root, 'update');
+    fs.mkdirSync(upd, { recursive: true });
+    for (const n of fs.readdirSync(upd))
+        if (/^new(-\d+)?$/.test(n))
+            removeDir(path.join(upd, n));
+    let dest = path.join(upd, 'new');
+    if (fs.existsSync(dest))
+        dest = path.join(upd, 'new-' + Date.now());
     fs.mkdirSync(dest, { recursive: true });
     const tar = LINUX ? 'tar' : path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
     let r = LINUX || fs.existsSync(tar) ? spawnSync(tar, ['-xf', zip, '-C', dest], { windowsHide: true }) : { status: 1 };
@@ -162,7 +186,7 @@ function unpack(root, zip) {
                              && (fs.existsSync(path.join(d, 'UMK3-Launcher.exe')) || fs.existsSync(path.join(d, 'UMK3-Launcher'))));
     if (!src)
         throw new Error('the update archive structure is unexpected');
-    return src;
+    return { src, dest };
 }
 
 const shq = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
@@ -171,7 +195,7 @@ const shq = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
  * mirrored (resources/ holds the sources, so a dropped one goes), its files
  * copied; what the player's folder has besides -- res/, umk3.ini, build/,
  * mods/, the compiled game -- is not in the archive and stays. */
-function installLinux(root, src, zip, upd) {
+function installLinux(root, src, dest, upd) {
     const sh = [
         '#!/bin/sh',
         'root=' + shq(root), 'src=' + shq(src), 'log="$root/update/apply.log"',
@@ -188,7 +212,7 @@ function installLinux(root, src, zip, upd) {
         'chmod +x "$root/UMK3-Launcher" "$root/chrome_crashpad_handler" 2>/dev/null',
         'if [ $fail -ne 0 ]; then mv "$root/update/pending.json" "$root/update/failed.json"',
         'else mv "$root/update/pending.json" "$root/update/installed.json"; fi',
-        'rm -rf "$root/update/new" "$root"/update/*.tar.gz',
+        'rm -rf ' + shq(dest) + ' "$root"/update/*.tar.gz',
         'cd "$root" && nohup "$root/UMK3-Launcher" >/dev/null 2>&1 &',
     ].join('\n') + '\n';
     const script = path.join(upd, 'apply.sh');
@@ -200,13 +224,13 @@ function installLinux(root, src, zip, upd) {
 /* Writes update/apply.ps1 (apply.sh), starts it detached and returns; the
  * caller quits. */
 function install(root, zip, rel) {
-    const src = unpack(root, zip);
+    const { src, dest } = unpack(root, zip);
     const upd = path.join(root, 'update');
     fs.writeFileSync(path.join(upd, 'pending.json'), JSON.stringify({
         tag: rel.tag, name: rel.name, notes: rel.notes, from: rel.current,
     }));
     if (LINUX)
-        return installLinux(root, src, zip, upd);
+        return installLinux(root, src, dest, upd);
     const ps = [
         '$ErrorActionPreference = "Continue"',
         '$root = ' + psq(root),
@@ -238,7 +262,7 @@ function install(root, zip, rel) {
         'if ($fail) { Rename-Item (Join-Path $root "update\\pending.json") "failed.json" -Force }',
         'else { Rename-Item (Join-Path $root "update\\pending.json") "installed.json" -Force }',
         /* the unpacked copy and every archive go either way: a retry downloads again */
-        'Remove-Item (Join-Path $root "update\\new") -Recurse -Force -ErrorAction SilentlyContinue',
+        'Remove-Item -LiteralPath ' + psq(dest) + ' -Recurse -Force -ErrorAction SilentlyContinue',
         'Get-ChildItem (Join-Path $root "update") -Filter "*.zip" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue',
         'Start-Process -FilePath (Join-Path $root "UMK3-Launcher.exe") -WorkingDirectory $root',
     ].join('\r\n');
@@ -274,4 +298,4 @@ function takeResult(root) {
     return null;
 }
 
-module.exports = { parseVersion, compareVersions, check, download, install, takeResult, REPO };
+module.exports = { parseVersion, compareVersions, check, download, install, takeResult, unpack, REPO };

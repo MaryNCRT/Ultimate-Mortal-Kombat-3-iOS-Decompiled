@@ -5,6 +5,31 @@
 
 ---
 
+## After 0.1.13: an update stopped by a leftover update\new (2026-10-29, not released)
+
+Mary's update failed with "ENOTEMPTY: directory not empty, rmdir
+...\update\new\UMK3-PC-0.1.11-beta\launcher\bin\resources". `unpack`
+(`launcher/app/lib/update.js`) cleared `update\new` with one `fs.rmSync`.
+An earlier update's copy was still there: apply.ps1 removes it with
+`-ErrorAction SilentlyContinue`, and Windows would not let a file in it go
+(the usual holder is an antivirus still reading what was just unpacked).
+So the update threw before it began.
+
+Now:
+- `unpack` retries the removal for two seconds (`maxRetries`).
+- What still will not go is left, and the update unpacks into
+  `update\new-<time>` beside it.
+- Every leftover `new*` is tried again at the next update.
+- apply.ps1 / apply.sh remove the folder that update used.
+
+Checks: a test case in `test/update.test.js` (a removal that throws
+ENOTEMPTY, then the next update clearing both); launcher tests 14 pass.
+
+The fix runs in the launcher doing the update, so it helps from the next
+release on: a launcher of 0.1.13 or older still stops on a leftover. Until
+then, close the launcher, delete the `update` folder by hand and update
+again (or download the release zip).
+
 ## Release 0.1.13 beta (2026-10-29): replays, online delay by ping, Vulkan / Direct3D 12 stutters, 4 GB
 
 Published as the GitHub pre-release `v0.1.13-beta`, packaged as 0.1.12 was:
