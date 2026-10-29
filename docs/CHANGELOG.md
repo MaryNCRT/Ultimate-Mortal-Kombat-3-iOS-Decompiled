@@ -4,6 +4,40 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 
 ---
 
+## After 0.1.12: the game's memory below 4 GB, limeMalloc's heap 2 GB (2026-10-29, not released)
+
+Not yet played by Mary.
+
+The 64-bit build kept the game's heaps below 2 GB, because a `long` holding an
+address was feared to sign-extend. That fear was checked two ways.
+
+**The compiler.** Clang's `-Wint-to-pointer-cast` was run over every source
+of the 64-bit build. It found 320 integer-to-pointer casts, and all of them
+are from `uint32_t`, which zero-extends: `P32` is `__ptr32 __uptr`, and the
+game's `uintptr_t` is `uint32_t`. None are from a signed type, and
+`-Wint-conversion` found no implicit ones.
+
+**Running it.** With `UMK3_HIGH_MEM=1`, a test switch in `savestate.c`'s
+`reserve_low`, every region starts at 2 GB: the arena at 0x81000000 and the
+heap at 0xC1000000. With all of the game's memory above 2 GB, the game:
+- booted;
+- fought;
+- went through FINISH HIM, the continue screen, character select and the main
+  menu (8,000 ticks);
+- ran a 6,000-tick fight with a finisher request, with no fault.
+
+What changed:
+- `reserve_low` now searches below 4 GB, still first fit from the bottom. The
+  game's memory sits where it was; only what it never used before can go past
+  2 GB.
+- limeMalloc's region (`lime_platform.c`) now tries 2048 MB first (was 768) and
+  gets it: `lime_heap: 2048 MB`. It is a reservation, and pages are committed
+  as they are used. A fight with SMOOTH MODELS uses about 386 MB in all.
+- The save-state arena stays at 1024 MB.
+
+Linux keeps `MAP_32BIT`, so it stays below 2 GB. It falls back through the
+size list to what fits. Linux compile: 84/84.
+
 ## After 0.1.12: Vulkan / Direct3D 12 stutters, compiled shaders, Sub-Zero's strap (2026-10-29, not released)
 
 Not yet played by Mary.

@@ -241,7 +241,7 @@ long lime_heap_check(const char *where);
  * The allocator is the simplest that frees: power-of-two size classes, one
  * free list each, bump allocation from the region when a list is empty, pages
  * committed as the bump pointer reaches them. The device had 128 MB; the
- * region is up to 1 GB, so doubling every block still leaves room.
+ * region is up to 2 GB, so doubling every block still leaves room.
  *
  * A host that cannot reserve low memory falls back to malloc and says so once.
  * Everything still runs; a slot that truncates a pointer is then the next
@@ -279,10 +279,13 @@ void *umk3_reserve_low(size_t size);    /* savestate.c */
 static void low_reserve(void)
 {
 #ifdef UMK3_LOW32
-    /* the 64-bit build: below 2 GB (longs sign-extend), beside the save
-     * states' arena (runtime/savestate.c): the largest that fits */
-    static const size_t sizes[] = { 768u << 20, 640u << 20, 512u << 20,
-                                    384u << 20, 256u << 20, 128u << 20 };
+    /* the 64-bit build: below 4 GB, beside the save states' arena
+     * (runtime/savestate.c): the largest that fits. Reserved, committed as
+     * it is used. 768 MB while it had to stay below 2 GB; the device had
+     * 128 MB, and a fight with SMOOTH MODELS uses ~386 MB in all. */
+    static const size_t sizes[] = { 2048u << 20, 1536u << 20, 1024u << 20, 768u << 20,
+                                    640u << 20, 512u << 20, 384u << 20, 256u << 20,
+                                    128u << 20 };
 #else
     static const size_t sizes[] = { 1u << 30, 512u << 20, 256u << 20 };
     const uintptr_t lim = 0xFFFF0000u;
@@ -298,7 +301,7 @@ static void low_reserve(void)
         return;
     for (s = 0; s < sizeof(sizes) / sizeof(sizes[0]); s++) {
 #if defined(_WIN32) && defined(UMK3_LOW32)
-        /* the first free range below 2 GB that holds it (savestate.c) */
+        /* the first free range below 4 GB that holds it (savestate.c) */
         g_low_base = (unsigned char *)umk3_reserve_low(sizes[s]);
 #elif defined(_WIN32)
         uintptr_t at;

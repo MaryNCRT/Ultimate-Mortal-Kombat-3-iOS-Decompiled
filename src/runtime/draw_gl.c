@@ -57,7 +57,7 @@
 #include "../decomp/lime/lime.h"
 
 /* The texture cache's entries: the game keeps a TEXTURE's address in 32-bit
- * words, so in the 64-bit build they come from below 2 GB (savestate.c);
+ * words, so in the 64-bit build they come from below 4 GB (savestate.c);
  * the C library's heap is above 4 GB on some runs, and every texture of
  * such a run drew white. */
 #if defined(_WIN32) && defined(UMK3_LOW32)

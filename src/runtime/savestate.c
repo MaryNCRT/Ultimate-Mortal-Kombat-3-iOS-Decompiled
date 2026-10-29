@@ -25,7 +25,7 @@
 #include <windows.h>
 
 /* The arena's address space, committed lazily: the largest of the sizes
- * in arena_init that fits (in the 64-bit build below 2 GB, beside
+ * in arena_init that fits (in the 64-bit build below 4 GB, beside
  * limeMalloc's region) */
 static uint32_t g_reserve;
 #define ST_RESERVE   g_reserve
@@ -55,20 +55,30 @@ static int      g_failed;               /* the arena ran out once: no states */
 static struct st_head *head(void) { return (struct st_head *)g_base; }
 
 #ifdef UMK3_LOW32
-/* The 64-bit build: the game keeps its pointers in 32-bit words, and in
- * longs, which sign-extend, so its memory has to sit below 2 GB. Reserves
- * `size` bytes in the first free range there big enough; 0 if none.
- * Shared with limeMalloc's region (lime_platform.c). */
+/* The 64-bit build: the game keeps its pointers in 32-bit words, so its
+ * memory has to sit below 4 GB. Reserves `size` bytes in the first free
+ * range there big enough; 0 if none. Shared with limeMalloc's region
+ * (lime_platform.c).
+ *
+ * Below 2 GB until 0.1.12, for fear of longs that sign-extend an address.
+ * There are none the compiler sees: every integer the game turns into a
+ * pointer is a uint32_t (P32 is __ptr32 __uptr, its uintptr_t is uint32_t;
+ * clang's -Wint-to-pointer-cast over the 64-bit build: 320 casts, all from
+ * uint32_t, none from a signed type). And none run: with UMK3_HIGH_MEM=1
+ * every region starts at 2 GB -- the arena at 0x81000000, the heap at
+ * 0xC1000000 -- and the game boots, fights, finishes and goes back to the
+ * menus. First fit from the bottom still, so the game's memory stays where
+ * it was and only what it never used before is past 2 GB. */
 static void *reserve_low(size_t size, DWORD extra)
 {
     MEMORY_BASIC_INFORMATION mi;
-    uintptr_t q = 0x10000;
+    uintptr_t q = getenv("UMK3_HIGH_MEM") ? 0x80000000u : 0x10000;   /* a test */
 
-    while (q < 0x7FFF0000u && VirtualQuery((void *)q, &mi, sizeof mi)) {
+    while (q < 0xFFFF0000u && VirtualQuery((void *)q, &mi, sizeof mi)) {
         uintptr_t at = ((uintptr_t)mi.BaseAddress + 0xFFFF) & ~(uintptr_t)0xFFFF;
         uintptr_t end = (uintptr_t)mi.BaseAddress + mi.RegionSize;
 
-        if (mi.State == MEM_FREE && at + size <= end && at + size <= 0x7FFF0000u) {
+        if (mi.State == MEM_FREE && at + size <= end && at + size <= 0xFFFF0000u) {
             void *p = VirtualAlloc((void *)at, size, MEM_RESERVE | extra,
                                    PAGE_READWRITE);
             if (p)
@@ -84,7 +94,7 @@ void *umk3_reserve_low(size_t size)
     return reserve_low(size, 0);
 }
 
-/* A block below 2 GB that is never freed, outside every state: what the
+/* A block below 4 GB that is never freed, outside every state: what the
  * game keeps in a 32-bit word and a save state must not take back (the
  * texture cache, draw_gl.c). The C library's heap lands anywhere in the
  * 64-bit space -- above 4 GB on some runs, as address randomisation has it. */
