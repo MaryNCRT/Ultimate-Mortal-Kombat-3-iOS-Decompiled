@@ -262,10 +262,16 @@ int rb_quiet(void);
 
 /* armv7 0x00066a74, transcribed whole. The one substitution is the clock:
  * CFAbsoluteTimeGetCurrent becomes the host-advanced clock above. */
+/* Port: frames begun, so what runs once a frame can tell a second call in
+ * the same frame (GameCode.c port_smooth_pose) */
+unsigned long port_frame_no;
+
 void limeBegin(void)
 {
     double dt;
     int k;
+
+    port_frame_no++;
 
     limeDeviceSideways = limeDeferredDeviceSideways;
 

@@ -3063,6 +3063,7 @@ void LIME_GLAPI glMultMatrixf(const float *m);
  * 16/35..41 range, or what IsLiaProblem and IsOstrichProblem refuse -- the
  * cases where the game itself cuts. */
 int port_smooth_anims;
+extern unsigned long port_frame_no;     /* runtime/lime_menu.c, limeBegin */
 
 #define SMOOTH_MAX_TICKS 5
 #define SMOOTH_SLOTS     6
@@ -3092,6 +3093,7 @@ static void port_smooth_pose(long *w)
     static struct {
         long *who;
         long  chr, anim, cur, prev, held, dur;
+        unsigned long frame;
     } st[SMOOTH_SLOTS];
     static int next;
     const long *a = (const long *)(uintptr_t)(unsigned long)w[4 / 4];
@@ -3114,7 +3116,18 @@ static void port_smooth_pose(long *w)
         next = (next + 1) % SMOOTH_SLOTS;
         st[i].who = w;
         st[i].chr = -1;
+        st[i].frame = port_frame_no - 1;
     }
+    /* The same PLAYER drawn twice in a frame: the select screen with both
+     * sides on one fighter draws TheFECharacters' one record for each.
+     * The first call has already set its frames; a second would read them
+     * as the game's own blend, take the other frame for the game's and
+     * start again, so the mirror match lost its smoothing and its
+     * SMOOTH MODELS pose changed on every draw (Mary: the select screen
+     * slowed down with two of the same fighter). */
+    if (st[i].frame == port_frame_no)
+        return;
+    st[i].frame = port_frame_no;
 
     if (st[i].chr != w[0] || st[i].anim != w[4 / 4]) {
         st[i].chr  = w[0];
