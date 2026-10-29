@@ -25,7 +25,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { readFbx, fbxScene, similarity, writeSkin, clusters, globalM, geomM, mm, xform, xdir, kid, kids, plain, I4 } from './fbxin.js';
-import { posedVerts, makeRig, meshTopology, vertexWeights, rotBetween, vmul, tr3, localOf, withOffsets, withRootY } from './rig.js';
+import { posedVerts, makeRig, meshTopology, vertexWeights, rotBetween, axisAngle, mul3, vmul, tr3, localOf, withOffsets, withRootY } from './rig.js';
 export { parseBonesText } from './rig.js';
 import { mapBones } from './retarget.js';
 import { parseSkin } from './formats.js';
@@ -488,8 +488,8 @@ const I3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
  * model fits the bones the game's animations were made for. An end bone
  * (hand, head, toe) turns with the bone it hangs from. A vertex is moved by
  * its weights, as a skin moves it. */
-function conformers(f, mdl, place) {
-    const J = fileJoints(mdl, place), rest = place.rest, out = new Map();
+function conformers(place, J, rest) {
+    const out = new Map();
     for (const [g, Pf] of J) {
         const c = (place.map.link.get(g) || { child: -1 }).child;
         const Pg = rest[g].T;
@@ -539,6 +539,134 @@ function conformDir(conf, n, inf) {
     return o;
 }
 
+/* ARM / LEG ANGLE AND ROLL, and the T or A pose.
+ *
+ * The limbs: each side's upper arm and thigh, with every bone under it.
+ * The file's pose is read from its joints: the upper arm's rise from level
+ * (a T pose holds it near 0, an A pose some 30-50 degrees down) and the
+ * thigh's spread from straight down, beside the fighter's own rest.
+ *
+ * o.adjust: { armAngle, armRoll, legAngle, legRoll } in degrees, the same
+ * on both sides, mirrored; auto (default on): KEEP PROPORTIONS turns the
+ * file's arms to the fighter's rise first, so an A-pose model plays the
+ * game's moves with the arms where the fighter's are (FIT TO THE FIGHTER
+ * turns each part to its bone anyway).
+ *   angle  raises the arms / spreads the legs (negative: lowers, closes)
+ *   roll   turns the limb about its own length
+ * The roll and, keeping proportions, the angle turn the model itself (each
+ * vertex by its weights, and its joints) before it is bound. Fitting, the
+ * angle moves the fighter's joints the model is fitted to instead -- the
+ * bones' offsets, written with the skin (<skin>.bones), so the game's
+ * moves carry the limb at that angle. */
+const DEG = Math.PI / 180;
+const LIMB_OF = { upperarm: ['forearm', 'arm'], thigh: ['shin', 'leg'] };
+
+function limbsOf(f) {
+    const out = [], b = f.rig.bones;
+    for (const [base, [next, kind]] of Object.entries(LIMB_OF))
+        for (const sd of ['.L', '.R']) {
+            const g = f.names.indexOf(base + sd), c = f.names.indexOf(next + sd);
+            if (g < 0 || c < 0) continue;
+            const sub = new Set();
+            const walk = i => { sub.add(i); for (const k of b.children[i]) walk(k); };
+            walk(g);
+            out.push({ kind, g, c, sub });
+        }
+    return out;
+}
+
+/* an arm's rise from level, a leg's spread from straight down, degrees */
+const riseOf = d => Math.atan2(d[1], Math.hypot(d[0], d[2])) / DEG;
+const spreadOf = d => Math.atan2(Math.abs(d[0]), -d[1]) / DEG;
+const angleOf = (kind, d) => (kind === 'arm' ? riseOf(d) : spreadOf(d));
+
+/* The pose a file is in, read from its joints: 'T' or 'A' */
+export function poseName(rise) {
+    return rise > -20 ? 'T' : 'A';
+}
+
+function adjustments(f, mdl, place, o) {
+    const J0 = fileJoints(mdl, place), rest = place.rest, a = o.adjust || {};
+    const hips = f.names.indexOf('hips');
+    const cx = hips >= 0 ? (J0.get(hips) || rest[hips].T)[0] : rest[f.rig.bones.root].T[0];
+    const limbs = limbsOf(f);
+    /* a limb's side: +1 or -1, so one setting moves both alike */
+    const side = (L, P, d) => (L.kind === 'arm' ? Math.sign(d[0]) : Math.sign(P[0] - cx)) || 1;
+    const sum = { file: { arm: [], leg: [] }, fighter: { arm: [], leg: [] } };
+
+    const tf = new Map(), J = new Map(J0);
+    for (const L of limbs) {
+        const fd = vsub(rest[L.c].T, rest[L.g].T);
+        sum.fighter[L.kind].push(angleOf(L.kind, fd));
+        if (!J0.has(L.g) || !J0.has(L.c)) continue;
+        const P = J0.get(L.g), d = vsub(J0.get(L.c), P), s = side(L, P, d);
+        sum.file[L.kind].push(angleOf(L.kind, d));
+        let ang = 0;
+        if (o.keep) {
+            ang = (L.kind === 'arm' ? a.armAngle : a.legAngle) || 0;
+            if (L.kind === 'arm' && a.auto !== false) ang += riseOf(fd) - riseOf(d);
+        }
+        const roll = (L.kind === 'arm' ? a.armRoll : a.legRoll) || 0;
+        if (!ang && !roll) continue;
+        const l = vlen(d) || 1;
+        const M = mul3(axisAngle(d.map(x => x / l), roll * s * DEG), axisAngle([0, 0, 1], ang * s * DEG));
+        for (const g of L.sub) {
+            tf.set(g, { M, P });
+            if (J0.has(g)) { const q = vmul(vsub(J0.get(g), P), M); J.set(g, [q[0] + P[0], q[1] + P[1], q[2] + P[2]]); }
+        }
+    }
+
+    /* fitting: the angle on the fighter's joints, as bone offsets */
+    let rest2 = rest, ov = null;
+    if (!o.keep)
+        for (const L of limbs) {
+            const ang = (L.kind === 'arm' ? a.armAngle : a.legAngle) || 0;
+            if (!ang) continue;
+            const P = rest[L.g].T, d = vsub(rest[L.c].T, P);
+            const M = axisAngle([0, 0, 1], ang * side(L, P, d) * DEG);
+            if (rest2 === rest) { rest2 = rest.slice(); ov = { offsets: new Map(), rootY: 1 }; }
+            for (const g of L.sub) {
+                if (g === L.g) continue;
+                const q = vmul(vsub(rest[g].T, P), M);
+                rest2[g] = { ...rest[g], T: [q[0] + P[0], q[1] + P[1], q[2] + P[2]] };
+            }
+            for (const g of L.sub)
+                if (g !== L.g) {
+                    const par = f.rig.bones.parent[g];
+                    ov.offsets.set(g, vmul(vsub(rest2[g].T, rest2[par].T), tr3(rest2[par].R)));
+                }
+        }
+
+    const mean = l => (l.length ? l.reduce((x, y) => x + y, 0) / l.length : null);
+    const info = {
+        file: { arm: mean(sum.file.arm), leg: mean(sum.file.leg) },
+        fighter: { arm: mean(sum.fighter.arm), leg: mean(sum.fighter.leg) },
+    };
+    /* a vertex, a normal: through its bones' turns, by weight */
+    const point = (p, inf) => {
+        if (!tf.size) return p;
+        let sw = 0;
+        const out = [0, 0, 0];
+        for (const [g, w] of inf) {
+            const t = tf.get(g);
+            const q = t ? vmul(vsub(p, t.P), t.M).map((x, k) => x + t.P[k]) : p;
+            for (let k = 0; k < 3; k++) out[k] += w * q[k];
+            sw += w;
+        }
+        return sw > 0 ? out.map(x => x / sw) : p;
+    };
+    const dir = (n, inf) => {
+        if (!tf.size) return n;
+        const out = [0, 0, 0];
+        for (const [g, w] of inf) {
+            const t = tf.get(g), q = t ? vmul(n, t.M) : n;
+            for (let k = 0; k < 3; k++) out[k] += w * q[k];
+        }
+        return out;
+    };
+    return { J, rest: rest2, ov, info, point, dir };
+}
+
 /* PROPORTION TRICK (KEEP THE MODEL'S PROPORTIONS): the model is left as it
  * is and the fighter's bones are moved to its joints instead -- each bone's
  * offset from its parent (the .bones file's, which the game's animations
@@ -548,8 +676,8 @@ function conformDir(conf, n, inf) {
  * in the animations is scaled by the model's hips over the fighter's, so
  * the feet stay on the floor. Returns the rest to bind to and the
  * override. */
-function proportions(f, mdl, place) {
-    const J = fileJoints(mdl, place), rest = place.rest, bones = f.rig.bones;
+function proportions(f, J, rest) {
+    const bones = f.rig.bones;
     /* the root's height, as the game scales the animations' (about y 0,
      * the floor the fighters stand on): the model's hips over the
      * fighter's */
@@ -632,21 +760,25 @@ function autoWeights(f, rest, p) {
  *                proportion trick) instead of fitting it to the fighter's
  *   o.blockOf    per material, the fighter's block it goes to (default:
  *                one each in order, the rest sharing the last)
+ *   o.adjust     a humanoid rig: { armAngle, armRoll, legAngle, legRoll,
+ *                auto } (adjustments above)
  *   o.scale      the model's size, about its pivot: the floor under the
  *                fighter's root. Mesh, bones and the root's height together
  *                (written as <skin>.bones), so the animations play on it
  * Returns { bytes, verts, tris, kind, matched, of, auto (vertices weighted
  * here), parts: per block, its runs of triangles [{ mat, first, count }],
  * rig ('names', 'humanoid' or ''), bones (the proportion trick's override,
- * for <skin>.bones, or null) }. */
+ * for <skin>.bones, or null), pose (a humanoid rig: the file's and the
+ * fighter's arm rise and leg spread, degrees, or null) }. */
 export function buildSkin(f, mdl, o = {}) {
     const nblocks = f.rig.skin.length;
     const place = placeModel(f, mdl, o.turn || 0);
     const human = place.map && place.map.kind === 'humanoid';
-    const prop = human && o.keep ? proportions(f, mdl, place) : null;
-    const conf = human && !o.keep ? conformers(f, mdl, place) : null;
+    const adj = human ? adjustments(f, mdl, place, o) : null;
+    const prop = human && o.keep ? proportions(f, adj.J, place.rest) : null;
+    const conf = human && !o.keep ? conformers(place, adj.J, adj.rest) : null;
     const k = o.scale && o.scale !== 1 ? o.scale : 1;
-    const rest0 = prop ? prop.rest : place.rest;
+    const rest0 = prop ? prop.rest : adj ? adj.rest : place.rest;
     const rT = rest0[f.rig.bones.root].T;
     /* about the pivot: x and z about the root's, y about the floor */
     const scaled = p => (k === 1 ? p : [rT[0] + (p[0] - rT[0]) * k, p[1] * k, rT[2] + (p[2] - rT[2]) * k]);
@@ -667,7 +799,10 @@ export function buildSkin(f, mdl, o = {}) {
             if (m.inf) for (const [b, w] of m.inf[v]) { const g = place.byFile[b]; if (g >= 0) sum.set(g, (sum.get(g) || 0) + w); }
             let l = [...sum];
             if (!l.length) { l = autoWeights(f, rest0, p); auto++; }
-            else if (conf) p = conformPoint(conf, p, l);
+            else {
+                if (adj) p = adj.point(p, l);
+                if (conf) p = conformPoint(conf, p, l);
+            }
             gpos.push(scaled(p));
             ginf.push(l);
         }
@@ -685,6 +820,7 @@ export function buildSkin(f, mdl, o = {}) {
                     blk.verts.push({ p, n: [0, 0, 0], inf: ginf[v] });
                 }
                 let n = m.tn ? xdir(place.toGame, [m.tn[k * 3], m.tn[k * 3 + 1], m.tn[k * 3 + 2]]) : null;
+                if (n && adj && m.inf) n = adj.dir(n, ginf[v]);
                 if (n && conf) n = conformDir(conf, n, ginf[v]);
                 if (n) for (let q = 0; q < 3; q++) blk.verts[oi].n[q] += n[q];
                 tri.push({ o: oi, uv: [m.tuv[k * 2], m.tuv[k * 2 + 1]] });
@@ -728,7 +864,8 @@ export function buildSkin(f, mdl, o = {}) {
         bytes: writeSkin(blocks, bindRest, f.rig.skin.counted !== false),
         verts: blocks.reduce((s, b) => s + b.verts.length, 0), tris: blocks.reduce((s, b) => s + b.tris.length, 0),
         kind: place.kind, matched: place.matched, of: f.names.length, auto, parts,
-        rig: place.map ? place.map.kind : '', bones: scaledBones(f, prop ? prop.bones : null, k),
+        rig: place.map ? place.map.kind : '', bones: scaledBones(f, prop ? prop.bones : adj && adj.ov, k),
+        pose: adj ? adj.info : null,
     };
 }
 

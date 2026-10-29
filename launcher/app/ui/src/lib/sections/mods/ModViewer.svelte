@@ -37,6 +37,7 @@
     import { decodePvr } from '#lib/mods/formats.js';
     import { putTexture } from '#lib/mods/image.js';
     import { homeOf, textureDir, exportTexDir } from '#lib/mods/owners.js';
+    import { makeFloor, placeFloor, weightColors, applyLook, makeRigLines, poseRigLines } from '#lib/mods/viewkit.js';
 
     let host = $state();
     let pic = $state();
@@ -53,7 +54,7 @@
     let layers = $state([]);                /* [{ key, name, on }]: the model's meshes */
     let pics = $state({});                  /* texture stem -> its small picture */
 
-    let renderer, scene, camera, controls, root, raf, skel;
+    let renderer, scene, camera, controls, root, raf, skel, floor;
     let fighterView = null;                 /* { f, meshes: [{ mesh, map }], rest } */
 
     const items = $derived.by(() => {
@@ -96,6 +97,9 @@
         const sun = new THREE.DirectionalLight(0xffffff, 1.4);
         sun.position.set(1, 2, 3);
         scene.add(sun);
+        /* the floor (FLOOR): under a fighter at y 0, else at the model's feet */
+        floor = makeFloor();
+        scene.add(floor);
         const ro = new ResizeObserver(fit);
         ro.observe(host);
         loop();
@@ -177,6 +181,8 @@
             if (!near.isEmpty()) box = near;
         }
         const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3()).length() || 1;
+        placeFloor(floor, box, !!fighterView);
+        floor.visible = ms.floor && ms.kind !== 'stages';
         controls.target.copy(c);
         camera.near = size / 500;
         camera.far = size * 50;
@@ -282,6 +288,7 @@
         clear();
         root = new THREE.Group();
         const meshes = [];
+        const colors = weightColors(f.weights, f.topo.src.length);
         for (const [bi, blk] of f.topo.blocks.entries()) {
             /* the block's triangles over all of the fighter's vertices: the
              * positions are replaced every frame, so no compaction */
@@ -289,6 +296,7 @@
             g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(f.topo.src.length * 3), 3));
             g.setAttribute('uv', new THREE.BufferAttribute(Float32Array.from(f.topo.uv), 2));
             g.setIndex(new THREE.BufferAttribute(f.topo.faces.slice(blk.first * 3, (blk.first + blk.count) * 3), 1));
+            g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
             const stem = bi === 0 && ms.outfit ? shownOutfit() : f.blockTex[bi];
             const map = await texture(stem);
             let mat = new THREE.MeshLambertMaterial({ map, color: map ? 0xffffff : 0x9a96c8, side: THREE.DoubleSide, alphaTest: 0.35, wireframe: ms.wire });
@@ -324,8 +332,7 @@
             root.add(mesh);
             extras.push({ a, mesh });
         }
-        skel = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xff5a5a, depthTest: false }));
-        skel.renderOrder = 10;
+        skel = makeRigLines();
         root.add(skel);
         scene.add(root);
         fighterView = { f, meshes, extras, smooth: { level: 0, blocks: [] } };
@@ -443,7 +450,7 @@
         const covered = (q, i) => boxes.some(({ lo, hi }) => q[i] >= lo[0] && q[i] <= hi[0] && q[i + 1] >= lo[1] && q[i + 1] <= hi[1] && q[i + 2] >= lo[2] && q[i + 2] <= hi[2]);
         /* SMOOTH MODEL: a block drawn smoothed when it has been built */
         const sm = fighterView.smooth;
-        const smooth = sm && sm.level > 0 && sm.blocks.length === meshes.length;
+        const smooth = sm && sm.level > 0 && sm.blocks.length === meshes.length && !ms.weights;
         const skin = smooth ? skinOf(f, pos) : null;
         /* unsmoothed: the skin tucked under what his bones carry, as the
          * game does (mods/tuck.js); f.fitted is kept, so a copy */
@@ -469,7 +476,7 @@
             g.computeVertexNormals();
             g.computeBoundingSphere();
             g.computeBoundingBox();
-            for (const mt of [].concat(m.material)) mt.wireframe = ms.wire;
+            for (const mt of [].concat(m.material)) applyLook(mt, lookOf(true));
         });
         for (const [ei, { mesh }] of (fighterView.extras || []).entries()) {
             const v = extraPos[ei];
@@ -479,18 +486,24 @@
             mesh.geometry.attributes.position.needsUpdate = true;
             mesh.geometry.computeVertexNormals();
             mesh.geometry.computeBoundingSphere();
-            mesh.material.wireframe = ms.wire;
+            applyLook(mesh.material, lookOf(false));
         }
-        const seg = [];
-        if (ms.bones)
-            f.rig.bones.parent.forEach((par, b) => { if (par >= 0) seg.push(...p[par].T, ...p[b].T); });
-        skel.geometry.setAttribute('position', new THREE.Float32BufferAttribute(seg, 3));
+        poseRigLines(skel, p, f.rig.bones.parent, ms.bones);
     }
 
+    /* how the model draws: TEXTURES, SOLID, WEIGHTS (a fighter's, by its
+     * bones), WIREFRAME */
+    const lookOf = skinned => ({ wire: ms.wire, solid: ms.solid, weights: skinned && ms.weights });
+
     $effect(() => {
-        ms.clip; ms.frame; ms.pose; ms.bones; ms.wire; ms.extras;
+        ms.clip; ms.frame; ms.pose; ms.bones; ms.wire; ms.extras; ms.solid; ms.weights;
         pose();
+        if (!fighterView && root) {
+            const l = lookOf(false);
+            root.traverse(o => { if (o.material) for (const mt of [].concat(o.material)) applyLook(mt, l); });
+        }
     });
+    $effect(() => { if (floor) floor.visible = ms.floor && ms.kind !== 'stages'; });
 
     /* LAYERS: a mesh of the model shown or hidden */
     const shown = key => { const l = layers.find(x => x.key === key); return !l || l.on; };
@@ -980,14 +993,18 @@
                 <div class="checks">
                     <label class="chk"><input type="checkbox" bind:checked={ms.bones}><span>{tx('vwBones')}</span></label>
                     <label class="chk"><input type="checkbox" bind:checked={ms.wire}><span>{tx('vwWire')}</span></label>
+                    <label class="chk"><input type="checkbox" bind:checked={ms.solid} onchange={() => { if (ms.solid) ms.weights = false; }}><span>{tx('vwSolid')}</span></label>
+                    <label class="chk"><input type="checkbox" bind:checked={ms.weights} onchange={() => { if (ms.weights) ms.solid = false; }}><span>{tx('vwWeights')}</span></label>
+                    <label class="chk"><input type="checkbox" bind:checked={ms.floor}><span>{tx('vwFloor')}</span></label>
                     {#if fx.attach && fx.attach.length}
                         <label class="chk"><input type="checkbox" bind:checked={ms.extras}><span>{tx('vwExtras')}</span></label>
                     {/if}
                 </div>
             {:else if ms.pick && ms.kind !== 'textures' && !ms.loading}
                 <div class="checks">
-                    <label class="chk"><input type="checkbox" bind:checked={ms.wire}
-                        onchange={() => root && root.traverse(o => { if (o.material) for (const mt of [].concat(o.material)) mt.wireframe = ms.wire; })}><span>{tx('vwWire')}</span></label>
+                    <label class="chk"><input type="checkbox" bind:checked={ms.wire}><span>{tx('vwWire')}</span></label>
+                    <label class="chk"><input type="checkbox" bind:checked={ms.solid}><span>{tx('vwSolid')}</span></label>
+                    {#if ms.kind !== 'stages'}<label class="chk"><input type="checkbox" bind:checked={ms.floor}><span>{tx('vwFloor')}</span></label>{/if}
                 </div>
             {:else if ms.kind === 'textures' && texInfo}
                 <span class="lbl">{texInfo.name}</span>

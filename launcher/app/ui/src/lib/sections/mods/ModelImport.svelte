@@ -7,14 +7,18 @@
      * texture it replaces (its picture is saved as that texture, and the
      * game draws it on the model's own UVs) or a new texture of its own, a
      * picture to put in its place, and an eye to hide its part or see it
-     * alone. */
+     * alone. Over the view: how it is drawn (textures, plain, wire, its
+     * bones' weights), the rig it will have (bones and joints, as they move
+     * in the animation chosen) and the floor; at the side, a humanoid rig's
+     * pose (T or A), and the arms' and legs' angle and roll. */
     import { onMount, onDestroy } from 'svelte';
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     import { app, tx } from '#lib/app.svelte.js';
     import { api } from '#lib/platform.js';
     import { selectBlip } from '#lib/sound.js';
-    import { readModel, buildSkin, withSkin, solidPicture } from '#lib/mods/modelin.js';
+    import { readModel, buildSkin, withSkin, solidPicture, poseName } from '#lib/mods/modelin.js';
+    import { makeFloor, placeFloor, weightColors, applyLook, makeRigLines, poseRigLines } from '#lib/mods/viewkit.js';
     import { framePose, posedVerts } from '#lib/mods/rig.js';
     import { decodePicture } from '#lib/mods/image.js';
     import { dataUrl } from '#lib/mods/thumbs.js';
@@ -37,8 +41,12 @@
     let clip = $state(-1), frame = $state(0), playing = $state(false), loop = $state(true);
     let hidden = $state({});                /* material -> hidden */
     let big = $state(-1);                   /* the material seen large */
+    /* ARM / LEG ANGLE and ROLL (buildSkin o.adjust), degrees */
+    let adjust = $state({ armAngle: 0, armRoll: 0, legAngle: 0, legRoll: 0, auto: true });
+    let look = $state({ wire: false, solid: false, weights: false });
+    let showRig = $state(true), showFloor = $state(true);
 
-    let renderer, scene, camera, controls, root, raf, pf = null, meshes = [];
+    let renderer, scene, camera, controls, root, raf, pf = null, meshes = [], floor, rigLines;
 
     function setup() {
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -53,6 +61,9 @@
         const sun = new THREE.DirectionalLight(0xffffff, 1.4);
         sun.position.set(1, 2, 3);
         scene.add(sun);
+        floor = makeFloor();
+        rigLines = makeRigLines();
+        scene.add(floor, rigLines);
         new ResizeObserver(fit).observe(host);
         loop_();
     }
@@ -86,7 +97,7 @@
         if (!mdl) return;
         err = '';
         try {
-            res = buildSkin(f, mdl, { turn, blockOf, keep, scale });
+            res = buildSkin(f, mdl, { turn, blockOf, keep, scale, adjust: { ...adjust } });
             pf = withSkin(f, res.bytes, res.bones);
             await show();
         } catch (e) {
@@ -104,6 +115,7 @@
         /* a mesh a part: each material with its own picture, as the game
          * draws them (runtime/skin_mats.c) */
         const maps = new Map();
+        const colors = weightColors(pf.weights, pf.topo.src.length);
         const pic = (key, im) => {
             if (!im) return null;
             if (!maps.has(key)) {
@@ -122,6 +134,7 @@
                 const g = new THREE.BufferGeometry();
                 g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pf.topo.src.length * 3), 3));
                 g.setAttribute('uv', new THREE.BufferAttribute(Float32Array.from(pf.topo.uv), 2));
+                g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
                 const a = blk.first + p.first;
                 g.setIndex(new THREE.BufferAttribute(pf.topo.faces.slice(a * 3, (a + p.count) * 3), 1));
                 const M = p.mat >= 0 ? mdl.materials[p.mat] : null;
@@ -136,6 +149,7 @@
                     normalMap: M ? pic('n' + p.mat, M.normal) : null, specularMap: M ? pic('s' + p.mat, M.specular) : null,
                     specular: M && M.specular ? 0xffffff : 0x111111, shininess: 30,
                     side: THREE.DoubleSide, alphaTest: see ? 0.1 : 0.35, transparent: see }));
+                applyLook(mesh.material, look);
                 mesh.userData.mat = p.mat;
                 mesh.renderOrder = see ? 1 : 0;
                 mesh.visible = !hidden[p.mat];
@@ -147,6 +161,7 @@
         pose();
         const box = new THREE.Box3().setFromObject(root);
         const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3()).length() || 1;
+        placeFloor(floor, box, true);
         controls.target.copy(c);
         camera.near = size / 500;
         camera.far = size * 50;
@@ -168,8 +183,11 @@
             m.geometry.computeVertexNormals();
             m.geometry.computeBoundingSphere();
         }
+        poseRigLines(rigLines, p, pf.rig.bones.parent, showRig);
     }
-    $effect(() => { clip; frame; pose(); });
+    $effect(() => { clip; frame; showRig; pose(); });
+    $effect(() => { const l = { ...look }; for (const m of meshes) applyLook(m.material, l); });
+    $effect(() => { if (floor) floor.visible = showFloor; });
 
     async function makeThumbs() {
         thumbs = await Promise.all(mdl.materials.map(async m => {
@@ -250,6 +268,15 @@
         scaleWait = setTimeout(rebuild, 150);
     }
 
+    let adjWait;
+    function setAdjust(key, v) {
+        adjust[key] = typeof v === 'boolean' ? v : Math.min(90, Math.max(-90, Number(v) || 0));
+        clearTimeout(adjWait);
+        adjWait = setTimeout(rebuild, 150);
+    }
+    const poseLine = (deg, leg) => (deg === null || deg === undefined ? '-'
+        : (leg ? '' : poseName(deg) + ' · ') + Math.round(deg) + '°');
+
     async function setKeep(v) {
         selectBlip();
         keep = v;
@@ -302,6 +329,14 @@
         <div class="body">
             <section class="main">
                 <div class="view" bind:this={host}></div>
+                <div class="looks">
+                    <button class="eye wide" class:hot={!look.solid && !look.weights} onclick={() => { look.solid = false; look.weights = false; }}>{tx('imLookTex')}</button>
+                    <button class="eye wide" class:hot={look.solid} onclick={() => { look.solid = !look.solid; look.weights = false; }}>{tx('imLookSolid')}</button>
+                    <button class="eye wide" class:hot={look.weights} onclick={() => { look.weights = !look.weights; look.solid = false; }}>{tx('imLookWeights')}</button>
+                    <button class="eye wide" class:hot={look.wire} onclick={() => look.wire = !look.wire}>{tx('vwWire')}</button>
+                    <button class="eye wide" class:hot={showRig} onclick={() => showRig = !showRig}>{tx('imLookRig')}</button>
+                    <button class="eye wide" class:hot={showFloor} onclick={() => showFloor = !showFloor}>{tx('imLookFloor')}</button>
+                </div>
                 <div class="over">
                     {#if busy}<span class="msg">{tx('vwLoading')}</span>
                     {:else if err}<span class="msg bad">{err}</span>{/if}
@@ -362,6 +397,21 @@
                         <button class="btn" class:hot={keep} onclick={() => setKeep(true)}>{tx('imKeep')}</button>
                     </div>
                     <p class="note">{tx(keep ? 'imKeepNote' : 'imFitNote')}</p>
+                    {#if res.pose}
+                        <!-- the pose the file is in, beside the fighter's -->
+                        <p class="note">{tx('imPoseFile')}: {poseLine(res.pose.file.arm)} · {tx('imPoseFighter')}: {poseLine(res.pose.fighter.arm)}</p>
+                        <p class="note">{tx('imLegSpread')}: {poseLine(res.pose.file.leg, true)} · {poseLine(res.pose.fighter.leg, true)}</p>
+                    {/if}
+                    {#each [['armAngle', 'imArmAngle'], ['armRoll', 'imArmRoll'], ['legAngle', 'imLegAngle'], ['legRoll', 'imLegRoll']] as [key, label]}
+                        <label class="scale">
+                            <span class="lbl">{tx(label)} {adjust[key] > 0 ? '+' : ''}{adjust[key]}°</span>
+                            <input type="range" min="-90" max="90" step="1" value={adjust[key]} oninput={e => setAdjust(key, e.currentTarget.value)}>
+                            <button class="eye" onclick={() => setAdjust(key, 0)} title="0">0</button>
+                        </label>
+                    {/each}
+                    {#if keep}
+                        <label class="chk" title={tx('imAutoPoseNote')}><input type="checkbox" checked={adjust.auto} onchange={e => setAdjust('auto', e.currentTarget.checked)}><span>{tx('imAutoPose')}</span></label>
+                    {/if}
                 {/if}
                 <p class="note">{tx('imNote')}</p>
                 <div class="pair">
@@ -427,4 +477,9 @@
     .pair { display: flex; gap: calc(var(--u) * .5); }
     .pair .btn { flex: 1; font-size: calc(var(--t) * 1.15); }
     .head { color: #fff; }
+    .looks { position: absolute; right: calc(var(--u) * .6); top: calc(var(--u) * .6); display: flex; flex-wrap: wrap; justify-content: flex-end;
+        gap: calc(var(--u) * .3); max-width: 70%; }
+    .eye.wide { width: auto; padding: 0 calc(var(--u) * .6); font-size: calc(var(--t) * 1); letter-spacing: .06em; }
+    .eye.hot { border-color: var(--blue); color: #fff; background: rgba(90, 80, 255, .35); }
+    .scale .lbl { flex: 0 0 calc(var(--u) * 11); font-size: calc(var(--t) * 1.1); }
 </style>

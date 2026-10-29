@@ -753,8 +753,14 @@ void AddNewGameEvents(void)
                  * in the block). Passed as (kind, rand, voice) the random
                  * number became the block index and read far past the row:
                  * voices went missing and stray sounds played instead. */
-                if (Settings[3])
-                    PlaySoundId(get_gsound(arg & 0xf, arg >> 4, limeRand()));
+                if (Settings[3]) {
+                    long snd = get_gsound(arg & 0xf, arg >> 4, limeRand());
+                    /* Port diagnostic, not in the binary: every voice played,
+                     * to find the repeated scream Mary hears on Liu Kang */
+                    printf("voice: kind %ld, voice group %ld, sound %ld\n",
+                           (long)(arg & 0xf), (long)(arg >> 4), snd);
+                    PlaySoundId(snd);
+                }
                 break;
             case 2:
                 if (Settings[3])
@@ -771,8 +777,12 @@ void AddNewGameEvents(void)
                            (long)(arg >> 8), (unsigned long)arg);
                     break;
                 }
-                if (Settings[3])
-                    PlaySoundId(get_csound(arg & 0xff, arg >> 8));
+                if (Settings[3]) {
+                    long snd = get_csound(arg & 0xff, arg >> 8);
+                    printf("voice: character %ld, sound %ld -> %ld\n",
+                           (long)(arg >> 8), (long)(arg & 0xff), snd);
+                    PlaySoundId(snd);
+                }
                 break;
             case 4:
                 if (arg == 0x36)

@@ -1,5 +1,5 @@
-/* The exporters: OBJ (+MTL), USD (.usda, UsdSkel) and FBX (binary 7.4),
- * the three Blender reads, and PNG for the textures.
+/* The exporters: OBJ (+MTL), USD (.usda, UsdSkel), FBX (binary 7.4) and
+ * GLB (glTF 2.0 binary, its pictures inside), and PNG for the textures.
  *
  * They all take one description of what to write:
  *
@@ -17,7 +17,7 @@
  * Units are the game's, which are centimetres (a fighter is ~180 tall); Y is
  * up and the fighters face +Z. Each format says so in its own header, and
  * Blender converts on import. */
-import { tr3, mul3, vmul, localOf } from './rig.js';
+import { tr3, mul3, vmul, localOf, matToQuat } from './rig.js';
 import { stageOf, writeUsda, writeUsdc, writeUsdz } from './usd.js';
 
 const enc = new TextEncoder();
@@ -443,4 +443,166 @@ export function poseMeshes(desc, pose) {
         }
         return Object.assign({}, m, { pos: out });
     });
+}
+
+/* ---------------------------------------------------------------- GLB --
+ * glTF 2.0 binary: the meshes (skinned when there is a skeleton), the
+ * bones as nodes, one animation a clip and the pictures inside the file
+ * (`pictures`: { texture file name: PNG bytes }). glTF is in metres, Y up,
+ * facing +Z, as the game is: a root node scales the centimetres down. */
+export function toGlb(desc, pictures = {}) {
+    const chunks = [], views = [], accessors = [];
+    let blen = 0;
+    const align = () => {
+        const pad = (4 - (blen & 3)) & 3;
+        if (pad) { chunks.push(new Uint8Array(pad)); blen += pad; }
+    };
+    const view = (bytes, target) => {
+        align();
+        const b = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        views.push(Object.assign({ buffer: 0, byteOffset: blen, byteLength: b.length }, target ? { target } : {}));
+        chunks.push(b);
+        blen += b.length;
+        return views.length - 1;
+    };
+    const SIZE = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
+    const acc = (arr, type, ctype, target, minmax) => {
+        const n = SIZE[type];
+        const a = { bufferView: view(arr, target), componentType: ctype, count: arr.length / n, type };
+        if (minmax) {
+            a.min = []; a.max = [];
+            for (let k = 0; k < n; k++) {
+                let lo = Infinity, hi = -Infinity;
+                for (let i = k; i < arr.length; i += n) { lo = Math.min(lo, arr[i]); hi = Math.max(hi, arr[i]); }
+                a.min.push(lo); a.max.push(hi);
+            }
+        }
+        accessors.push(a);
+        return accessors.length - 1;
+    };
+    const FLOAT = 5126, U16 = 5123, U32 = 5125;
+
+    const images = [], textures = [], picOf = new Map();
+    const materials = desc.materials.map(m => {
+        const out = { name: m.name, pbrMetallicRoughness: { metallicFactor: 0, roughnessFactor: 0.9 }, doubleSided: true };
+        const png = m.texture && pictures[m.texture];
+        if (png) {
+            if (!picOf.has(m.texture)) {
+                images.push({ name: m.texture.replace(/\.png$/i, ''), mimeType: 'image/png', bufferView: view(png) });
+                textures.push({ source: images.length - 1, sampler: 0 });
+                picOf.set(m.texture, textures.length - 1);
+            }
+            out.pbrMetallicRoughness.baseColorTexture = { index: picOf.get(m.texture) };
+        }
+        return out;
+    });
+
+    const nodes = [{ name: desc.name, scale: [0.01, 0.01, 0.01], children: [] }];
+    const sk = desc.skeleton, tree = sk && { parent: sk.parent };
+    const boneNode = [], skins = [];
+    if (sk) {
+        sk.names.forEach((nm, b) => {
+            const l = localOf(sk.rest, tree, b);
+            boneNode[b] = nodes.length;
+            nodes.push({ name: nm, translation: l.T, rotation: matToQuat(l.R) });
+        });
+        sk.names.forEach((_, b) => {
+            const p = sk.parent[b], into = p < 0 ? nodes[0] : nodes[boneNode[p]];
+            (into.children = into.children || []).push(boneNode[b]);
+        });
+        const ibm = new Float32Array(sk.names.length * 16);
+        sk.rest.forEach((r, b) => { const i = inverse(r); ibm.set(mat16(i.R, i.T), b * 16); });
+        skins.push({ joints: boneNode.slice(), inverseBindMatrices: acc(ibm, 'MAT4', FLOAT) });
+    }
+
+    const meshes = desc.meshes.map(m => {
+        const n = m.pos.length / 3;
+        /* smooth normals from the faces */
+        const nor = new Float32Array(n * 3);
+        for (let t = 0; t < m.faces.length; t += 3) {
+            const a = m.faces[t], b = m.faces[t + 1], c = m.faces[t + 2];
+            const e1 = [0, 1, 2].map(k => m.pos[b * 3 + k] - m.pos[a * 3 + k]), e2 = [0, 1, 2].map(k => m.pos[c * 3 + k] - m.pos[a * 3 + k]);
+            const nn = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+            for (const v of [a, b, c]) for (let k = 0; k < 3; k++) nor[v * 3 + k] += nn[k];
+        }
+        for (let v = 0; v < n; v++) {
+            const l = Math.hypot(nor[v * 3], nor[v * 3 + 1], nor[v * 3 + 2]);
+            for (let k = 0; k < 3; k++) nor[v * 3 + k] = l > 1e-12 ? nor[v * 3 + k] / l : (k === 1 ? 1 : 0);
+        }
+        const attributes = {
+            POSITION: acc(Float32Array.from(m.pos), 'VEC3', FLOAT, 34962, true),
+            NORMAL: acc(nor, 'VEC3', FLOAT, 34962),
+            TEXCOORD_0: acc(Float32Array.from(m.uv), 'VEC2', FLOAT, 34962),
+        };
+        if (sk && m.skin) {
+            attributes.JOINTS_0 = acc(Uint16Array.from(m.skin.idx), 'VEC4', U16, 34962);
+            attributes.WEIGHTS_0 = acc(Float32Array.from(m.skin.wt), 'VEC4', FLOAT, 34962);
+        }
+        const indices = n > 65535 ? acc(Uint32Array.from(m.faces), 'SCALAR', U32, 34963) : acc(Uint16Array.from(m.faces), 'SCALAR', U16, 34963);
+        return { name: m.name, primitives: [{ attributes, indices, material: m.material }] };
+    });
+    desc.meshes.forEach((m, i) => {
+        const node = { name: m.name, mesh: i };
+        if (sk && m.skin) node.skin = 0;
+        nodes[0].children.push(nodes.length);
+        nodes.push(node);
+    });
+
+    const animations = [];
+    if (sk)
+        for (const clip of desc.clips || []) {
+            const nf = clip.poses.length;
+            if (!nf) continue;
+            const time = acc(Float32Array.from({ length: nf }, (_, f) => f / desc.fps), 'SCALAR', FLOAT, 0, true);
+            const samplers = [], channels = [];
+            sk.names.forEach((_, b) => {
+                const T = new Float32Array(nf * 3), R = new Float32Array(nf * 4);
+                const S = clip.poses.some(p => p[b].S) ? new Float32Array(nf * 3) : null;
+                let prev = null;
+                clip.poses.forEach((pose, f) => {
+                    const l = localOf(pose, tree, b);
+                    T.set(l.T, f * 3);
+                    let q = matToQuat(l.R);
+                    /* the short way from the frame before */
+                    if (prev && prev[0] * q[0] + prev[1] * q[1] + prev[2] * q[2] + prev[3] * q[3] < 0) q = q.map(x => -x);
+                    prev = q;
+                    R.set(q, f * 4);
+                    if (S) S.set(l.S || [1, 1, 1], f * 3);
+                });
+                const ch = [['translation', T, 'VEC3'], ['rotation', R, 'VEC4']];
+                if (S) ch.push(['scale', S, 'VEC3']);
+                for (const [path, arr, type] of ch) {
+                    samplers.push({ input: time, output: acc(arr, type, FLOAT), interpolation: 'LINEAR' });
+                    channels.push({ sampler: samplers.length - 1, target: { node: boneNode[b], path } });
+                }
+            });
+            animations.push({ name: clip.name, samplers, channels });
+        }
+
+    align();
+    const json = {
+        asset: { version: '2.0', generator: 'UMK3 PC launcher' },
+        scene: 0, scenes: [{ name: desc.name, nodes: [0] }], nodes, meshes, materials,
+        accessors, bufferViews: views, buffers: [{ byteLength: blen }],
+    };
+    if (skins.length) json.skins = skins;
+    if (animations.length) json.animations = animations;
+    if (images.length) {
+        json.images = images;
+        json.textures = textures;
+        json.samplers = [{ magFilter: 9729, minFilter: 9987, wrapS: 10497, wrapT: 10497 }];
+    }
+
+    let jb = enc.encode(JSON.stringify(json));
+    if (jb.length & 3) { const t = new Uint8Array((jb.length + 3) & ~3).fill(0x20); t.set(jb); jb = t; }
+    const total = 12 + 8 + jb.length + 8 + blen;
+    const out = new Uint8Array(total), d = new DataView(out.buffer);
+    d.setUint32(0, 0x46546c67, true); d.setUint32(4, 2, true); d.setUint32(8, total, true);
+    d.setUint32(12, jb.length, true); d.setUint32(16, 0x4e4f534a, true);
+    out.set(jb, 20);
+    let o = 20 + jb.length;
+    d.setUint32(o, blen, true); d.setUint32(o + 4, 0x004e4942, true);
+    o += 8;
+    for (const c of chunks) { out.set(c, o); o += c.length; }
+    return { [desc.name + '.glb']: out };
 }

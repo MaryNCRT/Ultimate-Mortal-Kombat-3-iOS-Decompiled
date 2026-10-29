@@ -14,7 +14,7 @@ export const ms = $state({
     files: null, cat: null, noGame: false,
     /* the viewer: kind of thing, the chosen one, its settings */
     kind: 'characters', pick: null, search: '',
-    pose: 'tpose', clip: -1, frame: 0, playing: false, speed: 1, loop: true, solo: false, outfit: '', bones: false, wire: false, extras: true,
+    pose: 'tpose', clip: -1, frame: 0, playing: false, speed: 1, loop: true, solo: false, outfit: '', bones: false, wire: false, solid: false, weights: false, floor: true, extras: true,
     loading: false, error: '',
     /* SMOOTH MODEL (0 off, 1 or 2: the game's weld + Catmull-Clark level)
      * and SMOOTH ANIMATIONS (frames blended while playing), as in the game */

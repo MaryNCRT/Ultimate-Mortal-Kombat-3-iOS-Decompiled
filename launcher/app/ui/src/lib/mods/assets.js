@@ -6,7 +6,7 @@
  * ...] relative to res/, read(path) -> Promise<Uint8Array|null> }. */
 import { parseMeshset, parseSkin, parseBones, parseAnim, parseScene, parseFrameList, findClips, decodePvr } from './formats.js';
 import { makeRig, bindPose, tPose, framePose, meshTopology, vertexWeights, posedVerts, boneNames, fitRest, vmul, parseBonesText, withOffsets, withRootY } from './rig.js';
-import { toObj, toUsd, toFbx, encodePng, poseMeshes } from './export.js';
+import { toObj, toUsd, toFbx, toGlb, encodePng, poseMeshes } from './export.js';
 
 /* the fighters by the name the game files use (PlayerDefs, the roster) */
 export const FIGHTERS = {
@@ -395,7 +395,8 @@ export async function meshsetDesc(src, file, only) {
 
 /* ------------------------------------------------------------ writing --
  * The files for one export: the model in `format` (obj, fbx, usda, usdc,
- * usdz) and its textures as PNG beside it -- inside it, for usdz.
+ * usdz, glb) and its textures as PNG beside it -- inside it, for usdz and
+ * glb.
  * { name: bytes }. */
 export async function exportFiles(src, desc, format) {
     const pics = {};
@@ -406,6 +407,7 @@ export async function exportFiles(src, desc, format) {
         else mat.texture = '';
     }
     if (format === 'usdz') return toUsd(desc, 'usdz', pics);       /* the pictures inside */
+    if (format === 'glb') return toGlb(desc, pics);
     const out = format === 'fbx' ? toFbx(desc) : /^usd[ac]?$/.test(format) ? toUsd(desc, format === 'usd' ? 'usda' : format) : toObj(desc);
     return Object.assign(out, pics);
 }

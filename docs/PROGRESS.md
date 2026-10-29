@@ -64,6 +64,38 @@ yet**. Asked by Mary after trying the first round:
     `lime.h`), and a lighting file that does not fit the skin is replaced by
     its average light (`Players.c port_fit_lighting`, logged `flat light`).
     The importer refuses a block over 65,535 vertices once unwelded.
+  - **REPLACE MODEL: the rig before it is put on, arm/leg angle and roll,
+    T or A pose** (Mary, with gtastuff.com's viewer as the reference for
+    the floor, the joints and the weight colours). Over the preview:
+    TEXTURES / SOLID / WEIGHTS (each vertex coloured by its bones,
+    `mods/viewkit.js`) / WIREFRAME, RIG (the bones as lines and the joints
+    as dots, moving with the animation chosen) and FLOOR. A humanoid rig
+    shows the file's pose (`T` above -20 degrees of arm rise, else `A`) and
+    its leg spread beside the fighter's, and four sliders, mirrored on both
+    sides: ARM ANGLE (raise/lower), ARM ROLL, LEG ANGLE (spread), LEG ROLL
+    (`modelin.js adjustments`). Roll turns the model's limb about its own
+    length, each vertex by its weights. KEEP PROPORTIONS turns the model's
+    limbs before the bones are moved to its joints, and AUTOMATIC T / A POSE
+    (on by default) first turns the file's arms to the fighter's rise, so an
+    A-pose model plays the moves with its arms where the fighter's are.
+    FIT TO THE FIGHTER puts the angle on the fighter's joints instead: the
+    bones' offsets, written as `<skin>.bones` as the proportion trick's
+    are; the bone frames keep the fighter's turn, so a large angle bends
+    the elbow about the fighter's axis. The game's animations already play
+    on the imported model in the preview (the clip list under the view).
+  - **The model viewer**: FLOOR (a grid under the model, not on stages),
+    SOLID, WEIGHTS (a fighter's) and the joints as dots with the bones.
+  - **GLB export** (`export.js toGlb`): EXPORT's formats now include GLB,
+    glTF 2.0 binary with the skeleton, the skin, one animation a clip and
+    the PNG textures inside, in metres (a root node scales the game's
+    centimetres). Checked here: the file's header, JSON and every accessor
+    against the buffer, on a two-bone test; not opened in Blender yet.
+  - **Liu Kang's repeated screams** (Mary, 2026-10-29): not found. Her
+    17:19 log (Liu Kang vs Shao Kahn) shows one `death scream` from the
+    game logic. The build now logs every voice it plays
+    (`voice: kind K, voice group G, sound S` for a group sound,
+    `voice: character C, sound N -> S` for a character's), so the next log
+    of a fight where it happens shows which sound repeats and from where.
   - **Frames lost with a custom model.** A REPLACE MODEL skin is drawn a
     material at a time (`skin_mats.c`), each part a run of indices into the
     whole model's vertices, and the Direct3D 12 / Vulkan path
