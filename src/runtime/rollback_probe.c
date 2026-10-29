@@ -926,6 +926,7 @@ void rb_tick_end(const uint32_t *w, int n)
 extern int CurrentTask;                 /* GameCode.c: 6 is the fight */
 extern char PreloadedCharacters[41148][0x5f4];  /* read only by a fight */
 void rb_silent(int quiet, int nodraw);  /* rollback.c */
+void plat_audio_stop_all(void);         /* platform/*_audio.c */
 
 #define RP_KEYS_MAX  48                 /* keyframes, the last slot for holds */
 #define RP_JUMP      300                /* ticks: five seconds */
@@ -1013,6 +1014,10 @@ static void rp_seek(uint32_t t)
 
     if (t > g_total)
         t = g_total;
+    /* what still sounds belongs to the moment left: going back to before a
+     * scream it would sound on under the scream played again (Mary heard
+     * the fatality's screams repeat) */
+    plat_audio_stop_all();
     if (g_rp_snap == 1 && g_rp_nkeys) {
         for (k = g_rp_nkeys - 1; k > 0 && g_rp_key[k] > t; k--)
             ;
