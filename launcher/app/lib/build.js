@@ -165,7 +165,7 @@ function cancelBuild() {
     return true;
 }
 
-function play(root, exeName) {
+function play(root, exeName, args = []) {
     const exePath = path.join(root, exeName);
     if (!fs.existsSync(exePath)) {
         return false;
@@ -177,7 +177,7 @@ function play(root, exeName) {
         } catch (_) {}
     }
 
-    const child = spawn(exePath, [], {
+    const child = spawn(exePath, args, {
         cwd: root,
         detached: true,
         stdio: 'ignore',

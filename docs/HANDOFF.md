@@ -5,6 +5,52 @@
 
 ---
 
+## After 0.1.12: REPLAYS (2026-10-29, not released)
+
+Not yet played by Mary. Asked for so that a fight can be watched again to
+find bugs and take logs of them (Melee Unlocked's replays as the model).
+
+**Recording** (`rollback_probe.c`, `GameCode.c`). The probe's recorder
+(`UMK3_REPLAY_RECORD`, which replayed a fight identically over 3038 ticks)
+now records every fight but an online one, by default, to
+`replays/recent/<date>_<p1>_vs_<p2>.umkr` beside the exe; only the newest 5
+stay, and one shorter than a second is not kept. umk3.ini `replays=0` turns
+it off. The file is the setup -- the fighters, the level, the mode, the ten
+`Settings` words and training (`PortPractice`), 18 words now -- the two
+seeds, then each tick's two engine words and its result's hashes. A replay
+takes the recorded settings back for its one fight, since the buttons and
+the difficulty change how it plays. While recording the frame step is pinned
+to 1, as online: below 60 FPS the game slows instead of skipping ticks.
+Online fights are not recorded yet (their ticks go through `rollback.c`).
+
+**Playing** (`umk3-game --replay replays/<folder>/<file>`, a path inside the
+exe's folder). The game goes straight into the fight, as `--fight` does, and
+`rp_frame` steps it in `GameCodeMain`'s place. A panel along the bottom
+(`debug_menu.c`, drawn like the launcher: violet glass, light rules, buttons
+with a rim, play lit) holds the status line, a bar to click or drag, and
+buttons: to the start, back 5 s, back a frame, play / pause, on a frame, on
+5 s, slower / faster (x1/4 .. x4), and the settings menu; each names itself
+when the mouse is over it. Keys: Enter or P play / pause, left / right 5 s
+(paused, a frame; held, they repeat), up / down speed, M the start, Esc the
+settings. Going back loads the nearest keyframe (a rollback snapshot,
+`st_rb_*`, every 120 ticks or more, 47 at most) and runs the ticks between
+silent and undrawn, 20 ms of them a frame. Pausing draws the next frame and
+puts the state back. At the last tick the player stops. Each tick's result is
+compared with the recorded one: a difference shows on the panel and goes to
+the log (`replay: tick N DIFFERS`, then `replay: the end ... the same as the
+recording` or `DIFFERS`). Windows only for going back and pausing: the
+snapshots are Windows only.
+
+**Launcher.** A REPLAYS line on the menu (the eight lines re-centred on the
+ring) opens the page (`SecReplays.svelte`, `lib/replays.js`): the keep-the-
+last-5 switch, the last fights and the kept ones, each with WATCH, KEEP FOR
+GOOD (recent to `replays/saved/`), EXPORT… and DELETE, and IMPORT… and OPEN
+FOLDER for the kept ones. `play` passes `--replay` to the game.
+
+Checks: Windows build without warnings in the new code, Linux compile 84/84,
+launcher tests pass, the page and the menu seen in launcher captures. The
+panel and playback have not been seen in the game yet.
+
 ## After 0.1.12: online lag over the internet (2026-10-29, not released)
 
 Not yet played by Mary. She saw lag in an online fight against another PC.

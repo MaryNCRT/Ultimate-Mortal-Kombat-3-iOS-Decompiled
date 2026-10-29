@@ -498,6 +498,14 @@ void rb_net(long type, const void *data, long len)
 int rb_active(void) { return g_on; }
 int rb_quiet(void)  { return g_quiet; }
 int rb_nodraw(void) { return g_nodraw; }
+
+/* The replay player's frames run again or skipped (rollback_probe.c): the
+ * same silence as a rollback's. */
+void rb_silent(int quiet, int nodraw)
+{
+    g_quiet = quiet;
+    g_nodraw = nodraw;
+}
 int rb_ready(void)  { return !g_on || g_hello; }
 
 /* One line of the numbers report() logs, for the debug menu's NET STATS

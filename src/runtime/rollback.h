@@ -39,5 +39,39 @@ void rb_net(long type, const void *data, long len);
 /* game_main.c, every frame: the last inputs go on being sent for a while
  * after a fight, so the other side can finish it. */
 void rb_poll(void);
+/* The replay player's frames: no sound, nothing drawn. */
+void rb_silent(int quiet, int nodraw);
+
+/* REPLAYS (rollback_probe.c): umk3.ini replays= records every fight but an
+ * online one to replays/recent; --replay <file> (inside the exe's folder)
+ * plays one, whose fighters and level rb_replay_peek reads first. */
+void rb_replay_auto(int on);
+void rb_replay_open(const char *rel);
+int  rb_replay_peek(int32_t *c1, int32_t *c2, int32_t *level);
+/* Task_GameDestroy */
+void rb_replay_fight_over(void);
+/* The player's buttons, left to right on its panel (debug_menu.c draws
+ * them), and the bar above them. */
+enum { RPB_START, RPB_BACK5, RPB_FRAME_BACK, RPB_PLAY, RPB_FRAME_FWD,
+       RPB_FWD5, RPB_SLOWER, RPB_FASTER, RPB_SETTINGS, RPB_COUNT,
+       RPB_BAR = 100 };
+/* rp_info's state: the speed (0..4: x1/4 x1/2 x1 x2 x4) and these bits */
+#define RPS_SPEED   0x07
+#define RPS_PAUSED  0x08
+#define RPS_SEEKING 0x10
+#define RPS_END     0x20
+#define RPS_DIFFERS 0x40
+
+/* The player: 1 while --replay's fight is on; the frame in GameCodeMain's
+ * place; a button pressed; the keys as held; the mouse on the panel (the
+ * button under it, where along the bar, down), returning a button the
+ * caller acts on itself (RPB_SETTINGS) or -1; the time and the state,
+ * returning how far the fight is, 0..1. */
+int   rp_playing(void);
+void  rp_frame(void (*frame)(void));
+void  rp_press(int id);
+void  rp_keys(int play, int back, int fwd, int faster, int slower, int start);
+int   rp_ui(int id, float at, int down);
+float rp_info(char *time, int n, int *state);
 
 #endif

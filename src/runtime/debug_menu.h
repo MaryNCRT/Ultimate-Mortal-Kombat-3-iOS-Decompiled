@@ -113,6 +113,11 @@ void dbg_info_toggle(void);
 void dbg_info_draw(const char *line);
 /* a line of the corner's overlay: row 0 the top one */
 void dbg_info_draw_at(const char *line, int row);
+/* the replay player's panel along the bottom (rollback_probe.c): how far
+ * the fight is, its clock, rp_info's state, the button under the mouse;
+ * and which button (RPB_*, rollback.h) is at a place of the view */
+void dbg_replay_draw(float at, const char *time, int state, int hover);
+int  dbg_replay_hit(float fx, float fy, float *at);
 int  dbg_fps_on(void);                 /* TOOLS: FRAMES PER SECOND */
 int  dbg_net_on(void);                 /* TOOLS: ONLINE NUMBERS */
 /* FIGHT: INFINITE HEALTH (bit 0 player one, bit 1 two) and FREEZE CLOCK */

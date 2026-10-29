@@ -73,6 +73,8 @@
  *
  * Debug, to skip the menus:
  *   umk3-game --fight <p1> <p2> [stage]     (or UMK3_FIGHT="p1,p2,stage")
+ *   umk3-game --replay replays/saved/x.umkr a recorded fight, with the player
+ *                                           (rollback_probe.c; the launcher's REPLAYS)
  *   umk3-game --list-pads                   the pads attached (for the launcher)
  *   umk3-game --list-monitors               the monitors (for the launcher)
  * goes straight from the main menu into a fight. A fighter is a name from
@@ -444,6 +446,7 @@ static void keyboard_buttons(void)
 
 /* --fight: -1 until parsed. */
 static long g_fight_p1 = -1, g_fight_p2 = -1, g_fight_stage = 0;
+static int  g_rp_hover = -1;            /* REPLAYS: the button under the mouse */
 static int  g_fight_override;           /* Character2Override is ours */
 extern int  DbgPalette[2], DbgFightActive;      /* runtime/debug_menu.c */
 
@@ -1143,6 +1146,8 @@ static void read_config(const char *dir)
             snprintf(g_cfg_frame, sizeof g_cfg_frame, "%s", v);
         else if (strcmp(line, "debug_keys") == 0)
             g_cfg_debug_keys = atoi(v) != 0;
+        else if (strcmp(line, "replays") == 0)     /* REPLAYS: keep the last fights */
+            rb_replay_auto(atoi(v) != 0);
         else if (strcmp(line, "skip_intro") == 0)
             g_cfg_skip_intro = atoi(v) != 0;
         else if (strcmp(line, "aspect") == 0) {
@@ -2971,6 +2976,25 @@ int main(int argc, char **argv)
         for (i = 1; i + 1 < argc; i++)
             if (strcmp(argv[i], "--screen") == 0)
                 g_screen_jump = parse_screen(argv[i + 1]);
+        /* --replay <file>: straight into the recorded fight, as --fight
+         * goes; Task_GameInit puts the rest of its setup back */
+        for (i = 1; i + 1 < argc; i++)
+            if (strcmp(argv[i], "--replay") == 0) {
+                int32_t c1, c2, lv;
+
+                rb_replay_open(argv[i + 1]);
+                if (rb_replay_peek(&c1, &c2, &lv) && c1 >= 0 && c1 < 26
+                    && c2 >= 0 && c2 < 26) {
+                    g_fight_p1 = c1;
+                    g_fight_p2 = c2;
+                    g_fight_stage = lv >= 0 && lv <= 15 ? lv : 0;
+                } else {
+                    fprintf(stderr, "--replay: %s is not a replay inside the "
+                            "game's folder\n", argv[i + 1]);
+                    rb_replay_open("");
+                }
+                break;
+            }
         if (g_fight_p1 < 0 && getenv("UMK3_FIGHT")) {
             char buf[128], *a, *b, *c;
             snprintf(buf, sizeof buf, "%s", getenv("UMK3_FIGHT"));
@@ -3104,7 +3128,7 @@ int main(int argc, char **argv)
         /* A scripted run is the script's alone: a click on the window
          * would be a second finger nobody asked for. */
         down = plat_mouse(&mx, &my) && g_ntaps == 0 && !dbg_menu_is_open()
-               && !set_menu_is_open();
+               && !set_menu_is_open() && !rp_playing();
         {
             static float prev_tx = -1.0f, prev_ty = -1.0f;
             float tx = (float)(mx - vx) * g_virt_w / (vw ? vw : 1);
@@ -3116,6 +3140,14 @@ int main(int argc, char **argv)
             if (set_menu_is_open())     /* and so does the settings menu */
                 set_menu_mouse(tx / g_virt_w, ty / g_virt_h,
                                plat_mouse(&mx, &my) && g_ntaps == 0);
+            else if (rp_playing() && !dbg_menu_is_open()) {     /* the replay's panel */
+                float at;
+
+                g_rp_hover = dbg_replay_hit(tx / g_virt_w, ty / g_virt_h, &at);
+                if (rp_ui(g_rp_hover, at, plat_mouse(&mx, &my) && g_ntaps == 0)
+                    == RPB_SETTINGS)
+                    set_menu_toggle();
+            }
 
             if (down && !was_down) {
                 lime_touch_began(tx, ty);
@@ -3316,7 +3348,12 @@ int main(int argc, char **argv)
             palette_sync();
             lime_menu_advance_clock(1.0 / 60.0);
             keyboard_buttons();
-            hud_keys();
+            if (rp_playing())   /* a replay: the player's keys, no pause menu */
+                rp_keys(plat_key(PK_OK) || plat_key(PK_PAUSE),
+                        plat_key(PK_LEFT), plat_key(PK_RIGHT),
+                        plat_key(PK_UP), plat_key(PK_DOWN), plat_key(PK_MOVES));
+            else
+                hud_keys();
             pad_skip();
             if (g_cfg_debug_keys && dbg_keys_on()
                 && !(GameMode == 1 && (CurrentTask == 6 || CurrentTask == 9))) {
@@ -3365,7 +3402,10 @@ int main(int argc, char **argv)
                 }
                 mpnet_poll();       /* ONLINE: the other game's packets (port) */
                 rb_poll();          /* rollback: inputs after a fight */
-                GameCodeMain();
+                if (rp_playing())   /* REPLAYS: the player steps the fight */
+                    rp_frame(GameCodeMain);
+                else
+                    GameCodeMain();
                 PortPadPalette[0] = PortPadPalette[1] = 0;  /* off the select screen */
                 if (on) {
                     limeTouchScreenX[0] = limeLastTouchScreenX[0] = -1.0f;
@@ -3443,6 +3483,13 @@ int main(int argc, char **argv)
                 set_menu_badge();
             online_after_frame();   /* the ONLINE screens' badges (port) */
             render_resolve();
+            if (rp_playing() && !set_menu_is_open()) {  /* REPLAYS: the player's panel */
+                char clock[48];
+                int state;
+                float at = rp_info(clock, sizeof clock, &state);
+
+                dbg_replay_draw(at, clock, state, g_rp_hover);
+            }
             if (g_cfg_debug_keys) {
                 if (dbg_info_on()) {
                     char line[96];

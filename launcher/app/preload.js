@@ -51,4 +51,11 @@ contextBridge.exposeInMainWorld('umk3', {
     exportOpen: sub => ipcRenderer.invoke('export:open', sub),
     shot: () => ipcRenderer.invoke('shot:capture'),
     debugLayout: payload => ipcRenderer.invoke('debug:layout', payload),
+    replaysList: () => ipcRenderer.invoke('replays:list'),
+    replaysKeep: name => ipcRenderer.invoke('replays:keep', name),
+    replaysDelete: (folder, name) => ipcRenderer.invoke('replays:delete', folder, name),
+    replaysImport: () => ipcRenderer.invoke('replays:import'),
+    replaysExport: (folder, name) => ipcRenderer.invoke('replays:export', folder, name),
+    replaysOpen: () => ipcRenderer.invoke('replays:open'),
+    replaysPlay: (folder, name) => ipcRenderer.invoke('replays:play', folder, name),
 });

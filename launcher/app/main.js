@@ -20,6 +20,7 @@ const bld = require('./lib/build');
 const upd = require('./lib/update');
 const prof = require('./lib/profiles');
 const mods = require('./lib/mods');
+const replays = require('./lib/replays');
 
 let g_win = null;
 let g_root = null;
@@ -286,13 +287,13 @@ ipcMain.handle('window:fullscreen', () => {
 /* The file picker. On Windows a dialog owned by a fullscreen window opens
  * BEHIND it, so BUSCAR looked dead in fullscreen: leave fullscreen while the
  * picker is up and come back after, and bring it to the front. */
-async function pickFile(opts) {
+async function pickFile(opts, save = false) {
     const full = g_win.isFullScreen();
     if (full)
         g_win.setFullScreen(false);
     g_win.focus();
     try {
-        return await dialog.showOpenDialog(g_win, opts);
+        return save ? await dialog.showSaveDialog(g_win, opts) : await dialog.showOpenDialog(g_win, opts);
     } finally {
         if (full)
             g_win.setFullScreen(true);
@@ -485,6 +486,45 @@ ipcMain.handle('play', async () => {
     bld.play(g_root, ini.gameExe(arch()));
     /* the game runs on its own (detached): the launcher steps aside, once
      * the answer has reached the page */
+    setTimeout(() => app.quit(), 800);
+    return { ok: true };
+});
+
+/* ------------------------------------------------------------ replays --
+ * REPLAYS (lib/replays.js): the last fights the game kept, the ones kept for
+ * good, and watching one (the game with --replay). */
+
+const REPLAY_FILTER = [{ name: 'UMK3 replay', extensions: ['umkr'] }];
+
+ipcMain.handle('replays:list', () => replays.list(g_root));
+ipcMain.handle('replays:keep', (_ev, name) => replays.keep(g_root, name));
+ipcMain.handle('replays:delete', (_ev, folder, name) => replays.remove(g_root, folder, name));
+ipcMain.handle('replays:import', async () => {
+    if (!g_win)
+        return 0;
+    const r = await pickFile({ title: 'Replays', properties: ['openFile', 'multiSelections'], filters: REPLAY_FILTER });
+    return r.canceled ? 0 : replays.importFiles(g_root, r.filePaths);
+});
+ipcMain.handle('replays:export', async (_ev, folder, name) => {
+    const from = replays.filePath(g_root, folder, name);
+    if (!g_win || !from || !fs.existsSync(from))
+        return false;
+    const r = await pickFile({ title: 'Export replay', defaultPath: name, filters: REPLAY_FILTER }, true);
+    if (r.canceled || !r.filePath)
+        return false;
+    fs.copyFileSync(from, r.filePath);
+    return true;
+});
+ipcMain.handle('replays:open', () => {
+    const p = replays.dir(g_root, 'saved');
+    fs.mkdirSync(p, { recursive: true });
+    shell.openPath(p);
+    return true;
+});
+ipcMain.handle('replays:play', (_ev, folder, name) => {
+    if (!ini.gameReady(g_root, arch()) || !replays.filePath(g_root, folder, name))
+        return { ok: false };
+    bld.play(g_root, ini.gameExe(arch()), ['--replay', `replays/${folder}/${name}`]);
     setTimeout(() => app.quit(), 800);
     return { ok: true };
 });
