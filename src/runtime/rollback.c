@@ -48,6 +48,7 @@
 #include "savestate.h"
 #include "mp_net.h"
 #include "rollback.h"
+#include "mods.h"
 
 /* the game's side */
 long isParent(void);                    /* limeMPGameSpecific.c */
@@ -533,14 +534,15 @@ int rb_host_level(long *level)
      * the host's arrived mid-fight (RenderLevelBG) */
     if (isParent())
         return 0;
-    if (!g_hello && ++waited < 600)
+    /* a minute: the host may be on STAGE SELECT (debug_menu.c) */
+    if (!g_hello && ++waited < 3600)
         return 1;
     if (g_hello && *level != g_their_setup[2]) {
         printf("rollback: the host's level %d, not %ld\n",
                (int)g_their_setup[2], *level);
         *level = g_their_setup[2];
     } else if (!g_hello)
-        printf("rollback: no hello from the host in ten seconds\n");
+        printf("rollback: no hello from the host in a minute\n");
     waited = 0;
     return 0;
 }
@@ -550,6 +552,7 @@ void rb_online_begin(int c1, int c2, int level)
     const char *e = getenv("UMK3_RB_DELAY");
     uint32_t seed;
 
+    mods_online(1);                     /* the game's own fight (mods.c) */
     if (getenv("UMK3_NETCODE") && !strcmp(getenv("UMK3_NETCODE"), "classic")) {
         printf("rollback: off (UMK3_NETCODE=classic)\n");
         g_me = isParent() ? 0 : 1;      /* the hello still says the level */
@@ -600,6 +603,7 @@ void rb_online_begin(int c1, int c2, int level)
 
 void rb_online_end(void)
 {
+    mods_online(0);
     if (!g_on) {
         g_hello = 0;                    /* the classic netcode's */
         return;

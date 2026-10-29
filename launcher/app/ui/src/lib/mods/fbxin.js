@@ -191,15 +191,31 @@ export function fbxScene(root) {
             id, name: plain(n.props[1]), type: n.props[2],
             T: p['Lcl Translation'] || [0, 0, 0], R: p['Lcl Rotation'] || [0, 0, 0], S: p['Lcl Scaling'] || [1, 1, 1],
             pre: p.PreRotation || [0, 0, 0], post: p.PostRotation || [0, 0, 0],
+            /* the pivots (3ds Max, Maya: a part turned or scaled about a
+             * point of its own) and the geometric offset, which moves the
+             * mesh only, not the children */
+            rOff: p.RotationOffset || [0, 0, 0], rPiv: p.RotationPivot || [0, 0, 0],
+            sOff: p.ScalingOffset || [0, 0, 0], sPiv: p.ScalingPivot || [0, 0, 0],
+            gT: p.GeometricTranslation || [0, 0, 0], gR: p.GeometricRotation || [0, 0, 0], gS: p.GeometricScaling || [1, 1, 1],
             parent: (parentOf.get(id) || []).find(x => byId.get(x) && byId.get(x).name === 'Model') ?? null,
         });
     }
     return { byId, parentOf, childrenOf, propLinks, models, fps };
 }
 
+/* FBX's local transform: T Roff Rp Rpre R Rpost^-1 Rp^-1 Soff Sp S Sp^-1 */
 function localM(m, over) {
     const T = (over && over.T) || m.T, R = (over && over.R) || m.R, S = (over && over.S) || m.S;
-    return mm(trans(T), mm(eulerM(m.pre), mm(eulerM(R), mm(inv4(eulerM(m.post)), scal(S)))));
+    const neg = v => [-v[0], -v[1], -v[2]];
+    const rp = m.rPiv || [0, 0, 0], sp = m.sPiv || [0, 0, 0];
+    const rot = mm(trans(rp), mm(eulerM(m.pre), mm(eulerM(R), mm(inv4(eulerM(m.post)), trans(neg(rp))))));
+    const sc = mm(trans(m.sOff || [0, 0, 0]), mm(trans(sp), mm(scal(S), trans(neg(sp)))));
+    return mm(trans(T), mm(trans(m.rOff || [0, 0, 0]), mm(rot, sc)));
+}
+
+/* the mesh's own offset under its model (GeometricTranslation...) */
+function geomM(m) {
+    return mm(trans(m.gT || [0, 0, 0]), mm(eulerM(m.gR || [0, 0, 0]), scal(m.gS || [1, 1, 1])));
 }
 
 function globalM(sc, id, over, memo) {
@@ -540,3 +556,6 @@ export function rigDesc(f) {
     return fighterDesc(f, { rest: f.tpose ? 'tpose' : 'bind', clips: [] });
 }
 
+
+/* for modelin.js: the other model formats share the fit and the writer */
+export { mm, inv4, similarity, writeSkin, clusters, globalM, geomM, xform, xdir, kid, kids, plain, I4 };

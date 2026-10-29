@@ -233,6 +233,7 @@ async function compileGame({
         path.join(rootDir, 'src/runtime/rollback_probe.c'),
         path.join(rootDir, 'src/runtime/rollback.c'),
         path.join(rootDir, 'src/runtime/smooth_models.c'),
+        path.join(rootDir, 'src/runtime/skin_mats.c'),
     ];
 
     if (isWindows) {

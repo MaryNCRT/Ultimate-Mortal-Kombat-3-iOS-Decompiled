@@ -3063,6 +3063,7 @@ void LIME_GLAPI glMultMatrixf(const float *m);
  * 16/35..41 range, or what IsLiaProblem and IsOstrichProblem refuse -- the
  * cases where the game itself cuts. */
 int port_smooth_anims;
+extern unsigned long port_frame_no;     /* runtime/lime_menu.c, limeBegin */
 
 #define SMOOTH_MAX_TICKS 5
 #define SMOOTH_SLOTS     6
@@ -3092,6 +3093,7 @@ static void port_smooth_pose(long *w)
     static struct {
         long *who;
         long  chr, anim, cur, prev, held, dur;
+        unsigned long frame;
     } st[SMOOTH_SLOTS];
     static int next;
     const long *a = (const long *)(uintptr_t)(unsigned long)w[4 / 4];
@@ -3114,7 +3116,18 @@ static void port_smooth_pose(long *w)
         next = (next + 1) % SMOOTH_SLOTS;
         st[i].who = w;
         st[i].chr = -1;
+        st[i].frame = port_frame_no - 1;
     }
+    /* The same PLAYER drawn twice in a frame: the select screen with both
+     * sides on one fighter draws TheFECharacters' one record for each.
+     * The first call has already set its frames; a second would read them
+     * as the game's own blend, take the other frame for the game's and
+     * start again, so the mirror match lost its smoothing and its
+     * SMOOTH MODELS pose changed on every draw (Mary: the select screen
+     * slowed down with two of the same fighter). */
+    if (st[i].frame == port_frame_no)
+        return;
+    st[i].frame = port_frame_no;
 
     if (st[i].chr != w[0] || st[i].anim != w[4 / 4]) {
         st[i].chr  = w[0];
@@ -6101,6 +6114,8 @@ long GameInit_LoadABit(long step);
  * A recorded fight keeps its setup; a replayed one gets the recorded setup
  * back before anything loads. */
 int  rb_fight_setup(int32_t *setup, int n);
+void rb_fight_rival(long *c2);
+int  stage_menu_gate(long *level);     /* runtime/debug_menu.c */
 void rb_online_begin(int c1, int c2, int level);
 int  rb_host_level(long *level);
 int  rb_step_begin(int32_t joy[2]);
@@ -6152,6 +6167,10 @@ void Task_GameInit(void)
     if (GameInitState == 0) {
         /* Port, not in the binary: the guest takes the host's level */
         if (GameMode == 1 && rb_host_level(LevelSelectP))
+            return;
+        /* Port, not in the binary: STAGE SELECT (debug_menu.c), the window
+         * waits here until a stage is picked */
+        if (stage_menu_gate(LevelSelectP))
             return;
         rb_setup();                     /* Port, not in the binary */
         if (GameMode == 1)              /* Port: rollback netcode */
@@ -7570,6 +7589,7 @@ long GameInit_LoadABit(long step)
             Character2   = Character2Override;
             PLAYER2MODEL = Character2Override;
         }
+        rb_fight_rival(&Character2);    /* port: the replay's real rival */
         PLAYER2MODEL = Character2;
 
         HUDANIM_Init();
@@ -7655,6 +7675,10 @@ long GameInit_LoadABit(long step)
 
     case 48:
         puts("########## TASK_GAME_INIT: 7");
+        /* port: the rival as loaded -- Arcade's can still change between
+         * step 42 and here (Mary: "liukang_vs_stryker" fought Kitana, the
+         * file's setup still Stryker) -- recorded, or put back replaying */
+        rb_fight_rival(&PLAYER2MODEL);
         LoadLevelCharacters(PLAYER1MODEL, PLAYER2MODEL);
         return 0;
 

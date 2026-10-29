@@ -483,6 +483,16 @@ bool plat_swap(void)
         rgl_present();                  /* waits for the frame, as glFinish */
         return true;
     }
+    {   /* VSYNC (rgl_vsync), when it changes: the driver's own until then */
+        static int set = -1;
+        if (set != rgl_vsync) {
+            typedef BOOL (WINAPI *swap_fn)(int);
+            swap_fn f = (swap_fn)plat_gl_proc("wglSwapIntervalEXT");
+            set = rgl_vsync;
+            if (f)
+                f(rgl_vsync ? 1 : 0);
+        }
+    }
     ok = SwapBuffers(g_dc) != FALSE;
 
     glFinish();

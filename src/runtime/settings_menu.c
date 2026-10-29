@@ -108,6 +108,7 @@ enum { PAGE_GFX, PAGE_CTL, PAGE_PROF, N_PAGES };
 
 enum {
     R_DISPLAY, R_MONITOR, R_RES, R_APPLY, R_RRES, R_AA, R_TEXQ, R_ASPECT, R_UI, R_HIDE, R_LANG, R_REND, R_SMOOTH, R_SMODEL,
+    R_VSYNC,                            /* VSYNC (render/rgl.h rgl_vsync) */
     R_PLAYER, R_LAYOUT, R_KEY, R_KRESET, R_DEVICE, R_PICONS, R_PADB, R_PRESET,
     R_PNAME, R_PICON, R_PCOLOR, R_PSHADE, R_PCOLOR2, R_PID, R_PRESET2,
     R_CLOSE, R_QUIT, R_HEAD, R_CSUB,
@@ -259,6 +260,7 @@ int (*set_menu_key)(int code) = plat_key;
 #define plat_key(code) set_menu_key(code)
 
 static void save_ini(void);
+void set_menu_save(void) { save_ini(); }
 
 static void close_menu(void)
 {
@@ -606,6 +608,8 @@ static void build(void)
         add(R_REND, 0, tx("RENDERIZADOR", "RENDERER"), "< %s >%s",
             rend_name(port_renderer()),
             port_renderer() != rgl_renderer ? tx("  AL REINICIAR", "  AFTER A RESTART") : "");
+        add(R_VSYNC, 0, "VSYNC", "< %s >",
+            rgl_vsync ? tx("ACTIVADO", "ON") : tx("DESACTIVADO", "OFF"));
         add(R_SMOOTH, 0, tx("ANIMACIONES SUAVES", "SMOOTH ANIMATIONS"), "< %s >",
             port_smooth_anims ? tx("ACTIVADAS", "ON") : tx("DESACTIVADAS", "OFF"));
         if (port_smooth_models)
@@ -754,7 +758,7 @@ static int has_value(int kind)
 {
     switch (kind) {
     case R_DISPLAY: case R_MONITOR: case R_RES: case R_RRES: case R_AA: case R_TEXQ:
-    case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_SMOOTH: case R_SMODEL: case R_PLAYER: case R_LAYOUT:
+    case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_SMOOTH: case R_SMODEL: case R_VSYNC: case R_PLAYER: case R_LAYOUT:
     case R_RTSHADOW: case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE: case R_PCOLOR2:
     case R_PICONS:
         return 1;
@@ -983,6 +987,10 @@ static void change(int kind, int d)
         port_renderer_set(wrap(port_renderer() + d, N_REND));
         g_dirty = 1;
         return;
+    case R_VSYNC:                       /* at once, from the next present */
+        rgl_vsync = !rgl_vsync;
+        g_dirty = 1;
+        return;
     case R_SMOOTH:                      /* at once (GameCode.c) */
         port_smooth_anims = !port_smooth_anims;
         g_dirty = 1;
@@ -1153,6 +1161,12 @@ static int drop_fill(int kind)
         for (n = 0; n < N_REND; n++)
             snprintf(L[n], 48, "%s", rend_name(n));
         g_drop_cur = port_renderer();
+        break;
+    case R_VSYNC:
+        snprintf(L[0], 48, "%s", tx("DESACTIVADO", "OFF"));
+        snprintf(L[1], 48, "%s", tx("ACTIVADO", "ON"));
+        n = 2;
+        g_drop_cur = rgl_vsync ? 1 : 0;
         break;
     case R_SMOOTH:
         snprintf(L[0], 48, "%s", tx("DESACTIVADAS", "OFF"));
@@ -2039,10 +2053,12 @@ static void save_ini(void)
     put("renderer", "%s", port_renderer() == RGL_VULKAN ? "vulkan"
                         : port_renderer() == RGL_D3D12 ? "d3d12" : "opengl");
     put("smooth_anims", "%d", port_smooth_anims);
+    put("vsync", "%d", rgl_vsync);
     put("smooth_models", "%d", port_smooth_models);
     put("sharp_edge_angle", "%d", (int)(port_sharp_angle + 0.5f));
     put("sharp_edge_strength", "%d", (int)(port_sharp_strength * 100.0f + 0.5f));
     put("rt_shadows", "%d", rgl_shadows);
+    put("replay_scale", "%d", dbg_replay_pct);
     put("buttons", "%d", port_buttons());
     {
         static const char *const st[5] = { "auto", "xbox", "ps5", "nintendo", "ps4" };

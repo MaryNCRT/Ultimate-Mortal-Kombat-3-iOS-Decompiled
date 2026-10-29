@@ -16,6 +16,219 @@
 
 ---
 
+## After 0.1.13, second round: retarget, proportion trick, own materials, stage pictures, replay fixes (2026-10-29, not released)
+
+Branch `claude/viewer-tabs`. Built into
+`WORK\release-0.1.12\UMK3-PC-0.1.12-beta` for Mary to try; **not played
+yet**. Asked by Mary after trying the first round:
+
+- **Replays were not recorded right and did not show in the launcher.**
+  Two causes, found in her logs and files:
+  - Arcade's rival still changed after Task_GameInit step 42 (her
+    `20261029-162545_liukang_vs_stryker.umkr` keeps Stryker, 5, in its
+    setup, and the log loads LIUKANG vs KITANA, 15). `rb_fight_rival` is
+    now also called at step 48 with `PLAYER2MODEL`, right before
+    `LoadLevelCharacters`: the recording keeps (and is named after) the
+    rival loaded; a replay puts it back there.
+  - The launcher's REPLAYS page accepted only `UMK3RPL3` files; every
+    recording since the rival fix is `UMK3RPL4` (`lib/replays.js`).
+- **Replay HIDE is a toggle**: the click that hid the player also brought
+  it back on release (it only stayed hidden while held). Now a new click
+  is needed (`game_main.c`, `g_rp_hide_wait`).
+- **STAGE SELECT**: smaller buttons that no longer cover the names, a
+  RANDOM button, and a picture for every stage: `STAGE_<SCENE>.PNG` (a mod
+  or res, for pictures added later), else the game's CS_BG sheet, else the
+  stage **rendered by the launcher** (`mods/stagepics.js`, once per stage
+  into `aditional textures/stages/<SCENE>.png`, when the game is ready),
+  else one drawn in the game (a gradient with the name).
+- **REPLACE MODEL**:
+  - The bar at the foot (Enter / Esc / F11) no longer shows over the
+    preview window (`app.overlay`).
+  - **Every material gets its own texture** (`<skin>_M<n>`, and its
+    `_ICE`): a material with no picture is its colour (FBX DiffuseColor,
+    GLB baseColor, else grey); THE GAME'S is a copy of the outfit's. So the
+    model's UVs are kept and no texture other models share is touched
+    (Mary's Sonya mod had turned other models black; the cause was not
+    found in the game's draw code, this removes any shared texture from
+    the path).
+  - The materials' textures are listed in REPLACE TEXTURE after the model
+    is saved.
+  - **Fighters drawn black with a large model, found and fixed.** Mary's
+    Sonya (6,009 faces) unwelds to ~18,000 vertices; the binary's skinning
+    scratch holds 15,000 vertices and 3,333 faces (`SkinnedVerts`,
+    `RenderIndexes`, `RenderUVs/RGBs/Verts`), so `DrawSkinnedMesh2` wrote
+    past them into the animation frames and palette. And the fighter's
+    baked `STATICLIGHTING/<name>.lighting` is sliced by the skin's own
+    vertex count: read past its end, colours came from the heap. Now the
+    scratch holds `PORT_SKIN_VERTS` (65,536, a uint16 index's reach;
+    `lime.h`), and a lighting file that does not fit the skin is replaced by
+    its average light (`Players.c port_fit_lighting`, logged `flat light`).
+    The importer refuses a block over 65,535 vertices once unwelded.
+  - **REPLACE MODEL: the rig before it is put on, arm/leg angle and roll,
+    T or A pose** (Mary, with gtastuff.com's viewer as the reference for
+    the floor, the joints and the weight colours). Over the preview:
+    TEXTURES / SOLID / WEIGHTS (each vertex coloured by its bones,
+    `mods/viewkit.js`) / WIREFRAME, RIG (the bones as lines and the joints
+    as dots, moving with the animation chosen) and FLOOR. A humanoid rig
+    shows the file's pose (`T` above -20 degrees of arm rise, else `A`) and
+    its leg spread beside the fighter's, and four sliders, mirrored on both
+    sides: ARM ANGLE (raise/lower), ARM ROLL, LEG ANGLE (spread), LEG ROLL
+    (`modelin.js adjustments`). Roll turns the model's limb about its own
+    length, each vertex by its weights. KEEP PROPORTIONS turns the model's
+    limbs before the bones are moved to its joints, and AUTOMATIC T / A POSE
+    (on by default) first turns the file's arms to the fighter's rise, so an
+    A-pose model plays the moves with its arms where the fighter's are.
+    FIT TO THE FIGHTER puts the angle on the fighter's joints instead: the
+    bones' offsets, written as `<skin>.bones` as the proportion trick's
+    are; the bone frames keep the fighter's turn, so a large angle bends
+    the elbow about the fighter's axis. The game's animations already play
+    on the imported model in the preview (the clip list under the view).
+  - **The model viewer**: FLOOR (a grid under the model, not on stages),
+    SOLID, WEIGHTS (a fighter's) and the joints as dots with the bones.
+  - **GLB export** (`export.js toGlb`): EXPORT's formats now include GLB,
+    glTF 2.0 binary with the skeleton, the skin, one animation a clip and
+    the PNG textures inside, in metres (a root node scales the game's
+    centimetres). Checked here: the file's header, JSON and every accessor
+    against the buffer, on a two-bone test; not opened in Blender yet.
+  - **Liu Kang's repeated screams** (Mary, 2026-10-29): not found. Her
+    17:19 log (Liu Kang vs Shao Kahn) shows one `death scream` from the
+    game logic. The build now logs every voice it plays
+    (`voice: kind K, voice group G, sound S` for a group sound,
+    `voice: character C, sound N -> S` for a character's), so the next log
+    of a fight where it happens shows which sound repeats and from where.
+  - **Frames lost with a custom model.** A REPLACE MODEL skin is drawn a
+    material at a time (`skin_mats.c`), each part a run of indices into the
+    whole model's vertices, and the Direct3D 12 / Vulkan path
+    (`render/rgl_ff.c tris_indexed`) transformed every vertex 0..max for
+    each part -- or, when a part named few vertices of a big array, fell
+    back to one transform per index and a malloc. Now only the vertices the
+    indices name are transformed, once a draw (a stamp a vertex). And a skin
+    a mod brings (`mods_find` on the skin file, `port_skin_custom`) is left
+    alone by SMOOTH MODELS and what it does to the plain skin (the tuck
+    under a hat, the cover pieces): such a model is already dense, as Mary
+    asked; the log says `is a mod's model: no SMOOTH MODELS on it`. SMOOTH
+    ANIMATIONS still apply (bones only, no cost in the vertices). Not
+    measured here.
+  - Every material is its own texture by default again (the materials as
+    the model has them); REPLACES a game texture only when chosen.
+  - **SCALE** in the importer: the model's size about its pivot (the floor
+    under the fighter's root): mesh, every bone offset and the root height
+    together, written in `<skin>.bones`, so the animations play on it.
+  - **FBX**: parts with pivots (`RotationOffset/Pivot`, `ScalingOffset/
+    Pivot`) and a geometric offset (`GeometricTranslation/Rotation/
+    Scaling`) are placed right; a part with no material gets its own grey
+    one; a part not skinned but hanging under a bone moves with that bone;
+    diffuse, normal and specular maps are read (the preview shows all
+    three; the game's fixed-function renderer draws the diffuse only); a
+    material without pictures shows its colour (`DiffuseColor` times
+    `DiffuseFactor`).
+  - **STAGE SELECT pictures** rendered from the camera a round starts with
+    (eye 1.5 over the floor, 8 back, looking at 1.25, 25 degrees); the
+    older renders are made again once (`<ID>.auto2`, `.v2`).
+  - **Each picture chooses the game texture it replaces** (REPLACES
+    `SONYA_DIFFUSE`, an outfit, block 2's texture, or NEW TEXTURE): it is
+    saved as that texture (and its `_ICE`), and the game draws it on the
+    model's own UVs with no `.mats` part. By default each picture replaces
+    its block's texture. Mary saw the model's pictures not arrive in the
+    game; this is the direct route. The player's badge is hidden while the
+    importer is open.
+  - **Humanoid retarget** (`mods/retarget.js`): the file's bones are known
+    by name from Mixamo, AccuRig / Character Creator (`CC_Base_*`),
+    ValveBiped, 3ds Max Biped, Unreal, Unity / VRM, Blender / Rigify and
+    Daz, and the file's **own weights** move the model on the fighter's
+    bones (twist and helper bones with their limb, fingers with the hand,
+    the rest with the nearest bone above). The placement is fitted on the
+    body's joints (not the arms: T or A pose). Two ways, chosen in the
+    preview: FIT TO THE FIGHTER (each part turned and stretched to its
+    bone) or KEEP PROPORTIONS -- the **proportion trick**: the fighter's
+    bone offsets become the model's, written as `<skin>.bones`; the game
+    puts them in the bones it loads (`skin_mats.c`
+    `port_skin_bones_loaded`) and scales the animations' root height
+    (`lime_port_root_y` in `CreateMatrixPaletteForGeneratingMesh`), and the
+    viewer reads them the same (`assets.js`).
+- **Frozen copies of custom textures**: REPLACE TEXTURE (viewer, editor,
+  TEXTURES) writes `<stem>_ICE` too when the game has one (a fighter's
+  `_DIFFUSE_ICE`) or it is a replaced model's material, as the game's are
+  made: brightness on pale blue (blue 255, red 113 + 0.55 L, green
+  205 + 0.19 L, measured on four fighters). A box turns it off.
+- **Sonya's second outfit picture** is `SONYA_2_VERSUS.pvr` (the others
+  `<NAME>_VERSUS2.pvr`): the profile icon finds it, in the launcher and
+  the game.
+
+Checked here: the C files pass `gcc -fsyntax-only`; the launcher UI
+builds; the bone roles were checked on 40 names from those rigs. Not
+checked: any of it in the game or with a real Mixamo/AccuRig/Valve file.
+
+## After 0.1.13: model viewer, REPLACE MODEL (FBX/GLB/OBJ, a texture per material), replays, VSYNC (2026-10-29, not released)
+
+Branch `claude/viewer-tabs`. **Nothing here has been built into a game exe
+or played by Mary yet.** The C files pass `gcc -fsyntax-only` with the
+build's flags; the launcher UI builds (`npm run ui`).
+
+- **Model viewer** (MODS): the right panel in tabs (VIEW, LAYERS, TEXTURES,
+  IMPORT, EXPORT); each fighter lists its derived models (babality, frozen,
+  cut in half, headless, ...) found by the meshsets' names
+  (`ui/src/lib/mods/derived.js`); LAYERS hides or shows each mesh; the
+  texture editor shows thumbnails, grouped, with a large preview.
+- **REPLACE MODEL** takes FBX, GLB (three.js GLTFLoader, MIT) or OBJ
+  (+ .mtl) and opens a preview window with the model on the fighter, its
+  animations and its textures. **Each material keeps its own texture**:
+  the skin's triangles are written grouped by material and
+  `<FIGHTER>_STANDARD.skin.mats` lists the parts
+  (`block first count alpha texture`). The game draws each part with its
+  texture (`src/runtime/skin_mats.c`, hooked through function pointers in
+  `RenderSkinned.c` / `RenderMesh.c` and `Players.c`): UVs as the file has
+  them, GL_REPEAT past 0..1, transparent parts last (alpha test 0.1 +
+  blend); frozen uses each part's `_ICE` copy, written by the launcher.
+  GLB reads the UV set each material names and `KHR_texture_transform`.
+  The preview and the viewer show each part on its own (eye, "1" = alone,
+  click = large picture). A block with parts is not smoothed (SMOOTH
+  MODELS) in the game or the viewer. Online loads `.mats` too (visual).
+- **Online is vanilla**: `mods_online(1)` puts back every data.ini word a
+  mod changed and only models and textures are taken from mods
+  (`mods.c`, called from `rollback.c`).
+- **Replay player**: HIDE (a click or Esc shows it again) and SIZE
+  (75/100/125/150 %, umk3.ini `replay_scale`); the launcher steps aside
+  while the game runs and comes back where it was.
+- **Replays: the wrong rival.** Arcade's VS screen picks player two inside
+  the fight's loading, after the setup was written, so a recording kept
+  the previous rival (Mary: `liukang_vs_stryker` was a fight with Kitana;
+  `scorpion_vs_nightwolf` replayed against Old Sub-Zero). Task_GameInit
+  step 42 now calls `rb_fight_rival`: recording writes the real one into
+  the setup and names the file after it; a replay (`UMK3RPL4`) puts it
+  back. Old `UMK3RPL3` files still play but keep their old name.
+- **Replays: seeking stops what still sounds** (`plat_audio_stop_all` in
+  `rp_seek`).
+- **Select screen, the same fighter on both sides**: TheFECharacters has
+  one record per fighter, drawn for each side; the second
+  `port_smooth_pose` call took the first one's frames for the game's blend
+  and started over every draw (no smoothing, the smoothed pose remade).
+  Now once a frame per PLAYER (`port_frame_no`, counted in `limeBegin`).
+- **VSYNC** option: umk3.ini `vsync=0/1`, the game's options menu and the
+  launcher's video page; OpenGL swap interval, Direct3D 12 interval 0,
+  Vulkan mailbox/immediate. Applied at once.
+
+**Death screams (open).** Mary's last replay
+(`20261029-131108`, Liu Kang's decapitation) and the log of the fight it
+recorded show **one** death scream per fatality from the game logic
+(`group_sound`, kind 9); the repeats in the replay's log are Mary going
+back over the end. So the logic does not ask twice; what is heard twice
+is still unknown. Needs Mary to say which sound repeats and where
+(fight or replay, which fatality).
+
+- **STAGE SELECT** after the fighters in VS (GameMode 6), training (2)
+  and online (1, the host; the guest takes the host's level and now waits
+  up to a minute for it). `Task_GameInit` step 0 waits on
+  `stage_menu_gate` (`debug_menu.c`), and the window takes the frame as
+  the settings menu does, over `FE_SELECTFIGHTER`: the stage's picture
+  large with arrows, or a list of all of them with their pictures (LIST,
+  TAB, the pad's Y); CANCEL keeps the stage the game would have taken,
+  SELECT (Enter, A, START) picks. The pictures are the game's `CS_BG` ..
+  `CS_BG4` (960x640 on a 1024 sheet): Subway, Bell Tower, Soul Chamber
+  (a guess from the picture), The Graveyard, Temple. The other stages show
+  their name only. A debug fight and a replay skip it.
+- **Online select: START presses PLAY**, as in VS and Arcade.
+
 ## After 0.1.13: an update stopped by a leftover update\new (2026-10-29, not released)
 
 Mary's update failed with "ENOTEMPTY: directory not empty, rmdir

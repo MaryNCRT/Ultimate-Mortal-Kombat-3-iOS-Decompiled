@@ -4,6 +4,8 @@
 #define UMK3_SETTINGS_MENU_H
 
 int  set_menu_is_open(void);
+/* umk3.ini written now, with what is set (the replay player's SIZE) */
+void set_menu_save(void);
 void set_menu_toggle(void);
 /* The game's button setup with the on-screen controls off: the CONTROLS
  * page alone, in the game's own panel. */

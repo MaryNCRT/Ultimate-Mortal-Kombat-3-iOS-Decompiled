@@ -69,7 +69,10 @@
 extern int32_t  rand_seed;              /* lime_menu.c: limeRand's */
 extern uint32_t umk3_rand_seed;         /* fight_runtime.c: the engine's rand() */
 
-#define RB_MAGIC      "UMK3RPL3"
+#define RB_MAGIC      "UMK3RPL4"
+/* RPL3: the same, but setup[1] may not be the rival fought (rb_fight_rival) */
+#define RB_MAGIC_OLD  "UMK3RPL3"
+#define RB_MAGIC_OK(m) (!memcmp((m), RB_MAGIC, 8) || !memcmp((m), RB_MAGIC_OLD, 8))
 #define RB_EVENT_WORDS 21               /* MKEventQueue: 0x54 bytes */
 #define RB_SETUP_MAX  24
 #define RB_SYNC_EVERY 300
@@ -301,7 +304,7 @@ int rb_replay_peek(int32_t *c1, int32_t *c2, int32_t *level)
 
     if (!in_exe_dir(g_play_rel, path, sizeof path) || !(f = fopen(path, "rb")))
         return 0;
-    ok = fread(magic, 1, 8, f) == 8 && !memcmp(magic, RB_MAGIC, 8)
+    ok = fread(magic, 1, 8, f) == 8 && RB_MAGIC_OK(magic)
          && fread(b, 1, sizeof b, f) == sizeof b;
     fclose(f);
     if (!ok)
@@ -412,6 +415,47 @@ static const char *build_name(uint32_t b)
     return n[b & 3];
 }
 
+/* The rival is only known later than the setup is written: Arcade's VS
+ * screen (FE_Task_VS_Screen_Init) runs inside the fight's loading and puts
+ * the ladder's opponent -- or a random one -- in Character2 and clears
+ * Character2Override. The setup kept the opponent of the screen before, so
+ * a replay named and loaded the wrong one (Mary: "liukang_vs_stryker" was a
+ * fight with Kitana). Task_GameInit step 42, once player two is decided:
+ * recording, setup[1] is written again with the real one and the file
+ * takes its name at the end; replaying, the recorded one is put back. */
+static int32_t g_rival = -1;            /* replaying: setup[1] as recorded */
+static int32_t g_rec_rival = -1;        /* recording: the real one */
+
+void rb_fight_rival(long *c2)
+{
+    if (!g_active || !g_f)
+        return;
+    if (g_mode == 1) {
+        long at = ftell(g_f);
+        fseek(g_f, 8 + 4 + 4 + 4 * 1, SEEK_SET);
+        wr32((uint32_t)*c2);
+        fseek(g_f, at, SEEK_SET);
+        g_rec_rival = (int32_t)*c2;
+    } else if (g_mode == 2 && g_rival >= 0 && g_rival < 26 && *c2 != g_rival) {
+        printf("replay: player two was %ld, the recorded %d\n", *c2, (int)g_rival);
+        *c2 = g_rival;
+    }
+}
+
+/* the recording's name with its real rival: ".._vs_<old>.umkr" */
+static void rename_rival(void)
+{
+    char piece[32], to[1024], *vs;
+    if (g_rec_rival < 0 || !(vs = strstr(g_file, "_vs_")))
+        return;
+    name_piece(piece, sizeof piece, g_rec_rival);
+    snprintf(to, sizeof to, "%.*s_vs_%s.umkr", (int)(vs - g_file), g_file, piece);
+    if (strcmp(to, g_file) != 0 && rename(g_file, to) == 0) {
+        printf("replay: renamed to %s\n", to);
+        snprintf(g_file, sizeof g_file, "%s", to);
+    }
+}
+
 static void replay_finish(const char *why)
 {
     int i;
@@ -437,8 +481,11 @@ static void replay_finish(const char *why)
     if (g_auto && g_mode == 1) {
         if (g_tick < RB_MIN_TICKS)
             remove(g_file);
+        else
+            rename_rival();
         keep_recent();
     }
+    g_rec_rival = -1;
     fflush(stdout);
 }
 
@@ -640,7 +687,7 @@ int rb_fight_setup(int32_t *setup, int n)
     }
 
     g_f = fopen(g_file, "rb");
-    if (!g_f || fread(magic, 1, 8, g_f) != 8 || memcmp(magic, RB_MAGIC, 8)
+    if (!g_f || fread(magic, 1, 8, g_f) != 8 || !RB_MAGIC_OK(magic)
         || !rd32(&b) || !rd32(&m) || m != (uint32_t)n) {
         printf("replay: %s is missing or not a replay of this version\n", g_file);
         if (g_f)
@@ -656,6 +703,7 @@ int rb_fight_setup(int32_t *setup, int n)
                    i, (int)v, (int)setup[i]);
         setup[i] = (int32_t)v;
     }
+    g_rival = n > 1 && !memcmp(magic, RB_MAGIC, 8) ? setup[1] : -1;
     rd32(&v);
     rand_seed = (int32_t)v;
     rd32(&umk3_rand_seed);
@@ -878,6 +926,7 @@ void rb_tick_end(const uint32_t *w, int n)
 extern int CurrentTask;                 /* GameCode.c: 6 is the fight */
 extern char PreloadedCharacters[41148][0x5f4];  /* read only by a fight */
 void rb_silent(int quiet, int nodraw);  /* rollback.c */
+void plat_audio_stop_all(void);         /* platform/*_audio.c */
 
 #define RP_KEYS_MAX  48                 /* keyframes, the last slot for holds */
 #define RP_JUMP      300                /* ticks: five seconds */
@@ -965,6 +1014,10 @@ static void rp_seek(uint32_t t)
 
     if (t > g_total)
         t = g_total;
+    /* what still sounds belongs to the moment left: going back to before a
+     * scream it would sound on under the scream played again (Mary heard
+     * the fatality's screams repeat) */
+    plat_audio_stop_all();
     if (g_rp_snap == 1 && g_rp_nkeys) {
         for (k = g_rp_nkeys - 1; k > 0 && g_rp_key[k] > t; k--)
             ;

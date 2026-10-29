@@ -8823,8 +8823,11 @@ void FE_Task_Multiplayer_Character_Select(void)
 
     if (playerCharacter != -1 && opponentCharacter != -1) {
         /* ---- both picked: the Play button ---- */
+        /* Port: START (or the pause key) presses it too, as in VS and
+         * Arcade (Mary: the pad's START did nothing online) */
         if (DrawButtonNew(&BUTTON_PLAY, 0xf0, 0x130,
-                          (int)(pressedPlay <= 1 ? 1 - pressedPlay : 0))) {
+                          (int)(pressedPlay <= 1 ? 1 - pressedPlay : 0))
+            | (pressedPlay == 0 && PortStartPress())) {
             sel = MPCS_PLAY_SENTINEL;
             charSelectButtonPressed = MPCS_PRESS_FRAMES;
         }
@@ -8832,6 +8835,8 @@ void FE_Task_Multiplayer_Character_Select(void)
         limeDrawFONT(&GameFont, GameText(0xc),
                      FE_X(240.0f), FE_Y(296.0f), 1, FE_WidthScale,
                      pressedPlay ? dimcol : fontcol);
+        if (!pressedPlay)
+            start_glyph();              /* port: START's picture, as in VS */
 
         if (pressedPlay != 0 && (sendInd % 128) <= MPCS_BLINK_ON)
             /* the iPad build draws this one at y 26 (0x1748e there) */

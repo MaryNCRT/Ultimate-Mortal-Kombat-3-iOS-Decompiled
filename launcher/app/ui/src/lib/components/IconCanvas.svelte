@@ -4,7 +4,7 @@
     import { app, profArt, profArtAlt } from '#lib/app.svelte.js';
     import { drawIcon } from '#lib/profileIcon.js';
 
-    /* alt: the fighter in his second outfit (Sonya has none: her first) */
+    /* alt: the fighter in his second outfit (Sonya's is SONYA_2_VERSUS) */
     let { icon, color, shade, color2, angle = -1, alt = 0, size = 96, class: cls = '', onclick = undefined } = $props();
     let cv;
 

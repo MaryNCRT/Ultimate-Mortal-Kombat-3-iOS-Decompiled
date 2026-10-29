@@ -5,8 +5,8 @@
  * `src` is the file access: { files: ['KANO_STANDARD.skin', 'Textures/x.pvr',
  * ...] relative to res/, read(path) -> Promise<Uint8Array|null> }. */
 import { parseMeshset, parseSkin, parseBones, parseAnim, parseScene, parseFrameList, findClips, decodePvr } from './formats.js';
-import { makeRig, bindPose, tPose, framePose, meshTopology, vertexWeights, posedVerts, boneNames, fitRest, vmul } from './rig.js';
-import { toObj, toUsd, toFbx, encodePng, poseMeshes } from './export.js';
+import { makeRig, bindPose, tPose, framePose, meshTopology, vertexWeights, posedVerts, boneNames, fitRest, vmul, parseBonesText, withOffsets, withRootY } from './rig.js';
+import { toObj, toUsd, toFbx, toGlb, encodePng, poseMeshes } from './export.js';
 
 /* the fighters by the name the game files use (PlayerDefs, the roster) */
 export const FIGHTERS = {
@@ -102,9 +102,16 @@ export async function loadFighter(src, ch) {
         if (!b) throw new Error(ch.file + ext + ' is missing');
         return b;
     };
-    const bones = parseBones(await rd('.bones'));
+    let bones = parseBones(await rd('.bones'));
     const skin = parseSkin(await rd('.skin'));
-    const anim = parseAnim(await rd('.skinanim'));
+    let anim = parseAnim(await rd('.skinanim'));
+    /* a model brought in with the proportion trick: its bone offsets and
+     * root height (<skin>.bones, modelin.js), as the game applies them */
+    const ov = parseBonesText(await src.read(ch.file + '.skin.bones'));
+    if (ov) {
+        bones = withOffsets(bones, ov);
+        anim = withRootY(anim, ov.rootY);
+    }
     const rig = makeRig(bones, skin, anim);
     const bind = bindPose(rig);
     const tpose = tPose(rig, bind.pose);
@@ -159,11 +166,23 @@ export async function loadFighter(src, ch) {
         }
     } catch { /* no scene, or one this reader does not know */ }
 
+    /* a model brought in by REPLACE MODEL: its parts, each with its own
+     * texture (the skin's .mats, runtime/skin_mats.c) -- per block
+     * [{ first, count, alpha, stem }], stem null for the block's own */
+    const parts = skin.map(() => []);
+    const mt = await src.read(ch.file + '.skin.mats');
+    if (mt)
+        for (const line of new TextDecoder().decode(mt).split(/\r?\n/)) {
+            const w = line.trim().split(/\s+/);
+            if (line.startsWith('#') || w.length < 5 || !parts[+w[0]]) continue;
+            parts[+w[0]].push({ first: +w[1], count: +w[2], alpha: w[3] === '1', stem: w[4] === '-' ? null : w[4].replace(/\.\w+$/, '') });
+        }
+
     let frameNames = [];
     const fl = await src.read('framelists/' + ch.id.toLowerCase() + 'frames.txt');
     if (fl) frameNames = parseFrameList(new TextDecoder().decode(fl));
     const clips = findClips(frameNames, anim.frames);
-    return { ch, rig, bind, tpose, names, topo, weights, blockTex, variants: variants.length ? variants : [base], clips, frameNames, attach };
+    return { ch, rig, bind, tpose, names, topo, weights, blockTex, parts, variants: variants.length ? variants : [base], clips, frameNames, attach };
 }
 
 /* opts: { rest: 'tpose' | 'bind', variant, clips: [index into f.clips] or
@@ -376,7 +395,8 @@ export async function meshsetDesc(src, file, only) {
 
 /* ------------------------------------------------------------ writing --
  * The files for one export: the model in `format` (obj, fbx, usda, usdc,
- * usdz) and its textures as PNG beside it -- inside it, for usdz.
+ * usdz, glb) and its textures as PNG beside it -- inside it, for usdz and
+ * glb.
  * { name: bytes }. */
 export async function exportFiles(src, desc, format) {
     const pics = {};
@@ -387,6 +407,7 @@ export async function exportFiles(src, desc, format) {
         else mat.texture = '';
     }
     if (format === 'usdz') return toUsd(desc, 'usdz', pics);       /* the pictures inside */
+    if (format === 'glb') return toGlb(desc, pics);
     const out = format === 'fbx' ? toFbx(desc) : /^usd[ac]?$/.test(format) ? toUsd(desc, format === 'usd' ? 'usda' : format) : toObj(desc);
     return Object.assign(out, pics);
 }

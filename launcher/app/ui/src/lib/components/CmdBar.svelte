@@ -9,7 +9,7 @@
     const kind = $derived(padKindOf(1));
 </script>
 
-<footer class="cmdbar">
+<footer class="cmdbar" class:gone={app.overlay > 0}>
     <span class="cmds">
         <span class="cg">{#if app.usingPad}<PadFace {kind} b="SOUTH" />{:else}<KeyFace vk={13} />{/if}</span>
         <span>{tx('cSelect')}</span>
@@ -46,6 +46,7 @@
                     linear-gradient(rgba(255, 255, 255, .1), rgba(255, 255, 255, 0) 45%),
                     linear-gradient(rgba(33, 29, 76, .85), rgba(8, 6, 26, .92));
     }
+    .cmdbar.gone { visibility: hidden; }
     .cmds { display: flex; align-items: center; gap: calc(var(--u) * .8); }
     .cg { display: inline-flex; align-items: center; margin-left: calc(var(--u) * 1.6); }
     .cg:first-child { margin-left: 0; }

@@ -52,8 +52,10 @@
 
 #include <math.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <string.h>
 
 #include "platform/platform.h"
@@ -1709,6 +1711,28 @@ void dbg_info_draw(const char *line) { dbg_info_draw_at(line, 0); }
 #define RPP_GAP    5.0f
 
 static float g_rp_w = 480.0f;           /* the space's width, last drawn */
+static float g_rp_h = 320.0f;           /* and its height: 320 at 100% */
+
+/* SIZE: the player drawn at 75 to 150% (umk3.ini replay_scale); the space
+ * is 320 / scale high, the panel on its bottom, the corners on its top */
+int dbg_replay_pct = 100;
+
+void dbg_replay_size(void)
+{
+    static const int k[4] = { 75, 100, 125, 150 };
+    int i;
+
+    for (i = 0; i < 4 && k[i] <= dbg_replay_pct; i++)
+        ;
+    dbg_replay_pct = k[i % 4];
+}
+
+static float rp_scale(void)
+{
+    int p = dbg_replay_pct < 50 ? 50 : dbg_replay_pct > 200 ? 200 : dbg_replay_pct;
+
+    return (float)p / 100.0f;
+}
 
 static const char *const k_rp_tip[RPB_COUNT] = {
     "TO THE START", "BACK 5 SECONDS", "BACK ONE FRAME", "PLAY / PAUSE",
@@ -1743,6 +1767,9 @@ static void rp_layout(float w, float x[RPB_COUNT], float bw[RPB_COUNT])
 #define RPT_BTN_H  20.0f
 #define RPT_LIST_W 84.0f
 #define RPT_X_W    24.0f
+#define RPT_HIDE_W 24.0f
+#define RPT_SIZE_W 44.0f
+#define RPT_GAP    4.0f
 #define RL_TOP     34.0f
 #define RL_W       230.0f
 #define RL_ROW     14.0f
@@ -1779,8 +1806,8 @@ static void rl_layout(int n, int n_recent, float *y, float h[3])
 int dbg_replay_hit(float fx, float fy, float *at, int list_n, int n_recent)
 {
     float x[RPB_COUNT], bw[RPB_COUNT], w = g_rp_w;
-    float px = fx * w, py = fy * 320.0f, b0 = w * 0.04f, b1 = w * 0.96f;
-    float ry[RL_MAX], rh[3];
+    float px = fx * w, py = fy * g_rp_h, b0 = w * 0.04f, b1 = w * 0.96f;
+    float ry[RL_MAX], rh[3], hx = b1 - RPT_X_W - RPT_GAP - RPT_HIDE_W;
     int i;
 
     *at = (px - b0) / (b1 - b0);
@@ -1789,6 +1816,10 @@ int dbg_replay_hit(float fx, float fy, float *at, int list_n, int n_recent)
             return RPB_LIST;
         if (px >= b1 - RPT_X_W && px <= b1)
             return RPB_CLOSE;
+        if (px >= hx && px <= hx + RPT_HIDE_W)
+            return RPB_HIDE;
+        if (px >= hx - RPT_GAP - RPT_SIZE_W && px <= hx - RPT_GAP)
+            return RPB_SIZE;
     }
     if (list_n > 0) {
         if (list_n > RL_MAX)
@@ -1799,6 +1830,7 @@ int dbg_replay_hit(float fx, float fy, float *at, int list_n, int n_recent)
                 if (py >= ry[i] && py < ry[i] + RL_ROW)
                     return RPB_ROW + i;
     }
+    py -= g_rp_h - 320.0f;              /* the panel: on the bottom */
     if (py >= RPP_BAR_Y - 7 && py <= RPP_BAR_Y + RPP_BAR_H + 7
         && px >= b0 - 6 && px <= b1 + 6)
         return RPB_BAR;
@@ -1923,6 +1955,9 @@ static void rp_icon(int id, float cx, float cy, int paused)
         glVertex2f(cx - 4.5f, cy + 6.5f);
         glVertex2f(cx - 6, cy + 5);
         break;
+    case RPB_HIDE:                      /* away: a bar at the foot */
+        rect(cx - 6, cy + 3, 12, 2);
+        break;
     case RPB_SETTINGS:                  /* the menu's three lines */
         rect(cx - 6, cy - 5, 12, 2);
         rect(cx - 6, cy - 1, 12, 2);
@@ -1951,7 +1986,13 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
     int i, paused = (state & (RPS_PAUSED | RPS_END)) != 0;
 
     begin_2d();
-    w = g_rp_w = g_ow;
+    w = g_rp_w = g_ow / rp_scale();
+    g_rp_h = 320.0f / rp_scale();
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0.0, w, g_rp_h, 0.0, -1.0, 1.0);
+    glMatrixMode(GL_MODELVIEW);
+    glTranslatef(0.0f, g_rp_h - 320.0f, 0.0f);     /* the panel on the bottom */
     b0 = w * 0.04f;
     b1 = w * 0.96f;
     f = at < 0 ? 0 : at > 1 ? 1 : at;
@@ -2033,14 +2074,23 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
         text(tx + 5, RPP_TOP - 15, 1.0f, tip);
     }
 
-    /* the top corners: REPLAYS (the list) and the X, with nothing between
-     * them, so the health bars stay in sight */
-    for (i = 0; i < 2; i++) {
-        int id = i ? RPB_CLOSE : RPB_LIST, on = hover == id || (!i && list_n >= 0);
-        float bx = i ? b1 - RPT_X_W : b0, bwid = i ? RPT_X_W : RPT_LIST_W;
+    glEnd();
+    glLoadIdentity();                   /* the top: where it is */
+    glBegin(GL_QUADS);
+
+    /* the top corners: REPLAYS (the list) on the left; SIZE, HIDE and the X
+     * on the right, with nothing between, so the health bars stay in sight */
+    for (i = 0; i < 4; i++) {
+        static const int ids[4] = { RPB_LIST, RPB_CLOSE, RPB_HIDE, RPB_SIZE };
+        int id = ids[i], on = hover == id || (!i && list_n >= 0);
+        float hx = b1 - RPT_X_W - RPT_GAP - RPT_HIDE_W;
+        float bx = i == 0 ? b0 : i == 1 ? b1 - RPT_X_W : i == 2 ? hx : hx - RPT_GAP - RPT_SIZE_W;
+        float bwid = i == 0 ? RPT_LIST_W : i == 1 ? RPT_X_W : i == 2 ? RPT_HIDE_W : RPT_SIZE_W;
 
         if (hover == id) {
-            glColor4f(i ? 1.0f : 0.67f, i ? 0.4f : 0.63f, i ? 0.45f : 1.0f, 0.35f);
+            int red = i == 1;           /* the X glows red */
+
+            glColor4f(red ? 1.0f : 0.67f, red ? 0.4f : 0.63f, red ? 0.45f : 1.0f, 0.35f);
             rect(bx - 2, RPT_BTN_Y - 2, bwid + 4, RPT_BTN_H + 4);
         }
         vgrad(bx, RPT_BTN_Y, bwid, RPT_BTN_H, on && !i ? hot0 : btn0, on && !i ? hot1 : btn1);
@@ -2052,6 +2102,14 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
             glColor4f(0.8f, 0.82f, 1.0f, 0.45f);
         frame_rect(bx, RPT_BTN_Y, bwid, RPT_BTN_H, 0.75f);
         glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+        if (i == 3) {                   /* SIZE: the scale, as text */
+            char pc[8];
+
+            snprintf(pc, sizeof pc, "%d%%", dbg_replay_pct);
+            text(bx + bwid / 2 - (float)strlen(pc) * CH_W / 2,
+                 RPT_BTN_Y + RPT_BTN_H / 2 - 3.5f, 1.0f, pc);
+            continue;
+        }
         rp_icon(id, i ? bx + bwid / 2 : bx + 12, RPT_BTN_Y + RPT_BTN_H / 2, 0);
         if (!i)
             text(bx + 24, RPT_BTN_Y + RPT_BTN_H / 2 - 3.5f, 1.0f, "REPLAYS");
@@ -2093,6 +2151,25 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
     end_2d();
 }
 
+/* HIDE: the player away, the fight alone; a line on the bottom for a while
+ * says how to have it back. `alpha` 0..1, fading. */
+void dbg_replay_hidden(float alpha)
+{
+    const char *what = "CLICK OR ESC: THE PLAYER";
+    float tw = (float)strlen(what) * CH_W;
+
+    if (alpha <= 0)
+        return;
+    begin_2d();
+    glBegin(GL_QUADS);
+    glColor4f(0.031f, 0.027f, 0.12f, 0.6f * alpha);
+    rect((g_ow - tw) * 0.5f - 6, 302.0f, tw + 12, 14.0f);
+    glColor4f(1.0f, 1.0f, 1.0f, alpha);
+    text((g_ow - tw) * 0.5f, 305.0f, 1.0f, what);
+    glEnd();
+    end_2d();
+}
+
 /* Between one replay and the next: the screen dark, the next one's name. */
 void dbg_replay_loading(const char *title)
 {
@@ -2112,4 +2189,453 @@ void dbg_replay_loading(const char *title)
     }
     glEnd();
     end_2d();
+}
+
+
+/* ------------------------------------------------------------ STAGE SELECT
+ *
+ * Port, not in the binary. After the fighters are chosen -- VS (GameMode 6),
+ * training (2) and online (1, the host; the guest takes the host's level,
+ * rollback.c rb_host_level) -- Task_GameInit asks stage_menu_gate before it
+ * loads anything, and a window comes up over FE_SELECTFIGHTER: the stage's
+ * picture large with arrows, or a list of all of them with their pictures
+ * (the TAB key, the pad's Y or the LIST button), CANCEL (the stage the game
+ * would have taken), RANDOM and SELECT. The pictures are the game's CS_BG sheets
+ * (960x640 on a 1024 sheet), or STAGE_<SCENE>.PNG when one is added; a
+ * stage with neither gets one drawn (st_thumb). A debug
+ * fight and a replay go straight on, with their own stage. */
+extern long GameMode;
+long isParent(void);
+struct TEXTURE;
+struct TEXTURE *limeLoadTexture(const char *path, int a, int b);
+struct TEXTURE *lime_load_extra_texture(const char *file);
+extern char Language[10];
+
+#define ST_MAX 16
+#define ST_BTN_H 15.0f                  /* the buttons' height */
+
+static int  g_st_open, g_st_done, g_st_chosen = -1;
+static int  g_st_n, g_st_ids[ST_MAX], g_st_cur, g_st_list, g_st_first;
+static int  g_st_hover = -1;
+static int  g_st_fresh;              /* opened: what is held does not count */
+/* what the last draw put where, for the mouse: 0 the picture's left arrow,
+ * 1 its right one, 2 CANCEL, 3 LIST / LARGE, 4 SELECT, 5 RANDOM, 8.. a
+ * list tile */
+static struct { float x, y, w, h; } g_st_hit[8 + ST_MAX];
+static int g_st_nhit;
+
+static const char *st_tx(const char *es, const char *en)
+{
+    return Language[0] == 'E' && Language[1] == 'S' ? es : en;
+}
+
+static const struct { const char *scene, *name, *pic; } k_stages[] = {
+    { "SUBWAY",         "SUBWAY",           "CS_BG.PNG"  },
+    { "BELLTOWER",      "BELL TOWER",       "CS_BG1.PNG" },
+    { "SOULCHAMBER",    "SOUL CHAMBER",     "CS_BG2.PNG" },
+    { "GRAVEYARD",      "THE GRAVEYARD",    "CS_BG3.PNG" },
+    { "TEMPLE",         "TEMPLE",           "CS_BG4.PNG" },
+    { "STREET",         "THE STREET",       NULL },
+    { "BALCONY",        "THE BALCONY",      NULL },
+    { "BRIDGE",         "THE BRIDGE",       NULL },
+    { "CAVE",           "KAHN'S KAVE",      NULL },
+    { "JADESDESERT",    "JADE'S DESERT",    NULL },
+    { "LAIR",           "SCORPION'S LAIR",  NULL },
+    { "NOOBSDORFEN",    "NOOB'S DORFEN",    NULL },
+    { "PIT",            "THE PIT III",      NULL },
+    { "ROOFTOP",        "ROOFTOP",          NULL },
+    { "SCISLACBUSOREZ", "SCISLAC BUSOREZ",  NULL },
+    { "WATERFRONT",     "WATERFRONT",       NULL },
+};
+#define N_KSTAGES (int)(sizeof k_stages / sizeof k_stages[0])
+
+static int st_entry(int level)
+{
+    const char *s = stage_name(level);
+    int i;
+    for (i = 0; i < N_KSTAGES; i++)
+        if (strcmp(s, k_stages[i].scene) == 0)
+            return i;
+    return -1;
+}
+
+static const char *st_name(int level)
+{
+    int e = st_entry(level);
+    return e >= 0 ? k_stages[e].name : stage_name(level);
+}
+
+/* a texture's GL name, loaded once (0: none) */
+static unsigned st_tex(const char *file)
+{
+    static struct { char file[48]; unsigned name; } cache[40];
+    int i;
+    if (!file)
+        return 0;
+    for (i = 0; i < 40 && cache[i].file[0]; i++)
+        if (strcmp(cache[i].file, file) == 0)
+            return cache[i].name;
+    if (i == 40)
+        return 0;
+    snprintf(cache[i].file, sizeof cache[i].file, "%s", file);
+    {
+        struct TEXTURE *t = limeLoadTexture(file, 0, 0);
+        cache[i].name = t ? *(const unsigned *)((const char *)t + 0x40) : 0;
+    }
+    return cache[i].name;
+}
+
+static void st_pic(unsigned name, float x, float y, float w, float h,
+                   float u1, float v1)
+{
+    if (!name)
+        return;
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, name);
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    glBegin(GL_QUADS);
+    glTexCoord2f(0.0f, 0.0f); glVertex2f(x, y);
+    glTexCoord2f(u1, 0.0f);   glVertex2f(x + w, y);
+    glTexCoord2f(u1, v1);     glVertex2f(x + w, y + h);
+    glTexCoord2f(0.0f, v1);   glVertex2f(x, y + h);
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+}
+
+/* A stage's picture: STAGE_<SCENE>.PNG when there is one (a picture added
+ * later, by a mod or in res), else its CS_BG sheet, else the one the
+ * launcher renders ("aditional textures/stages/<SCENE>.png"), else one drawn
+ * here --
+ * a gradient in a colour of its own with the name across it. `big` the
+ * name's size. */
+static void st_thumb(int level, float x, float y, float w, float h, float big)
+{
+    static unsigned char miss[64];      /* no rendered picture */
+    char file[48];
+    int e = st_entry(level);
+    unsigned t;
+    const char *n = st_name(level);
+    snprintf(file, sizeof file, "STAGE_%s.PNG", stage_name(level));
+    if ((t = st_tex(file)) != 0) {
+        st_pic(t, x, y, w, h, 1.0f, 1.0f);
+        return;
+    }
+    if (e >= 0 && k_stages[e].pic && (t = st_tex(k_stages[e].pic)) != 0) {
+        st_pic(t, x, y, w, h, 0.9375f, 0.625f);
+        return;
+    }
+    /* the stage rendered by the launcher (mods/stagepics.js) */
+    snprintf(file, sizeof file, "stages/%s.png", stage_name(level));
+    if (level >= 0 && level < 64 && !miss[level]) {     /* looked for once */
+        struct TEXTURE *r = lime_load_extra_texture(file);
+        if (r && (t = *(const unsigned *)((const char *)r + 0x40)) != 0) {
+            st_pic(t, x, y, w, h, 1.0f, 1.0f);
+            return;
+        }
+        miss[level] = 1;
+    }
+    {
+        unsigned hsh = 2166136261u;
+        const char *c;
+        float c0[4], c1[4], hue, sc;
+        int k;
+        for (c = n; *c; c++)
+            hsh = (hsh ^ (unsigned char)*c) * 16777619u;
+        hue = (float)(hsh % 360u) / 60.0f;
+        for (k = 0; k < 3; k++) {       /* the hue as rgb, dimmed */
+            float d = hue - (float)(k == 0 ? 0 : k == 1 ? 2 : 4);
+            float v;
+            if (d < -3.0f) d += 6.0f;
+            if (d > 3.0f) d -= 6.0f;
+            v = d < 0 ? -d : d;
+            v = v < 1.0f ? 1.0f : v < 2.0f ? 2.0f - v : 0.0f;
+            c0[k] = 0.10f + 0.40f * v;
+            c1[k] = 0.03f + 0.10f * v;
+        }
+        c0[3] = c1[3] = 1.0f;
+        glBegin(GL_QUADS);
+        vgrad(x, y, w, h, c0, c1);
+        /* a floor line, as a stage would have */
+        glColor4f(1.0f, 1.0f, 1.0f, 0.12f);
+        rect(x, y + h * 0.72f, w, 1.0f);
+        sc = (float)strlen(n) * CH_W * big > w - 8 ? (w - 8) / ((float)strlen(n) * CH_W) : big;
+        glColor4f(1.0f, 1.0f, 1.0f, 0.85f);
+        text(x + (w - (float)strlen(n) * CH_W * sc) / 2, y + h * 0.45f - 3.5f * sc, sc, n);
+        glEnd();
+    }
+}
+
+static int eligible(void)
+{
+    if (DbgFightActive || rp_playing())
+        return 0;
+    return GameMode == 6 || GameMode == 2 || (GameMode == 1 && isParent());
+}
+
+int stage_menu_gate(long *level)
+{
+    int i;
+
+    if (g_st_done) {                    /* picked: this fight's stage */
+        g_st_done = 0;
+        if (g_st_chosen >= 0) {
+            printf("stage select: %d %s\n", g_st_chosen, st_name(g_st_chosen));
+            *level = g_st_chosen;
+        }
+        return 0;
+    }
+    if (g_st_open)
+        return 1;
+    if (!eligible())
+        return 0;
+    g_st_n = 0;
+    for (i = 0; i < ST_MAX; i++) {
+        const char *s = *(const char *P32 const *)(Level_Info + i * LEVEL_INFO_STRIDE + 0x1c);
+        if (s && *(const int32_t *)(Level_Info + i * LEVEL_INFO_STRIDE + 0x70) == 0)
+            g_st_ids[g_st_n++] = i;
+    }
+    if (g_st_n < 2)
+        return 0;
+    g_st_cur = 0;
+    for (i = 0; i < g_st_n; i++)
+        if (g_st_ids[i] == *level)
+            g_st_cur = i;
+    g_st_open = 1;
+    g_st_fresh = 1;
+    g_st_hover = -1;
+    printf("stage select: open (%d stages)\n", g_st_n);
+    return 1;
+}
+
+int stage_menu_is_open(void) { return g_st_open; }
+
+static void st_close(int pick)
+{
+    g_st_chosen = pick ? g_st_ids[g_st_cur] : -1;
+    g_st_open = 0;
+    g_st_done = 1;
+}
+
+static void st_move(int d)
+{
+    g_st_cur = (g_st_cur + d + g_st_n) % g_st_n;
+}
+
+/* RANDOM: any of them, and the fight goes on. Its own numbers, from the
+ * clock: the C library's rand() is left to whatever else draws on it. */
+static void st_random(void)
+{
+    static unsigned long seed;
+    if (!seed)
+        seed = (unsigned long)time(NULL) | 1;
+    seed = seed * 1103515245UL + 12345UL;
+    g_st_cur = (int)((seed >> 16) % (unsigned long)g_st_n);
+    st_close(1);
+}
+
+static void st_button(float x, float y, float w, float h, const char *s,
+                      int hot, int on)
+{
+    static const float b0[4] = { 0.25f, 0.24f, 0.48f, 0.96f };
+    static const float b1[4] = { 0.063f, 0.055f, 0.17f, 0.96f };
+    static const float h0[4] = { 0.58f, 0.53f, 0.97f, 1.0f };
+    static const float h1[4] = { 0.18f, 0.14f, 0.52f, 1.0f };
+    if (on) {
+        glColor4f(0.67f, 0.63f, 1.0f, 0.35f);
+        rect(x - 2, y - 2, w + 4, h + 4);
+    }
+    vgrad(x, y, w, h, hot ? h0 : b0, hot ? h1 : b1);
+    glColor4f(1.0f, 1.0f, 1.0f, on ? 1.0f : 0.5f);
+    frame_rect(x, y, w, h, 0.75f);
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    text(x + (w - (float)strlen(s) * CH_W) / 2, y + (h - 7) / 2, 1.0f, s);
+}
+
+static void st_hit(int i, float x, float y, float w, float h)
+{
+    g_st_hit[i].x = x; g_st_hit[i].y = y; g_st_hit[i].w = w; g_st_hit[i].h = h;
+    if (i + 1 > g_st_nhit)
+        g_st_nhit = i + 1;
+}
+
+void stage_menu_draw(void)
+{
+    static const float veil0[4] = { 0.086f, 0.078f, 0.26f, 0.92f };
+    static const float veil1[4] = { 0.031f, 0.027f, 0.12f, 0.95f };
+    float pw, px, py = 14, ph = 292, bx, by, bw;
+    const char *title = st_tx("ELIGE ESCENARIO", "SELECT STAGE");
+    int i;
+
+    if (!g_st_open)
+        return;
+    begin_2d();
+    g_st_nhit = 0;
+    memset(g_st_hit, 0, sizeof g_st_hit);
+    /* FE_SELECTFIGHTER over the whole screen: its marble is the top 3/4 */
+    st_pic(st_tex("FE_SELECTFIGHTER.PNG"), 0, 0, g_ow, 320, 1.0f, 0.75f);
+
+    pw = g_ow - 24 < 440 ? g_ow - 24 : 440;
+    px = (g_ow - pw) / 2;
+    glBegin(GL_QUADS);
+    vgrad(px, py, pw, ph, veil0, veil1);
+    glColor4f(0.84f, 0.86f, 1.0f, 0.6f);
+    frame_rect(px, py, pw, ph, 1.0f);
+    glColor4f(0.95f, 0.82f, 0.45f, 1.0f);
+    text((g_ow - (float)strlen(title) * CH_W * 2) / 2, py + 8, 2.0f, title);
+    glEnd();
+
+    if (!g_st_list) {                   /* one stage, large */
+        float aw = 18, iw = pw - 2 * aw - 24, ih = iw * 2 / 3, ix = px + 12 + aw, iy = py + 30;
+        if (ih > 196) {
+            ih = 196;
+            iw = ih * 3 / 2;
+            ix = (g_ow - iw) / 2;
+        }
+        st_thumb(g_st_ids[g_st_cur], ix, iy, iw, ih, 3.0f);
+        glBegin(GL_QUADS);
+        glColor4f(0.95f, 0.82f, 0.45f, 0.8f);
+        frame_rect(ix, iy, iw, ih, 1.0f);
+        /* the arrows */
+        glColor4f(1.0f, 1.0f, 1.0f, g_st_hover == 0 ? 1.0f : 0.7f);
+        text(ix - aw + 2, iy + ih / 2 - 10, 3.0f, "<");
+        glColor4f(1.0f, 1.0f, 1.0f, g_st_hover == 1 ? 1.0f : 0.7f);
+        text(ix + iw + 4, iy + ih / 2 - 10, 3.0f, ">");
+        st_hit(0, ix - aw - 4, iy, aw + 4, ih);
+        st_hit(1, ix + iw, iy, aw + 4, ih);
+        {
+            const char *n = st_name(g_st_ids[g_st_cur]);
+            char cnt[16];
+            glColor4f(0.95f, 0.82f, 0.45f, 1.0f);
+            text((g_ow - (float)strlen(n) * CH_W * 2) / 2, iy + ih + 8, 2.0f, n);
+            snprintf(cnt, sizeof cnt, "%d / %d", g_st_cur + 1, g_st_n);
+            glColor4f(0.7f, 0.67f, 0.95f, 1.0f);
+            text((g_ow - (float)strlen(cnt) * CH_W) / 2, iy + ih + 26, 1.0f, cnt);
+        }
+        glEnd();
+    } else {                            /* the list: every stage, its picture */
+        int cols = 4, rows = 3, vis = cols * rows;
+        float gx = px + 10, gy = py + 30, gw = pw - 20;
+        float tw = (gw - (cols - 1) * 6) / cols, th = tw * 2 / 3;
+        if (g_st_cur < g_st_first)
+            g_st_first = g_st_cur / cols * cols;
+        if (g_st_cur >= g_st_first + vis)
+            g_st_first = (g_st_cur / cols - rows + 1) * cols;
+        /* the rows end above the buttons (ST_BTN_H, at the foot) */
+        if (th > (ph - 30 - ST_BTN_H - 14) / rows - 14) {
+            th = (ph - 30 - ST_BTN_H - 14) / rows - 14;
+            tw = th * 3 / 2;
+            gx = (g_ow - (cols * tw + (cols - 1) * 6)) / 2;
+        }
+        for (i = 0; i < vis && g_st_first + i < g_st_n; i++) {
+            int k = g_st_first + i, lv = g_st_ids[k];
+            float x = gx + (i % cols) * (tw + 6), y = gy + (i / cols) * (th + 14);
+            const char *n = st_name(lv);
+            float s = (float)strlen(n) * CH_W > tw ? tw / ((float)strlen(n) * CH_W) : 1.0f;
+            st_thumb(lv, x, y, tw, th, 1.0f);
+            glBegin(GL_QUADS);
+            if (k == g_st_cur) {
+                glColor4f(0.95f, 0.82f, 0.45f, 1.0f);
+                frame_rect(x - 1, y - 1, tw + 2, th + 2, 1.5f);
+            } else {
+                glColor4f(0.8f, 0.82f, 1.0f, g_st_hover == 8 + i ? 0.9f : 0.35f);
+                frame_rect(x, y, tw, th, 0.75f);
+            }
+            glColor4f(1.0f, 1.0f, 1.0f, k == g_st_cur ? 1.0f : 0.75f);
+            text(x + (tw - (float)strlen(n) * CH_W * s) / 2, y + th + 3, s, n);
+            glEnd();
+            st_hit(8 + i, x, y, tw, th + 12);
+        }
+        if (g_st_n > vis) {             /* more below or above */
+            glBegin(GL_QUADS);
+            glColor4f(0.7f, 0.67f, 0.95f, 1.0f);
+            if (g_st_first > 0)
+                text(px + pw - 16, gy, 1.0f, "^");
+            if (g_st_first + vis < g_st_n)
+                text(px + pw - 16, gy + rows * (th + 14) - 12, 1.0f, "V");
+            glEnd();
+        }
+    }
+
+    /* CANCEL, LIST / LARGE, RANDOM, SELECT: small, centred along the foot */
+    bw = 84;
+    by = py + ph - ST_BTN_H - 8;
+    bx = (g_ow - 4 * bw - 3 * 10) / 2;
+    glBegin(GL_QUADS);
+    st_button(bx, by, bw, ST_BTN_H, st_tx("CANCELAR", "CANCEL"), 0, g_st_hover == 2);
+    st_button(bx + bw + 10, by, bw, ST_BTN_H, g_st_list ? st_tx("GRANDE", "LARGE")
+                                                        : st_tx("LISTA", "LIST"),
+              0, g_st_hover == 3);
+    st_button(bx + 2 * (bw + 10), by, bw, ST_BTN_H, st_tx("ALEATORIO", "RANDOM"), 0,
+              g_st_hover == 5);
+    st_button(bx + 3 * (bw + 10), by, bw, ST_BTN_H, st_tx("ELEGIR", "SELECT"), 1,
+              g_st_hover == 4);
+    glEnd();
+    st_hit(2, bx, by, bw, ST_BTN_H);
+    st_hit(3, bx + bw + 10, by, bw, ST_BTN_H);
+    st_hit(5, bx + 2 * (bw + 10), by, bw, ST_BTN_H);
+    st_hit(4, bx + 3 * (bw + 10), by, bw, ST_BTN_H);
+    end_2d();
+}
+
+void stage_menu_mouse(float fx, float fy, int down)
+{
+    static int was;
+    float x = fx * g_ow, y = fy * 320.0f;
+    int i, hit = -1;
+
+    if (!g_st_open) {
+        was = down;
+        return;
+    }
+    for (i = 0; i < g_st_nhit; i++)
+        if (g_st_hit[i].w > 0 && x >= g_st_hit[i].x && x < g_st_hit[i].x + g_st_hit[i].w
+            && y >= g_st_hit[i].y && y < g_st_hit[i].y + g_st_hit[i].h)
+            hit = i;
+    g_st_hover = hit;
+    if (was && !down && hit >= 0) {     /* a click, on release */
+        if (hit == 0)
+            st_move(-1);
+        else if (hit == 1)
+            st_move(1);
+        else if (hit == 2)
+            st_close(0);
+        else if (hit == 3)
+            g_st_list = !g_st_list;
+        else if (hit == 4)
+            st_close(1);
+        else if (hit == 5)
+            st_random();
+        else if (hit >= 8) {
+            int k = g_st_first + hit - 8;
+            if (k == g_st_cur)          /* a second click on it: that one */
+                st_close(1);
+            else if (k < g_st_n)
+                g_st_cur = k;
+        }
+    }
+    was = down;
+}
+
+void stage_menu_keys(int left, int right, int up, int down, int ok, int back,
+                     int tab)
+{
+    static int was[7];
+    int now[7], i, e[7];
+
+    now[0] = left; now[1] = right; now[2] = up; now[3] = down;
+    now[4] = ok; now[5] = back; now[6] = tab;
+    for (i = 0; i < 7; i++) {
+        e[i] = now[i] && !was[i] && !g_st_fresh;
+        was[i] = now[i];
+    }
+    g_st_fresh = 0;                     /* START / ENTER from PLAY still down */
+    if (!g_st_open)
+        return;
+    if (e[0]) st_move(-1);
+    if (e[1]) st_move(1);
+    if (g_st_list && e[2]) st_move(-4);
+    if (g_st_list && e[3]) st_move(4);
+    if (e[6]) g_st_list = !g_st_list;
+    if (e[4]) st_close(1);
+    else if (e[5]) st_close(0);
 }

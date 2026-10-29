@@ -5,7 +5,8 @@
      * Models\<model>\<FORMAT>; a texture in its fighter's or stage's
      * Textures, or in Interface or Effects. A stage can carry its animation
      * (the scene's frames, issue #101). Models as FBX (skeleton, skin,
-     * one action per animation), USD -- USDA text, USDC binary, or USDZ, the
+     * one action per animation), GLB (the same, glTF binary with its pictures
+     * inside), USD -- USDA text, USDC binary, or USDZ, the
      * USDC with its pictures in one file -- (the same, the animations end to
      * end) or OBJ (the mesh alone); their textures as PNG beside them. */
     import { onMount } from 'svelte';
@@ -29,7 +30,7 @@
 
     const items = $derived(ms.cat ? ms.cat[kind] || [] : []);
     /* USD three ways: text, binary, and the binary packed with its pictures */
-    const FORMATS = [['fbx', 'FBX'], ['usd', 'USDA'], ['usdc', 'USDC'], ['usdz', 'USDZ'], ['obj', 'OBJ']];
+    const FORMATS = [['fbx', 'FBX'], ['glb', 'GLB'], ['usd', 'USDA'], ['usdc', 'USDC'], ['usdz', 'USDZ'], ['obj', 'OBJ']];
 
     onMount(async () => {
         await loadCatalog();

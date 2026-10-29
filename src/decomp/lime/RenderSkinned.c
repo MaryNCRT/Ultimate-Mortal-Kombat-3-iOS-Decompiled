@@ -283,6 +283,10 @@ long DrawSkinnedMesh2(SKININFO *skin, unsigned a, unsigned b, long flags,
 
     if (uvCount == 0)
         uvCount = 5000;
+    /* port: a larger skin (REPLACE MODEL) unwelds past 5000; clear what it
+     * can use, within the scratch (lime_globals.c) */
+    if (uvCount < nfaces * 3)
+        uvCount = nfaces * 3 < PORT_SKIN_VERTS ? nfaces * 3 : PORT_SKIN_VERTS;
 
     if (flags != 0) {
         NormaliseLDirs();
@@ -506,6 +510,12 @@ void MatrixIdentity2(SKINMATRIX43 *m)
 }
 
 
+/* Port, not in the binary: the proportion trick (runtime/skin_mats.c) --
+ * the animations' root height scaled for a model with its own bone
+ * lengths, and told when the bones go. NULL until set. */
+float (*lime_port_root_y)(const void *bones);
+void (*lime_port_bones_freed)(const void *bones);
+
 /* --------------------------------------------------------- LIME_FreeBones
  *
  * armv6 0x00083644, 24 bytes.
@@ -520,6 +530,8 @@ void LIME_FreeBones(BONESINFO *info)
 {
     if (info == NULL)
         return;
+    if (lime_port_bones_freed)           /* port: skin_mats.c */
+        lime_port_bones_freed(info);
     limeFree(info->bones);
     limeFree(info);
 }
@@ -575,6 +587,11 @@ void GenerateMatrices(char *data, BONESINFO *bones, long frameA, long frameB,
 /* Port, not in the binary: told when a skin goes, so what SMOOTH MODELS
  * built for it (runtime/smooth_models.c) goes too. NULL until set. */
 void (*lime_port_skin_freed)(const void *skin);
+/* Port, not in the binary: a modded skin's own textures, one per part
+ * (runtime/skin_mats.c), read when the skin is and dropped with it. NULL
+ * until set. */
+void (*lime_port_skin_loaded)(const void *skin, const char *filename);
+void (*lime_port_skin_parts_freed)(const void *skin);
 
 void LIME_FreeSkin(SKININFO *skin)
 {
@@ -585,6 +602,8 @@ void LIME_FreeSkin(SKININFO *skin)
 
     if (lime_port_skin_freed)
         lime_port_skin_freed(skin);
+    if (lime_port_skin_parts_freed)
+        lime_port_skin_parts_freed(skin);
 
     limeFree(skin->vertExtra);      /* +0x18 */
     limeFree(skin->uvs);            /* +0x1c */
@@ -758,6 +777,8 @@ SKININFO *LIME_LoadSkin(const char *filename)
     }
 
     limeFree((void *)data);              /* 0x60684: the file buffer goes */
+    if (lime_port_skin_loaded)           /* port: runtime/skin_mats.c */
+        lime_port_skin_loaded(skin, filename);
     return skin;
 }
 
@@ -1154,6 +1175,8 @@ void CreateMatrixPaletteForGeneratingMesh(char *data, long stride,
                     DecompAnimFrames1, &Root_Trans1, bones->numBones);
 
     LerpVector3(&Root_Trans1, &Root_Trans0, t, &Root_Trans0);
+    if (lime_port_root_y)               /* port: the proportion trick */
+        Root_Trans0.y *= lime_port_root_y(bones);
 
     for (i = 0; i < bones->numBones; i++)
         GetSlerpedQ(&DecompAnimFrames0[i], &DecompAnimFrames1[i], t,

@@ -447,6 +447,9 @@ static void keyboard_buttons(void)
 /* --fight: -1 until parsed. */
 static long g_fight_p1 = -1, g_fight_p2 = -1, g_fight_stage = 0;
 static int  g_rp_hover = -1;            /* REPLAYS: the button under the mouse */
+static int  g_rp_hidden;                /* REPLAYS: HIDE, the fight alone */
+static int  g_rp_hint;                  /* frames left of the "how back" line */
+static int  g_rp_hide_wait;             /* HIDE: the click that hid it still down */
 static int  g_quit_now;                 /* REPLAYS: the player's X */
 static int  g_fight_override;           /* Character2Override is ours */
 extern int  DbgPalette[2], DbgFightActive;      /* runtime/debug_menu.c */
@@ -1115,6 +1118,8 @@ static void read_config(const char *dir)
             snprintf(g_cfg_lang, sizeof g_cfg_lang, "%s", v);
         else if (strcmp(line, "renderer") == 0)        /* render/rgl.h */
             rgl_renderer = g_cfg_renderer = rgl_parse(v);
+        else if (strcmp(line, "vsync") == 0)            /* render/rgl.h */
+            rgl_vsync = atoi(v) != 0;
         else if (strcmp(line, "smooth_anims") == 0) {  /* GameCode.c */
             extern int port_smooth_anims;
             port_smooth_anims = atoi(v) == 1;
@@ -1149,6 +1154,8 @@ static void read_config(const char *dir)
             g_cfg_debug_keys = atoi(v) != 0;
         else if (strcmp(line, "replays") == 0)     /* REPLAYS: keep the last fights */
             rb_replay_auto(atoi(v) != 0);
+        else if (strcmp(line, "replay_scale") == 0)  /* the player's SIZE, % */
+            dbg_replay_pct = atoi(v) < 50 ? 50 : atoi(v) > 200 ? 200 : atoi(v);
         else if (strcmp(line, "skip_intro") == 0)
             g_cfg_skip_intro = atoi(v) != 0;
         else if (strcmp(line, "aspect") == 0) {
@@ -3141,6 +3148,27 @@ int main(int argc, char **argv)
             if (set_menu_is_open())     /* and so does the settings menu */
                 set_menu_mouse(tx / g_virt_w, ty / g_virt_h,
                                plat_mouse(&mx, &my) && g_ntaps == 0);
+            else if (stage_menu_is_open())      /* STAGE SELECT */
+                stage_menu_mouse(tx / g_virt_w, ty / g_virt_h,
+                                 plat_mouse(&mx, &my) && g_ntaps == 0);
+            else if (rp_playing() && !dbg_menu_is_open() && g_rp_hidden) {
+                /* HIDE: a click anywhere has the player back -- a new one:
+                 * the click that hid it is let go first (a toggle, not a
+                 * button held down) */
+                static int was;
+                int now = plat_mouse(&mx, &my) && g_ntaps == 0;
+
+                g_rp_hover = -1;
+                if (g_rp_hide_wait) {
+                    if (!now)
+                        g_rp_hide_wait = 0;
+                    was = 0;
+                } else {
+                    if (was && !now)
+                        g_rp_hidden = 0;
+                    was = now;
+                }
+            }
             else if (rp_playing() && !dbg_menu_is_open()) {     /* the replay's panel */
                 const char *labels[16];
                 float at;
@@ -3148,7 +3176,14 @@ int main(int argc, char **argv)
 
                 g_rp_hover = dbg_replay_hit(tx / g_virt_w, ty / g_virt_h, &at, n, nr);
                 r = rp_ui(g_rp_hover, at, plat_mouse(&mx, &my) && g_ntaps == 0);
-                if (r == RPB_SETTINGS)
+                if (r == RPB_HIDE) {
+                    g_rp_hidden = 1;
+                    g_rp_hide_wait = 1;
+                    g_rp_hint = 180;
+                } else if (r == RPB_SIZE) {
+                    dbg_replay_size();
+                    set_menu_save();    /* umk3.ini replay_scale */
+                } else if (r == RPB_SETTINGS)
                     set_menu_toggle();
                 else if (r == RPB_CLOSE)    /* the X */
                     g_quit_now = 1;
@@ -3288,7 +3323,9 @@ int main(int argc, char **argv)
                                                 == g_pad_settings)
                           || (g_p2pad_settings && (g_pad2.buttons & g_p2pad_settings)
                                                   == g_p2pad_settings);
-                if (esc && !was_esc && !set_menu_is_open()
+                if (esc && !was_esc && g_rp_hidden && rp_playing())
+                    g_rp_hidden = 0;    /* HIDE: Esc has the player back */
+                else if (esc && !was_esc && !set_menu_is_open()
                     && !dbg_menu_is_open())
                     set_menu_toggle();
                 was_esc = esc;
@@ -3306,6 +3343,28 @@ int main(int argc, char **argv)
                 acc -= 1.0 / 60.0;
                 g_tick = ++ticks;       /* UMK3_KEYS' clock goes on */
                 continue;               /* the game does not tick */
+            }
+            /* STAGE SELECT (debug_menu.c): the frame is its own while it is
+             * up, as the settings menu's; Task_GameInit waits for it */
+            if (stage_menu_is_open() && !set_menu_is_open()) {
+                const unsigned pb = g_pad.buttons | g_pad2.buttons;
+                stage_menu_keys(plat_key(PK_LEFT) || g_pad.left || g_pad2.left,
+                                plat_key(PK_RIGHT) || g_pad.right || g_pad2.right,
+                                plat_key(PK_UP) || g_pad.up || g_pad2.up,
+                                plat_key(PK_DOWN) || g_pad.down || g_pad2.down,
+                                plat_key(PK_OK) || (pb & (1u << PB_SOUTH))
+                                    || (pb & (1u << PB_START)),
+                                plat_key(PK_BACK) || (pb & (1u << PB_EAST)),
+                                plat_key(PK_NEXT) || (pb & (1u << PB_NORTH)));
+                clear_frame(ww, wh, vx, vy, vw, vh);
+                if (stage_menu_is_open()) {
+                    use_surface(0);
+                    stage_menu_draw();
+                }
+                render_resolve();
+                acc -= 1.0 / 60.0;
+                g_tick = ++ticks;
+                continue;
             }
             /* port: no debug menu or debug keys in an online fight (Mary):
              * the other player's game would not see what they change */
@@ -3499,7 +3558,11 @@ int main(int argc, char **argv)
                 set_menu_badge();
             online_after_frame();   /* the ONLINE screens' badges (port) */
             render_resolve();
-            if (rp_playing() && !set_menu_is_open()) {  /* REPLAYS: the player's panel */
+            if (rp_playing() && g_rp_hidden) {          /* HIDE: the fight alone */
+                if (g_rp_hint > 0)
+                    g_rp_hint--;
+                dbg_replay_hidden(g_rp_hint > 60 ? 1.0f : (float)g_rp_hint / 60.0f);
+            } else if (rp_playing() && !set_menu_is_open()) {  /* REPLAYS: the player's panel */
                 char clock[48];
                 int state;
                 float at = rp_info(clock, sizeof clock, &state);

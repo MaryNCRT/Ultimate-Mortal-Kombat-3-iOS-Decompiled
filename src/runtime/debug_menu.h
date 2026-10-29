@@ -123,10 +123,28 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
 int  dbg_replay_hit(float fx, float fy, float *at, int list_n, int n_recent);
 /* Between one replay and the next, over the front end: the next one's name. */
 void dbg_replay_loading(const char *title);
+/* HIDE: the line that says how to have the player back, `alpha` 0..1 */
+void dbg_replay_hidden(float alpha);
+/* SIZE: the player's scale in percent (umk3.ini replay_scale), and the
+ * button's step to the next one (75, 100, 125, 150) */
+extern int dbg_replay_pct;
+void dbg_replay_size(void);
 int  dbg_fps_on(void);                 /* TOOLS: FRAMES PER SECOND */
 int  dbg_net_on(void);                 /* TOOLS: ONLINE NUMBERS */
 /* FIGHT: INFINITE HEALTH (bit 0 player one, bit 1 two) and FREEZE CLOCK */
 int  dbg_health_mask(void);
 int  dbg_clock_frozen(void);
+
+/* STAGE SELECT (port): after the fighters, in VS, training and online (the
+ * host), a window to pick the stage. Task_GameInit asks stage_menu_gate
+ * before anything loads: 1 while the window is up (it waits), 0 once the
+ * stage is in *level (or left as the game chose, CANCEL). game_main gives
+ * it the frame while it is open, as the settings menu. */
+int  stage_menu_gate(long *level);
+int  stage_menu_is_open(void);
+void stage_menu_draw(void);
+void stage_menu_mouse(float fx, float fy, int down);
+void stage_menu_keys(int left, int right, int up, int down, int ok, int back,
+                     int tab);
 
 #endif

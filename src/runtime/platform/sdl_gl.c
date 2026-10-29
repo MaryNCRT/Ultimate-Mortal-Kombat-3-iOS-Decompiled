@@ -331,6 +331,11 @@ bool plat_swap(void)
         rgl_present();
         return true;
     }
+    {   /* VSYNC (rgl_vsync), when it changes */
+        static int set = 1;
+        if (set != rgl_vsync)
+            SDL_GL_SetSwapInterval((set = rgl_vsync) ? 1 : 0);
+    }
     SDL_GL_SwapWindow(g_wnd);
     return true;
 }

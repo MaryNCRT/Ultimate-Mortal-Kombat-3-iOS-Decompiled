@@ -48,6 +48,13 @@ void *limeMalloc(const char *tag, size_t bytes);
 void  limeFree(void *p);
 long  lime_heap_check(const char *where);
 #include "../decomp/lime/lime.h"
+#include "skin_mats.h"
+extern void (*lime_port_skin_loaded)(const void *skin, const char *filename);
+extern void (*lime_port_skin_parts_freed)(const void *skin);
+extern float (*lime_port_root_y)(const void *bones);
+extern void (*lime_port_bones_freed)(const void *bones);
+extern int  (*lime_port_mesh_parts)(const unsigned short *indices, long nfaces,
+                                    unsigned tex_name);
 
 
 /* The engine passes paths relative to the bundle ("FLOOR.meshset",
@@ -66,6 +73,11 @@ void lime_platform_set_asset_root(const char *path)
 {
     snprintf(g_lime_asset_root, sizeof(g_lime_asset_root), "%s", path);
     mods_init(path);
+    lime_port_skin_loaded = port_skin_mats_loaded;      /* skin_mats.c */
+    lime_port_skin_parts_freed = port_skin_mats_forget;
+    lime_port_root_y = port_skin_root_y;               /* the proportion trick */
+    lime_port_bones_freed = port_skin_bones_forget;
+    lime_port_mesh_parts = port_skin_mats_draw;
 }
 
 /* The port reads its own `res` folder and nothing outside it. The engine asks

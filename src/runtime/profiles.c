@@ -285,7 +285,7 @@ static float sd_round(float x, float y, float c, float h, float r)
 /* The second outfit's picture: <NAME>_VERSUS2.pvr framed as the first one's
  * PNG, which is the .pvr shrunk about 2.12 times on its bottom left corner
  * (measured on the art; the launcher's profileIcon.js altArt does the same).
- * Sonya has none: 0, and her first is drawn. */
+ * Sonya's is SONYA_2_VERSUS.pvr. None: 0, and the first is drawn. */
 #define ALT_FRAME 1.061f
 
 static int alt_art(const char *root, int icon, uint8_t **art, int *aw, int *ah)
@@ -297,8 +297,13 @@ static int alt_art(const char *root, int icon, uint8_t **art, int *aw, int *ah)
 
     snprintf(path, sizeof path, "%s/Textures/%s_VERSUS2.pvr", root ? root : "res", k_art[icon]);
     memset(&im, 0, sizeof im);
-    if (!lime_pvr_load(path, &im) || !im.rgba)
-        return 0;
+    if (!lime_pvr_load(path, &im) || !im.rgba) {
+        /* Sonya's is named the other way round: SONYA_2_VERSUS.pvr */
+        snprintf(path, sizeof path, "%s/Textures/%s_2_VERSUS.pvr", root ? root : "res", k_art[icon]);
+        memset(&im, 0, sizeof im);
+        if (!lime_pvr_load(path, &im) || !im.rgba)
+            return 0;
+    }
     out = calloc((size_t)n * n, 4);
     if (out)
         for (y = 0; y < n; y++)

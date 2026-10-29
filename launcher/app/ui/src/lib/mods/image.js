@@ -115,10 +115,41 @@ export async function smallerCopies(src, stem) {
     return out;
 }
 
+/* The frozen look of a picture, as the game's own _ICE textures are made:
+ * its brightness on a pale blue -- measured on SONYA, SCORPION, KITANA and
+ * SINDEL_DIFFUSE against their _DIFFUSE_ICE: blue full, red 113 + 0.55 and
+ * green 205 + 0.19 of the brightness. Transparency kept. */
+export function icePicture(pic) {
+    const w = pic.width || pic.naturalWidth, h = pic.height || pic.naturalHeight;
+    const c = new OffscreenCanvas(w, h), g = c.getContext('2d');
+    g.drawImage(pic, 0, 0);
+    const d = g.getImageData(0, 0, w, h), px = d.data;
+    for (let i = 0; i < px.length; i += 4) {
+        const L = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+        px[i] = Math.min(255, 113 + 0.55 * L);
+        px[i + 1] = Math.min(255, 205 + 0.19 * L);
+        px[i + 2] = 255;
+    }
+    g.putImageData(d, 0, 0);
+    return c;
+}
+
+/* the frozen copy a texture has: <stem>_ICE when the game has one (a
+ * fighter's <NAME>_DIFFUSE_ICE) or the texture is a replaced model's
+ * material (<skin>_M<n>, runtime/skin_mats.c); its size, the game's */
+async function iceOf(src, stem) {
+    if (/_ICE\d*$/i.test(stem)) return null;
+    const n = stem.toUpperCase() + '_ICE';
+    const file = textureFile(src.files, n);
+    if (file) return { stem: n, ...(await sizeOf(src, file) || {}) };
+    return /_M\d+$/i.test(stem) ? { stem: n } : null;
+}
+
 /* REPLACE TEXTURE: the picture as `stem`.png in the mod, in its folder
  * `dir` (mods/owners.js), and, with `auto`, each smaller copy the game has,
- * at that copy's own size. Returns the files written. */
-export async function putTexture(api, src, mod, stem, bytes, auto, dir = '') {
+ * at that copy's own size; with `ice`, its frozen copy too (icePicture),
+ * and that one's smaller copies. Returns the files written. */
+export async function putTexture(api, src, mod, stem, bytes, auto, dir = '', ice = true) {
     const pic = await decodePicture(bytes);
     if (!pic) return null;
     const at = name => (dir ? dir + '/' : '') + name;
@@ -129,5 +160,16 @@ export async function putTexture(api, src, mod, stem, bytes, auto, dir = '') {
             await api.modsPut(mod, at(c.stem + '.png'), await pngOf(pic, c.w, c.h));
             files.push(at(c.stem + '.png'));
         }
+    const ic = ice && await iceOf(src, stem);
+    if (ic) {
+        const frozen = icePicture(pic);
+        await api.modsPut(mod, at(ic.stem + '.png'), await pngOf(frozen, ic.w || 0, ic.h || 0));
+        files.push(at(ic.stem + '.png'));
+        if (auto)
+            for (const c of await smallerCopies(src, ic.stem)) {
+                await api.modsPut(mod, at(c.stem + '.png'), await pngOf(frozen, c.w, c.h));
+                files.push(at(c.stem + '.png'));
+            }
+    }
     return files;
 }

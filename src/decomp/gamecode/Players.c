@@ -10,6 +10,7 @@
 #include <string.h>   /* memcpy, strcmp, strcpy */
 #include <stdio.h>    /* sprintf */
 #include "../../runtime/smooth_models.h"   /* port: SMOOTH MODELS */
+#include "../../runtime/skin_mats.h"       /* port: a modded skin's textures */
 int rgl_shadow_active(void);            /* port: REAL-TIME SHADOWS, render/rgl.h */
 
 typedef struct TEXTURE TEXTURE;
@@ -1413,10 +1414,16 @@ void RenderAnimatedCharacter(char *name, ANIMATEDCHARACTER *c,
         GenerateFrameVertsBySkinning(c, idxA, idxB, t, RenderVerts);
         LIME_printf(0x1b, "Player SKIN %s at fr %d is VISIBLE\n",
                     name, (int)frameA);
+        /* port: a modded skin's own textures, iced when frozen, not as a
+         * baby (runtime/skin_mats.c) */
+        port_skin_mats_use(tex && tex != ((void *P32 *)c)[0x1c / 4]
+                           ? ((void *P32 *)c)[0x30 / 4] : NULL,
+                           tex && tex == ((void *P32 *)c)[0x18 / 4]);
         /* port: SMOOTH MODELS draws the skin smoothed, or nothing */
         if (!port_smooth_draw(((void *P32 *)c)[0x30 / 4], frame, 0, tex,
                               grey, pos))
             LIME_RenderMeshSingleIndexed(frame, tex, grey, pos, 0);
+        port_skin_mats_use(NULL, 0);
     } else {
         /* 0x5c2f4: a body not drawn is still posed. A baked frame (Mileena's
          * nail fatality, 310..334) draws scene meshes instead, and what they
@@ -1435,6 +1442,8 @@ void RenderAnimatedCharacter(char *name, ANIMATEDCHARACTER *c,
     if (*(void *P32 *)(uintptr_t)(unsigned long)a[0x30 / 4] != 0 && vis) {
         if (f[0x28 / 4] == 1 || (idxA == 365 && a[2] == 6)) {
             GenerateFrameVertsBySkinningSKIN2(c, idxA, idxB, t, RenderVerts);
+            port_skin_mats_use(*(void *P32 *)(uintptr_t)(unsigned long)
+                                   a[0x30 / 4], 0); /* port: skin_mats.c */
             if (!port_smooth_draw(*(void *P32 *)(uintptr_t)(unsigned long)
                                       a[0x30 / 4], frame, 1,
                                   (void *)(uintptr_t)(unsigned long)a[0x20 / 4],
@@ -1442,6 +1451,7 @@ void RenderAnimatedCharacter(char *name, ANIMATEDCHARACTER *c,
                 LIME_RenderMeshSingleIndexed(frame,
                         (void *)(uintptr_t)(unsigned long)a[0x20 / 4],
                         grey, pos, 1);
+            port_skin_mats_use(NULL, 0);
         }
     }
     glPopMatrix();
@@ -1845,6 +1855,35 @@ static TEXTURE *port_load_lite(const char *path)
     return limeLoadTexture((char *)path, 0, 0);
 }
 
+/* Port, not in the binary. The `.lighting` file is baked for the game's own
+ * skin: `need` bytes, a colour per unwelded vertex per frame. A skin brought
+ * in with REPLACE MODEL has its own vertex count, and slicing the file by it
+ * read past its end -- colours from the heap, the fighter drawn black. When
+ * the file does not fit, every frame gets the file's average light (a mid
+ * grey without one), flat but the model's own. */
+long limeFileSize(const char *name);    /* the platform's, as text.c */
+
+static void *port_fit_lighting(void *lighting, const char *path, size_t need)
+{
+    size_t have = lighting ? (size_t)limeFileSize(path) : 0, k;
+    unsigned long sum = 0;
+    unsigned char *out;
+
+    if (lighting && have >= need)
+        return lighting;
+    for (k = 0; k < have; k++)
+        sum += ((const unsigned char *)lighting)[k];
+    out = (unsigned char *)limeMalloc("port_lighting", need ? need : 1);
+    if (out == NULL)
+        return lighting;
+    memset(out, have ? (int)(sum / have) : 0xb4, need);
+    printf("LAC: %s is %lu bytes, the skin needs %lu: flat light\n", path,
+           (unsigned long)have, (unsigned long)need);
+    if (lighting)
+        limeFree(lighting);
+    return out;
+}
+
 ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
                                          char *bonesFile, char *lightingName,
                                          char *meshbaseFile, char *texBase,
@@ -1895,6 +1934,7 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
 
     c->skin = LIME_LoadSkin(skinFile);
     c->bones = LIME_LoadBones(bonesFile);
+    port_skin_bones_loaded(c->bones, skinFile); /* port: skin_mats.c */
     c->frameList = limeLoadFile(framePath);
 
     /* ---- the frame list, and the finisher-frame gate ---- */
@@ -2037,6 +2077,9 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
                                : 0;
                     size1 = DrawSkinnedMesh2(skin, 0, 0, 1, RenderVerts,
                                              RenderUVs, RenderRGBs, 0, 1);
+                    lighting = port_fit_lighting(lighting, lightingPath,
+                                                 (size_t)(meshCount - 1)
+                                                 * (size_t)(size1 + size2));
                 }
 
                 m->cols = limeMalloc("animatedcharacter_cols", size1);

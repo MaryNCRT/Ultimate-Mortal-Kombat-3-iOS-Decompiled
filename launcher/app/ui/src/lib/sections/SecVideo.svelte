@@ -91,6 +91,8 @@
             <div class="field wide">
                 <SharpSliders disabled={!c.smoothModels} />
             </div>
+            <label class="chk wide"><input type="checkbox" checked={c.vsync !== false}
+                onchange={e => save({ vsync: e.currentTarget.checked })}><span>{tx('vsync')}</span></label>
             <label class="chk wide"><input type="checkbox" checked={!!c.smoothAnims}
                 onchange={e => save({ smoothAnims: e.currentTarget.checked })}><span>{tx('smooth')}</span></label>
             <label class="chk wide"><input type="checkbox" checked={!!c.rtShadows}

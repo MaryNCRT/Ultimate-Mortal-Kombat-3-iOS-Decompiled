@@ -945,6 +945,12 @@ int  lime_port_edge_clamp(const float *uv, int stride,
 void lime_port_edge_restore(int clamped);
 extern limeVECTOR3 *RenderVerts;
 
+/* Port, not in the binary: a modded skin drawn part by part, each part
+ * with its own texture (runtime/skin_mats.c); 0 when it has no parts.
+ * NULL until set. */
+int (*lime_port_mesh_parts)(const unsigned short *indices, long nfaces,
+                            unsigned tex_name);
+
 void LIME_RenderMeshSingleIndexed(void *rec, TEXTURE *tex, float alpha,
                                   const limeVECTOR3 *fade, long second)
 {
@@ -1011,7 +1017,10 @@ void LIME_RenderMeshSingleIndexed(void *rec, TEXTURE *tex, float alpha,
         const int clamp = tex ? lime_port_edge_clamp((const float *)uvs, 2,
                                    (const unsigned short *)indices,
                                                      nfaces * 3) : 0;
-        if (!rb_nodraw())               /* port: a frame run again (rollback.c) */
+        if (!rb_nodraw()                /* port: a frame run again (rollback.c) */
+            && !(tex && lime_port_mesh_parts  /* port: runtime/skin_mats.c */
+                 && lime_port_mesh_parts((const unsigned short *)indices,
+                                         nfaces, tex->name)))
             glDrawElements(GL_TRIANGLES, nfaces * 3, GL_UNSIGNED_SHORT, indices);
         lime_port_edge_restore(clamp);
     }

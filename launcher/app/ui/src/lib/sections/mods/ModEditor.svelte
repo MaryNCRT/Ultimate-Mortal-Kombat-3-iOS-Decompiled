@@ -175,7 +175,7 @@
         if (!(await ensureMod())) return;
         const got = await api.pickFile('picture');
         if (!got) return;
-        const files = await putTexture(api, src, ms.edMod, stem, got.bytes, ms.autoSmall, 'Characters/' + fname);
+        const files = await putTexture(api, src, ms.edMod, stem, got.bytes, ms.autoSmall, 'Characters/' + fname, ms.autoIce);
         if (!files) { note = tx('vwNotPicture'); return; }
         forgetMod();
         note = tx('vwSaved') + ms.edMod + '\\' + files.join(', ');
@@ -368,6 +368,7 @@
         {:else}
             <p class="note">{tx('edLooksNote')}</p>
             <label class="chk"><input type="checkbox" bind:checked={ms.autoSmall}><span>{tx('vwAutoSmall')}</span></label>
+            <label class="chk"><input type="checkbox" bind:checked={ms.autoIce}><span>{tx('vwAutoIce')}</span></label>
             <div class="scroll">
                 <table class="grid">
                     <tbody>

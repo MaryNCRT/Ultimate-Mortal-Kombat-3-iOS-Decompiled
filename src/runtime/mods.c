@@ -61,6 +61,7 @@ typedef struct Map {
 static Map g_files;             /* "kano.skin" -> path */
 static Map g_tex;               /* "kano_diffuse" -> path, pictures only */
 static int g_mods_on;
+static int g_online;            /* an online fight: the game as it ships */
 static char g_on[MOD_MAX][PATH_MAX_];   /* the mods that are on, highest first */
 
 static void lower(char *s)
@@ -313,6 +314,16 @@ void mods_init(const char *res_root)
         printf("mods: %d on, %d files\n", g_mods_on, (int)g_files.used);
 }
 
+/* Online, only what is seen and changes nothing of the fight: models
+ * (.skin .meshset, a skin's .mats) and textures. Animations, scenes, events, sounds and the
+ * CHARACTER EDITOR's numbers stay the game's, the same on both machines. */
+static int online_file(const char *key)
+{
+    const char *dot = strrchr(key, '.');
+    return dot && (strcmp(dot, ".skin") == 0 || strcmp(dot, ".meshset") == 0
+                   || strcmp(dot, ".mats") == 0 || is_picture(key));
+}
+
 int mods_find(const char *rel, char *out, size_t n)
 {
     char key[NAME_MAX_];
@@ -326,6 +337,8 @@ int mods_find(const char *rel, char *out, size_t n)
         return 0;
     strcpy(key, base);
     lower(key);
+    if (g_online && !online_file(key))
+        return 0;
     hit = map_get(&g_files, key);
     if (!hit)
         return 0;
@@ -402,6 +415,31 @@ static const struct umk3_logic_name *logic_name(const char *name)
     return NULL;
 }
 
+/* every word the mods changed and what the game had there, so an online
+ * fight can have the game's own (mods_online) */
+typedef struct Old { uint32_t *at; uint32_t v; } Old;
+static Old *g_old;
+static size_t g_nold, g_capold;
+
+static void keep_old(uint32_t *at)
+{
+    size_t i;
+
+    for (i = 0; i < g_nold; i++)
+        if (g_old[i].at == at)
+            return;
+    if (g_nold == g_capold) {
+        size_t cap = g_capold ? g_capold * 2 : 256;
+        Old *o = realloc(g_old, cap * sizeof *o);
+        if (!o)
+            return;
+        g_old = o;
+        g_capold = cap;
+    }
+    g_old[g_nold].at = at;
+    g_old[g_nold++].v = *at;
+}
+
 int mods_apply_data(void)
 {
     char path[PATH_MAX_ + 16], line[512];
@@ -441,6 +479,7 @@ int mods_apply_data(void)
                 printf("mods: %s: no %s[%lu]\n", path, name, idx);
                 continue;
             }
+            keep_old((uint32_t *)t->at + idx);
             ((uint32_t *)t->at)[idx] = (uint32_t)v;
             done++;
         }
@@ -449,4 +488,21 @@ int mods_apply_data(void)
     if (done)
         printf("mods: %d numbers changed\n", done);
     return done;
+}
+
+void mods_online(int on)
+{
+    size_t i;
+
+    if (on == g_online)
+        return;
+    g_online = on;
+    if (on) {
+        for (i = 0; i < g_nold; i++)
+            *g_old[i].at = g_old[i].v;
+        if (g_nold)
+            printf("mods: online, the game's own numbers (%u put back)\n",
+                   (unsigned)g_nold);
+    } else if (g_nold)
+        mods_apply_data();
 }

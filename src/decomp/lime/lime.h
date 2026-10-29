@@ -561,8 +561,11 @@ extern const float      LIGHT_SCALE;
 /* Skinning state, under the binary's names; see lime_globals.c for where each
  * lives and RenderSkinned.c for who writes it. */
 extern SKINMATRIX43     MatrixPalette2[150];
-extern unsigned char    SkinnedVerts[360000];
-extern uint16_t         RenderIndexes[10000];
+/* port: the skinning scratch for any skin a uint16 index can draw (the
+ * binary's held 15,000 vertices and 3,333 faces; lime_globals.c) */
+#define PORT_SKIN_VERTS 65536
+extern unsigned char    SkinnedVerts[PORT_SKIN_VERTS * 24];
+extern uint16_t         RenderIndexes[PORT_SKIN_VERTS * 3];
 extern BONEANIMFRAME    DecompAnimFrames0[150];
 extern BONEANIMFRAME    DecompAnimFrames1[150];
 extern limeVECTOR3      Root_Trans0, Root_Trans1;
