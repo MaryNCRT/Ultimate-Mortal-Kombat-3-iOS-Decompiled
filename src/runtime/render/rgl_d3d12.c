@@ -106,6 +106,7 @@ static int g_npsos, g_cpsos;
 static dx_samp g_samps[64];
 static int g_nsamps;
 static int g_white;
+static int g_shadow;                    /* the target sampled as the shadow map (t1) */
 
 #define DEPTH_FMT DXGI_FORMAT_D24_UNORM_S8_UINT
 #define COLOR_FMT DXGI_FORMAT_R8G8B8A8_UNORM
@@ -402,6 +403,7 @@ static int make_root(void)
 {
     D3D12_DESCRIPTOR_RANGE rs, rsm;
     D3D12_ROOT_PARAMETER p[3];
+    D3D12_STATIC_SAMPLER_DESC sp;
     D3D12_ROOT_SIGNATURE_DESC d;
     ID3DBlob *blob = NULL, *err = NULL;
     PFN_D3D12_SERIALIZE_ROOT_SIGNATURE ser =
@@ -411,8 +413,9 @@ static int make_root(void)
         return 0;
     memset(&rs, 0, sizeof rs);
     rs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-    rs.NumDescriptors = 1;
+    rs.NumDescriptors = 2;              /* t0 the texture, t1 the shadow map */
     rsm = rs;
+    rsm.NumDescriptors = 1;
     rsm.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
     memset(p, 0, sizeof p);
     p[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
@@ -424,9 +427,19 @@ static int make_root(void)
     p[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     p[2] = p[1];
     p[2].DescriptorTable.pDescriptorRanges = &rsm;
+    /* s1: the shadow map's, texel by texel, clamped */
+    memset(&sp, 0, sizeof sp);
+    sp.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+    sp.AddressU = sp.AddressV = sp.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    sp.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+    sp.MaxLOD = D3D12_FLOAT32_MAX;
+    sp.ShaderRegister = 1;
+    sp.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     memset(&d, 0, sizeof d);
     d.NumParameters = 3;
     d.pParameters = p;
+    d.NumStaticSamplers = 1;
+    d.pStaticSamplers = &sp;
     d.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
     if (!ok(ser(&d, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &err), "SerializeRootSignature"))
         return 0;
@@ -567,6 +580,7 @@ static int dx_open(void *window, int width, int height)
 static void dx_close(void)
 {
     int i;
+    g_shadow = 0;
     if (!g_dev)
         return;
     flush();
@@ -847,6 +861,8 @@ static void dx_target_free(int i)
     flush();
     if (g_cur == i)
         g_cur = 0;
+    if (g_shadow == i)
+        g_shadow = 0;
     release(&g_tg[i].color);
     release(&g_tg[i].dep);
     if (g_tg[i].rtv >= 0) g_rtv_used[g_tg[i].rtv] = 0;
@@ -928,7 +944,7 @@ static D3D12_BLEND dx_bfa(int f)
 static ID3D12PipelineState *get_pso(const rgl_pipe *k, int samples, int depth)
 {
     D3D12_GRAPHICS_PIPELINE_STATE_DESC d;
-    D3D12_INPUT_ELEMENT_DESC il[3];
+    D3D12_INPUT_ELEMENT_DESC il[4];
     ID3D12PipelineState *p = NULL;
     int i;
 
@@ -940,7 +956,9 @@ static ID3D12PipelineState *get_pso(const rgl_pipe *k, int samples, int depth)
     il[0].SemanticName = "POSITION"; il[0].Format = DXGI_FORMAT_R32G32B32A32_FLOAT; il[0].AlignedByteOffset = 0;
     il[1].SemanticName = "COLOR"; il[1].Format = DXGI_FORMAT_R8G8B8A8_UNORM; il[1].AlignedByteOffset = 16;
     il[2].SemanticName = "TEXCOORD"; il[2].Format = DXGI_FORMAT_R32G32_FLOAT; il[2].AlignedByteOffset = 20;
-    for (i = 0; i < 3; i++)
+    il[3].SemanticName = "TEXCOORD"; il[3].SemanticIndex = 1; il[3].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    il[3].AlignedByteOffset = 28;
+    for (i = 0; i < 4; i++)
         il[i].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
     memset(&d, 0, sizeof d);
     d.pRootSignature = g_root;
@@ -968,7 +986,7 @@ static ID3D12PipelineState *get_pso(const rgl_pipe *k, int samples, int depth)
     d.DepthStencilState.DepthWriteMask = k->depth_write && depth ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
     d.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
     d.InputLayout.pInputElementDescs = il;
-    d.InputLayout.NumElements = 3;
+    d.InputLayout.NumElements = 4;
     d.PrimitiveTopologyType = k->topo == RGL_LINES ? D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE : D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     d.NumRenderTargets = 1;
     d.RTVFormats[0] = COLOR_FMT;
@@ -1027,19 +1045,34 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     ID3D12PipelineState *p;
     D3D12_SHADER_RESOURCE_VIEW_DESC sd;
     D3D12_VERTEX_BUFFER_VIEW vb;
+    ID3D12Resource *shadow_res;
     int t = g_cur, samples, depth, ss;
 
-    if (bytes > g_vsize) {
+    if (g_voff + bytes > g_vsize) {
+        /* the frame outgrew the buffer: a bigger one, so the frames after
+         * draw without waiting for the GPU partway (REAL-TIME SHADOWS and
+         * SMOOTH MODELS draw a frame's fighters twice and thicker) */
+        UINT64 want = g_voff + bytes;
         flush();
         ID3D12Resource_Release(g_vbuf);
+        while (g_vsize < want && g_vsize < (256u << 20))
+            g_vsize *= 2;
         while (g_vsize < bytes)
             g_vsize *= 2;
         g_vbuf = buffer(g_vsize, D3D12_HEAP_TYPE_UPLOAD);
         ID3D12Resource_Map(g_vbuf, 0, NULL, (void **)&g_vmap);
     }
-    if ((g_voff + bytes > g_vsize || g_srv_next >= SRV_RING) && g_list_on)
+    if (g_srv_next + 2 > SRV_RING && g_list_on)
         flush();
     bind_target();
+    /* t1: the shadow map for a draw that receives, white (nothing nearer
+     * the light) for the rest */
+    shadow_res = g_tex[g_white].r.res;
+    if ((f->shadow & 15) == RGL_SHADOW_RECEIVE && g_shadow > 0 && g_shadow < g_ntg && g_tg[g_shadow].used
+        && g_shadow != t) {
+        to_state(&g_tg[g_shadow].color, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        shadow_res = g_tg[g_shadow].color.res;
+    }
     samples = t > 0 ? g_tg[t].samples : 1;
     depth = t > 0 ? g_tg[t].depth : 1;
     p = get_pso(k, samples, depth);
@@ -1051,6 +1084,8 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     sd.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
     sd.Texture2D.MipLevels = (UINT)-1;
     ID3D12Device_CreateShaderResourceView(g_dev, srv_res, &sd, cpu(g_srv_heap, g_srv_inc, g_srv_next));
+    sd.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    ID3D12Device_CreateShaderResourceView(g_dev, shadow_res, &sd, cpu(g_srv_heap, g_srv_inc, g_srv_next + 1));
     ss = get_sampler(s);
     memcpy(g_vmap + g_voff, v, (size_t)bytes);
     vb.BufferLocation = ID3D12Resource_GetGPUVirtualAddress(g_vbuf) + g_voff;
@@ -1068,7 +1103,7 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
                                                                                   : D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     ID3D12GraphicsCommandList_IASetVertexBuffers(g_list, 0, 1, &vb);
     ID3D12GraphicsCommandList_DrawInstanced(g_list, (UINT)n, 1, 0, 0);
-    g_srv_next++;
+    g_srv_next += 2;
 }
 
 static void dx_draw(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_samp *s,
@@ -1261,11 +1296,18 @@ static void dx_present(void)
 
 static void dx_finish(void) { }
 
+static void dx_shadow_map(int t)
+{
+    g_shadow = t > 0 && t < g_ntg && g_tg[t].used ? t : 0;
+    if (g_shadow && g_list_on)
+        to_state(&g_tg[g_shadow].color, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+}
+
 rgl_backend rgl_d3d12 = {
     "Direct3D 12", dx_open, dx_close, dx_device, 16384, 1,
     dx_tex_new, dx_tex_image, dx_tex_sub, dx_tex_free,
     dx_target_new, dx_target_free, dx_target_use, dx_target_size,
-    dx_clear, dx_draw, dx_blit, dx_read, dx_present, dx_finish,
+    dx_clear, dx_draw, dx_blit, dx_read, dx_present, dx_finish, dx_shadow_map,
 };
 
 #endif

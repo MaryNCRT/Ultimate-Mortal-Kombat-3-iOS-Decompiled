@@ -10,6 +10,7 @@
 #include <string.h>   /* memcpy, strcmp, strcpy */
 #include <stdio.h>    /* sprintf */
 #include "../../runtime/smooth_models.h"   /* port: SMOOTH MODELS */
+int rgl_shadow_active(void);            /* port: REAL-TIME SHADOWS, render/rgl.h */
 
 typedef struct TEXTURE TEXTURE;
 void limeDeleteTexture(TEXTURE *tex);
@@ -1455,8 +1456,9 @@ void RenderAnimatedCharacter(char *name, ANIMATEDCHARACTER *c,
 
     /* port: SMOOTH MODELS leaves the shadow alone -- flattened onto the
      * floor the smoothing does not show, and it would cost a second draw of
-     * the subdivided body (Mary: lag) */
-    if (f[0x18 / 4] == 1 && vis)
+     * the subdivided body (Mary: lag). REAL-TIME SHADOWS, when drawn,
+     * replace it (render/rgl.h). */
+    if (f[0x18 / 4] == 1 && vis && !rgl_shadow_active())
         LIME_RenderMeshSingleIndexed(frame, 0, grey, pos, 0);
 
     glPopMatrix();

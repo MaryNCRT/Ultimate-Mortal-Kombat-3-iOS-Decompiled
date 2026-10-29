@@ -11,6 +11,7 @@
 #include "lime_glapi.h"   /* the GL calls' calling convention */
 #include <string.h>   /* memset, for clearSpriteListsAndEvents */
 #include "../../runtime/smooth_models.h"   /* port: SMOOTH MODELS, what covers a skin */
+void rgl_shadow_caster(int on);         /* port: REAL-TIME SHADOWS, render/rgl.h */
 
 extern int PortTextureQuality;          /* runtime/draw_gl.c, port only */
 int  lime_port_load_more(int first);    /* runtime/draw_gl.c, port only */
@@ -3230,6 +3231,7 @@ long RenderPlayer(PLAYER *p, long attach, long flag)
     limeEnableDepthWrites();
 
     port_smooth_pose(w);                /* port: SMOOTH ANIMATIONS */
+    rgl_shadow_caster(1);               /* port: REAL-TIME SHADOWS, a caster */
     vis = IsFrameVisible(c, w[0x51c / 4], w[0x520 / 4]);
     def = &PlayerDefs[w[0]];
 
@@ -3277,6 +3279,7 @@ long RenderPlayer(PLAYER *p, long attach, long flag)
         }
     }
 
+    rgl_shadow_caster(0);               /* port */
     glCullFace(GL_BACK);
     LIME_KillAllLights();
     LIME_PopMatrix(1);
@@ -5123,6 +5126,7 @@ void RenderIntroCharacterPlayer(void)
         p0[0x528 / 4] = anim[0x14 / 4];
 
         port_smooth_pose(p0);           /* port: SMOOTH ANIMATIONS */
+        rgl_shadow_caster(1);           /* port: REAL-TIME SHADOWS */
         RenderAnimatedCharacter(0, (ANIMATEDCHARACTER *)anim,
                                 p0[0x51c / 4], p0[0x520 / 4],
                                 ((float *)p0)[0x524 / 4],
@@ -5138,6 +5142,7 @@ void RenderIntroCharacterPlayer(void)
                          ((float *)p0)[0x524 / 4], 0, 0, 0,
                          (void *)(uintptr_t)(unsigned long) p0[0x528 / 4],
                          p0[0x52c / 4], AttachTransforms);
+        rgl_shadow_caster(0);           /* port */
     }
 
     if ((IntroCamCount > 2 || IntroCamCount == 0) && p1[1] != 0) {
@@ -5176,6 +5181,7 @@ void RenderIntroCharacterPlayer(void)
         p1[0x528 / 4] = (p1[0x530 / 4] != 0) ? p1[0x530 / 4] : anim[0x14 / 4];
 
         port_smooth_pose(p1);           /* port: SMOOTH ANIMATIONS */
+        rgl_shadow_caster(1);           /* port: REAL-TIME SHADOWS */
         RenderAnimatedCharacter(0, (ANIMATEDCHARACTER *)anim,
                                 p1[0x51c / 4], p1[0x520 / 4],
                                 ((float *)p1)[0x524 / 4],
@@ -5191,6 +5197,7 @@ void RenderIntroCharacterPlayer(void)
                          ((float *)p1)[0x524 / 4], 0, 0, 0,
                          (void *)(uintptr_t)(unsigned long) p1[0x528 / 4],
                          p1[0x52c / 4], AttachTransforms);
+        rgl_shadow_caster(0);           /* port */
     }
 
     glPopMatrix();

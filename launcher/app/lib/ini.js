@@ -8,6 +8,9 @@
  *     sharp_edge_angle=80  sharp_edge_strength=100   (the smoothing keeps an edge
  *       whose faces turn by more than the angle, by that percent of a crease;
  *       src/thirdparty/blender/umk3_subsurf.h)
+ *     rt_shadows=1      (real-time shadows, experimental: a shadow map from a
+ *       light over the stage, Vulkan and Direct3D 12; the flattened shadow
+ *       under a fighter goes; src/runtime/render/rgl.h)
  *     texture_quality=iphone|ipad|max
  *     arch=x86|x64   (the launcher's own: which game it builds and plays,
  *       umk3-game.exe, 32 bits, or umk3-game64.exe, 64 bits)
@@ -165,6 +168,7 @@ function defaultConfig() {
         smoothModels: 0,             /* smooth_models=: 0 off, 1 or 2 the subdivision level */
         sharpAngle: SHARP_ANGLE,     /* sharp_edge_angle=: degrees, 0..180 */
         sharpStrength: SHARP_STRENGTH,   /* sharp_edge_strength=: percent, 0..100 */
+        rtShadows: false,            /* rt_shadows=1: real-time shadows (experimental) */
         language: 0,                 /* "" = follow Windows */
         ui: 'EN',                    /* the launcher's own language */
         ipa: '',
@@ -231,6 +235,7 @@ function load(p) {
         else if (key === 'smooth_models') cfg.smoothModels = num >= 1 && num <= 2 ? num : 0;
         else if (key === 'sharp_edge_angle') cfg.sharpAngle = clampInt(num, 0, 180, SHARP_ANGLE);
         else if (key === 'sharp_edge_strength') cfg.sharpStrength = clampInt(num, 0, 100, SHARP_STRENGTH);
+        else if (key === 'rt_shadows') cfg.rtShadows = num === 1;
         else if (key === 'language') {
             const i = LANGS.findIndex(l => l.code.toUpperCase() === val.toUpperCase());
             if (i >= 0)
@@ -325,6 +330,7 @@ function save(p, cfg) {
         'smooth_models=' + (cfg.smoothModels === 1 || cfg.smoothModels === 2 ? cfg.smoothModels : 0),
         'sharp_edge_angle=' + clampInt(cfg.sharpAngle, 0, 180, SHARP_ANGLE),
         'sharp_edge_strength=' + clampInt(cfg.sharpStrength, 0, 100, SHARP_STRENGTH),
+        'rt_shadows=' + (cfg.rtShadows ? 1 : 0),
         'buttons=' + (cfg.buttons === 6 ? 6 : 5),
         'pad=' + (cfg.pad || 'auto'),
         'arch=' + (cfg.arch === 'x64' ? 'x64' : 'x86'),

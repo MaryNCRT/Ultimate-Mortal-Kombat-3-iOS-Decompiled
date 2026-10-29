@@ -29,6 +29,7 @@
 #  define GLREAL WINAPI
 #else
 #  include <dlfcn.h>
+#  include <time.h>
 #  define GLREAL
 #endif
 
@@ -207,11 +208,55 @@ int rgl_open(void *window, int width, int height)
     return 1;
 }
 
+double rgl_now_ms(void)
+{
+#ifdef _WIN32
+    static LARGE_INTEGER f;
+    LARGE_INTEGER c;
+
+    if (!f.QuadPart)
+        QueryPerformanceFrequency(&f);
+    QueryPerformanceCounter(&c);
+    return (double)c.QuadPart * 1000.0 / (double)f.QuadPart;
+#else
+    struct timespec t;
+
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return t.tv_sec * 1000.0 + t.tv_nsec / 1e6;
+#endif
+}
+
 void rgl_present(void)
 {
+    /* REAL-TIME SHADOWS: where a frame's time goes, in the log every 600
+     * frames while they are on */
+    static double last, frame_ms, present_ms, shadow_ms;
+    static int frames;
+
     if (g_b) {
+        double t0, t1;
+
+        rgl_ff_frame();                 /* what the scene held back, drawn */
+        t0 = rgl_now_ms();
         g_b->present();
-        rgl_ff_frame();
+        t1 = rgl_now_ms();
+        if (last > 0.0) {
+            if (t1 - last > 40.0)
+                printf("slow frame: %.0f ms, %.0f the map and the scene's draws, %.0f presenting\n",
+                       t1 - last, rgl_shadow_ms, t1 - t0);
+            frame_ms += t1 - last;
+            present_ms += t1 - t0;
+            shadow_ms += rgl_shadow_ms;
+            if (++frames == 600) {
+                printf("frame timing (shadows %d): %.1f ms a frame, %.1f of it the map and the scene's draws, "
+                       "%.1f presenting (the GPU); %d triangles cast\n",
+                       rgl_shadows, frame_ms / frames, shadow_ms / frames, present_ms / frames, rgl_shadow_tris);
+                frames = 0;
+                frame_ms = present_ms = shadow_ms = 0.0;
+            }
+        }
+        rgl_shadow_ms = 0.0;
+        last = t1;
     }
 }
 

@@ -488,6 +488,8 @@ void LIMEDS_Set3dMode(void)
  * That is unusual enough to flag rather than quietly complete: it is recorded
  * as written, and the third basis vector is left out rather than invented.
  */
+void rgl_shadow_camera(int on);         /* port: render/rgl.h */
+
 void LIMEDS_SetCameraOrientation(float eyeX, float eyeY, float eyeZ,
                                  float atX,  float atY,  float atZ,
                                  float upX,  float upY,  float upZ)
@@ -544,4 +546,7 @@ void LIMEDS_SetCameraOrientation(float eyeX, float eyeY, float eyeZ,
 
     glMultMatrixf(m);
     glTranslatef(-eyeX, -eyeY, -eyeZ);
+    /* port: REAL-TIME SHADOWS (render/rgl.h) take the scene's world from
+     * this view */
+    rgl_shadow_camera(1);
 }

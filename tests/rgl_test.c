@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "platform/gl.h"
 #include "render/rgl.h"
 
@@ -279,6 +280,102 @@ int main(int argc, char **argv)
         glClear(GL_COLOR_BUFFER_BIT);
         expect("after three presents", 10, 10, 0, 128, 0);
         frame();
+    }
+
+    /* 11. REAL-TIME SHADOWS (Vulkan and Direct3D 12): a white floor at z 0,
+     * a red square casting at z 1.5 (a fighter) and a green one at z 0.8
+     * (the stage), Z up, seen from (0, -6, 4), one frame: the floor drawn
+     * before the casters, the map drawn from them before the floor is let
+     * go (rgl_ff.c holds the scene's draws). The floor where the light's
+     * lines through the squares' centres meet it is dark (the fighter's
+     * shade, the stage's lighter); beside the red one's shadow, in the map,
+     * and a corner of it out of the map, lit. */
+    if (rgl_renderer != RGL_OPENGL) {
+        static const float dir[3] = { 0.2316f, 0.4169f, -0.8789f };   /* rgl_ff.c's light */
+        float P[16], V[16], f[3], s[3], u[3], l;
+        float eye[3] = { 0.0f, -6.0f, 4.0f };
+        int k;
+
+        memset(P, 0, sizeof P);         /* glFrustum(-1, 1, -1, 1, 1, 50) */
+        P[0] = 1.0f;
+        P[5] = 1.0f;
+        P[10] = -51.0f / 49.0f;
+        P[11] = -1.0f;
+        P[14] = -100.0f / 49.0f;
+        for (k = 0; k < 3; k++)         /* gluLookAt(eye, origin, Z up) */
+            f[k] = -eye[k];
+        l = sqrtf(f[0] * f[0] + f[1] * f[1] + f[2] * f[2]);
+        for (k = 0; k < 3; k++)
+            f[k] /= l;
+        s[0] = f[1]; s[1] = -f[0]; s[2] = 0.0f;   /* f x (0, 0, 1) */
+        l = sqrtf(s[0] * s[0] + s[1] * s[1]);
+        s[0] /= l; s[1] /= l;
+        u[0] = s[1] * f[2] - s[2] * f[1];
+        u[1] = s[2] * f[0] - s[0] * f[2];
+        u[2] = s[0] * f[1] - s[1] * f[0];
+        memset(V, 0, sizeof V);
+        for (k = 0; k < 3; k++) {
+            V[k * 4 + 0] = s[k];
+            V[k * 4 + 1] = u[k];
+            V[k * 4 + 2] = -f[k];
+        }
+        V[12] = -(s[0] * eye[0] + s[1] * eye[1] + s[2] * eye[2]);
+        V[13] = -(u[0] * eye[0] + u[1] * eye[1] + u[2] * eye[2]);
+        V[14] = f[0] * eye[0] + f[1] * eye[1] + f[2] * eye[2];
+        V[15] = 1.0f;
+
+        rgl_shadows = 1;
+        {
+            glViewport(0, 0, W, H);
+            glClearColor(0, 0, 0, 1);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            glMatrixMode(GL_PROJECTION);
+            glLoadMatrixf(P);
+            glMatrixMode(GL_MODELVIEW);
+            glLoadMatrixf(V);
+            rgl_shadow_camera(1);
+            glEnable(GL_DEPTH_TEST);
+            glColor4f(1, 1, 1, 1);
+            quad(-4, -4, 4, 4, 0);      /* the floor: glBegin, z 0 */
+            rgl_shadow_caster(1);
+            glColor4f(1, 0, 0, 1);
+            quad_z(-0.5f, -0.5f, 0.5f, 0.5f, 1.5f, 1);
+            rgl_shadow_caster(0);
+            glColor4f(0, 1, 0, 1);
+            quad_z(-0.6f, -0.9f, -0.3f, -0.6f, 0.8f, 1);
+            glDisable(GL_DEPTH_TEST);
+        }
+        {
+            /* where the floor points land on the window */
+            float pts[5][3] = { { 0.0f, 0.0f, 0.0f }, { -3.0f, -2.5f, 0.0f }, { 0.2f, 0.2f, 1.5f },
+                                { 1.1f, 0.0f, 0.0f }, { -0.45f, -0.75f, 0.0f } };
+            int sx[5], sy[5], i;
+            float t = 1.5f / -dir[2];
+            pts[0][0] = dir[0] * t;
+            pts[0][1] = dir[1] * t;
+            pts[3][1] = pts[0][1];
+            t = 0.8f / -dir[2];
+            pts[4][0] += dir[0] * t;
+            pts[4][1] += dir[1] * t;
+            for (i = 0; i < 5; i++) {
+                float e[4], c[4];
+                for (k = 0; k < 4; k++)
+                    e[k] = V[k] * pts[i][0] + V[4 + k] * pts[i][1] + V[8 + k] * pts[i][2] + V[12 + k];
+                for (k = 0; k < 4; k++)
+                    c[k] = P[k] * e[0] + P[4 + k] * e[1] + P[8 + k] * e[2] + P[12 + k] * e[3];
+                sx[i] = (int)((c[0] / c[3] * 0.5f + 0.5f) * W);
+                sy[i] = (int)((c[1] / c[3] * 0.5f + 0.5f) * H);
+            }
+            printf("  shadow at %d,%d; lit floor at %d,%d\n", sx[0], sy[0], sx[1], sy[1]);
+            expect("shadow: the floor behind the square", sx[0], sy[0], 115, 115, 115);  /* a fighter: 0.45 */
+            expect("shadow: the floor away from it", sx[1], sy[1], 255, 255, 255);
+            expect("shadow: none on the square itself", sx[2], sy[2], 255, 0, 0);
+            expect("shadow: the floor beside it, lit", sx[3], sy[3], 255, 255, 255);
+            expect("shadow: the floor behind the stage", sx[4], sy[4], 166, 166, 166);   /* the stage: 0.65 */
+        }
+        frame();
+        rgl_shadows = 0;
+        frame();                        /* the map let go */
     }
 
     printf("%s: %d failed\n", rgl_label(rgl_renderer), g_fail);

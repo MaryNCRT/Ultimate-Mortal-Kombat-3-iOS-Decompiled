@@ -665,7 +665,8 @@ static int port_report_context(char *out, int n)
                     "GPU: %s\r\n"
                     "Video: %dx%d %s, 3D resolution %s, antialiasing %s, aspect %s, "
                     "interface %s, textures %s\r\n"
-                    "Language %s, smooth animations %s, smooth models %s, mods on %d\r\n\r\n",
+                    "Language %s, smooth animations %s, smooth models %s, real-time shadows %s, "
+                    "mods on %d\r\n\r\n",
                     UMK3_VERSION_STR, (int)(sizeof(void *) * 8), __DATE__,
                     sys,
                     rend[rgl_renderer % 3], rend[port_renderer() % 3],
@@ -673,7 +674,8 @@ static int port_report_context(char *out, int n)
                     g.w, g.h, mode[g.mode % 3], rres, aa,
                     g.aspect, g.ui ? "IPAD" : "IPHONE", texq[g.texq % 3],
                     port_language()[0] ? port_language() : "system",
-                    port_smooth_anims ? "on" : "off", sm, mods_count(NULL));
+                    port_smooth_anims ? "on" : "off", sm, rgl_shadows ? "on" : "off",
+                    mods_count(NULL));
 }
 
 #ifdef _WIN32
@@ -984,6 +986,7 @@ extern int PortHideControls;           /* GameCode.c: hide_controls=1 */
  *     fullscreen=0
  *     language=ES
  *     renderer=opengl    (vulkan, d3d12: render/rgl.h; from the next start)
+ *     rt_shadows=0       (1: REAL-TIME SHADOWS, experimental, render/rgl.h)
  *
  *     render_width=960
  *     render_height=640
@@ -1109,6 +1112,8 @@ static void read_config(const char *dir)
             extern int port_smooth_anims;
             port_smooth_anims = atoi(v) == 1;
         }
+        else if (strcmp(line, "rt_shadows") == 0)      /* render/rgl.h */
+            rgl_shadows = atoi(v) == 1;
         else if (strcmp(line, "smooth_models") == 0) { /* smooth_models.c */
             extern int port_smooth_models;
             port_smooth_models = atoi(v) < 0 ? 0 : atoi(v) > 2 ? 2 : atoi(v);
