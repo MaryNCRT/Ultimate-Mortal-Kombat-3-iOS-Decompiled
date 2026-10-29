@@ -59,6 +59,7 @@
 #include "platform/platform.h"
 #include "platform/gl.h"
 #include "debug_menu.h"
+#include "rollback.h"
 
 #ifndef GL_CLAMP
 #define GL_CLAMP 0x2900
@@ -1685,3 +1686,277 @@ void dbg_info_draw_at(const char *line, int row)
 }
 
 void dbg_info_draw(const char *line) { dbg_info_draw_at(line, 0); }
+
+/* ------------------------------------------------------ the replay player */
+
+/* The player's panel along the bottom (rollback_probe.c plays the fight),
+ * drawn as the launcher draws its pages: a deep violet glass with faded
+ * light rules, buttons with a sheen and a light rim, the one that matters
+ * (play) lit. In the 2D space, 320 high: the status line, the bar, then the
+ * buttons -- speed on the left, the transport in the middle, the settings
+ * on the right. */
+
+#define RPP_TOP    248.0f               /* the panel */
+#define RPP_TEXT   254.0f               /* the status line */
+#define RPP_BAR_Y  268.0f
+#define RPP_BAR_H  6.0f
+#define RPP_BTN_Y  284.0f
+#define RPP_BTN_H  26.0f
+#define RPP_BTN_W  32.0f
+#define RPP_PLAY_W 44.0f
+#define RPP_SMALL  26.0f                /* slower, faster */
+#define RPP_SPEED  40.0f                /* the speed between them */
+#define RPP_GAP    5.0f
+
+static float g_rp_w = 480.0f;           /* the space's width, last drawn */
+
+static const char *const k_rp_tip[RPB_COUNT] = {
+    "TO THE START", "BACK 5 SECONDS", "BACK ONE FRAME", "PLAY / PAUSE",
+    "ON ONE FRAME", "ON 5 SECONDS", "SLOWER", "FASTER", "SETTINGS (ESC)"
+};
+static const char *const k_rp_speed[5] = { "X1/4", "X1/2", "X1", "X2", "X4" };
+
+/* Where each button is, in a space `w` wide. */
+static void rp_layout(float w, float x[RPB_COUNT], float bw[RPB_COUNT])
+{
+    float x0 = w * 0.04f, at;
+    int i;
+
+    for (i = 0; i < RPB_COUNT; i++)
+        bw[i] = RPP_BTN_W;
+    bw[RPB_PLAY] = RPP_PLAY_W;
+    bw[RPB_SLOWER] = bw[RPB_FASTER] = RPP_SMALL;
+
+    at = w / 2 - (5 * RPP_BTN_W + RPP_PLAY_W + 5 * RPP_GAP) / 2;
+    for (i = RPB_START; i <= RPB_FWD5; i++) {
+        x[i] = at;
+        at += bw[i] + RPP_GAP;
+    }
+    x[RPB_SLOWER] = x0;
+    x[RPB_FASTER] = x0 + RPP_SMALL + RPP_SPEED;
+    x[RPB_SETTINGS] = w * 0.96f - RPP_BTN_W;
+}
+
+/* The button under (fx, fy), fractions of the view, -1 for none, RPB_BAR on
+ * the bar; `at` is where along the bar, 0..1, wherever the mouse is. */
+int dbg_replay_hit(float fx, float fy, float *at)
+{
+    float x[RPB_COUNT], bw[RPB_COUNT], w = g_rp_w;
+    float px = fx * w, py = fy * 320.0f, b0 = w * 0.04f, b1 = w * 0.96f;
+    int i;
+
+    *at = (px - b0) / (b1 - b0);
+    if (py >= RPP_BAR_Y - 7 && py <= RPP_BAR_Y + RPP_BAR_H + 7
+        && px >= b0 - 6 && px <= b1 + 6)
+        return RPB_BAR;
+    rp_layout(w, x, bw);
+    if (py >= RPP_BTN_Y && py <= RPP_BTN_Y + RPP_BTN_H)
+        for (i = 0; i < RPB_COUNT; i++)
+            if (px >= x[i] && px <= x[i] + bw[i])
+                return i;
+    return -1;
+}
+
+/* A box, its top colour fading to its bottom one. */
+static void vgrad(float x, float y, float w, float h, const float *a, const float *b)
+{
+    glColor4f(a[0], a[1], a[2], a[3]);
+    glVertex2f(x, y);
+    glVertex2f(x + w, y);
+    glColor4f(b[0], b[1], b[2], b[3]);
+    glVertex2f(x + w, y + h);
+    glVertex2f(x, y + h);
+}
+
+/* A light rule fading in at its left and out at its right, as --rim-fade. */
+static void rule(float x, float y, float w, float r, float g, float b, float a)
+{
+    float s[5] = { x, x + w * 0.2f, x + w * 0.8f, x + w };
+    int i;
+
+    for (i = 0; i < 3; i++) {
+        float a0 = i == 0 ? 0 : a, a1 = i == 2 ? 0 : a;
+        glColor4f(r, g, b, a0);
+        glVertex2f(s[i], y);
+        glColor4f(r, g, b, a1);
+        glVertex2f(s[i + 1], y);
+        glVertex2f(s[i + 1], y + 0.75f);
+        glColor4f(r, g, b, a0);
+        glVertex2f(s[i], y + 0.75f);
+    }
+}
+
+static void frame_rect(float x, float y, float w, float h, float t)
+{
+    rect(x, y, w, t);
+    rect(x, y + h - t, w, t);
+    rect(x, y, t, h);
+    rect(x + w - t, y, t, h);
+}
+
+/* A triangle pointing right (dir 1) or left (-1) in the box, as a quad with
+ * two corners on its point. */
+static void tri(float x0, float y0, float x1, float y1, int dir)
+{
+    float ym = (y0 + y1) / 2;
+
+    if (dir > 0) {
+        glVertex2f(x0, y0);
+        glVertex2f(x1, ym);
+        glVertex2f(x1, ym);
+        glVertex2f(x0, y1);
+    } else {
+        glVertex2f(x1, y0);
+        glVertex2f(x1, y1);
+        glVertex2f(x0, ym);
+        glVertex2f(x0, ym);
+    }
+}
+
+static void rp_icon(int id, float cx, float cy, int paused)
+{
+    float t = cy - 5, b = cy + 5;
+
+    switch (id) {
+    case RPB_START:
+        rect(cx - 6, t, 2, 10);
+        tri(cx - 4, t, cx + 1, b, -1);
+        tri(cx + 1, t, cx + 6, b, -1);
+        break;
+    case RPB_BACK5:
+        tri(cx - 7, t, cx, b, -1);
+        tri(cx, t, cx + 7, b, -1);
+        break;
+    case RPB_FRAME_BACK:
+        tri(cx - 5, t, cx + 2, b, -1);
+        rect(cx + 3, t, 2, 10);
+        break;
+    case RPB_PLAY:
+        if (paused)
+            tri(cx - 4, cy - 6, cx + 6, cy + 6, 1);
+        else {
+            rect(cx - 5, cy - 6, 3.5f, 12);
+            rect(cx + 1.5f, cy - 6, 3.5f, 12);
+        }
+        break;
+    case RPB_FRAME_FWD:
+        rect(cx - 5, t, 2, 10);
+        tri(cx - 2, t, cx + 5, b, 1);
+        break;
+    case RPB_FWD5:
+        tri(cx - 7, t, cx, b, 1);
+        tri(cx, t, cx + 7, b, 1);
+        break;
+    case RPB_SLOWER:
+        rect(cx - 5, cy - 1, 10, 2);
+        break;
+    case RPB_FASTER:
+        rect(cx - 5, cy - 1, 10, 2);
+        rect(cx - 1, cy - 5, 2, 10);
+        break;
+    case RPB_SETTINGS:                  /* the menu's three lines */
+        rect(cx - 6, cy - 5, 12, 2);
+        rect(cx - 6, cy - 1, 12, 2);
+        rect(cx - 6, cy + 3, 12, 2);
+        break;
+    }
+}
+
+/* `at` how far the fight is, 0..1; `time` its clock; `state` rp_info's;
+ * `hover` the button under the mouse, -1 none. */
+void dbg_replay_draw(float at, const char *time, int state, int hover)
+{
+    static const float veil0[4] = { 0.086f, 0.078f, 0.26f, 0.88f };
+    static const float veil1[4] = { 0.031f, 0.027f, 0.12f, 0.93f };
+    static const float btn0[4] = { 0.25f, 0.24f, 0.48f, 0.96f };
+    static const float btn1[4] = { 0.063f, 0.055f, 0.17f, 0.96f };
+    static const float hot0[4] = { 0.58f, 0.53f, 0.97f, 1.0f };
+    static const float hot1[4] = { 0.18f, 0.14f, 0.52f, 1.0f };
+    float x[RPB_COUNT], bw[RPB_COUNT], w, b0, b1, f;
+    const char *what;
+    char sp[8];
+    int i, paused = (state & (RPS_PAUSED | RPS_END)) != 0;
+
+    begin_2d();
+    w = g_rp_w = g_ow;
+    b0 = w * 0.04f;
+    b1 = w * 0.96f;
+    f = at < 0 ? 0 : at > 1 ? 1 : at;
+    rp_layout(w, x, bw);
+
+    glBegin(GL_QUADS);
+    /* the glass and its rules */
+    vgrad(0, RPP_TOP, w, 320.0f - RPP_TOP, veil0, veil1);
+    rule(0, RPP_TOP, w, 0.84f, 0.86f, 1.0f, 0.5f);
+
+    /* the status line: REPLAY and the clock on the left, what it is doing
+     * on the right, a warning in the middle when it differs */
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    text(b0, RPP_TEXT, 1.0f, "REPLAY");
+    glColor4f(0.70f, 0.67f, 0.95f, 1.0f);
+    text(b0 + 7 * CH_W, RPP_TEXT, 1.0f, time);
+    what = state & RPS_SEEKING ? "SEEKING" : state & RPS_END ? "END"
+         : state & RPS_PAUSED ? "PAUSED" : "PLAYING";
+    glColor4f(0.62f, 0.6f, 0.85f, 1.0f);
+    text(b1 - (float)strlen(what) * CH_W, RPP_TEXT, 1.0f, what);
+    if (state & RPS_DIFFERS) {
+        const char *d = "DIFFERS FROM THE RECORDING - SEE THE LOG";
+        glColor4f(1.0f, 0.45f, 0.5f, 1.0f);
+        text(w / 2 - (float)strlen(d) * CH_W / 2, RPP_TEXT, 1.0f, d);
+    }
+
+    /* the bar: a well, the part played lit, a knob where the fight is */
+    glColor4f(0.016f, 0.012f, 0.07f, 0.8f);
+    rect(b0, RPP_BAR_Y, b1 - b0, RPP_BAR_H);
+    vgrad(b0, RPP_BAR_Y, (b1 - b0) * f, RPP_BAR_H, hot0, hot1);
+    glColor4f(0.8f, 0.82f, 1.0f, 0.45f);
+    frame_rect(b0, RPP_BAR_Y, b1 - b0, RPP_BAR_H, 0.75f);
+    glColor4f(0.67f, 0.63f, 1.0f, 0.35f);
+    rect(b0 + (b1 - b0) * f - 4, RPP_BAR_Y - 4, 8, RPP_BAR_H + 8);
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    rect(b0 + (b1 - b0) * f - 2, RPP_BAR_Y - 2, 4, RPP_BAR_H + 4);
+
+    /* the buttons */
+    for (i = 0; i < RPB_COUNT; i++) {
+        int hot = i == RPB_PLAY, on = i == hover;
+        float bx = x[i], by = RPP_BTN_Y, h = RPP_BTN_H;
+
+        if (on) {                       /* --hover-glow */
+            glColor4f(0.67f, 0.63f, 1.0f, 0.35f);
+            rect(bx - 2, by - 2, bw[i] + 4, h + 4);
+        }
+        vgrad(bx, by, bw[i], h, hot ? hot0 : btn0, hot ? hot1 : btn1);
+        glColor4f(1.0f, 1.0f, 1.0f, hot ? 0.14f : 0.07f);       /* the sheen */
+        rect(bx, by, bw[i], h / 2);
+        if (on)
+            glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+        else if (hot)
+            glColor4f(0.88f, 0.89f, 1.0f, 0.9f);
+        else
+            glColor4f(0.8f, 0.82f, 1.0f, 0.45f);
+        frame_rect(bx, by, bw[i], h, 0.75f);
+        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+        rp_icon(i, bx + bw[i] / 2, by + h / 2, paused);
+    }
+    /* the speed between its two buttons */
+    snprintf(sp, sizeof sp, "%s", k_rp_speed[(state & RPS_SPEED) % 5]);
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    text(x[RPB_SLOWER] + RPP_SMALL + RPP_SPEED / 2 - (float)strlen(sp) * CH_W / 2,
+         RPP_BTN_Y + RPP_BTN_H / 2 - 3.5f, 1.0f, sp);
+
+    /* the hovered button's name, in a box above it */
+    if (hover >= 0 && hover < RPB_COUNT) {
+        const char *tip = k_rp_tip[hover];
+        float tw = (float)strlen(tip) * CH_W + 10, tx = x[hover] + bw[hover] / 2 - tw / 2;
+
+        if (tx < 2) tx = 2;
+        if (tx + tw > w - 2) tx = w - 2 - tw;
+        vgrad(tx, RPP_TOP - 18, tw, 14, btn0, btn1);
+        glColor4f(0.8f, 0.82f, 1.0f, 0.45f);
+        frame_rect(tx, RPP_TOP - 18, tw, 14, 0.75f);
+        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+        text(tx + 5, RPP_TOP - 15, 1.0f, tip);
+    }
+    glEnd();
+    end_2d();
+}

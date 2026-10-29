@@ -6112,11 +6112,12 @@ extern long Character2Override;         /* 0x00101798, declared again below */
 
 static void rb_setup(void)
 {
-    int32_t v[17];
+    int32_t v[18];
     int i;
 
-    /* what loading step 42 builds the two models from, the level, the mode;
-     * the settings after them are compared only */
+    /* what loading step 42 builds the two models from, the level, the mode,
+     * the settings (the buttons, the difficulty) and training; a replay
+     * takes them all back, its own game's settings for that one fight */
     v[0] = Character1;
     v[1] = Character2;
     v[2] = Character2Override;
@@ -6126,8 +6127,14 @@ static void rb_setup(void)
     v[6] = GameMode;
     for (i = 0; i < 10; i++)
         v[7 + i] = Settings[i];
-    if (!rb_fight_setup(v, 17))
+    v[17] = PortPractice;
+    if (!rb_fight_setup(v, 18))
         return;
+    if (GameMode != 1 && v[6] != 1) {
+        for (i = 0; i < 10; i++)
+            Settings[i] = v[7 + i];
+        PortPractice = v[17];
+    }
     Character1         = v[0];
     Character2         = v[1];
     Character2Override = v[2];
@@ -9362,12 +9369,14 @@ static void FreeSceneHandle(void **h)
 }
 
 void rb_online_end(void);               /* runtime/rollback.c, port */
+void rb_replay_fight_over(void);        /* runtime/rollback_probe.c, port */
 
 void Task_GameDestroy(void)
 {
     long i;
 
     rb_online_end();                    /* Port, not in the binary */
+    rb_replay_fight_over();             /* Port: REPLAYS keeps the fight */
     FadeMusicOut = 0;
     *theKode     = -1;                  /* the kode does not outlive the fight */
 

@@ -24,6 +24,18 @@
  *                           f.rec64.pages / f.play64.pages, so a tool can name
  *                           the first variable two runs of one exe disagree on.
  *
+ * REPLAYS (the launcher's page of that name): with none of the switches,
+ * every fight but an online one is recorded the same way to
+ * replays/recent/<date>_<p1>_vs_<p2>.umkr beside the exe, and only the
+ * newest RB_RECENT stay (umk3.ini replays=0 turns it off). The launcher keeps
+ * one for good by moving it to replays/saved/. `umk3-game --replay <file>`
+ * (a path inside the exe's folder) goes straight into that fight and plays
+ * it with the player below (rp_*): pause, a frame at a time, five seconds
+ * back or on, speed, a bar to click. Going back loads the nearest keyframe
+ * -- a rollback snapshot (st_rb_*) taken every so many ticks -- and runs the
+ * ticks between silent and undrawn. A tick whose result differs from the
+ * recorded one goes to the log, as with UMK3_REPLAY_PLAY.
+ *
  * Recording and replaying hold the frame step at 1 (limeBegin), so the
  * number of ticks in each frame does not depend on the clock.
  *
@@ -38,15 +50,21 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #ifdef _WIN32
 #include <windows.h>
 #else
-#include <time.h>
 #include <unistd.h>
 #endif
 
+#ifndef _WIN32
+#include <sys/stat.h>
+#include <dirent.h>
+#endif
+
 #include "savestate.h"
+#include "rollback.h"
 
 extern int32_t  rand_seed;              /* lime_menu.c: limeRand's */
 extern uint32_t umk3_rand_seed;         /* fight_runtime.c: the engine's rand() */
@@ -60,6 +78,9 @@ extern uint32_t umk3_rand_seed;         /* fight_runtime.c: the engine's rand() 
 #define RB_REGIONS    3
 #define RB_PAGES_EVERY 120
 #define RB_PARTS      7
+#define RB_TICK_BYTES (4 * (2 + RB_PARTS + RB_EVENT_WORDS))
+#define RB_RECENT     5                 /* replays/recent keeps the newest */
+#define RB_MIN_TICKS  60                /* a shorter recording is not kept */
 
 static const char *const g_region_name[RB_REGIONS] = {
     ".umkstd", ".umkstb", "arena"
@@ -87,6 +108,15 @@ static uint32_t g_ev[RB_EVENT_WORDS];   /* the event queue as it is */
 static uint32_t g_want_ev[RB_EVENT_WORDS];
 static uint32_t g_bad[RB_PARTS], g_first[RB_PARTS];
 static uint32_t g_bad_ticks;
+
+/* REPLAYS */
+static int g_auto_want = 1;             /* umk3.ini replays= (rb_replay_auto) */
+static int g_auto;                      /* recording every fight */
+static char g_play_rel[512];            /* --replay */
+static long g_data_at;                  /* the file's first tick */
+static uint32_t g_total;                /* replaying: the ticks in the file */
+static int g_have_want;                 /* this tick's recorded result was read */
+static int g_reported;                  /* the end's summary is in the log */
 
 static int g_pages_on;                  /* UMK3_REPLAY_PAGES */
 static FILE *g_pf;
@@ -121,13 +151,14 @@ static double now_ms(void)
 #endif
 }
 
-/* `name` in the exe's folder; a name with a slash is refused, as
- * UMK3_PROFILES does, so the game keeps to its own folder. */
-static int beside_exe(const char *name, char *out, size_t n)
+/* `rel` in the exe's folder. Only a path that stays inside it: no "..", no
+ * drive, not from the root, so the game keeps to its own folder. */
+static int in_exe_dir(const char *rel, char *out, size_t n)
 {
     char *sl;
 
-    if (!name || !*name || strchr(name, '/') || strchr(name, '\\'))
+    if (!rel || !*rel || strstr(rel, "..") || strchr(rel, ':')
+        || rel[0] == '/' || rel[0] == '\\')
         return 0;
 #ifdef _WIN32
     if (!GetModuleFileNameA(NULL, out, (DWORD)n))
@@ -142,9 +173,131 @@ static int beside_exe(const char *name, char *out, size_t n)
     }
     sl = strrchr(out, '/');
 #endif
-    if (!sl || (size_t)(sl + 1 - out) + strlen(name) + 1 > n)
+    if (!sl || (size_t)(sl + 1 - out) + strlen(rel) + 1 > n)
         return 0;
-    strcpy(sl + 1, name);
+    strcpy(sl + 1, rel);
+    return 1;
+}
+
+/* `name` in the exe's folder; a name with a slash is refused, as
+ * UMK3_PROFILES does. */
+static int beside_exe(const char *name, char *out, size_t n)
+{
+    if (!name || strchr(name, '/') || strchr(name, '\\'))
+        return 0;
+    return in_exe_dir(name, out, n);
+}
+
+static void make_dir(const char *p)
+{
+#ifdef _WIN32
+    CreateDirectoryA(p, NULL);
+#else
+    mkdir(p, 0755);
+#endif
+}
+
+/* replays/recent: the oldest go until RB_RECENT are left. The names begin
+ * with the date, so the oldest sort first. */
+static void keep_recent(void)
+{
+    char dir[1024], names[64][160], p[1200];
+    int n = 0, i, j;
+
+    if (!in_exe_dir("replays/recent", dir, sizeof dir))
+        return;
+#ifdef _WIN32
+    {
+        WIN32_FIND_DATAA fd;
+        HANDLE h;
+
+        snprintf(p, sizeof p, "%s\\*.umkr", dir);
+        h = FindFirstFileA(p, &fd);
+        if (h == INVALID_HANDLE_VALUE)
+            return;
+        do
+            if (n < 64 && strlen(fd.cFileName) < 160)
+                strcpy(names[n++], fd.cFileName);
+        while (FindNextFileA(h, &fd));
+        FindClose(h);
+    }
+#else
+    {
+        DIR *d = opendir(dir);
+        struct dirent *e;
+
+        if (!d)
+            return;
+        while ((e = readdir(d)) != NULL) {
+            size_t k = strlen(e->d_name);
+            if (n < 64 && k > 5 && k < 160 && !strcmp(e->d_name + k - 5, ".umkr"))
+                strcpy(names[n++], e->d_name);
+        }
+        closedir(d);
+    }
+#endif
+    for (i = 1; i < n; i++)             /* oldest first */
+        for (j = i; j > 0 && strcmp(names[j - 1], names[j]) > 0; j--) {
+            char t[160];
+            strcpy(t, names[j]);
+            strcpy(names[j], names[j - 1]);
+            strcpy(names[j - 1], t);
+        }
+    for (i = 0; i < n - RB_RECENT; i++) {
+        snprintf(p, sizeof p, "%s/%s", dir, names[i]);
+        remove(p);
+    }
+}
+
+/* The setup's fighter as a file name's piece: "sub-zero", "kunglao". */
+extern const char *CharacterNames[26];
+
+static void name_piece(char *out, int n, int32_t who)
+{
+    const char *s = who >= 0 && who < 26 ? CharacterNames[who] : "unknown";
+    int k = 0;
+
+    for (; *s && k < n - 1; s++) {
+        int c = (unsigned char)*s;
+        if (c >= 'A' && c <= 'Z')
+            c += 32;
+        if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-')
+            out[k++] = (char)c;
+    }
+    out[k] = 0;
+}
+
+/* game_main.c: umk3.ini's replays= and --replay, before the first fight */
+void rb_replay_auto(int on) { g_auto_want = on; }
+
+void rb_replay_open(const char *rel)
+{
+    snprintf(g_play_rel, sizeof g_play_rel, "%s", rel);
+}
+
+/* The setup words --replay's fight is started from: the two fighters and
+ * the level (rb_setup puts the rest back). 0 if the file is not a replay. */
+int rb_replay_peek(int32_t *c1, int32_t *c2, int32_t *level)
+{
+    char path[1024], magic[8];
+    unsigned char b[4 * 8];
+    FILE *f;
+    int ok;
+
+    if (!in_exe_dir(g_play_rel, path, sizeof path) || !(f = fopen(path, "rb")))
+        return 0;
+    ok = fread(magic, 1, 8, f) == 8 && !memcmp(magic, RB_MAGIC, 8)
+         && fread(b, 1, sizeof b, f) == sizeof b;
+    fclose(f);
+    if (!ok)
+        return 0;
+    /* the build, the count, then setup[0] [1] [2] .. [5] */
+#define W(i) (int32_t)(b[4 * (i)] | b[4 * (i) + 1] << 8 | b[4 * (i) + 2] << 16 \
+                       | (uint32_t)b[4 * (i) + 3] << 24)
+    *c1 = W(2);
+    *c2 = W(3);
+    *level = W(7);
+#undef W
     return 1;
 }
 
@@ -173,14 +326,19 @@ static void read_switches(void)
     }
     e = getenv("UMK3_REPLAY_PAGES");
     g_pages_on = e && *e && *e != '0';
-    if (beside_exe(getenv("UMK3_REPLAY_PLAY"), g_file, sizeof g_file))
+    if (g_play_rel[0] && in_exe_dir(g_play_rel, g_file, sizeof g_file))
+        g_mode = 2;
+    else if (beside_exe(getenv("UMK3_REPLAY_PLAY"), g_file, sizeof g_file))
         g_mode = 2;
     else if (beside_exe(getenv("UMK3_REPLAY_RECORD"), g_file, sizeof g_file))
         g_mode = 1;
+    else if (g_auto_want)
+        g_mode = g_auto = 1;
     if (g_probe || g_mode)
         printf("rollback probe: %s%s%s\n", g_probe ? "measuring" : "",
                g_probe && g_mode ? ", " : "",
-               g_mode == 1 ? "recording the first fight"
+               g_auto ? "every fight to replays/recent"
+               : g_mode == 1 ? "recording the first fight"
                : g_mode == 2 ? "replaying the first fight" : "");
 }
 
@@ -251,7 +409,7 @@ static void replay_finish(const char *why)
             if (g_bad[i])
                 printf("replay:   %-11s differs in %u ticks, first %u\n",
                        g_part_name[i], g_bad[i], g_first[i]);
-    } else if (g_mode == 1)
+    } else if (g_mode == 1 && g_f)
         printf("replay: recorded %u ticks to %s\n", g_tick, g_file);
     if (g_f)
         fclose(g_f);
@@ -260,8 +418,20 @@ static void replay_finish(const char *why)
         fclose(g_pf);
     g_pf = NULL;
     g_active = 0;
-    g_done = 1;
+    g_done = !g_auto;                   /* REPLAYS records every fight */
+    if (g_auto && g_mode == 1) {
+        if (g_tick < RB_MIN_TICKS)
+            remove(g_file);
+        keep_recent();
+    }
     fflush(stdout);
+}
+
+/* Task_GameDestroy: the fight is over, its recording is whole. */
+void rb_replay_fight_over(void)
+{
+    if (g_active && g_mode == 1)
+        replay_finish("the fight ended");
 }
 
 /* ------------------------------------------------------------ the probe */
@@ -417,11 +587,28 @@ int rb_fight_setup(int32_t *setup, int n)
             printf("replay: page hashes every %d ticks to %s\n",
                    RB_PAGES_EVERY, pf);
     }
+    if (g_mode == 1 && g_auto) {
+        char dir[1024], a[32], b2[32], stamp[32];
+        time_t now = time(NULL);
+        struct tm *tm = localtime(&now);
+
+        if (n < 7 || setup[6] == 1)     /* ONLINE: rollback.c's own inputs */
+            return 0;
+        if (!in_exe_dir("replays", dir, sizeof dir))
+            return 0;
+        make_dir(dir);
+        in_exe_dir("replays/recent", dir, sizeof dir);
+        make_dir(dir);
+        strftime(stamp, sizeof stamp, "%Y%m%d-%H%M%S", tm);
+        name_piece(a, sizeof a, setup[0]);
+        name_piece(b2, sizeof b2, setup[1]);
+        snprintf(g_file, sizeof g_file, "%s/%s_%s_vs_%s.umkr", dir, stamp, a, b2);
+    }
     if (g_mode == 1) {
         g_f = fopen(g_file, "wb");
         if (!g_f) {
             printf("replay: cannot write %s\n", g_file);
-            g_done = 1;
+            g_done = !g_auto;
             return 0;
         }
         fwrite(RB_MAGIC, 1, 8, g_f);
@@ -456,9 +643,15 @@ int rb_fight_setup(int32_t *setup, int n)
     rd32(&v);
     rand_seed = (int32_t)v;
     rd32(&umk3_rand_seed);
-    printf("replay: playing %s, recorded on %s, here %s\n", g_file,
-           build_name(b), build_name(build_bits()));
+    g_data_at = ftell(g_f);
+    fseek(g_f, 0, SEEK_END);
+    g_total = (uint32_t)((ftell(g_f) - g_data_at) / RB_TICK_BYTES);
+    fseek(g_f, g_data_at, SEEK_SET);
+    printf("replay: playing %s (%u ticks), recorded on %s, here %s\n", g_file,
+           g_total, build_name(b), build_name(build_bits()));
     fflush(stdout);
+    g_done = 1;                         /* the one fight */
+    g_reported = 0;
     g_active = 1;
     return 1;
 }
@@ -471,7 +664,11 @@ int rb_step_begin(int32_t joy[2])
     uint32_t a, b;
 
     read_switches();
-    if (g_active && g_mode == 2) {
+    g_have_want = 0;
+    if (g_active && g_mode == 2 && g_play_rel[0] && g_tick >= g_total) {
+        /* the player holds the last frame: past the end, the sticks rest */
+        joy[0] = joy[1] = 0;
+    } else if (g_active && g_mode == 2) {
         int i, ok = rd32(&a) && rd32(&b);
 
         for (i = 0; ok && i < RB_PARTS; i++)
@@ -483,6 +680,7 @@ int rb_step_begin(int32_t joy[2])
         else {
             joy[0] = (int32_t)a;
             joy[1] = (int32_t)b;
+            g_have_want = 1;
         }
     }
     g_joy[0] = joy[0];
@@ -580,7 +778,7 @@ void rb_tick_end(const uint32_t *w, int n)
             wr32(g_part[i]);
         for (i = 0; i < RB_EVENT_WORDS; i++)
             wr32(g_ev[i]);
-    } else if (g_active && g_mode == 2) {
+    } else if (g_active && g_mode == 2 && g_have_want) {
         for (i = 0; i < RB_PARTS; i++)
             if (g_part[i] != g_want[i]) {
                 if (!g_bad[i])
@@ -651,4 +849,307 @@ void rb_tick_end(const uint32_t *w, int n)
             report();
     }
     g_tick++;
+}
+
+/* ------------------------------------------------------------ the player */
+
+/* --replay's fight, watched: the main loop calls rp_frame where it would
+ * call GameCodeMain, and rp_keys / rp_ui with the player's keys and mouse. */
+
+extern int CurrentTask;                 /* GameCode.c: 6 is the fight */
+extern char PreloadedCharacters[41148][0x5f4];  /* read only by a fight */
+void rb_silent(int quiet, int nodraw);  /* rollback.c */
+
+#define RP_KEYS_MAX  48                 /* keyframes, the last slot for holds */
+#define RP_JUMP      300                /* ticks: five seconds */
+#define RP_BUDGET_MS 20.0               /* silent ticks a frame while seeking */
+#define RP_NONE      0xffffffffu
+
+static const int k_speed_num[5] = { 1, 1, 1, 2, 4 };
+static const int k_speed_div[5] = { 4, 2, 1, 1, 1 };
+
+static int      g_rp_snap;              /* 0 not yet, 1 keyframes, -1 none */
+static int      g_rp_nkeys, g_rp_slots, g_rp_every;
+static uint32_t g_rp_key[RP_KEYS_MAX];
+static uint32_t g_rp_target = RP_NONE;
+static int      g_rp_paused, g_rp_step, g_rp_speed = 2, g_rp_sub;
+
+int rp_playing(void)
+{
+    return g_mode == 2 && g_active && g_play_rel[0];
+}
+
+/* The file's place and the tick count together: what a loaded snapshot
+ * does not put back, since this file is not part of the state. */
+static void rp_set_tick(uint32_t t)
+{
+    g_tick = t;
+    fseek(g_f, g_data_at + (long)t * RB_TICK_BYTES, SEEK_SET);
+}
+
+static void rp_begin(void)
+{
+    g_rp_snap = -1;
+    if (!st_available())
+        return;
+    g_rp_every = (int)(g_total / (RP_KEYS_MAX - 2)) + 1;
+    if (g_rp_every < 120)
+        g_rp_every = 120;
+    g_rp_slots = (int)(g_total / (uint32_t)g_rp_every) + 2;
+    if (g_rp_slots > RP_KEYS_MAX - 1)
+        g_rp_slots = RP_KEYS_MAX - 1;
+    st_rb_skip(PreloadedCharacters, sizeof PreloadedCharacters);
+    if (st_rb_begin(g_rp_slots + 1) != 0) {
+        printf("replay: no keyframes -- the player cannot go back\n");
+        return;
+    }
+    g_rp_snap = 1;
+    g_rp_nkeys = 0;
+    printf("replay: a keyframe every %d ticks, %d at most\n", g_rp_every, g_rp_slots);
+}
+
+/* A keyframe once the tick reaches the next one's place. */
+static void rp_keyframe(void)
+{
+    if (g_rp_snap != 1 || g_rp_nkeys >= g_rp_slots
+        || g_tick < (uint32_t)g_rp_nkeys * (uint32_t)g_rp_every)
+        return;
+    if (st_rb_save(g_rp_nkeys) == 0)
+        g_rp_key[g_rp_nkeys++] = g_tick;
+}
+
+static void rp_run(void (*frame)(void), int quiet, int nodraw)
+{
+    rb_silent(quiet, nodraw);
+    frame();
+    rb_silent(0, 0);
+}
+
+/* Draws the next frame and puts the state back: a still picture. */
+static void rp_hold(void (*frame)(void))
+{
+    uint32_t t = g_tick;
+
+    if (g_rp_snap != 1 || st_rb_save(g_rp_slots) != 0)
+        return;
+    rp_run(frame, 1, 0);
+    st_rb_load(g_rp_slots);
+    rp_set_tick(t);
+}
+
+/* To tick `t`: back to the nearest keyframe at or before it when it is
+ * behind (or a keyframe is nearer than where the fight is), then on, silent
+ * and undrawn, a few milliseconds a frame (rp_frame). */
+static void rp_seek(uint32_t t)
+{
+    int k;
+
+    if (t > g_total)
+        t = g_total;
+    if (g_rp_snap == 1 && g_rp_nkeys) {
+        for (k = g_rp_nkeys - 1; k > 0 && g_rp_key[k] > t; k--)
+            ;
+        if (g_rp_key[k] <= t && (t < g_tick || g_rp_key[k] > g_tick)
+            && st_rb_load(k) == 0)
+            rp_set_tick(g_rp_key[k]);
+    }
+    g_rp_target = t > g_tick ? t : RP_NONE;
+    g_rp_step = 0;
+}
+
+static void rp_report_end(void)
+{
+    int i;
+
+    if (g_reported)
+        return;
+    g_reported = 1;
+    printf("replay: the end, %u ticks -- %s\n", g_total,
+           g_bad_ticks ? "it DIFFERS from the recording"
+                       : "the same as the recording");
+    for (i = 0; i < RB_PARTS; i++)
+        if (g_bad[i])
+            printf("replay:   %-11s differs in %u ticks, first %u\n",
+                   g_part_name[i], g_bad[i], g_first[i]);
+    fflush(stdout);
+}
+
+void rp_frame(void (*frame)(void))
+{
+    double t0;
+    int i;
+
+    if (CurrentTask != 6) {
+        frame();
+        return;
+    }
+    if (!g_rp_snap)
+        rp_begin();
+
+    if (g_rp_target != RP_NONE) {       /* on to the tick asked for */
+        t0 = now_ms();
+        while (g_tick < g_rp_target && g_tick < g_total
+               && now_ms() - t0 < RP_BUDGET_MS && CurrentTask == 6) {
+            rp_keyframe();
+            rp_run(frame, 1, 1);
+        }
+        if (g_tick >= g_rp_target || g_tick >= g_total)
+            g_rp_target = RP_NONE;
+        rp_hold(frame);
+        return;
+    }
+    if (g_tick >= g_total) {
+        g_rp_paused = 1;
+        rp_report_end();
+    }
+    if (g_rp_paused) {
+        if (g_rp_step && g_tick < g_total) {
+            g_rp_step = 0;
+            rp_keyframe();
+            rp_run(frame, 0, 0);
+        } else
+            rp_hold(frame);
+        return;
+    }
+    if (++g_rp_sub % k_speed_div[g_rp_speed]) {     /* slow motion */
+        rp_hold(frame);
+        return;
+    }
+    for (i = 1; i < k_speed_num[g_rp_speed] && g_tick < g_total; i++) {
+        rp_keyframe();
+        rp_run(frame, 1, 1);
+    }
+    rp_keyframe();
+    rp_run(frame, 0, 0);
+}
+
+/* One of the player's buttons (rollback.h, RPB_*), from a key or a click. */
+void rp_press(int id)
+{
+    if (!rp_playing())
+        return;
+    switch (id) {
+    case RPB_START:
+        rp_seek(0);
+        break;
+    case RPB_BACK5:
+        rp_seek(g_tick > RP_JUMP ? g_tick - RP_JUMP : 0);
+        break;
+    case RPB_FRAME_BACK:
+        g_rp_paused = 1;
+        rp_seek(g_tick ? g_tick - 1 : 0);
+        break;
+    case RPB_PLAY:
+        if (g_tick >= g_total) {        /* at the end: again from the start */
+            rp_seek(0);
+            g_rp_paused = 0;
+        } else
+            g_rp_paused = !g_rp_paused;
+        break;
+    case RPB_FRAME_FWD:
+        g_rp_paused = 1;
+        g_rp_step = 1;
+        break;
+    case RPB_FWD5:
+        rp_seek(g_tick + RP_JUMP);
+        break;
+    case RPB_SLOWER:
+        if (g_rp_speed > 0)
+            g_rp_speed--;
+        break;
+    case RPB_FASTER:
+        if (g_rp_speed < 4)
+            g_rp_speed++;
+        break;
+    }
+}
+
+/* Held: the jumps and the frame steps go on while it stays down. */
+static int rp_repeats(int id, int held)
+{
+    if (id != RPB_BACK5 && id != RPB_FWD5 && id != RPB_FRAME_BACK
+        && id != RPB_FRAME_FWD)
+        return 0;
+    return held > 20 && (held - 20) % (g_rp_paused ? 2 : 8) == 0;
+}
+
+/* The keys, as held this frame: play, back, on, faster, slower, start.
+ * Back and on are a frame while paused, five seconds while playing. */
+void rp_keys(int play, int back, int fwd, int faster, int slower, int start)
+{
+    static int was[6], held[6];
+    int now[6], id[6], i;
+
+    now[0] = play; now[1] = back; now[2] = fwd;
+    now[3] = faster; now[4] = slower; now[5] = start;
+    id[0] = RPB_PLAY;
+    id[1] = g_rp_paused ? RPB_FRAME_BACK : RPB_BACK5;
+    id[2] = g_rp_paused ? RPB_FRAME_FWD : RPB_FWD5;
+    id[3] = RPB_FASTER; id[4] = RPB_SLOWER; id[5] = RPB_START;
+    for (i = 0; i < 6; i++) {
+        held[i] = now[i] ? held[i] + 1 : 0;
+        if ((now[i] && !was[i]) || (now[i] && rp_repeats(id[i], held[i])))
+            rp_press(id[i]);
+        was[i] = now[i];
+    }
+}
+
+/* The mouse on the panel: `id` the button under it (-1 none), `at` where
+ * along the bar it is, 0..1. A press acts, a drag along the bar follows it.
+ * Returns the button pressed this frame, for what the caller does itself
+ * (RPB_SETTINGS), else -1. */
+int rp_ui(int id, float at, int down)
+{
+    static int was = -1, held;
+    static uint32_t last;
+    uint32_t t;
+
+    if (!rp_playing() || !down) {
+        was = -1;
+        held = 0;
+        return -1;
+    }
+    if (id == RPB_BAR || was == RPB_BAR) {
+        if (was != RPB_BAR && was != -1)
+            return -1;                  /* pressed elsewhere, slid onto it */
+        at = at < 0 ? 0 : at > 1 ? 1 : at;
+        t = (uint32_t)(at * (float)g_total);
+        if (was != RPB_BAR || (t > last ? t - last : last - t) > 30) {
+            rp_seek(t);
+            last = t;
+        }
+        was = RPB_BAR;
+        return -1;
+    }
+    if (id != was) {
+        int first = was == -1;
+
+        was = id;
+        held = 0;
+        if (!first || id < 0)
+            return -1;                  /* slid onto it: not a press */
+        rp_press(id);
+        return id;
+    }
+    if (rp_repeats(id, ++held))
+        rp_press(id);
+    return -1;
+}
+
+/* What the panel shows: the time, and paused / speed (0..4, x1/4 .. x4) /
+ * seeking / at the end / differs from the recording. Returns how far the
+ * fight is, 0..1. */
+float rp_info(char *time, int n, int *state)
+{
+    unsigned t = g_tick < g_total ? g_tick : g_total;
+
+    snprintf(time, (size_t)n, "%u:%02u.%02u / %u:%02u.%02u",
+             t / 3600, t / 60 % 60, t % 60 * 100 / 60,
+             g_total / 3600, g_total / 60 % 60, g_total % 60 * 100 / 60);
+    *state = g_rp_speed
+             | (g_rp_paused ? RPS_PAUSED : 0)
+             | (g_rp_target != RP_NONE ? RPS_SEEKING : 0)
+             | (g_tick >= g_total ? RPS_END : 0)
+             | (g_bad_ticks ? RPS_DIFFERS : 0);
+    return g_total ? (float)t / (float)g_total : 0.0f;
 }

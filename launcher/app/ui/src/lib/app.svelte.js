@@ -21,10 +21,10 @@ import { altArt } from './profileIcon.js';
 /* ------------------------------------------------------------ tables -- */
 
 /* the menu, in order; QUIT closes */
-export const SECTIONS = ['build', 'play', 'video', 'controls', 'profile', 'mods', 'quit'];
+export const SECTIONS = ['build', 'play', 'video', 'controls', 'profile', 'mods', 'replays', 'quit'];
 /* each section's name in the menu and its full-screen header */
-export const TITLE = { build: 'mBuild', play: 'mPlay', video: 'mVideo', controls: 'mControls', profile: 'mProfile', mods: 'mMods', quit: 'mQuit' };
-export const DESC = { build: 'dBuild', video: 'dVideo', controls: 'dControls', profile: 'dProfile', play: 'dPlay', mods: 'dMods', quit: 'dQuit' };
+export const TITLE = { build: 'mBuild', play: 'mPlay', video: 'mVideo', controls: 'mControls', profile: 'mProfile', mods: 'mMods', replays: 'mReplays', quit: 'mQuit' };
+export const DESC = { build: 'dBuild', video: 'dVideo', controls: 'dControls', profile: 'dProfile', play: 'dPlay', mods: 'dMods', replays: 'dReplays', quit: 'dQuit' };
 /* the pages of GRAPHICS and CONTROLS, in their second row */
 export const GFX_TABS = [['video', 'gVideo'], ['tex', 'gTex'], ['ui', 'gUi']];
 export const CTL_TABS = [['p', 'tabKb'], ['pad', 'tabPad'], ['dbg', 'tabDbg']];
