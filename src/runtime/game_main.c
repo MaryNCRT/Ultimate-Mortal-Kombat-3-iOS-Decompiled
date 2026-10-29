@@ -1080,6 +1080,7 @@ static void read_config(const char *dir)
 
     snprintf(path, sizeof path, "%s%s", dir, "umk3.ini");
     snprintf(g_ini_path, sizeof g_ini_path, "%s", path);
+    snprintf(rgl_dir, sizeof rgl_dir, "%s", dir);  /* the pipeline caches beside it */
     f = fopen(path, "r");
     if (!f)
         return;
@@ -2479,6 +2480,18 @@ static void pace_frame(void)
         off = getenv("UMK3_FRAME_DELAY") && atoi(getenv("UMK3_FRAME_DELAY")) == 0;
         hz = getenv("UMK3_PACE_HZ") ? atoi(getenv("UMK3_PACE_HZ"))
                                     : plat_refresh_hz();   /* for tests */
+        /* Vulkan and Direct3D 12 on a 120/180/240 Hz screen: each frame
+         * stays up 2/3/4 refreshes (rgl_swap_interval), and the screen is
+         * paced as one of 60 Hz. Presented once per tick at one refresh, a
+         * frame that ended near a refresh now and then waited one more:
+         * 22 ms, then 11, several times a second (Mary, 180 Hz). */
+        if (rgl_renderer != RGL_OPENGL && hz >= 100) {
+            int n = (hz + 30) / 60;
+            if (n <= 4 && hz >= n * 60 - 3 * n && hz <= n * 60 + 3 * n) {
+                rgl_swap_interval = n;
+                hz /= n;
+            }
+        }
     }
     period = (hz >= 50 && hz <= 65) ? 1.0 / hz : 0.0;
     if (g_pace_vbl >= 0.0) {
@@ -2493,12 +2506,19 @@ static void pace_frame(void)
     }
     g_pace_vbl = now;
     if (getenv("UMK3_LOG_PACE")) {      /* UMK3_LOG_PACE=1: once a second */
-        static int n;
+        static int n, late;
+        static double prev = -1.0;
+        /* a swap over 20 ms after the last: a frame the screen held twice */
+        if (prev >= 0.0 && now - prev > 0.020)
+            late++;
+        prev = now;
         if (++n % 60 == 0)
-            printf("pace: screen %d Hz, between swaps %.2f ms, frame work %.2f ms, wait %.2f ms\n",
-                   hz, g_pace_gap * 1e3, g_pace_work * 1e3,
+            printf("pace: %d late, screen %d Hz, between swaps %.2f ms, frame work %.2f ms, wait %.2f ms\n",
+                   late, hz * rgl_swap_interval, g_pace_gap * 1e3, g_pace_work * 1e3,
                    off || !period ? 0.0
                                   : (period - g_pace_work - 0.003) * 1e3);
+        if (n % 60 == 0)
+            late = 0;
     }
     /* the swap waited for the refresh only if it took a while: with vsync
      * off it returns at once and there is nothing to wait for */
@@ -2971,6 +2991,15 @@ int main(int argc, char **argv)
         fprintf(stderr, "could not open a window\n");
         return 1;
     }
+    /* --compile-shaders: the launcher's PLAY > COMPILE SHADERS. Opening the
+     * renderer made every pipeline of its list (render/rgl.h); closing it
+     * keeps them on disk for the game. */
+    for (int a = 1; a < argc; a++)
+        if (strcmp(argv[a], "--compile-shaders") == 0) {
+            printf("shaders: compiled for %s\n", rgl_label(rgl_renderer));
+            plat_close();
+            return 0;
+        }
     render_init();
     plat_ask_hook = render_ask_hook;
     snprintf(g_root, sizeof g_root, "%s", root);

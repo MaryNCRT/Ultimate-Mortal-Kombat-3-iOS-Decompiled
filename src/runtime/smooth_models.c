@@ -119,6 +119,7 @@ typedef struct {
     float           weld;
     uint16_t       *jidx;               /* its own copies of the record */
     float          *jpos, *jcu;
+    unsigned       *jkey;               /* per vertex, its bones and weights */
 } smooth_entry;
 
 static smooth_entry g_cache[SMOOTH_CACHE];
@@ -126,7 +127,8 @@ static unsigned g_tick;
 
 static void build(smooth_entry *e)
 {
-    e->built = umk_subsurf_new(e->levels, e->weld, e->nverts, e->jpos, e->nfaces, e->jidx, e->jcu);
+    e->built = umk_subsurf_new_keyed(e->levels, e->weld, e->nverts, e->jpos, e->nfaces, e->jidx,
+                                     e->jcu, e->jkey);
 }
 
 #ifdef _WIN32
@@ -199,6 +201,7 @@ static void entry_free(smooth_entry *e)
     free(e->jidx);
     free(e->jpos);
     free(e->jcu);
+    free(e->jkey);
     free(e->fitw);
     umk_subsurf_free(e->s);
     free(e->pos);
@@ -493,8 +496,10 @@ static void adopt(smooth_entry *e)
     free(e->jidx);
     free(e->jpos);
     free(e->jcu);
+    free(e->jkey);
     e->jidx = NULL;
     e->jpos = e->jcu = NULL;
+    e->jkey = NULL;
     if (e->s) {
         int n;
 
@@ -515,6 +520,45 @@ static void adopt(smooth_entry *e)
         }
     } else
         printf("smooth models: mesh %d verts %d tris not smoothed\n", e->nverts, e->nfaces);
+}
+
+/* What moves a vertex: its four bone bytes and their weights (SKININFO +0x20,
+ * +0x24; docs/formats/SKIN-FORMAT.md 7). DrawSkinnedMesh2 (0x608d8) unwelds
+ * the skin by texture coordinate: the record's vertex of each triangle corner
+ * is a copy of the skin vertex the corner names (+0x18, one int16 a corner).
+ * Two record vertices with the same key move together in every pose -- a UV
+ * seam's copies -- and are the only ones the weld may join. NULL (no key) when
+ * the record's triangles are not the skin's. */
+static void weld_keys(smooth_entry *e, const void *skin, const uint16_t *idx)
+{
+    const SKININFO *k = (const SKININFO *)skin;
+    const int16_t *corner;
+    int i, j;
+
+    e->jkey = NULL;
+    if (!k || k->numVerts != e->nfaces || !k->vertExtra || !k->indexes || !k->weights)
+        return;
+    e->jkey = malloc(sizeof(unsigned) * (size_t)e->nverts);
+    if (!e->jkey)
+        return;
+    for (i = 0; i < e->nverts; i++)
+        e->jkey[i] = 0x80000000u | (unsigned)i;    /* no corner: its own */
+    corner = (const int16_t *)k->vertExtra;
+    for (i = 0; i < e->nfaces * 3; i++) {
+        const int v = (uint16_t)corner[i];
+        const uint8_t *b, *w;
+        uint32_t h = 2166136261u;
+
+        if (v >= k->numMatrices)
+            continue;
+        b = (const uint8_t *)&k->indexes[v];
+        w = (const uint8_t *)&k->weights[v * 4];
+        for (j = 0; j < 4; j++)
+            h = (h ^ b[j]) * 16777619u;
+        for (j = 0; j < 16; j++)
+            h = (h ^ w[j]) * 16777619u;
+        e->jkey[idx[i]] = h & 0x7fffffffu;
+    }
 }
 
 static smooth_entry *start_entry(smooth_entry *e, const void *skin, uint32_t hash,
@@ -539,6 +583,7 @@ static smooth_entry *start_entry(smooth_entry *e, const void *skin, uint32_t has
         return NULL;
 
     record_positions(nverts, e->jpos);
+    weld_keys(e, skin, idx);
     memcpy(e->jidx, idx, sizeof(uint16_t) * 3 * (size_t)nfaces);
     for (i = 0; i < nfaces * 3; i++) {
         e->jcu[i * 2 + 0] = ruv[idx[i] * 2 + 0];

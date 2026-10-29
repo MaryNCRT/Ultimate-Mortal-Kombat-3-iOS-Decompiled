@@ -41,6 +41,73 @@ typedef double        GLdouble;
 typedef void          GLvoid;
 
 int rgl_renderer = RGL_OPENGL;
+int rgl_swap_interval = 1;
+char rgl_dir[1024];
+
+void rgl_path(char *out, int n, const char *name)
+{
+    snprintf(out, (size_t)n, "%s%s", rgl_dir, name);
+}
+
+/* "<key in hex> a b c", one pipeline a line */
+void rgl_pipes_note(const char *name, const void *key, int keysize, int a, int b, int c)
+{
+    const unsigned char *k = (const unsigned char *)key;
+    char path[1100];
+    FILE *f;
+    int i;
+
+    rgl_path(path, sizeof path, name);
+    f = fopen(path, "a");
+    if (!f)
+        return;
+    for (i = 0; i < keysize; i++)
+        fprintf(f, "%02x", k[i]);
+    fprintf(f, " %d %d %d\n", a, b, c);
+    fclose(f);
+}
+
+static void pipes_line(const char *l, int keysize, void (*fn)(const void *, int, int, int))
+{
+    unsigned char k[64];
+    int i, a, b, c;
+
+    if (keysize > (int)sizeof k)
+        return;
+    for (i = 0; i < keysize; i++) {
+        unsigned v;
+        if (sscanf(l + i * 2, "%2x", &v) != 1)
+            return;
+        k[i] = (unsigned char)v;
+    }
+    if (sscanf(l + keysize * 2, "%d %d %d", &a, &b, &c) == 3)
+        fn(k, a, b, c);
+}
+
+void rgl_pipes_each(const char *name, const char *seed, int keysize,
+                    void (*fn)(const void *key, int a, int b, int c))
+{
+    char path[1100], line[256];
+    FILE *f;
+
+    while (seed && *seed) {
+        const char *e = strchr(seed, '\n');
+        size_t n = e ? (size_t)(e - seed) : strlen(seed);
+        if (n < sizeof line) {
+            memcpy(line, seed, n);
+            line[n] = 0;
+            pipes_line(line, keysize, fn);
+        }
+        seed = e ? e + 1 : NULL;
+    }
+    rgl_path(path, sizeof path, name);
+    f = fopen(path, "r");
+    if (!f)
+        return;
+    while (fgets(line, sizeof line, f))
+        pipes_line(line, keysize, fn);
+    fclose(f);
+}
 
 int rgl_parse(const char *name)
 {

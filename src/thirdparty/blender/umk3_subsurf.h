@@ -32,6 +32,16 @@ UmkSubsurf *umk_subsurf_new(int levels, float weld_dist,
                             int ntris, const unsigned short *tri,
                             const float *corner_uv);
 
+/* The same, and two vertices are welded only when their `weld_key`s (nverts,
+ * NULL for none) are equal as well as close. A skinned mesh is welded on one
+ * pose: a key per set of bones and weights keeps two pieces that only touch
+ * in that pose apart (Mary: Sub-Zero's strap, welded to his hand in his
+ * intro's first pose, stretched to his fist on every punch). */
+UmkSubsurf *umk_subsurf_new_keyed(int levels, float weld_dist,
+                                  int nverts, const float *pos,
+                                  int ntris, const unsigned short *tri,
+                                  const float *corner_uv, const unsigned *weld_key);
+
 /* SHARP EDGES (port, not Blender's modifier): an interior edge whose two
  * triangles turn by more than `angle_deg` -- the angle between their
  * normals, 0 flat, 180 folded back on itself; an edge within 0.001 degree

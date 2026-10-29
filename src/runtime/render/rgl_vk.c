@@ -78,6 +78,7 @@ VKF(vkAllocateMemory); VKF(vkFreeMemory); VKF(vkMapMemory); VKF(vkUnmapMemory);
 VKF(vkCreateRenderPass); VKF(vkDestroyRenderPass); VKF(vkCreateFramebuffer); VKF(vkDestroyFramebuffer);
 VKF(vkCreateShaderModule); VKF(vkDestroyShaderModule); VKF(vkCreatePipelineLayout);
 VKF(vkDestroyPipelineLayout); VKF(vkCreateGraphicsPipelines); VKF(vkDestroyPipeline);
+VKF(vkCreatePipelineCache); VKF(vkGetPipelineCacheData); VKF(vkDestroyPipelineCache);
 VKF(vkCreateDescriptorSetLayout); VKF(vkDestroyDescriptorSetLayout); VKF(vkCreateDescriptorPool);
 VKF(vkDestroyDescriptorPool); VKF(vkResetDescriptorPool); VKF(vkAllocateDescriptorSets);
 VKF(vkUpdateDescriptorSets); VKF(vkCreateSampler); VKF(vkDestroySampler);
@@ -163,6 +164,7 @@ static VkImageView g_views[8];
 static VkImageLayout g_img_layout[8];
 static VkFramebuffer g_fbs[8];
 static vk_image g_wdepth;
+static vk_image g_hold;                 /* the frame, for the presents after (present) */
 static VkFormat g_depth_fmt;
 static int g_win_pass = -1;
 static unsigned g_image;                /* the swapchain image this frame */
@@ -441,30 +443,72 @@ static void frame_begin(void)
     cmd_begin();
 }
 
+/* the whole window from one image to another of its size */
+static void copy_window(VkImage from, VkImage to)
+{
+    VkImageBlit r;
+
+    memset(&r, 0, sizeof r);
+    r.srcSubresource.aspectMask = r.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    r.srcSubresource.layerCount = r.dstSubresource.layerCount = 1;
+    r.srcOffsets[1].x = r.dstOffsets[1].x = (int)g_extent.width;
+    r.srcOffsets[1].y = r.dstOffsets[1].y = (int)g_extent.height;
+    r.srcOffsets[1].z = r.dstOffsets[1].z = 1;
+    vkCmdBlitImage(g_cmd, from, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                   to, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &r, VK_FILTER_NEAREST);
+}
+
+/* FIFO has no swap interval: on a 120/180/240 Hz screen (rgl_swap_interval
+ * 2/3/4) the frame is kept and presented again once for each refresh after
+ * the first, so every frame stays up the same time. One present each, a frame
+ * ending near a refresh was shown one refresh late now and then -- 22 ms and
+ * then 11, a stutter several times a second (Mary, 180 Hz). */
 static void present(void)
 {
     VkPresentInfoKHR pi;
     VkResult r;
+    int k, n = rgl_swap_interval < 1 ? 1 : rgl_swap_interval > 4 ? 4 : rgl_swap_interval;
 
-    frame_begin();
-    if (!g_frame_on)
-        return;
-    cmd_begin();
-    end_pass();
-    barrier(g_images[g_image], VK_IMAGE_ASPECT_COLOR_BIT, 1, g_img_layout[g_image], VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-    g_img_layout[g_image] = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    flush(1);
-    memset(&pi, 0, sizeof pi);
-    pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    pi.waitSemaphoreCount = 1;
-    pi.pWaitSemaphores = &g_sem_done;
-    pi.swapchainCount = 1;
-    pi.pSwapchains = &g_swap;
-    pi.pImageIndices = &g_image;
-    r = vkQueuePresentKHR(g_queue, &pi);
-    if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR)
-        g_need_resize = 1;
-    g_frame_on = 0;
+    if (!g_hold.img)
+        n = 1;
+    for (k = 0; k < n; k++) {
+        frame_begin();
+        if (!g_frame_on)
+            return;
+        cmd_begin();
+        if (k == 0) {
+            end_pass();
+            if (n > 1) {
+                barrier(g_images[g_image], VK_IMAGE_ASPECT_COLOR_BIT, 1, g_img_layout[g_image],
+                        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+                g_img_layout[g_image] = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                to_layout(&g_hold, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                copy_window(g_images[g_image], g_hold.img);
+                to_layout(&g_hold, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+            }
+        } else {
+            barrier(g_images[g_image], VK_IMAGE_ASPECT_COLOR_BIT, 1, g_img_layout[g_image],
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            g_img_layout[g_image] = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            copy_window(g_hold.img, g_images[g_image]);
+        }
+        barrier(g_images[g_image], VK_IMAGE_ASPECT_COLOR_BIT, 1, g_img_layout[g_image], VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+        g_img_layout[g_image] = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        flush(1);
+        memset(&pi, 0, sizeof pi);
+        pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        pi.waitSemaphoreCount = 1;
+        pi.pWaitSemaphores = &g_sem_done;
+        pi.swapchainCount = 1;
+        pi.pSwapchains = &g_swap;
+        pi.pImageIndices = &g_image;
+        r = vkQueuePresentKHR(g_queue, &pi);
+        if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR)
+            g_need_resize = 1;
+        g_frame_on = 0;
+        if (g_need_resize)
+            return;
+    }
 }
 
 /* ---------------------------------------------------------- render passes */
@@ -601,6 +645,7 @@ static void free_swapchain(void)
         g_views[i] = VK_NULL_HANDLE;
     }
     free_image(&g_wdepth);
+    free_image(&g_hold);
 }
 
 static int recreate_swapchain(void)
@@ -663,6 +708,9 @@ static int recreate_swapchain(void)
     g_nimages = n;
     make_image(&g_wdepth, w, h, 1, g_depth_fmt, VK_SAMPLE_COUNT_1_BIT,
                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT);
+    make_image(&g_hold, w, h, 1, g_swap_fmt, VK_SAMPLE_COUNT_1_BIT,
+               VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+               VK_IMAGE_ASPECT_COLOR_BIT);
     g_win_pass = get_pass(g_swap_fmt, VK_SAMPLE_COUNT_1_BIT, 1);
     for (i = 0; i < n; i++) {
         VkImageViewCreateInfo vi;
@@ -717,6 +765,74 @@ static void vk_tex_image(int t, int w, int h, int levels, const unsigned char *c
 
 #define LOAD_I(n) n = (PFN_##n)gipa(g_inst, #n)
 #define LOAD_D(n) n = (PFN_##n)vkGetDeviceProcAddr(g_dev, #n)
+
+/* The pipelines the driver built, kept in the game's folder between runs
+ * (Khronos' Vulkan-Samples, pipeline_cache): a combination of states seen
+ * before is not compiled again the first time it is drawn. The driver checks
+ * the file's header and ignores one from another driver or GPU. */
+#define PCACHE_FILE "umk3-pipelines-vk.bin"
+#define PIPES_FILE "umk3-pipelines-vk.txt"
+static VkPipelineCache g_pcache;
+static int g_preloading;                /* the list made again: not noted again */
+static void preload(void);
+#include "rgl_pipes_vk.h"
+
+static void cache_open(void)
+{
+    VkPipelineCacheCreateInfo ci;
+    void *data = NULL;
+    long n = 0;
+    char path[1100];
+    FILE *f;
+
+    rgl_path(path, sizeof path, PCACHE_FILE);
+    f = fopen(path, "rb");
+
+    if (f) {
+        if (fseek(f, 0, SEEK_END) == 0 && (n = ftell(f)) > 0 && fseek(f, 0, SEEK_SET) == 0
+            && (data = malloc((size_t)n)) != NULL && fread(data, 1, (size_t)n, f) != (size_t)n) {
+            free(data);
+            data = NULL;
+        }
+        fclose(f);
+    }
+    memset(&ci, 0, sizeof ci);
+    ci.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+    ci.initialDataSize = data ? (size_t)n : 0;
+    ci.pInitialData = data;
+    if (vkCreatePipelineCache(g_dev, &ci, NULL, &g_pcache) != VK_SUCCESS && data) {
+        ci.initialDataSize = 0;         /* a file it would not take: start empty */
+        ci.pInitialData = NULL;
+        if (vkCreatePipelineCache(g_dev, &ci, NULL, &g_pcache) != VK_SUCCESS)
+            g_pcache = VK_NULL_HANDLE;
+    }
+    free(data);
+}
+
+static void cache_close(void)
+{
+    size_t n = 0;
+    void *data;
+
+    if (!g_pcache)
+        return;
+    if (vkGetPipelineCacheData(g_dev, g_pcache, &n, NULL) == VK_SUCCESS && n
+        && (data = malloc(n)) != NULL) {
+        if (vkGetPipelineCacheData(g_dev, g_pcache, &n, data) == VK_SUCCESS) {
+            char path[1100];
+            FILE *f;
+            rgl_path(path, sizeof path, PCACHE_FILE);
+            f = fopen(path, "wb");
+            if (f) {
+                fwrite(data, 1, n, f);
+                fclose(f);
+            }
+        }
+        free(data);
+    }
+    vkDestroyPipelineCache(g_dev, g_pcache, NULL);
+    g_pcache = VK_NULL_HANDLE;
+}
 
 static int vk_open(void *window, int width, int height)
 {
@@ -850,6 +966,7 @@ static int vk_open(void *window, int width, int height)
     LOAD_D(vkCreateRenderPass); LOAD_D(vkDestroyRenderPass); LOAD_D(vkCreateFramebuffer); LOAD_D(vkDestroyFramebuffer);
     LOAD_D(vkCreateShaderModule); LOAD_D(vkDestroyShaderModule); LOAD_D(vkCreatePipelineLayout);
     LOAD_D(vkDestroyPipelineLayout); LOAD_D(vkCreateGraphicsPipelines); LOAD_D(vkDestroyPipeline);
+    LOAD_D(vkCreatePipelineCache); LOAD_D(vkGetPipelineCacheData); LOAD_D(vkDestroyPipelineCache);
     LOAD_D(vkCreateDescriptorSetLayout); LOAD_D(vkDestroyDescriptorSetLayout); LOAD_D(vkCreateDescriptorPool);
     LOAD_D(vkDestroyDescriptorPool); LOAD_D(vkResetDescriptorPool); LOAD_D(vkAllocateDescriptorSets);
     LOAD_D(vkUpdateDescriptorSets); LOAD_D(vkCreateSampler); LOAD_D(vkDestroySampler);
@@ -934,6 +1051,7 @@ static int vk_open(void *window, int width, int height)
         pl.pushConstantRangeCount = 1;
         pl.pPushConstantRanges = &pc;
         vkCreatePipelineLayout(g_dev, &pl, NULL, &g_layout);
+        cache_open();
         ps.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         ps.descriptorCount = DPOOL_SETS * 2;
         memset(&dp, 0, sizeof dp);
@@ -965,6 +1083,7 @@ static int vk_open(void *window, int width, int height)
         g_white = vk_tex_new();
         vk_tex_image(g_white, 1, 1, 1, lv);
     }
+    preload();
     printf("vulkan: %s, window %ux%u, %s\n", g_props.deviceName, g_extent.width, g_extent.height,
            g_swap_fmt == VK_FORMAT_B8G8R8A8_UNORM ? "BGRA8" : "RGBA8");
     return 1;
@@ -1011,6 +1130,7 @@ static void vk_close(void)
     vkDestroyShaderModule(g_dev, g_fs, NULL);
     vkDestroyDescriptorPool(g_dev, g_dpool, NULL);
     vkDestroyPipelineLayout(g_dev, g_layout, NULL);
+    cache_close();
     vkDestroyDescriptorSetLayout(g_dev, g_dsl, NULL);
     vkDestroySemaphore(g_dev, g_sem_acquire, NULL);
     vkDestroySemaphore(g_dev, g_sem_done, NULL);
@@ -1469,7 +1589,7 @@ static VkPipeline get_pipe(const rgl_pipe *k, int pass)
     pi.pDynamicState = &dy;
     pi.layout = g_layout;
     pi.renderPass = g_pass[pass].rp;
-    if (!vk_ok(vkCreateGraphicsPipelines(g_dev, VK_NULL_HANDLE, 1, &pi, NULL, &p), "vkCreateGraphicsPipelines"))
+    if (!vk_ok(vkCreateGraphicsPipelines(g_dev, g_pcache, 1, &pi, NULL, &p), "vkCreateGraphicsPipelines"))
         return VK_NULL_HANDLE;
     if (g_npipes >= g_cpipes) {
         g_cpipes = g_cpipes ? g_cpipes * 2 : 64;
@@ -1479,7 +1599,26 @@ static VkPipeline get_pipe(const rgl_pipe *k, int pass)
     g_pipes[g_npipes].pass = pass;
     g_pipes[g_npipes].p = p;
     g_npipes++;
+    if (!g_preloading)
+        rgl_pipes_note(PIPES_FILE, k, sizeof *k, g_pass[pass].fmt, g_pass[pass].samples, g_pass[pass].depth);
     return p;
+}
+
+/* a pipeline of the list: its render pass, then itself */
+static void preload_one(const void *key, int fmt, int samples, int depth)
+{
+    get_pipe((const rgl_pipe *)key, get_pass((VkFormat)fmt, (VkSampleCountFlagBits)samples, depth));
+}
+
+static void preload(void)
+{
+    double t0 = rgl_now_ms();
+    int n0 = g_npipes;
+
+    g_preloading = 1;
+    rgl_pipes_each(PIPES_FILE, k_seed_pipes, sizeof(rgl_pipe), preload_one);
+    g_preloading = 0;
+    printf("vulkan: %d pipelines ready in %.0f ms\n", g_npipes - n0, rgl_now_ms() - t0);
 }
 
 static VkSampler get_sampler(const rgl_samp *s)

@@ -163,6 +163,7 @@ function defaultConfig() {
         widescreen: false,           /* native: widen the 3D view, no stretch */
         debug: false,
         skipIntro: false,            /* skip_intro=1: no publisher logos */
+        compileShaders: false,       /* compile_shaders=1: PLAY runs --compile-shaders first */
         hideControls: false,         /* hide_controls=1: no on-screen stick and buttons */
         smoothAnims: false,          /* smooth_anims=1: blend the fighters' frames (drawing only) */
         smoothModels: 0,             /* smooth_models=: 0 off, 1 or 2 the subdivision level */
@@ -230,6 +231,7 @@ function load(p) {
         else if (key === 'aspect') cfg.aspect = ['3:2', '4:3', '16:9', '21:9'].includes(val) ? val : '3:2';
         else if (key === 'debug_keys') cfg.debug = num === 1;
         else if (key === 'skip_intro') cfg.skipIntro = num === 1;
+        else if (key === 'compile_shaders') cfg.compileShaders = num === 1;
         else if (key === 'hide_controls') cfg.hideControls = num === 1;
         else if (key === 'smooth_anims') cfg.smoothAnims = num === 1;
         else if (key === 'smooth_models') cfg.smoothModels = num >= 1 && num <= 2 ? num : 0;
@@ -325,6 +327,7 @@ function save(p, cfg) {
         'ipa=' + cfg.ipa,
         'debug_keys=' + (cfg.debug ? 1 : 0),
         'skip_intro=' + (cfg.skipIntro ? 1 : 0),
+        'compile_shaders=' + (cfg.compileShaders ? 1 : 0),
         'hide_controls=' + (cfg.hideControls ? 1 : 0),
         'smooth_anims=' + (cfg.smoothAnims ? 1 : 0),
         'smooth_models=' + (cfg.smoothModels === 1 || cfg.smoothModels === 2 ? cfg.smoothModels : 0),

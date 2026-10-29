@@ -466,9 +466,22 @@ ipcMain.handle('glyphs:all', () => {
     return out;
 });
 
-ipcMain.handle('play', () => {
+/* COMPILE SHADERS BEFORE PLAYING: `umk3-game --compile-shaders` opens the
+ * renderer umk3.ini names, makes every pipeline it knows (the game's list and
+ * what it met before, render/rgl.h), keeps them on disk for the game, and
+ * closes; then the game starts. Nothing to do for OpenGL, which says so. */
+function compileShaders(exe) {
+    return new Promise(resolve => {
+        require('child_process').execFile(exe, ['--compile-shaders'],
+            { cwd: g_root, timeout: 120000 }, (_err, out) => resolve(String(out || '')));
+    });
+}
+
+ipcMain.handle('play', async () => {
     if (!ini.gameReady(g_root, arch()))
         return { ok: false };
+    if (ini.load(path.join(g_root, 'umk3.ini')).compileShaders)
+        await compileShaders(path.join(g_root, ini.gameExe(arch())));
     bld.play(g_root, ini.gameExe(arch()));
     /* the game runs on its own (detached): the launcher steps aside, once
      * the answer has reached the page */

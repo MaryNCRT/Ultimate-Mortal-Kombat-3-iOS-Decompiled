@@ -454,6 +454,8 @@ static int make_root(void)
 }
 
 static int dx_tex_new(void);
+static void preload(void);
+static void lib_close(void);
 static void dx_tex_image(int t, int w, int h, int levels, const unsigned char *const *rgba);
 
 static int dx_open(void *window, int width, int height)
@@ -577,6 +579,7 @@ static int dx_open(void *window, int width, int height)
         g_white = dx_tex_new();
         dx_tex_image(g_white, 1, 1, 1, lv);
     }
+    preload();
     printf("d3d12: %s, window %dx%d\n", g_adapter, g_bw, g_bh);
     return 1;
 }
@@ -589,6 +592,7 @@ static void dx_close(void)
         return;
     flush();
     wait_gpu();
+    lib_close();
     for (i = 0; i < g_npsos; i++)
         ID3D12PipelineState_Release(g_psos[i].p);
     for (i = 0; i < g_ntex; i++)
@@ -947,8 +951,102 @@ static D3D12_BLEND dx_bfa(int f)
     return b;
 }
 
+/* The pipelines the driver built, kept in the game's folder between runs
+ * (Microsoft's DirectX-Graphics-Samples, D3D12PipelineStateCache: a pipeline
+ * library). A state seen before is loaded, not compiled again. The library
+ * refuses a file from another driver or GPU, and then starts empty. Names
+ * carry the shaders' hash: new shaders, new names. */
+#define LIB_FILE "umk3-pipelines-d3d12.bin"
+#define PIPES_FILE "umk3-pipelines-d3d12.txt"
+static ID3D12PipelineLibrary *g_lib;
+static void *g_lib_blob;                /* the library reads from it while it lives */
+static int g_lib_dirty, g_preloading;
+static unsigned g_shader_hash;
+#include "rgl_pipes_d3d12.h"
+
+static void lib_open(void)
+{
+    ID3D12Device1 *d1 = NULL;
+    char path[1100];
+    long n = 0;
+    FILE *f;
+    size_t i;
+
+    g_shader_hash = 2166136261u;        /* FNV-1a */
+    for (i = 0; i < sizeof k_dx_vs; i++)
+        g_shader_hash = (g_shader_hash ^ k_dx_vs[i]) * 16777619u;
+    for (i = 0; i < sizeof k_dx_ps; i++)
+        g_shader_hash = (g_shader_hash ^ k_dx_ps[i]) * 16777619u;
+    if (FAILED(ID3D12Device_QueryInterface(g_dev, &IID_ID3D12Device1, (void **)&d1)))
+        return;
+    rgl_path(path, sizeof path, LIB_FILE);
+    f = fopen(path, "rb");
+    if (f) {
+        if (fseek(f, 0, SEEK_END) == 0 && (n = ftell(f)) > 0 && fseek(f, 0, SEEK_SET) == 0
+            && (g_lib_blob = malloc((size_t)n)) != NULL && fread(g_lib_blob, 1, (size_t)n, f) != (size_t)n) {
+            free(g_lib_blob);
+            g_lib_blob = NULL;
+        }
+        fclose(f);
+    }
+    if (!g_lib_blob || FAILED(ID3D12Device1_CreatePipelineLibrary(d1, g_lib_blob, (SIZE_T)n,
+                                  &IID_ID3D12PipelineLibrary, (void **)&g_lib))) {
+        free(g_lib_blob);
+        g_lib_blob = NULL;
+        g_lib = NULL;
+        if (FAILED(ID3D12Device1_CreatePipelineLibrary(d1, NULL, 0, &IID_ID3D12PipelineLibrary,
+                                                       (void **)&g_lib)))
+            g_lib = NULL;
+    }
+    ID3D12Device1_Release(d1);
+}
+
+static void lib_close(void)
+{
+    if (g_lib && g_lib_dirty) {
+        SIZE_T n = ID3D12PipelineLibrary_GetSerializedSize(g_lib);
+        void *data = n ? malloc(n) : NULL;
+        if (data && SUCCEEDED(ID3D12PipelineLibrary_Serialize(g_lib, data, n))) {
+            char path[1100];
+            FILE *f;
+            rgl_path(path, sizeof path, LIB_FILE);
+            f = fopen(path, "wb");
+            if (f) {
+                fwrite(data, 1, n, f);
+                fclose(f);
+            }
+        }
+        free(data);
+    }
+    if (g_lib)
+        ID3D12PipelineLibrary_Release(g_lib);
+    g_lib = NULL;
+    g_lib_dirty = 0;
+    free(g_lib_blob);
+    g_lib_blob = NULL;
+}
+
+/* the shaders' hash, the key, samples and depth, as a name */
+static void pso_name(WCHAR *o, const rgl_pipe *k, int samples, int depth)
+{
+    static const char hex[] = "0123456789abcdef";
+    const unsigned char *b = (const unsigned char *)k;
+    int i, n = 0;
+
+    for (i = 0; i < 8; i++)
+        o[n++] = (WCHAR)hex[(g_shader_hash >> (28 - 4 * i)) & 15];
+    for (i = 0; i < (int)sizeof *k; i++) {
+        o[n++] = (WCHAR)hex[b[i] >> 4];
+        o[n++] = (WCHAR)hex[b[i] & 15];
+    }
+    o[n++] = (WCHAR)hex[samples & 15];
+    o[n++] = (WCHAR)(depth ? '1' : '0');
+    o[n] = 0;
+}
+
 static ID3D12PipelineState *get_pso(const rgl_pipe *k, int samples, int depth)
 {
+    WCHAR name[64];
     D3D12_GRAPHICS_PIPELINE_STATE_DESC d;
     D3D12_INPUT_ELEMENT_DESC il[4];
     ID3D12PipelineState *p = NULL;
@@ -998,8 +1096,15 @@ static ID3D12PipelineState *get_pso(const rgl_pipe *k, int samples, int depth)
     d.RTVFormats[0] = COLOR_FMT;
     d.DSVFormat = depth ? DEPTH_FMT : DXGI_FORMAT_UNKNOWN;
     d.SampleDesc.Count = (UINT)samples;
-    if (!ok(ID3D12Device_CreateGraphicsPipelineState(g_dev, &d, &IID_ID3D12PipelineState, (void **)&p), "PSO"))
-        return NULL;
+    pso_name(name, k, samples, depth);
+    if (!g_lib || FAILED(ID3D12PipelineLibrary_LoadGraphicsPipeline(g_lib, name, &d,
+                                                                    &IID_ID3D12PipelineState, (void **)&p))) {
+        p = NULL;
+        if (!ok(ID3D12Device_CreateGraphicsPipelineState(g_dev, &d, &IID_ID3D12PipelineState, (void **)&p), "PSO"))
+            return NULL;
+        if (g_lib && SUCCEEDED(ID3D12PipelineLibrary_StorePipeline(g_lib, name, p)))
+            g_lib_dirty = 1;
+    }
     if (g_npsos >= g_cpsos) {
         g_cpsos = g_cpsos ? g_cpsos * 2 : 64;
         g_psos = (dx_pso *)realloc(g_psos, (size_t)g_cpsos * sizeof *g_psos);
@@ -1009,7 +1114,27 @@ static ID3D12PipelineState *get_pso(const rgl_pipe *k, int samples, int depth)
     g_psos[g_npsos].depth = depth;
     g_psos[g_npsos].p = p;
     g_npsos++;
+    if (!g_preloading)
+        rgl_pipes_note(PIPES_FILE, k, sizeof *k, samples, depth, 0);
     return p;
+}
+
+static void preload_one(const void *key, int samples, int depth, int unused)
+{
+    (void)unused;
+    get_pso((const rgl_pipe *)key, samples, depth);
+}
+
+static void preload(void)
+{
+    double t0 = rgl_now_ms();
+    int n0 = g_npsos;
+
+    lib_open();
+    g_preloading = 1;
+    rgl_pipes_each(PIPES_FILE, k_seed_pipes, sizeof(rgl_pipe), preload_one);
+    g_preloading = 0;
+    printf("d3d12: %d pipelines ready in %.0f ms\n", g_npsos - n0, rgl_now_ms() - t0);
 }
 
 static int get_sampler(const rgl_samp *s)
@@ -1311,7 +1436,8 @@ static void dx_present(void)
     frame_begin();
     to_state(&g_back[g_bi], D3D12_RESOURCE_STATE_PRESENT);
     flush();
-    IDXGISwapChain3_Present(g_swap, 1, 0);
+    IDXGISwapChain3_Present(g_swap, rgl_swap_interval < 1 ? 1 : rgl_swap_interval > 4 ? 4
+                                    : (UINT)rgl_swap_interval, 0);
     wait_gpu();
     g_bi = IDXGISwapChain3_GetCurrentBackBufferIndex(g_swap);
     g_bound_target = -1;
