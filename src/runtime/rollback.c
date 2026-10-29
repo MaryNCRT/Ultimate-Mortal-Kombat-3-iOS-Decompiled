@@ -9,8 +9,12 @@
  * inputs travel:
  *
  *   - Each frame, the local player's input (the stick and the seven buttons
- *     ReadControls produces, 11 bits) is taken for the frame RB_DELAY ahead
- *     and sent with every input the other side has not acknowledged.
+ *     ReadControls produces, 11 bits) is taken for the frame g_delay ahead
+ *     and sent with every input the other side has not acknowledged, put on
+ *     the wire at once (mpnet_flush), not at the next frame's poll.
+ *   - g_delay follows the round trip (adapt_delay): each side's delay is its
+ *     own -- the other only receives inputs by frame -- so it moves one frame
+ *     at a time, the inputs it skips filled, the one it overlaps dropped.
  *   - A frame whose remote input has not arrived uses the last one that did.
  *     When the real one arrives and differs, the state goes back to the
  *     snapshot taken before that frame and the frames since run again,
@@ -56,8 +60,10 @@ uint32_t rb_game_hash(void);            /* GameCode.c */
 void     rb_game_buttons(int p1, int p2);   /* GameCode.c */
 
 #define RB_VERSION      1
-#define RB_DELAY        2               /* frames, UMK3_RB_DELAY 0..6 */
-#define RB_WINDOW       8               /* frames ahead of the last input */
+#define RB_DELAY        2               /* frames at the start; UMK3_RB_DELAY 0..6 fixes it */
+#define RB_DELAY_MAX    6
+#define RB_DEPTH        3               /* the rollback adapt_delay aims at */
+#define RB_WINDOW       12              /* frames ahead of the last input */
 #define RB_SLOTS        (RB_WINDOW + 3) /* snapshots, the last for holds */
 #define RB_RING         64              /* inputs and hashes, by frame */
 #define RB_SEND_MAX     32              /* inputs in one packet */
@@ -68,7 +74,7 @@ void     rb_game_buttons(int p1, int p2);   /* GameCode.c */
 
 #define NONE            0xffffffffu
 
-static int g_on, g_started, g_me, g_delay = RB_DELAY;
+static int g_on, g_started, g_me, g_delay = RB_DELAY, g_delay_fixed;
 static int g_quiet, g_nodraw;
 static uint32_t g_frame;                /* the next frame to run */
 static uint16_t g_in[2][RB_RING];       /* inputs by player and frame */
@@ -83,6 +89,10 @@ static int      g_waiting;              /* the fight ended on a guess: hold */
 static uint16_t g_cur[2];               /* the frame being run */
 static int      g_linger;
 
+/* the round trip: when each local input was first sent, until acknowledged */
+static double   g_sent_ms[RB_RING];
+static double   g_rtt;                  /* ms, smoothed; 0 before a sample */
+
 /* hello: the other machine's buttons and its view of the fight's setup */
 static int      g_hello, g_their_buttons;
 static int32_t  g_setup[3], g_their_setup[3];
@@ -96,7 +106,7 @@ static uint32_t g_desyncs;
 
 /* numbers for the log */
 static uint32_t g_rollbacks, g_resims, g_deepest, g_holds;
-static double   g_save_ms, g_save_max;
+static double   g_save_ms, g_save_max, g_resim_max;
 static uint32_t g_saves;
 
 /* --------------------------------------------------------------- helpers */
@@ -179,6 +189,7 @@ static void send_inputs(void)
         b[21 + 2 * i] = (unsigned char)(v >> 8);
     }
     mpnet_send(RB_PKT_INPUT, b, (int)(20 + 2 * n), 0);
+    mpnet_flush();
 }
 
 static void send_hello(void)
@@ -196,14 +207,15 @@ static void send_hello(void)
 
 static void report(void)
 {
-    printf("rollback: frame %u -- %u rollbacks, %u frames run again, deepest %u; "
-           "%u holds; snapshot %.2f ms avg, %.2f max (%.1f MB); remote %d frames "
-           "behind; desyncs %u\n",
-           g_frame, g_rollbacks, g_resims, g_deepest, g_holds,
+    printf("rollback: frame %u -- %u rollbacks, %u frames run again, deepest %u "
+           "(longest %.1f ms); %u holds; snapshot %.2f ms avg, %.2f max (%.1f MB); "
+           "remote %d frames behind; ping %.0f ms, delay %d; desyncs %u\n",
+           g_frame, g_rollbacks, g_resims, g_deepest, g_resim_max, g_holds,
            g_saves ? g_save_ms / g_saves : 0.0, g_save_max,
-           st_rb_size() / 1048576.0, (int)g_frame - g_remote_frame, g_desyncs);
+           st_rb_size() / 1048576.0, (int)g_frame - g_remote_frame, g_rtt,
+           g_delay, g_desyncs);
     fflush(stdout);
-    g_save_ms = g_save_max = 0;
+    g_save_ms = g_save_max = g_resim_max = 0;
     g_saves = 0;
 }
 
@@ -259,6 +271,7 @@ static int run(void (*frame)(void), uint32_t f)
 static void roll_back(void (*frame)(void))
 {
     uint32_t f = g_rollback, depth = g_frame - g_rollback;
+    double t0 = now_ms();
 
     g_rollback = NONE;
     if (depth >= RB_SLOTS - 1 || st_rb_load(slot_of(f)) != 0) {
@@ -286,6 +299,39 @@ static void roll_back(void (*frame)(void))
         }
     }
     g_quiet = g_nodraw = 0;
+    if (now_ms() - t0 > g_resim_max)
+        g_resim_max = now_ms() - t0;
+}
+
+/* Once a second, a frame of delay toward the one that keeps rollbacks near
+ * RB_DEPTH frames: the other side's input for a frame comes half the round
+ * trip after it was taken, g_delay frames before that frame. Down only once
+ * the round trip is half a frame clear of the step, so it does not flap. */
+static void adapt_delay(void)
+{
+    double half = g_rtt / 2.0 / (1000.0 / 60.0);
+    int up = (int)(half + 0.5) - RB_DEPTH, down = (int)(half + 1.0) - RB_DEPTH;
+
+    if (g_delay_fixed || g_rtt <= 0 || g_frame % 60 != 0)
+        return;
+    if (up > g_delay && g_delay < RB_DELAY_MAX)
+        g_delay++;
+    else if (down < g_delay && g_delay > RB_DELAY)
+        g_delay--;
+}
+
+/* This frame's input, for g_delay frames on. After the delay grew, the frames
+ * between take it too; after it shrank, the frame already has its input and
+ * this one is dropped (a press lasts longer than a frame). */
+static void take_input(void)
+{
+    uint32_t want = g_frame + (uint32_t)g_delay;
+    uint16_t v = rb_game_local_input();
+
+    for (; g_local_upto <= want; g_local_upto++) {
+        g_in[g_me][g_local_upto % RB_RING] = v;
+        g_sent_ms[g_local_upto % RB_RING] = now_ms();
+    }
 }
 
 /* Draw the next frame without keeping it. */
@@ -359,9 +405,8 @@ void rb_frame(void (*frame)(void))
         return;
     }
 
-    /* this frame's input, for RB_DELAY frames on */
-    g_in[g_me][(g_frame + g_delay) % RB_RING] = rb_game_local_input();
-    g_local_upto = g_frame + g_delay + 1;
+    adapt_delay();
+    take_input();
     send_inputs();
 
     save_slot(slot_of(g_frame));
@@ -400,8 +445,13 @@ static void got_inputs(const unsigned char *b, long len)
         g_remote_frame = (int32_t)get32(b + 8);
         g_remote_adv = (int32_t)get32(b + 12);
     }
-    if (get32(b + 16) > g_acked)
+    if (get32(b + 16) > g_acked && get32(b + 16) <= g_local_upto) {
+        double rtt = now_ms() - g_sent_ms[(get32(b + 16) - 1) % RB_RING];
+
         g_acked = get32(b + 16);
+        if (rtt > 0 && rtt < 2000)
+            g_rtt = g_rtt > 0 ? (g_rtt * 7 + rtt) / 8 : rtt;
+    }
 
     for (i = 0; i < n; i++) {
         uint16_t v = (uint16_t)(b[20 + 2 * i] | b[21 + 2 * i] << 8);
@@ -456,9 +506,9 @@ int rb_stats(char *out, int n)
 {
     if (!g_on)
         return 0;
-    snprintf(out, (size_t)n, "ROLLBACK  FRAME %u  DELAY %d  REMOTE %+d  "
+    snprintf(out, (size_t)n, "ROLLBACK  FRAME %u  PING %.0f  DELAY %d  REMOTE %+d  "
              "ROLLBACKS %u  DEEPEST %u  HOLDS %u  DESYNCS %u",
-             g_frame, g_delay, (int)g_frame - g_remote_frame, g_rollbacks,
+             g_frame, g_rtt, g_delay, (int)g_frame - g_remote_frame, g_rollbacks,
              g_deepest, g_holds, g_desyncs);
     return 1;
 }
@@ -505,7 +555,8 @@ void rb_online_begin(int c1, int c2, int level)
     g_started = 0;
     g_me = isParent() ? 0 : 1;
     g_delay = RB_DELAY;
-    if (e && *e >= '0' && *e <= '6')
+    g_delay_fixed = e && *e >= '0' && *e <= '6';
+    if (g_delay_fixed)
         g_delay = *e - '0';
     g_frame = 0;
     memset(g_in, 0, sizeof g_in);
@@ -513,6 +564,8 @@ void rb_online_begin(int c1, int c2, int level)
     memset(g_hash_frame, 0xff, sizeof g_hash_frame);
     g_local_upto = g_remote_upto = (uint32_t)g_delay;   /* the first are 0 */
     g_acked = 0;
+    g_rtt = 0;
+    memset(g_sent_ms, 0, sizeof g_sent_ms);
     g_rollback = NONE;
     g_remote_frame = 0;
     g_remote_adv = 0;

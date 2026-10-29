@@ -47,5 +47,8 @@ const struct mpnet_peer *mpnet_peer(void);   /* NULL before a connection */
 /* Called once a frame by game_main.c: reads the socket, hands each game
  * packet to processPacket, resends what was not acknowledged. */
 void mpnet_poll(void);
+/* Puts what was just sent on the wire now: EOS only sends in its tick, which
+ * mpnet_poll does at the start of the next frame (rollback.c's inputs). */
+void mpnet_flush(void);
 
 #endif
