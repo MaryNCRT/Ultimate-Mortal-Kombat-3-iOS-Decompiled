@@ -1020,6 +1020,14 @@ UmkSubsurf *umk_subsurf_new(int levels, float weld_dist,
                             int ntris, const unsigned short *tri,
                             const float *corner_uv)
 {
+	return umk_subsurf_new_keyed(levels, weld_dist, nverts, pos, ntris, tri, corner_uv, NULL);
+}
+
+UmkSubsurf *umk_subsurf_new_keyed(int levels, float weld_dist,
+                                  int nverts, const float *pos,
+                                  int ntris, const unsigned short *tri,
+                                  const float *corner_uv, const unsigned *weld_key)
+{
 	UmkSubsurf *s;
 	int *dup, i, j, n;
 	float (*face_uv)[2];
@@ -1047,6 +1055,25 @@ UmkSubsurf *umk_subsurf_new(int levels, float weld_dist,
 		kdtree_balance_tree(tree);
 		s->merged = kdtree_calc_duplicates_fast(tree, weld_dist, dup);
 		kdtree_free(tree);
+	}
+	if (weld_key && s->merged) {
+		/* port: a vertex of another key leaves its target's group, and a
+		 * target left alone is out of the weld's context again */
+		int *members = MEM_callocN(sizeof(int) * (size_t)nverts, "members");
+		s->merged = 0;
+		for (i = 0; i < nverts; i++)
+			if (dup[i] >= 0 && dup[i] != i) {
+				if (weld_key[i] != weld_key[dup[i]])
+					dup[i] = -1;
+				else {
+					members[dup[i]]++;
+					s->merged++;
+				}
+			}
+		for (i = 0; i < nverts; i++)
+			if (dup[i] == i && !members[i])
+				dup[i] = -1;
+		MEM_freeN(members);
 	}
 
 	/* surviving vertices keep their order; a merged one joins its target */

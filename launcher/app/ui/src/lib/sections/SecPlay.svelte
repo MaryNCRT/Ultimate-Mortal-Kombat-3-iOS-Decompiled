@@ -1,6 +1,6 @@
 <script>
     /* PLAY: the game's language, which build when both are compiled, debug
-     * mode, the intros, and the button. */
+     * mode, the intros, compiling the shaders first, and the button. */
     import { app, tx, ARCH, LANGS, save, refreshRoot, doPlay } from '#lib/app.svelte.js';
     import { isWin } from '#lib/platform.js';
     import { hoverBlip } from '#lib/sound.js';
@@ -36,5 +36,7 @@
         onchange={e => save({ debug: e.currentTarget.checked })}><span>{tx('dbg')}</span></label>
     <label class="chk"><input type="checkbox" checked={!!app.cfg.skipIntro}
         onchange={e => save({ skipIntro: e.currentTarget.checked })}><span>{tx('skip')}</span></label>
+    <label class="chk"><input type="checkbox" checked={!!app.cfg.compileShaders}
+        onchange={e => save({ compileShaders: e.currentTarget.checked })}><span>{tx('shaders')}</span></label>
     <button class="btn hot big" disabled={!app.ready || app.build.on} onpointerenter={hoverBlip} onclick={doPlay}>{tx('play')}</button>
 </Page>

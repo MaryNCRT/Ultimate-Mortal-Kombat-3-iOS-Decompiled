@@ -35,6 +35,20 @@ const char *rgl_label(int renderer);       /* "OpenGL", "Vulkan", "Direct3D 12" 
  * up; 0 and rgl_renderer = RGL_OPENGL when it is not. */
 int  rgl_open(void *window, int width, int height);
 void rgl_present(void);                    /* the frame to the screen */
+/* Refreshes each present stays on the screen: 1, or 2/3/4 on a 120/180/240 Hz
+ * screen, so every 60 Hz frame shows for the same time (game_main.c). */
+extern int rgl_swap_interval;
+
+/* COMPILE SHADERS (the launcher's PLAY): every pipeline a backend has made is
+ * a line in a file in the game's folder, made again when the backend opens --
+ * from the driver's cache on disk, so it is quick -- and never compiled in
+ * the middle of a fight. `seed` is a backend's own list for a first run,
+ * lines of the same form. rgl_dir is the folder, with its slash at the end. */
+extern char rgl_dir[1024];
+void rgl_path(char *out, int n, const char *name);
+void rgl_pipes_note(const char *name, const void *key, int keysize, int a, int b, int c);
+void rgl_pipes_each(const char *name, const char *seed, int keysize,
+                    void (*fn)(const void *key, int a, int b, int c));
 void rgl_close(void);
 void *rgl_proc(const char *name);          /* the FBO entry points */
 

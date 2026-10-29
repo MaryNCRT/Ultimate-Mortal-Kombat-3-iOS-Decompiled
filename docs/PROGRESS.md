@@ -16,6 +16,71 @@
 
 ---
 
+## After 0.1.12: Vulkan / Direct3D 12 stutters, compiled shaders, Sub-Zero's strap (2026-10-29, not released)
+
+Not yet played by Mary.
+
+**The stutters on Vulkan and Direct3D 12 (Mary's 180 Hz screen).** Each 60 Hz
+tick was presented with a swap interval of one refresh (5.6 ms at 180 Hz).
+The frame's work (10-12 ms) varies by a few ms, and a frame that ended just
+past a refresh was shown one refresh later. The result was 22 ms, then 11 ms,
+several times a second. That is what was measured on 0.1.12: 150-330 of
+~2,400 frames late. Changing vsync made no difference, because the late
+refresh came from where the frame ended, not from vsync.
+
+Now, on a 120/180/240 Hz screen, each frame stays up 2/3/4 refreshes
+(`rgl_swap_interval`, set in `game_main.c`'s `pace_frame`):
+- Direct3D 12 presents with that sync interval.
+- Vulkan's FIFO has no interval, so `rgl_vk.c` keeps a copy of the frame and
+  presents it again once for each extra refresh.
+- The loop is paced as on a 60 Hz screen.
+
+Measured on Direct3D 12 and Vulkan at 180 Hz:
+- Swaps hold at 16.66 ms with 0 late frames a second through a fight.
+- A few frames are still late when the frame's work goes past 16.7 ms.
+  `UMK3_LOG_PACE=1` now prints the late frames a second.
+
+OpenGL is unchanged.
+
+**Where a fight's frame time goes (measured, D3D12, SMOOTH MODELS 2).**
+- `rgl_ff` (transform, index gather, hand-off): ~3 ms.
+- Catmull-Clark of the two fighters: ~7 ms.
+- With 1 / 4 / 8 threads, the intro had 64 / 38 / 23 frames over 13 ms, with
+  smoothing averaging 12.4 / 9.9 / 9.7 ms. The pool stays at 4.
+- Open: a fight intro still has frames of 15-19 ms of CPU work. The next
+  step is to make the smoothing cheaper.
+
+**COMPILE SHADERS (Khronos' pipeline_cache sample, Microsoft's
+D3D12PipelineStateCache).**
+- Every pipeline a backend makes is a line in `umk3-pipelines-vk.txt` /
+  `umk3-pipelines-d3d12.txt` beside the game, and the driver's compiled
+  pipelines are kept in `umk3-pipelines-vk.bin` (`VkPipelineCache`) /
+  `umk3-pipelines-d3d12.bin` (`ID3D12PipelineLibrary`, names carrying the
+  shaders' hash).
+- When the backend opens, it makes them all again, from its own seed list
+  (`render/rgl_pipes_*.h`: menus and two fights, 18 / 17 pipelines) and the
+  file. This takes 1-7 ms, and no pipeline is compiled in the middle of a
+  fight.
+- `umk3-game --compile-shaders` does only that and exits.
+- The launcher's PLAY has COMPILAR SHADERS ANTES DE JUGAR
+  (`compile_shaders=1`), which runs it before the game.
+
+**Sub-Zero's strap stretched to his fist (Mary, his intro, player two, with
+SMOOTH MODELS).** The weld was measured on the first pose a skin is drawn in.
+In Sub-Zero's intro his hand touches the strap there, and the two were welded
+for good. `DrawSkinnedMesh2` (armv7 0x608d8) unwelds the skin by UV: each
+record vertex is a copy of the skin vertex its corner names (SKININFO +0x18).
+The weld now joins two vertices only when, besides being close, their skin
+vertices have the same four bone bytes and weights (+0x20, +0x24):
+`umk_subsurf_new_keyed`. For his mesh, 3 of 670 welds were refused, and the
+strap stays on his back (captures at ticks 105, 108 and 159). With SMOOTH
+MODELS off the strap was always right.
+
+Checks:
+- rgl_test: 0 failed on OpenGL, Vulkan and Direct3D 12.
+- Linux compile: 84/84.
+- Launcher tests: pass.
+
 ## Release 0.1.12 beta (2026-10-29): fatality lag, several cores, no vertex-buffer ceiling, shadows, flawless
 
 **Scorpion's fatality lag (Mary: lag in that fatality only).** Measured
