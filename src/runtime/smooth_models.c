@@ -274,7 +274,7 @@ void port_smooth_cover_mesh(const void *mesh_p, const float *key, int bone, cons
     struct cover *c = NULL;
     int i;
 
-    if (!g_cover_owner || !bones || bone < 0 || bone >= 150 || !mesh || mesh->numVerts <= 0
+    if (!g_cover_owner || port_skin_custom(g_cover_owner) || !bones || bone < 0 || bone >= 150 || !mesh || mesh->numVerts <= 0
         || mesh->boundsRadius == 0.0f)
         return;
     for (i = 0; i < COVER_MAX && !c; i++)
@@ -779,6 +779,8 @@ int port_smooth_draw(const void *skin, const void *rec, long second,
 
     if (skin == NULL || rec == NULL || second == 2)
         return 0;                       /* the shadow is not smoothed */
+    if (port_skin_custom(skin))         /* a mod's model: drawn as made */
+        return 0;
     if (!second)
         cover_repose(skin);             /* the hat where it is this frame */
     if (!port_smooth_models) {

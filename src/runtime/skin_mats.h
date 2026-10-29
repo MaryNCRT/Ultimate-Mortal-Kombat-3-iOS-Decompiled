@@ -8,6 +8,8 @@
 /* LIME_LoadSkin: the skin file just loaded (its .mats beside it, if a mod
  * has one) */
 void port_skin_mats_loaded(const void *skin, const char *filename);
+/* a skin (either block) a mod brought: SMOOTH MODELS leaves it alone */
+int  port_skin_custom(const void *skin);
 /* LIME_FreeSkin */
 void port_skin_mats_forget(const void *skin);
 /* does this skin block draw in parts */

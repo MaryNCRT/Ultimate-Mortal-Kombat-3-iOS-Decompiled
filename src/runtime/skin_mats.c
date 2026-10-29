@@ -105,6 +105,34 @@ static void add(const void *skin, const Part *pt)
     m->p[m->n++] = *pt;
 }
 
+/* A skin a mod brings (REPLACE MODEL): SMOOTH MODELS and what it does to
+ * the plain skin (the tuck under a hat) leave it alone. Such a model is
+ * already dense; subdividing it again cost frames for nothing (Mary). */
+#define CUSTOM_MAX 16
+static const void *g_custom[CUSTOM_MAX];
+
+static void custom_set(const void *skin, int on)
+{
+    int i;
+    for (i = 0; i < CUSTOM_MAX; i++)
+        if (g_custom[i] == (on ? NULL : skin)) {
+            g_custom[i] = on ? skin : NULL;
+            if (on)
+                return;
+        }
+}
+
+int port_skin_custom(const void *skin)
+{
+    int i;
+    if (!skin)
+        return 0;
+    for (i = 0; i < CUSTOM_MAX; i++)
+        if (g_custom[i] == skin)
+            return 1;
+    return 0;
+}
+
 void port_skin_mats_loaded(const void *skin, const char *filename)
 {
     char rel[160], path[1024], line[256];
@@ -114,6 +142,13 @@ void port_skin_mats_loaded(const void *skin, const char *filename)
 
     if (!skin || !filename)
         return;
+    if (mods_find(filename, path, sizeof path)) {
+        custom_set(skin, 1);
+        if (*(void *const *)skin)
+            custom_set(*(void *const *)skin, 1);
+        printf("skin_mats: %s is a mod's model: no SMOOTH MODELS on it\n",
+               filename);
+    }
     snprintf(rel, sizeof rel, "%s.mats", filename);
     if (!mods_find(rel, path, sizeof path) || !(f = fopen(path, "r")))
         return;
@@ -152,6 +187,9 @@ void port_skin_mats_forget(const void *skin)
     Mats *m;
     if (!skin)
         return;
+    custom_set(skin, 0);
+    if (*(void *const *)skin)
+        custom_set(*(void *const *)skin, 0);
     if ((m = find(skin)) != NULL)
         drop(m);
     if ((m = find(*(void *const *)skin)) != NULL)

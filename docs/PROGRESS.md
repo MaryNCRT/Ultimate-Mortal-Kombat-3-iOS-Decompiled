@@ -64,6 +64,19 @@ yet**. Asked by Mary after trying the first round:
     `lime.h`), and a lighting file that does not fit the skin is replaced by
     its average light (`Players.c port_fit_lighting`, logged `flat light`).
     The importer refuses a block over 65,535 vertices once unwelded.
+  - **Frames lost with a custom model.** A REPLACE MODEL skin is drawn a
+    material at a time (`skin_mats.c`), each part a run of indices into the
+    whole model's vertices, and the Direct3D 12 / Vulkan path
+    (`render/rgl_ff.c tris_indexed`) transformed every vertex 0..max for
+    each part -- or, when a part named few vertices of a big array, fell
+    back to one transform per index and a malloc. Now only the vertices the
+    indices name are transformed, once a draw (a stamp a vertex). And a skin
+    a mod brings (`mods_find` on the skin file, `port_skin_custom`) is left
+    alone by SMOOTH MODELS and what it does to the plain skin (the tuck
+    under a hat, the cover pieces): such a model is already dense, as Mary
+    asked; the log says `is a mod's model: no SMOOTH MODELS on it`. SMOOTH
+    ANIMATIONS still apply (bones only, no cost in the vertices). Not
+    measured here.
   - Every material is its own texture by default again (the materials as
     the model has them); REPLACES a game texture only when chosen.
   - **SCALE** in the importer: the model's size about its pivot (the floor

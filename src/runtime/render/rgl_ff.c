@@ -1784,34 +1784,67 @@ static int elem_index(GLenum t, const void *idx, int i)
 /* Indexed triangles: each vertex the indices reach is transformed once and
  * then gathered by index, instead of once per index -- a subdivided fighter
  * (SMOOTH MODELS) is ~180,000 indices over ~32,000 vertices. The same
- * vertices come out, so the picture is the same. */
+ * vertices come out, so the picture is the same.
+ *
+ * Only the vertices these indices name are transformed, not 0..max: a
+ * REPLACE MODEL skin is drawn a material at a time (skin_mats.c), each part
+ * a run of indices into the whole model's vertices, and transforming all of
+ * them for every part cost the model's vertex count times its parts, each
+ * frame (Mary: custom models dropped frames). A stamp a vertex says which
+ * are done this draw. */
 static int tris_indexed(int count, GLenum t, const void *idx)
 {
     static rgl_vtx *cache;
-    static int ccap;
-    int i, max = 0, n = 0;
+    static unsigned *stamp;
+    static int *used;
+    static int ccap, ucap;
+    static unsigned gen;
+    int i, max = 0, n = 0, nu = 0;
 
     for (i = 0; i < count; i++) {
         int k = elem_index(t, idx, i);
         if (k > max)
             max = k;
     }
-    if (max + 1 > count)                /* a few indices into a big array */
-        return 0;
     if (max + 1 > ccap) {
-        rgl_vtx *c = (rgl_vtx *)realloc(cache, (size_t)(max + 1) * 2 * sizeof *cache);
+        int cap = (max + 1) * 2;
+        rgl_vtx *c = (rgl_vtx *)realloc(cache, (size_t)cap * sizeof *cache);
+        unsigned *st;
         if (!c)
             return 0;
         cache = c;
-        ccap = (max + 1) * 2;
+        st = (unsigned *)realloc(stamp, (size_t)cap * sizeof *stamp);
+        if (!st)
+            return 0;
+        memset(st + ccap, 0, (size_t)(cap - ccap) * sizeof *st);
+        stamp = st;
+        ccap = cap;
+    }
+    if (count > ucap) {
+        int *u = (int *)realloc(used, (size_t)count * 2 * sizeof *used);
+        if (!u)
+            return 0;
+        used = u;
+        ucap = count * 2;
+    }
+    if (++gen == 0) {                   /* wrapped: every stamp is stale */
+        memset(stamp, 0, (size_t)ccap * sizeof *stamp);
+        gen = 1;
+    }
+    for (i = 0; i < count; i++) {
+        int k = elem_index(t, idx, i);
+        if (stamp[k] != gen) {
+            stamp[k] = gen;
+            used[nu++] = k;
+        }
     }
     update_mvp();
     shadow_prep(1);
     /* every core on a big mesh (thirdparty/blender/omp_lite.c): each vertex
      * and each index is its own work */
-#pragma omp parallel for if (max > 4096)
-    for (i = 0; i <= max; i++)
-        from_arrays(&cache[i], i);
+#pragma omp parallel for if (nu > 4096)
+    for (i = 0; i < nu; i++)
+        from_arrays(&cache[used[i]], used[i]);
     need_out(count + 16);
     n = count / 3 * 3;
 #pragma omp parallel for if (n > 12288)
