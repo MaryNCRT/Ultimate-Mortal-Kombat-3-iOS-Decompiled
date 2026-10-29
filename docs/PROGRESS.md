@@ -73,11 +73,18 @@ back over the end. So the logic does not ask twice; what is heard twice
 is still unknown. Needs Mary to say which sound repeats and where
 (fight or replay, which fatality).
 
-**Pending:** STAGE SELECT after the fighters in VS, online and practice
-(a window like the reference Mary sent: the stage's picture, arrows, a
-list with pictures, `FE_SELECTFIGHTER` as the background). Not started:
-the stage pictures Mary mentions are not in `res/Textures` under any
-name found (`*_COMPLETEMAP.PNG` are light maps).
+- **STAGE SELECT** after the fighters in VS (GameMode 6), training (2)
+  and online (1, the host; the guest takes the host's level and now waits
+  up to a minute for it). `Task_GameInit` step 0 waits on
+  `stage_menu_gate` (`debug_menu.c`), and the window takes the frame as
+  the settings menu does, over `FE_SELECTFIGHTER`: the stage's picture
+  large with arrows, or a list of all of them with their pictures (LIST,
+  TAB, the pad's Y); CANCEL keeps the stage the game would have taken,
+  SELECT (Enter, A, START) picks. The pictures are the game's `CS_BG` ..
+  `CS_BG4` (960x640 on a 1024 sheet): Subway, Bell Tower, Soul Chamber
+  (a guess from the picture), The Graveyard, Temple. The other stages show
+  their name only. A debug fight and a replay skip it.
+- **Online select: START presses PLAY**, as in VS and Arcade.
 
 ## After 0.1.13: an update stopped by a leftover update\new (2026-10-29, not released)
 
