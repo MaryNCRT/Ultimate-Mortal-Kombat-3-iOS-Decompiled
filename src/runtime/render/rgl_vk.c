@@ -187,6 +187,8 @@ static VkBuffer g_vbuf;
 static VkDeviceMemory g_vmem;
 static unsigned char *g_vmap;
 static VkDeviceSize g_vsize, g_voff;
+static struct { VkBuffer b; VkDeviceMemory m; } g_retired[16];   /* outgrown this frame, still read */
+static int g_nretired;
 
 static vk_tex *g_tex;
 static int g_ntex;
@@ -398,6 +400,10 @@ static void flush(int signal_done)
     vkResetFences(g_dev, 1, &g_fence);
     vk_ok(vkQueueSubmit(g_queue, 1, &si, g_fence), "vkQueueSubmit");
     vkWaitForFences(g_dev, 1, &g_fence, VK_TRUE, ~0ull);
+    while (g_nretired > 0) {            /* the buffers the frame outgrew */
+        g_nretired--;
+        free_buffer(g_retired[g_nretired].b, g_retired[g_nretired].m);
+    }
     vkResetDescriptorPool(g_dev, g_dpool, 0);
     g_dpool_used = 0;
     g_voff = 0;
@@ -996,6 +1002,10 @@ static void vk_close(void)
     for (i = 0; i < g_npass; i++)
         vkDestroyRenderPass(g_dev, g_pass[i].rp, NULL);
     vkDestroySwapchainKHR(g_dev, g_swap, NULL);
+    while (g_nretired > 0) {
+        g_nretired--;
+        free_buffer(g_retired[g_nretired].b, g_retired[g_nretired].m);
+    }
     free_buffer(g_vbuf, g_vmem);
     vkDestroyShaderModule(g_dev, g_vs, NULL);
     vkDestroyShaderModule(g_dev, g_fs, NULL);
@@ -1578,18 +1588,34 @@ static void vk_draw(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_sam
     if (n <= 0)
         return;
     if (g_voff + bytes > g_vsize) {
-        /* the frame outgrew the buffer: a bigger one, so the frames after
-         * draw without waiting for the GPU partway (REAL-TIME SHADOWS and
-         * SMOOTH MODELS draw a frame's fighters twice and thicker) */
-        VkDeviceSize want = g_voff + bytes;
-        if (g_cmd_on)
-            flush(0);
-        free_buffer(g_vbuf, g_vmem);
-        while (g_vsize < want && g_vsize < (256u << 20))
-            g_vsize *= 2;
-        while (g_vsize < bytes)
-            g_vsize *= 2;
-        make_buffer(g_vsize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &g_vbuf, &g_vmem, (void **)&g_vmap);
+        /* the frame outgrew the buffer: a bigger one, as big as the frame
+         * needs, so the frames after fit (REAL-TIME SHADOWS and SMOOTH
+         * MODELS draw a frame's fighters twice and thicker). The commands
+         * already recorded keep reading the old one, freed at the next
+         * flush, so the GPU is not waited for partway through the frame.
+         * There was a 256 MB ceiling, past which every overflow waited and
+         * made the buffer again. */
+        VkDeviceSize want = g_voff + bytes, size = g_vsize;
+        VkBuffer nb = VK_NULL_HANDLE;
+        VkDeviceMemory nm = VK_NULL_HANDLE;
+        void *nmap = NULL;
+        while (size < want)
+            size *= 2;
+        if (g_nretired < (int)(sizeof g_retired / sizeof *g_retired)
+            && make_buffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &nb, &nm, &nmap)) {
+            g_retired[g_nretired].b = g_vbuf;
+            g_retired[g_nretired++].m = g_vmem;
+            g_vbuf = nb;
+            g_vmem = nm;
+            g_vmap = nmap;
+            g_vsize = size;
+            g_voff = 0;
+        } else {                        /* no memory for it: wait and reuse */
+            if (g_cmd_on)
+                flush(0);
+            if (bytes > g_vsize)
+                return;
+        }
     }
     if (!begin_pass())
         return;

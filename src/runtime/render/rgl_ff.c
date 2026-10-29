@@ -1807,14 +1807,16 @@ static int tris_indexed(int count, GLenum t, const void *idx)
     }
     update_mvp();
     shadow_prep(1);
+    /* every core on a big mesh (thirdparty/blender/omp_lite.c): each vertex
+     * and each index is its own work */
+#pragma omp parallel for if (max > 4096)
     for (i = 0; i <= max; i++)
         from_arrays(&cache[i], i);
     need_out(count + 16);
-    for (i = 0; i + 2 < count; i += 3) {
-        g_out[n++] = cache[elem_index(t, idx, i)];
-        g_out[n++] = cache[elem_index(t, idx, i + 1)];
-        g_out[n++] = cache[elem_index(t, idx, i + 2)];
-    }
+    n = count / 3 * 3;
+#pragma omp parallel for if (n > 12288)
+    for (i = 0; i < n; i++)
+        g_out[i] = cache[elem_index(t, idx, i)];
     submit(RGL_TRIS, g_out, n);
     return 1;
 }

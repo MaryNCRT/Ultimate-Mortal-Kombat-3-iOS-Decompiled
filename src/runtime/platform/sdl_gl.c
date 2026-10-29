@@ -489,15 +489,62 @@ void plat_monitor_name(int i, char *out, int n)
 }
 void plat_monitor_list(void) { printf("1\t1\n"); }
 
+/* The keys in umk3.ini, the launcher's CONTROLS (the browser's keyCode) and
+ * the settings menu's defaults are Windows virtual-key codes on every system.
+ * Read here as SDL scancodes, 'A' (65) was F8 and every key the launcher
+ * bound on Linux / Steam Deck landed on another one. So this backend takes
+ * and gives virtual-key codes and keeps the scancode inside. */
+static int vk_to_scancode(int vk)
+{
+    static const unsigned char other[][2] = {
+        { 0x0d, 40 }, { 0x1b, 41 }, { 0x08, 42 }, { 0x09, 43 }, { 0x20, 44 },
+        { 0x25, 80 }, { 0x26, 82 }, { 0x27, 79 }, { 0x28, 81 },
+        { 0x2d, 73 }, { 0x2e, 76 }, { 0x24, 74 }, { 0x23, 77 },
+        { 0x21, 75 }, { 0x22, 78 },
+        { 0x6a, 85 }, { 0x6b, 87 }, { 0x6d, 86 }, { 0x6e, 99 }, { 0x6f, 84 },
+        { 0x10, 225 }, { 0x11, 224 }, { 0x12, 226 },
+        { 0xa0, 225 }, { 0xa1, 229 }, { 0xa2, 224 }, { 0xa3, 228 },
+        { 0xa4, 226 }, { 0xa5, 230 },
+        { 0xba, 51 }, { 0xbb, 46 }, { 0xbc, 54 }, { 0xbd, 45 }, { 0xbe, 55 },
+        { 0xbf, 56 }, { 0xc0, 53 }, { 0xdb, 47 }, { 0xdc, 49 }, { 0xdd, 48 },
+        { 0xde, 52 },
+        { 0x14, 57 }, { 0x13, 72 }, { 0x91, 71 }, { 0x90, 83 }, { 0x2c, 70 },
+    };
+    size_t i;
+
+    if (vk >= 'A' && vk <= 'Z') return 4 + vk - 'A';
+    if (vk >= '1' && vk <= '9') return 30 + vk - '1';
+    if (vk == '0') return 39;
+    if (vk >= 0x70 && vk <= 0x7b) return 58 + vk - 0x70;     /* F1..F12 */
+    if (vk >= 0x61 && vk <= 0x69) return 89 + vk - 0x61;     /* keypad 1..9 */
+    if (vk == 0x60) return 98;                               /* keypad 0 */
+    for (i = 0; i < sizeof other / sizeof other[0]; i++)
+        if (other[i][0] == vk)
+            return other[i][1];
+    return 0;
+}
+
+static int scancode_to_vk(int sc)
+{
+    int vk;
+
+    for (vk = 1; vk < 256; vk++)
+        if (vk_to_scancode(vk) == sc)
+            return vk;
+    return 0;
+}
+
 void plat_bind_key(int code, int key)
 {
-    if (code >= 0 && code < PK_COUNT && key > 0 && key < SDL_NUM_SCANCODES)
-        g_scancode[code] = (SDL_Scancode)key;
+    int sc = vk_to_scancode(key);
+
+    if (code >= 0 && code < PK_COUNT && sc > 0)
+        g_scancode[code] = (SDL_Scancode)sc;
 }
 
 int plat_key_bound(int code)
 {
-    return code >= 0 && code < PK_COUNT ? (int)g_scancode[code] : 0;
+    return code >= 0 && code < PK_COUNT ? scancode_to_vk((int)g_scancode[code]) : 0;
 }
 
 int plat_key_backspace(void)
@@ -511,8 +558,8 @@ int plat_key_any(void)
     const Uint8 *keys = SDL_GetKeyboardState(&count);
 
     for (i = 1; i < count; i++)
-        if (keys[i])
-            return i;
+        if (keys[i] && scancode_to_vk(i))
+            return scancode_to_vk(i);   /* as a virtual-key code */
     return 0;
 }
 

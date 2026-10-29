@@ -71,7 +71,9 @@ typedef enum {
 
 /***/
 
-#define CCG_OMP_LIMIT	1000000
+/* port: 1000000 in Blender; the game's meshes (a fighter's ~2,500 faces)
+ * stayed under it and ran on one core. With omp_lite.c, every core. */
+#define CCG_OMP_LIMIT	20000
 
 /***/
 

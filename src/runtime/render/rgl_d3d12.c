@@ -94,6 +94,8 @@ static int g_cur;                       /* the current target */
 static int g_bound_target = -1;
 
 static ID3D12Resource *g_vbuf;
+static ID3D12Resource *g_retired[16];   /* outgrown this frame, still read */
+static int g_nretired;
 static unsigned char *g_vmap;
 static UINT64 g_vsize, g_voff;
 
@@ -274,6 +276,8 @@ static void flush(void)
     ID3D12CommandQueue_ExecuteCommandLists(g_queue, 1, &l);
     g_list_on = 0;
     wait_gpu();
+    while (g_nretired > 0)              /* the buffers the frame outgrew */
+        ID3D12Resource_Release(g_retired[--g_nretired]);
     g_srv_next = 0;
     g_voff = 0;
     g_serial++;
@@ -604,6 +608,8 @@ static void dx_close(void)
     free(g_ubufs);
     g_ubufs = NULL;
     g_cubufs = 0;
+    while (g_nretired > 0)
+        ID3D12Resource_Release(g_retired[--g_nretired]);
     if (g_vbuf) ID3D12Resource_Release(g_vbuf);
     if (g_root) ID3D12RootSignature_Release(g_root);
     if (g_list) ID3D12GraphicsCommandList_Release(g_list);
@@ -1049,18 +1055,35 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     int t = g_cur, samples, depth, ss;
 
     if (g_voff + bytes > g_vsize) {
-        /* the frame outgrew the buffer: a bigger one, so the frames after
-         * draw without waiting for the GPU partway (REAL-TIME SHADOWS and
-         * SMOOTH MODELS draw a frame's fighters twice and thicker) */
+        /* the frame outgrew the buffer: a bigger one, as big as the frame
+         * needs, so the frames after fit (REAL-TIME SHADOWS and SMOOTH
+         * MODELS draw a frame's fighters twice and thicker). The draws
+         * already recorded keep reading the old one, released at the next
+         * flush, so the GPU is not waited for partway through the frame.
+         * There was a 256 MB ceiling: past it every frame waited for the
+         * GPU and made a new 256 MB buffer three or four times (Scorpion's
+         * fatality, ~900 ms frames). */
         UINT64 want = g_voff + bytes;
-        flush();
-        ID3D12Resource_Release(g_vbuf);
-        while (g_vsize < want && g_vsize < (256u << 20))
-            g_vsize *= 2;
-        while (g_vsize < bytes)
-            g_vsize *= 2;
-        g_vbuf = buffer(g_vsize, D3D12_HEAP_TYPE_UPLOAD);
-        ID3D12Resource_Map(g_vbuf, 0, NULL, (void **)&g_vmap);
+        ID3D12Resource *nb;
+        unsigned char *nmap = NULL;
+        UINT64 size = g_vsize;
+        while (size < want)
+            size *= 2;
+        nb = buffer(size, D3D12_HEAP_TYPE_UPLOAD);
+        if (nb && SUCCEEDED(ID3D12Resource_Map(nb, 0, NULL, (void **)&nmap))
+            && g_nretired < (int)(sizeof g_retired / sizeof *g_retired)) {
+            g_retired[g_nretired++] = g_vbuf;
+            g_vbuf = nb;
+            g_vmap = nmap;
+            g_vsize = size;
+            g_voff = 0;
+        } else {                        /* no memory for it: wait and reuse */
+            if (nb)
+                ID3D12Resource_Release(nb);
+            flush();
+            if (bytes > g_vsize)
+                return;
+        }
     }
     if (g_srv_next + 2 > SRV_RING && g_list_on)
         flush();

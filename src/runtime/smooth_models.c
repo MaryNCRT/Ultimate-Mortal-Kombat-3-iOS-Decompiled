@@ -36,6 +36,8 @@
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#else
+#include <pthread.h>
 #endif
 
 int port_smooth_models;                 /* 0 off, else the level */
@@ -55,9 +57,17 @@ int  rb_nodraw(void);
 int  rgl_shadow_active(void);           /* render/rgl.h, REAL-TIME SHADOWS */
 void rgl_shadow_proxy(int mode);
 extern long limeRenderedPolyCount;
+static long g_frame_tris;               /* smoothed triangles this frame */
+
+void port_smooth_frame(void)
+{
+    g_frame_tris = 0;
+}
 extern void (*lime_port_skin_freed)(const void *skin);   /* RenderSkinned.c */
 
-#define SMOOTH_CACHE 8
+#define SMOOTH_CACHE 32
+#define SMOOTH_POSES 8                  /* subdivided poses kept a mesh */
+#define SMOOTH_FRAME_TRIS 250000        /* a frame's smoothed triangles: a fighter at level 2 is ~60,000, so the two fighters and a third body; past it, copies are drawn as the model is */
 
 extern limeVECTOR3 *RenderVerts;        /* int16 triples, as drawn */
 
@@ -99,6 +109,12 @@ typedef struct {
      * character select froze as one came in); the plain skin is drawn
      * until it is done */
     void           *job;                /* its thread, NULL none */
+    int             job_over;           /* Linux: the thread has finished */
+    struct {                            /* pose_restore_or_eval's */
+        uint32_t    h;
+        unsigned    used;
+        float      *out;                /* the subdivided positions */
+    }               pose[SMOOTH_POSES];
     UmkSubsurf     *built;              /* what it made */
     float           weld;
     uint16_t       *jidx;               /* its own copies of the record */
@@ -119,6 +135,15 @@ static DWORD WINAPI build_job(LPVOID p)
     build((smooth_entry *)p);
     return 0;
 }
+#else
+/* Linux: a thread too (it was built here and now, the game held ~200 ms) */
+static void *build_job(void *p)
+{
+    build((smooth_entry *)p);
+    __sync_synchronize();
+    ((smooth_entry *)p)->job_over = 1;
+    return NULL;
+}
 #endif
 
 /* the build started (1), or done here and now (0) */
@@ -130,6 +155,14 @@ static int build_start(smooth_entry *e)
         e->job = t;
         return 1;
     }
+#else
+    pthread_t *t = (pthread_t *)malloc(sizeof *t);
+    e->job_over = 0;
+    if (t && pthread_create(t, NULL, build_job, e) == 0) {
+        e->job = t;
+        return 1;
+    }
+    free(t);
 #endif
     build(e);
     return 0;
@@ -146,13 +179,21 @@ static int build_done(smooth_entry *e, int wait)
         e->job = NULL;
     }
 #else
-    (void)wait;
+    if (e->job) {
+        if (!wait && !*(volatile int *)&e->job_over)
+            return 0;
+        pthread_join(*(pthread_t *)e->job, NULL);
+        free(e->job);
+        e->job = NULL;
+    }
 #endif
     return 1;
 }
 
 static void entry_free(smooth_entry *e)
 {
+    int i;
+
     build_done(e, 1);
     umk_subsurf_free(e->built);
     free(e->jidx);
@@ -164,6 +205,8 @@ static void entry_free(smooth_entry *e)
     free(e->attr);
     free(e->light);
     free(e->rgba);
+    for (i = 0; i < SMOOTH_POSES; i++)
+        free(e->pose[i].out);
     memset(e, 0, sizeof *e);
 }
 
@@ -474,6 +517,39 @@ static void adopt(smooth_entry *e)
         printf("smooth models: mesh %d verts %d tris not smoothed\n", e->nverts, e->nfaces);
 }
 
+static smooth_entry *start_entry(smooth_entry *e, const void *skin, uint32_t hash,
+                                 int nverts, int nfaces, const uint16_t *idx,
+                                 const float *ruv)
+{
+    int i;
+
+    e->skin = skin;
+    e->hash = hash;
+    e->nverts = nverts;
+    e->nfaces = nfaces;
+    e->levels = port_smooth_models;
+    e->used = ++g_tick;
+    e->weld = UMK_WELD_DISTANCE_CM * VertScale;
+    e->pos = malloc(sizeof(float) * 3 * (size_t)nverts);
+    e->attr = malloc(sizeof(float) * 3 * (size_t)nfaces);
+    e->jpos = malloc(sizeof(float) * 3 * (size_t)nverts);
+    e->jidx = malloc(sizeof(uint16_t) * 3 * (size_t)nfaces);
+    e->jcu = malloc(sizeof(float) * 6 * (size_t)nfaces);
+    if (!e->pos || !e->attr || !e->jpos || !e->jidx || !e->jcu)
+        return NULL;
+
+    record_positions(nverts, e->jpos);
+    memcpy(e->jidx, idx, sizeof(uint16_t) * 3 * (size_t)nfaces);
+    for (i = 0; i < nfaces * 3; i++) {
+        e->jcu[i * 2 + 0] = ruv[idx[i] * 2 + 0];
+        e->jcu[i * 2 + 1] = ruv[idx[i] * 2 + 1];
+    }
+    if (build_start(e))
+        return NULL;                    /* the plain skin until it is done */
+    adopt(e);
+    return e->s ? e : NULL;
+}
+
 static smooth_entry *lookup(const void *skin, int nverts, int nfaces,
                             const uint16_t *idx, const float *ruv)
 {
@@ -505,32 +581,57 @@ static smooth_entry *lookup(const void *skin, int nverts, int nfaces,
         if (e->skin)
             entry_free(e);
     }
+    return start_entry(e, skin, hash, nverts, nfaces, idx, ruv);
+}
 
-    e->skin = skin;
-    e->hash = hash;
-    e->nverts = nverts;
-    e->nfaces = nfaces;
-    e->levels = port_smooth_models;
-    e->used = ++g_tick;
-    e->weld = UMK_WELD_DISTANCE_CM * VertScale;
-    e->pos = malloc(sizeof(float) * 3 * (size_t)nverts);
-    e->attr = malloc(sizeof(float) * 3 * (size_t)nfaces);
-    e->jpos = malloc(sizeof(float) * 3 * (size_t)nverts);
-    e->jidx = malloc(sizeof(uint16_t) * 3 * (size_t)nfaces);
-    e->jcu = malloc(sizeof(float) * 6 * (size_t)nfaces);
-    if (!e->pos || !e->attr || !e->jpos || !e->jidx || !e->jcu)
-        return NULL;
+/* One mesh is often drawn several times a frame in poses of the frames
+ * before (the trail of copies in Scorpion's fatality): each pose seen is
+ * kept, its subdivided positions, so seeing it again costs a copy and the
+ * light spread again instead of subdividing it twice over. `h` is a hash
+ * of the positions handed to the subdivision. */
+static uint32_t pose_hash(const float *p, int n)
+{
+    const uint32_t *w = (const uint32_t *)(const void *)p;
+    uint32_t h = 2166136261u;
+    int i;
 
-    record_positions(nverts, e->jpos);
-    memcpy(e->jidx, idx, sizeof(uint16_t) * 3 * (size_t)nfaces);
-    for (i = 0; i < nfaces * 3; i++) {
-        e->jcu[i * 2 + 0] = ruv[idx[i] * 2 + 0];
-        e->jcu[i * 2 + 1] = ruv[idx[i] * 2 + 1];
+    for (i = 0; i < n * 3; i++)
+        h = (h ^ w[i]) * 16777619u;
+    return h;
+}
+
+static int pose_restore_or_eval(smooth_entry *e)
+{
+    const int n = umk_subsurf_num_verts(e->s);
+    const uint32_t h = pose_hash(e->pos, e->nverts);
+    int i, slot = -1;
+
+    for (i = 0; i < SMOOTH_POSES; i++)
+        if (e->pose[i].out && e->pose[i].h == h) {
+            slot = i;
+            break;
+        }
+    if (slot >= 0 && !umk_subsurf_is_last(e->s, e->pos))
+        umk_subsurf_restore(e->s, e->pos, e->pose[slot].out);
+    if (!umk_subsurf_eval(e->s, e->pos, e->attr))
+        return 0;
+    if (slot >= 0) {
+        e->pose[slot].used = ++g_tick;
+        return 1;
     }
-    if (build_start(e))
-        return NULL;                    /* the plain skin until it is done */
-    adopt(e);
-    return e->s ? e : NULL;
+    /* keep it, in the slot seen longest ago */
+    slot = 0;
+    for (i = 1; i < SMOOTH_POSES; i++)
+        if (e->pose[i].used < e->pose[slot].used)
+            slot = i;
+    if (e->pose[slot].out == NULL)
+        e->pose[slot].out = malloc(sizeof(float) * 3 * (size_t)n);
+    if (e->pose[slot].out == NULL)
+        return 1;
+    memcpy(e->pose[slot].out, umk_subsurf_pos(e->s), sizeof(float) * 3 * (size_t)n);
+    e->pose[slot].h = h;
+    e->pose[slot].used = ++g_tick;
+    return 1;
 }
 
 /* LIME_RenderMeshSingleIndexed's state calls, around the smoothed arrays. */
@@ -544,6 +645,7 @@ static void draw(smooth_entry *e, TEXTURE *tex, float alpha, const limeVECTOR3 *
 
     glShadeModel(0x1d01);               /* GL_SMOOTH */
     limeRenderedPolyCount += ntris;
+    g_frame_tris += ntris;
 
     glClientActiveTexture(GL_TEXTURE0);
     glActiveTexture(GL_TEXTURE0);
@@ -640,6 +742,21 @@ int port_smooth_draw(const void *skin, const void *rec, long second,
     }
     lime_port_skin_freed = port_smooth_forget;
 
+    /* A frame's smoothed triangles have a budget: a fatality that draws the
+     * same body ~120 times a frame (the copies in Scorpion's) asked for
+     * 7 million smoothed triangles, each transformed on the CPU, and the
+     * game fell to one frame a second. Past it the copies are drawn as the
+     * model is; a fight's fighters are far below it. Counted per frame on
+     * the screen, not in limeRenderedPolyCount: the game's tick clears that,
+     * and a slow frame runs several ticks between its draws, so the budget
+     * never filled (measured: ~150 copies of 180,000 vertices a frame,
+     * 1 GB sent, ~900 ms frames). */
+    if (g_frame_tris > SMOOTH_FRAME_TRIS) {
+        if (!second)
+            tuck(skin, (int)*(const long *)r);
+        return 0;
+    }
+
     /* LIME_RenderMeshSingleIndexed's own reads */
     nverts = *(const long *)(r + (second ? 0x08 : 0x00));
     nfaces = *(const long *)(r + (second ? 0x0c : 0x04));
@@ -675,7 +792,7 @@ int port_smooth_draw(const void *skin, const void *rec, long second,
     cover_fit(e);
     for (i = 0; i < e->nfaces * 3; i++)
         e->attr[i] = (float)light[idx[i]];
-    if (!umk_subsurf_eval(e->s, e->pos, e->attr))
+    if (!pose_restore_or_eval(e))
         return 0;
 
     n = umk_subsurf_num_verts(e->s);
@@ -689,3 +806,4 @@ int port_smooth_draw(const void *skin, const void *rec, long second,
     draw(e, tex, alpha, fade, idx);
     return 1;
 }
+

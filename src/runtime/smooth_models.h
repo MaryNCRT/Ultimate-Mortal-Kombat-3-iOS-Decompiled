@@ -16,6 +16,9 @@ extern float port_sharp_angle, port_sharp_strength;   /* degrees, 0..1 */
 int  port_smooth_draw(const void *skin, const void *rec, long second,
                       void *tex, float alpha, const void *fade);
 
+/* A frame on the screen: its budget of smoothed triangles starts again. */
+void port_smooth_frame(void);
+
 /* LIME_FreeSkin: drop what was built for this skin. */
 void port_smooth_forget(const void *skin);
 

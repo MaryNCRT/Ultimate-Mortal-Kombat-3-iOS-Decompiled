@@ -102,6 +102,7 @@
 #include "online_ui.h"
 #include "pad_nav.h"
 #include "render/rgl.h"
+#include "smooth_models.h"
 #if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
 #include <unistd.h>                 /* readlink, setenv */
 #endif
@@ -3639,6 +3640,7 @@ int main(int argc, char **argv)
         }
         mem_log();
         pace_work_end();
+        port_smooth_frame();
         if (!plat_swap())
             break;
         pace_frame();
