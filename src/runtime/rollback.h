@@ -55,6 +55,7 @@ void rb_replay_fight_over(void);
 enum { RPB_START, RPB_BACK5, RPB_FRAME_BACK, RPB_PLAY, RPB_FRAME_FWD,
        RPB_FWD5, RPB_SLOWER, RPB_FASTER, RPB_SETTINGS, RPB_COUNT,
        RPB_LIST = 20, RPB_CLOSE,        /* the top: the list, the X */
+       RPB_SWITCH,                      /* a row picked: another replay */
        RPB_BAR = 100, RPB_ROW = 200 };  /* the bar; the list's rows, + index */
 /* rp_info's state: the speed (0..4: x1/4 x1/2 x1 x2 x4) and these bits */
 #define RPS_SPEED   0x07
@@ -75,9 +76,11 @@ void  rp_keys(int play, int back, int fwd, int faster, int slower, int start);
 int   rp_ui(int id, float at, int down);
 float rp_info(char *time, int n, int *state);
 /* The REPLAYS list (its length, -1 while closed): labels, how many are recent, the one
- * playing; and the playing one's label. A row picked starts the game again
- * on it, and rp_ui returns RPB_CLOSE, as the X does: the caller quits. */
+ * playing; and the playing one's label. A row picked ends this replay and
+ * rp_ui returns RPB_SWITCH: the caller leaves the fight for the one
+ * rb_replay_peek now reads, and rp_switching is 1 until that one begins. */
 int   rp_list(const char **labels, int max, int *n_recent, int *current);
 const char *rp_title(void);
+int   rp_switching(void);
 
 #endif

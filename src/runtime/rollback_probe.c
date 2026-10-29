@@ -117,6 +117,7 @@ static long g_data_at;                  /* the file's first tick */
 static uint32_t g_total;                /* replaying: the ticks in the file */
 static int g_have_want;                 /* this tick's recorded result was read */
 static int g_reported;                  /* the end's summary is in the log */
+static int g_switching;                 /* on the way to another replay (rl_pick) */
 
 static int g_pages_on;                  /* UMK3_REPLAY_PAGES */
 static FILE *g_pf;
@@ -585,6 +586,7 @@ int rb_fight_setup(int32_t *setup, int n)
     char magic[8];
 
     read_switches();
+    g_switching = 0;
     if (g_active)
         replay_finish("a new fight began");
     if (!g_mode || g_done || n > RB_SETUP_MAX)
@@ -679,7 +681,10 @@ int rb_step_begin(int32_t joy[2])
 
     read_switches();
     g_have_want = 0;
-    if (g_active && g_mode == 2 && g_play_rel[0] && g_tick >= g_total) {
+    if (g_switching) {
+        /* leaving for another replay's fight: nobody plays this one */
+        joy[0] = joy[1] = 0;
+    } else if (g_active && g_mode == 2 && g_play_rel[0] && g_tick >= g_total) {
         /* the player holds the last frame: past the end, the sticks rest */
         joy[0] = joy[1] = 0;
     } else if (g_active && g_mode == 2) {
@@ -1040,8 +1045,8 @@ void rp_frame(void (*frame)(void))
 /* ------------------------------------------------- the player's list */
 
 /* The list the panel's REPLAYS button opens: the last fights, then the kept
- * ones, newest first. Picking another starts the game again on it (a fight
- * is loaded for its two fighters and its level, so it cannot simply swap). */
+ * ones, newest first. Picking another leaves this fight for that one's, in
+ * the same game (rl_pick). */
 
 #define RL_RECENT 5
 #define RL_SAVED  8
@@ -1104,55 +1109,50 @@ int rp_list(const char **labels, int max, int *n_recent, int *current)
     return i;
 }
 
-/* The game again, on `rel`. 1 once it is on its way. */
-static int rp_switch(const char *rel)
+/* Another replay picked: this one is over, the next is read when its fight
+ * begins (rb_fight_setup). While the game leaves this fight and starts that
+ * one, the sticks rest and rp_switching says so. */
+int rp_switching(void)
 {
-    char exe[1024];
-
-#ifdef _WIN32
-    char cmd[2200];
-    STARTUPINFOA si;
-    PROCESS_INFORMATION pi;
-
-    if (!GetModuleFileNameA(NULL, exe, sizeof exe))
-        return 0;
-    snprintf(cmd, sizeof cmd, "\"%s\" --replay \"%s\"", exe, rel);
-    memset(&si, 0, sizeof si);
-    si.cb = sizeof si;
-    if (!CreateProcessA(exe, cmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
-        return 0;
-    CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
-    return 1;
-#else
-    ssize_t k = readlink("/proc/self/exe", exe, sizeof exe - 1);
-    pid_t pid;
-
-    if (k <= 0)
-        return 0;
-    exe[k] = 0;
-    pid = fork();
-    if (pid == 0) {
-        execl(exe, exe, "--replay", rel, (char *)NULL);
-        _exit(127);
-    }
-    return pid > 0;
-#endif
+    return g_switching;
 }
 
-/* A row of the list picked: the one playing closes the list; another
- * starts, and this game should close (1). */
+/* A row of the list picked: the one playing closes the list; another one,
+ * a replay, ends this one (1) -- the caller starts its fight. */
 static int rl_pick(int i)
 {
+    char was[sizeof g_play_rel];
+    int32_t c1, c2, lv;
+
     if (i < 0 || i >= g_rl_n)
         return 0;
-    if (!strcmp(g_rl_rel[i], g_play_rel)) {
-        g_rl_open = 0;
+    g_rl_open = 0;
+    if (!strcmp(g_rl_rel[i], g_play_rel))
+        return 0;
+    memcpy(was, g_play_rel, sizeof was);
+    rb_replay_open(g_rl_rel[i]);
+    if (!rb_replay_peek(&c1, &c2, &lv) || c1 < 0 || c1 >= 26 || c2 < 0
+        || c2 >= 26 || !in_exe_dir(g_play_rel, g_file, sizeof g_file)) {
+        printf("replay: %s is not a replay\n", g_rl_rel[i]);
+        rb_replay_open(was);
+        in_exe_dir(g_play_rel, g_file, sizeof g_file);
         return 0;
     }
-    printf("replay: switching to %s\n", g_rl_rel[i]);
-    fflush(stdout);
-    return rp_switch(g_rl_rel[i]);
+    printf("replay: switching to %s\n", g_play_rel);
+    if (g_active)
+        replay_finish("switched to another replay");
+    if (g_rp_snap == 1)
+        st_rb_end();
+    g_rp_snap = 0;
+    g_rp_target = RP_NONE;
+    g_rp_paused = g_rp_step = g_rp_sub = 0;
+    g_rp_speed = 2;
+    memset(g_bad, 0, sizeof g_bad);
+    memset(g_first, 0, sizeof g_first);
+    g_bad_ticks = 0;
+    g_done = 0;
+    g_switching = 1;
+    return 1;
 }
 
 /* The playing replay's label without its date, for the status line. */
@@ -1284,7 +1284,7 @@ int rp_ui(int id, float at, int down)
             return -1;
         }
         if (id >= RPB_ROW)
-            return rl_pick(id - RPB_ROW) ? RPB_CLOSE : -1;
+            return rl_pick(id - RPB_ROW) ? RPB_SWITCH : -1;
         rp_press(id);
         return id;
     }
