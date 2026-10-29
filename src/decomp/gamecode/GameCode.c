@@ -6115,6 +6115,7 @@ long GameInit_LoadABit(long step);
  * back before anything loads. */
 int  rb_fight_setup(int32_t *setup, int n);
 void rb_fight_rival(long *c2);
+int  stage_menu_gate(long *level);     /* runtime/debug_menu.c */
 void rb_online_begin(int c1, int c2, int level);
 int  rb_host_level(long *level);
 int  rb_step_begin(int32_t joy[2]);
@@ -6166,6 +6167,10 @@ void Task_GameInit(void)
     if (GameInitState == 0) {
         /* Port, not in the binary: the guest takes the host's level */
         if (GameMode == 1 && rb_host_level(LevelSelectP))
+            return;
+        /* Port, not in the binary: STAGE SELECT (debug_menu.c), the window
+         * waits here until a stage is picked */
+        if (stage_menu_gate(LevelSelectP))
             return;
         rb_setup();                     /* Port, not in the binary */
         if (GameMode == 1)              /* Port: rollback netcode */

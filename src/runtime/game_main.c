@@ -3147,6 +3147,9 @@ int main(int argc, char **argv)
             if (set_menu_is_open())     /* and so does the settings menu */
                 set_menu_mouse(tx / g_virt_w, ty / g_virt_h,
                                plat_mouse(&mx, &my) && g_ntaps == 0);
+            else if (stage_menu_is_open())      /* STAGE SELECT */
+                stage_menu_mouse(tx / g_virt_w, ty / g_virt_h,
+                                 plat_mouse(&mx, &my) && g_ntaps == 0);
             else if (rp_playing() && !dbg_menu_is_open() && g_rp_hidden) {
                 /* HIDE: a click anywhere has the player back */
                 static int was;
@@ -3330,6 +3333,28 @@ int main(int argc, char **argv)
                 acc -= 1.0 / 60.0;
                 g_tick = ++ticks;       /* UMK3_KEYS' clock goes on */
                 continue;               /* the game does not tick */
+            }
+            /* STAGE SELECT (debug_menu.c): the frame is its own while it is
+             * up, as the settings menu's; Task_GameInit waits for it */
+            if (stage_menu_is_open() && !set_menu_is_open()) {
+                const unsigned pb = g_pad.buttons | g_pad2.buttons;
+                stage_menu_keys(plat_key(PK_LEFT) || g_pad.left || g_pad2.left,
+                                plat_key(PK_RIGHT) || g_pad.right || g_pad2.right,
+                                plat_key(PK_UP) || g_pad.up || g_pad2.up,
+                                plat_key(PK_DOWN) || g_pad.down || g_pad2.down,
+                                plat_key(PK_OK) || (pb & (1u << PB_SOUTH))
+                                    || (pb & (1u << PB_START)),
+                                plat_key(PK_BACK) || (pb & (1u << PB_EAST)),
+                                plat_key(PK_NEXT) || (pb & (1u << PB_NORTH)));
+                clear_frame(ww, wh, vx, vy, vw, vh);
+                if (stage_menu_is_open()) {
+                    use_surface(0);
+                    stage_menu_draw();
+                }
+                render_resolve();
+                acc -= 1.0 / 60.0;
+                g_tick = ++ticks;
+                continue;
             }
             /* port: no debug menu or debug keys in an online fight (Mary):
              * the other player's game would not see what they change */
