@@ -11,6 +11,7 @@
 #include "lime_glapi.h"   /* the GL calls' calling convention */
 #include <string.h>   /* memset, for clearSpriteListsAndEvents */
 #include "../../runtime/smooth_models.h"   /* port: SMOOTH MODELS, what covers a skin */
+void rgl_shadow_caster(int on);         /* port: REAL-TIME SHADOWS, render/rgl.h */
 
 extern int PortTextureQuality;          /* runtime/draw_gl.c, port only */
 int  lime_port_load_more(int first);    /* runtime/draw_gl.c, port only */
@@ -3230,6 +3231,7 @@ long RenderPlayer(PLAYER *p, long attach, long flag)
     limeEnableDepthWrites();
 
     port_smooth_pose(w);                /* port: SMOOTH ANIMATIONS */
+    rgl_shadow_caster(1);               /* port: REAL-TIME SHADOWS, a caster */
     vis = IsFrameVisible(c, w[0x51c / 4], w[0x520 / 4]);
     def = &PlayerDefs[w[0]];
 
@@ -3277,6 +3279,7 @@ long RenderPlayer(PLAYER *p, long attach, long flag)
         }
     }
 
+    rgl_shadow_caster(0);               /* port */
     glCullFace(GL_BACK);
     LIME_KillAllLights();
     LIME_PopMatrix(1);
@@ -5123,6 +5126,7 @@ void RenderIntroCharacterPlayer(void)
         p0[0x528 / 4] = anim[0x14 / 4];
 
         port_smooth_pose(p0);           /* port: SMOOTH ANIMATIONS */
+        rgl_shadow_caster(1);           /* port: REAL-TIME SHADOWS */
         RenderAnimatedCharacter(0, (ANIMATEDCHARACTER *)anim,
                                 p0[0x51c / 4], p0[0x520 / 4],
                                 ((float *)p0)[0x524 / 4],
@@ -5132,12 +5136,16 @@ void RenderIntroCharacterPlayer(void)
                                     p0[0x528 / 4], 1);
 
         memcpy(AttachTransforms, MatrixPalette2, 0x1c20);
+        /* port: the hat covers the smoothed head here too (RenderPlayer) */
+        port_smooth_cover_owner((void *)(uintptr_t)(unsigned long) anim[0x30 / 4]);
         LIME_RenderScene(6,
                          (void *)(uintptr_t)(unsigned long) anim[0x10 / 4],
                          p0[0x51c / 4], p0[0x520 / 4],
                          ((float *)p0)[0x524 / 4], 0, 0, 0,
                          (void *)(uintptr_t)(unsigned long) p0[0x528 / 4],
                          p0[0x52c / 4], AttachTransforms);
+        port_smooth_cover_owner(NULL);   /* port */
+        rgl_shadow_caster(0);           /* port */
     }
 
     if ((IntroCamCount > 2 || IntroCamCount == 0) && p1[1] != 0) {
@@ -5176,6 +5184,7 @@ void RenderIntroCharacterPlayer(void)
         p1[0x528 / 4] = (p1[0x530 / 4] != 0) ? p1[0x530 / 4] : anim[0x14 / 4];
 
         port_smooth_pose(p1);           /* port: SMOOTH ANIMATIONS */
+        rgl_shadow_caster(1);           /* port: REAL-TIME SHADOWS */
         RenderAnimatedCharacter(0, (ANIMATEDCHARACTER *)anim,
                                 p1[0x51c / 4], p1[0x520 / 4],
                                 ((float *)p1)[0x524 / 4],
@@ -5185,12 +5194,16 @@ void RenderIntroCharacterPlayer(void)
                                     p1[0x528 / 4], 1);
 
         memcpy(AttachTransforms, MatrixPalette2, 0x1c20);
+        /* port: the hat covers the smoothed head here too (RenderPlayer) */
+        port_smooth_cover_owner((void *)(uintptr_t)(unsigned long) anim[0x30 / 4]);
         LIME_RenderScene(6,
                          (void *)(uintptr_t)(unsigned long) anim[0x10 / 4],
                          p1[0x51c / 4], p1[0x520 / 4],
                          ((float *)p1)[0x524 / 4], 0, 0, 0,
                          (void *)(uintptr_t)(unsigned long) p1[0x528 / 4],
                          p1[0x52c / 4], AttachTransforms);
+        port_smooth_cover_owner(NULL);   /* port */
+        rgl_shadow_caster(0);           /* port */
     }
 
     glPopMatrix();
@@ -8470,7 +8483,21 @@ static void DrawFinisherBanner(void)
 }
 
 /* One half of the round-end test. `loser` is the player whose health hit zero,
- * so the round goes to the other one. */
+ * so the round goes to the other one.
+ *
+ * The binary has one block per loser (0x2902c player one, 0x290a6 player
+ * two) and they are not mirror images:
+ *  - the round that wins the match calls updateMPWins and goes ON to the
+ *    flawless test (0x2a816 / 0x2a81e branch back), so the last round shows
+ *    FLAWLESS VICTORY too; returning there lost it on every match point;
+ *  - only player one losing clears flawlessVictories and sets
+ *    playerLostRound; player one winning clears the streak only when the
+ *    win is not flawless (0x29100), so five in a row can be reached;
+ *  - the one-round kode (0x13) gives the match to the winner, and the
+ *    flawless test still follows;
+ *  - player two winning flawless shows the message and counts nothing,
+ *    except the network client counting its own (0x2acb2); Karnage skips
+ *    the test, and there player one's flawless does not clear the streak. */
 static void RoundEndedAgainst(long loser)
 {
     long winner = loser ^ 1;
@@ -8482,24 +8509,35 @@ static void RoundEndedAgainst(long loser)
     RoundWins[winner]++;
     Round++;
 
-    if (RoundWins[0] == WinsNeeded || RoundWins[1] == WinsNeeded) {
+    if (RoundWins[0] == WinsNeeded || RoundWins[1] == WinsNeeded)
         updateMPWins();
-        return;
-    }
 
-    flawlessVictories = 0;
-    playerLostRound  = 1;
+    if (loser == 0) {
+        flawlessVictories = 0;
+        playerLostRound  = 1;
+    }
 
     /* The one-round kode hands the match over immediately. */
     if (GameMode == 1 && *theKode == 0x13) {
-        RoundWins[loser]  = WinsNeeded;
-        RoundWins[winner] = WinsNeeded - 1;
+        RoundWins[winner] = WinsNeeded;
+        RoundWins[loser]  = WinsNeeded - 1;
+    }
+
+    if (loser == 0) {
+        if (GameMode == 3)
+            return;
+        if (Health[1] == 100)
+            FlawlessMessage = 1;
+        /* the network client counts its own flawless */
+        if (GameMode == 1 && !(rb_active() ? isParent() : isParentBasedOnSpeed())
+            && Health[0] == 0 && Health[1] == 100)
+            Stats[6]++;
         return;
     }
-    if (GameMode == 3)
-        return;
 
-    if (Health[winner] == 100) {
+    if (GameMode == 3 && Health[0] == 100)
+        return;
+    if (GameMode != 3 && Health[0] == 100) {
         FlawlessMessage = 1;
         if (GameMode == 4 || GameMode == 0) {
             Stats[6]++;
@@ -8508,11 +8546,13 @@ static void RoundEndedAgainst(long loser)
             if (flawlessVictories == 5)
                 achievementsUnlock(3);
         }
-    } else if (GameMode == 1 && (rb_active() ? isParent() : isParentBasedOnSpeed())
-               && Health[1] == 0 && Health[0] == 100) {
-        /* the network half counts the host's flawless without the message */
-        Stats[6]++;
+    } else {
+        flawlessVictories = 0;
     }
+    /* the network host counts its flawless */
+    if (GameMode == 1 && (rb_active() ? isParent() : isParentBasedOnSpeed())
+        && Health[1] == 0 && Health[0] == 100)
+        Stats[6]++;
 }
 
 void DrawHUD(void)
@@ -11379,11 +11419,15 @@ void RenderLevelPlayers(void)
                     SkipFrame86 = 0;
                     if (oi[GOBJ_FRAME / 2] == FRAME_SKIP86)
                         SkipFrame86 = 1;
+                    /* port: what the scene hangs on the bones covers this
+                     * fighter's skin (SMOOTH MODELS, Kung Lao's hat) */
+                    port_smooth_cover_owner(RLP_PTR(RLP_PTR(owner[4 / 4])[0x30 / 4]));
                     LIME_RenderScene(slot + RLP_SCENE_BASE,
                                      RLP_PTR(RLP_PTR(owner[4 / 4])[0x10 / 4]),
                                      w[0x51c / 4], w[0x520 / 4], pf[0x524 / 4],
                                      0, 0, pass,
                                      RLP_PTR(w[0x528 / 4]), w[0x52c / 4], att);
+                    port_smooth_cover_owner(NULL);   /* port */
                     SkipFrame86 = 0;
                 } else if (flags100 == 0) {
                     LIME_RenderScene(slot + RLP_SCENE_BASE,

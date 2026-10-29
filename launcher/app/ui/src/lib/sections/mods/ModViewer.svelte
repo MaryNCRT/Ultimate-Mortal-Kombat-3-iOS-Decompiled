@@ -18,6 +18,7 @@
     import { hoverBlip, selectBlip } from '#lib/sound.js';
     import { ms, src, loadCatalog, fighter, refreshMods, reloadMods, exportThis, forgetMod, VIEW_KINDS } from '#lib/mods/store.svelte.js';
     import { stageDesc, meshsetDesc, textureFile, pngBytes, exportFiles, isPng, attachVerts } from '#lib/mods/assets.js';
+    import { tuckUnder } from '#lib/mods/tuck.js';
     import { readFbx, fbxScene, fbxTakes, importAnim, importModel, rigDesc } from '#lib/mods/fbxin.js';
     import { framePose, framePoseBlend, posedVerts, fitRest } from '#lib/mods/rig.js';
     import { subsurfCreate } from '#lib/mods/subsurf.js';
@@ -385,11 +386,15 @@
                 for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], v[i + k] - 2); hi[k] = Math.max(hi[k], v[i + k] + 2); }
             return { lo, hi };
         });
+        const pieces = (fighterView.extras || []).map(({ a }, ei) => ({ v: extraPos[ei], faces: a.faces })).filter(x => x.v);
         const covered = (q, i) => boxes.some(({ lo, hi }) => q[i] >= lo[0] && q[i] <= hi[0] && q[i + 1] >= lo[1] && q[i + 1] <= hi[1] && q[i + 2] >= lo[2] && q[i + 2] <= hi[2]);
         /* SMOOTH MODEL: a block drawn smoothed when it has been built */
         const sm = fighterView.smooth;
         const smooth = sm && sm.level > 0 && sm.blocks.length === meshes.length;
         const skin = smooth ? skinOf(f, pos) : null;
+        /* unsmoothed: the skin tucked under what his bones carry, as the
+         * game does (mods/tuck.js); f.fitted is kept, so a copy */
+        if (!smooth && pieces.length) { pos = Float32Array.from(pos); tuckUnder(pos, pieces); }
         meshes.forEach((m, bi) => {
             const b = smooth ? sm.blocks[bi] : null;
             if (b && b.ss) {

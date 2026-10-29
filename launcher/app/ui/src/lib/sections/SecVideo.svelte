@@ -93,6 +93,8 @@
             </div>
             <label class="chk wide"><input type="checkbox" checked={!!c.smoothAnims}
                 onchange={e => save({ smoothAnims: e.currentTarget.checked })}><span>{tx('smooth')}</span></label>
+            <label class="chk wide"><input type="checkbox" checked={!!c.rtShadows}
+                onchange={e => save({ rtShadows: e.currentTarget.checked })}><span>{tx('rtshadow')}</span></label>
             <div class="field wide">
                 <span class="lbl">{tx('frame')}</span>
                 <div class="row">

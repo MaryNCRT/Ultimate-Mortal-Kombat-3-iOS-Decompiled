@@ -362,8 +362,13 @@ async function compileGame({
         if (baseName === 'text') {
             fileFlags.push('-DUMK3_NO_LONG_REMAP');
         }
+        if (baseName === 'rgl_ff') {
+            fileFlags.push('-fopenmp');     /* its big meshes on every core */
+        }
         if (path.dirname(src) === blenderDir) {
             fileFlags.push('-I', blenderDir, '-I', path.join(blenderDir, 'shim'));
+            /* CCGSubSurf's own OpenMP loops, on omp_lite.c's threads */
+            fileFlags.push('-fopenmp');
         }
 
         const compileArgs = [...fileFlags, '-c', src, '-o', objPath];
@@ -471,7 +476,7 @@ async function compileGame({
         };
         /* no libGL: render/rgl_front.c loads it when OpenGL draws, so a
          * machine without it can still run the game with Vulkan */
-        linkArgs.push(sysLib('SDL2', ['libSDL2-2.0.so.0', 'libSDL2-2.0.so']), '-lm', '-ldl');
+        linkArgs.push(sysLib('SDL2', ['libSDL2-2.0.so.0', 'libSDL2-2.0.so']), '-lm', '-ldl', '-lpthread');
     }
 
     const linkRsp = path.join(buildDir, 'link.rsp');

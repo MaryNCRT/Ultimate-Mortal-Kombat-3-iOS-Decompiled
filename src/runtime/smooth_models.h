@@ -16,6 +16,9 @@ extern float port_sharp_angle, port_sharp_strength;   /* degrees, 0..1 */
 int  port_smooth_draw(const void *skin, const void *rec, long second,
                       void *tex, float alpha, const void *fade);
 
+/* A frame on the screen: its budget of smoothed triangles starts again. */
+void port_smooth_frame(void);
+
 /* LIME_FreeSkin: drop what was built for this skin. */
 void port_smooth_forget(const void *skin);
 
@@ -26,6 +29,7 @@ void port_smooth_forget(const void *skin);
  * such a piece get no correction pass (umk_subsurf_set_fit), so the
  * smoothed skin does not come through it. */
 void port_smooth_cover_owner(const void *skin);
-void port_smooth_cover_mesh(const void *mesh, const float *m44, float scene_scale);
+void port_smooth_cover_mesh(const void *mesh, const float *key, int bone, const void *bones,
+                            float scene_scale);
 
 #endif

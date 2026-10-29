@@ -248,6 +248,8 @@ void LIME_GLAPI glScalef(float x, float y, float z);
  * Depth test and depth writes are both off for the overlay and both restored.
  * The 90-degree X rotation stands the flat sign up to face the camera.
  */
+void rgl_shadow_camera(int on);         /* port: render/rgl.h */
+
 void HUDANIM_Render(void)
 {
     const MESHANDTEXTURE *mesh = 0;     /* the original leaves this unset */
@@ -256,6 +258,7 @@ void HUDANIM_Render(void)
     LIMEDS_SetCameraOrientation(0.0f, -5.0f, 0.0f,   /* eye    */
                                 0.0f,  0.0f, 0.0f,   /* target */
                                 0.0f,  0.0f, 1.0f);  /* up     */
+    rgl_shadow_camera(0);               /* port: the HUD gets no shadows */
 
     if (GameMode == 2)
         return;

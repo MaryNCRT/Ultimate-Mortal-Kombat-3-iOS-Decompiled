@@ -62,7 +62,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         def one(i_src):
             i, src = i_src
-            extra = (["-I", BLENDER, "-I", os.path.join(BLENDER, "shim")]
+            extra = (["-I", BLENDER, "-I", os.path.join(BLENDER, "shim"), "-fopenmp"]
                      if os.path.normpath(os.path.dirname(src)) == os.path.normpath(BLENDER) else [])
             r = subprocess.run(CC + fl + extra + ["-c", src, "-o", os.path.join(tmp, "%d.o" % i)],
                                capture_output=True, text=True)

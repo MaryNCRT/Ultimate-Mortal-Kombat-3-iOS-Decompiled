@@ -41,11 +41,14 @@ void *rgl_proc(const char *name);          /* the FBO entry points */
 /* ----------------------------------------------------- backend interface */
 
 /* A vertex as the backends take it: clip-space position (OpenGL's
- * convention, z from -w to w), colour as RGBA bytes, texture coordinates. */
+ * convention, z from -w to w), colour as RGBA bytes, texture coordinates,
+ * and where it is in the shadow map's light (clip space too; REAL-TIME
+ * SHADOWS, rgl_frag.shadow 1). */
 typedef struct {
     float x, y, z, w;
     unsigned char rgba[4];
     float u, v;
+    float s[4];
 } rgl_vtx;
 
 enum { RGL_TRIS, RGL_LINES };
@@ -65,11 +68,17 @@ typedef struct {
 } rgl_pipe;
 
 /* What the fragment shader is told per draw. */
+enum { RGL_SHADOW_NONE, RGL_SHADOW_RECEIVE, RGL_SHADOW_DEPTH };
 typedef struct {
     int   tex_mode;                        /* RGL_TEX_* */
     int   alpha_func;                      /* 0 none, else the GL compare enum */
     float alpha_ref;
-    int   pad;
+    int   shadow;                          /* RGL_SHADOW_* in the low four
+                                            * bits: darkened where the map has
+                                            * something nearer the light (the
+                                            * bits above: the receiver's own
+                                            * caster, skipped), or the map's
+                                            * texel itself */
 } rgl_frag;
 
 /* A texture's sampling, packed: filter and wrap as GL has them. */
@@ -114,6 +123,9 @@ typedef struct rgl_backend {
     void (*read)(int target, const rgl_rect *r, unsigned char *rgba);
     void (*present)(void);
     void (*finish)(void);
+    /* the target draws sample as the shadow map from now on (its colour, a
+     * depth packed in RGBA8), made readable; 0 none */
+    void (*shadow_map)(int target);
 } rgl_backend;
 
 extern rgl_backend rgl_vk;
@@ -125,6 +137,31 @@ extern rgl_backend rgl_d3d12;
  * before rgl_open); Windows makes its own from the HWND. */
 extern const char *const *(*rgl_vk_instance_exts)(unsigned *count);
 extern int (*rgl_vk_make_surface)(void *window, void *instance, void *surface);
+
+/* REAL-TIME SHADOWS (umk3.ini rt_shadows=1, experimental; rgl_ff.c): the
+ * fighters and the stage about them seen from a light over it, into a
+ * shadow map, and every 3D draw of the scene darkened where it is behind
+ * something. Vulkan and
+ * Direct3D 12 only; with OpenGL these do nothing and rgl_shadow_active is 0.
+ *
+ *   rgl_shadow_camera(1)  the view the scene is drawn with was just set
+ *                         (LIMEDS_SetCameraOrientation); 0 when another
+ *                         camera (the HUD's) takes over
+ *   rgl_shadow_caster(1)  what is drawn now is a fighter, with an id of
+ *                         its own each call in a frame, until 0
+ *   rgl_shadow_proxy(1)   what is drawn now only casts (a fighter's base
+ *                         mesh); 2: what is drawn now does not cast (its
+ *                         smoothed mesh); 0 back to normal
+ *   rgl_shadow_active()   1 while shadows are on and drawn: the flattened
+ *                         shadow under a fighter is left out */
+extern int rgl_shadows;
+extern double rgl_shadow_ms;           /* this frame's map and held draws, for the log */
+extern int rgl_shadow_tris;            /* the triangles the last map was drawn from */
+double rgl_now_ms(void);
+void rgl_shadow_camera(int on);
+void rgl_shadow_caster(int on);
+void rgl_shadow_proxy(int mode);
+int  rgl_shadow_active(void);
 
 /* rgl_ff.c */
 void rgl_ff_start(const rgl_backend *b, int width, int height);

@@ -256,13 +256,24 @@ void rgl_ff_start(const rgl_backend *b, int width, int height)
     g_draw_fb = g_read_fb = 0;
 }
 
+static void scene_flush(void);
+static void SH_end_frame(void);
+static int hold_clear(const rgl_rect *sc, int color, const float rgba[4], int depth);
+static void shadow_forget(void);
+
 void rgl_ff_stop(void)
 {
+    scene_flush();
     B = NULL;
+    shadow_forget();                    /* its target went with the backend */
 }
 
+/* the end of a frame, before it is presented: what the scene held back
+ * drawn, and the next frame's scene starts with no caster */
 void rgl_ff_frame(void)
 {
+    scene_flush();
+    SH_end_frame();
 }
 
 /* ------------------------------------------------------------- matrices */
@@ -442,6 +453,7 @@ void ff_glPopAttrib(void)
 
 void ff_glFinish(void)
 {
+    scene_flush();
     if (B && B->finish)
         B->finish();
 }
@@ -495,8 +507,10 @@ void ff_glDeleteTextures(GLsizei n, const GLuint *t)
         ff_tex *x = tex(t[i], 0);
         if (!x)
             continue;
-        if (x->handle && B)
+        if (x->handle && B) {
+            scene_flush();              /* a held draw may use it */
             B->tex_free(x->handle);
+        }
         x->used = 0;
         x->handle = 0;
         if (S.bound == t[i])
@@ -629,6 +643,7 @@ void ff_glTexImage2D(GLenum t, GLint level, GLint internal, GLsizei w, GLsizei h
             ch = nh;
         }
     }
+    scene_flush();                      /* held draws see the texture as it was */
     if (!x->handle)
         x->handle = B->tex_new();
     B->tex_image(x->handle, w, h, n, (const unsigned char *const *)lv);
@@ -649,6 +664,7 @@ void ff_glTexSubImage2D(GLenum t, GLint level, GLint x0, GLint y0, GLsizei w, GL
     if (!x || !x->handle || !B || level != 0 || w <= 0 || h <= 0)
         return;
     px = to_rgba(w, h, f, type, p, g_unpack);
+    scene_flush();
     if (px)
         B->tex_sub(x->handle, x0, y0, w, h, px);
     free(px);
@@ -703,6 +719,7 @@ static void FBAPI ff_glGenRenderbuffers(GLsizei n, GLuint *o)
 static void FBAPI ff_glDeleteFramebuffers(GLsizei n, const GLuint *o)
 {
     int i;
+    scene_flush();
     for (i = 0; i < n; i++)
         if (o[i] && (int)o[i] < g_nfb && g_fb[o[i]].used) {
             if (g_fb[o[i]].target && B)
@@ -744,6 +761,8 @@ static int make_target(GLuint fb)
 static void FBAPI ff_glBindFramebuffer(GLenum t, GLuint fb)
 {
     if (t == E_FRAMEBUFFER || t == E_DRAW_FRAMEBUFFER) {
+        if (fb != g_draw_fb)
+            scene_flush();              /* held draws go where they were made */
         g_draw_fb = fb;
         if (B)
             B->target_use(fb ? make_target(fb) : 0);
@@ -781,8 +800,10 @@ static void FBAPI ff_glFramebufferRenderbuffer(GLenum t, GLenum att, GLenum rt, 
         g_fb[fb].color = rb;
     else if (att == E_DEPTH_ATTACHMENT || att == E_DEPTH_STENCIL_ATTACHMENT)
         g_fb[fb].depth = rb;
-    if (g_fb[fb].made && g_fb[fb].target && B)
+    if (g_fb[fb].made && g_fb[fb].target && B) {
+        scene_flush();
         B->target_free(g_fb[fb].target);
+    }
     g_fb[fb].made = 0;
     g_fb[fb].target = 0;
 }
@@ -812,6 +833,7 @@ static void FBAPI ff_glBlitFramebuffer(GLint sx0, GLint sy0, GLint sx1, GLint sy
         return;
     a.x = sx0; a.y = sy0; a.w = sx1 - sx0; a.h = sy1 - sy0;
     b.x = dx0; b.y = dy0; b.w = dx1 - dx0; b.h = dy1 - dy0;
+    scene_flush();
     B->blit(cur_target(g_read_fb), &a, cur_target(g_draw_fb), &b, filter == E_LINEAR);
 }
 
@@ -860,6 +882,7 @@ void ff_glReadPixels(GLint x, GLint y, GLsizei w, GLsizei h, GLenum f, GLenum ty
     if (!px)
         return;
     r.x = x; r.y = y; r.w = w; r.h = h;
+    scene_flush();
     B->read(cur_target(g_read_fb), &r, px);
     bpp = f == E_RGB ? 3 : 4;
     row = w * bpp;
@@ -967,6 +990,10 @@ void ff_glClear(GLbitfield m)
     if (!B)
         return;
     sc = draw_rect(&r);
+    if (hold_clear(sc ? &r : NULL, (m & E_COLOR_BUFFER_BIT) && (S.mask[0] | S.mask[1] | S.mask[2] | S.mask[3]),
+                   S.clear, (m & E_DEPTH_BUFFER_BIT) && S.depth_mask))
+        return;
+    scene_flush();
     B->clear(sc ? &r : NULL, (m & E_COLOR_BUFFER_BIT) && (S.mask[0] | S.mask[1] | S.mask[2] | S.mask[3]),
              S.clear, (m & E_DEPTH_BUFFER_BIT) && S.depth_mask, 1.0f);
 }
@@ -1027,6 +1054,523 @@ static void update_mvp(void)
     g_mvp_dirty = 0;
 }
 
+/* ------------------------------------------------------ REAL-TIME SHADOWS
+ *
+ * umk3.ini rt_shadows=1 (rgl.h). A shadow map, as CopperCube's: the scene
+ * seen from a light, keeping the depth nearest it, and each point drawn
+ * darkened when the map has something nearer the light than it is.
+ *
+ *   the light     a direction, from above and in front of the stage, a
+ *                 little from the left (world Z is up, the camera looks
+ *                 along +Y): an orthographic view, fitted around the
+ *                 fighters with room about them (SHADOW_ROOM), its size
+ *                 in steps and its centre on the map's texels, so the
+ *                 shadows do not crawl as the fighters move
+ *   the casters   the fighters (rgl_shadow_caster, RenderPlayer), each
+ *                 with an id of its own, and the stage: every opaque
+ *                 triangle of the scene that writes depth, the ones the
+ *                 light saw the last time. Their triangles are kept in
+ *                 world space as they are drawn, and drawn from the light
+ *                 into the map, a SHADOW_SIZE target whose colour holds
+ *                 the depth in RGB and the caster's id in A
+ *   receivers     every 3D draw of the scene (the camera set by
+ *                 LIMEDS_SetCameraOrientation, depth tested, a
+ *                 perspective projection; not the HUD): each vertex also
+ *                 carries where it is in the map's light, and the shader
+ *                 compares (render/shaders: nine texels for a soft edge,
+ *                 each against the receiver's own plane so a surface does
+ *                 not shadow itself, and faded out at the map's edge)
+ *
+ * As a shadow map is drawn (LearnOpenGL's "Shadow Mapping"): the light's
+ * depth first, then the scene with it, the same frame. The scene's draws
+ * are held back (hold_draw) while its camera is on, with their vertices in
+ * world space; when something else needs the backend (the HUD's draws, a
+ * blit, a texture changing, the frame's end: scene_flush) the map is drawn
+ * from the casters held, and then the draws, each vertex put in the map's
+ * light. A fighter is not shadowed by its own texels (SMOOTH MODELS casts
+ * the base mesh and draws the smoothed one; they differ); by the other
+ * fighter's and the stage's it is. World space is the eye space of the
+ * scene's camera taken back through the view matrix, captured when the
+ * camera is set (rgl_shadow_camera). */
+int rgl_shadows;
+double rgl_shadow_ms;
+int rgl_shadow_tris;
+
+#define SHADOW_SIZE 4096                /* 64 MB: the fighters' texels as fine as at 2048 */
+#define SHADOW_ROOM 3.2f                /* the map's half width, the fighters' radius times */
+#define SHADOW_MIN 10.0f                /* and at least this: the stage they stand in */
+
+static struct {
+    int scene, caster, ids;             /* the scene's camera; the fighter drawing
+                                         * (its id, 0 none), and the ids given */
+    int valid, target;                  /* the map holds the held casters; its target */
+    int lit;                            /* light is one drawn with, to cull the stage by */
+    mat4 inv_view;                      /* world from eye */
+    mat4 light;                         /* light clip from world, the map's */
+    float *w;                           /* the casters' triangles, world xyz and id */
+    int nw, cw;
+} SH;
+static int g_sh_on;                     /* this draw: 1 receives, 2 casts too */
+
+/* a scene's draw or clear held back until the map is drawn */
+typedef struct {
+    rgl_pipe p;
+    rgl_frag f;
+    rgl_samp sm;
+    rgl_rect vp, sc;
+    int tex, has_sc, first, n;
+    int clear, color, depth;            /* a clear: what it clears */
+    float rgba[4];
+} held;
+static held *g_held;
+static int g_nheld, g_cheld;
+static rgl_vtx *g_hv;                   /* their vertices, s in world space */
+static int g_nhv, g_chv;
+static int g_sh_proxy;                  /* rgl_shadow_proxy: 1 casts only, 2 never casts */
+static mat4 g_shm;                      /* this draw: rgl_vtx.s from the vertex */
+static rgl_vtx *g_shv;                  /* the map's vertices */
+static int g_cshv;
+
+/* the inverse of a 4x4, 0 when it has none (Cramer's rule, as MESA's
+ * gluInvertMatrix) */
+static int invert(const mat4 *a, mat4 *out)
+{
+    const float *m = a->m;
+    float v[16], d;
+    int i;
+
+    v[0] = m[5] * m[10] * m[15] - m[5] * m[11] * m[14] - m[9] * m[6] * m[15]
+         + m[9] * m[7] * m[14] + m[13] * m[6] * m[11] - m[13] * m[7] * m[10];
+    v[4] = -m[4] * m[10] * m[15] + m[4] * m[11] * m[14] + m[8] * m[6] * m[15]
+         - m[8] * m[7] * m[14] - m[12] * m[6] * m[11] + m[12] * m[7] * m[10];
+    v[8] = m[4] * m[9] * m[15] - m[4] * m[11] * m[13] - m[8] * m[5] * m[15]
+         + m[8] * m[7] * m[13] + m[12] * m[5] * m[11] - m[12] * m[7] * m[9];
+    v[12] = -m[4] * m[9] * m[14] + m[4] * m[10] * m[13] + m[8] * m[5] * m[14]
+          - m[8] * m[6] * m[13] - m[12] * m[5] * m[10] + m[12] * m[6] * m[9];
+    v[1] = -m[1] * m[10] * m[15] + m[1] * m[11] * m[14] + m[9] * m[2] * m[15]
+         - m[9] * m[3] * m[14] - m[13] * m[2] * m[11] + m[13] * m[3] * m[10];
+    v[5] = m[0] * m[10] * m[15] - m[0] * m[11] * m[14] - m[8] * m[2] * m[15]
+         + m[8] * m[3] * m[14] + m[12] * m[2] * m[11] - m[12] * m[3] * m[10];
+    v[9] = -m[0] * m[9] * m[15] + m[0] * m[11] * m[13] + m[8] * m[1] * m[15]
+         - m[8] * m[3] * m[13] - m[12] * m[1] * m[11] + m[12] * m[3] * m[9];
+    v[13] = m[0] * m[9] * m[14] - m[0] * m[10] * m[13] - m[8] * m[1] * m[14]
+          + m[8] * m[2] * m[13] + m[12] * m[1] * m[10] - m[12] * m[2] * m[9];
+    v[2] = m[1] * m[6] * m[15] - m[1] * m[7] * m[14] - m[5] * m[2] * m[15]
+         + m[5] * m[3] * m[14] + m[13] * m[2] * m[7] - m[13] * m[3] * m[6];
+    v[6] = -m[0] * m[6] * m[15] + m[0] * m[7] * m[14] + m[4] * m[2] * m[15]
+         - m[4] * m[3] * m[14] - m[12] * m[2] * m[7] + m[12] * m[3] * m[6];
+    v[10] = m[0] * m[5] * m[15] - m[0] * m[7] * m[13] - m[4] * m[1] * m[15]
+          + m[4] * m[3] * m[13] + m[12] * m[1] * m[7] - m[12] * m[3] * m[5];
+    v[14] = -m[0] * m[5] * m[14] + m[0] * m[6] * m[13] + m[4] * m[1] * m[14]
+          - m[4] * m[2] * m[13] - m[12] * m[1] * m[6] + m[12] * m[2] * m[5];
+    v[3] = -m[1] * m[6] * m[11] + m[1] * m[7] * m[10] + m[5] * m[2] * m[11]
+         - m[5] * m[3] * m[10] - m[9] * m[2] * m[7] + m[9] * m[3] * m[6];
+    v[7] = m[0] * m[6] * m[11] - m[0] * m[7] * m[10] - m[4] * m[2] * m[11]
+         + m[4] * m[3] * m[10] + m[8] * m[2] * m[7] - m[8] * m[3] * m[6];
+    v[11] = -m[0] * m[5] * m[11] + m[0] * m[7] * m[9] + m[4] * m[1] * m[11]
+          - m[4] * m[3] * m[9] - m[8] * m[1] * m[7] + m[8] * m[3] * m[5];
+    v[15] = m[0] * m[5] * m[10] - m[0] * m[6] * m[9] - m[4] * m[1] * m[10]
+          + m[4] * m[2] * m[9] + m[8] * m[1] * m[6] - m[8] * m[2] * m[5];
+    d = m[0] * v[0] + m[1] * v[4] + m[2] * v[8] + m[3] * v[12];
+    if (d == 0.0f)
+        return 0;
+    for (i = 0; i < 16; i++)
+        out->m[i] = v[i] / d;
+    return 1;
+}
+
+void rgl_shadow_camera(int on)
+{
+    mat4 inv;
+
+    if (on && B && rgl_shadows && B->shadow_map && invert(&g_mv.s[g_mv.top], &inv)) {
+        /* another camera (the character select draws each fighter with
+         * its own): what the last one held is a scene of its own, with a
+         * map of its own -- its world is not this one's */
+        if (SH.scene && g_nheld && memcmp(&inv, &SH.inv_view, sizeof inv) != 0) {
+            scene_flush();
+            SH.lit = 0;
+        }
+        SH.inv_view = inv;
+        SH.scene = 1;
+    } else
+        SH.scene = 0;
+}
+
+void rgl_shadow_caster(int on)
+{
+    SH.caster = !on ? 0 : SH.ids < 254 ? ++SH.ids : 254;
+}
+
+/* a mesh that stands in for another: drawn into the map only (1), the one
+ * it stands for drawn but not cast (2), back to normal (0) -- SMOOTH MODELS
+ * casts the base mesh, ~2,500 triangles, not the ~60,000 it draws */
+void rgl_shadow_proxy(int mode)
+{
+    g_sh_proxy = mode;
+}
+
+int rgl_shadow_active(void)
+{
+    return B && rgl_shadows && B->shadow_map && SH.scene;
+}
+
+/* what this draw does with shadows: casts (a fighter's triangles, or the
+ * stage's opaque ones) and receives, receives, or neither; its vertices
+ * carry their world position */
+static void shadow_prep(int tris)
+{
+    mat4 w;
+
+    g_sh_on = 0;
+    if (!SH.scene || !S.depth_test || g_pr.s[g_pr.top].m[11] == 0.0f)
+        return;
+    w = mul(&SH.inv_view, &g_mv.s[g_mv.top]);
+    g_shm = w;                          /* into the light when the draw is let go */
+    /* the stage casts what is solid: not blended, and not cut out by its
+     * alpha (a fence's or a chain's texels: LearnOpenGL's "Blending"), which
+     * the map, drawn untextured, would cast as a whole quad */
+    g_sh_on = tris && g_sh_proxy != 2
+              && (SH.caster || (!S.blend && S.depth_mask && !(S.alpha_test && S.texture))) ? 2 : 1;
+}
+
+/* a caster's triangles kept. The stage's are kept only where the light
+ * drawn with last saw them (its map's square with a margin, the fighters
+ * move; between its near and far), all of them before there is one */
+static void shadow_cast(const rgl_vtx *v, int n, int id)
+{
+    const float *m = SH.light.m;
+    int i, k;
+
+    if (SH.nw + n * 4 > SH.cw) {
+        int c = (SH.nw + n * 4) * 2;
+        float *p = (float *)realloc(SH.w, (size_t)c * sizeof *p);
+        if (!p)
+            return;
+        SH.w = p;
+        SH.cw = c;
+    }
+    for (i = 0; i + 2 < n; i += 3) {
+        float w[3][3];
+        unsigned out = 0x3f;
+
+        for (k = 0; k < 3; k++) {
+            const rgl_vtx *o = &v[i + k];
+            const float x = o->s[0], y = o->s[1], z = o->s[2];
+            float lx, ly, lz;
+            unsigned side = 0;
+
+            w[k][0] = x; w[k][1] = y; w[k][2] = z;
+            if (id || !SH.lit)
+                continue;
+            lx = m[0] * x + m[4] * y + m[8] * z + m[12];
+            ly = m[1] * x + m[5] * y + m[9] * z + m[13];
+            lz = m[2] * x + m[6] * y + m[10] * z + m[14];
+            side |= lx < -1.3f ? 1u : 0u;
+            side |= lx > 1.3f ? 2u : 0u;
+            side |= ly < -1.3f ? 4u : 0u;
+            side |= ly > 1.3f ? 8u : 0u;
+            side |= lz < -1.0f ? 16u : 0u;
+            side |= lz > 1.0f ? 32u : 0u;
+            out &= side;
+        }
+        if (!id && SH.lit && out)
+            continue;
+        for (k = 0; k < 3; k++) {
+            SH.w[SH.nw++] = w[k][0];
+            SH.w[SH.nw++] = w[k][1];
+            SH.w[SH.nw++] = w[k][2];
+            SH.w[SH.nw++] = (float)id;
+        }
+    }
+}
+
+static void shadow_drop(void)
+{
+    if (SH.target && B) {
+        B->shadow_map(0);
+        B->target_free(SH.target);
+    }
+    SH.target = 0;
+    SH.valid = SH.lit = 0;
+}
+
+static void shadow_forget(void)
+{
+    SH.target = 0;
+    SH.valid = SH.lit = SH.scene = SH.caster = SH.ids = 0;
+    SH.nw = 0;
+    g_nheld = g_nhv = 0;
+}
+
+static void SH_end_frame(void)
+{
+    SH.scene = SH.caster = SH.ids = 0;
+    SH.nw = 0;
+    if (!rgl_shadows && SH.target)
+        shadow_drop();                  /* turned off: the map's memory back */
+}
+
+/* the held casters into the map, from a light fitted around the fighters,
+ * for the held draws to sample: SH.valid when it was drawn */
+static void shadow_build(void)
+{
+    static const float dir[3] = { 0.2316f, 0.4169f, -0.8789f };   /* (0.25, 0.45, -0.95) */
+    float lo[3] = { 1e30f, 1e30f, 1e30f }, hi[3] = { -1e30f, -1e30f, -1e30f };
+    float c[3], r = 0.0f, eye[3], side[3], up[3], l;
+    mat4 view = k_ident, ortho = k_ident;
+    rgl_vtx *v;
+    rgl_pipe p;
+    rgl_frag f;
+    rgl_samp sm;
+    rgl_rect vp;
+    static const float white[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    int i, k, f_n = 0, n = SH.nw / 4;
+    float texel, cs, cu;
+
+    SH.caster = SH.ids = 0;
+    SH.valid = 0;
+    if (!B || !B->shadow_map)
+        return;
+    if (!rgl_shadows) {
+        shadow_drop();
+        SH.nw = 0;
+        return;
+    }
+    SH.nw = 0;
+    if (n < 3) {
+        SH.valid = 0;
+        return;
+    }
+    for (i = 0; i < n; i++) {
+        if (SH.w[i * 4 + 3] == 0.0f)
+            continue;                   /* the stage: the map follows the fighters */
+        f_n++;
+        for (k = 0; k < 3; k++) {
+            if (SH.w[i * 4 + k] < lo[k]) lo[k] = SH.w[i * 4 + k];
+            if (SH.w[i * 4 + k] > hi[k]) hi[k] = SH.w[i * 4 + k];
+        }
+    }
+    for (k = 0; k < 3; k++)
+        c[k] = (lo[k] + hi[k]) * 0.5f;
+    for (k = 0; k < 3; k++)
+        r += (hi[k] - c[k]) * (hi[k] - c[k]);
+    r = sqrtf(r) * SHADOW_ROOM;
+    if (r < SHADOW_MIN)
+        r = SHADOW_MIN;                 /* the stage about them too */
+    if (f_n < 3 || !(r > 0.0f) || r > 1e6f) {
+        SH.valid = 0;
+        return;
+    }
+    /* steady: the size in eighths of its power of two, so it changes only
+     * now and then, and the centre on a texel (below), so the texels do not
+     * slide over the stage as the fighters move */
+    {
+        const float q = exp2f(ceilf(log2f(r)) - 3.0f);
+        r = ceilf(r / q) * q;
+    }
+
+    /* the light's view: from 3r back along its direction, looking at the
+     * casters' centre (gluLookAt, with +Y as up -- never the direction) */
+    side[0] = dir[1] * 0.0f - dir[2] * 1.0f;    /* dir x (0, 1, 0) */
+    side[1] = dir[2] * 0.0f - dir[0] * 0.0f;
+    side[2] = dir[0] * 1.0f - dir[1] * 0.0f;
+    l = sqrtf(side[0] * side[0] + side[1] * side[1] + side[2] * side[2]);
+    for (k = 0; k < 3; k++)
+        side[k] /= l;
+    up[0] = side[1] * dir[2] - side[2] * dir[1];
+    up[1] = side[2] * dir[0] - side[0] * dir[2];
+    up[2] = side[0] * dir[1] - side[1] * dir[0];
+    texel = 2.0f * r / SHADOW_SIZE;
+    cs = side[0] * c[0] + side[1] * c[1] + side[2] * c[2];
+    cu = up[0] * c[0] + up[1] * c[1] + up[2] * c[2];
+    cs = floorf(cs / texel + 0.5f) * texel - cs;
+    cu = floorf(cu / texel + 0.5f) * texel - cu;
+    for (k = 0; k < 3; k++) {
+        c[k] += side[k] * cs + up[k] * cu;
+        eye[k] = c[k] - dir[k] * 3.0f * r;
+    }
+    for (k = 0; k < 3; k++) {
+        view.m[k * 4 + 0] = side[k];
+        view.m[k * 4 + 1] = up[k];
+        view.m[k * 4 + 2] = -dir[k];
+    }
+    view.m[12] = -(side[0] * eye[0] + side[1] * eye[1] + side[2] * eye[2]);
+    view.m[13] = -(up[0] * eye[0] + up[1] * eye[1] + up[2] * eye[2]);
+    view.m[14] = dir[0] * eye[0] + dir[1] * eye[1] + dir[2] * eye[2];
+    /* glOrtho(-r, r, -r, r, 0, 6r): the room about the fighters, and the
+     * stage from as far above them as below */
+    ortho.m[0] = 1.0f / r;
+    ortho.m[5] = 1.0f / r;
+    ortho.m[10] = -2.0f / (6.0f * r);
+    ortho.m[14] = -1.0f;
+    SH.light = mul(&ortho, &view);
+
+    if (!SH.target) {
+        SH.target = B->target_new(SHADOW_SIZE, SHADOW_SIZE, 1, 1);
+        if (!SH.target) {
+            printf("real-time shadows: no %dx%d target, off\n", SHADOW_SIZE, SHADOW_SIZE);
+            rgl_shadows = 0;
+            return;
+        }
+        printf("real-time shadows: on, a %dx%d shadow map\n", SHADOW_SIZE, SHADOW_SIZE);
+    }
+    /* a buffer of its own: the draw that let the scene go is in g_out */
+    if (n > g_cshv) {
+        rgl_vtx *a = (rgl_vtx *)realloc(g_shv, (size_t)n * 2 * sizeof *a);
+        if (!a)
+            return;
+        g_shv = a;
+        g_cshv = n * 2;
+    }
+    v = g_shv;
+    memset(v, 0, (size_t)n * sizeof *v);
+    for (i = 0; i < n; i++) {
+        const float x = SH.w[i * 4], y = SH.w[i * 4 + 1], z = SH.w[i * 4 + 2];
+        const float *m = SH.light.m;
+        v[i].x = m[0] * x + m[4] * y + m[8] * z + m[12];
+        v[i].y = m[1] * x + m[5] * y + m[9] * z + m[13];
+        v[i].z = m[2] * x + m[6] * y + m[10] * z + m[14];
+        v[i].w = m[3] * x + m[7] * y + m[11] * z + m[15];
+        v[i].rgba[0] = v[i].rgba[1] = v[i].rgba[2] = v[i].rgba[3] = 255;
+        v[i].s[0] = SH.w[i * 4 + 3];   /* the caster's id, into the texel's A */
+    }
+    B->target_use(SH.target);
+    B->clear(NULL, 1, white, 1, 1.0f);
+    memset(&p, 0, sizeof p);
+    p.topo = RGL_TRIS;
+    p.depth_test = p.depth_write = 1;
+    p.cull = RGL_CULL_NONE;
+    p.mask = 15;
+    memset(&f, 0, sizeof f);
+    f.tex_mode = RGL_TEX_NONE;
+    f.shadow = RGL_SHADOW_DEPTH;
+    memset(&sm, 0, sizeof sm);
+    sm.aniso = 1;
+    vp.x = vp.y = 0;
+    vp.w = vp.h = SHADOW_SIZE;
+    B->draw(&p, &f, 0, &sm, &vp, NULL, v, n);
+    B->shadow_map(SH.target);
+    B->target_use(cur_target(g_draw_fb));
+    SH.valid = SH.lit = 1;
+}
+
+/* the scene's draws held back while its camera is on (1), or not (0) */
+static int hold_draw(const rgl_pipe *p, const rgl_frag *f, int tex, const rgl_samp *sm,
+                     const rgl_rect *vp, const rgl_rect *sc, const rgl_vtx *v, int n)
+{
+    held *h;
+
+    if (!SH.scene)
+        return 0;
+    if (g_nheld >= g_cheld) {
+        int c = g_cheld ? g_cheld * 2 : 256;
+        held *a = (held *)realloc(g_held, (size_t)c * sizeof *a);
+        if (!a)
+            return 0;
+        g_held = a;
+        g_cheld = c;
+    }
+    if (g_nhv + n > g_chv) {
+        int c = (g_nhv + n) * 2;
+        rgl_vtx *a = (rgl_vtx *)realloc(g_hv, (size_t)c * sizeof *a);
+        if (!a)
+            return 0;
+        g_hv = a;
+        g_chv = c;
+    }
+    h = &g_held[g_nheld++];
+    memset(h, 0, sizeof *h);
+    h->p = *p;
+    h->f = *f;
+    h->sm = *sm;
+    h->vp = *vp;
+    if (sc) {
+        h->sc = *sc;
+        h->has_sc = 1;
+    }
+    h->tex = tex;
+    h->first = g_nhv;
+    h->n = n;
+    memcpy(g_hv + g_nhv, v, (size_t)n * sizeof *v);
+    g_nhv += n;
+    return 1;
+}
+
+static int hold_clear(const rgl_rect *sc, int color, const float rgba[4], int depth)
+{
+    held *h;
+
+    if (!SH.scene || !g_nheld)
+        return 0;                       /* nothing held to keep the order of */
+    if (g_nheld >= g_cheld) {
+        int c = g_cheld * 2;
+        held *a = (held *)realloc(g_held, (size_t)c * sizeof *a);
+        if (!a)
+            return 0;
+        g_held = a;
+        g_cheld = c;
+    }
+    h = &g_held[g_nheld++];
+    memset(h, 0, sizeof *h);
+    h->clear = 1;
+    h->color = color;
+    h->depth = depth;
+    memcpy(h->rgba, rgba, sizeof h->rgba);
+    if (sc) {
+        h->sc = *sc;
+        h->has_sc = 1;
+    }
+    return 1;
+}
+
+/* the map from the casters held, then the held draws with it */
+static void scene_flush(void)
+{
+    int i, k;
+    double t0;
+
+    if (!B || !g_nheld) {
+        SH.nw = 0;
+        SH.caster = SH.ids = 0;
+        return;
+    }
+    t0 = rgl_now_ms();
+    rgl_shadow_tris = SH.nw / 12;
+    if (rgl_shadows)
+        shadow_build();
+    else {
+        shadow_drop();
+        SH.nw = 0;
+    }
+    SH.nw = 0;
+    for (i = 0; i < g_nheld; i++) {
+        held *h = &g_held[i];
+        rgl_vtx *v = g_hv + h->first;
+
+        if (h->clear) {
+            B->clear(h->has_sc ? &h->sc : NULL, h->color, h->rgba, h->depth, 1.0f);
+            continue;
+        }
+        if ((h->f.shadow & 15) == RGL_SHADOW_RECEIVE) {
+            if (SH.valid) {
+                const float *m = SH.light.m;
+                for (k = 0; k < h->n; k++) {
+                    const float x = v[k].s[0], y = v[k].s[1], z = v[k].s[2], w = v[k].s[3];
+                    v[k].s[0] = m[0] * x + m[4] * y + m[8] * z + m[12] * w;
+                    v[k].s[1] = m[1] * x + m[5] * y + m[9] * z + m[13] * w;
+                    v[k].s[2] = m[2] * x + m[6] * y + m[10] * z + m[14] * w;
+                    v[k].s[3] = m[3] * x + m[7] * y + m[11] * z + m[15] * w;
+                }
+            } else
+                h->f.shadow = RGL_SHADOW_NONE;
+        }
+        B->draw(&h->p, &h->f, h->tex, &h->sm, &h->vp, h->has_sc ? &h->sc : NULL, v, h->n);
+    }
+    g_nheld = g_nhv = 0;
+    rgl_shadow_ms += rgl_now_ms() - t0;
+}
+
 /* one vertex out: position transformed, colour and texture coordinate */
 static void put(rgl_vtx *o, const float p[4], const float c[4], float s, float t)
 {
@@ -1040,6 +1584,14 @@ static void put(rgl_vtx *o, const float p[4], const float c[4], float s, float t
     o->rgba[0] = ub(c[0]); o->rgba[1] = ub(c[1]); o->rgba[2] = ub(c[2]); o->rgba[3] = ub(c[3]);
     o->u = x[0] * s + x[4] * t + x[12];
     o->v = x[1] * s + x[5] * t + x[13];
+    if (g_sh_on) {
+        const float *h = g_shm.m;
+        o->s[0] = h[0] * p[0] + h[4] * p[1] + h[8] * p[2] + h[12] * p[3];
+        o->s[1] = h[1] * p[0] + h[5] * p[1] + h[9] * p[2] + h[13] * p[3];
+        o->s[2] = h[2] * p[0] + h[6] * p[1] + h[10] * p[2] + h[14] * p[3];
+        o->s[3] = h[3] * p[0] + h[7] * p[1] + h[11] * p[2] + h[15] * p[3];
+    } else
+        o->s[0] = o->s[1] = o->s[2] = o->s[3] = 0.0f;
 }
 
 static void from_arrays(rgl_vtx *o, int i)
@@ -1086,7 +1638,7 @@ static unsigned char bf(GLenum f)
 }
 
 /* the assembled primitives to the backend */
-static void submit(int topo, const rgl_vtx *v, int n)
+static void submit(int topo, rgl_vtx *v, int n)
 {
     rgl_pipe p;
     rgl_frag f;
@@ -1114,6 +1666,12 @@ static void submit(int topo, const rgl_vtx *v, int n)
     f.tex_mode = !handle ? RGL_TEX_NONE : S.env == E_REPLACE ? RGL_TEX_REPLACE : RGL_TEX_MODULATE;
     f.alpha_func = S.alpha_test ? (int)S.alpha_func : 0;
     f.alpha_ref = S.alpha_ref;
+    if (g_sh_on == 2 && topo == RGL_TRIS)
+        shadow_cast(v, n, SH.caster);
+    if (g_sh_proxy == 1)
+        return;                         /* a stand-in, cast and not drawn */
+    /* a receiver's own caster id above the mode: its texels are skipped */
+    f.shadow = g_sh_on ? RGL_SHADOW_RECEIVE | SH.caster << 4 : RGL_SHADOW_NONE;
 
     memset(&sm, 0, sizeof sm);
     if (t) {
@@ -1127,6 +1685,9 @@ static void submit(int topo, const rgl_vtx *v, int n)
         sm.aniso = (unsigned char)(t->aniso < 1.0f ? 1 : t->aniso > 16.0f ? 16 : t->aniso);
     }
     vp.x = S.viewport[0]; vp.y = S.viewport[1]; vp.w = S.viewport[2]; vp.h = S.viewport[3];
+    if (hold_draw(&p, &f, handle, &sm, &vp, draw_rect(&sc) ? &sc : NULL, v, n))
+        return;
+    scene_flush();
     B->draw(&p, &f, handle, &sm, &vp, draw_rect(&sc) ? &sc : NULL, v, n);
 }
 
@@ -1139,6 +1700,7 @@ static void assemble(GLenum mode, int count, void (*get)(rgl_vtx *, int, const v
     if (count <= 0)
         return;
     update_mvp();
+    shadow_prep(mode == E_TRIANGLES || mode == E_TRIANGLE_STRIP || mode == E_TRIANGLE_FAN);
     need_out(count * 3 + 16);
     src = (rgl_vtx *)malloc((size_t)count * sizeof *src);
     if (!src)
@@ -1244,14 +1806,17 @@ static int tris_indexed(int count, GLenum t, const void *idx)
         ccap = (max + 1) * 2;
     }
     update_mvp();
+    shadow_prep(1);
+    /* every core on a big mesh (thirdparty/blender/omp_lite.c): each vertex
+     * and each index is its own work */
+#pragma omp parallel for if (max > 4096)
     for (i = 0; i <= max; i++)
         from_arrays(&cache[i], i);
     need_out(count + 16);
-    for (i = 0; i + 2 < count; i += 3) {
-        g_out[n++] = cache[elem_index(t, idx, i)];
-        g_out[n++] = cache[elem_index(t, idx, i + 1)];
-        g_out[n++] = cache[elem_index(t, idx, i + 2)];
-    }
+    n = count / 3 * 3;
+#pragma omp parallel for if (n > 12288)
+    for (i = 0; i < n; i++)
+        g_out[i] = cache[elem_index(t, idx, i)];
     submit(RGL_TRIS, g_out, n);
     return 1;
 }

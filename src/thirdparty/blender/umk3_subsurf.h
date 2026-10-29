@@ -77,6 +77,10 @@ void umk_subsurf_set_fit(UmkSubsurf *s, const float *w);
  * triangle corner (ntris x 3, e.g. the light value) that is carried the way
  * Blender carries loop data through a subdivision. 0 on failure. */
 int umk_subsurf_eval(UmkSubsurf *s, const float *pos, const float *corner_attr);
+/* A pose subdivided before, its output positions put back: the next
+ * umk_subsurf_eval with the same `pos` only spreads the attribute. */
+int  umk_subsurf_is_last(const UmkSubsurf *s, const float *pos);
+void umk_subsurf_restore(UmkSubsurf *s, const float *pos, const float *out_pos);
 
 /* The result of the last evaluation. Vertices are unique per position and
  * UV; triangles keep the winding of the face they came from. */

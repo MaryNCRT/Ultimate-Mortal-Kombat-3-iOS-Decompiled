@@ -112,6 +112,7 @@ enum {
     R_PNAME, R_PICON, R_PCOLOR, R_PSHADE, R_PCOLOR2, R_PID, R_PRESET2,
     R_CLOSE, R_QUIT, R_HEAD, R_CSUB,
     R_SHARPA, R_SHARPS,                 /* SMOOTH MODELS' sharp edges */
+    R_RTSHADOW,                         /* REAL-TIME SHADOWS (render/rgl.h) */
     R_PALT, R_PGRAD                     /* the outfit; the gradient picker */
 };
 
@@ -621,6 +622,12 @@ static void build(void)
         add(R_SHARPS, 0, tx("CONSERVACION DE BORDES AFILADOS", "SHARP EDGE PRESERVATION"), "< %d%% >",
             (int)(port_sharp_strength * 100.0f + 0.5f));
         g_rows[g_n - 1].en = port_smooth_models != 0;
+        /* REAL-TIME SHADOWS, experimental: drawn with Vulkan and Direct3D
+         * 12; with them on the flattened shadow under a fighter goes */
+        add(R_RTSHADOW, 0, tx("SOMBRAS EN TIEMPO REAL", "REAL-TIME SHADOWS"), "< %s >  %s",
+            rgl_shadows ? tx("ACTIVADAS", "ON") : tx("DESACTIVADAS", "OFF"),
+            rgl_renderer == RGL_OPENGL ? tx("CON VULKAN O DIRECT3D 12", "WITH VULKAN OR DIRECT3D 12")
+                                       : "EXPERIMENTAL");
         head(tx("TEXTURAS", "TEXTURES"));
         add(R_TEXQ, 0, tx("CALIDAD", "QUALITY"), "< %s >",
             tx(tq_es[g_gfx.texq], tq_en[g_gfx.texq]));
@@ -744,7 +751,7 @@ static int has_value(int kind)
     switch (kind) {
     case R_DISPLAY: case R_MONITOR: case R_RES: case R_RRES: case R_AA: case R_TEXQ:
     case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_SMOOTH: case R_SMODEL: case R_PLAYER: case R_LAYOUT:
-    case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE: case R_PCOLOR2:
+    case R_RTSHADOW: case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE: case R_PCOLOR2:
     case R_PICONS:
         return 1;
     }
@@ -980,6 +987,10 @@ static void change(int kind, int d)
         port_smooth_models = wrap(port_smooth_models + d, 3);
         g_dirty = 1;
         return;
+    case R_RTSHADOW:                    /* at once, from the next frame */
+        rgl_shadows = !rgl_shadows;
+        g_dirty = 1;
+        return;
     case R_SHARPA:                      /* at once, at the next frame drawn */
         port_sharp_angle += 5.0f * (float)d;
         port_sharp_angle = port_sharp_angle < 0 ? 0 : port_sharp_angle > 180 ? 180 : port_sharp_angle;
@@ -1151,6 +1162,12 @@ static int drop_fill(int kind)
         snprintf(L[2], 48, "%s 2", tx("NIVEL", "LEVEL"));
         n = 3;
         g_drop_cur = port_smooth_models;
+        break;
+    case R_RTSHADOW:
+        snprintf(L[0], 48, "%s", tx("DESACTIVADAS", "OFF"));
+        snprintf(L[1], 48, "%s", tx("ACTIVADAS", "ON"));
+        n = 2;
+        g_drop_cur = rgl_shadows ? 1 : 0;
         break;
     case R_LANG:
         for (n = 0; n < N_LANG; n++)
@@ -2021,6 +2038,7 @@ static void save_ini(void)
     put("smooth_models", "%d", port_smooth_models);
     put("sharp_edge_angle", "%d", (int)(port_sharp_angle + 0.5f));
     put("sharp_edge_strength", "%d", (int)(port_sharp_strength * 100.0f + 0.5f));
+    put("rt_shadows", "%d", rgl_shadows);
     put("buttons", "%d", port_buttons());
     {
         static const char *const st[5] = { "auto", "xbox", "ps5", "nintendo", "ps4" };

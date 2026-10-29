@@ -945,10 +945,13 @@ void LIME_RenderScene(long arg1, SCENEINFO *scene,
                     ConvertQSTMatrixtoPCMatrix(&q, m44);
                 }
                 if (ka->field05 != 0) {
+                    /* port: the skin under this piece is tucked under it
+                     * and not pushed out by SMOOTH MODELS' correction
+                     * (smooth_models.c), the key and bone kept so it is
+                     * posed again with the next skin's bones */
+                    port_smooth_cover_mesh(set->meshes[mi], m44, ka->field05,
+                                           flushMatrix, scene->scale);
                     scene_attach_to_bone(flushMatrix, ka->field05);
-                    /* port: the skin under this piece is not pushed out
-                     * by SMOOTH MODELS' correction (smooth_models.c) */
-                    port_smooth_cover_mesh(set->meshes[mi], m44, scene->scale);
                 }
 
                 glTranslatef(m44[12], m44[13], m44[14]);

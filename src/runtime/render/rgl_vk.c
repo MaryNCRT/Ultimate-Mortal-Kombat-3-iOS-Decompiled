@@ -187,6 +187,8 @@ static VkBuffer g_vbuf;
 static VkDeviceMemory g_vmem;
 static unsigned char *g_vmap;
 static VkDeviceSize g_vsize, g_voff;
+static struct { VkBuffer b; VkDeviceMemory m; } g_retired[16];   /* outgrown this frame, still read */
+static int g_nretired;
 
 static vk_tex *g_tex;
 static int g_ntex;
@@ -200,6 +202,7 @@ static vk_samp g_samps[64];
 static int g_nsamps;
 static int g_cur_target;
 static int g_white;                     /* a 1x1 white texture for untextured draws */
+static int g_shadow;                    /* the target sampled as the shadow map (binding 1) */
 
 static int vk_ok(VkResult r, const char *what)
 {
@@ -397,6 +400,10 @@ static void flush(int signal_done)
     vkResetFences(g_dev, 1, &g_fence);
     vk_ok(vkQueueSubmit(g_queue, 1, &si, g_fence), "vkQueueSubmit");
     vkWaitForFences(g_dev, 1, &g_fence, VK_TRUE, ~0ull);
+    while (g_nretired > 0) {            /* the buffers the frame outgrew */
+        g_nretired--;
+        free_buffer(g_retired[g_nretired].b, g_retired[g_nretired].m);
+    }
     vkResetDescriptorPool(g_dev, g_dpool, 0);
     g_dpool_used = 0;
     g_voff = 0;
@@ -878,7 +885,7 @@ static int vk_open(void *window, int width, int height)
         VkCommandBufferAllocateInfo ai;
         VkFenceCreateInfo fi;
         VkSemaphoreCreateInfo si;
-        VkDescriptorSetLayoutBinding b;
+        VkDescriptorSetLayoutBinding b[2];
         VkDescriptorSetLayoutCreateInfo dl;
         VkPushConstantRange pc;
         VkPipelineLayoutCreateInfo pl;
@@ -904,15 +911,18 @@ static int vk_open(void *window, int width, int height)
         vkCreateSemaphore(g_dev, &si, NULL, &g_sem_acquire);
         vkCreateSemaphore(g_dev, &si, NULL, &g_sem_done);
 
-        memset(&b, 0, sizeof b);
-        b.binding = 0;
-        b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        b.descriptorCount = 1;
-        b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        /* 0 the texture, 1 the shadow map */
+        memset(b, 0, sizeof b);
+        b[0].binding = 0;
+        b[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        b[0].descriptorCount = 1;
+        b[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        b[1] = b[0];
+        b[1].binding = 1;
         memset(&dl, 0, sizeof dl);
         dl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        dl.bindingCount = 1;
-        dl.pBindings = &b;
+        dl.bindingCount = 2;
+        dl.pBindings = b;
         vkCreateDescriptorSetLayout(g_dev, &dl, NULL, &g_dsl);
         pc.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         pc.offset = 0;
@@ -925,7 +935,7 @@ static int vk_open(void *window, int width, int height)
         pl.pPushConstantRanges = &pc;
         vkCreatePipelineLayout(g_dev, &pl, NULL, &g_layout);
         ps.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        ps.descriptorCount = DPOOL_SETS;
+        ps.descriptorCount = DPOOL_SETS * 2;
         memset(&dp, 0, sizeof dp);
         dp.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         dp.maxSets = DPOOL_SETS;
@@ -964,6 +974,7 @@ static void vk_close(void)
 {
     int i;
 
+    g_shadow = 0;
     if (!g_dev)
         return;
     upload_submit();
@@ -991,6 +1002,10 @@ static void vk_close(void)
     for (i = 0; i < g_npass; i++)
         vkDestroyRenderPass(g_dev, g_pass[i].rp, NULL);
     vkDestroySwapchainKHR(g_dev, g_swap, NULL);
+    while (g_nretired > 0) {
+        g_nretired--;
+        free_buffer(g_retired[g_nretired].b, g_retired[g_nretired].m);
+    }
     free_buffer(g_vbuf, g_vmem);
     vkDestroyShaderModule(g_dev, g_vs, NULL);
     vkDestroyShaderModule(g_dev, g_fs, NULL);
@@ -1266,6 +1281,8 @@ static void vk_target_free(int i)
         flush(0);
     if (g_cur_target == i)
         g_cur_target = 0;
+    if (g_shadow == i)
+        g_shadow = 0;
     vkDestroyFramebuffer(g_dev, g_tg[i].fb, NULL);
     free_image(&g_tg[i].color);
     free_image(&g_tg[i].dep);
@@ -1362,7 +1379,7 @@ static VkPipeline get_pipe(const rgl_pipe *k, int pass)
 {
     VkPipelineShaderStageCreateInfo st[2];
     VkVertexInputBindingDescription vb;
-    VkVertexInputAttributeDescription va[3];
+    VkVertexInputAttributeDescription va[4];
     VkPipelineVertexInputStateCreateInfo vi;
     VkPipelineInputAssemblyStateCreateInfo ia;
     VkPipelineViewportStateCreateInfo vp;
@@ -1395,11 +1412,12 @@ static VkPipeline get_pipe(const rgl_pipe *k, int pass)
     va[0].location = 0; va[0].binding = 0; va[0].format = VK_FORMAT_R32G32B32A32_SFLOAT; va[0].offset = 0;
     va[1].location = 1; va[1].binding = 0; va[1].format = VK_FORMAT_R8G8B8A8_UNORM; va[1].offset = 16;
     va[2].location = 2; va[2].binding = 0; va[2].format = VK_FORMAT_R32G32_SFLOAT; va[2].offset = 20;
+    va[3].location = 3; va[3].binding = 0; va[3].format = VK_FORMAT_R32G32B32A32_SFLOAT; va[3].offset = 28;
     memset(&vi, 0, sizeof vi);
     vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vi.vertexBindingDescriptionCount = 1;
     vi.pVertexBindingDescriptions = &vb;
-    vi.vertexAttributeDescriptionCount = 3;
+    vi.vertexAttributeDescriptionCount = 4;
     vi.pVertexAttributeDescriptions = va;
     memset(&ia, 0, sizeof ia);
     ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -1499,18 +1517,20 @@ static VkSampler get_sampler(const rgl_samp *s)
     return out;
 }
 
-static VkDescriptorSet get_set(int tex, const rgl_samp *s)
+static VkDescriptorSet get_set(int tex, const rgl_samp *s, VkImageView shadow)
 {
     static int last_tex = -1;
     static rgl_samp last_s;
     static VkDescriptorSet last;
+    static VkImageView last_shadow;
     static unsigned last_serial;
     VkDescriptorSetAllocateInfo ai;
-    VkDescriptorImageInfo ii;
-    VkWriteDescriptorSet w;
+    VkDescriptorImageInfo ii[2];
+    VkWriteDescriptorSet w[2];
     VkDescriptorSet set = VK_NULL_HANDLE;
+    rgl_samp point;
 
-    if (tex == last_tex && last_serial == g_serial && g_dpool_used
+    if (tex == last_tex && last_serial == g_serial && g_dpool_used && shadow == last_shadow
         && memcmp(&last_s, s, sizeof *s) == 0)
         return last;
     if (g_dpool_used >= DPOOL_SETS) {
@@ -1525,18 +1545,29 @@ static VkDescriptorSet get_set(int tex, const rgl_samp *s)
     if (!vk_ok(vkAllocateDescriptorSets(g_dev, &ai, &set), "vkAllocateDescriptorSets"))
         return VK_NULL_HANDLE;
     g_dpool_used++;
-    ii.sampler = get_sampler(s);
-    ii.imageView = g_tex[tex].im.view;
-    ii.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    memset(&w, 0, sizeof w);
-    w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    w.dstSet = set;
-    w.descriptorCount = 1;
-    w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    w.pImageInfo = &ii;
-    vkUpdateDescriptorSets(g_dev, 1, &w, 0, NULL);
+    ii[0].sampler = get_sampler(s);
+    ii[0].imageView = g_tex[tex].im.view;
+    ii[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    /* the shadow map texel by texel, clamped; white when there is none */
+    memset(&point, 0, sizeof point);
+    point.wrap_s_clamp = point.wrap_t_clamp = 1;
+    point.aniso = 1;
+    ii[1].sampler = get_sampler(&point);
+    ii[1].imageView = shadow ? shadow : g_tex[g_white].im.view;
+    ii[1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    memset(w, 0, sizeof w);
+    w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    w[0].dstSet = set;
+    w[0].descriptorCount = 1;
+    w[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    w[0].pImageInfo = &ii[0];
+    w[1] = w[0];
+    w[1].dstBinding = 1;
+    w[1].pImageInfo = &ii[1];
+    vkUpdateDescriptorSets(g_dev, 2, w, 0, NULL);
     last_tex = tex;
     last_s = *s;
+    last_shadow = shadow;
     last = set;
     last_serial = g_serial;
     return set;
@@ -1550,22 +1581,42 @@ static void vk_draw(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_sam
     VkViewport vp;
     VkRect2D sc;
     VkDescriptorSet set;
+    VkImageView shadow;
     rgl_samp plain;
     int w, h, pass;
 
     if (n <= 0)
         return;
-    if (bytes > g_vsize) {
-        /* a draw bigger than the buffer: a bigger buffer */
-        if (g_cmd_on)
-            flush(0);
-        free_buffer(g_vbuf, g_vmem);
-        while (g_vsize < bytes)
-            g_vsize *= 2;
-        make_buffer(g_vsize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &g_vbuf, &g_vmem, (void **)&g_vmap);
+    if (g_voff + bytes > g_vsize) {
+        /* the frame outgrew the buffer: a bigger one, as big as the frame
+         * needs, so the frames after fit (REAL-TIME SHADOWS and SMOOTH
+         * MODELS draw a frame's fighters twice and thicker). The commands
+         * already recorded keep reading the old one, freed at the next
+         * flush, so the GPU is not waited for partway through the frame.
+         * There was a 256 MB ceiling, past which every overflow waited and
+         * made the buffer again. */
+        VkDeviceSize want = g_voff + bytes, size = g_vsize;
+        VkBuffer nb = VK_NULL_HANDLE;
+        VkDeviceMemory nm = VK_NULL_HANDLE;
+        void *nmap = NULL;
+        while (size < want)
+            size *= 2;
+        if (g_nretired < (int)(sizeof g_retired / sizeof *g_retired)
+            && make_buffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &nb, &nm, &nmap)) {
+            g_retired[g_nretired].b = g_vbuf;
+            g_retired[g_nretired++].m = g_vmem;
+            g_vbuf = nb;
+            g_vmem = nm;
+            g_vmap = nmap;
+            g_vsize = size;
+            g_voff = 0;
+        } else {                        /* no memory for it: wait and reuse */
+            if (g_cmd_on)
+                flush(0);
+            if (bytes > g_vsize)
+                return;
+        }
     }
-    if (g_voff + bytes > g_vsize && g_cmd_on)
-        flush(0);
     if (!begin_pass())
         return;
     pass = g_cur_target ? g_tg[g_cur_target].pass : g_win_pass;
@@ -1578,7 +1629,21 @@ static void vk_draw(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_sam
         s = &plain;
     }
     g_tex[tex].serial = g_serial;
-    set = get_set(tex, s);
+    /* a draw that receives samples the shadow map, readable: its layout
+     * changes outside a render pass, once a frame */
+    shadow = VK_NULL_HANDLE;
+    if ((f->shadow & 15) == RGL_SHADOW_RECEIVE && g_shadow > 0 && g_shadow < g_ntg && g_tg[g_shadow].used
+        && g_shadow != g_cur_target) {
+        vk_image *im = &g_tg[g_shadow].color;
+        if (im->layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+            end_pass();
+            to_layout(im, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            if (!begin_pass())
+                return;
+        }
+        shadow = im->view;
+    }
+    set = get_set(tex, s, shadow);
     if (!set)
         return;
     off = g_voff;
@@ -1728,10 +1793,11 @@ static void vk_read(int t, const rgl_rect *r, unsigned char *out)
 
 static void vk_present(void) { present(); }
 static void vk_finish(void) { }
+static void vk_shadow_map(int t) { g_shadow = t > 0 && t < g_ntg && g_tg[t].used ? t : 0; }
 
 rgl_backend rgl_vk = {
     "Vulkan", vk_open, vk_close, vk_device, 4096, 1,
     vk_tex_new, vk_tex_image, vk_tex_sub, vk_tex_free,
     vk_target_new, vk_target_free, vk_target_use, vk_target_size,
-    vk_clear, vk_draw, vk_blit, vk_read, vk_present, vk_finish,
+    vk_clear, vk_draw, vk_blit, vk_read, vk_present, vk_finish, vk_shadow_map,
 };

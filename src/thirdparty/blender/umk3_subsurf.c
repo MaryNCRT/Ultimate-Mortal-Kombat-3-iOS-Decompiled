@@ -1308,12 +1308,19 @@ int umk_subsurf_eval(UmkSubsurf *s, const float *pos, const float *corner_attr)
 {
 	int i, j;
 	const int gs = s->gridSize;
+	/* the same pose as last time: a pause, a held frame, or the same body
+	 * drawn again this frame under another light (half of the draws in
+	 * Scorpion's fatality) -- the surface stays, only the light is
+	 * spread again, which costs a fraction of subdividing */
+	const int same_pos = s->have_last
+	    && memcmp(s->last_pos, pos, sizeof(float) * 3 * (size_t)s->nverts) == 0;
 
-	/* the same pose as last time (a pause, a held frame): nothing to do */
-	if (s->have_last && memcmp(s->last_pos, pos, sizeof(float) * 3 * (size_t)s->nverts) == 0
+	if (same_pos
 	    && (corner_attr == NULL) == (s->last_had_attr == 0)
 	    && (corner_attr == NULL || memcmp(s->last_attr, corner_attr, sizeof(float) * 3 * (size_t)s->ntris) == 0))
 		return 1;
+	if (same_pos)
+		goto spread;
 
 	weld_positions(s, pos);
 	if (!sync_positions_partial(s))
@@ -1345,18 +1352,25 @@ int umk_subsurf_eval(UmkSubsurf *s, const float *pos, const float *corner_attr)
 		return 0;
 
 	memcpy(s->last_pos, pos, sizeof(float) * 3 * (size_t)s->nverts);
+
+spread:
 	s->last_had_attr = corner_attr != NULL;
 	if (corner_attr)
 		memcpy(s->last_attr, corner_attr, sizeof(float) * 3 * (size_t)s->ntris);
 	s->have_last = 1;
 
+	/* each output vertex on its own: every core (omp_lite.c) */
+#pragma omp parallel for private(j) if (s->out_nverts > 4096)
 	for (i = 0; i < s->out_nverts; i++) {
 		const int *r = s->out_ref + i * 4;
-		const float *co = ccgSubSurf_getFaceGridData(s->ss, s->faceMap[r[0]], r[1], r[2], r[3]);
 
-		s->out_pos[i * 3 + 0] = co[0];
-		s->out_pos[i * 3 + 1] = co[1];
-		s->out_pos[i * 3 + 2] = co[2];
+		if (!same_pos) {
+			const float *co = ccgSubSurf_getFaceGridData(s->ss, s->faceMap[r[0]], r[1], r[2], r[3]);
+
+			s->out_pos[i * 3 + 0] = co[0];
+			s->out_pos[i * 3 + 1] = co[1];
+			s->out_pos[i * 3 + 2] = co[2];
+		}
 
 		if (corner_attr) {
 			/* read as subsurf_ccg.c reads it for loop data:
@@ -1370,6 +1384,22 @@ int umk_subsurf_eval(UmkSubsurf *s, const float *pos, const float *corner_attr)
 		}
 	}
 	return 1;
+}
+
+/* A pose subdivided before (smooth_models.c keeps them): its positions put
+ * back as the last result, so umk_subsurf_eval with the same `pos` only
+ * spreads the light again. */
+int umk_subsurf_is_last(const UmkSubsurf *s, const float *pos)
+{
+	return s->have_last && memcmp(s->last_pos, pos, sizeof(float) * 3 * (size_t)s->nverts) == 0;
+}
+
+void umk_subsurf_restore(UmkSubsurf *s, const float *pos, const float *out_pos)
+{
+	memcpy(s->last_pos, pos, sizeof(float) * 3 * (size_t)s->nverts);
+	memcpy(s->out_pos, out_pos, sizeof(float) * 3 * (size_t)s->out_nverts);
+	s->have_last = 1;
+	s->last_had_attr = 0;           /* the light: spread again */
 }
 
 int umk_subsurf_num_verts(const UmkSubsurf *s) { return s->out_nverts; }
