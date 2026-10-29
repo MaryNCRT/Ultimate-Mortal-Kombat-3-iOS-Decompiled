@@ -5,6 +5,69 @@
 
 ---
 
+## After 0.1.13: model viewer, REPLACE MODEL (FBX/GLB/OBJ, a texture per material), replays, VSYNC (2026-10-29, not released)
+
+Branch `claude/viewer-tabs`. **Nothing here has been built into a game exe
+or played by Mary yet.** The C files pass `gcc -fsyntax-only` with the
+build's flags; the launcher UI builds (`npm run ui`).
+
+- **Model viewer** (MODS): the right panel in tabs (VIEW, LAYERS, TEXTURES,
+  IMPORT, EXPORT); each fighter lists its derived models (babality, frozen,
+  cut in half, headless, ...) found by the meshsets' names
+  (`ui/src/lib/mods/derived.js`); LAYERS hides or shows each mesh; the
+  texture editor shows thumbnails, grouped, with a large preview.
+- **REPLACE MODEL** takes FBX, GLB (three.js GLTFLoader, MIT) or OBJ
+  (+ .mtl) and opens a preview window with the model on the fighter, its
+  animations and its textures. **Each material keeps its own texture**:
+  the skin's triangles are written grouped by material and
+  `<FIGHTER>_STANDARD.skin.mats` lists the parts
+  (`block first count alpha texture`). The game draws each part with its
+  texture (`src/runtime/skin_mats.c`, hooked through function pointers in
+  `RenderSkinned.c` / `RenderMesh.c` and `Players.c`): UVs as the file has
+  them, GL_REPEAT past 0..1, transparent parts last (alpha test 0.1 +
+  blend); frozen uses each part's `_ICE` copy, written by the launcher.
+  GLB reads the UV set each material names and `KHR_texture_transform`.
+  The preview and the viewer show each part on its own (eye, "1" = alone,
+  click = large picture). A block with parts is not smoothed (SMOOTH
+  MODELS) in the game or the viewer. Online loads `.mats` too (visual).
+- **Online is vanilla**: `mods_online(1)` puts back every data.ini word a
+  mod changed and only models and textures are taken from mods
+  (`mods.c`, called from `rollback.c`).
+- **Replay player**: HIDE (a click or Esc shows it again) and SIZE
+  (75/100/125/150 %, umk3.ini `replay_scale`); the launcher steps aside
+  while the game runs and comes back where it was.
+- **Replays: the wrong rival.** Arcade's VS screen picks player two inside
+  the fight's loading, after the setup was written, so a recording kept
+  the previous rival (Mary: `liukang_vs_stryker` was a fight with Kitana;
+  `scorpion_vs_nightwolf` replayed against Old Sub-Zero). Task_GameInit
+  step 42 now calls `rb_fight_rival`: recording writes the real one into
+  the setup and names the file after it; a replay (`UMK3RPL4`) puts it
+  back. Old `UMK3RPL3` files still play but keep their old name.
+- **Replays: seeking stops what still sounds** (`plat_audio_stop_all` in
+  `rp_seek`).
+- **Select screen, the same fighter on both sides**: TheFECharacters has
+  one record per fighter, drawn for each side; the second
+  `port_smooth_pose` call took the first one's frames for the game's blend
+  and started over every draw (no smoothing, the smoothed pose remade).
+  Now once a frame per PLAYER (`port_frame_no`, counted in `limeBegin`).
+- **VSYNC** option: umk3.ini `vsync=0/1`, the game's options menu and the
+  launcher's video page; OpenGL swap interval, Direct3D 12 interval 0,
+  Vulkan mailbox/immediate. Applied at once.
+
+**Death screams (open).** Mary's last replay
+(`20261029-131108`, Liu Kang's decapitation) and the log of the fight it
+recorded show **one** death scream per fatality from the game logic
+(`group_sound`, kind 9); the repeats in the replay's log are Mary going
+back over the end. So the logic does not ask twice; what is heard twice
+is still unknown. Needs Mary to say which sound repeats and where
+(fight or replay, which fatality).
+
+**Pending:** STAGE SELECT after the fighters in VS, online and practice
+(a window like the reference Mary sent: the stage's picture, arrows, a
+list with pictures, `FE_SELECTFIGHTER` as the background). Not started:
+the stage pictures Mary mentions are not in `res/Textures` under any
+name found (`*_COMPLETEMAP.PNG` are light maps).
+
 ## After 0.1.13: an update stopped by a leftover update\new (2026-10-29, not released)
 
 Mary's update failed with "ENOTEMPTY: directory not empty, rmdir
