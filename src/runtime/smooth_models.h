@@ -26,6 +26,7 @@ void port_smooth_forget(const void *skin);
  * such a piece get no correction pass (umk_subsurf_set_fit), so the
  * smoothed skin does not come through it. */
 void port_smooth_cover_owner(const void *skin);
-void port_smooth_cover_mesh(const void *mesh, const float *m44, float scene_scale);
+void port_smooth_cover_mesh(const void *mesh, const float *key, int bone, const void *bones,
+                            float scene_scale);
 
 #endif

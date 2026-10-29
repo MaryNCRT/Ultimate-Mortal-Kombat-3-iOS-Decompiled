@@ -63,7 +63,8 @@ extern limeVECTOR3 *RenderVerts;        /* int16 triples, as drawn */
 
 /* What covers each skin (port_smooth_cover_mesh): a box per piece, in the
  * skin's own units (RenderVerts), kept a quarter of a second -- the scene is
- * drawn after the skin, so a frame uses the boxes of the one before. */
+ * drawn after the skin, so each is posed again with this frame's bones
+ * before the skin is drawn (cover_repose). */
 #define COVER_MAX 16
 #define COVER_MARGIN_CM 2.0f
 #define COVER_VERTS 1024                /* a bigger piece keeps only its box */
@@ -73,6 +74,8 @@ static struct cover {
     const void *skin, *mesh;
     float lo[3], hi[3];
     double at;
+    float key[16], scale;               /* the piece's key matrix and bone: posed */
+    int bone;                           /* again with the skin's own bones */
     int nv;                             /* the piece's vertices below, or 0 */
     float v[COVER_VERTS * 3], c[3];     /* in the skin's units, their centre */
 } g_cover[COVER_MAX];
@@ -87,6 +90,7 @@ typedef struct {
     float           sharp_a, sharp_s;   /* what umk_subsurf_set_sharp has */
     float          *fitw;               /* nverts, umk_subsurf_set_fit's */
     int             covered;            /* vertices under a piece, logged once */
+    int             tucked;             /* tucked under it, logged once */
     float          *pos;                /* nverts x 3, scratch */
     float          *attr;               /* nfaces x 3, scratch */
     uint8_t        *light, *rgba;       /* per output vertex */
@@ -168,31 +172,27 @@ void port_smooth_cover_owner(const void *skin)
     g_cover_owner = skin;
 }
 
-void port_smooth_cover_mesh(const void *mesh_p, const float *m, float scene_scale)
+/* the piece where its bone holds it: the key matrix onto the bone's (as
+ * RenderScene's scene_attach_to_bone), its box and vertices in the skin's
+ * units. Posed again with the skin's bones before the skin is drawn
+ * (cover_repose), so a moving fighter's head stays under it this frame,
+ * not the one before (the scene is drawn after the skin) */
+static void cover_pose(struct cover *c, const void *bones)
 {
-    const MESHINFO *mesh = (const MESHINFO *)mesh_p;
-    const double now = plat_time();
-    struct cover *c = NULL;
-    float k;
+    const MESHINFO *mesh = (const MESHINFO *)c->mesh;
+    const float *b = (const float *)((const char *)bones + c->bone * 48);
+    float t[16] = { 0 }, m[16], k;
     int i, j;
 
-    if (!g_cover_owner || !mesh || mesh->numVerts <= 0 || mesh->boundsRadius == 0.0f)
-        return;
-    for (i = 0; i < COVER_MAX && !c; i++)
-        if (g_cover[i].skin == g_cover_owner && g_cover[i].mesh == mesh)
-            c = &g_cover[i];
-    for (i = 0; i < COVER_MAX && !c; i++)
-        if (!g_cover[i].skin || now - g_cover[i].at > 0.25)
-            c = &g_cover[i];
-    if (!c)
-        return;
-    c->skin = g_cover_owner;
-    c->mesh = mesh;
-    c->at = now;
+    t[0] = b[0];  t[1] = b[1];  t[2] = b[2];
+    t[4] = b[3];  t[5] = b[4];  t[6] = b[5];
+    t[8] = b[6];  t[9] = b[7];  t[10] = b[8];
+    t[12] = b[9]; t[13] = b[10]; t[14] = b[11]; t[15] = 1.0f;
+    limeMatrixMult(c->key, t, m);
     /* the piece's int16 positions over its radius (LIME_RenderMeshSingle's
      * glScalef), through the key and bone matrix, the scene's scale on all
      * of it (LIME_RenderScene's glScalef), into the skin's units */
-    k = scene_scale * VertScale;
+    k = c->scale * VertScale;
     for (j = 0; j < 3; j++) {
         c->lo[j] = 1e30f;
         c->hi[j] = -1e30f;
@@ -217,6 +217,47 @@ void port_smooth_cover_mesh(const void *mesh_p, const float *m, float scene_scal
         c->lo[j] -= COVER_MARGIN_CM * VertScale;
         c->hi[j] += COVER_MARGIN_CM * VertScale;
     }
+}
+
+void port_smooth_cover_mesh(const void *mesh_p, const float *key, int bone, const void *bones,
+                            float scene_scale)
+{
+    const MESHINFO *mesh = (const MESHINFO *)mesh_p;
+    const double now = plat_time();
+    struct cover *c = NULL;
+    int i;
+
+    if (!g_cover_owner || !bones || bone < 0 || bone >= 150 || !mesh || mesh->numVerts <= 0
+        || mesh->boundsRadius == 0.0f)
+        return;
+    for (i = 0; i < COVER_MAX && !c; i++)
+        if (g_cover[i].skin == g_cover_owner && g_cover[i].mesh == mesh)
+            c = &g_cover[i];
+    for (i = 0; i < COVER_MAX && !c; i++)
+        if (!g_cover[i].skin || now - g_cover[i].at > 0.25)
+            c = &g_cover[i];
+    if (!c)
+        return;
+    c->skin = g_cover_owner;
+    c->mesh = mesh;
+    c->at = now;
+    memcpy(c->key, key, sizeof c->key);
+    c->bone = bone;
+    c->scale = scene_scale;
+    cover_pose(c, bones);
+}
+
+/* the bones the skin was just posed with (lime_globals.c) */
+
+/* this skin's pieces posed with its bones of this frame */
+static void cover_repose(const void *skin)
+{
+    const double now = plat_time();
+    int k;
+
+    for (k = 0; k < COVER_MAX; k++)
+        if (g_cover[k].skin == skin && now - g_cover[k].at <= 0.25)
+            cover_pose(&g_cover[k], (const void *)MatrixPalette2);
 }
 
 /* The correction's share for this frame: none for a vertex inside a piece
@@ -306,12 +347,13 @@ static float cover_leaves(const struct cover *c, const MESHINFO *mesh, const flo
  * back TUCK_INSIDE_CM inside it, in RenderVerts before the original draw.
  * Measured on Kung Lao in the rest pose (WORK tuck.mjs): the 4 points
  * through the hat, at most 0.24 cm past it along that line, and none else. */
-static void tuck(const void *skin, int nverts)
+/* in the skin's units, float positions (the smoothed draw's) or the
+ * int16 RenderVerts (the plain one), whichever is given */
+static int tuck_at(const void *skin, int nverts, float *fp, int16_t *rv, float inside_cm,
+                   float depth_cm)
 {
-    int16_t *rv = (int16_t *)(void *)RenderVerts;
     const double now = plat_time();
     int i, k, n = 0;
-    static int logged;
 
     for (k = 0; k < COVER_MAX; k++) {
         const struct cover *c = &g_cover[k];
@@ -323,7 +365,8 @@ static void tuck(const void *skin, int nverts)
             float p[3], d[3], len, w, back;
             int j;
 
-            p[0] = rv[i * 3]; p[1] = rv[i * 3 + 1]; p[2] = rv[i * 3 + 2];
+            for (j = 0; j < 3; j++)
+                p[j] = fp ? fp[i * 3 + j] : rv[i * 3 + j];
             if (p[0] < c->lo[0] || p[0] > c->hi[0] || p[1] < c->lo[1] || p[1] > c->hi[1]
                 || p[2] < c->lo[2] || p[2] > c->hi[2])
                 continue;
@@ -332,20 +375,32 @@ static void tuck(const void *skin, int nverts)
             for (j = 0; j < 3; j++)
                 d[j] = p[j] - c->c[j];
             len = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
-            if (len <= 0.0f || (1.0f - w) * len > TUCK_DEPTH_CM * VertScale)
+            if (len <= 0.0f || (1.0f - w) * len > depth_cm * VertScale)
                 continue;
-            back = w - TUCK_INSIDE_CM * VertScale / len;
+            back = w - inside_cm * VertScale / len;
             if (back < 0.0f)
                 back = 0.0f;
             for (j = 0; j < 3; j++) {
                 float v = c->c[j] + d[j] * back;
-                rv[i * 3 + j] = (int16_t)(v < 0.0f ? v - 0.5f : v + 0.5f);
+                if (fp)
+                    fp[i * 3 + j] = v;
+                else
+                    rv[i * 3 + j] = (int16_t)(v < 0.0f ? v - 0.5f : v + 0.5f);
             }
             n++;
         }
     }
+    return n;
+}
+
+static void tuck(const void *skin, int nverts)
+{
+    static int logged;
+    const int n = tuck_at(skin, nverts, NULL, (int16_t *)(void *)RenderVerts, TUCK_INSIDE_CM,
+                          TUCK_DEPTH_CM);
+
     if (n && !logged) {
-        printf("smooth models off: %d vertices of a skin tucked under a piece on its bones\n", n);
+        printf("smooth models: %d vertices of a skin tucked under a piece on its bones\n", n);
         logged = 1;
     }
 }
@@ -576,6 +631,8 @@ int port_smooth_draw(const void *skin, const void *rec, long second,
 
     if (skin == NULL || rec == NULL || second == 2)
         return 0;                       /* the shadow is not smoothed */
+    if (!second)
+        cover_repose(skin);             /* the hat where it is this frame */
     if (!port_smooth_models) {
         if (!second)                    /* what the bones carry covers the body */
             tuck(skin, (int)*(const long *)r);
@@ -596,8 +653,11 @@ int port_smooth_draw(const void *skin, const void *rec, long second,
             return 0;                   /* not a mesh this can read */
 
     e = lookup(skin, (int)nverts, (int)nfaces, idx, ruv);
-    if (e == NULL)
+    if (e == NULL) {
+        if (!second)                    /* the plain skin meanwhile, tucked too */
+            tuck(skin, (int)nverts);
         return 0;
+    }
 
     if (e->sharp_a != port_sharp_angle || e->sharp_s != port_sharp_strength) {
         umk_subsurf_set_sharp(e->s, port_sharp_angle, port_sharp_strength);
@@ -605,6 +665,13 @@ int port_smooth_draw(const void *skin, const void *rec, long second,
         e->sharp_s = port_sharp_strength;
     }
     record_positions(e->nverts, e->pos);
+    /* under the hat before it is smoothed, as the model viewer does
+     * (mods/tuck.js): the head no longer comes through it */
+    if (!second && (i = tuck_at(skin, e->nverts, e->pos, NULL, TUCK_INSIDE_CM,
+                                TUCK_DEPTH_CM)) != 0 && !e->tucked) {
+        printf("smooth models: %d vertices of a skin tucked under a piece on its bones\n", i);
+        e->tucked = 1;
+    }
     cover_fit(e);
     for (i = 0; i < e->nfaces * 3; i++)
         e->attr[i] = (float)light[idx[i]];

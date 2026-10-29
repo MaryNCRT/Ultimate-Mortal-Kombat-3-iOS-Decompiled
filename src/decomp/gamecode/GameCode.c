@@ -5136,12 +5136,15 @@ void RenderIntroCharacterPlayer(void)
                                     p0[0x528 / 4], 1);
 
         memcpy(AttachTransforms, MatrixPalette2, 0x1c20);
+        /* port: the hat covers the smoothed head here too (RenderPlayer) */
+        port_smooth_cover_owner((void *)(uintptr_t)(unsigned long) anim[0x30 / 4]);
         LIME_RenderScene(6,
                          (void *)(uintptr_t)(unsigned long) anim[0x10 / 4],
                          p0[0x51c / 4], p0[0x520 / 4],
                          ((float *)p0)[0x524 / 4], 0, 0, 0,
                          (void *)(uintptr_t)(unsigned long) p0[0x528 / 4],
                          p0[0x52c / 4], AttachTransforms);
+        port_smooth_cover_owner(NULL);   /* port */
         rgl_shadow_caster(0);           /* port */
     }
 
@@ -5191,12 +5194,15 @@ void RenderIntroCharacterPlayer(void)
                                     p1[0x528 / 4], 1);
 
         memcpy(AttachTransforms, MatrixPalette2, 0x1c20);
+        /* port: the hat covers the smoothed head here too (RenderPlayer) */
+        port_smooth_cover_owner((void *)(uintptr_t)(unsigned long) anim[0x30 / 4]);
         LIME_RenderScene(6,
                          (void *)(uintptr_t)(unsigned long) anim[0x10 / 4],
                          p1[0x51c / 4], p1[0x520 / 4],
                          ((float *)p1)[0x524 / 4], 0, 0, 0,
                          (void *)(uintptr_t)(unsigned long) p1[0x528 / 4],
                          p1[0x52c / 4], AttachTransforms);
+        port_smooth_cover_owner(NULL);   /* port */
         rgl_shadow_caster(0);           /* port */
     }
 
@@ -11386,11 +11392,15 @@ void RenderLevelPlayers(void)
                     SkipFrame86 = 0;
                     if (oi[GOBJ_FRAME / 2] == FRAME_SKIP86)
                         SkipFrame86 = 1;
+                    /* port: what the scene hangs on the bones covers this
+                     * fighter's skin (SMOOTH MODELS, Kung Lao's hat) */
+                    port_smooth_cover_owner(RLP_PTR(RLP_PTR(owner[4 / 4])[0x30 / 4]));
                     LIME_RenderScene(slot + RLP_SCENE_BASE,
                                      RLP_PTR(RLP_PTR(owner[4 / 4])[0x10 / 4]),
                                      w[0x51c / 4], w[0x520 / 4], pf[0x524 / 4],
                                      0, 0, pass,
                                      RLP_PTR(w[0x528 / 4]), w[0x52c / 4], att);
+                    port_smooth_cover_owner(NULL);   /* port */
                     SkipFrame86 = 0;
                 } else if (flags100 == 0) {
                     LIME_RenderScene(slot + RLP_SCENE_BASE,
