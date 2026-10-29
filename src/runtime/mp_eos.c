@@ -566,7 +566,7 @@ static void EOS_CALL on_deleted(const EOS_Connect_DeleteDeviceIdCallbackInfo *d)
 }
 
 /* The SDK's memory comes from a heap of its own, above the game's: the 64-bit
- * game keeps its memory below 2 GB in arenas of its own (savestate.c,
+ * game keeps its memory below 4 GB in arenas of its own (savestate.c,
  * lime_platform.c), and nothing of the SDK's should land in or near them. */
 #ifdef _WIN32
 static HANDLE g_eos_heap;

@@ -52,7 +52,7 @@ void  st_free(void *p);
 /* The 64-bit build (UMK3_LOW32): the game's words stay 32 bits, as on the
  * device. Its code spells a word holding an address uintptr_t; here that is
  * a uint32_t, which holds every address of the game, since the build keeps
- * the exe, its data and the game's heaps below 2 GB. The library's headers
+ * the exe, its data and the game's heaps below 4 GB. The library's headers
  * come first, with the real type. */
 #include <stdint.h>
 #include <stdio.h>

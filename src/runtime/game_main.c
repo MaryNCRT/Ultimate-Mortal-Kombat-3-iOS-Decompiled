@@ -2825,7 +2825,7 @@ int main(int argc, char **argv)
     umk3_logic_tables_fixup();
 #ifdef UMK3_LOW32
     /* the 32-bit pointers of the runtime's static tables (tools/
-     * low32_static.py), and the game's two heaps reserved below 2 GB before
+     * low32_static.py), and the game's two heaps reserved below 4 GB before
      * anything else (the graphics driver) takes the room */
     umk3_globals_fixup();
     st_init();
