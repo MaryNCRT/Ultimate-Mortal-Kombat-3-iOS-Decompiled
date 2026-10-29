@@ -121,6 +121,8 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
                      const char *title, const char *const *labels, int list_n,
                      int n_recent, int current);
 int  dbg_replay_hit(float fx, float fy, float *at, int list_n, int n_recent);
+/* Between one replay and the next, over the front end: the next one's name. */
+void dbg_replay_loading(const char *title);
 int  dbg_fps_on(void);                 /* TOOLS: FRAMES PER SECOND */
 int  dbg_net_on(void);                 /* TOOLS: ONLINE NUMBERS */
 /* FIGHT: INFINITE HEALTH (bit 0 player one, bit 1 two) and FREEZE CLOCK */

@@ -16,7 +16,19 @@
 
 ---
 
-## After 0.1.12: REPLAYS (2026-10-29, not released)
+## Release 0.1.13 beta (2026-10-29): replays, online delay by ping, Vulkan / Direct3D 12 stutters, 4 GB
+
+Published as the GitHub pre-release `v0.1.13-beta`, packaged as 0.1.12 was:
+`UMK3-PC-0.1.13-beta.zip` (`launcher/make_release.py` over `electron-builder
+--win dir`) and `UMK3-PC-0.1.13-beta-linux-x64.tar.gz` (`electron-builder
+--linux dir`, then `launcher/make_release_linux.py`). It carries the five
+"After 0.1.12" sections below. Before publishing, the game was built from
+the 1.2.59 .ipa in the unpacked Windows package. Known problems taken off at
+Mary's word: Reptile's fatalities (it was not Reptile's alone) and the
+Vulkan / Direct3D 12 stutters (fixed below). **Mary has not played this
+build yet.**
+
+## After 0.1.12: REPLAYS (2026-10-29, in 0.1.13)
 
 Not yet played by Mary. Asked for so that a fight can be watched again to
 find bugs and take logs of them (Melee Unlocked's replays as the model).
@@ -60,9 +72,13 @@ FOLDER for the kept ones. `play` passes `--replay` to the game.
 
 **The player's top corners** (asked after the first look at the plan). A
 REPLAYS button at the top left opens a list of the last fights and the kept
-ones (the newest 8), the one playing marked; picking another starts the game
-again on it (`CreateProcess` / `fork` of the exe with `--replay`) and this
-one closes, since a fight is loaded for its own fighters and level. An X at
+ones (the newest 8), the one playing marked; picking another switches to it
+in the same game: this replay ends (logged as `switched to another
+replay`), the game leaves the fight as the debug menu's FIGHT does and the
+`--fight` path starts the new one's fighters and level, behind a LOADING
+screen with its name; the sticks rest and the keys and mouse do nothing on
+the way (`rp_switching`). (The first version started a second copy of the
+exe instead; Mary asked for no restart.) An X at
 the top right closes the game. Nothing else is drawn across the top, so the
 health bars stay in sight; the replay's name moved into the status line.
 
@@ -70,7 +86,7 @@ Checks: Windows build without warnings in the new code, Linux compile 84/84,
 launcher tests pass, the page and the menu seen in launcher captures. The
 panel and playback have not been seen in the game yet.
 
-## After 0.1.12: online lag over the internet (2026-10-29, not released)
+## After 0.1.12: online lag over the internet (2026-10-29, in 0.1.13)
 
 Not yet played by Mary. She saw lag in an online fight against another PC.
 No 0.1.12 online log was on hand; the last one (0.1.11, over EOS) showed, per
@@ -95,7 +111,7 @@ Also seen in that 0.1.11 log, not touched: the second fight (this side player
 2) logged a DESYNC every second. Built into Mary's 0.1.12 test folder; not
 yet tried between two PCs.
 
-## After 0.1.12: REAL-TIME SHADOWS' note on a row of its own (2026-10-29, not released)
+## After 0.1.12: REAL-TIME SHADOWS' note on a row of its own (2026-10-29, in 0.1.13)
 
 Mary saw the note beside REAL-TIME SHADOWS' value ("WITH VULKAN OR DIRECT3D
 12") drawn over the label: the row shrinks its text to fit, down to a floor,
@@ -103,7 +119,7 @@ and this one was still too long. The note is now a dimmed row of its own under
 the option, shown, not chosen (`settings_menu.c`): ONLY WITH VULKAN OR
 DIRECT3D 12 on OpenGL, EXPERIMENTAL on the others. Seen right by Mary.
 
-## After 0.1.12: the game's memory below 4 GB, limeMalloc's heap 2 GB (2026-10-29, not released)
+## After 0.1.12: the game's memory below 4 GB, limeMalloc's heap 2 GB (2026-10-29, in 0.1.13)
 
 Not yet played by Mary.
 
@@ -137,7 +153,7 @@ What changed:
 Linux keeps `MAP_32BIT`, so it stays below 2 GB. It falls back through the
 size list to what fits. Linux compile: 84/84.
 
-## After 0.1.12: Vulkan / Direct3D 12 stutters, compiled shaders, Sub-Zero's strap (2026-10-29, not released)
+## After 0.1.12: Vulkan / Direct3D 12 stutters, compiled shaders, Sub-Zero's strap (2026-10-29, in 0.1.13)
 
 Not yet played by Mary.
 
@@ -1094,8 +1110,9 @@ Not investigated yet; each needs its mechanism traced in the binary first.
 
 - **64-bit:** the FLAWLESS VICTORY text is not shown (fine in 32-bit).
   Fixed: Mary confirmed it on 2026-10-22.
-- **Reptile's fatalities** sometimes do not work fully; in one of them he
-  only raises his arms.
+- **Reptile's fatalities** sometimes did not work fully; in one of them he
+  only raised his arms. Taken off the known problems on 2026-10-29 at
+  Mary's word: it was not Reptile's alone.
 - **Hitboxes** (the debug view) crash the game. Fixed, see above.
 - **Linux:** compiling in the launcher fails at once:
   `1/5 Preparing compiler toolchain... Starting download of Zig 0.13.0

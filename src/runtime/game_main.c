@@ -3129,7 +3129,7 @@ int main(int argc, char **argv)
         /* A scripted run is the script's alone: a click on the window
          * would be a second finger nobody asked for. */
         down = plat_mouse(&mx, &my) && g_ntaps == 0 && !dbg_menu_is_open()
-               && !set_menu_is_open() && !rp_playing();
+               && !set_menu_is_open() && !rp_playing() && !rp_switching();
         {
             static float prev_tx = -1.0f, prev_ty = -1.0f;
             float tx = (float)(mx - vx) * g_virt_w / (vw ? vw : 1);
@@ -3150,8 +3150,17 @@ int main(int argc, char **argv)
                 r = rp_ui(g_rp_hover, at, plat_mouse(&mx, &my) && g_ntaps == 0);
                 if (r == RPB_SETTINGS)
                     set_menu_toggle();
-                else if (r == RPB_CLOSE)    /* the X, or another replay begun */
+                else if (r == RPB_CLOSE)    /* the X */
                     g_quit_now = 1;
+                else if (r == RPB_SWITCH) { /* another replay: its fight, here */
+                    int32_t c1, c2, lv;
+
+                    rb_replay_peek(&c1, &c2, &lv);
+                    g_fight_p1 = c1;
+                    g_fight_p2 = c2;
+                    g_fight_stage = lv >= 0 && lv <= 15 ? lv : 0;
+                    leave_fight(0);
+                }
             }
 
             if (down && !was_down) {
@@ -3353,7 +3362,9 @@ int main(int argc, char **argv)
             palette_sync();
             lime_menu_advance_clock(1.0 / 60.0);
             keyboard_buttons();
-            if (rp_playing())   /* a replay: the player's keys, no pause menu */
+            if (rp_switching())
+                ;               /* on the way to another replay: no keys */
+            else if (rp_playing())  /* a replay: the player's keys, no pause menu */
                 rp_keys(plat_key(PK_OK) || plat_key(PK_PAUSE),
                         plat_key(PK_LEFT), plat_key(PK_RIGHT),
                         plat_key(PK_UP), plat_key(PK_DOWN), plat_key(PK_MOVES));
@@ -3498,7 +3509,8 @@ int main(int argc, char **argv)
 
                 dbg_replay_draw(at, clock, state, g_rp_hover, rp_title(),
                                 labels, n, nr, cur);
-            }
+            } else if (rp_switching())  /* the front end, hidden on the way */
+                dbg_replay_loading(rp_title());
             if (g_cfg_debug_keys) {
                 if (dbg_info_on()) {
                     char line[96];

@@ -2092,3 +2092,24 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
     glEnd();
     end_2d();
 }
+
+/* Between one replay and the next: the screen dark, the next one's name. */
+void dbg_replay_loading(const char *title)
+{
+    static const float veil0[4] = { 0.086f, 0.078f, 0.26f, 1.0f };
+    static const float veil1[4] = { 0.031f, 0.027f, 0.12f, 1.0f };
+    const char *what = "LOADING";
+    float y = 160.0f - CH_H;
+
+    begin_2d();
+    glBegin(GL_QUADS);
+    vgrad(0, 0, g_ow, 320.0f, veil0, veil1);
+    glColor4f(0.62f, 0.6f, 0.85f, 1.0f);
+    text((g_ow - (float)strlen(what) * CH_W) * 0.5f, y, 1.0f, what);
+    if (title && *title) {
+        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+        text((g_ow - (float)strlen(title) * CH_W) * 0.5f, y + 2 * CH_H, 1.0f, title);
+    }
+    glEnd();
+    end_2d();
+}
