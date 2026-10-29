@@ -4,7 +4,7 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 
 ---
 
-## After 0.1.11: fatality lag, several cores, no vertex-buffer ceiling, shadows, flawless (2026-10-29, not released yet)
+## Release 0.1.12 beta (2026-10-29): fatality lag, several cores, no vertex-buffer ceiling, shadows, flawless
 
 **Scorpion's fatality lag (Mary: lag in that fatality only).** Measured
 with a per-second log of the draws (Scorpion vs Sonya, practice, finisher 2):
@@ -25,6 +25,16 @@ draws). Two causes:
 After: one 52 ms frame in the whole fatality, the rest under the slow-frame
 threshold. rgl_test 0 failed on OpenGL, Vulkan and Direct3D 12; Linux
 compile 84/84. Not yet played by Mary.
+
+**Open: random stutters on Vulkan and Direct3D 12 (Mary, RTX 4060: OpenGL
+smooth).** Measured on Direct3D 12 (Liu Kang vs Sonya, practice, 40 s, a
+180 Hz screen): ~150-330 of ~2,400 frames take 20-23 ms instead of 16.7,
+then one ~11 ms frame (the next tick is already due); they come about every
+100 ms. Ruled out: vsync (`Present(0)` changed nothing, 289 vs 318), GPU
+waits (2 a frame, 0.6 ms), textures rewritten mid-frame or read back (0).
+The frame work before the present is ~10-11 ms on Direct3D 12 against
+~5.5 ms on OpenGL (the `pace:` log), so the CPU side of rgl_ff (transforming
+and expanding every vertex) is the next place to look. Not fixed.
 
 **Several cores.** zig cc ships no OpenMP runtime, so Blender's subdivision
 ran on one core: `src/thirdparty/blender/omp_lite.c` implements the
