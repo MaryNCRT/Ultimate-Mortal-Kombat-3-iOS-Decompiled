@@ -478,15 +478,30 @@ function compileShaders(exe) {
     });
 }
 
+/* While the game runs the launcher steps aside -- its window hidden, once
+ * the answer has reached the page -- and when the game closes it comes back
+ * as it was, on the page it was on (a replay: REPLAYS). */
+function stepAside(child) {
+    if (!child || !g_win)
+        return;
+    const hide = setTimeout(() => g_win && g_win.hide(), 800);
+    child.once('error', () => clearTimeout(hide));
+    child.once('exit', () => {
+        clearTimeout(hide);
+        if (!g_win)
+            return;
+        g_win.show();
+        g_win.focus();
+        g_win.webContents.send('game:closed');
+    });
+}
+
 ipcMain.handle('play', async () => {
     if (!ini.gameReady(g_root, arch()))
         return { ok: false };
     if (ini.load(path.join(g_root, 'umk3.ini')).compileShaders)
         await compileShaders(path.join(g_root, ini.gameExe(arch())));
-    bld.play(g_root, ini.gameExe(arch()));
-    /* the game runs on its own (detached): the launcher steps aside, once
-     * the answer has reached the page */
-    setTimeout(() => app.quit(), 800);
+    stepAside(bld.play(g_root, ini.gameExe(arch())));
     return { ok: true };
 });
 
@@ -524,8 +539,7 @@ ipcMain.handle('replays:open', () => {
 ipcMain.handle('replays:play', (_ev, folder, name) => {
     if (!ini.gameReady(g_root, arch()) || !replays.filePath(g_root, folder, name))
         return { ok: false };
-    bld.play(g_root, ini.gameExe(arch()), ['--replay', `replays/${folder}/${name}`]);
-    setTimeout(() => app.quit(), 800);
+    stepAside(bld.play(g_root, ini.gameExe(arch()), ['--replay', `replays/${folder}/${name}`]));
     return { ok: true };
 });
 
@@ -577,19 +591,53 @@ ipcMain.handle('res:files', () => mods.resFiles(g_root));
 ipcMain.handle('res:read', (_ev, rel, layer) => mods.resRead(g_root, rel, layer));
 ipcMain.handle('game:tables', () => mods.gameTables(g_root));
 /* a model or an animation from Blender, for the viewer to bring in */
+const PICTURES = ['png', 'jpg', 'jpeg', 'jfif', 'webp', 'gif', 'bmp', 'ico', 'avif', 'svg', 'tga'];
+
+/* A model's textures and .mtl, from its own folder and a textures folder
+ * beside it, for the importer to find by name: { name: bytes }, 40 files
+ * and 128 MB at most. */
+function besideModel(file) {
+    const out = {};
+    let n = 0, size = 0;
+    const dir = path.dirname(file);
+    for (const sub of ['', 'textures', 'Textures', 'tex', 'images']) {
+        let names = [];
+        try { names = fs.readdirSync(path.join(dir, sub)); } catch (_) { continue; }
+        for (const nm of names) {
+            const ext = path.extname(nm).slice(1).toLowerCase();
+            if (ext !== 'mtl' && !PICTURES.includes(ext))
+                continue;
+            const p = path.join(dir, sub, nm);
+            let st;
+            try { st = fs.statSync(p); } catch (_) { continue; }
+            if (!st.isFile() || n >= 40 || size + st.size > 128 << 20 || out[nm])
+                continue;
+            out[nm] = new Uint8Array(fs.readFileSync(p));
+            n++;
+            size += st.size;
+        }
+    }
+    return out;
+}
+
 ipcMain.handle('file:pick', async (_ev, kind) => {
     const r = g_win && await pickFile({
-        title: kind === 'picture' ? 'Picture' : 'FBX from Blender',
+        title: kind === 'picture' ? 'Picture' : kind === 'model' ? 'Model' : 'FBX from Blender',
         properties: ['openFile'],
         /* pictures: whatever the window decodes, and TGA (ui/src/lib/mods/image.js) */
         filters: kind === 'picture'
-            ? [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'jfif', 'webp', 'gif', 'bmp', 'ico', 'avif', 'svg', 'tga'] },
-               { name: 'All files', extensions: ['*'] }]
-            : [{ name: 'FBX', extensions: ['fbx'] }],
+            ? [{ name: 'Pictures', extensions: PICTURES }, { name: 'All files', extensions: ['*'] }]
+            : kind === 'model'
+                ? [{ name: 'Models (FBX, GLB, OBJ)', extensions: ['fbx', 'glb', 'obj'] }]
+                : [{ name: 'FBX', extensions: ['fbx'] }],
     });
     if (!r || r.canceled)
         return null;
-    return { name: path.basename(r.filePaths[0]), bytes: new Uint8Array(fs.readFileSync(r.filePaths[0])) };
+    const file = r.filePaths[0];
+    const got = { name: path.basename(file), bytes: new Uint8Array(fs.readFileSync(file)) };
+    if (kind === 'model')
+        got.beside = besideModel(file);
+    return got;
 });
 ipcMain.handle('export:save', (_ev, sub, files) => mods.exportSave(g_root, sub, files));
 ipcMain.handle('export:open', (_ev, sub) => {
@@ -642,6 +690,7 @@ if (!gotLock) {
 } else {
     app.on('second-instance', () => {
         if (g_win) {
+            g_win.show();
             if (g_win.isMinimized())
                 g_win.restore();
             g_win.focus();

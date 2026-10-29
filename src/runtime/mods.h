@@ -27,4 +27,9 @@ int  mods_count(int *files);
  * how many words it wrote */
 int  mods_apply_data(void);
 
+/* 1 for an online fight: the CHARACTER EDITOR's numbers go back to the
+ * game's and only models and textures are taken from the mods, so both
+ * machines run the same fight. 0 after it puts the mods back. */
+void mods_online(int on);
+
 #endif

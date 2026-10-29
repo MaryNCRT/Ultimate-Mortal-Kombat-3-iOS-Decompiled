@@ -1709,6 +1709,28 @@ void dbg_info_draw(const char *line) { dbg_info_draw_at(line, 0); }
 #define RPP_GAP    5.0f
 
 static float g_rp_w = 480.0f;           /* the space's width, last drawn */
+static float g_rp_h = 320.0f;           /* and its height: 320 at 100% */
+
+/* SIZE: the player drawn at 75 to 150% (umk3.ini replay_scale); the space
+ * is 320 / scale high, the panel on its bottom, the corners on its top */
+int dbg_replay_pct = 100;
+
+void dbg_replay_size(void)
+{
+    static const int k[4] = { 75, 100, 125, 150 };
+    int i;
+
+    for (i = 0; i < 4 && k[i] <= dbg_replay_pct; i++)
+        ;
+    dbg_replay_pct = k[i % 4];
+}
+
+static float rp_scale(void)
+{
+    int p = dbg_replay_pct < 50 ? 50 : dbg_replay_pct > 200 ? 200 : dbg_replay_pct;
+
+    return (float)p / 100.0f;
+}
 
 static const char *const k_rp_tip[RPB_COUNT] = {
     "TO THE START", "BACK 5 SECONDS", "BACK ONE FRAME", "PLAY / PAUSE",
@@ -1743,6 +1765,9 @@ static void rp_layout(float w, float x[RPB_COUNT], float bw[RPB_COUNT])
 #define RPT_BTN_H  20.0f
 #define RPT_LIST_W 84.0f
 #define RPT_X_W    24.0f
+#define RPT_HIDE_W 24.0f
+#define RPT_SIZE_W 44.0f
+#define RPT_GAP    4.0f
 #define RL_TOP     34.0f
 #define RL_W       230.0f
 #define RL_ROW     14.0f
@@ -1779,8 +1804,8 @@ static void rl_layout(int n, int n_recent, float *y, float h[3])
 int dbg_replay_hit(float fx, float fy, float *at, int list_n, int n_recent)
 {
     float x[RPB_COUNT], bw[RPB_COUNT], w = g_rp_w;
-    float px = fx * w, py = fy * 320.0f, b0 = w * 0.04f, b1 = w * 0.96f;
-    float ry[RL_MAX], rh[3];
+    float px = fx * w, py = fy * g_rp_h, b0 = w * 0.04f, b1 = w * 0.96f;
+    float ry[RL_MAX], rh[3], hx = b1 - RPT_X_W - RPT_GAP - RPT_HIDE_W;
     int i;
 
     *at = (px - b0) / (b1 - b0);
@@ -1789,6 +1814,10 @@ int dbg_replay_hit(float fx, float fy, float *at, int list_n, int n_recent)
             return RPB_LIST;
         if (px >= b1 - RPT_X_W && px <= b1)
             return RPB_CLOSE;
+        if (px >= hx && px <= hx + RPT_HIDE_W)
+            return RPB_HIDE;
+        if (px >= hx - RPT_GAP - RPT_SIZE_W && px <= hx - RPT_GAP)
+            return RPB_SIZE;
     }
     if (list_n > 0) {
         if (list_n > RL_MAX)
@@ -1799,6 +1828,7 @@ int dbg_replay_hit(float fx, float fy, float *at, int list_n, int n_recent)
                 if (py >= ry[i] && py < ry[i] + RL_ROW)
                     return RPB_ROW + i;
     }
+    py -= g_rp_h - 320.0f;              /* the panel: on the bottom */
     if (py >= RPP_BAR_Y - 7 && py <= RPP_BAR_Y + RPP_BAR_H + 7
         && px >= b0 - 6 && px <= b1 + 6)
         return RPB_BAR;
@@ -1923,6 +1953,9 @@ static void rp_icon(int id, float cx, float cy, int paused)
         glVertex2f(cx - 4.5f, cy + 6.5f);
         glVertex2f(cx - 6, cy + 5);
         break;
+    case RPB_HIDE:                      /* away: a bar at the foot */
+        rect(cx - 6, cy + 3, 12, 2);
+        break;
     case RPB_SETTINGS:                  /* the menu's three lines */
         rect(cx - 6, cy - 5, 12, 2);
         rect(cx - 6, cy - 1, 12, 2);
@@ -1951,7 +1984,13 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
     int i, paused = (state & (RPS_PAUSED | RPS_END)) != 0;
 
     begin_2d();
-    w = g_rp_w = g_ow;
+    w = g_rp_w = g_ow / rp_scale();
+    g_rp_h = 320.0f / rp_scale();
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0.0, w, g_rp_h, 0.0, -1.0, 1.0);
+    glMatrixMode(GL_MODELVIEW);
+    glTranslatef(0.0f, g_rp_h - 320.0f, 0.0f);     /* the panel on the bottom */
     b0 = w * 0.04f;
     b1 = w * 0.96f;
     f = at < 0 ? 0 : at > 1 ? 1 : at;
@@ -2033,14 +2072,23 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
         text(tx + 5, RPP_TOP - 15, 1.0f, tip);
     }
 
-    /* the top corners: REPLAYS (the list) and the X, with nothing between
-     * them, so the health bars stay in sight */
-    for (i = 0; i < 2; i++) {
-        int id = i ? RPB_CLOSE : RPB_LIST, on = hover == id || (!i && list_n >= 0);
-        float bx = i ? b1 - RPT_X_W : b0, bwid = i ? RPT_X_W : RPT_LIST_W;
+    glEnd();
+    glLoadIdentity();                   /* the top: where it is */
+    glBegin(GL_QUADS);
+
+    /* the top corners: REPLAYS (the list) on the left; SIZE, HIDE and the X
+     * on the right, with nothing between, so the health bars stay in sight */
+    for (i = 0; i < 4; i++) {
+        static const int ids[4] = { RPB_LIST, RPB_CLOSE, RPB_HIDE, RPB_SIZE };
+        int id = ids[i], on = hover == id || (!i && list_n >= 0);
+        float hx = b1 - RPT_X_W - RPT_GAP - RPT_HIDE_W;
+        float bx = i == 0 ? b0 : i == 1 ? b1 - RPT_X_W : i == 2 ? hx : hx - RPT_GAP - RPT_SIZE_W;
+        float bwid = i == 0 ? RPT_LIST_W : i == 1 ? RPT_X_W : i == 2 ? RPT_HIDE_W : RPT_SIZE_W;
 
         if (hover == id) {
-            glColor4f(i ? 1.0f : 0.67f, i ? 0.4f : 0.63f, i ? 0.45f : 1.0f, 0.35f);
+            int red = i == 1;           /* the X glows red */
+
+            glColor4f(red ? 1.0f : 0.67f, red ? 0.4f : 0.63f, red ? 0.45f : 1.0f, 0.35f);
             rect(bx - 2, RPT_BTN_Y - 2, bwid + 4, RPT_BTN_H + 4);
         }
         vgrad(bx, RPT_BTN_Y, bwid, RPT_BTN_H, on && !i ? hot0 : btn0, on && !i ? hot1 : btn1);
@@ -2052,6 +2100,14 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
             glColor4f(0.8f, 0.82f, 1.0f, 0.45f);
         frame_rect(bx, RPT_BTN_Y, bwid, RPT_BTN_H, 0.75f);
         glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+        if (i == 3) {                   /* SIZE: the scale, as text */
+            char pc[8];
+
+            snprintf(pc, sizeof pc, "%d%%", dbg_replay_pct);
+            text(bx + bwid / 2 - (float)strlen(pc) * CH_W / 2,
+                 RPT_BTN_Y + RPT_BTN_H / 2 - 3.5f, 1.0f, pc);
+            continue;
+        }
         rp_icon(id, i ? bx + bwid / 2 : bx + 12, RPT_BTN_Y + RPT_BTN_H / 2, 0);
         if (!i)
             text(bx + 24, RPT_BTN_Y + RPT_BTN_H / 2 - 3.5f, 1.0f, "REPLAYS");
@@ -2089,6 +2145,25 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
             text(b0 + 14, ry[i] + 3.5f, 1.0f, labels[i]);
         }
     }
+    glEnd();
+    end_2d();
+}
+
+/* HIDE: the player away, the fight alone; a line on the bottom for a while
+ * says how to have it back. `alpha` 0..1, fading. */
+void dbg_replay_hidden(float alpha)
+{
+    const char *what = "CLICK OR ESC: THE PLAYER";
+    float tw = (float)strlen(what) * CH_W;
+
+    if (alpha <= 0)
+        return;
+    begin_2d();
+    glBegin(GL_QUADS);
+    glColor4f(0.031f, 0.027f, 0.12f, 0.6f * alpha);
+    rect((g_ow - tw) * 0.5f - 6, 302.0f, tw + 12, 14.0f);
+    glColor4f(1.0f, 1.0f, 1.0f, alpha);
+    text((g_ow - tw) * 0.5f, 305.0f, 1.0f, what);
     glEnd();
     end_2d();
 }

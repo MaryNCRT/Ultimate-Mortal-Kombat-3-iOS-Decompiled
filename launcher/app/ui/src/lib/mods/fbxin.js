@@ -540,3 +540,6 @@ export function rigDesc(f) {
     return fighterDesc(f, { rest: f.tpose ? 'tpose' : 'bind', clips: [] });
 }
 
+
+/* for modelin.js: the other model formats share the fit and the writer */
+export { mm, inv4, similarity, writeSkin, clusters, globalM, xform, xdir, kid, kids, plain, I4 };

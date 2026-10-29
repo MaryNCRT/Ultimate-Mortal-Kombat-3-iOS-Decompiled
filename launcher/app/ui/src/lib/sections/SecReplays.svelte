@@ -15,6 +15,14 @@
         lists = await api.replaysList();
     }
     onMount(refresh);
+    /* back from the game: the fight just played may be a new one */
+    let seenClosed = app.gameClosed;
+    $effect(() => {
+        if (app.gameClosed !== seenClosed) {
+            seenClosed = app.gameClosed;
+            refresh();
+        }
+    });
 
     const clock = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
     const pretty = n => (n || '').replace(/-/g, ' ').toUpperCase();

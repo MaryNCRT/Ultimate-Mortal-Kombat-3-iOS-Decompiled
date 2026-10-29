@@ -125,6 +125,7 @@ export const app = $state({
     upd: { cls: '', text: '', canGet: false, busy: false, bar: false, pct: 0, label: '',
            notesLbl: '', notes: null, news: false, checking: false },
     prof: null, profResetArmed: false, artTick: 0,
+    gameClosed: 0,                      /* counts the game closing (REPLAYS reads its list again) */
     logo: null, hero: null,
     picker: null,                       /* { x, y, kind, pick } */
 });
@@ -689,6 +690,12 @@ export async function init() {
     setInterval(scanPads, 3000);
     api.onBuildData(handleBuildData);
     api.onUpdateProgress(handleUpdateProgress);
+    /* the game closed: the launcher is back where it was */
+    api.onGameClosed(async () => {
+        await refreshRoot();
+        paintState();
+        app.gameClosed++;
+    });
 
     app.logo = await api.logo();
     app.hero = await api.hero();

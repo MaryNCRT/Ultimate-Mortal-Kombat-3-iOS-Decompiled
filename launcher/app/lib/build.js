@@ -177,14 +177,14 @@ function play(root, exeName, args = []) {
         } catch (_) {}
     }
 
-    const child = spawn(exePath, args, {
+    /* detached: the game outlives the launcher if that is closed; the
+     * caller hears when it ends (main.js brings its window back) */
+    return spawn(exePath, args, {
         cwd: root,
         detached: true,
         stdio: 'ignore',
         windowsHide: false,
     });
-    child.unref();
-    return true;
 }
 
 module.exports = {

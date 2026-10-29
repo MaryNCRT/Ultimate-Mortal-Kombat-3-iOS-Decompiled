@@ -56,6 +56,7 @@ enum { RPB_START, RPB_BACK5, RPB_FRAME_BACK, RPB_PLAY, RPB_FRAME_FWD,
        RPB_FWD5, RPB_SLOWER, RPB_FASTER, RPB_SETTINGS, RPB_COUNT,
        RPB_LIST = 20, RPB_CLOSE,        /* the top: the list, the X */
        RPB_SWITCH,                      /* a row picked: another replay */
+       RPB_HIDE, RPB_SIZE,              /* the top: away, the scale */
        RPB_BAR = 100, RPB_ROW = 200 };  /* the bar; the list's rows, + index */
 /* rp_info's state: the speed (0..4: x1/4 x1/2 x1 x2 x4) and these bits */
 #define RPS_SPEED   0x07

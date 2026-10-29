@@ -123,6 +123,12 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
 int  dbg_replay_hit(float fx, float fy, float *at, int list_n, int n_recent);
 /* Between one replay and the next, over the front end: the next one's name. */
 void dbg_replay_loading(const char *title);
+/* HIDE: the line that says how to have the player back, `alpha` 0..1 */
+void dbg_replay_hidden(float alpha);
+/* SIZE: the player's scale in percent (umk3.ini replay_scale), and the
+ * button's step to the next one (75, 100, 125, 150) */
+extern int dbg_replay_pct;
+void dbg_replay_size(void);
 int  dbg_fps_on(void);                 /* TOOLS: FRAMES PER SECOND */
 int  dbg_net_on(void);                 /* TOOLS: ONLINE NUMBERS */
 /* FIGHT: INFINITE HEALTH (bit 0 player one, bit 1 two) and FREEZE CLOCK */

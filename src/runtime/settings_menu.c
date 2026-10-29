@@ -259,6 +259,7 @@ int (*set_menu_key)(int code) = plat_key;
 #define plat_key(code) set_menu_key(code)
 
 static void save_ini(void);
+void set_menu_save(void) { save_ini(); }
 
 static void close_menu(void)
 {
@@ -2043,6 +2044,7 @@ static void save_ini(void)
     put("sharp_edge_angle", "%d", (int)(port_sharp_angle + 0.5f));
     put("sharp_edge_strength", "%d", (int)(port_sharp_strength * 100.0f + 0.5f));
     put("rt_shadows", "%d", rgl_shadows);
+    put("replay_scale", "%d", dbg_replay_pct);
     put("buttons", "%d", port_buttons());
     {
         static const char *const st[5] = { "auto", "xbox", "ps5", "nintendo", "ps4" };
