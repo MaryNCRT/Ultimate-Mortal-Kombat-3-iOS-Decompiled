@@ -4,6 +4,14 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 
 ---
 
+## After 0.1.12: REAL-TIME SHADOWS' note on a row of its own (2026-10-29, not released)
+
+Mary saw the note beside REAL-TIME SHADOWS' value ("WITH VULKAN OR DIRECT3D
+12") drawn over the label: the row shrinks its text to fit, down to a floor,
+and this one was still too long. The note is now a dimmed row of its own under
+the option, shown, not chosen (`settings_menu.c`): ONLY WITH VULKAN OR
+DIRECT3D 12 on OpenGL, EXPERIMENTAL on the others. Seen right by Mary.
+
 ## After 0.1.12: the game's memory below 4 GB, limeMalloc's heap 2 GB (2026-10-29, not released)
 
 Not yet played by Mary.

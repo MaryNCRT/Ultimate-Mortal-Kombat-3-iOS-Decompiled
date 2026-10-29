@@ -623,11 +623,15 @@ static void build(void)
             (int)(port_sharp_strength * 100.0f + 0.5f));
         g_rows[g_n - 1].en = port_smooth_models != 0;
         /* REAL-TIME SHADOWS, experimental: drawn with Vulkan and Direct3D
-         * 12; with them on the flattened shadow under a fighter goes */
-        add(R_RTSHADOW, 0, tx("SOMBRAS EN TIEMPO REAL", "REAL-TIME SHADOWS"), "< %s >  %s",
-            rgl_shadows ? tx("ACTIVADAS", "ON") : tx("DESACTIVADAS", "OFF"),
-            rgl_renderer == RGL_OPENGL ? tx("CON VULKAN O DIRECT3D 12", "WITH VULKAN OR DIRECT3D 12")
-                                       : "EXPERIMENTAL");
+         * 12; with them on the flattened shadow under a fighter goes. The
+         * note is a row of its own, shown, not chosen: beside the value it
+         * ran over the label */
+        add(R_RTSHADOW, 0, tx("SOMBRAS EN TIEMPO REAL", "REAL-TIME SHADOWS"), "< %s >",
+            rgl_shadows ? tx("ACTIVADAS", "ON") : tx("DESACTIVADAS", "OFF"));
+        add(R_HEAD, 0, rgl_renderer == RGL_OPENGL
+                           ? tx("  SOLO CON VULKAN O DIRECT3D 12", "  ONLY WITH VULKAN OR DIRECT3D 12")
+                           : tx("  EXPERIMENTALES", "  EXPERIMENTAL"), "");
+        g_rows[g_n - 1].en = 0;
         head(tx("TEXTURAS", "TEXTURES"));
         add(R_TEXQ, 0, tx("CALIDAD", "QUALITY"), "< %s >",
             tx(tq_es[g_gfx.texq], tq_en[g_gfx.texq]));
