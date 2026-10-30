@@ -2199,7 +2199,8 @@ void dbg_replay_loading(const char *title)
  * rollback.c rb_host_level) -- Task_GameInit asks stage_menu_gate before it
  * loads anything, and a window comes up over FE_SELECTFIGHTER: the stage's
  * picture large with arrows, or a list of all of them with their pictures
- * (the TAB key, the pad's Y or the LIST button), CANCEL (the stage the game
+ * (the TAB key, the pad's Y or the LIST button; the mouse's wheel moves
+ * through it), CANCEL (the stage the game
  * would have taken), RANDOM and SELECT. The pictures are the game's CS_BG sheets
  * (960x640 on a 1024 sheet), or STAGE_<SCENE>.PNG when one is added; a
  * stage with neither gets one drawn (st_thumb). A debug
@@ -2423,6 +2424,7 @@ int stage_menu_gate(long *level)
             g_st_cur = i;
     g_st_open = 1;
     g_st_fresh = 1;
+    plat_mouse_wheel();                 /* turns made while it was shut */
     g_st_hover = -1;
     printf("stage select: open (%d stages)\n", g_st_n);
     return 1;
@@ -2607,6 +2609,14 @@ void stage_menu_mouse(float fx, float fy, int down)
     if (!g_st_open) {
         was = down;
         return;
+    }
+    {   /* the wheel: a row of the list a notch (a stage in the large view),
+         * up when it turns up, as in the debug menu; it stops at the ends */
+        int w = plat_mouse_wheel(), k;
+        if (w) {
+            k = g_st_cur - w * (g_st_list ? 4 : 1);
+            g_st_cur = k < 0 ? 0 : k >= g_st_n ? g_st_n - 1 : k;
+        }
     }
     for (i = 0; i < g_st_nhit; i++)
         if (g_st_hit[i].w > 0 && x >= g_st_hit[i].x && x < g_st_hit[i].x + g_st_hit[i].w
