@@ -24,7 +24,7 @@
     import { selectBlip } from '#lib/sound.js';
     import { readModel, buildSkin, withSkin, solidPicture, poseName } from '#lib/mods/modelin.js';
     import { makeFloor, placeFloor, weightColors, heatColor, heatColors, applyLook, makeRigLines, poseRigLines } from '#lib/mods/viewkit.js';
-    import { framePose, framePoseBlend, posedVerts, vmul, mul3, tr3 } from '#lib/mods/rig.js';
+    import { framePose, framePoseBlend, posedVerts, vmul, mul3, tr3, tPose } from '#lib/mods/rig.js';
     import { decodePicture } from '#lib/mods/image.js';
     import { ViewNav } from '#lib/mods/viewnav.js';
     import { dataUrl } from '#lib/mods/thumbs.js';
@@ -47,6 +47,15 @@
     let blockOf = $state([]);
     let thumbs = $state([]);
     let clip = $state(-1), frame = $state(0), playing = $state(false), loop = $state(true);
+    /* at rest: the pose the model is fitted in (ORIGINAL POSE) or stood in
+     * the T-pose, as the viewer shows them; either can be edited */
+    let restView = $state('bind');
+    let tposeOf = null, tposeFor = null;
+    function restPose() {
+        if (restView !== 'tpose') return res.rest;
+        if (tposeFor !== res.rest) { tposeFor = res.rest; tposeOf = tPose(pf.rig, res.rest); }
+        return tposeOf || res.rest;
+    }
     /* the player as the viewer's: SMOOTH (blended between frames), SPEED */
     let smoothAnims = $state(false), speed = $state(1);
     const SPEEDS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3];
@@ -254,7 +263,7 @@
             const c = pf.clips[clip], at = c.from + Math.min(frame, c.to - c.from);
             const next = at < c.to ? at + 1 : loop ? c.from : at;
             p = smoothAnims && playing && blendT > 0 ? framePoseBlend(pf.rig, at, next, blendT) : framePose(pf.rig, at);
-        } else p = res.rest;
+        } else p = restPose();
         const pos = posedVerts(pf.rig, pf.topo, p);
         for (const m of meshes) {
             m.geometry.attributes.position.array.set(pos);
@@ -266,7 +275,7 @@
         lastPose = p;
         syncGizmo();
     }
-    $effect(() => { clip; frame; showRig; sel; pose(); });
+    $effect(() => { clip; frame; showRig; sel; restView; pose(); });
     $effect(() => { const l = { ...look }; for (const m of meshes) applyLook(m.material, l); });
     $effect(() => { if (floor) floor.visible = showFloor; });
 
@@ -535,7 +544,7 @@
         const moved = kind === 'turn' ? subtree(b).slice(1) : [b];
         if (!moved.length) { editInfo = tx('imNoChildren'); return false; }
         edit = { kind, b, drag, at: at ? [at.clientX, at.clientY] : null, con: null, track: false, num: null, P, out: null,
-            pose: base, rest: clip < 0, wasPlaying: playing,
+            pose: base, rest: clip < 0 && restPose() === res.rest, wasPlaying: playing,
             base: new Map(moved.map(i => [i, new THREE.Vector3(...base[i].T)])) };
         playing = false;
         return true;
@@ -1156,6 +1165,10 @@
                             <option value={-1}>{tx('vwPose')}</option>
                             {#each pf.clips as c, i}<option value={i}>{c.name} ({c.to - c.from + 1})</option>{/each}
                         </select>
+                        {#if clip < 0}
+                            <button class="btn" class:hot={restView === 'tpose'} onclick={() => { selectBlip(); restView = 'tpose'; }}>{tx('vwTpose')}</button>
+                            <button class="btn" class:hot={restView === 'bind'} onclick={() => { selectBlip(); restView = 'bind'; }}>{tx('vwBind')}</button>
+                        {/if}
                         {#if clip >= 0}
                             <button class="btn" onclick={() => { if (!playing && frame >= pf.clips[clip].to - pf.clips[clip].from) frame = 0; playing = !playing; }}>{playing ? tx('vwPause') : tx('vwPlay')}</button>
                             <label class="chk"><input type="checkbox" bind:checked={loop}><span>{tx('vwLoop')}</span></label>

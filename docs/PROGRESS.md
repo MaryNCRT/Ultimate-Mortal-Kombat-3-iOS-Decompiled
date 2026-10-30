@@ -64,6 +64,37 @@ yet**. Asked by Mary after trying the first round:
     `lime.h`), and a lighting file that does not fit the skin is replaced by
     its average light (`Players.c port_fit_lighting`, logged `flat light`).
     The importer refuses a block over 65,535 vertices once unwelded.
+  - **STAGE VIEWER, stages as the engine plays them (Mary 2026-10-30; built
+    into the test folder, not tried by Mary yet).** The MODEL VIEWER is now
+    the CHARACTER VIEWER and stages have their own page
+    (`mods/stagerun.js`, `StageViewer.svelte`). What was missing: a stage's
+    `.events` fire effect scenes (Scislac's whole sky is `SCISLAC_VORTEX`,
+    the Street's newspapers, the Kave's lens flares, the Pit's blades), and
+    the viewer, the export and STAGE SELECT's pictures only drew the scene.
+    Now, read from the code: each tick AnimateBG advances the frame
+    (looping or held per LEVEL_INFO +0x20) and fires the keys on it,
+    LIME_UpdateEvents runs each spawned effect (step, repeat, repeat2,
+    delay, cap, group, following), LIME_RenderScene's rules draw every node
+    (key above 0.03; 0.97 and over opaque, ALPHA... blended without depth
+    writes, ATST... clipped at 0.9; below 0.97 additive, no culling), an
+    effect tinted by its track's colour and lit from its `.lighting` plus
+    the level's ambient when its `.lights` says so; the Temple's 32 window
+    glow slices (RenderLevelBG). Each level's place, scale (the Street's
+    0.010651, not 0.0133), loop flag, ambient and second scene come from
+    LEVEL_INFO in the binary. Unlit, raw colours, on black. A click picks an
+    element: its properties, ISOLATE (numpad /), FRAME (F). The export
+    writes everything drawn over the stage's length, each spawn its own
+    object, with the material's blend (GLB alphaMode/extras + unlit, FBX
+    opacity, USD opacity / threshold). STAGE SELECT's launcher pictures are
+    made again this way (`.v3`). Checked by eye in a local test page:
+    Scislac, Street, Temple, Pit.
+  - **STAGE SELECT named the Street twice (and the Balcony, the Kave).**
+    Levels 4, 10 and 11 have a second scene and the fight starts in it
+    (Task_GameInit step 51, CurrentScene = 1): the Subway, the Soul Chamber,
+    the Lair. The select now names and pictures a level by that scene
+    (`debug_menu.c st_scene`), so all 16 are different.
+  - **EDIT MODEL shows the T-pose too** (T-POSE / ORIGINAL POSE at rest, as
+    the viewer); bones can be edited in either.
   - **0.1.14b beta published** (2026-10-30, pre-release `v0.1.14b-beta`,
     zip and Linux tar.gz): the 0.1.14 packages with the new `src/`,
     CMakeLists.txt and launcher (`0.1.14-beta.b`, read by the updater as

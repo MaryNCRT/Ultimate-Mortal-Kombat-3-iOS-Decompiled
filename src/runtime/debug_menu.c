@@ -2249,9 +2249,30 @@ static const struct { const char *scene, *name, *pic; } k_stages[] = {
 };
 #define N_KSTAGES (int)(sizeof k_stages / sizeof k_stages[0])
 
+/* The scene a level's fight starts in: its second scene when it has one
+ * (Task_GameInit step 51 sets CurrentScene to 1 when both LEVEL_INFO names
+ * are there, +0x1c and +0x50), so level 4 starts in the Subway under the
+ * Street, 10 in the Soul Chamber under the Balcony, 11 in the Lair under
+ * the Kave -- else its first. Named by it, the Street's two levels are the
+ * Subway and the Street, not the Street twice. */
+static const char *st_scene(int level)
+{
+    const char *rec = Level_Info + level * LEVEL_INFO_STRIDE;
+    const char *s2 = *(const char *P32 const *)(rec + 0x50);
+    static char buf[40];
+    char *u;
+
+    if (!s2 || !*(const char *P32 const *)(rec + 0x1c))
+        return stage_name(level);
+    snprintf(buf, sizeof buf, "%s", s2);
+    if ((u = strstr(buf, "_LEVEL")) != NULL || (u = strchr(buf, '.')) != NULL)
+        *u = 0;
+    return buf;
+}
+
 static int st_entry(int level)
 {
-    const char *s = stage_name(level);
+    const char *s = st_scene(level);
     int i;
     for (i = 0; i < N_KSTAGES; i++)
         if (strcmp(s, k_stages[i].scene) == 0)
@@ -2262,7 +2283,7 @@ static int st_entry(int level)
 static const char *st_name(int level)
 {
     int e = st_entry(level);
-    return e >= 0 ? k_stages[e].name : stage_name(level);
+    return e >= 0 ? k_stages[e].name : st_scene(level);
 }
 
 /* a texture's GL name, loaded once (0: none) */
@@ -2315,7 +2336,7 @@ static void st_thumb(int level, float x, float y, float w, float h, float big)
     int e = st_entry(level);
     unsigned t;
     const char *n = st_name(level);
-    snprintf(file, sizeof file, "STAGE_%s.PNG", stage_name(level));
+    snprintf(file, sizeof file, "STAGE_%s.PNG", st_scene(level));
     if ((t = st_tex(file)) != 0) {
         st_pic(t, x, y, w, h, 1.0f, 1.0f);
         return;
@@ -2325,7 +2346,7 @@ static void st_thumb(int level, float x, float y, float w, float h, float big)
         return;
     }
     /* the stage rendered by the launcher (mods/stagepics.js) */
-    snprintf(file, sizeof file, "stages/%s.png", stage_name(level));
+    snprintf(file, sizeof file, "stages/%s.png", st_scene(level));
     if (level >= 0 && level < 64 && !miss[level]) {     /* looked for once */
         struct TEXTURE *r = lime_load_extra_texture(file);
         if (r && (t = *(const unsigned *)((const char *)r + 0x40)) != 0) {
