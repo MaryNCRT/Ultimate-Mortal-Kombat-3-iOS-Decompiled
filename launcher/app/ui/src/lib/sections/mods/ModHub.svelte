@@ -107,8 +107,12 @@
         background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-sm);
         padding: calc(var(--u) * .8) calc(var(--u) * 1);
     }
-    .pic { width: calc(var(--u) * 16); height: calc(var(--u) * 10); flex: none; display: grid; place-items: center; }
-    .pic img { width: 100%; height: 100%; object-fit: cover; border-radius: var(--r-sm); border: 1px solid var(--line); }
+    .pic {
+        width: calc(var(--u) * 16); height: calc(var(--u) * 10); flex: none; overflow: hidden;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--well);
+    }
+    .pic img { display: block; width: 100%; height: 100%; object-fit: cover; }
     .cat { width: 50%; height: 80%; border-radius: 50%; background: var(--grad-hot); box-shadow: 0 0 calc(var(--u) * .6) rgba(140, 130, 255, .6); }
     .cat.audio { background: #1f6f6a; }
     .cat.music { background: #8a3c8f; }
