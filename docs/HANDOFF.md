@@ -96,6 +96,14 @@ yet**. Asked by Mary after trying the first round:
     23 WAVs are the same format as every other (PCM 16 kHz 8-bit mono). Her
     18:02 log plays his voice from group 6 as the binary would. Not found;
     the `voice:` lines stay in the log. Needs what is heard and when.
+    Also checked against the binary: `limePlaySound` (0x65344) is
+    `[sound play]; [sound setGain:]` on one Finch `Sound` (one OpenAL
+    source) a loaded file, `-[Sound play]` restarts it if it still sounds
+    -- the port's mixers already do the same (one voice a sound) -- and
+    `limeLoadSound` (0x65ad0) takes the first empty of 512 slots, as the
+    port does. Mary: screams repeat that should not sound. The log now
+    names every sound played (`sound: <file> (<slot>)`), not only the
+    voices, so the next fight with it shows which file and when.
   - **REPLACE MODEL: the rig before it is put on, arm/leg angle and roll,
     T or A pose** (Mary, with gtastuff.com's viewer as the reference for
     the floor, the joints and the weight colours). Over the preview:
