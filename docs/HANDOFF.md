@@ -129,7 +129,8 @@ press COMPILE.
 | Renderers | `src/runtime/render/` |
 | Replays, rollback | `src/runtime/rollback*.c` |
 | Mods in the game | `src/runtime/mods.c`, `skin_mats.c` |
-| Launcher main process | `launcher/app/main.js`, `preload.js`, `lib/` (compile, update, mods, replays) |
+| Launcher main process | `launcher/app/main.js`, `preload.js`, `lib/` (compile, update, mods, replays, `hub.js` the MOD HUB) |
+| MOD HUB storage | the separate repository MaryNCRT/UMK3-IOS-Mod-Hub: `index.json`, covers in `mods/<id>/`, each mod a release zip; publish with its `publish.js` |
 | Launcher interface | `launcher/app/ui/src/lib/sections/` (`mods/` holds the viewers and editors), `lib/mods/` (readers, exporters, `stagerun.js`, `stageedit.js`), `i18n.js` (Spanish and English) |
 | Release packaging | `launcher/make_release.py`, `make_release_linux.py`, `launcher/stub/` |
 

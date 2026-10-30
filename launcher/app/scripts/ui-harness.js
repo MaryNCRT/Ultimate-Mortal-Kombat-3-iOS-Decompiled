@@ -1,8 +1,8 @@
 'use strict';
 /* The launcher's UI in an ordinary browser, for debugging it without
  * Electron: serves renderer/ and answers the preload's calls (window.umk3)
- * over HTTP from a game folder. Read-only but for stage edits, which go to
- * the given folder too.
+ * over HTTP from a game folder. Read-only but for stage edits and MOD HUB
+ * installs, which go to the given folder too.
  *
  *   node scripts/ui-harness.js <game folder> [port]
  *
@@ -13,12 +13,14 @@ const fs = require('fs');
 const path = require('path');
 const ini = require('../lib/ini');
 const mods = require('../lib/mods');
+const hub = require('../lib/hub');
 
 const root = path.resolve(process.argv[2] || '.');
 const port = Number(process.argv[3]) || 5178;
 const dir = path.join(__dirname, '..', 'renderer');
 const editFile = id => path.join(root, 'stage edits', id + '.json');
 
+let g_hub = [];
 const calls = {
     root: () => ({ root, ready: true, builtAt: 0, version: 'harness', both: false, any: true }),
     loadConfig: () => ini.load(path.join(root, 'umk3.ini')),
@@ -31,6 +33,8 @@ const calls = {
     stageEditsLoad: id => { try { return JSON.parse(fs.readFileSync(editFile(id), 'utf8')); } catch { return null; } },
     stageEditsSave: (id, json) => { fs.mkdirSync(path.dirname(editFile(id)), { recursive: true }); fs.writeFileSync(editFile(id), json); return true; },
     listPads: () => [], listMonitors: () => [], glyphs: () => ({}), replaysList: () => [],
+    hubList: async () => { g_hub = await hub.fetchIndex(fetch); return { ok: true, mods: hub.status(root, g_hub) }; },
+    hubInstall: async id => { const m = g_hub.find(x => x.id === id); return m ? Object.assign(await hub.install(fetch, root, m), { mods: hub.status(root, g_hub) }) : { ok: false, error: 'not in the hub' }; },
 };
 
 /* the page's side: every call a POST, bytes back as base64 */

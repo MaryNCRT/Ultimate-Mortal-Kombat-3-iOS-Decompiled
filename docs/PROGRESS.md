@@ -55,7 +55,8 @@ around the decompiled game:
 Electron + SvelteKit (`launcher/app/ui`, built with `npm run ui`). It
 compiles the game from the player's `.ipa` with a bundled `zig cc`, keeps
 `umk3.ini`, updates itself from GitHub releases, and has the MODS section:
-MOD MANAGER, CHARACTER VIEWER (with REPLACE / EDIT MODEL: retargeting,
+MOD MANAGER, MOD HUB (mods from the companion repository
+MaryNCRT/UMK3-IOS-Mod-Hub, installed and updated), CHARACTER VIEWER (with REPLACE / EDIT MODEL: retargeting,
 weight paint, Blender-style bones, shape keys, corrective animation
 layers), STAGE VIEWER (the engine's stage playback, Blender-style element
 editing with keyframes and shape keys, texture replacement), CHARACTER
@@ -92,6 +93,34 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## After 0.1.15: MOD HUB (2026-10-30, not yet released)
+
+Mary asked for a hub inside the launcher where players download the mods
+that she and her collaborators publish, installed into `mods\` and
+updatable.
+
+- **Storage:** the public repository MaryNCRT/UMK3-IOS-Mod-Hub. `index.json`
+  on `main` lists each mod (id, folder, name, author, version, category,
+  description, thumbnail, url, size, sha256); its files are a `.zip`
+  attached to the release `<id>-v<version>` (HD NINJAS is ~920 MB, past
+  git's 100 MB limit; a release file may be 2 GB). Its `publish.js` zips a
+  mod folder, creates the release with `gh` and writes the entry; its README
+  says how collaborators publish. Published: HD NINJAS, Sonya Blade MKX,
+  Rain (from Mary's test folder).
+- **Launcher:** `lib/hub.js` reads the index (an entry whose download is not
+  a release of that repository is dropped), downloads with
+  `lib/update.js`'s `download()` (SHA-256 checked), unpacks with `tar`,
+  replaces `mods\<folder>` and adds it to `mods.ini` on, at the top (an
+  update keeps its place and on/off). What came from the hub is kept in
+  `mods\hub.json` (id, folder, version); UPDATE shows when the index's
+  version is newer by `compareVersions`. IPC `hub:list`, `hub:install`
+  (by id, from the list fetched last); page `sections/mods/ModHub.svelte`;
+  the UI harness answers both.
+- **Checked:** `node --test test/*.js` (new `test/hub.test.js`: index
+  parsing and filtering, installed/update status, `mods.ini` registration,
+  a real zip installed and then updated in place, a bad hash refused).
+  **Not yet played by Mary.**
 
 ## 0.1.14 to 0.1.15: retarget, proportion trick, own materials, stage pictures, replay fixes, STAGE VIEWER, shape keys (2026-10-29 to 2026-10-30, released in 0.1.14, 0.1.14b and 0.1.15)
 

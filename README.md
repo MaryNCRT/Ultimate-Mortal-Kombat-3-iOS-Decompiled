@@ -77,6 +77,7 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 
 **The launcher's MODS section:**
 - **MOD MANAGER:** order, on/off, new mod, open folder.
+- **MOD HUB:** mods published by Mary and her collaborators in [UMK3-IOS-Mod-Hub](https://github.com/MaryNCRT/UMK3-IOS-Mod-Hub), downloaded into `mods\` with a click and updated when a newer version is out.
 - **CHARACTER VIEWER:** every fighter with its outfits, derived models, animations, a stage behind it; texture replacement; **REPLACE MODEL** from FBX, GLB or OBJ (humanoid rigs retargeted, weights painted and smoothed, bones posed with a Blender-style gizmo, shape keys with a keyed timeline); corrective animation layers; exports for Blender.
 - **STAGE VIEWER:** a stage played as the engine plays it, with its effects; elements picked, isolated and edited as in Blender (move / rotate / scale, keyframes, a dope-sheet timeline, shape keys and sculpting), kept per stage and exported as GLB, FBX or USD; its textures seen and replaced.
 - **CHARACTER EDITOR:** a fighter's attacks, data and texts.
