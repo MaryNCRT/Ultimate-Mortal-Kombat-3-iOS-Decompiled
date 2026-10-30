@@ -53,6 +53,20 @@ yet**. Asked by Mary after trying the first round:
     `lime.h`), and a lighting file that does not fit the skin is replaced by
     its average light (`Players.c port_fit_lighting`, logged `flat light`).
     The importer refuses a block over 65,535 vertices once unwelded.
+  - **A custom model crushed at the elbows and wrists in the moves, Mary
+    2026-10-30 (test launcher repacked, not tried yet).** KEEP PROPORTIONS
+    put the fighter's bones at the model's joints but kept the fighter's
+    bone frames: a T-pose model on an A-pose fighter played with its arms
+    45 degrees off, and each twist of a forearm or hand turned about an
+    axis beside the model's limb, shearing it. Now each bone's frame is
+    turned with the model's limb (the turn from the fighter's segment to
+    the model's; ends and bones the file lacks take their parent's), the
+    skin is bound to those frames and the offsets are written in them, as
+    a retarget in Blender binds a mesh to bones along its own limbs. The
+    moves' turns, the same in the world as the fighter's, then carry the
+    model's limbs where the fighter's go, whatever its rest (T, A, ARM
+    ANGLE). Checked by hand on an arm chain; `proportions` in
+    `mods/modelin.js`.
   - **Bones moved and turned as Blender does; POSE A fixed, Mary
     2026-10-30 (test launcher repacked, not tried yet).**
     - **The gizmo** on the bone picked (Blender's Move / Rotate /

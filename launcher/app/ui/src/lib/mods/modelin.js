@@ -721,7 +721,7 @@ function adjustments(f, mdl, place, o) {
  * in the animations is scaled by the model's hips over the fighter's, so
  * the feet stay on the floor. Returns the rest to bind to and the
  * override. */
-function proportions(f, J, rest) {
+function proportions(f, J, rest, link) {
     const bones = f.rig.bones;
     /* the root's height, as the game scales the animations' (about y 0,
      * the floor the fighters stand on): the model's hips over the
@@ -730,19 +730,38 @@ function proportions(f, J, rest) {
     let rootY = 1;
     if (hips >= 0 && J.has(hips) && rest[hips].T[1] > 1e-3 && J.get(hips)[1] > 1e-3)
         rootY = Math.min(3, Math.max(0.3, J.get(hips)[1] / rest[hips].T[1]));
-    const out = new Array(bones.num), offs = new Map();
+    /* Each bone's frame turned with the model's limb, as a retarget in
+     * Blender binds the mesh to bones lying along the model's own limbs:
+     * the turn Q taking the fighter's segment (the joint to the next one's)
+     * onto the model's. The skin is bound to R Q and the offsets are put
+     * in those frames, so a move's turn (the same in the world as the
+     * fighter's) carries the model's limb where the fighter's goes, and a
+     * twist turns it about its own length. Kept on the fighter's frames, a
+     * T-pose model on an A-pose fighter played with its arms 45 degrees
+     * off, and every elbow and wrist twist went about an axis beside the
+     * limb, crushing it. An end bone (hand, head, toe) and the bones the
+     * file has none of turn with the bone above them. */
+    const childOf = i => {
+        const l = link && link.get(i);
+        if (l && l.child >= 0 && J.has(l.child)) return l.child;
+        const ks = bones.children[i].filter(c => J.has(c));
+        return ks.length === 1 ? ks[0] : -1;
+    };
+    const out = new Array(bones.num), offs = new Map(), Q = new Array(bones.num);
     const walk = i => {
         const p = bones.parent[i];
-        if (p < 0) out[i] = { R: rest[i].R, T: [rest[i].T[0], rest[i].T[1] * rootY, rest[i].T[2]] };
+        if (p < 0) { Q[i] = I3; out[i] = { R: rest[i].R, T: [rest[i].T[0], rest[i].T[1] * rootY, rest[i].T[2]] }; }
         else {
             let T;
             if (J.has(i)) T = J.get(i);
             else {
-                const v = vmul(localOf(rest, bones, i).T, rest[p].R);
+                const v = vmul(localOf(rest, bones, i).T, out[p].R);
                 T = [out[p].T[0] + v[0], out[p].T[1] + v[1], out[p].T[2] + v[2]];
             }
-            out[i] = { R: rest[i].R, T };
-            if (J.has(i)) offs.set(i, vmul(vsub(T, out[p].T), tr3(rest[p].R)));
+            const c = J.has(i) ? childOf(i) : -1;
+            Q[i] = c >= 0 ? rotBetween(vsub(rest[c].T, rest[i].T), vsub(J.get(c), T)) : mul3(Q[p], I3);
+            out[i] = { R: mul3(rest[i].R, Q[i]), T };
+            offs.set(i, vmul(vsub(T, out[p].T), tr3(out[p].R)));
         }
         for (const c of bones.children[i]) walk(c);
     };
@@ -865,7 +884,7 @@ export function buildSkin(f, mdl, o = {}) {
     const place = placeModel(f, mdl, o.turn || 0);
     const human = place.map && place.map.kind === 'humanoid';
     const adj = place.map ? adjustments(f, mdl, place, o) : limbsOf(f).length ? bareAdjust(f, place.rest, o.adjust) : null;
-    const prop = place.map && o.keep ? proportions(f, adj.J, place.rest) : null;
+    const prop = place.map && o.keep ? proportions(f, adj.J, place.rest, place.map.link) : null;
     const conf = human && !o.keep ? conformers(place, adj.J, adj.rest) : null;
     const k = o.scale && o.scale !== 1 ? o.scale : 1;
     const mj = movedJoints(f, prop ? prop.rest : adj ? adj.rest : place.rest, o.joints, prop ? prop.bones : adj && adj.ov, o.turns);
