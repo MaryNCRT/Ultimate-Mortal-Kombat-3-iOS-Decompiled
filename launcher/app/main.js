@@ -611,6 +611,18 @@ ipcMain.handle('stagepics:put', (_ev, id, bytes) => {
     fs.writeFileSync(path.join(stagePicDir(), '.v4'), '');
     return true;
 });
+/* STAGE VIEWER's edits (stageedit.js): one JSON a stage, beside the game */
+const stageEditFile = id => path.join(g_root, 'stage edits', id + '.json');
+ipcMain.handle('stageedits:load', (_ev, id) => {
+    if (!g_root || !/^[A-Z0-9_]+$/.test(String(id))) return null;
+    try { return JSON.parse(fs.readFileSync(stageEditFile(id), 'utf8')); } catch { return null; }
+});
+ipcMain.handle('stageedits:save', (_ev, id, json) => {
+    if (!g_root || !/^[A-Z0-9_]+$/.test(String(id)) || typeof json !== 'string') return false;
+    fs.mkdirSync(path.dirname(stageEditFile(id)), { recursive: true });
+    fs.writeFileSync(stageEditFile(id), json);
+    return true;
+});
 ipcMain.handle('res:read', (_ev, rel, layer) => mods.resRead(g_root, rel, layer));
 ipcMain.handle('game:tables', () => mods.gameTables(g_root));
 /* a model or an animation from Blender, for the viewer to bring in */

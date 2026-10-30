@@ -44,6 +44,8 @@ contextBridge.exposeInMainWorld('umk3', {
     resFiles: () => ipcRenderer.invoke('res:files'),
     stagePics: () => ipcRenderer.invoke('stagepics:list'),
     stagePicPut: (id, bytes) => ipcRenderer.invoke('stagepics:put', id, bytes),
+    stageEditsLoad: id => ipcRenderer.invoke('stageedits:load', id),
+    stageEditsSave: (id, json) => ipcRenderer.invoke('stageedits:save', id, json),
     resRead: (rel, layer) => ipcRenderer.invoke('res:read', rel, layer),
     modsCover: (folder, png) => ipcRenderer.invoke('mods:cover', folder, png),
     modsDataRead: folder => ipcRenderer.invoke('mods:dataRead', folder),

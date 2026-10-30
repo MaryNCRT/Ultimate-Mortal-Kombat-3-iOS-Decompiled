@@ -7,13 +7,16 @@
  *     name,
  *     meshes:    [{ name, pos (rest, Float32 xyz), uv (Float32, the game's v
  *                   down from the top), faces (Uint32 triangles), material,
- *                   skin?: { idx, wt } four bones a vertex }],
+ *                   skin?: { idx, wt } four bones a vertex,
+ *                   morphs?: [{ name, delta (Float32 xyz a vertex), weight }]
+ *                   shape keys: GLB targets, FBX BlendShape, USD BlendShape }],
  *     materials: [{ name, texture (a file name beside the export, or ''),
  *                   blend?: 'opaque' | 'alpha' | 'clip' | 'add' (how the game
  *                   blends it: a stage, stagerun.js), color?: [r, g, b],
  *                   alpha?, unlit? }],
  *     skeleton?: { names, parent, rest: [{ R, T }] }       global, row vectors
- *     clips?:    [{ name, poses: [[{ R, T }] a frame] }]   global
+ *     clips?:    [{ name, poses: [[{ R, T }] a frame],      global
+ *                   weights?: { mesh index: Float32 (a frame, its morphs' weights) } }]
  *     fps
  *   }
  *
@@ -274,7 +277,7 @@ export function toFbx(desc) {
     }
 
     /* the meshes */
-    const poseNodes = [];
+    const poseNodes = [], channels = [];
     for (const m of desc.meshes) {
         const gid = id(), mid = id();
         const n = m.pos.length / 3, nt = m.faces.length / 3;
@@ -325,6 +328,29 @@ export function toFbx(desc) {
                 OO(boneIds[b], cid);
             });
         }
+
+        /* the shape keys: a BlendShape on the geometry, a channel a key with
+         * its Shape (the vertices it moves and by how much) */
+        if (m.morphs && m.morphs.length) {
+            const bs = id();
+            add('Deformer', ['Deformer', [L(bs), S(cls(m.name, 'Deformer')), S('BlendShape')], [['Version', [I(100)]]]]);
+            OO(bs, gid);
+            m.morphs.forEach((t, k) => {
+                const ix = [], dv = [];
+                for (let v = 0; v < n; v++) {
+                    const x = t.delta[v * 3], y = t.delta[v * 3 + 1], z = t.delta[v * 3 + 2];
+                    if (x || y || z) { ix.push(v); dv.push(x, y, z); }
+                }
+                const sid = id(), ch = id();
+                add('Geometry', ['Geometry', [L(sid), S(cls(t.name, 'Geometry')), S('Shape')], [
+                    ['Version', [I(100)]], ['Indexes', [['i', ix]]], ['Vertices', [['d', dv]]], ['Normals', [['d', new Array(dv.length).fill(0)]]]]]);
+                add('Deformer', ['Deformer', [L(ch), S(cls(t.name, 'SubDeformer')), S('BlendShapeChannel')], [
+                    ['Version', [I(100)]], ['DeformPercent', [D((t.weight || 0) * 100)]], ['FullWeights', [['d', [100]]]]]]);
+                OO(sid, ch);
+                OO(ch, bs);
+                channels.push({ mesh: desc.meshes.indexOf(m), k, n: m.morphs.length, ch });
+            });
+        }
     }
     if (sk) {
         poseNodes.push(['PoseNode', [], [['Node', [L(armId)]], ['Matrix', [['d', mat16(I3.R, I3.T)]]]]]);
@@ -335,8 +361,17 @@ export function toFbx(desc) {
 
     /* the clips: one stack each, a curve a channel a bone */
     let longest = 0;
+    const curve = (cn, ch, vals, times) => {
+        const cv = id();
+        add('AnimationCurve', ['AnimationCurve', [L(cv), S(cls('', 'AnimCurve')), S('')], [
+            ['Default', [D(vals[0])]], ['KeyVer', [I(4009)]],
+            ['KeyTime', [['l', times]]], ['KeyValueFloat', [['f', vals]]],
+            ['KeyAttrFlags', [['i', [24836]]]], ['KeyAttrDataFloat', [['f', [0, 0, 9.419963346924634e-30, 0]]]],
+            ['KeyAttrRefCount', [['i', [vals.length]]]]]]);
+        OP(cv, cn, ch);
+    };
     for (const clip of desc.clips || []) {
-        if (!sk) break;
+        if (!sk && !channels.length) break;
         const nf = clip.poses.length;
         longest = Math.max(longest, nf);
         const stop = Math.round((nf - 1) * KTIME / desc.fps);
@@ -346,7 +381,19 @@ export function toFbx(desc) {
         add('AnimationLayer', ['AnimationLayer', [L(ly), S(cls(clip.name, 'AnimLayer')), S('')], []]);
         OO(ly, st);
         const times = Array.from({ length: nf }, (_, f) => Math.round(f * KTIME / desc.fps));
-        sk.names.forEach((_, b) => {
+        /* the shape keys' weights, in percent */
+        for (const c of channels) {
+            const w = clip.weights && clip.weights[c.mesh];
+            if (!w) continue;
+            const vals = Array.from({ length: nf }, (_, f) => w[f * c.n + c.k] * 100);
+            const cn = id();
+            add('AnimationCurveNode', ['AnimationCurveNode', [L(cn), S(cls('DeformPercent', 'AnimCurveNode')), S('')], [
+                P70(P('d|DeformPercent', 'Number', '', 'A', D(vals[0])))]]);
+            OO(cn, ly);
+            OP(cn, c.ch, 'DeformPercent');
+            curve(cn, 'd|DeformPercent', vals, times);
+        }
+        if (sk) sk.names.forEach((_, b) => {
             const tv = [[], [], []], rv = [[], [], []], sv = [[], [], []];
             /* a bone's own scale, when a pose has one (an animated stage) */
             const scaled = clip.poses.some(p => p[b].S);
@@ -368,15 +415,7 @@ export function toFbx(desc) {
                     P70(P('d|X', 'Number', '', 'A', D(vals[0][0])), P('d|Y', 'Number', '', 'A', D(vals[1][0])), P('d|Z', 'Number', '', 'A', D(vals[2][0])))]]);
                 OO(cn, ly);
                 OP(cn, boneIds[b], what);
-                ['d|X', 'd|Y', 'd|Z'].forEach((ch, k) => {
-                    const cv = id();
-                    add('AnimationCurve', ['AnimationCurve', [L(cv), S(cls('', 'AnimCurve')), S('')], [
-                        ['Default', [D(vals[k][0])]], ['KeyVer', [I(4009)]],
-                        ['KeyTime', [['l', times]]], ['KeyValueFloat', [['f', vals[k]]]],
-                        ['KeyAttrFlags', [['i', [24836]]]], ['KeyAttrDataFloat', [['f', [0, 0, 9.419963346924634e-30, 0]]]],
-                        ['KeyAttrRefCount', [['i', [nf]]]]]]);
-                    OP(cv, cn, ch);
-                });
+                ['d|X', 'd|Y', 'd|Z'].forEach((ch, k) => curve(cn, ch, vals[k], times));
             }
         });
     }
@@ -555,45 +594,58 @@ export function toGlb(desc, pictures = {}) {
             attributes.WEIGHTS_0 = acc(Float32Array.from(m.skin.wt), 'VEC4', FLOAT, 34962);
         }
         const indices = n > 65535 ? acc(Uint32Array.from(m.faces), 'SCALAR', U32, 34963) : acc(Uint16Array.from(m.faces), 'SCALAR', U16, 34963);
-        return { name: m.name, primitives: [{ attributes, indices, material: m.material }] };
+        const out = { name: m.name, primitives: [{ attributes, indices, material: m.material }] };
+        /* the shape keys: morph targets, named as Blender reads them */
+        if (m.morphs && m.morphs.length) {
+            out.primitives[0].targets = m.morphs.map(t => ({ POSITION: acc(Float32Array.from(t.delta), 'VEC3', FLOAT, 34962, true) }));
+            out.weights = m.morphs.map(t => t.weight || 0);
+            out.extras = { targetNames: m.morphs.map(t => t.name) };
+        }
+        return out;
     });
+    const meshNode = [];
     desc.meshes.forEach((m, i) => {
         const node = { name: m.name, mesh: i };
+        meshNode[i] = nodes.length;
         if (sk && m.skin) node.skin = 0;
         nodes[0].children.push(nodes.length);
         nodes.push(node);
     });
 
     const animations = [];
-    if (sk)
-        for (const clip of desc.clips || []) {
-            const nf = clip.poses.length;
-            if (!nf) continue;
-            const time = acc(Float32Array.from({ length: nf }, (_, f) => f / desc.fps), 'SCALAR', FLOAT, 0, true);
-            const samplers = [], channels = [];
-            sk.names.forEach((_, b) => {
-                const T = new Float32Array(nf * 3), R = new Float32Array(nf * 4);
-                const S = clip.poses.some(p => p[b].S) ? new Float32Array(nf * 3) : null;
-                let prev = null;
-                clip.poses.forEach((pose, f) => {
-                    const l = localOf(pose, tree, b);
-                    T.set(l.T, f * 3);
-                    let q = matToQuat(l.R);
-                    /* the short way from the frame before */
-                    if (prev && prev[0] * q[0] + prev[1] * q[1] + prev[2] * q[2] + prev[3] * q[3] < 0) q = q.map(x => -x);
-                    prev = q;
-                    R.set(q, f * 4);
-                    if (S) S.set(l.S || [1, 1, 1], f * 3);
-                });
-                const ch = [['translation', T, 'VEC3'], ['rotation', R, 'VEC4']];
-                if (S) ch.push(['scale', S, 'VEC3']);
-                for (const [path, arr, type] of ch) {
-                    samplers.push({ input: time, output: acc(arr, type, FLOAT), interpolation: 'LINEAR' });
-                    channels.push({ sampler: samplers.length - 1, target: { node: boneNode[b], path } });
-                }
-            });
-            animations.push({ name: clip.name, samplers, channels });
+    for (const clip of desc.clips || []) {
+        const nf = clip.poses.length;
+        if (!nf || (!sk && !clip.weights)) continue;
+        const time = acc(Float32Array.from({ length: nf }, (_, f) => f / desc.fps), 'SCALAR', FLOAT, 0, true);
+        const samplers = [], channels = [];
+        /* the shape keys' weights, a frame */
+        for (const [mi, w] of Object.entries(clip.weights || {})) {
+            samplers.push({ input: time, output: acc(Float32Array.from(w), 'SCALAR', FLOAT), interpolation: 'LINEAR' });
+            channels.push({ sampler: samplers.length - 1, target: { node: meshNode[mi], path: 'weights' } });
         }
+        if (sk) sk.names.forEach((_, b) => {
+            const T = new Float32Array(nf * 3), R = new Float32Array(nf * 4);
+            const S = clip.poses.some(p => p[b].S) ? new Float32Array(nf * 3) : null;
+            let prev = null;
+            clip.poses.forEach((pose, f) => {
+                const l = localOf(pose, tree, b);
+                T.set(l.T, f * 3);
+                let q = matToQuat(l.R);
+                /* the short way from the frame before */
+                if (prev && prev[0] * q[0] + prev[1] * q[1] + prev[2] * q[2] + prev[3] * q[3] < 0) q = q.map(x => -x);
+                prev = q;
+                R.set(q, f * 4);
+                if (S) S.set(l.S || [1, 1, 1], f * 3);
+            });
+            const ch = [['translation', T, 'VEC3'], ['rotation', R, 'VEC4']];
+            if (S) ch.push(['scale', S, 'VEC3']);
+            for (const [path, arr, type] of ch) {
+                samplers.push({ input: time, output: acc(arr, type, FLOAT), interpolation: 'LINEAR' });
+                channels.push({ sampler: samplers.length - 1, target: { node: boneNode[b], path } });
+            }
+        });
+        animations.push({ name: clip.name, samplers, channels });
+    }
 
     align();
     const json = {

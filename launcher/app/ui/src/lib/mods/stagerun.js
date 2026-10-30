@@ -36,6 +36,7 @@
 import * as THREE from 'three';
 import { parseScene, parseMeshset, texStem, decodePvr } from './formats.js';
 import { textureFile, isPng } from './assets.js';
+import { localMatrix, shapeAt, frameOf } from './stageedit.js';
 
 export const PLAYER_SIZE = 0.0101562496;
 export const TICKS_PER_SECOND = 30;
@@ -526,6 +527,8 @@ export class StageView {
             if (d.lit !== !!mesh.geometry.attributes.color) mesh.geometry = geometryOf(d.mesh, d.lit, this.stage.level.amb, this.geos);
             style(mesh.material, d);
             mesh.matrix.fromArray(mul(d.world, to));
+            /* STAGE VIEWER's edits on top (stageedit.js) */
+            if (this.edit && d.owner !== 'ev' && !d.key.startsWith('ev')) this.edit(d, mesh);
             mesh.matrixWorldNeedsUpdate = true;
             mesh.renderOrder = order++;
             mesh.userData.draw = d;
@@ -557,8 +560,11 @@ export class StageView {
  * spawned, the glow -- is a mesh bound whole to a bone of its own; a frame
  * where it is not drawn scales it to nothing. Its material says how the
  * game blends it (blend: opaque / alpha / clip / add), its tint and its
- * alpha where it holds one. One clip, one frame a tick, 30 a second. */
-export async function stageExport(src, st, ticks) {
+ * alpha where it holds one. One clip, one frame a tick, 30 a second.
+ * `edits` (stageedit.js) on top: an element placed as edited, its vertices
+ * with the Basis edited, its shape keys morph targets whose weights are
+ * keyed a frame (meshes[].morphs, clips[].weights). */
+export async function stageExport(src, st, ticks, edits) {
     const stage = await loadStage(src, st);
     const sim = new StageSim(stage);
     const n = ticks || Math.max(1, stage.root.frames);
@@ -574,8 +580,16 @@ export async function stageExport(src, st, ticks) {
         }
         frames.push(now);
     }
-    const to = stage.toOut;
-    const meshes = [], materials = [], matOf = new Map(), names = [], rest = [], keys = [], used = new Map();
+    const to = stage.toOut, length = Math.max(1, stage.root.frames);
+    const els = (edits && edits.els) || {};
+    /* the engine's placement with the edit on frame index f (tick f + 1) */
+    const placed = (d, f) => {
+        const M = mul(d.world, to), el = els[d.key];
+        return el ? Float32Array.from(new THREE.Matrix4().fromArray(M).multiply(localMatrix(el, frameOf(f + 1, length))).elements) : M;
+    };
+    const first = new Map();
+    frames.forEach((now, f) => { for (const k of now.keys()) if (!first.has(k)) first.set(k, f); });
+    const meshes = [], weights = {}, materials = [], matOf = new Map(), names = [], rest = [], keys = [], used = new Map();
     for (const [key, t] of things) {
         const d = t.d, m = d.mesh;
         const blend = t.mode.has('add') || t.mode.has('glow') ? 'add' : t.mode.has('alpha') ? 'alpha' : t.mode.has('atst') ? 'clip' : 'opaque';
@@ -593,29 +607,45 @@ export async function stageExport(src, st, ticks) {
         const c = (used.get(base) || 0) + 1;
         used.set(base, c);
         const name = c > 1 ? base + '_' + c : base;
-        const M0 = mul(d.world, to), r0 = split(M0);
+        const el = els[key], M0 = placed(d, first.get(key)), r0 = split(M0);
         const nv = m.pos.length / 3, pos = new Float32Array(nv * 3), b = names.length;
+        const src0 = el ? Float32Array.from(m.pos) : m.pos;
+        if (el) for (const [v, x] of Object.entries(el.basis)) for (let k = 0; k < 3; k++) src0[v * 3 + k] += x[k];
         for (let i = 0; i < nv; i++) {
-            const x = m.pos[i * 3], y = m.pos[i * 3 + 1], z = m.pos[i * 3 + 2];
+            const x = src0[i * 3], y = src0[i * 3 + 1], z = src0[i * 3 + 2];
             for (let k = 0; k < 3; k++) pos[i * 3 + k] = x * M0[k] + y * M0[4 + k] + z * M0[8 + k] + M0[12 + k];
         }
         const idx = new Int32Array(nv * 4), wt = new Float32Array(nv * 4);
         for (let v = 0; v < nv; v++) { idx[v * 4] = b; wt[v * 4] = 1; }
-        meshes.push({ name, pos, uv: m.uv, faces: m.faces, material: matOf.get(mk), skin: { idx, wt } });
+        const out = { name, pos, uv: m.uv, faces: m.faces, material: matOf.get(mk), skin: { idx, wt } };
+        /* the shape keys: their deltas turned and scaled as the mesh is */
+        const shapes = el ? el.shapes.filter(s => !s.mute && Object.keys(s.d).length) : [];
+        if (shapes.length) {
+            out.morphs = shapes.map(s => {
+                const delta = new Float32Array(nv * 3);
+                for (const [v, x] of Object.entries(s.d))
+                    for (let k = 0; k < 3; k++) delta[v * 3 + k] = x[0] * M0[k] + x[1] * M0[4 + k] + x[2] * M0[8 + k];
+                return { name: s.name.replace(/\W+/g, '_') || 'Key', delta, weight: shapeAt(s, 1) };
+            });
+            const w = new Float32Array(n * shapes.length);
+            for (let f = 0; f < n; f++) shapes.forEach((s, j) => { w[f * shapes.length + j] = shapeAt(s, frameOf(f + 1, length)); });
+            weights[meshes.length] = w;
+        }
+        meshes.push(out);
         names.push(name);
         rest.push({ R: r0.R, T: r0.T });
         keys.push({ key, S0: r0.S });
     }
-    const poses = frames.map(now => keys.map(({ key, S0 }, b) => {
+    const poses = frames.map((now, f) => keys.map(({ key, S0 }, b) => {
         const d = now.get(key);
         if (!d) return { R: rest[b].R, T: rest[b].T, S: [0, 0, 0] };
-        const r = split(mul(d.world, to));
+        const r = split(placed(d, f));
         return { R: r.R, T: r.T, S: r.S.map((s, i) => (S0[i] ? s / S0[i] : 1)) };
     }));
     return {
         name: st.id + '_STAGE', meshes, materials, fps: TICKS_PER_SECOND,
         skeleton: { names, parent: names.map(() => -1), rest },
-        clips: [{ name: 'Stage', poses }],
+        clips: [{ name: 'Stage', poses, weights }],
     };
 }
 

@@ -91,6 +91,36 @@ yet**. Asked by Mary after trying the first round:
     it); its events are the main menu's vortex sphere, textured by
     DrawVortex3D's code, so it shows black. Pictures redone (`.v4`). STAGE SELECT's
     list moves with the mouse wheel (a row a notch; `stage_menu_mouse`).
+  - **STAGE VIEWER editing, as Blender (Mary 2026-10-30; built into the
+    test folder, not tried by Mary yet).** `mods/stageedit.js`,
+    `StageEditor.svelte`, `KeyTimeline.svelte`. A picked stage element (the
+    scene's objects and the Temple's glow; effects are spawned and die with
+    their events, so they are not editable) is moved, turned and scaled in
+    place with G / R / S (X / Y / Z an axis, again its own, Shift a plane,
+    typed numbers, click or Enter keeps, Esc or right button drops) or the
+    MOVE / ROTATE / SCALE handles. I keys the placement on the frame shown,
+    Alt+I deletes the frame's keys, REC keys every change, LINEAR / BEZIER
+    (Blender's auto-clamped) sets new keys and the frame's own, Ctrl+Z /
+    Ctrl+Y. The play bar's slider is now a dope-sheet timeline (drag to
+    scrub, a diamond row for the placement and each shape key). The edit
+    rides on top of the engine's animation about the mesh's centre, as the
+    CORRECTIVE ANIMATION LAYERS ride on the fighters'; a change on a keyed
+    element that is not keyed goes when the frame changes. EDIT opens the
+    element in a model editor window (its mesh, texture, vertices,
+    wireframe, UVs over the texture, exact T / R / S fields, the same keys
+    and timeline) with SHAPE KEYS: Basis plus named keys, a value slider,
+    a key button and mute each; SCULPT (Tab) grabs vertices with a smooth
+    proportional falloff into the key picked (radius [ ] or the wheel while
+    dragging). Kept a stage in `<game>/stage edits/<ID>.json` (IPC
+    `stageedits:load/save`), reloaded with the stage. The export writes them:
+    placement baked into each bone's frames, the Basis edits into the
+    vertices, shape keys as GLB morph targets with a `weights` animation
+    (`extras.targetNames`), FBX BlendShape / BlendShapeChannel / Shape with
+    an animated DeformPercent, USD BlendShape prims bound through
+    `skel:blendShapes` and SkelAnimation `blendShapeWeights`. Checked:
+    `npm run ui` builds; `node launcher/app/test/stageedit.test.mjs` (curves,
+    keys, shapes, the three exporters' shape data). Not checked: the files
+    opened in Blender or pxr (not on this machine), and the editor by hand.
   - **STAGE SELECT named the Street twice (and the Balcony, the Kave).**
     Levels 4, 10 and 11 have a second scene and the fight starts in it
     (Task_GameInit step 51, CurrentScene = 1): the Subway, the Soul Chamber,
