@@ -64,6 +64,10 @@ export function stageOf(desc) {
     const root = prim(desc.name, sk ? 'SkelRoot' : 'Xform');
     const base = '/' + rootName;
 
+    /* the shape keys: a token each for the animation, mesh by mesh */
+    const shapeToks = desc.meshes.map(m => (m.morphs || []).map(t => ident(m.name) + '_' + ident(t.name)));
+    const allToks = shapeToks.flat();
+
     let slot = [], paths = [], order = [];
     if (sk) {
         order = boneOrder(sk);
@@ -96,6 +100,18 @@ export function stageOf(desc) {
             anim.props.push({ name: 'rotations', type: 'quatf[]', samples: rot });
             if (scaled) anim.props.push({ name: 'scales', type: 'half3[]', samples: sc });
             else anim.props.push({ name: 'scales', type: 'half3[]', value: order.map(() => [1, 1, 1]) });
+            if (allToks.length) {
+                const bw = [];
+                let t2 = 0;
+                for (const c of clips)
+                    for (let f = 0; f < c.poses.length; f++, t2++)
+                        bw.push([t2, desc.meshes.flatMap((m, mi) => (m.morphs || []).map((x, k) => {
+                            const w = c.weights && c.weights[mi];
+                            return w ? w[f * m.morphs.length + k] : x.weight || 0;
+                        }))]);
+                anim.props.push({ name: 'blendShapes', type: 'token[]', value: allToks, uniform: true });
+                anim.props.push({ name: 'blendShapeWeights', type: 'float[]', samples: bw });
+            }
             skel.children.push(anim);
         }
         root.children.push(skel);
@@ -120,6 +136,23 @@ export function stageOf(desc) {
             mesh.props.push({ name: 'primvars:skel:jointWeights', type: 'float[]', value: Array.from(m.skin.wt), meta: { elementSize: 4, interpolation: 'vertex' } });
             mesh.props.push({ name: 'primvars:skel:geomBindTransform', type: 'matrix4d', value: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] });
             mesh.props.push({ name: 'skel:skeleton', targets: [base + '/Skel'] });
+            /* the shape keys: a BlendShape each, the vertices it moves */
+            const mi = desc.meshes.indexOf(m);
+            if (m.morphs && m.morphs.length) {
+                const at = base + '/' + mesh.name + '/';
+                m.morphs.forEach(t => {
+                    const bs = prim(t.name, 'BlendShape'), ix = [], off = [];
+                    for (let v = 0; v < n; v++) {
+                        const d = [t.delta[v * 3], t.delta[v * 3 + 1], t.delta[v * 3 + 2]];
+                        if (d.some(Boolean)) { ix.push(v); off.push(d); }
+                    }
+                    bs.props.push({ name: 'offsets', type: 'vector3f[]', value: off, uniform: true });
+                    bs.props.push({ name: 'pointIndices', type: 'int[]', value: ix, uniform: true });
+                    mesh.children.push(bs);
+                });
+                mesh.props.push({ name: 'skel:blendShapes', type: 'token[]', value: shapeToks[mi], uniform: true });
+                mesh.props.push({ name: 'skel:blendShapeTargets', targets: mesh.children.map(c => at + c.name) });
+            }
         }
         mesh.props.push({ name: 'material:binding', targets: [base + '/Materials/' + ident(desc.materials[m.material].name)] });
         root.children.push(mesh);

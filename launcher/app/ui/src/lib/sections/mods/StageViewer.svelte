@@ -9,7 +9,14 @@
      * properties on the right, ISOLATE shows it alone (Blender's local view,
      * numpad / too), F or numpad . frames it. On the right, by tabs: what is
      * seen, the elements (each shown or hidden), the one picked, exporting
-     * with the animation and the effects. */
+     * with the animation and the effects.
+     *
+     * Editing, as Blender (mods/stageedit.js): the element picked is moved,
+     * turned and scaled in place (G / R / S, or the handles), I keys its
+     * placement on the frame shown, Alt+I takes the frame's keys away, REC
+     * keys every change; EDIT opens it in the model editor (StageEditor),
+     * with its shape keys. The timeline shows the keys; the edits are kept a
+     * stage (the launcher's "stage edits" folder) and exported. */
     import { onMount, onDestroy } from 'svelte';
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -17,10 +24,13 @@
     import { api } from '#lib/platform.js';
     import { hoverBlip, selectBlip, doneChord, failChord } from '#lib/sound.js';
     import { ms, src, loadCatalog, reloadMods } from '#lib/mods/store.svelte.js';
-    import { loadStage, StageView, stageTextures, stageExport, TICKS_PER_SECOND, PLAYER_SIZE } from '#lib/mods/stagerun.js';
+    import { loadStage, StageView, stageTextures, stageExport, mul, TICKS_PER_SECOND, PLAYER_SIZE } from '#lib/mods/stagerun.js';
     import { exportFiles } from '#lib/mods/assets.js';
     import { homeOf } from '#lib/mods/owners.js';
     import { ViewNav } from '#lib/mods/viewnav.js';
+    import { Gizmo, EditCache, newEl, frameOf, trsAt, shapeAt, putKey, dropKey, copyTrs, saved } from '#lib/mods/stageedit.js';
+    import KeyTimeline from './KeyTimeline.svelte';
+    import StageEditor from './StageEditor.svelte';
 
     let host = $state(), mainEl = $state(), topEl;
     let pick = $state(null);                /* the stage open */
@@ -39,6 +49,11 @@
     let full = $state(false), solo = $state(false);
     let format = $state('glb'), done = $state(''), busy = $state(false);
     let length = $state(1);
+
+    /* the edits: plain data (stageedit.js), erev says when they changed */
+    let edits = { v: 1, els: {} }, cache = new EditCache(), gizmo = null, revN = 1;
+    let erev = $state(0), rec = $state(false), interp = $state('bezier'), tool = $state(''), gizInfo = $state(''), editing = $state(false);
+    let undoList = [], redoList = [], lastTag = '', saveWait = 0;
 
     let renderer, scene, camera, controls, nav, raf, view = null, overlay = null;
     const SPEEDS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3];
@@ -66,6 +81,8 @@
                 user: tx('nvUser'), persp: tx('nvPersp'), ortho: tx('nvOrtho') }, below: () => topEl });
         nav.gizmo.title = tx('nvKeys');
         nav.label();
+        gizmo = new Gizmo({ scene, dom: renderer.domElement, camera: () => camera, controls,
+            onStart: () => remember(), onChange: trs => setTrs(trs), onEnd: () => keep(), info: t => { gizInfo = t; } });
         renderer.domElement.addEventListener('pointerdown', onDown);
         renderer.domElement.addEventListener('pointerup', onUp);
         window.addEventListener('keydown', onKey);
@@ -88,7 +105,7 @@
             const step = 1 / (TICKS_PER_SECOND * speed);
             let n = 0;
             while (acc >= step && n < 8) { acc -= step; view.sim.tick(); n++; }
-            if (n) { view.update(); tick = view.sim.ticks; follow(); }
+            if (n) { dropPending(); view.update(); tick = view.sim.ticks; follow(); }
         }
         scene.background = black ? new THREE.Color(0, 0, 0) : null;
         controls.update();
@@ -117,7 +134,9 @@
     }
 
     function close() {
+        editing = false;
         if (view) { scene.remove(view.group); view.dispose(); view = null; }
+        cache.dispose();
         clearSel();
     }
     async function open(st) {
@@ -131,6 +150,9 @@
             const stage = await loadStage(src, st);
             if (pick !== st) return;
             view = new StageView(stage, stageTextures(src));
+            length = Math.max(1, stage.root.frames);
+            await loadEdits(st, stage);
+            view.edit = (d, mesh) => cache.apply(edits.els[d.key], frameOf(view.sim.ticks, length), mesh, d.key);
             await view.preload();
             if (pick !== st) { view.dispose(); view = null; return; }
             view.group.visible = true;
@@ -151,6 +173,7 @@
 
     function seek(t) {
         if (!view) return;
+        dropPending();
         view.seek(Math.max(1, t));
         tick = view.sim.ticks;
         follow();
@@ -180,8 +203,9 @@
     }
     function onDown(e) { downAt = e.button === 0 ? [e.clientX, e.clientY] : null; }
     function onUp(e) {
-        if (!downAt || !view || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) return;
+        const at = downAt;
         downAt = null;
+        if (!at || !view || Math.hypot(e.clientX - at[0], e.clientY - at[1]) > 4 || gizmo.active || gizmo.tc.axis) return;
         ray.setFromCamera(ndc(e), camera);
         const hits = ray.intersectObjects([...view.live.values()].filter(m => m.visible), false);
         if (!hits.length) { clearSel(); return; }
@@ -193,6 +217,7 @@
         follow();
     }
     function clearSel() {
+        if (gizmo) gizmo.detach();
         selKey = null;
         sel = null;
         if (overlay) { scene.remove(overlay); overlay.material.dispose(); overlay = null; }
@@ -205,8 +230,10 @@
         if (!mesh) {
             if (overlay) overlay.visible = false;
             if (sel) sel = { ...sel, gone: true };
+            gizmo.detach();
             return;
         }
+        placeGizmo(mesh);
         const d = mesh.userData.draw;
         if (!overlay) {
             overlay = new THREE.Mesh(mesh.geometry, new THREE.MeshBasicMaterial({ color: 0xffa040, wireframe: true, depthTest: false, transparent: true, opacity: 0.55 }));
@@ -263,13 +290,222 @@
     }
     function onKey(e) {
         const tag = e.target && e.target.tagName;
-        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || !nav) return;
+        if (editing || !nav) return;
+        const k = e.key.toLowerCase();
+        if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y') && tag !== 'TEXTAREA' && !(tag === 'INPUT' && e.target.type === 'text')) {
+            undo(k === 'z' && !e.shiftKey);
+            e.preventDefault();
+            return;
+        }
+        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+        if (gizmo.key(e)) { e.preventDefault(); e.stopPropagation(); return; }
+        if (e.code === 'KeyI' && editable(selKey)) { if (e.altKey) deleteKeys(); else insertKey(); e.preventDefault(); return; }
         if (e.code === 'NumpadDivide' && selKey) { isolate(); e.preventDefault(); return; }
         if ((e.code === 'NumpadDecimal' || e.key === 'f' || e.key === 'F') && selKey) { frameSel(); e.preventDefault(); return; }
         if (e.key === 'Escape' && selKey) { clearSel(); e.preventDefault(); return; }
         if (e.key === ' ' && view) { playing = !playing; e.preventDefault(); return; }
         if (nav.key(e)) e.preventDefault();
     }
+
+    /* -------------------------------------------------------------- edits -- */
+
+    const editable = key => !!key && (key.startsWith('stage:') || key.startsWith('extra:'));
+    const frameNow = () => frameOf(tick, length);
+    async function loadEdits(st, stage) {
+        const got = await api.stageEditsLoad(st.id);
+        edits = got && got.els ? got : { v: 1, els: {} };
+        /* an element whose object is not the one it was made on (another
+         * mod layer's scene): left out */
+        for (const [k, el] of Object.entries(edits.els)) {
+            const [kind, i] = k.split(':');
+            const name = kind === 'stage' ? (stage.root.objects[i] || {}).name : kind === 'extra' ? (stage.extras[i] || {}).name : null;
+            if (name !== el.name) delete edits.els[k];
+            else el.rev = revN++;
+        }
+        undoList = []; redoList = []; lastTag = '';
+        erev++;
+    }
+    function ensureEl(key) {
+        if (!edits.els[key]) {
+            const mesh = view && view.live.get(key);
+            if (!mesh) return null;
+            const d = mesh.userData.draw;
+            edits.els[key] = newEl(d.extra ? d.extra.name : d.scene.objects[d.obj].name, d.mesh.pos);
+            edits.els[key].rev = revN++;
+        }
+        return edits.els[key];
+    }
+    /* something changed: drawn again, the panel, saved a moment later */
+    function bump(reshaped) {
+        const el = selKey && edits.els[selKey];
+        if (el && reshaped) el.rev = revN++;
+        erev++;
+        if (view) { view.update(); follow(); }
+    }
+    function keep() {
+        clearTimeout(saveWait);
+        const id = pick && pick.id, json = JSON.stringify(saved(edits));
+        saveWait = setTimeout(() => { if (id) api.stageEditsSave(id, json); }, 300);
+    }
+    /* before a change: Ctrl+Z goes back to here (one step a tag in a row) */
+    function remember(tag = '') {
+        if (tag && tag === lastTag) return;
+        lastTag = tag;
+        undoList.push(JSON.stringify(saved(edits)));
+        if (undoList.length > 100) undoList.shift();
+        redoList = [];
+    }
+    function undo(back) {
+        const from = back ? undoList : redoList, to = back ? redoList : undoList;
+        if (!from.length) return;
+        to.push(JSON.stringify(saved(edits)));
+        edits = JSON.parse(from.pop());
+        for (const el of Object.values(edits.els)) el.rev = revN++;
+        lastTag = '';
+        bump();
+        keep();
+    }
+    /* what was set on a frame and not keyed goes when the frame changes
+     * (as the CORRECTIVE ANIMATION LAYERS' recorder) */
+    function dropPending() {
+        for (const el of Object.values(edits.els)) {
+            if (el.pending) { el.pending = null; erev++; }
+            for (const s of el.shapes) if (s.pending) { s.pending = null; el.rev = revN++; erev++; }
+        }
+    }
+    function placeGizmo(mesh) {
+        if (!editable(selKey) || editing) { gizmo.detach(); return; }
+        const d = mesh.userData.draw, el = edits.els[selKey] || newEl('', d.mesh.pos);
+        const p = el.pivot;
+        const base = new THREE.Matrix4().fromArray(mul(d.world, view.stage.toOut)).multiply(new THREE.Matrix4().makeTranslation(p[0], p[1], p[2]));
+        gizmo.attach(base, trsAt(el, frameNow()));
+    }
+    /* a placement set: keyed (REC), held on this frame (keys there), or the
+     * element's own (no keys) */
+    function setTrs(trs) {
+        const el = ensureEl(selKey);
+        if (!el) return;
+        const f = frameNow();
+        if (rec) { putKey(el.keys, { f, ...copyTrs(trs), i: interp }); el.pending = null; }
+        else if (el.keys.length) el.pending = { f, trs: copyTrs(trs) };
+        else el.base = copyTrs(trs);
+        bump();
+    }
+    function insertKey() {
+        const el = ensureEl(selKey);
+        if (!el) return;
+        remember();
+        selectBlip();
+        const f = frameNow();
+        putKey(el.keys, { f, ...copyTrs(trsAt(el, f)), i: interp });
+        el.pending = null;
+        for (const s of el.shapes) if (s.pending) { putKey(s.keys, { f, v: s.pending.v, i: interp }); s.pending = null; }
+        bump(true);
+        keep();
+    }
+    function deleteKeys() {
+        const el = edits.els[selKey];
+        if (!el) return;
+        const f = frameNow(), was = copyTrs(trsAt(el, f));
+        remember();
+        let any = dropKey(el.keys, f);
+        if (any && !el.keys.length) el.base = was;
+        for (const s of el.shapes) {
+            const v = shapeAt(s, f);
+            if (dropKey(s.keys, f)) { any = true; if (!s.keys.length) s.value = v; }
+        }
+        if (any) { selectBlip(); bump(true); keep(); }
+    }
+    /* LINEAR / BEZIER: the keys inserted from now on, and the frame's own */
+    function setInterp(v) {
+        interp = v;
+        const el = selKey && edits.els[selKey], f = frameNow();
+        if (!el) return;
+        remember();
+        for (const k of [...el.keys, ...el.shapes.flatMap(s => s.keys)]) if (k.f === f) k.i = v;
+        bump(true);
+        keep();
+    }
+    function resetEl() {
+        if (!edits.els[selKey]) return;
+        selectBlip();
+        remember();
+        delete edits.els[selKey];
+        bump(true);
+        keep();
+    }
+    function setTool(t) {
+        selectBlip();
+        tool = tool === t ? '' : t;
+        gizmo.setTool(tool);
+    }
+    /* the model editor's: the placement, the keys, the shape keys */
+    const act = {
+        seek: f => { playing = false; seek(f); },
+        play: () => { playing = !playing; },
+        el: () => ensureEl(selKey),
+        remember, keep, setTrs, insertKey, deleteKeys, setInterp,
+        rec: () => { rec = !rec; },
+        undo,
+        reshaped: () => bump(true),
+        close: () => closeEditor(),
+        addShape() {
+            const el = ensureEl(selKey);
+            remember();
+            let n = el.shapes.length + 1;
+            while (el.shapes.some(s => s.name === 'Key ' + n)) n++;
+            el.shapes.push({ name: 'Key ' + n, value: 0, mute: false, d: {}, keys: [] });
+            bump(true); keep();
+            return el.shapes.length - 1;
+        },
+        delShape(j) { const el = edits.els[selKey]; remember(); el.shapes.splice(j, 1); bump(true); keep(); },
+        renameShape(j, name) {
+            const el = edits.els[selKey], nm = name.trim() || el.shapes[j].name;
+            if (el.shapes.some((s, i) => i !== j && s.name === nm)) { erev++; return; }
+            remember(); el.shapes[j].name = nm; bump(); keep();
+        },
+        muteShape(j) { const el = edits.els[selKey]; remember(); el.shapes[j].mute = !el.shapes[j].mute; bump(true); keep(); },
+        setShape(j, v) {
+            const el = edits.els[selKey], s = el.shapes[j], f = frameNow();
+            remember('v' + j + ':' + f);
+            if (rec) { putKey(s.keys, { f, v, i: interp }); s.pending = null; }
+            else if (s.keys.length) s.pending = { f, v };
+            else s.value = v;
+            bump(true); keep();
+        },
+        keyShape(j) {
+            const el = edits.els[selKey], s = el.shapes[j], f = frameNow();
+            remember();
+            if (s.keys.some(k => k.f === f) && !s.pending) dropKey(s.keys, f);
+            else { putKey(s.keys, { f, v: shapeAt(s, f), i: interp }); s.pending = null; }
+            bump(true); keep();
+        },
+    };
+    function openEditor() {
+        if (!editable(selKey) || !ensureEl(selKey)) return;
+        selectBlip();
+        playing = false;
+        editing = true;
+        gizmo.detach();
+        erev++;
+    }
+    function closeEditor() {
+        editing = false;
+        lastTag = '';
+        bump();
+    }
+    /* the timeline's rows: the element picked's placement and shape keys */
+    const rows = $derived.by(() => {
+        erev;
+        const el = sel && edits.els[sel.key];
+        if (!el) return [];
+        return [{ label: tx('stPlacement'), keys: el.keys.map(k => ({ f: k.f, i: k.i })) },
+            ...el.shapes.map(s => ({ label: s.name, keys: s.keys.map(k => ({ f: k.f, i: k.i })) }))];
+    });
+    const editKey = $derived(sel && editable(sel.key) ? sel.key : null);
+    const hasEdits = $derived.by(() => { erev; return !!(editKey && edits.els[editKey]); });
+    const editorDraw = () => { const m = view && view.live.get(selKey); return m ? m.userData.draw : null; };
+    const editorTex = d => { const st = ((d.extra ? d.extra.texture : d.mesh.texture) || '').toUpperCase(); return (view && view.ready.get(st)) || null; };
 
     /* ------------------------------------------------------------- export -- */
 
@@ -279,7 +515,7 @@
         busy = true;
         done = '';
         try {
-            const desc = await stageExport(src, pick);
+            const desc = await stageExport(src, pick, undefined, saved(edits));
             const files = await exportFiles(src, desc, format);
             const at = await api.exportSave(homeOf('stages', pick) + '/' + format.toUpperCase(), files);
             doneChord();
@@ -312,7 +548,10 @@
         document.removeEventListener('fullscreenchange', onFull);
         if (document.fullscreenElement) document.exitFullscreen();
         cancelAnimationFrame(raf);
+        clearTimeout(saveWait);
+        if (pick) api.stageEditsSave(pick.id, JSON.stringify(saved(edits)));
         close();
+        gizmo && gizmo.dispose();
         window.removeEventListener('keydown', onKey);
         nav && nav.dispose();
         renderer && renderer.dispose();
@@ -347,6 +586,7 @@
             {:else if !pick}<span class="msg">{tx('vwPick')}</span>{/if}
         </div>
         {#if sel && !sel.gone}<div class="info">{sel.name}</div>{/if}
+        {#if gizInfo}<div class="edit">{gizInfo}</div>{/if}
         <div class="topbtns" bind:this={topEl}>
             {#if pick}<button class="btn" onclick={() => { selectBlip(); gameCamera(); }}>{tx('stGameCam')}</button>{/if}
             <button class="btn" onclick={() => { selectBlip(); solo = !solo; }}>{solo ? tx('vwPanels') : tx('vwSolo')}</button>
@@ -356,12 +596,18 @@
             <div class="play">
                 <button class="btn" onclick={() => { selectBlip(); playing = !playing; }}>{playing ? tx('vwPause') : tx('vwPlay')}</button>
                 <button class="btn" onclick={() => { selectBlip(); seek(1); }}>{tx('stRestart')}</button>
-                <input type="range" min="1" max={length} value={Math.min(tick, length)} oninput={e => { playing = false; seek(Number(e.currentTarget.value)); }}>
-                <span class="lbl">{tx('vwFrame')} {tick}</span>
+                <span class="lbl grow">{tx('vwFrame')} {frameOf(tick, length)} / {length}</span>
+                {#if editKey}
+                    <button class="btn" class:hot={rec} onclick={() => { selectBlip(); rec = !rec; }} title={tx('stRecNote')}>{rec ? '● REC' : '○ REC'}</button>
+                    <select class="sel interp" value={interp} onchange={e => setInterp(e.currentTarget.value)} title={tx('stInterp')}>
+                        <option value="bezier">BEZIER</option><option value="linear">{tx('stLinear')}</option>
+                    </select>
+                {/if}
                 <select class="sel speed" bind:value={speed} title={tx('vwSpeed')}>
                     {#each SPEEDS as v}<option value={v}>{v}x</option>{/each}
                 </select>
             </div>
+            <KeyTimeline {length} frame={frameOf(tick, length)} {rows} onSeek={f => { playing = false; seek(f); }} />
         {/if}
     </section>
 
@@ -419,6 +665,23 @@
                         {#if sel.bone}<dt>{tx('stBone')}</dt><dd>{sel.bone}</dd>{/if}
                     {/if}
                 </dl>
+                {#if editKey && !sel.gone}
+                    <span class="lbl head">{tx('stEditHead')}</span>
+                    <button class="btn hot" onclick={openEditor}>{tx('stEdit')}</button>
+                    <div class="trio">
+                        <button class="btn" class:hot={tool === 'translate'} onclick={() => setTool('translate')}>{tx('stMove')}</button>
+                        <button class="btn" class:hot={tool === 'rotate'} onclick={() => setTool('rotate')}>{tx('stTurn')}</button>
+                        <button class="btn" class:hot={tool === 'scale'} onclick={() => setTool('scale')}>{tx('stScl')}</button>
+                    </div>
+                    <div class="pair">
+                        <button class="btn" onclick={insertKey}>{tx('stKey')}</button>
+                        <button class="btn" onclick={deleteKeys}>{tx('stDelKey')}</button>
+                    </div>
+                    {#if hasEdits}<button class="btn" onclick={resetEl}>{tx('stResetEdit')}</button>{/if}
+                    <p class="note">{tx('stEditNote')}</p>
+                {:else if !editKey}
+                    <p class="note">{tx('stNoEdit')}</p>
+                {/if}
                 <div class="pair">
                     <button class="btn" class:hot={isolated} onclick={isolate}>{isolated ? tx('stShowAll') : tx('stIsolate')}</button>
                     <button class="btn" onclick={() => { selectBlip(); frameSel(); }}>{tx('stFrame')}</button>
@@ -441,6 +704,10 @@
         {/if}
     </aside>
 </div>
+
+{#if editing && editorDraw()}
+    <StageEditor d={editorDraw()} tex={editorTex(editorDraw())} {erev} frame={frameOf(tick, length)} {length} {rows} {rec} {interp} {playing} {act} />
+{/if}
 
 <style>
     .viewer { display: grid; grid-template-columns: calc(var(--u) * 22) minmax(0, 1fr) calc(var(--u) * 24); gap: calc(var(--u) * 1.2); flex: 1; min-height: calc(var(--u) * 40); }
@@ -486,6 +753,13 @@
     .play { display: flex; align-items: center; gap: calc(var(--u) * .9); margin-top: calc(var(--u) * .6); }
     .play input[type=range] { flex: 1; accent-color: var(--blue); }
     .play .speed { flex: 0 0 calc(var(--u) * 8); }
+    .play .interp { flex: 0 0 calc(var(--u) * 11); }
+    .play .grow { flex: 1; }
+    .main :global(.tl) { margin-top: calc(var(--u) * .4); max-height: calc(var(--u) * 14); overflow-y: auto; }
+    .edit { position: absolute; left: 50%; top: calc(var(--u) * .6); transform: translateX(-50%); padding: 2px 10px; border-radius: var(--r-sm);
+        background: rgba(10, 8, 32, .8); color: #fff; font-size: calc(var(--t) * 1.2); letter-spacing: .06em; pointer-events: none; white-space: nowrap; }
+    .trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(var(--u) * .4); }
+    .opts .trio .btn { width: auto; font-size: calc(var(--t) * 1.05); }
     .ok { color: var(--ok-text); word-break: break-all; }
     .rtabs { display: grid; grid-template-columns: repeat(2, 1fr); gap: calc(var(--u) * .3); margin-bottom: calc(var(--u) * .4); }
     .rtabs .tab { font-size: calc(var(--t) * 1.05); padding: calc(var(--u) * .45) calc(var(--u) * .2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
