@@ -2210,8 +2210,8 @@ void dbg_replay_loading(const char *title)
  * loads anything, and a window comes up over FE_SELECTFIGHTER: the stage's
  * picture large with arrows, or a list of all of them with their pictures
  * (the TAB key, the pad's Y or the LIST button; the mouse's wheel moves
- * through it), CANCEL (the stage the game
- * would have taken), RANDOM and SELECT. The pictures are the game's CS_BG sheets
+ * through it), CANCEL (back to the select screen; online, where the guest
+ * waits, the stage the game would have taken), RANDOM and SELECT. The pictures are the game's CS_BG sheets
  * (960x640 on a 1024 sheet), or STAGE_<SCENE>.PNG when one is added; a
  * stage with neither gets one drawn (st_thumb). A debug
  * fight and a replay go straight on, with their own stage. */
@@ -2225,7 +2225,7 @@ extern char Language[10];
 #define ST_MAX 16
 #define ST_BTN_H 15.0f                  /* the buttons' height */
 
-static int  g_st_open, g_st_done, g_st_chosen = -1;
+static int  g_st_open, g_st_done, g_st_chosen = -1, g_st_back;
 static int  g_st_n, g_st_ids[ST_MAX], g_st_cur, g_st_list, g_st_first;
 static int  g_st_hover = -1;
 static int  g_st_fresh;              /* opened: what is held does not count */
@@ -2406,10 +2406,33 @@ static int eligible(void)
 
 static void st_music(int on);
 
+/* CANCEL: Task_FEDestroy has run (the front end's pictures and models are
+ * gone), so the front end is loaded again, as after a fight -- Task_FEInit,
+ * with the loading picture Task_LoadingScreen made for the fight -- and
+ * Task_FEMain carries on at the top of its stack, the select screen. The
+ * selection screen pops on its way out (training queues the whole stack's
+ * pop): that is undone, so it is the select screen it comes back to. The
+ * tune is the select screen's, already playing (st_music), and the front
+ * end's load latches FETuneSelection to it, so it plays on. */
+extern int CurrentTask, FEInitState, PendingPop, PendingPopAll;
+
+static void back_to_select(void)
+{
+    PendingPop = PendingPopAll = -1;
+    FEInitState = 0;
+    CurrentTask = 2;
+    printf("stage select: back to the select screen\n");
+}
+
 int stage_menu_gate(long *level)
 {
     int i;
 
+    if (g_st_done && g_st_back) {       /* CANCEL: the select screen again */
+        g_st_done = g_st_back = 0;
+        back_to_select();
+        return 1;
+    }
     if (g_st_done) {                    /* picked: this fight's stage */
         g_st_done = 0;
         if (g_st_chosen >= 0) {
@@ -2445,26 +2468,38 @@ int stage_menu_gate(long *level)
 
 int stage_menu_is_open(void) { return g_st_open; }
 
-/* The music while it is open: the select screen faded the tune out with
- * the picture (FadeMusicOut leaves it playing at volume 0); it plays on at
- * the player's volume here, and goes quiet again for the loading, as the
- * binary has it. The fight starts its own tune at its own volume. */
-void limeSetTuneVol(long vol);
+/* The music while it is open: Task_FEDestroy stopped the select screen's
+ * tune, so it is started again here, at the player's volume, as
+ * Task_FEMain starts it (FEMain_SwitchTune). Picked, it stops for the
+ * loading, as Task_FEDestroy had it; the fight starts its own. Back to the
+ * select screen, it plays on. */
+void limePlayTune(const char *file, long vol, long loop);
+void limeStopTune(void);
 extern int Settings[10];
 extern float MusicVol[];
 
 static void st_music(int on)
 {
-    if (Settings[2])
-        limeSetTuneVol(on ? (long)MusicVol[Settings[2]] : 0);
+    if (!Settings[2])
+        return;
+    if (on)
+        limePlayTune("CharacterSelect.mp3", (long)MusicVol[Settings[2]], 1);
+    else
+        limeStopTune();
 }
 
+/* pick: 1 the stage shown, 0 the game's own, -1 back to the select screen
+ * (online, the guest waits on the host's level: the game's own) */
 static void st_close(int pick)
 {
-    g_st_chosen = pick ? g_st_ids[g_st_cur] : -1;
+    if (pick < 0 && GameMode == 1)
+        pick = 0;
+    g_st_chosen = pick > 0 ? g_st_ids[g_st_cur] : -1;
+    g_st_back = pick < 0;
     g_st_open = 0;
     g_st_done = 1;
-    st_music(0);
+    if (!g_st_back)
+        st_music(0);
 }
 
 static void st_move(int d)
@@ -2657,7 +2692,7 @@ void stage_menu_mouse(float fx, float fy, int down)
         else if (hit == 1)
             st_move(1);
         else if (hit == 2)
-            st_close(0);
+            st_close(-1);
         else if (hit == 3)
             g_st_list = !g_st_list;
         else if (hit == 4)
@@ -2696,5 +2731,5 @@ void stage_menu_keys(int left, int right, int up, int down, int ok, int back,
     if (g_st_list && e[3]) st_move(4);
     if (e[6]) g_st_list = !g_st_list;
     if (e[4]) st_close(1);
-    else if (e[5]) st_close(0);
+    else if (e[5]) st_close(-1);
 }

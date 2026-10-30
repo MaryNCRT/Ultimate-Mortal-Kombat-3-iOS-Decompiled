@@ -138,7 +138,8 @@ int  dbg_clock_frozen(void);
 /* STAGE SELECT (port): after the fighters, in VS, training and online (the
  * host), a window to pick the stage. Task_GameInit asks stage_menu_gate
  * before anything loads: 1 while the window is up (it waits), 0 once the
- * stage is in *level (or left as the game chose, CANCEL). game_main gives
+ * stage is in *level (or left as the game chose; CANCEL goes back to the
+ * select screen, online the game's own). game_main gives
  * it the frame while it is open, as the settings menu. */
 int  stage_menu_gate(long *level);
 int  stage_menu_is_open(void);
