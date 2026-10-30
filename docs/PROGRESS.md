@@ -100,7 +100,8 @@ yet**. Asked by Mary after trying the first round:
     (coplanar pieces no longer swap). All 17 stages checked by eye in a
     local page. Scislac Busorez is not in LEVEL_INFO (the game never loads
     it); its events are the main menu's vortex sphere, textured by
-    DrawVortex3D's code, so it shows black. Pictures redone (`.v4`).
+    DrawVortex3D's code, so it shows black. Pictures redone (`.v4`). STAGE SELECT's
+    list moves with the mouse wheel (a row a notch; `stage_menu_mouse`).
   - **STAGE SELECT named the Street twice (and the Balcony, the Kave).**
     Levels 4, 10 and 11 have a second scene and the fight starts in it
     (Task_GameInit step 51, CurrentScene = 1): the Subway, the Soul Chamber,
