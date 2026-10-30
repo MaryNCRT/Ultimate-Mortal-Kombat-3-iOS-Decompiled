@@ -41,6 +41,7 @@
     import { putTexture } from '#lib/mods/image.js';
     import { homeOf, textureDir, exportTexDir } from '#lib/mods/owners.js';
     import { makeFloor, placeFloor, weightColors, applyLook, makeRigLines, poseRigLines } from '#lib/mods/viewkit.js';
+    import { loadStage, StageView, stageTextures, PLAYER_SIZE } from '#lib/mods/stagerun.js';
 
     let host = $state();
     let pic = $state();
@@ -96,7 +97,8 @@
     /* ------------------------------------------------------------ 3D -- */
 
     function setup() {
-        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        /* log depth: a stage behind (STAGE) reaches skies 1e7 units away */
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, logarithmicDepthBuffer: true });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.outputColorSpace = THREE.SRGBColorSpace;
         host.appendChild(renderer.domElement);
@@ -175,6 +177,13 @@
                 pose();
             }
         } else blendT = 0;
+        /* the stage behind plays on its own, 30 a second, as in a fight */
+        if (bgView) {
+            bgAcc += dt;
+            let n = 0;
+            while (bgAcc >= 1 / 30 && n < 8) { bgAcc -= 1 / 30; bgView.sim.tick(); n++; }
+            if (n) bgView.update();
+        }
         controls && controls.update();
         renderer && renderer.render(scene, camera);
         nav && nav.draw();
@@ -208,13 +217,14 @@
         const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3()).length() || 1;
         nav && nav.reframed();
         placeFloor(floor, box, !!fighterView);
-        floor.visible = ms.floor && ms.kind !== 'stages';
+        floor.visible = ms.floor && ms.kind !== 'stages' && !bgView;
         controls.target.copy(c);
         camera.near = size / 500;
-        camera.far = size * 50;
+        camera.far = bgView ? 1e5 / PLAYER_SIZE : size * 50;
         camera.position.set(c.x + size * 0.15, c.y + size * 0.1, c.z + size * 1.1);
         camera.updateProjectionMatrix();
         if (nav) { nav.reframed(); nav.axisView = ''; nav.label(); }
+        if (bgView && !core) gameCamera();          /* on a stage: as the fight sees it */
     }
 
     /* a texture by its name, the way the game finds it; PNG through the
@@ -533,7 +543,53 @@
             root.traverse(o => { if (o.material) for (const mt of [].concat(o.material)) applyLook(mt, l); });
         }
     });
-    $effect(() => { if (floor) floor.visible = ms.floor && ms.kind !== 'stages'; });
+    $effect(() => { if (floor) floor.visible = ms.floor && ms.kind !== 'stages' && !ms.bgStage; });
+
+    /* STAGE: a stage behind the fighter, as the fight has it -- drawn as the
+     * engine draws it (mods/stagerun.js), playing, on black, the floor of
+     * the stage under the fighter's feet (both in fighter units, y 0). Its
+     * textures as sRGB, as the fighter's are here, so the colours are the
+     * game's. */
+    let bgView = null, bgAcc = 0, bgWant = null;
+    async function setStage(id) {
+        bgWant = id;
+        if (bgView) { scene.remove(bgView.group); bgView.dispose(); bgView = null; }
+        scene.background = null;
+        if (!id || !ms.cat) return;
+        const st = ms.cat.stages.find(x => x.id === id);
+        if (!st) return;
+        try {
+            const raw = stageTextures(src);
+            const v = new StageView(await loadStage(src, st), stem => raw(stem).then(t => {
+                if (t && t.colorSpace !== THREE.SRGBColorSpace) { t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true; }
+                return t;
+            }));
+            await v.preload();
+            if (bgWant !== id) { v.dispose(); return; }
+            v.seek(1);
+            bgView = v;
+            scene.add(v.group);
+            scene.background = new THREE.Color(0, 0, 0);
+            if (floor) floor.visible = false;
+            gameCamera();
+        } catch (e) { console.warn('stage behind:', e); }
+    }
+    $effect(() => { const id = ms.kind === 'characters' ? ms.bgStage : ''; if (scene) untrack(() => setStage(id)); });
+
+    /* GAME CAMERA: where the fight's camera stands as a round starts
+     * (StageViewer.svelte gameCamera): 1.25 over the floor, the eye 1.5
+     * over it and 8 back, 25 degrees, no far plane */
+    function gameCamera() {
+        const u = v => v / PLAYER_SIZE;
+        nav && nav.reframed();
+        controls.target.set(0, u(1.25), 0);
+        camera.near = u(0.33);
+        camera.far = u(1e5);
+        camera.position.set(0, u(1.5), u(8));
+        if (camera.isPerspectiveCamera) camera.fov = 25;
+        camera.updateProjectionMatrix();
+        if (nav) { nav.axisView = ''; nav.label(); }
+    }
 
     /* LAYERS: a mesh of the model shown or hidden */
     const shown = key => { const l = layers.find(x => x.key === key); return !l || l.on; };
@@ -1089,6 +1145,7 @@
     });
     onDestroy(() => {
         cancelAnimationFrame(raf);
+        if (bgView) { bgView.dispose(); bgView = null; }
         clear();
         window.removeEventListener('keydown', navKey);
         nav && nav.dispose();
@@ -1210,12 +1267,20 @@
                     {/each}
                 </span>
                 {#if fx}<SharpSliders disabled={!ms.smoothModel} />{/if}
+                {#if ms.cat && ms.cat.stages}
+                    <span class="lbl">{tx('vwStage')}</span>
+                    <select class="sel" bind:value={ms.bgStage}>
+                        <option value="">{tx('vwNoStage')}</option>
+                        {#each ms.cat.stages as st}<option value={st.id}>{st.name}</option>{/each}
+                    </select>
+                    {#if ms.bgStage}<button class="btn" onclick={() => { selectBlip(); gameCamera(); }}>{tx('stGameCam')}</button>{/if}
+                {/if}
                 <div class="checks">
                     <label class="chk"><input type="checkbox" bind:checked={ms.bones}><span>{tx('vwBones')}</span></label>
                     <label class="chk"><input type="checkbox" bind:checked={ms.wire}><span>{tx('vwWire')}</span></label>
                     <label class="chk"><input type="checkbox" bind:checked={ms.solid} onchange={() => { if (ms.solid) ms.weights = false; }}><span>{tx('vwSolid')}</span></label>
                     <label class="chk"><input type="checkbox" bind:checked={ms.weights} onchange={() => { if (ms.weights) ms.solid = false; }}><span>{tx('vwWeights')}</span></label>
-                    <label class="chk"><input type="checkbox" bind:checked={ms.floor}><span>{tx('vwFloor')}</span></label>
+                    {#if !ms.bgStage}<label class="chk"><input type="checkbox" bind:checked={ms.floor}><span>{tx('vwFloor')}</span></label>{/if}
                     {#if fx.attach && fx.attach.length}
                         <label class="chk"><input type="checkbox" bind:checked={ms.extras}><span>{tx('vwExtras')}</span></label>
                     {/if}
