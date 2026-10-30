@@ -23,6 +23,7 @@
     import { ViewNav } from '#lib/mods/viewnav.js';
     import { Gizmo, trsAt, shapeAt, localMatrix, shapedPositions, copyTrs } from '#lib/mods/stageedit.js';
     import KeyTimeline from './KeyTimeline.svelte';
+    import { portal } from '#lib/portal.js';
 
     let { d, tex, erev, frame, length, rows, rec, interp, playing, act } = $props();
 
@@ -312,7 +313,7 @@
     const f3 = v => +v.toFixed(3);
 </script>
 
-<div class="veil" role="presentation">
+<div class="veil" role="presentation" use:portal>
     <div class="win" role="dialog" aria-label={tx('seTitle')}>
         <header>
             <span class="ttl">{tx('seTitle')} · {name}</span>
@@ -398,7 +399,7 @@
 </div>
 
 <style>
-    .veil { position: fixed; inset: 0; z-index: 50; background: rgba(5, 4, 20, .72); display: grid; place-items: center; }
+    .veil { position: fixed; inset: 0; z-index: 1000; background: rgba(5, 4, 20, .72); display: grid; place-items: center; }
     .win {
         width: min(96vw, calc(var(--u) * 150)); height: min(92vh, calc(var(--u) * 90));
         display: flex; flex-direction: column; background: var(--bg); border: 1px solid var(--line);
