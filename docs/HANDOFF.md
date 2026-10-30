@@ -55,6 +55,12 @@ yet**. Asked by Mary after trying the first round:
     The importer refuses a block over 65,535 vertices once unwelded.
   - **0.1.14 beta: REPLACE MODEL like Blender, Mary 2026-10-30 (built,
     not tried yet).**
+    - **Published** as v0.1.14-beta (pre-release, 2026-10-30): the 0.1.13
+      zip and tar.gz with the repository's src/, CMakeLists.txt and the
+      new app.asar put in (the Windows and Linux asar are the same
+      files); everything else as 0.1.13 shipped it. The hand repacks had
+      left out `build/icon.ico` (the launcher window's icon,
+      package.json `build.files`); it is back in.
     - **Bones and weights while posed:** a clip's frame shown (or
       playing: it holds while a bone is moved, paint goes on as it
       plays) no longer jumps to the rest. A move is taken back to the
