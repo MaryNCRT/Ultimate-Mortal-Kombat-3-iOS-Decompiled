@@ -53,6 +53,20 @@ yet**. Asked by Mary after trying the first round:
     `lime.h`), and a lighting file that does not fit the skin is replaced by
     its average light (`Players.c port_fit_lighting`, logged `flat light`).
     The importer refuses a block over 65,535 vertices once unwelded.
+  - **Still crushed: a GLB's bone names lost their dots, Mary 2026-10-30
+    (test launcher repacked, not tried yet).** Her Sonya GLB (the
+    exporter's 49 bones, through Blender) showed 13/49 bones and 1688 of
+    3337 vertices weighted automatically: three.js's GLTFLoader takes '.',
+    ':', '/' and brackets out of node names, so clavicle.L came in as
+    clavicleL and only the 13 names without a dot matched; arms, hands and
+    legs were weighted again by distance. The importer now reads each
+    bone's name from the file's own node (checked on her file: clavicle.L,
+    upperarm.L, ... all 49). A mod saved before this needs EDIT SAVED MODEL
+    and saving again.
+    - REPLACE MODEL's player got the viewer's: SMOOTH (blended between
+      frames), the frame number, SPEED, PLAY from the start at the end.
+    - Not changed (not asked): `<skin>.source` keeps every file picked
+      beside the model; hers is 135 MB of unrelated pictures.
   - **A custom model crushed at the elbows and wrists in the moves, Mary
     2026-10-30 (test launcher repacked, not tried yet).** KEEP PROPORTIONS
     put the fighter's bones at the model's joints but kept the fighter's

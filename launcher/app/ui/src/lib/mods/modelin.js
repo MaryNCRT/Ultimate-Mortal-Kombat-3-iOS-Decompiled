@@ -285,11 +285,20 @@ async function glbModel(bytes, beside) {
     const root = gltf.scene;
     root.updateMatrixWorld(true);
 
+    /* a node's name as the file has it: three.js's loader takes '.', ':',
+     * '/' and brackets out of names (clavicle.L came in as clavicleL, so a
+     * file with the fighter's own bone names matched 13 bones of 49 and
+     * its arms and legs were weighted again by distance) */
+    const nameOf = o => {
+        const a = gltf.parser.associations.get(o);
+        const n = a && a.nodes !== undefined && json.nodes[a.nodes] ? json.nodes[a.nodes].name : undefined;
+        return n !== undefined && n !== null ? String(n) : o.name;
+    };
     const bones = [], boneOf = new Map();
     root.traverse(o => {
         if (o.isSkinnedMesh)
             for (const b of o.skeleton.bones)
-                if (!boneOf.has(b)) { boneOf.set(b, bones.length); bones.push({ name: b.name, rest: b.matrixWorld.elements.slice() }); }
+                if (!boneOf.has(b)) { boneOf.set(b, bones.length); bones.push({ name: nameOf(b), rest: b.matrixWorld.elements.slice() }); }
     });
     for (const [b, i] of boneOf) {
         let p = b.parent;

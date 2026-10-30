@@ -24,7 +24,7 @@
     import { selectBlip } from '#lib/sound.js';
     import { readModel, buildSkin, withSkin, solidPicture, poseName } from '#lib/mods/modelin.js';
     import { makeFloor, placeFloor, weightColors, heatColor, heatColors, applyLook, makeRigLines, poseRigLines } from '#lib/mods/viewkit.js';
-    import { framePose, posedVerts, vmul, mul3, tr3 } from '#lib/mods/rig.js';
+    import { framePose, framePoseBlend, posedVerts, vmul, mul3, tr3 } from '#lib/mods/rig.js';
     import { decodePicture } from '#lib/mods/image.js';
     import { ViewNav } from '#lib/mods/viewnav.js';
     import { dataUrl } from '#lib/mods/thumbs.js';
@@ -47,6 +47,10 @@
     let blockOf = $state([]);
     let thumbs = $state([]);
     let clip = $state(-1), frame = $state(0), playing = $state(false), loop = $state(true);
+    /* the player as the viewer's: SMOOTH (blended between frames), SPEED */
+    let smoothAnims = $state(false), speed = $state(1);
+    const SPEEDS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3];
+    let blendT = 0;
     let hidden = $state({});                /* material -> hidden */
     let big = $state(-1);                   /* the material seen large */
     /* ARM / LEG ANGLE and ROLL (buildSkin o.adjust), degrees */
@@ -136,14 +140,19 @@
         last = t;
         if (playing && pf && clip >= 0) {
             acc += dt;
-            if (acc >= 1 / 30) {
+            if (acc >= 1 / (30 * speed)) {             /* the game's 30 a second, times SPEED */
                 acc = 0;
                 const c = pf.clips[clip];
                 if (frame < c.to - c.from) frame++;
                 else if (loop) frame = 0;
                 else playing = false;
             }
-        }
+            /* between two frames: drawn blended, every screen refresh */
+            if (smoothAnims && !edit) {
+                blendT = Math.min(1, acc * 30 * speed);
+                pose();
+            }
+        } else blendT = 0;
         controls && controls.update();
         renderer && renderer.render(scene, camera);
         nav && nav.draw();
@@ -239,8 +248,9 @@
         if (!pf || !meshes.length) return;
         let p;
         if (clip >= 0) {
-            const c = pf.clips[clip];
-            p = framePose(pf.rig, c.from + Math.min(frame, c.to - c.from));
+            const c = pf.clips[clip], at = c.from + Math.min(frame, c.to - c.from);
+            const next = at < c.to ? at + 1 : loop ? c.from : at;
+            p = smoothAnims && playing && blendT > 0 ? framePoseBlend(pf.rig, at, next, blendT) : framePose(pf.rig, at);
         } else p = res.rest;
         const pos = posedVerts(pf.rig, pf.topo, p);
         for (const m of meshes) {
@@ -1137,9 +1147,14 @@
                             {#each pf.clips as c, i}<option value={i}>{c.name} ({c.to - c.from + 1})</option>{/each}
                         </select>
                         {#if clip >= 0}
-                            <button class="btn" onclick={() => playing = !playing}>{playing ? tx('vwPause') : tx('vwPlay')}</button>
+                            <button class="btn" onclick={() => { if (!playing && frame >= pf.clips[clip].to - pf.clips[clip].from) frame = 0; playing = !playing; }}>{playing ? tx('vwPause') : tx('vwPlay')}</button>
                             <label class="chk"><input type="checkbox" bind:checked={loop}><span>{tx('vwLoop')}</span></label>
+                            <label class="chk"><input type="checkbox" bind:checked={smoothAnims}><span>{tx('vwSmoothAnims')}</span></label>
                             <input type="range" min="0" max={pf.clips[clip].to - pf.clips[clip].from} bind:value={frame}>
+                            <span class="lbl">{tx('vwFrame')} {frame + 1}</span>
+                            <select class="sel speed" bind:value={speed} title={tx('vwSpeed')}>
+                                {#each SPEEDS as v}<option value={v}>{v}x</option>{/each}
+                            </select>
                         {/if}
                     </div>
                 {/if}
@@ -1334,6 +1349,8 @@
     .info { position: absolute; left: calc(var(--u) * 1); top: calc(var(--u) * .6); font-size: calc(var(--t) * 1.3); color: var(--dim); pointer-events: none; }
     .play { display: flex; align-items: center; gap: calc(var(--u) * .9); margin-top: calc(var(--u) * .6); }
     .play .sel { flex: 0 0 calc(var(--u) * 22); }
+    .play .sel.speed { flex: 0 0 calc(var(--u) * 8); }
+    .play .lbl { white-space: nowrap; }
     .play input[type=range] { flex: 1; accent-color: var(--blue); }
     .side { display: flex; flex-direction: column; gap: calc(var(--u) * .6); min-height: 0; }
     .side .btn { white-space: normal; height: auto; min-height: var(--ctl-h); }
