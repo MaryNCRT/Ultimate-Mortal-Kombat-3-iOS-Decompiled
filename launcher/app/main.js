@@ -593,22 +593,22 @@ ipcMain.handle('res:files', () => mods.resFiles(g_root));
  * where the game looks for them (debug_menu.c st_thumb). */
 const stagePicDir = () => path.join(g_root, 'aditional textures', 'stages');
 /* The pictures there: the player's own and the launcher's current ones
- * (an `<ID>.auto3` beside it: as the engine draws it, effects and all,
- * mods/stagerun.js). Until the folder has `.v3`, a picture without a mark is
+ * (an `<ID>.auto4` beside it: as the engine draws it, effects and all,
+ * mods/stagerun.js). Until the folder has `.v4`, a picture without a mark is
  * an older render, made again. */
 ipcMain.handle('stagepics:list', () => {
     try {
-        const d = stagePicDir(), names = fs.readdirSync(d), v3 = names.includes('.v3');
-        const auto = new Set(names.filter(n => /\.auto3$/i.test(n)).map(n => n.slice(0, -6).toUpperCase()));
-        return names.filter(n => /\.png$/i.test(n)).map(n => n.slice(0, -4).toUpperCase()).filter(id => v3 || auto.has(id));
+        const d = stagePicDir(), names = fs.readdirSync(d), v4 = names.includes('.v4');
+        const auto = new Set(names.filter(n => /\.auto4$/i.test(n)).map(n => n.slice(0, -6).toUpperCase()));
+        return names.filter(n => /\.png$/i.test(n)).map(n => n.slice(0, -4).toUpperCase()).filter(id => v4 || auto.has(id));
     } catch { return []; }
 });
 ipcMain.handle('stagepics:put', (_ev, id, bytes) => {
     if (!g_root || !/^[A-Z0-9_]+$/.test(String(id)) || !(bytes instanceof Uint8Array)) return false;
     fs.mkdirSync(stagePicDir(), { recursive: true });
     fs.writeFileSync(path.join(stagePicDir(), id + '.png'), bytes);
-    fs.writeFileSync(path.join(stagePicDir(), id + '.auto3'), '');
-    fs.writeFileSync(path.join(stagePicDir(), '.v3'), '');
+    fs.writeFileSync(path.join(stagePicDir(), id + '.auto4'), '');
+    fs.writeFileSync(path.join(stagePicDir(), '.v4'), '');
     return true;
 });
 ipcMain.handle('res:read', (_ev, rel, layer) => mods.resRead(g_root, rel, layer));

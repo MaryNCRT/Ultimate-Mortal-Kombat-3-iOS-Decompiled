@@ -77,6 +77,19 @@ yet**. Asked by Mary after trying the first round:
     opacity, USD opacity / threshold). STAGE SELECT's launcher pictures are
     made again this way (`.v3`). Checked by eye in a local test page:
     Scislac, Street, Temple, Pit.
+  - **Stage viewer, second pass (Mary 2026-10-30):** Jade's Desert had no
+    sky and Cyrax blinked. The sky: the game's projection has no far plane
+    (`CreatePerspectiveMatrix` puts 2fn/(n-f) where w is taken: depth stays
+    under 0.5), so its sky ~870 units out is drawn in the game; the viewer
+    and pictures cut at 400. Now 100,000. Cyrax: `DESERT_CYRAX` is a
+    12-mesh flipbook, and each mesh drew untextured for the frame its
+    texture took to arrive: every texture of the stage and its effects is
+    loaded first and meshes are kept, not rebuilt. Also as the engine: an
+    effect wrapping back draws frame 0 (not the last), depth test GL_LESS
+    (coplanar pieces no longer swap). All 17 stages checked by eye in a
+    local page. Scislac Busorez is not in LEVEL_INFO (the game never loads
+    it); its events are the main menu's vortex sphere, textured by
+    DrawVortex3D's code, so it shows black. Pictures redone (`.v4`).
   - **STAGE SELECT named the Street twice (and the Balcony, the Kave).**
     Levels 4, 10 and 11 have a second scene and the fight starts in it
     (Task_GameInit step 51, CurrentScene = 1): the Subway, the Soul Chamber,
