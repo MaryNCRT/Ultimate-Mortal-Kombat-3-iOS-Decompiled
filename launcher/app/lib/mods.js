@@ -108,7 +108,44 @@ function resIndex(root) {
 /* The list, in priority order: the named mods first as mods.ini has them,
  * then any folder it does not name (on, as the game takes them). */
 /* a mod's own files at its top: never laid over the game */
-const isOwn = rel => /^(mod\.ini|data\.ini|(cover|preview)\.(png|jpe?g))$/i.test(rel);
+/* the mod's own files, not the game's: its settings, its cover, its
+ * mod.meta.xml, and what the windows keep to edit again (a model's import
+ * settings, an animation's corrective layers, the animation before them) */
+const isOwn = rel => /^(mod\.ini|data\.ini|mod\.meta\.xml|(cover|preview)\.(png|jpe?g))$/i.test(rel)
+    || /\.(import|layers)\.json$|\.orig$/i.test(rel);
+
+/* mod.meta.xml: what the mod is and every file in it, with the game file
+ * each replaces -- rewritten whenever the mod changes, for other tools and
+ * for sharing the mod */
+const xmlEsc = v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function writeMeta(root, folder) {
+    const name = safeName(folder);
+    if (!name) return;
+    const base = path.join(modsDir(root), name);
+    if (!fs.existsSync(base)) return;
+    const info = readIni(path.join(base, 'mod.ini'));
+    const res = resIndex(root);
+    const files = walk(base).map(p => path.relative(base, p).split(path.sep).join('/'))
+        .filter(rel => !/^mod\.meta\.xml$/i.test(rel)).sort();
+    const lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<mod format="1">',
+        '  <name>' + xmlEsc(info.name || name) + '</name>',
+        '  <folder>' + xmlEsc(name) + '</folder>',
+        '  <author>' + xmlEsc(info.author || '') + '</author>',
+        '  <version>' + xmlEsc(info.version || '') + '</version>',
+        '  <category>' + xmlEsc(info.category || '') + '</category>',
+        '  <description>' + xmlEsc(info.description || '') + '</description>',
+        '  <game>Ultimate Mortal Kombat 3, PC port</game>',
+        '  <updated>' + new Date().toISOString() + '</updated>',
+        '  <files count="' + files.length + '">'];
+    for (const rel of files) {
+        const n = path.basename(rel).toLowerCase();
+        const own = isOwn(rel) || isOwn(path.basename(rel));
+        const target = own ? null : res.byLower.get(n);
+        lines.push('    <file path="' + xmlEsc(rel) + '"' + (own ? ' own="1"' : '') + (target ? ' replaces="' + xmlEsc(target) + '"' : '') + ' size="' + fs.statSync(path.join(base, rel)).size + '"/>');
+    }
+    lines.push('  </files>', '</mod>', '');
+    fs.writeFileSync(path.join(base, 'mod.meta.xml'), lines.join('\n'));
+}
 
 function list(root) {
     const dir = modsDir(root);
@@ -199,6 +236,7 @@ function setInfo(root, folder, fields) {
     if (cur.category && !CATEGORIES.includes(cur.category)) delete cur.category;
     const text = Object.entries(cur).map(([k, v]) => k + '=' + v).join('\n') + '\n';
     fs.writeFileSync(file, text);
+    writeMeta(root, name);
     return true;
 }
 
@@ -215,6 +253,7 @@ function addFiles(root, folder, paths) {
             n++;
         } catch { /* skip */ }
     }
+    writeMeta(root, name);
     return n;
 }
 
@@ -234,6 +273,7 @@ function putFile(root, folder, file, bytes) {
             fs.rmSync(p, { force: true });
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.writeFileSync(dest, bytes);
+    writeMeta(root, name);
     return true;
 }
 

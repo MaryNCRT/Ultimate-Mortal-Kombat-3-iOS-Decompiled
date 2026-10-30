@@ -68,8 +68,9 @@ export function makeRigLines() {
     return g;
 }
 
-/* the rig in a pose: pose[b].T a bone's joint, parent[b] its parent */
-export function poseRigLines(rig, pose, parent, on) {
+/* the rig in a pose: pose[b].T a bone's joint, parent[b] its parent; the
+ * joint `sel` white */
+export function poseRigLines(rig, pose, parent, on, sel = -1) {
     const { lines, dots } = rig.userData;
     const seg = [], pts = [], col = [];
     if (on)
@@ -77,7 +78,7 @@ export function poseRigLines(rig, pose, parent, on) {
             if (!pose[b]) return;
             if (par >= 0 && pose[par]) seg.push(...pose[par].T, ...pose[b].T);
             pts.push(...pose[b].T);
-            const c = boneColor(b);
+            const c = b === sel ? new THREE.Color(0xffffff) : boneColor(b);
             col.push(c.r, c.g, c.b);
         });
     lines.geometry.setAttribute('position', new THREE.Float32BufferAttribute(seg, 3));

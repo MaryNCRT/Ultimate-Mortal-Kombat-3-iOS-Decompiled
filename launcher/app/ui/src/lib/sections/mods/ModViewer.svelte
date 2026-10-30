@@ -16,7 +16,7 @@
          * babality, cut in half ... mods/derived.js). On the right, by tabs: what
          * is seen, the model's layers (each mesh shown or hidden), its textures
          * with their pictures, bringing work in, exporting. */
-    import { onMount, onDestroy } from 'svelte';
+    import { onMount, onDestroy, untrack } from 'svelte';
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     import { app, tx } from '#lib/app.svelte.js';
@@ -24,7 +24,9 @@
     import { api } from '#lib/platform.js';
     import { hoverBlip, selectBlip } from '#lib/sound.js';
     import { ms, src, loadCatalog, fighter, refreshMods, reloadMods, exportThis, forgetMod, VIEW_KINDS } from '#lib/mods/store.svelte.js';
-    import { stageDesc, meshsetDesc, textureFile, pngBytes, exportFiles, isPng, attachVerts } from '#lib/mods/assets.js';
+    import { stageDesc, meshsetDesc, textureFile, pngBytes, exportFiles, isPng, attachVerts, fighterDesc } from '#lib/mods/assets.js';
+    import { withLayers, bakeLayers, keyAt } from '#lib/mods/corrective.js';
+    import { parseAnim } from '#lib/mods/formats.js';
     import { tuckUnder } from '#lib/mods/tuck.js';
     import { readFbx, fbxScene, fbxTakes, importAnim, rigDesc } from '#lib/mods/fbxin.js';
     import { sheetPng, matsText, solidPicture, bonesText } from '#lib/mods/modelin.js';
@@ -259,6 +261,7 @@
                 const f = await fighter(item);
                 if (my !== token) return;
                 fx = f;
+                await corrLoad(f);
                 /* with a replaced model, each material's own texture too
                  * (<skin>_M<n>), so REPLACE TEXTURE can change it */
                 stems = [...new Set([...f.blockTex, ...f.variants, ...(f.parts || []).flat().map(p => p.stem).filter(Boolean)])];
@@ -488,7 +491,7 @@
             mesh.geometry.computeBoundingSphere();
             applyLook(mesh.material, lookOf(false));
         }
-        poseRigLines(skel, p, f.rig.bones.parent, ms.bones);
+        poseRigLines(skel, p, f.rig.bones.parent, ms.bones || rtab === 'corr', rtab === 'corr' ? corr.bone : -1);
     }
 
     /* how the model draws: TEXTURES, SOLID, WEIGHTS (a fighter's, by its
@@ -711,10 +714,128 @@
     }
 
     /* the rig to model over: T-pose, no animation, FBX with its textures */
-    async function exportRig() {
+    /* EXPORT RIG / ANIMATIONS: the skeleton and skin alone, or with every
+     * clip, as FBX or GLB */
+    async function exportRig(format = 'fbx', anims = false) {
         selectBlip();
-        const files = await exportFiles(src, rigDesc(fx), 'fbx');
-        done = tx('exDone') + ' ' + await api.exportSave(homeOf('characters', fx.ch) + '/RIG', files);
+        const desc = anims ? fighterDesc(fx, { rest: fx.tpose ? 'tpose' : 'bind', clips: 'all', variant: ms.outfit }) : rigDesc(fx);
+        const files = await exportFiles(src, desc, format);
+        done = tx('exDone') + ' ' + await api.exportSave(homeOf('characters', fx.ch) + '/' + (anims ? 'ANIMATIONS' : 'RIG') + '/' + format.toUpperCase(), files);
+    }
+
+    /* ------------------------------------ CORRECTIVE ANIMATION LAYERS --
+     * Turns on the game's animations, a bone at a time, keyed on frames
+     * (mods/corrective.js). The viewer shows them on the animation they were
+     * put on (fx.anim0: the mod's <fighter>.skinanim.orig when it has
+     * layers, else the animation loaded); SAVE bakes them into the mod's
+     * .skinanim and keeps the layers and that animation beside it. With REC
+     * on, a turn set is keyed at the frame shown; without, KEY keys it. */
+    let corr = $state({ layers: [], cur: -1, bone: -1, rec: false, pend: null });
+    const dec = new TextDecoder(), enc = new TextEncoder();
+    async function corrLoad(f) {
+        f.anim0 = f.rig.anim;
+        corr.layers = [];
+        corr.cur = -1;
+        corr.pend = null;
+        const file = f.ch.file;
+        try {
+            const lj = await api.resRead(file + '.layers.json', ms.layer || '');
+            if (!lj) return;
+            const saved = JSON.parse(dec.decode(lj));
+            const ob = await api.resRead(file + '.skinanim.orig', ms.layer || '');
+            /* the animation before the layers: its turns; the root's
+             * positions are the loaded ones (the bake leaves them) */
+            if (ob) f.anim0 = { ...f.rig.anim, quat: parseAnim(ob).quat };
+            corr.layers = (saved.layers || []).map(L => ({ name: L.name, clip: L.clip, on: L.on !== false, weight: L.weight ?? 1, keys: L.keys || {} }));
+            corr.cur = corr.layers.length ? 0 : -1;
+            applyCorr();
+        } catch { /* no layers */ }
+    }
+    function applyCorr() {
+        if (!fx || !fx.anim0) return;
+        const pend = corr.pend && corr.bone >= 0 && ms.clip >= 0 ? { bone: corr.bone, r: corr.pend, clip: ms.clip, frame: ms.frame } : null;
+        fx.rig.anim = withLayers(fx.anim0, fx.rig.bones, $state.snapshot(corr.layers), fx.clips, pend);
+        pose();
+    }
+    const curLayer = () => (corr.cur >= 0 ? corr.layers[corr.cur] : null);
+    /* the turn shown for the bone picked: the one being set, else its keys */
+    function shownTurn() {
+        const L = curLayer();
+        if (corr.pend) return corr.pend;
+        if (!L || corr.bone < 0) return [0, 0, 0];
+        return keyAt(L.keys[corr.bone], ms.frame, L.clip < 0) || [0, 0, 0];
+    }
+    function addLayer() {
+        selectBlip();
+        corr.layers.push({ name: tx('crLayer') + ' ' + (corr.layers.length + 1), clip: ms.clip, on: true, weight: 1, keys: {} });
+        corr.cur = corr.layers.length - 1;
+    }
+    function delLayer(i) {
+        selectBlip();
+        corr.layers.splice(i, 1);
+        corr.cur = Math.min(corr.cur, corr.layers.length - 1);
+        applyCorr();
+    }
+    function writeKey(r) {
+        const L = curLayer();
+        if (!L || corr.bone < 0) return;
+        const fr = L.clip < 0 ? 0 : ms.frame;
+        const keys = (L.keys[corr.bone] || []).filter(k => k.f !== fr);
+        keys.push({ f: fr, r: r.map(v => Math.round(v * 10) / 10) });
+        keys.sort((a, b) => a.f - b.f);
+        L.keys[corr.bone] = keys;
+        corr.pend = null;
+        applyCorr();
+    }
+    function setTurn(c, v) {
+        const r = [...shownTurn()];
+        r[c] = Math.min(180, Math.max(-180, Number(v) || 0));
+        if (corr.rec) writeKey(r);
+        else { corr.pend = r; applyCorr(); }
+    }
+    function delKey() {
+        const L = curLayer();
+        if (!L || corr.bone < 0) return;
+        selectBlip();
+        const fr = L.clip < 0 ? 0 : ms.frame;
+        L.keys[corr.bone] = (L.keys[corr.bone] || []).filter(k => k.f !== fr);
+        if (!L.keys[corr.bone].length) delete L.keys[corr.bone];
+        corr.pend = null;
+        applyCorr();
+    }
+    /* another frame, bone or layer: what was being set and not keyed goes */
+    $effect(() => {
+        ms.frame; ms.clip; corr.bone; corr.cur;
+        untrack(() => { if (corr.pend) { corr.pend = null; applyCorr(); } });
+    });
+    async function saveCorr() {
+        if (!fx) return;
+        selectBlip();
+        const name = target.trim() || defaultTarget();
+        ms.error = '';
+        try {
+            await refreshMods();
+            if (!ms.list.some(m => m.folder === name)) await api.modsCreate({ name, category: 'models' });
+            const dir = homeOf('characters', fx.ch) + '/', file = fx.ch.file + '.skinanim';
+            const kept = await api.resRead(file + '.orig', name);
+            const orig = kept || (await api.resRead(file, name)) || (await api.resRead(file, ''));
+            if (!kept) await api.modsPut(name, dir + file + '.orig', orig);
+            const layers = $state.snapshot(corr.layers);
+            await api.modsPut(name, dir + file, bakeLayers(fx, layers, orig));
+            await api.modsPut(name, dir + fx.ch.file + '.layers.json', enc.encode(JSON.stringify({ fighter: fx.ch.file, layers }, null, 1)));
+            await refreshMods();
+            forgetMod();
+            ms.layer = name;
+            target = name;
+            const clip = ms.clip, frame = ms.frame;
+            await open(ms.pick);
+            ms.clip = clip;
+            ms.frame = frame;
+            rtab = 'corr';
+            done = tx('vwSaved') + name + '\\' + file + ' (' + layers.length + ' ' + tx('crLayers') + ')';
+        } catch (e) {
+            ms.error = String(e && e.message || e);
+        }
     }
 
     /* ---------------------------------------- bringing Blender's work in -- */
@@ -741,7 +862,7 @@
      * texture the game shares with other models (derived models, other
      * fighters) is touched: a material without a picture is its colour, one
      * left on THE GAME'S a copy of the outfit's. */
-    async function applyModel({ r, mdl }) {
+    async function applyModel({ r, mdl, settings }) {
         const name = target.trim() || defaultTarget();
         model = null;
         ms.error = '';
@@ -777,6 +898,12 @@
              * nothing, so an earlier import's does not stay */
             await api.modsPut(name, file + '.bones', bonesText(r.bones || { offsets: new Map(), rootY: 1 }));
             files.push(file + '.bones');
+            /* what the window was set to, to see what was done (rig, joints,
+             * angles, scale, materials) */
+            if (settings) {
+                await api.modsPut(name, file + '.import.json', new TextEncoder().encode(JSON.stringify(settings, null, 1)));
+                files.push(file + '.import.json');
+            }
             await refreshMods();
             forgetMod();
             forgetThumbs();
@@ -832,9 +959,17 @@
             /* over the mod's own copy, if it has one: clips replaced
              * before stay replaced */
             const file = fx.ch.file + '.skinanim';
-            const base = (await api.resRead(file, name)) || (await api.resRead(file, ''));
+            /* with corrective layers: into the animation before them, which
+             * is kept, and the layers baked on it again */
+            const orig = await api.resRead(file + '.orig', name);
+            const base = orig || (await api.resRead(file, name)) || (await api.resRead(file, ''));
             const r = importAnim(fx, imp.sc, imp.take, imp.clip, base);
-            const bytes = r.bytes;
+            let bytes = r.bytes;
+            if (orig) {
+                await api.modsPut(name, homeOf('characters', fx.ch) + '/' + file + '.orig', bytes);
+                const lj = await api.resRead(fx.ch.file + '.layers.json', name);
+                if (lj) bytes = bakeLayers(fx, JSON.parse(dec.decode(lj)).layers || [], bytes);
+            }
             const what = fx.clips[imp.clip].name + ' · ' + r.frames + ' → ' + r.into + ' · ' + r.matched + '/' + r.of;
             await api.modsPut(name, homeOf('characters', fx.ch) + '/' + file, bytes);
             await refreshMods();
@@ -949,7 +1084,7 @@
     <aside class="opts">
         {#if ms.pick && !ms.loading && (ms.kind === 'textures' ? texInfo : true)}
             <div class="rtabs">
-                {#each [['view', 'vwTabView'], ...(ms.kind !== 'textures' ? [['layers', 'vwTabLayers']] : []), ['tex', 'vwTabTex'], ...(fx ? [['import', 'vwTabImport']] : []), ['export', 'vwTabExport']] as [k, key]}
+                {#each [['view', 'vwTabView'], ...(ms.kind !== 'textures' ? [['layers', 'vwTabLayers']] : []), ['tex', 'vwTabTex'], ...(fx ? [['import', 'vwTabImport'], ['corr', 'vwTabCorr']] : []), ['export', 'vwTabExport']] as [k, key]}
                     <button class="tab" class:active={rtab === k} onpointerenter={hoverBlip}
                             onclick={() => { selectBlip(); rtab = k; }}>{tx(key)}</button>
                 {/each}
@@ -1054,7 +1189,14 @@
             <input class="edt" list="modnames2" spellcheck="false" bind:value={target} placeholder={defaultTarget()}>
             <datalist id="modnames2">{#each ms.list as m}<option value={m.folder}></option>{/each}</datalist>
             <span class="lbl head">BLENDER</span>
-            <button class="btn" onclick={exportRig}>{tx('vwExpRig')}</button>
+            <div class="pair">
+                <button class="btn" onclick={() => exportRig('fbx')}>{tx('vwExpRig')}</button>
+                <button class="btn" onclick={() => exportRig('glb')}>{tx('vwExpRigGlb')}</button>
+            </div>
+            <div class="pair">
+                <button class="btn" onclick={() => exportRig('fbx', true)}>{tx('vwExpAnims')}</button>
+                <button class="btn" onclick={() => exportRig('glb', true)}>{tx('vwExpAnimsGlb')}</button>
+            </div>
             <button class="btn hot" onclick={pickModel}>{tx('vwImpModel')}</button>
             <p class="note">{tx('vwImpModelNote')}</p>
             <button class="btn" onclick={() => pickImport('anim')}>{tx('vwImpAnim')}</button>
@@ -1076,6 +1218,59 @@
                     </div>
                 </div>
             {/if}
+
+        {:else if rtab === 'corr' && fx}
+            <!-- CORRECTIVE ANIMATION LAYERS and the keyframe recorder -->
+            <span class="lbl head">{tx('crTitle')}</span>
+            <p class="note">{tx('crNote')}</p>
+            <button class="btn" onclick={addLayer}>{tx('crAdd')}</button>
+            {#each corr.layers as L, i}
+                <div class="crl" class:hot={corr.cur === i}>
+                    <button class="btn nm" onclick={() => { selectBlip(); corr.cur = i; }}>{L.name}</button>
+                    <select class="sel" value={L.clip} onchange={e => { L.clip = Number(e.currentTarget.value); applyCorr(); }}>
+                        <option value={-1}>{tx('crAll')}</option>
+                        {#each fx.clips as c, ci}<option value={ci}>{c.name}</option>{/each}
+                    </select>
+                    <label class="chk"><input type="checkbox" checked={L.on} onchange={e => { L.on = e.currentTarget.checked; applyCorr(); }}><span>{tx('crOn')}</span></label>
+                    <input type="range" min="0" max="1" step="0.05" value={L.weight} title={tx('crWeight')} oninput={e => { L.weight = Number(e.currentTarget.value); applyCorr(); }}>
+                    <button class="eye" onclick={() => delLayer(i)} title={tx('crDel')}>✕</button>
+                </div>
+            {/each}
+            {#if curLayer()}
+                <span class="lbl">{tx('crBone')}</span>
+                <select class="sel" value={corr.bone} onchange={e => { corr.bone = Number(e.currentTarget.value); }}>
+                    <option value={-1}>-</option>
+                    {#each fx.names as n, i}<option value={i}>{n}{curLayer().keys[i] ? ' · ' + curLayer().keys[i].length + ' ' + tx('crKeys') : ''}</option>{/each}
+                </select>
+                {#if corr.bone >= 0}
+                    {#if curLayer().clip >= 0 && ms.clip !== curLayer().clip}
+                        <p class="note">{tx('crPlayClip')}: {fx.clips[curLayer().clip].name}</p>
+                    {/if}
+                    {#each ['X', 'Y', 'Z'] as ax, c}
+                        <label class="scale">
+                            <span class="lbl">{ax} {shownTurn()[c].toFixed(1)}°</span>
+                            <input type="range" min="-180" max="180" step="0.5" value={shownTurn()[c]} oninput={e => setTurn(c, e.currentTarget.value)}>
+                        </label>
+                    {/each}
+                    <div class="pair">
+                        <button class="btn" class:hot={corr.rec} onclick={() => { selectBlip(); corr.rec = !corr.rec; }}>{corr.rec ? '● REC' : '○ REC'}</button>
+                        <button class="btn" onclick={() => { selectBlip(); writeKey(shownTurn()); }}>{tx('crKey')}</button>
+                        <button class="btn" onclick={delKey}>{tx('crDelKey')}</button>
+                    </div>
+                    {#if curLayer().keys[corr.bone]}
+                        <div class="keys">
+                            {#each curLayer().keys[corr.bone] as k}
+                                <button class="eye wide" class:hot={curLayer().clip >= 0 && k.f === ms.frame}
+                                        onclick={() => { if (curLayer().clip >= 0) { ms.clip = curLayer().clip; ms.playing = false; ms.frame = k.f; } }}>{curLayer().clip < 0 ? tx('crAll') : k.f}</button>
+                            {/each}
+                        </div>
+                    {/if}
+                {/if}
+            {/if}
+            <span class="lbl">{tx('vwModName')}</span>
+            <input class="edt" list="modnames3" spellcheck="false" bind:value={target} placeholder={defaultTarget()}>
+            <datalist id="modnames3">{#each ms.list as m}<option value={m.folder}></option>{/each}</datalist>
+            <button class="btn hot" onclick={saveCorr}>{tx('crSave')}</button>
 
         {:else if rtab === 'export'}
             <button class="btn" onclick={exportThis}>{tx('vwExport')}</button>
@@ -1157,4 +1352,12 @@
     .list .subhead { padding: calc(var(--u) * .4) calc(var(--u) * 1.6) calc(var(--u) * .1); font-size: calc(var(--t) * 1.1); color: var(--dim); letter-spacing: .08em; }
     .list .sub button { padding-left: calc(var(--u) * 2.2); font-size: calc(var(--t) * 1.25); }
     .list button.own { color: #fff; background: rgba(140, 125, 255, .15); }
+    .crl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px; border-radius: var(--r-sm); background: var(--well); }
+    .crl.hot { outline: 1px solid var(--blue); }
+    .crl .nm { flex: 1 1 100%; }
+    .crl .sel { flex: 1; min-width: 0; }
+    .crl input[type=range] { flex: 1; min-width: 60px; }
+    .keys { display: flex; flex-wrap: wrap; gap: 4px; }
+    .keys .eye.wide { width: auto; padding: 0 8px; }
+    .keys .eye.hot { border-color: var(--blue); }
 </style>

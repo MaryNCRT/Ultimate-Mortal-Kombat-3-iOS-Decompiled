@@ -64,6 +64,49 @@ yet**. Asked by Mary after trying the first round:
     `lime.h`), and a lighting file that does not fit the skin is replaced by
     its average light (`Players.c port_fit_lighting`, logged `flat light`).
     The importer refuses a block over 65,535 vertices once unwelded.
+  - **Second pass on REPLACE MODEL's rig, Mary 2026-10-29 (built, not
+    tried yet).** The side has two tabs, RIG and MATERIALS. RIG: FIT TO THE
+    FIGHTER / KEEP PROPORTIONS, the file's pose, AUTOMATIC T / A POSE now
+    **off by default** (Mary: it moved models that were fine), the arm and
+    leg angle and roll sliders whenever the bones are known (a humanoid rig
+    or the exporter's own names; with the names the model itself is
+    turned), SCALE about 0,0,0, and **BONE POSITIONS**: a joint picked by
+    clicking its dot on the view or from the list, moved in X/Y/Z, its
+    other side mirrored (MIRROR L / R), each alone with its children left
+    (`modelin.js movedJoints`; the offsets go into `<skin>.bones`), RESET
+    BONE / RESET ALL, and RECOMPUTE WEIGHTS (every vertex to the nearest
+    bones, the file's weights left). The rest shown is the one the skin is
+    bound to (`buildSkin` returns it). The animation bar under the preview
+    never appeared: `pf` was not reactive in Svelte 5 -- fixed, the game's
+    clips play on the imported model. What the window was set to is saved
+    beside the skin as `<skin>.import.json`.
+  - **CORRECTIVE ANIMATION LAYERS** (the viewer's CORRECTIVE tab,
+    `mods/corrective.js`): layers of turns on the game's animations, each
+    on one clip or all, on/off and a weight; a bone picked, X/Y/Z degrees
+    about its own axes, keyed on frames (KEY, DELETE KEY, the keys listed
+    to jump to) or recorded as they are set (REC); straight in between,
+    held outside. Shown live; SAVE TO THE MOD bakes them into the mod's
+    `.skinanim` (each frame's bone quaternion turned, as the file stores
+    it) and keeps `<fighter>.layers.json` and the animation they were put
+    on, `<fighter>.skinanim.orig`, so they open again to edit and a later
+    REPLACE ANIMATION goes into that original and is baked again. Checked
+    here: a 90-degree key gives the 90-degree quaternion, a half-weight
+    layer half of it.
+  - **mod.meta.xml** in every mod (`lib/mods.js writeMeta`), rewritten when
+    the mod changes: name, author, version, category, description, date and
+    every file with its size and the game file it replaces (`own="1"` for
+    the mod's own: mod.ini, the import settings, the layers). Checked on a
+    test mod.
+  - **EXPORT RIG / ANIMATIONS** in the import tab: the rig, or the rig with
+    every clip, as FBX or GLB.
+  - **Liu Kang's sounds** (Mary: they play wrong, "strange"): checked
+    against the binary -- his voice group (6, `ochar_voice_groups`
+    0x16f55c), the ten group tables (`group_choices` 0x17b2e0,
+    `group_table` 0x17b308, every name) and the 26 character tables
+    (`ochar_sound_tables` 0x17b278, every name) are the binary's, and his
+    23 WAVs are the same format as every other (PCM 16 kHz 8-bit mono). Her
+    18:02 log plays his voice from group 6 as the binary would. Not found;
+    the `voice:` lines stay in the log. Needs what is heard and when.
   - **REPLACE MODEL: the rig before it is put on, arm/leg angle and roll,
     T or A pose** (Mary, with gtastuff.com's viewer as the reference for
     the floor, the joints and the weight colours). Over the preview:

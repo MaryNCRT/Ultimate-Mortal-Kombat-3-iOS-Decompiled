@@ -9,8 +9,12 @@
      * picture to put in its place, and an eye to hide its part or see it
      * alone. Over the view: how it is drawn (textures, plain, wire, its
      * bones' weights), the rig it will have (bones and joints, as they move
-     * in the animation chosen) and the floor; at the side, a humanoid rig's
-     * pose (T or A), and the arms' and legs' angle and roll. */
+     * in the animation chosen) and the floor. At the side, two tabs:
+     * MATERIALS, and RIG -- fitted or kept proportions, the file's pose (T
+     * or A), the arms' and legs' angle and roll, the size about 0,0,0, and
+     * each joint moved by hand (picked on the view or from the list, its
+     * other side mirrored), as gtastuff.com's SA viewer does, with the
+     * weights kept or worked out again. */
     import { onMount, onDestroy } from 'svelte';
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -42,11 +46,18 @@
     let hidden = $state({});                /* material -> hidden */
     let big = $state(-1);                   /* the material seen large */
     /* ARM / LEG ANGLE and ROLL (buildSkin o.adjust), degrees */
-    let adjust = $state({ armAngle: 0, armRoll: 0, legAngle: 0, legRoll: 0, auto: true });
+    let adjust = $state({ armAngle: 0, armRoll: 0, legAngle: 0, legRoll: 0, auto: false });
+    let tab = $state('rig');                 /* the side's tab: 'mats' or 'rig' */
+    let joints = $state({});                /* bone -> [dx, dy, dz] (buildSkin o.joints) */
+    let sel = $state(-1);                   /* the joint being moved */
+    let mirror = $state(true), reweight = $state(false);
     let look = $state({ wire: false, solid: false, weights: false });
     let showRig = $state(true), showFloor = $state(true);
 
-    let renderer, scene, camera, controls, root, raf, pf = null, meshes = [], floor, rigLines;
+    let renderer, scene, camera, controls, root, raf, meshes = [], floor, rigLines, lastPose = null;
+    /* the fighter with the model, its clips under the view (state: the bar
+     * shows once it is built) */
+    let pf = $state.raw(null);
 
     function setup() {
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -65,6 +76,8 @@
         rigLines = makeRigLines();
         scene.add(floor, rigLines);
         new ResizeObserver(fit).observe(host);
+        renderer.domElement.addEventListener('pointerdown', pickStart);
+        renderer.domElement.addEventListener('pointerup', pickJoint);
         loop_();
     }
     function fit() {
@@ -97,7 +110,7 @@
         if (!mdl) return;
         err = '';
         try {
-            res = buildSkin(f, mdl, { turn, blockOf, keep, scale, adjust: { ...adjust } });
+            res = buildSkin(f, mdl, { turn, blockOf, keep, scale, adjust: { ...adjust }, joints: $state.snapshot(joints), reweight });
             pf = withSkin(f, res.bytes, res.bones);
             await show();
         } catch (e) {
@@ -175,7 +188,7 @@
         if (clip >= 0) {
             const c = pf.clips[clip];
             p = framePose(pf.rig, c.from + Math.min(frame, c.to - c.from));
-        } else p = pf.tpose || pf.bind.pose;
+        } else p = res.rest;
         const pos = posedVerts(pf.rig, pf.topo, p);
         for (const m of meshes) {
             m.geometry.attributes.position.array.set(pos);
@@ -183,9 +196,10 @@
             m.geometry.computeVertexNormals();
             m.geometry.computeBoundingSphere();
         }
-        poseRigLines(rigLines, p, pf.rig.bones.parent, showRig);
+        poseRigLines(rigLines, p, pf.rig.bones.parent, showRig, sel);
+        lastPose = p;
     }
-    $effect(() => { clip; frame; showRig; pose(); });
+    $effect(() => { clip; frame; showRig; sel; pose(); });
     $effect(() => { const l = { ...look }; for (const m of meshes) applyLook(m.material, l); });
     $effect(() => { if (floor) floor.visible = showFloor; });
 
@@ -268,6 +282,57 @@
         scaleWait = setTimeout(rebuild, 150);
     }
 
+    /* a click (not a drag of the camera) on a joint picks it */
+    let downAt = null;
+    function pickStart(e) { downAt = [e.clientX, e.clientY]; }
+    function pickJoint(e) {
+        if (!downAt || !lastPose || !showRig || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) return;
+        const r = renderer.domElement.getBoundingClientRect();
+        const x = (e.clientX - r.left) / r.width * 2 - 1, y = -(e.clientY - r.top) / r.height * 2 + 1;
+        let best = -1, bd = 0.03;
+        lastPose.forEach((b, i) => {
+            if (!b || i === f.rig.bones.root) return;
+            const v = new THREE.Vector3(...b.T).project(camera);
+            const d = Math.hypot(v.x - x, (v.y - y) * r.height / r.width);
+            if (v.z < 1 && d < bd) { bd = d; best = i; }
+        });
+        if (best >= 0) { selectBlip(); sel = best; tab = 'rig'; }
+    }
+
+    /* BONE POSITIONS: the joint picked, moved; its other side mirrored */
+    const twin = i => {
+        const n = f.names[i], t = n.endsWith('.L') ? n.slice(0, -2) + '.R' : n.endsWith('.R') ? n.slice(0, -2) + '.L' : null;
+        return t ? f.names.indexOf(t) : -1;
+    };
+    let jointWait;
+    function setJoint(k, v) {
+        if (sel < 0) return;
+        const d = [...(joints[sel] || [0, 0, 0])];
+        d[k] = Math.min(60, Math.max(-60, Number(v) || 0));
+        const next = { ...joints, [sel]: d };
+        const o = mirror ? twin(sel) : -1;
+        if (o >= 0) next[o] = [-d[0], d[1], d[2]];
+        joints = next;
+        clearTimeout(jointWait);
+        jointWait = setTimeout(rebuild, 120);
+    }
+    async function resetJoints(all) {
+        selectBlip();
+        if (all) joints = {};
+        else if (sel >= 0) {
+            const next = { ...joints };
+            delete next[sel];
+            if (mirror && twin(sel) >= 0) delete next[twin(sel)];
+            joints = next;
+        }
+        await rebuild();
+    }
+    async function setReweight(v) {
+        selectBlip();
+        reweight = v;
+        await rebuild();
+    }
+
     let adjWait;
     function setAdjust(key, v) {
         adjust[key] = typeof v === 'boolean' ? v : Math.min(90, Math.max(-90, Number(v) || 0));
@@ -292,7 +357,10 @@
     function apply() {
         if (!res) return;
         selectBlip();
-        onApply({ r: res, mdl });
+        /* what this window was set to, kept beside the skin in the mod */
+        const settings = { file: file.name, keep, scale, turn, adjust: $state.snapshot(adjust), joints: $state.snapshot(joints), reweight,
+            blockOf: $state.snapshot(blockOf), replaces: mdl.materials.map(m => m.rep || '') };
+        onApply({ r: res, mdl, settings });
     }
 
     onMount(async () => {
@@ -359,7 +427,11 @@
                 {/if}
             </section>
             <aside class="side">
-                <span class="lbl head">{tx('imTextures')}</span>
+                <div class="pair tabs2">
+                    <button class="btn" class:hot={tab === 'rig'} onclick={() => { selectBlip(); tab = 'rig'; }}>{tx('imTabRig')}</button>
+                    <button class="btn" class:hot={tab === 'mats'} onclick={() => { selectBlip(); tab = 'mats'; }}>{tx('imTextures')}</button>
+                </div>
+                {#if tab === 'mats'}
                 <ul class="mats">
                     {#each mdl ? mdl.materials : [] as m, i}
                         <li>
@@ -381,37 +453,63 @@
                         </li>
                     {/each}
                 </ul>
-                {#if res && !res.matched}
-                    <button class="btn" onclick={turnIt}>{tx('imTurn')}</button>
-                {/if}
-                <label class="scale" title={tx('imScaleNote')}>
-                    <span class="lbl">{tx('imScale')} ×{scale.toFixed(2)}</span>
-                    <input type="range" min="0.25" max="4" step="0.01" value={scale} oninput={e => setScale(e.currentTarget.value)}>
-                    <button class="eye" onclick={() => setScale(1)} title="1">1</button>
-                </label>
-                {#if res && res.rig === 'humanoid'}
-                    <!-- a humanoid rig (Mixamo, AccuRig, ValveBiped...): fitted
-                         to the fighter's bones, or the proportion trick -->
-                    <div class="pair">
-                        <button class="btn" class:hot={!keep} onclick={() => setKeep(false)}>{tx('imFit')}</button>
-                        <button class="btn" class:hot={keep} onclick={() => setKeep(true)}>{tx('imKeep')}</button>
-                    </div>
-                    <p class="note">{tx(keep ? 'imKeepNote' : 'imFitNote')}</p>
-                    {#if res.pose}
+                {:else}
+                <div class="rigpane">
+                    {#if res && !res.matched}
+                        <button class="btn" onclick={turnIt}>{tx('imTurn')}</button>
+                    {/if}
+                    {#if res && res.rig === 'humanoid'}
+                        <!-- a humanoid rig (Mixamo, AccuRig, ValveBiped...): fitted
+                             to the fighter's bones, or the proportion trick -->
+                        <div class="pair">
+                            <button class="btn" class:hot={!keep} onclick={() => setKeep(false)}>{tx('imFit')}</button>
+                            <button class="btn" class:hot={keep} onclick={() => setKeep(true)}>{tx('imKeep')}</button>
+                        </div>
+                        <p class="note">{tx(keep ? 'imKeepNote' : 'imFitNote')}</p>
+                    {/if}
+                    {#if res && res.pose}
                         <!-- the pose the file is in, beside the fighter's -->
                         <p class="note">{tx('imPoseFile')}: {poseLine(res.pose.file.arm)} · {tx('imPoseFighter')}: {poseLine(res.pose.fighter.arm)}</p>
                         <p class="note">{tx('imLegSpread')}: {poseLine(res.pose.file.leg, true)} · {poseLine(res.pose.fighter.leg, true)}</p>
+                        {#if keep}
+                            <label class="chk" title={tx('imAutoPoseNote')}><input type="checkbox" checked={adjust.auto} onchange={e => { setAdjust('auto', e.currentTarget.checked); }}><span>{tx('imAutoPose')}</span></label>
+                        {/if}
+                        {#each [['armAngle', 'imArmAngle'], ['armRoll', 'imArmRoll'], ['legAngle', 'imLegAngle'], ['legRoll', 'imLegRoll']] as [key, label]}
+                            <label class="scale">
+                                <span class="lbl">{tx(label)} {adjust[key] > 0 ? '+' : ''}{adjust[key]}°</span>
+                                <input type="range" min="-90" max="90" step="1" value={adjust[key]} oninput={e => setAdjust(key, e.currentTarget.value)}>
+                                <button class="eye" onclick={() => setAdjust(key, 0)} title="0">0</button>
+                            </label>
+                        {/each}
                     {/if}
-                    {#each [['armAngle', 'imArmAngle'], ['armRoll', 'imArmRoll'], ['legAngle', 'imLegAngle'], ['legRoll', 'imLegRoll']] as [key, label]}
-                        <label class="scale">
-                            <span class="lbl">{tx(label)} {adjust[key] > 0 ? '+' : ''}{adjust[key]}°</span>
-                            <input type="range" min="-90" max="90" step="1" value={adjust[key]} oninput={e => setAdjust(key, e.currentTarget.value)}>
-                            <button class="eye" onclick={() => setAdjust(key, 0)} title="0">0</button>
-                        </label>
-                    {/each}
-                    {#if keep}
-                        <label class="chk" title={tx('imAutoPoseNote')}><input type="checkbox" checked={adjust.auto} onchange={e => setAdjust('auto', e.currentTarget.checked)}><span>{tx('imAutoPose')}</span></label>
+                    <label class="scale" title={tx('imScaleNote')}>
+                        <span class="lbl">{tx('imScale')} ×{scale.toFixed(2)}</span>
+                        <input type="range" min="0.25" max="4" step="0.01" value={scale} oninput={e => setScale(e.currentTarget.value)}>
+                        <button class="eye" onclick={() => setScale(1)} title="1">1</button>
+                    </label>
+                    <!-- BONE POSITIONS: a joint picked on the view or here -->
+                    <span class="lbl head">{tx('imJoints')}</span>
+                    <select class="sel" value={sel} onchange={e => { sel = Number(e.currentTarget.value); }}>
+                        <option value={-1}>{tx('imJointPick')}</option>
+                        {#each f.names as n, i}{#if i !== f.rig.bones.root}<option value={i}>{n}{joints[i] && joints[i].some(x => x) ? ' *' : ''}</option>{/if}{/each}
+                    </select>
+                    {#if sel >= 0}
+                        {#each ['X', 'Y', 'Z'] as ax, k}
+                            <label class="scale">
+                                <span class="lbl">{ax} {((joints[sel] || [0, 0, 0])[k]).toFixed(1)}</span>
+                                <input type="range" min="-60" max="60" step="0.5" value={(joints[sel] || [0, 0, 0])[k]} oninput={e => setJoint(k, e.currentTarget.value)}>
+                                <button class="eye" onclick={() => setJoint(k, 0)} title="0">0</button>
+                            </label>
+                        {/each}
                     {/if}
+                    <label class="chk"><input type="checkbox" bind:checked={mirror}><span>{tx('imMirror')}</span></label>
+                    <label class="chk" title={tx('imReweightNote')}><input type="checkbox" checked={reweight} onchange={e => setReweight(e.currentTarget.checked)}><span>{tx('imReweight')}</span></label>
+                    <div class="pair">
+                        <button class="btn" disabled={sel < 0} onclick={() => resetJoints(false)}>{tx('imJointReset')}</button>
+                        <button class="btn" onclick={() => resetJoints(true)}>{tx('imJointResetAll')}</button>
+                    </div>
+                    <p class="note">{tx('imJointNote')}</p>
+                </div>
                 {/if}
                 <p class="note">{tx('imNote')}</p>
                 <div class="pair">
@@ -482,4 +580,7 @@
     .eye.wide { width: auto; padding: 0 calc(var(--u) * .6); font-size: calc(var(--t) * 1); letter-spacing: .06em; }
     .eye.hot { border-color: var(--blue); color: #fff; background: rgba(90, 80, 255, .35); }
     .scale .lbl { flex: 0 0 calc(var(--u) * 11); font-size: calc(var(--t) * 1.1); }
+    .rigpane { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: calc(var(--u) * .5); }
+    .rigpane .sel { width: 100%; }
+    .tabs2 .btn.hot, .rigpane .btn.hot { border-color: var(--blue); background: rgba(90, 80, 255, .35); }
 </style>
