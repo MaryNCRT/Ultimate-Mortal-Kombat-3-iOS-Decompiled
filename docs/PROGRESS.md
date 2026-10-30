@@ -108,6 +108,19 @@ yet**. Asked by Mary after trying the first round:
     fight's camera (GAME CAMERA button), log depth for the far skies; its
     textures marked sRGB there, as the fighter's are in that view. Not
     yet seen by Mary.
+  - **STAGE SELECT: the select screen's music, CANCEL goes back (Mary
+    2026-10-30; built into the test folder, not tried by Mary yet).** The
+    window opens after `Task_FEDestroy`, which had stopped the tune, so
+    turning the volume up played nothing: `st_music` now starts
+    `CharacterSelect.mp3` again at the player's volume, as `Task_FEMain`
+    does, and stops it on a pick, as `Task_FEDestroy` had. CANCEL (and
+    Esc / the pad's back) went into the fight on the game's own stage; it
+    now goes back to the select screen: `CurrentTask = 2` (`Task_FEInit`,
+    as after a fight, with the loading picture already made), the select
+    screen's pop on the way out undone (`PendingPop` / `PendingPopAll`, for
+    training), and the tune plays on (the front end's load latches
+    `FETuneSelection` to it). Online the host's CANCEL still takes the
+    game's own stage, since the guest is waiting on it.
   - **Shape keys for fighters, a fuller timeline, 4:3 fixes, stage-select
     music (Mary 2026-10-30; built into the test folder, not tried by Mary
     yet).** REPLACE / EDIT MODEL has a SHAPE KEYS tab: Basis (the model as
@@ -585,7 +598,7 @@ is still unknown. Needs Mary to say which sound repeats and where
   `stage_menu_gate` (`debug_menu.c`), and the window takes the frame as
   the settings menu does, over `FE_SELECTFIGHTER`: the stage's picture
   large with arrows, or a list of all of them with their pictures (LIST,
-  TAB, the pad's Y); CANCEL keeps the stage the game would have taken,
+  TAB, the pad's Y); CANCEL goes back to the select screen (online, the game's own stage),
   SELECT (Enter, A, START) picks. The pictures are the game's `CS_BG` ..
   `CS_BG4` (960x640 on a 1024 sheet): Subway, Bell Tower, Soul Chamber
   (a guess from the picture), The Graveyard, Temple. The other stages show
