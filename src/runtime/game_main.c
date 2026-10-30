@@ -266,6 +266,10 @@ static void use_surface(int fight)
     lime_gl_set_screen(g_virt_w, g_virt_h);
 }
 
+/* the picture's shape, for a menu drawn over the whole window (debug_menu.c
+ * draw_ios): 4:3 shows only the middle of a 16:9 window */
+float port_aspect(void) { return g_aspect; }
+
 static float parse_aspect(const char *v)
 {
     float a = 0.0f, b = 0.0f;

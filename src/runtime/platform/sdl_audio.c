@@ -265,6 +265,8 @@ void plat_music_play(const char *path, int loop)
     }
 }
 
+int plat_music_playing(void) { return g_music != NULL && Mix_PlayingMusic(); }
+
 void plat_music_stop(void)
 {
     if (g_music == NULL)
@@ -611,6 +613,8 @@ void plat_music_play(const char *path, int loop)
     g_mus_loop = loop;
     SDL_UnlockAudioDevice(g_dev);
 }
+
+int plat_music_playing(void) { return g_mus != NULL; }
 
 void plat_music_stop(void)
 {

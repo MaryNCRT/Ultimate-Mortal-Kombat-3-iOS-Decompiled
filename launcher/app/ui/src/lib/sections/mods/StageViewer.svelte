@@ -31,6 +31,11 @@
     import { Gizmo, EditCache, newEl, frameOf, trsAt, shapeAt, putKey, dropKey, copyTrs, saved } from '#lib/mods/stageedit.js';
     import KeyTimeline from './KeyTimeline.svelte';
     import StageEditor from './StageEditor.svelte';
+    import ModTarget from './ModTarget.svelte';
+    import { putTexture } from '#lib/mods/image.js';
+    import { textureDir } from '#lib/mods/owners.js';
+    import { textureFile } from '#lib/mods/assets.js';
+    import { thumb, forgetThumbs, lazy } from '#lib/mods/thumbs.js';
 
     let host = $state(), mainEl = $state(), topEl;
     let pick = $state(null);                /* the stage open */
@@ -49,6 +54,9 @@
     let full = $state(false), solo = $state(false);
     let format = $state('glb'), done = $state(''), busy = $state(false);
     let length = $state(1);
+    /* TEXTURES: the stage's textures, each one's small picture, the one
+     * picked shown large; REPLACE puts a picture in a mod in its place */
+    let stems = $state([]), texPick = $state(''), pics = $state({}), target = $state('');
 
     /* the edits: plain data (stageedit.js), erev says when they changed */
     let edits = { v: 1, els: {} }, cache = new EditCache(), gizmo = null, revN = 1;
@@ -158,6 +166,8 @@
             view.group.visible = true;
             scene.add(view.group);
             length = Math.max(1, stage.root.frames);
+            stems = [...view.ready.keys()].filter(Boolean).sort();
+            if (!stems.includes(texPick)) texPick = stems[0] || '';
             elements = stage.root.objects.map((o, i) => ({ i, name: o.name, on: true, drawn: o.mesh >= 0 && !o.marker }))
                 .filter(e => e.drawn);
             view.seek(1);
@@ -536,7 +546,52 @@
     async function setLayer(v) {
         selectBlip();
         ms.layer = v;
+        pics = {};
         if (pick) await open(pick);
+    }
+
+    /* ---------------------------------------------------------- textures -- */
+
+    function texPic(stem) {
+        const file = textureFile(src.files, stem), k = ms.layer + '|' + stem;
+        if (!file || pics[k] !== undefined) return;
+        pics[k] = '';
+        thumb(src, file, ms.layer, 512).then(t => { pics[k] = t ? t.url : ''; });
+    }
+    const texTarget = () => target.trim() || (ms.layer && ms.layer !== '*' ? ms.layer : '') || (pick ? pick.name + ' mod' : 'My textures');
+    function seeTexture(stem) {
+        selectBlip();
+        texPick = String(stem).toUpperCase();
+        rtab = 'tex';
+    }
+    /* REPLACE TEXTURE: as in the character viewer -- the picture as the
+     * texture's PNG in the mod (with its LOW / LITE / ICE copies when asked),
+     * the mod shown, the stage opened again with it */
+    async function replaceTexture() {
+        if (!texPick) return;
+        selectBlip();
+        done = error = '';
+        const got = await api.pickFile('picture');
+        if (!got) return;
+        const name = texTarget(), stem = texPick;
+        try {
+            await reloadMods();
+            if (!ms.list.some(m => m.folder === name)) { await api.modsCreate({ name, category: 'textures' }); await reloadMods(); }
+            const files = await putTexture(api, src, name, stem, got.bytes, ms.autoSmall, await textureDir(src, ms.cat, stem), ms.autoIce);
+            if (!files) { error = tx('vwNotPicture'); failChord(); return; }
+            await reloadMods();
+            forgetThumbs();
+            pics = {};
+            ms.layer = name;
+            target = name;
+            if (pick) await open(pick);
+            texPick = stem;
+            done = tx('vwSaved') + name + '\\' + files.join(', ');
+            doneChord();
+        } catch (e) {
+            error = String(e && e.message || e);
+            failChord();
+        }
     }
 
     onMount(async () => {
@@ -614,7 +669,7 @@
     <aside class="opts">
         {#if pick && !loading}
             <div class="rtabs">
-                {#each [['view', 'vwTabView'], ['elements', 'stTabElements'], ['props', 'stTabProps'], ['export', 'vwTabExport']] as [k, key]}
+                {#each [['view', 'vwTabView'], ['elements', 'stTabElements'], ['props', 'stTabProps'], ['tex', 'vwTabTex'], ['export', 'vwTabExport']] as [k, key]}
                     <button class="tab" class:active={rtab === k} onpointerenter={hoverBlip} onclick={() => { selectBlip(); rtab = k; }}>{tx(key)}</button>
                 {/each}
             </div>
@@ -651,7 +706,7 @@
                 <dl class="props">
                     {#if sel.owner}<dt>{tx('stOwner')}</dt><dd>{sel.owner}</dd>{/if}
                     <dt>{tx('stMesh')}</dt><dd>{sel.mesh}</dd>
-                    <dt>{tx('stTexture')}</dt><dd>{sel.texture}</dd>
+                    <dt>{tx('stTexture')}</dt><dd>{#if sel.texture !== '—'}<button class="lnk" onclick={() => seeTexture(sel.texture)}>{sel.texture}</button>{:else}{sel.texture}{/if}</dd>
                     <dt>{tx('stGeo')}</dt><dd>{sel.verts} / {sel.tris}</dd>
                     <dt>{tx('stDrawn')}</dt><dd>{tx(MODES[sel.mode])}{sel.mode !== 'opaque' && sel.mode !== 'atst' ? ' · ' + Math.round(sel.alpha * 100) + '%' : ''}</dd>
                     <dt>{tx('stTint')}</dt><dd>{sel.tint.map(f2).join(' ')}</dd>
@@ -690,6 +745,31 @@
             {:else}
                 <p class="note">{tx('stPickNote')}</p>
             {/if}
+
+        {:else if rtab === 'tex'}
+            <span class="lbl">{tx('vwModName')}</span>
+            <ModTarget bind:value={target} placeholder={texTarget()} />
+            <label class="chk"><input type="checkbox" bind:checked={ms.autoSmall}><span>{tx('vwAutoSmall')}</span></label>
+            <label class="chk"><input type="checkbox" bind:checked={ms.autoIce}><span>{tx('vwAutoIce')}</span></label>
+            {#if texPick}
+                <div class="big" use:lazy={() => texPic(texPick)}>
+                    {#key ms.layer + '|' + texPick}{#if pics[ms.layer + '|' + texPick]}<img src={pics[ms.layer + '|' + texPick]} alt={texPick}>{/if}{/key}
+                    <span class="nm">{texPick}</span>
+                </div>
+            {/if}
+            <button class="btn hot" disabled={!texPick} onclick={replaceTexture}>{tx('vwImpTex')}</button>
+            <span class="lbl head">{tx('vwTexHead')} ({stems.length})</span>
+            <ul class="texlist">
+                {#each stems as st (st)}
+                    <li use:lazy={() => texPic(st)}>
+                        <button class:on={texPick === st} onclick={() => { selectBlip(); texPick = st; }} title={st}>
+                            <span class="pic">{#if pics[ms.layer + '|' + st]}<img src={pics[ms.layer + '|' + st]} alt="">{/if}</span>
+                            <span class="nm">{st}</span>
+                        </button>
+                    </li>
+                {/each}
+            </ul>
+            {#if done}<p class="ok">{done}</p>{/if}
 
         {:else if rtab === 'export'}
             <span class="lbl">{tx('exFormat')}</span>
@@ -763,6 +843,17 @@
     .ok { color: var(--ok-text); word-break: break-all; }
     .rtabs { display: grid; grid-template-columns: repeat(2, 1fr); gap: calc(var(--u) * .3); margin-bottom: calc(var(--u) * .4); }
     .rtabs .tab { font-size: calc(var(--t) * 1.05); padding: calc(var(--u) * .45) calc(var(--u) * .2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .texlist { list-style: none; margin: 0; padding: calc(var(--u) * .3); background: var(--well); border-radius: var(--r-sm); flex: none; max-height: calc(var(--u) * 36); overflow-y: auto; }
+    .texlist button { display: flex; align-items: center; gap: calc(var(--u) * .6); width: 100%; background: none; border: 0; cursor: pointer; padding: calc(var(--u) * .3); border-radius: var(--r-sm); color: var(--lav); text-align: left; }
+    .texlist button:hover { background: rgba(150, 140, 255, .12); color: #fff; }
+    .texlist button.on { background: rgba(140, 125, 255, .3); color: #fff; }
+    .texlist .pic { flex: 0 0 calc(var(--u) * 5); height: calc(var(--u) * 5); display: grid; place-items: center; border-radius: 3px; background: repeating-conic-gradient(#2a2650 0 25%, #1c1938 0 50%) 0 0 / 12px 12px; }
+    .texlist .pic img { max-width: 100%; max-height: 100%; }
+    .texlist .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(var(--t) * 1.15); }
+    .big { display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * .3); padding: calc(var(--u) * .4); background: var(--well); border-radius: var(--r-sm); }
+    .big img { max-width: 100%; max-height: calc(var(--u) * 22); background: repeating-conic-gradient(#2a2650 0 25%, #1c1938 0 50%) 0 0 / 12px 12px; }
+    .big .nm { color: var(--lav); font-size: calc(var(--t) * 1.05); word-break: break-all; }
+    .lnk { background: none; border: 0; padding: 0; color: #8fc4ff; cursor: pointer; font: inherit; text-decoration: underline; text-align: left; word-break: break-all; }
     .layers { list-style: none; margin: 0; padding: calc(var(--u) * .3); background: var(--well); border-radius: var(--r-sm); flex: none; max-height: calc(var(--u) * 46); overflow-y: auto; }
     .layers li { display: flex; align-items: center; gap: calc(var(--u) * .5); padding: calc(var(--u) * .15) calc(var(--u) * .2); border-radius: 3px; }
     .layers li.on { background: rgba(255, 160, 64, .18); }

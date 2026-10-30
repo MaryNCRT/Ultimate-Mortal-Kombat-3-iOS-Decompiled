@@ -542,6 +542,8 @@ void plat_music_volume(float gain)
     g_music_gain = gain;
 }
 
+int plat_music_playing(void) { return g_music; }
+
 void plat_music_stop(void)
 {
     int i;

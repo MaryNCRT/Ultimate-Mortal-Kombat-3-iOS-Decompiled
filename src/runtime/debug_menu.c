@@ -972,9 +972,14 @@ static void dim_all(void)
  * mouse. */
 /* The box's width in points: 360, or with the side panel as much as the
  * screen gives up to 464 (the 4:3 screen is 427 wide). */
+/* the width of the menu's space that is seen: the picture's shape, inside
+ * the window's (a 4:3 picture in a 16:9 window shows its middle 427) */
+static float g_vis = 480.0f;
+float port_aspect(void);                /* game_main.c */
+
 static float ui_box_width(int ntabs)
 {
-    float w = g_ow - 12.0f;
+    float w = g_vis - 12.0f;
 
     if (ntabs >= 0 && ui_menu_cols < 2)
         return 360.0f;
@@ -1008,9 +1013,15 @@ static int draw_ios(const char *title, const char *const *tabs, int ntabs,
      * g_ow was still the last 2D pass's (the whole 16:9 window around a 4:3
      * picture), and the box came out 464 wide on a 427 screen */
     g_ow = view[3] > 0 ? 320.0f * view[2] / view[3] : 480.0f;
+    /* the menu is drawn over the whole window, but a 4:3 picture shows
+     * only its middle: the box is sized from what is seen */
+    g_vis = 320.0f * port_aspect();
+    if (g_vis > g_ow || g_vis <= 0)
+        g_vis = g_ow;
     /* and should the box still be wider, all of it drawn smaller to fit,
-     * its pictures as sharp */
-    fit = g_ow / (ui_box_width(ntabs) + 12.0f);
+     * its pictures as sharp; on a picture narrower than 3:2 a little
+     * smaller still, so it does not run to the edges */
+    fit = g_vis * (g_vis < 470.0f ? 0.9f : 1.0f) / (ui_box_width(ntabs) + 12.0f);
     if (fit > 1.0f)
         fit = 1.0f;
     s *= fit;
@@ -2405,6 +2416,7 @@ static int eligible(void)
 }
 
 static void st_music(int on);
+static int  g_st_tune_check;        /* back: is the tune still on? */
 
 /* CANCEL: Task_FEDestroy has run (the front end's pictures and models are
  * gone), so the front end is loaded again, as after a fight -- Task_FEInit,
@@ -2421,6 +2433,7 @@ static void back_to_select(void)
     PendingPop = PendingPopAll = -1;
     FEInitState = 0;
     CurrentTask = 2;
+    g_st_tune_check = 1;
     printf("stage select: back to the select screen\n");
 }
 
@@ -2468,24 +2481,58 @@ int stage_menu_gate(long *level)
 
 int stage_menu_is_open(void) { return g_st_open; }
 
-/* The music while it is open: Task_FEDestroy stopped the select screen's
- * tune, so it is started again here, at the player's volume, as
- * Task_FEMain starts it (FEMain_SwitchTune). Picked, it stops for the
- * loading, as Task_FEDestroy had it; the fight starts its own. Back to the
- * select screen, it plays on. */
+/* The music: the select screen's tune plays on, unbroken, from the select
+ * screen into this window -- its fade to the fight and Task_FEDestroy's
+ * stop are skipped when this window comes next (stage_menu_keeps_tune,
+ * FrontEnd.c) -- and back to the select screen again. Picked, it stops for
+ * the loading, as Task_FEDestroy had it; the fight starts its own. Should
+ * the tune not be on (none, or another screen's), the select screen's is
+ * started, as FEMain_SwitchTune would. */
 void limePlayTune(const char *file, long vol, long loop);
 void limeStopTune(void);
+void limeSetTuneVol(long vol);
+int  plat_music_playing(void);
 extern int Settings[10];
 extern float MusicVol[];
+extern long FETuneSelection;
+
+static void st_tune_on(const char *why)
+{
+    if (!Settings[2])
+        return;
+    if (plat_music_playing()) {
+        limeSetTuneVol((long)MusicVol[Settings[2]]);
+        printf("stage select: the tune plays on (%s)\n", why);
+        return;
+    }
+    limePlayTune("CharacterSelect.mp3", (long)MusicVol[Settings[2]], 1);
+    FETuneSelection = 1;
+    printf("stage select: the tune was off, started again (%s)\n", why);
+}
 
 static void st_music(int on)
 {
     if (!Settings[2])
         return;
     if (on)
-        limePlayTune("CharacterSelect.mp3", (long)MusicVol[Settings[2]], 1);
+        st_tune_on("open");
     else
         limeStopTune();
+}
+
+/* Task_FEDestroy and the front end's fade ask: is STAGE SELECT next? */
+int stage_menu_keeps_tune(void)
+{
+    return eligible();
+}
+
+/* Task_FEMain, every frame: the first after CANCEL makes sure it plays */
+void stage_menu_fe_frame(void)
+{
+    if (!g_st_tune_check)
+        return;
+    g_st_tune_check = 0;
+    st_tune_on("back");
 }
 
 /* pick: 1 the stage shown, 0 the game's own, -1 back to the select screen
