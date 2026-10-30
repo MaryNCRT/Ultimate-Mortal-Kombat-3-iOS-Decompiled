@@ -1884,6 +1884,64 @@ static void *port_fit_lighting(void *lighting, const char *path, size_t need)
     return out;
 }
 
+/* Port, not in the binary. The `.lighting` bake, made here for a skin a mod
+ * brings (REPLACE MODEL), so it is shaded as the game's own fighters are
+ * instead of flat. The shipped bakes are exactly what DrawSkinnedMesh2's lit
+ * path gives (flags 1): each animation frame posed, each vertex's skinned
+ * normal through LightVert with the lights the binary ships -- light 1 from
+ * (0, -300, -50), power 2, exponent 3.5, light 0 at power 0 -- times 255,
+ * one byte an unwelded vertex. Checked against the game's own files: Sonya,
+ * Scorpion and Liu Kang come out byte for byte (scratch script over the
+ * launcher's skin reader). Frame i is the meshbase's frame i, skin 1's
+ * bytes then skin 2's, as LoadAnimatedCharacter slices them. The light
+ * globals are set for the bake and put back. */
+extern float g_lightDir0[3], g_lightDir1[3];   /* lime/lime_globals.c */
+extern float g_lightPower0, g_lightPower1, g_lightExp0, g_lightExp1;
+static void *port_bake_lighting(ANIMATEDCHARACTER *c, SKININFO *skin,
+                                SKININFO *s2, long frames, long size1,
+                                long size2)
+{
+    char *P32 *w = (char *P32 *)c;
+    const long *n = (const long *)c;
+    size_t per = (size_t)(size1 + size2);
+    unsigned char *out;
+    float d0[3], d1[3], p0, p1, e0, e1;
+    long f;
+
+    if (frames <= 0 || per == 0)
+        return NULL;
+    out = (unsigned char *)limeMalloc("port_lighting", (size_t)frames * per);
+    if (out == NULL)
+        return NULL;
+    memcpy(d0, g_lightDir0, sizeof d0);
+    memcpy(d1, g_lightDir1, sizeof d1);
+    p0 = g_lightPower0; p1 = g_lightPower1;
+    e0 = g_lightExp0;   e1 = g_lightExp1;
+    g_lightDir0[0] = 68.0f; g_lightDir0[1] = 462.0f;  g_lightDir0[2] = 247.0f;
+    g_lightDir1[0] = 0.0f;  g_lightDir1[1] = -300.0f; g_lightDir1[2] = -50.0f;
+    g_lightPower0 = 0.0f;   g_lightExp0 = 0.8f;
+    g_lightPower1 = 2.0f;   g_lightExp1 = 3.5f;
+    for (f = 0; f < frames; f++) {
+        GenerateMatrices(w[0x3c / 4], (BONESINFO *)w[0x34 / 4], f, f, 0.0f,
+                         n[0x40 / 4]);
+        DrawSkinnedMesh2(skin, 0, 0, 1, RenderVerts, RenderUVs, RenderRGBs,
+                         0, 1);
+        memcpy(out + (size_t)f * per, RenderRGBs, (size_t)size1);
+        if (s2 != NULL && size2 > 0) {
+            DrawSkinnedMesh2(s2, 0, 0, 1, RenderVerts, RenderUVs, RenderRGBs,
+                             0, 1);
+            memcpy(out + (size_t)f * per + size1, RenderRGBs, (size_t)size2);
+        }
+    }
+    memcpy(g_lightDir0, d0, sizeof d0);
+    memcpy(g_lightDir1, d1, sizeof d1);
+    g_lightPower0 = p0; g_lightPower1 = p1;
+    g_lightExp0 = e0;   g_lightExp1 = e1;
+    printf("LAC: lighting baked for a mod's model, %ld frames of %lu bytes\n",
+           frames, (unsigned long)per);
+    return out;
+}
+
 ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
                                          char *bonesFile, char *lightingName,
                                          char *meshbaseFile, char *texBase,
@@ -2077,9 +2135,22 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
                                : 0;
                     size1 = DrawSkinnedMesh2(skin, 0, 0, 1, RenderVerts,
                                              RenderUVs, RenderRGBs, 0, 1);
-                    lighting = port_fit_lighting(lighting, lightingPath,
-                                                 (size_t)(meshCount - 1)
-                                                 * (size_t)(size1 + size2));
+                    /* port: a mod's model gets its own bake, else the
+                     * file (flat light when it does not fit) */
+                    {
+                        void *own = port_skin_custom(skin)
+                            ? port_bake_lighting(c, skin, SKIN_NEXT(skin),
+                                                 meshCount - 1, size1, size2)
+                            : NULL;
+                        if (own != NULL) {
+                            if (lighting)
+                                limeFree(lighting);
+                            lighting = own;
+                        } else
+                            lighting = port_fit_lighting(lighting, lightingPath,
+                                                         (size_t)(meshCount - 1)
+                                                         * (size_t)(size1 + size2));
+                    }
                 }
 
                 m->cols = limeMalloc("animatedcharacter_cols", size1);
