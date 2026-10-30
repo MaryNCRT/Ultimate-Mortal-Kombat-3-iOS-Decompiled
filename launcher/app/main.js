@@ -20,6 +20,7 @@ const bld = require('./lib/build');
 const upd = require('./lib/update');
 const prof = require('./lib/profiles');
 const mods = require('./lib/mods');
+const hub = require('./lib/hub');
 const replays = require('./lib/replays');
 
 let g_win = null;
@@ -591,6 +592,31 @@ ipcMain.handle('mods:cover', (_ev, folder, png) => mods.setCover(g_root, folder,
 ipcMain.handle('mods:dataRead', (_ev, folder) => mods.dataRead(g_root, folder));
 ipcMain.handle('mods:dataWrite', (_ev, folder, entries) => mods.dataWrite(g_root, folder, entries));
 ipcMain.handle('res:files', () => mods.resFiles(g_root));
+
+/* The MOD HUB (lib/hub.js): the mods published in the hub repository, with
+ * what this folder has of each, and one installed or updated (only the files
+ * that differ, for one already here) by its id --
+ * from the list fetched last, never from what the page sends. */
+let g_hub = [];
+ipcMain.handle('hub:list', async () => {
+    try {
+        g_hub = await hub.fetchIndex(net.fetch);
+    } catch (err) {
+        return { ok: false, error: err.message, mods: hub.status(g_root, g_hub) };
+    }
+    return { ok: true, mods: await hub.check(net.fetch, g_root, g_hub) };
+});
+ipcMain.handle('hub:install', async (_ev, id) => {
+    const m = g_hub.find(x => x.id === id);
+    if (!m)
+        return { ok: false, error: 'not in the hub' };
+    try {
+        const r = await hub.get(net.fetch, g_root, m, (got, total) => send('hub:progress', { id, got, total }));
+        return Object.assign(r, { mods: await hub.check(net.fetch, g_root, g_hub) });
+    } catch (err) {
+        return { ok: false, error: err.message };
+    }
+});
 /* The stage pictures the launcher renders for STAGE SELECT (a stage the
  * game has no CS_BG picture for), in "aditional textures/stages/<ID>.png",
  * where the game looks for them (debug_menu.c st_thumb). */

@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-10-30 (release 0.1.15 beta, published as the pre-release `v0.1.15-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-10-30 (release 0.1.16 beta, published as the pre-release `v0.1.16-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -55,7 +55,8 @@ around the decompiled game:
 Electron + SvelteKit (`launcher/app/ui`, built with `npm run ui`). It
 compiles the game from the player's `.ipa` with a bundled `zig cc`, keeps
 `umk3.ini`, updates itself from GitHub releases, and has the MODS section:
-MOD MANAGER, CHARACTER VIEWER (with REPLACE / EDIT MODEL: retargeting,
+MOD MANAGER, MOD HUB (mods from the companion repository
+MaryNCRT/UMK3-IOS-Mod-Hub, installed and updated), CHARACTER VIEWER (with REPLACE / EDIT MODEL: retargeting,
 weight paint, Blender-style bones, shape keys, corrective animation
 layers), STAGE VIEWER (the engine's stage playback, Blender-style element
 editing with keyframes and shape keys, texture replacement), CHARACTER
@@ -67,9 +68,9 @@ Mary plays every build in a test folder (`WORK\release-0.1.12\UMK3-PC-0.1.12-bet
 on her machine) before it is released. **Played and confirmed:** everything
 up to 0.1.10b (the Linux package, the Vulkan and Direct3D 12 renderers),
 REAL-TIME SHADOWS' note on its own row in 0.1.13. **Not yet played as a whole:** 0.1.11 to
-0.1.15; she has tried pieces of them as she reported problems (STAGE
-SELECT's music and CANCEL, the 4:3 menus, the stage editor), each marked in
-the log below.
+0.1.16; she has tried pieces of them as she reported problems (STAGE
+SELECT's music and CANCEL, the 4:3 menus, the stage editor, the MOD HUB,
+which she confirmed works), each marked in the log below.
 
 ### Open problems
 
@@ -92,6 +93,50 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## 0.1.16: MOD HUB (2026-10-30, released in 0.1.16)
+
+Mary asked for a hub inside the launcher where players download the mods
+that she and her collaborators publish, installed into `mods\` and
+updatable.
+
+- **Storage:** the public repository MaryNCRT/UMK3-IOS-Mod-Hub. `index.json`
+  on `main` lists each mod (id, folder, name, author, version, category,
+  description, thumbnail, url, size, sha256); its files are a `.zip`
+  attached to the release `<id>-v<version>` (HD NINJAS is ~920 MB, past
+  git's 100 MB limit; a release file may be 2 GB). Its `publish.js` zips a
+  mod folder, creates the release with `gh` and writes the entry; its README
+  says how collaborators publish. Published: HD NINJAS, Sonya Blade MKX,
+  Rain (from Mary's test folder).
+- **Launcher:** `lib/hub.js` reads the index (an entry whose download is not
+  a release of that repository is dropped), downloads with
+  `lib/update.js`'s `download()` (SHA-256 checked), unpacks it itself
+  (zlib, each file CRC-checked: Linux's GNU tar cannot read a zip, which
+  the PR's Linux CI caught),
+  replaces `mods\<folder>` and adds it to `mods.ini` on, at the top (an
+  update keeps its place and on/off). What came from the hub is kept in
+  `mods\hub.json` (id, folder, version); UPDATE shows when the index's
+  version is newer by `compareVersions`. IPC `hub:list`, `hub:install`
+  (by id, from the list fetched last); page `sections/mods/ModHub.svelte`;
+  the UI harness answers both.
+- **A mod already here** (Mary's report: she had all three by hand and the
+  HUB offered DOWNLOAD): a mod counts as installed when `hub.json` names it
+  or `mods\<folder>` exists. Its files are compared with the zip's central
+  directory, read with HTTP ranges (GitHub's release storage answers 206;
+  it refuses suffix ranges, so the index's `size` gives the offsets): sizes
+  when the list loads, CRC-32 on UPDATE / CHECK, which downloads only the
+  entries that differ (each its own range, inflated and CRC-checked) and
+  deletes files the zip lacks (`mod.meta.xml` kept). A folder whose
+  `mod.ini` has no version is judged by its files only.
+- **Small window** (Mary's report: the HUB cut off on the right): `.app`'s
+  grid had no column size, so the MODS tab row, one tab longer, made the
+  column wider than the window. It is `minmax(0, 1fr)` now and the tab row
+  wraps when it does not fit; at full width nothing changes.
+- **Checked:** `node --test test/*.js` (new `test/hub.test.js`: index
+  parsing and filtering, installed/update status, `mods.ini` registration,
+  a real zip installed and then updated in place, a bad hash refused).
+  **Played by Mary** in her test folder (her mods detected, update, small
+  window): works.
 
 ## 0.1.14 to 0.1.15: retarget, proportion trick, own materials, stage pictures, replay fixes, STAGE VIEWER, shape keys (2026-10-29 to 2026-10-30, released in 0.1.14, 0.1.14b and 0.1.15)
 

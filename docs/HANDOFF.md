@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-10-30 (release 0.1.15 beta).
+**Last updated:** 2026-10-30 (release 0.1.16 beta).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
@@ -98,7 +98,7 @@ and answers the preload's calls over HTTP.
 
 A release is a GitHub pre-release `v<version>-beta` with two packages:
 
-1. Set the version in `launcher/app/package.json` (`0.1.15-beta`; a letter
+1. Set the version in `launcher/app/package.json` (`0.1.16-beta`; a letter
    release is `0.1.14-beta.b`, read by the updater as 0.1.14b).
 2. `npm run ui` in `launcher/app`.
 3. Windows: `npx electron-builder --win dir --x64`, then
@@ -129,7 +129,8 @@ press COMPILE.
 | Renderers | `src/runtime/render/` |
 | Replays, rollback | `src/runtime/rollback*.c` |
 | Mods in the game | `src/runtime/mods.c`, `skin_mats.c` |
-| Launcher main process | `launcher/app/main.js`, `preload.js`, `lib/` (compile, update, mods, replays) |
+| Launcher main process | `launcher/app/main.js`, `preload.js`, `lib/` (compile, update, mods, replays, `hub.js` the MOD HUB) |
+| MOD HUB storage | the separate repository MaryNCRT/UMK3-IOS-Mod-Hub: `index.json`, covers in `mods/<id>/`, each mod a release zip; publish with its `publish.js` |
 | Launcher interface | `launcher/app/ui/src/lib/sections/` (`mods/` holds the viewers and editors), `lib/mods/` (readers, exporters, `stagerun.js`, `stageedit.js`), `i18n.js` (Spanish and English) |
 | Release packaging | `launcher/make_release.py`, `make_release_linux.py`, `launcher/stub/` |
 

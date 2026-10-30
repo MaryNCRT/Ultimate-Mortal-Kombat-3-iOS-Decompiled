@@ -27,8 +27,8 @@
 
 <style>
     .subnav {
-        display: flex; align-items: center; justify-content: space-between;
-        gap: calc(var(--u) * 2); margin: 0 0 calc(var(--u) * 1.8);
+        display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+        gap: 0 calc(var(--u) * 2); margin: 0 0 calc(var(--u) * 1.8);
     }
     .pg {
         position: relative; background: none; border: 0; border-radius: 0; cursor: pointer;
