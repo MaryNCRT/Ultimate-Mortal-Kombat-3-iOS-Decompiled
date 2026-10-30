@@ -64,6 +64,10 @@ yet**. Asked by Mary after trying the first round:
     `lime.h`), and a lighting file that does not fit the skin is replaced by
     its average light (`Players.c port_fit_lighting`, logged `flat light`).
     The importer refuses a block over 65,535 vertices once unwelded.
+  - **0.1.14b beta published** (2026-10-30, pre-release `v0.1.14b-beta`,
+    zip and Linux tar.gz): the 0.1.14 packages with the new `src/`,
+    CMakeLists.txt and launcher (`0.1.14-beta.b`, read by the updater as
+    0.1.14b). Nothing in it played by Mary yet.
   - **Liu Kang's scream that never stops: found, Mary 2026-10-30 (built
     into the test folder, not tried yet).** Her words: it repeats for ever.
     The Windows mixer (`platform/win32_audio.c`) kept each voice's place in
