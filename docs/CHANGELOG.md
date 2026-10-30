@@ -8,7 +8,9 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased
+## 0.1.16 beta (2026-10-30) — MOD HUB
+
+Published 2026-10-30 as the GitHub pre-release `v0.1.16-beta` (`UMK3-PC-0.1.16-beta.zip`, `UMK3-PC-0.1.16-beta-linux-x64.tar.gz`). The MOD HUB was **played by Mary** in her test folder: works.
 
 **Launcher**
 - **MOD HUB** (new tab in MODS): lists the mods published in the companion
@@ -21,7 +23,7 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
   whole mod. The MODS tab row wraps in a small window instead of pushing
   the page past it (Mary's report). Only the repository's owner and
   collaborators can publish there. First mods: HD NINJAS, Sonya Blade MKX,
-  Rain. **Not yet played by Mary.**
+  Rain.
 
 ## 0.1.15 beta (2026-10-30) — STAGE VIEWER with Blender-style editing, shape keys, stage textures, select-screen music, 4:3 menus
 

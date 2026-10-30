@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-10-30 (release 0.1.15 beta, published as the pre-release `v0.1.15-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-10-30 (release 0.1.16 beta, published as the pre-release `v0.1.16-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -68,9 +68,9 @@ Mary plays every build in a test folder (`WORK\release-0.1.12\UMK3-PC-0.1.12-bet
 on her machine) before it is released. **Played and confirmed:** everything
 up to 0.1.10b (the Linux package, the Vulkan and Direct3D 12 renderers),
 REAL-TIME SHADOWS' note on its own row in 0.1.13. **Not yet played as a whole:** 0.1.11 to
-0.1.15; she has tried pieces of them as she reported problems (STAGE
-SELECT's music and CANCEL, the 4:3 menus, the stage editor), each marked in
-the log below.
+0.1.16; she has tried pieces of them as she reported problems (STAGE
+SELECT's music and CANCEL, the 4:3 menus, the stage editor, the MOD HUB,
+which she confirmed works), each marked in the log below.
 
 ### Open problems
 
@@ -94,7 +94,7 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
-## After 0.1.15: MOD HUB (2026-10-30, not yet released)
+## 0.1.16: MOD HUB (2026-10-30, released in 0.1.16)
 
 Mary asked for a hub inside the launcher where players download the mods
 that she and her collaborators publish, installed into `mods\` and
@@ -133,7 +133,8 @@ updatable.
 - **Checked:** `node --test test/*.js` (new `test/hub.test.js`: index
   parsing and filtering, installed/update status, `mods.ini` registration,
   a real zip installed and then updated in place, a bad hash refused).
-  **Not yet played by Mary.**
+  **Played by Mary** in her test folder (her mods detected, update, small
+  window): works.
 
 ## 0.1.14 to 0.1.15: retarget, proportion trick, own materials, stage pictures, replay fixes, STAGE VIEWER, shape keys (2026-10-29 to 2026-10-30, released in 0.1.14, 0.1.14b and 0.1.15)
 
