@@ -64,6 +64,26 @@ yet**. Asked by Mary after trying the first round:
     `lime.h`), and a lighting file that does not fit the skin is replaced by
     its average light (`Players.c port_fit_lighting`, logged `flat light`).
     The importer refuses a block over 65,535 vertices once unwelded.
+  - **Bones moved and turned as Blender does; POSE A fixed, Mary
+    2026-10-30 (test launcher repacked, not tried yet).**
+    - **The gizmo** on the bone picked (Blender's Move / Rotate /
+      Transform tools, three.js `TransformControls`): an arrow moves
+      along one axis, a square on a plane (2D), the middle freely on the
+      view (3D); a ring turns about one axis, the white one about the
+      view, inside it the trackball. MOVE / ROTATE / MOVE + ROTATE (the
+      default) / NONE, and GLOBAL or LOCAL (the bone's own axes).
+    - **G / R as Blender's modal transform:** X / Y / Z an axis, again
+      the other orientation, again none; Shift+X / Y / Z the plane
+      without it; a middle-button drag picks the axis; typed numbers
+      (Tab the next field, - the sign); Ctrl steps of 1 unit / 5 degrees
+      (Shift 0.1 / 1); Shift alone ten times finer; R twice the
+      trackball; Enter, Space or a click keeps it, Esc or the right
+      button puts it back. Along an axis the point under the pointer is
+      taken (the closest point of the axis to the ray), as Blender does,
+      not the view's plane.
+    - **CLEAN A POSE** left a model without a skeleton in T: the angle was
+      measured from the file's arms, which such a model has none of. It
+      now measures from the fighter's arms there (the ones it turns).
   - **The file read as Blender reads it; the gizmo under the buttons, Mary
     2026-10-30 (test launcher repacked, not tried yet).**
     - **The gizmo:** a click on an axis did nothing (the click looked for
