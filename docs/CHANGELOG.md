@@ -10,7 +10,7 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## 0.1.15 beta (2026-10-30) — STAGE VIEWER with Blender-style editing, shape keys, stage textures, select-screen music, 4:3 menus
 
-**Not yet played by Mary** as a whole; the items she reported are marked.
+Published 2026-10-30 as the GitHub pre-release `v0.1.15-beta` (`UMK3-PC-0.1.15-beta.zip`, `UMK3-PC-0.1.15-beta-linux-x64.tar.gz`). **Not yet played by Mary** as a whole; the items she reported are marked.
 
 **Game**
 - **STAGE SELECT** keeps the select screen's music playing without a break
