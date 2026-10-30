@@ -1,4 +1,5 @@
 <script>
+    import ModTarget from './ModTarget.svelte';
     /* MODEL VIEWER: the game's own files, by kind -- fighters (in the T-pose,
      * the pose they were modelled in, or any of their animations, played as
      * the game skins them), stages, every other model, the textures. A
@@ -1311,8 +1312,7 @@
 
         {:else if rtab === 'tex'}
             <span class="lbl">{tx('vwModName')}</span>
-            <input class="edt" list="modnames" spellcheck="false" bind:value={target} placeholder={defaultTarget()}>
-            <datalist id="modnames">{#each ms.list as m}<option value={m.folder}></option>{/each}</datalist>
+            <ModTarget bind:value={target} placeholder={defaultTarget()} />
             <label class="chk"><input type="checkbox" bind:checked={ms.autoSmall}><span>{tx('vwAutoSmall')}</span></label>
             <label class="chk"><input type="checkbox" bind:checked={ms.autoIce}><span>{tx('vwAutoIce')}</span></label>
             {#if ms.kind === 'textures'}
@@ -1336,8 +1336,7 @@
 
         {:else if rtab === 'import' && fx}
             <span class="lbl">{tx('vwModName')}</span>
-            <input class="edt" list="modnames2" spellcheck="false" bind:value={target} placeholder={defaultTarget()}>
-            <datalist id="modnames2">{#each ms.list as m}<option value={m.folder}></option>{/each}</datalist>
+            <ModTarget bind:value={target} placeholder={defaultTarget()} />
             <span class="lbl head">BLENDER</span>
             <div class="pair">
                 <button class="btn" onclick={() => exportRig('fbx')}>{tx('vwExpRig')}</button>
@@ -1419,8 +1418,7 @@
                 {/if}
             {/if}
             <span class="lbl">{tx('vwModName')}</span>
-            <input class="edt" list="modnames3" spellcheck="false" bind:value={target} placeholder={defaultTarget()}>
-            <datalist id="modnames3">{#each ms.list as m}<option value={m.folder}></option>{/each}</datalist>
+            <ModTarget bind:value={target} placeholder={defaultTarget()} />
             <button class="btn hot" onclick={saveCorr}>{tx('crSave')}</button>
 
         {:else if rtab === 'export'}

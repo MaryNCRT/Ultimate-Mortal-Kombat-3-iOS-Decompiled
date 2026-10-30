@@ -4787,6 +4787,8 @@ void FreeFrontEndCharacters(void);
 void limeDeleteSound(long handle);
 void limeDeleteTexture(void *tex);
 
+int  stage_menu_keeps_tune(void);      /* runtime/debug_menu.c, port */
+
 void Task_FEDestroy(void)
 {
     int i;
@@ -4795,7 +4797,9 @@ void Task_FEDestroy(void)
     CharacterConfirmed = -1;
     CharacterSelected  = -1;
 
-    if (Settings[2])
+    /* Port, not in the binary: STAGE SELECT comes next and the select
+     * screen's tune plays on through it */
+    if (Settings[2] && !stage_menu_keeps_tune())
         limeStopTune();
 
     FreeFrontEndCharacters();
@@ -7459,6 +7463,8 @@ static void FEMain_SwitchTune(const char *file)
     limePlayTune(file, (long)MusicVol[Settings[2]], 1);
 }
 
+void stage_menu_fe_frame(void);         /* runtime/debug_menu.c, port */
+
 void Task_FEMain(void)
 {
     void (*fn)(void);
@@ -7491,6 +7497,8 @@ void Task_FEMain(void)
             FEMain_SwitchTune("MainMenu.mp3");
         }
     }
+
+    stage_menu_fe_frame();              /* port: back from STAGE SELECT */
 
     /* ---- run the current screen ---- */
     /* port: the ONLINE screen, after the binary's 51 (FE_Task_Online) */
@@ -7591,9 +7599,11 @@ void Task_FEMain(void)
             FE_FadeAdd = 0.0f;
         }
 
-        /* the tune rides the same fade, scaled by the configured volume */
+        /* the tune rides the same fade, scaled by the configured volume
+         * (port: not into STAGE SELECT, where it plays on) */
         if (Settings[2] != 0 && FadeMusicOut != 0) {
-            limeSetTuneVol((long)(MusicVol[Settings[2]] * FE_Fade));
+            if (!stage_menu_keeps_tune())
+                limeSetTuneVol((long)(MusicVol[Settings[2]] * FE_Fade));
             if (FE_Fade == 0.0f)
                 FadeMusicOut = 0;
         }

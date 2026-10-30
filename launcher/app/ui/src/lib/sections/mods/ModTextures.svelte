@@ -1,4 +1,5 @@
 <script>
+    import ModTarget from './ModTarget.svelte';
     /* TEXTURES: every texture of the game by where it belongs -- a fighter,
      * a stage, the interface and menus, the effects (mods/owners.js) -- each
      * replaced by a picture into a mod, in that place's folder of the mod
@@ -135,8 +136,7 @@
 <div class="ed">
     <aside class="side">
         <label class="field"><span class="lbl">{tx('edMod')}</span>
-            <input class="edt" list="txmods" spellcheck="false" bind:value={ms.edMod}>
-            <datalist id="txmods">{#each ms.list as m}<option value={m.folder}></option>{/each}</datalist></label>
+            <ModTarget bind:value={ms.edMod} /></label>
         <span class="tabs sub groups">
             {#each GROUP_KEYS as [g, key]}
                 <button class="tab" class:active={ms.txGroup === g} onpointerenter={hoverBlip}

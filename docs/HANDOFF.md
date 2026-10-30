@@ -97,6 +97,25 @@ yet**. Asked by Mary after trying the first round:
     fight's camera (GAME CAMERA button), log depth for the far skies; its
     textures marked sRGB there, as the fighter's are in that view. Not
     yet seen by Mary.
+  - **Unbroken select-screen music into STAGE SELECT, a smaller ESC menu
+    on 4:3, every mod in TARGET MOD, TEXTURES in the STAGE VIEWER (Mary
+    2026-10-30; built into the test folder, not tried by Mary yet).** After
+    CANCEL the select screen came back silent. The tune now never stops on
+    the way: `Task_FEDestroy`'s stop and the front end's fade to the fight
+    are skipped when STAGE SELECT comes next (`stage_menu_keeps_tune`), the
+    window only sets the volume, and on the first front-end frame after
+    CANCEL `stage_menu_fe_frame` starts `CharacterSelect.mp3` again if it is
+    not playing (`plat_music_playing`, new in both audio backends); the log
+    says which happened (`stage select: the tune ...`). The ESC menu on 4:3
+    ran off both sides: it is drawn over the whole 16:9 window while the 4:3
+    picture shows the middle, so `draw_ios` now sizes the box from the
+    picture's shape (`port_aspect`, game_main.c) and draws it at 90% below
+    3:2. TARGET MOD was a `<datalist>`, which lists only the names that
+    start with what is in the box; `ModTarget.svelte` lists every mod under
+    a button (character viewer, TEXTURES). The STAGE VIEWER has a TEXTURES
+    tab: the stage's textures with pictures, the one picked large, REPLACE
+    TEXTURE into a mod (with LOW / LITE / ICE copies) and the stage opened
+    again with it; a texture name in PROPERTIES opens it there.
   - **STAGE SELECT: the select screen's music, CANCEL goes back (Mary
     2026-10-30; built into the test folder, not tried by Mary yet).** The
     window opens after `Task_FEDestroy`, which had stopped the tune, so

@@ -362,6 +362,8 @@ void plat_audio_update(void);
  * tunes with SDL2_mixer; Win32 uses MCI. */
 void plat_music_play(const char *path, int loop);
 void plat_music_stop(void);
+/* 1 while a tune is loaded (playing, or paused by the device) */
+int  plat_music_playing(void);
 
 /* 0..1, applied to the track playing now and to the next one. */
 void plat_music_volume(float gain);
