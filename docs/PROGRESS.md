@@ -102,6 +102,12 @@ yet**. Asked by Mary after trying the first round:
     it); its events are the main menu's vortex sphere, textured by
     DrawVortex3D's code, so it shows black. Pictures redone (`.v4`). STAGE SELECT's
     list moves with the mouse wheel (a row a notch; `stage_menu_mouse`).
+    CHARACTER VIEWER: VIEW > STAGE BEHIND puts a stage behind the fighter
+    as the fight has it (ModViewer.svelte `setStage`): the StageView of
+    stagerun.js playing at 30 a second, on black, the floor hidden, the
+    fight's camera (GAME CAMERA button), log depth for the far skies; its
+    textures marked sRGB there, as the fighter's are in that view. Not
+    yet seen by Mary.
   - **STAGE SELECT named the Street twice (and the Balcony, the Kave).**
     Levels 4, 10 and 11 have a second scene and the fight starts in it
     (Task_GameInit step 51, CurrentScene = 1): the Subway, the Soul Chamber,
