@@ -4,115 +4,159 @@
 
 # Ultimate Mortal Kombat 3 — iOS Decompilation & Native PC Port
 
-**Complete clean-room decompilation of the 2011 iOS release of *Ultimate Mortal Kombat 3* (v1.2.59) — all 2,572 game functions transcribed to C and verified — with a native PC port for Windows, Linux, and macOS.**
+**A clean-room decompilation of the 2011 iOS release of *Ultimate Mortal Kombat 3* (v1.2.59): all 2,572 game functions transcribed to C and checked against the original binary, with a native PC port for Windows and Linux built from the player's own copy of the game.**
 
-[Getting Started](docs/GETTING-STARTED.md) · [How the Game Works](docs/HOW-THE-GAME-WORKS.md) · [Architecture](docs/ARCHITECTURE.md) · [Progress](docs/PROGRESS.md) · [Changelog](docs/CHANGELOG.md) · [Español](README.es.md)
+[Getting Started](docs/GETTING-STARTED.md) · [How the Game Works](docs/HOW-THE-GAME-WORKS.md) · [Architecture](docs/ARCHITECTURE.md) · [Methodology](docs/METHODOLOGY.md) · [Progress](docs/PROGRESS.md) · [Changelog](docs/CHANGELOG.md) · [Español](README.es.md)
 
 </div>
 
 ---
 
+> [!IMPORTANT]
+> **No copyrighted assets or binaries are distributed in this repository.**
+> To build and play you need your own legally obtained copy of **Ultimate Mortal Kombat 3 for iOS (v1.2.59)** (`.ipa`, `armv7` UUID `90d6f56a18e2303f8f2053b02a42742e`). The launcher compiles the game from it on your machine.
+
+## What this project is
+
+The iOS game is a 2011 EA Mobile port of Midway's 1995 arcade game: Midway's fight engine (moves, AI, combos, finishers) running inside EA's own 3D engine, LIME. This repository holds:
+
+1. **The decompilation** (`src/decomp/`): every function of the game's armv7 binary written as readable C, each one checked against the binary (see [Methodology](#how-the-work-is-done)).
+2. **The native port** (`src/runtime/`): what the iPhone gave the game, written for a PC — the window, OpenGL / Vulkan / Direct3D 12 drawing, sound, keyboard and pads, files, online play — plus features the original never had (replays, mods, smoothing, wide screens).
+3. **The launcher** (`launcher/`): a desktop program that takes your `.ipa`, compiles the game, configures it, updates it, and has a full set of modding tools (viewers, texture and model replacement, Blender-style editors, exports).
+
+The only source of truth is the binary. Nothing enters the tree that is not derived from it and checked against it ([AGENTS.md](AGENTS.md) explains why, and [AI Disclosure](docs/AI-DISCLOSURE.md) who did what).
+
 ## Status
 
 | Component | Progress | Notes |
 |---|---|---|
-| **Decompilation (`src/decomp/`)** | **2,572 / 2,572 (100%)** | LIME 3D engine (`109`), Front-End & Scene (`291`), Arcade Fight Engine (`2,172`). |
-| **Verification (`tools/decomp/`)** | **100%** | Differential tests against the `armrecomp` ARM→C oracle + build-time table layout verification (`ctest`). |
-| **Native Port (`src/runtime/`)** | **Playable (v0.1.14b-beta)** | OpenGL, Vulkan and Direct3D 12 renderers (`src/runtime/render/`), Win32 & SDL2 backends, 3:2 / 4:3 / 16:9 / 21:9 aspect ratios, HD textures, keyboard & gamepad support, local 2P (`DUELO`), LAN/Online multiplayer, and debug tools (`F2`). |
+| **Decompilation** (`src/decomp/`) | **2,572 / 2,572 (100%)** | LIME 3D engine (109), front end & scenes (291), arcade fight engine (2,172). |
+| **Verification** (`tools/decomp/`) | **100%** | Differential tests against the `armrecomp` ARM→C oracle; 229 data tables checked at build time (`ctest`). |
+| **PC port** (`src/runtime/`) | **Playable — v0.1.15 beta** | OpenGL, Vulkan, Direct3D 12; Windows and Linux; 3:2 / 4:3 / 16:9 / 21:9; keyboard and pads; local 2 players, LAN and online with rollback; replays; mods. |
+| **Launcher** (`launcher/`) | Windows and Linux | Compiles the game with a bundled `zig cc` (nothing to install), updates itself, MODS tools. |
 
-**Known problems in 0.1.14b beta:** a fight intro can still drop a frame where smoothing two fighters takes more than a tick; friendships and animalities can repeat a death scream (open: the logs show the game asking for one per fatality, so what repeats is not known yet); a fighter cannot be duplicated into a new slot yet; losing to Motaro from the debug menu softlocks (open, needs a log); the slight slide mid-kombo (issue #114) is the original's punch-chain rule, checked against the binary instruction by instruction (a real difference in `repell_func` was fixed on the way). Not yet played by Mary: everything new in 0.1.11, 0.1.12, 0.1.13 and 0.1.14. **Next (in the test folder, not yet played by Mary):** a STAGE VIEWER of its own (the MODEL VIEWER is now the CHARACTER VIEWER) that plays a stage as the engine does, with the effects its events fire (Scislac's sky, flares, newspapers), the game's blending, element picking, properties and isolate, exported with its effects, and its elements edited as in Blender (G / R / S and handles, I / Alt+I keys, REC, linear or bezier, a dope-sheet timeline, a model editor with shape keys and proportional sculpting, kept per stage and exported as GLB morph targets, FBX blend shapes and USD BlendShapes); shape keys and a keyed timeline in REPLACE / EDIT MODEL too; the ONLINE code box and the settings panel fit a 4:3 screen; STAGE SELECT keeps the select screen's music playing and its CANCEL goes back to the select screen; the STAGE VIEWER can see and replace a stage's textures; STAGE SELECT's pictures redrawn that way and the Subway, Soul Chamber and Lair no longer named Street, Balcony and Kave; EDIT MODEL shows the T-pose too; the CHARACTER VIEWER can put a stage behind the fighter, playing, as in the game. **New in 0.1.14b (not yet played by Mary):** Liu Kang's endless scream fixed (above); REPLACE MODEL's SMOOTH WEIGHTS; an imported model's fight lighting baked at load; GLB bone names read from the file (dots kept); the importer's player as the viewer's. **New in 0.1.14 (not yet played by Mary):** replays record and replay the rival actually loaded (Arcade's still changed after the first fix) and show in the launcher again (it only read the older format); the replay player's HIDE is a toggle; STAGE SELECT with smaller buttons, RANDOM and a picture for every stage (the launcher renders the ones the game has none for); REPLACE MODEL reads Mixamo, AccuRig, ValveBiped and other humanoid rigs with their own weights, fitted to the fighter or keeping the model's proportions (the proportion trick, `<skin>.bones`), and gives every material its own texture so nothing shared is touched; custom textures get their frozen `_ICE` copy; Sonya's second-outfit icon. Custom models: no fighters drawn black with a large model, no SMOOTH MODELS on them (already dense), and their material parts no longer re-transform the whole model each (frames lost on Direct3D 12 / Vulkan). REPLACE MODEL shows the rig before it is put on (bones, joints, weight colours, floor), reads a T or A pose and has arm and leg angle and roll sliders; the viewer has a floor, solid and weight views; EXPORT writes GLB. REPLACE MODEL's RIG tab moves and turns each joint with the mouse as Blender does (G / R / X / Y / Z, mirrored), paints weights with a brush (WEIGHT PAINT), has Blender's LOCATION / ROTATION fields per bone, Ctrl+Z / Ctrl+Y, a reset to a clean T or A pose, fits a new model to the game's own rig (not an earlier model's), opens a saved model or the fighter's current one again (EDIT MODEL), edits bones and weights on an animation's frame, keeps a file's own rig by default, puts a skeleton-less model's rig in T / A, plays the mod's own animations as the game does, SMOOTH WEIGHTS evens out a file's weights as Blender's Smooth Vertex Weights does, an imported model is shaded in the fight as the game's own fighters are (its light baked at load, as the game's `.lighting` files are), a model keeping its proportions is bound to bones along its own limbs (no crushed elbows or wrists in the moves), bones are moved and turned with Blender's gizmo and G / R keys (axis, plane, local, typed values, steps), both views have Blender's camera (axis gizmo, numpad views, orthographic), and FBX files are read as Blender reads them (rotation order, up axis, every bone, the bind pose), recomputes weights, scales about 0,0,0 and plays the game's clips on the model; automatic T / A pose is off by default. The viewer has CORRECTIVE ANIMATION LAYERS with a keyframe recorder, saved into the mod; every mod gets a mod.meta.xml; the rig and animations export as GLB too. Liu Kang's death scream no longer plays for ever (the Windows mixer's place in a sound wrapped past 4.1 s; his, Skdiemix and Vpdeath are longer), and on Linux a sound played again starts over instead of doubling. **Also new in 0.1.14:** the model viewer in tabs, with derived models (babality, frozen, cut ...), layers and texture thumbnails; REPLACE MODEL from FBX, GLB or OBJ with a preview window, each material keeping its own texture (its UVs, tiling and transparency; the game draws each part, `skin_mats.c`); online always vanilla but for models and textures; the replay player can be hidden and resized; replays name and load the rival actually fought (Arcade's was the previous one); seeking a replay stops what still sounds; one fighter on both sides of the select screen keeps its smooth animations; a VSYNC option; STAGE SELECT after the fighters in VS, training and online (the host), with the game's CS_BG pictures; the online select's PLAY on the pad's START. an update no longer stops on "ENOTEMPTY ... update\new" left by an earlier one (it unpacks beside what Windows will not let go); a launcher of 0.1.13 or older still needs the `update` folder deleted by hand. **New in 0.1.13 (not yet played by Mary):** REPLAYS: every local fight recorded (the last 5 kept, any kept for good, exported or imported in the launcher's new REPLAYS page) and played back in the game with a player -- pause, a frame at a time, 5 s back and on, speed, a bar to click, an X to close and a list to switch to another replay in the same game (its fighters and stage load, no restart) -- that logs any tick that differs from the recording (online fights not recorded yet; going back Windows only); online over the internet: the input delay follows the ping (2 to 6 frames), inputs sent the moment they are taken, a 12-frame rollback window (Mary saw lag against another PC; not yet tried again); REAL-TIME SHADOWS' note is a row of its own (it was drawn over the label; seen right by Mary); the game's memory may use all of the first 4 GB (was 2), limeMalloc's heap reserves 2 GB (was 768 MB): no address the game keeps is sign-extended (checked by the compiler and by running the game with all its memory above 2 GB); Vulkan and Direct3D 12 on a 120/180/240 Hz screen hold each frame 2/3/4 refreshes (the stutter: a frame ending near a refresh waited one more, 22 ms then 11); COMPILAR SHADERS ANTES DE JUGAR in the launcher's PLAY and pipeline caches on disk; Sub-Zero's strap no longer stretches to his fist with SMOOTH MODELS (the weld keeps vertices of different bones apart). **New in 0.1.12:** Scorpion's fatality no longer drops to one frame a second (the smoothing budget now counted per frame, no 256 MB vertex-buffer ceiling on Direct3D 12 and Vulkan), subdivision on several cores, FLAWLESS VICTORY on match point; the engine's heaps stay below 2 GB by design (pointers in 32-bit words), ~386 MB used (below 4 GB after 0.1.12). **New in 0.1.11:** launcher updates that finish (every Windows update since 0.1.6 had ended as "could not be copied" and deleted `tools\eos\`); the game no longer crashes when its window is resized or moved several times; online over the internet in the download again, the EOS SDK in the repository (`tools/eos`); the home ring's picture with the launcher; faster loads (texture uploads batched on Direct3D 12 and Vulkan) and compiles (incremental, 13.9 s to 1.2 s with nothing changed); no lag that grows over a long session (textures found by a hash); the character editor works on Motaro; PROFILE's gradient picker and the second outfit as the player's picture, in the launcher and the same in the game's Esc menu; sharp edges for SMOOTH MODELS with two sliders, in the launcher and the game; Kung Lao's hat no longer pierced by his smoothed head. Tried by Mary for 0.1.10b: the Linux package works, and the Vulkan and Direct3D 12 renderers play. New in 0.1.10b: a VIDEO SETTINGS box on the settings screen (top right, above SOUND VOLUME): the GRAPHICS page in the game's own panel, with the on-screen controls on or off; the settings in two columns (Esc menu, debug menu, the game's panels), each section kept whole in one column, a row too long for its column drawn smaller; the controls split into FIGHT and MENU (tried by Mary before the section rule and the FIGHT / MENU split; those not yet). New in 0.1.10: kombos go on with the move that matched (issue #114: a later entry of a combo table ran the first entry's next move, likely Liu Kang's 7-hit kombo breaking; not yet tried in the game), SMOOTH ANIMATIONS and SMOOTH MODELS (Blender's weld + Catmull-Clark, in the game and the viewer), MODS > TEXTURES and exports by folder, stages exported with their animation, Linux sound, and crash reports naming the version and settings; the project is GPL-2.0-or-later from here on.
+Every release is tested by the project's tester, Mary, before the next one builds on it; the [Changelog](docs/CHANGELOG.md) says for each change whether she has played it yet.
 
-> [!IMPORTANT]
-> **No copyrighted assets or binaries are distributed in this repository.**
-> To build and play, you must supply your own legally obtained copy of **Ultimate Mortal Kombat 3 for iOS (v1.2.59)** (`.ipa`, `armv7` UUID `90d6f56a18e2303f8f2053b02a42742e`).
+## Playing it
 
----
+1. Download the latest release from the [Releases page](https://github.com/MaryNCRT/Ultimate-Mortal-Kombat-3-iOS-Decompiled/releases): `UMK3-PC-<version>.zip` (Windows) or `UMK3-PC-<version>-linux-x64.tar.gz` (Linux).
+2. Unpack it anywhere and open **`UMK3-Launcher`**.
+3. Give it your `.ipa` (**COMPILE YOUR .IPA**). It unpacks the game's data into the folder, extracts the binary's data tables, and compiles the game. Nothing of the game leaves your machine.
+4. **PLAY.** Graphics, controls, language and the rest are in the launcher and in the game's own settings menu (`Esc`).
 
-## Quick Build (from your `.ipa`)
+Later versions arrive through the launcher's own updater. Your mods, saves, replays and settings stay in the folder.
 
-### 1. Single-Command Build (`build.py`)
+### Controls
 
-Place your `Ultimate_Mortal_Kombat_3_1.2.59.ipa` in the repository root (or pass its path) and run:
+| Action | Player 1 (keyboard) | Pad |
+|---|---|---|
+| Move | `W` `A` `S` `D` or arrows | D-pad / left stick |
+| High punch / low punch | `U` / `I` (numpad `7` / `8`) | West / North |
+| Block | `O` (numpad `9`) | Right shoulder / trigger |
+| High kick / low kick | `J` / `K` (numpad `4` / `5`) | South / East |
+| Run | `L` (numpad `6`) | Left shoulder / trigger |
+| Pause / move list | `P` / `M` | Start / Back |
+| Settings | `Esc` | configurable (`pad_settings`) |
+| Debug menu (`debug_keys=1`) | `F2` (`F3` HUD, `F9`/`F10` KO, `F11`/`F12` match) | `L3 + R3` |
+
+All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
+
+## What the port has
+
+**The game, as on the device.** Every mode of the iOS game (arcade tower, VS, training, survival, karnage, treasures, kodes), its menus, HUD, finishers, sounds and music, from the decompiled code. The iPad build's layout is used on 4:3.
+
+**Added by the port:**
+- **Renderers:** OpenGL, Vulkan and Direct3D 12 (`src/runtime/render/`), HD textures, antialiasing, real-time shadows, VSYNC, pipeline caches compiled ahead of play.
+- **Screens:** 3:2, 4:3, 16:9 and 21:9; menus and panels laid out for each.
+- **SMOOTH ANIMATIONS** (frames between the game's frames) and **SMOOTH MODELS** (Blender's weld + Catmull-Clark subdivision, with sharp-edge controls).
+- **STAGE SELECT** before VS, training and online fights, with a picture of every stage; the select screen's music plays on through it.
+- **Online** over LAN or the internet (Epic Online Services), rollback netcode with an input delay that follows the ping; online fights always use the game's own data (only models and textures from mods).
+- **REPLAYS:** every local fight recorded and played back in the game with a full player (pause, frame step, seek, speed).
+- **Mods:** a folder per mod in `mods\`, files named like the game's replace them; data overrides for the fight tables (`data.ini`).
+- **Debug menu** (`F2`): any fighter including the bosses, stage, round, hitboxes, save states.
+
+**The launcher's MODS section:**
+- **MOD MANAGER:** order, on/off, new mod, open folder.
+- **CHARACTER VIEWER:** every fighter with its outfits, derived models, animations, a stage behind it; texture replacement; **REPLACE MODEL** from FBX, GLB or OBJ (humanoid rigs retargeted, weights painted and smoothed, bones posed with a Blender-style gizmo, shape keys with a keyed timeline); corrective animation layers; exports for Blender.
+- **STAGE VIEWER:** a stage played as the engine plays it, with its effects; elements picked, isolated and edited as in Blender (move / rotate / scale, keyframes, a dope-sheet timeline, shape keys and sculpting), kept per stage and exported as GLB, FBX or USD; its textures seen and replaced.
+- **CHARACTER EDITOR:** a fighter's attacks, data and texts.
+- **TEXTURES:** every texture of the game by where it belongs, replaced into a mod.
+- **EXPORT:** fighters, stages, models and textures as FBX, GLB, USD (USDA/USDC/USDZ) or OBJ with PNG textures.
+
+## Known problems (0.1.15 beta)
+
+- A fight intro can drop a frame where smoothing two fighters takes more than a tick.
+- Friendships and animalities can repeat a death scream (open: the logs show the game asking for one per finisher).
+- A fighter cannot be duplicated into a new slot yet.
+- Losing to Motaro from the debug menu softlocks (open, needs a log).
+- The stage editor's SCULPT once showed "500 Internal Error"; it could not be reproduced and is guarded, cause unknown.
+- In a kombo the one hit slides back slightly after a few punches (issue #114). That is the original game's own rule (`t_ccp3` → `t_separate_us`), checked against the binary instruction by instruction.
+
+## Building from source
+
+The launcher is the normal way. Without it:
 
 ```bash
-# Unpacks and validates the 1.2.59 .ipa, extracts the 229 binary data tables,
-# compiles umk3-game, and prepares a ready-to-play folder in dist/<platform>-<arch>/
+# unpack and check the .ipa, extract the 229 data tables, compile umk3-game,
+# and lay out a folder ready to play in dist/<platform>-<arch>/
 python3 build.py path/to/UMK3_1.2.59.ipa
 
-# Cross-compile the Windows .exe from Linux (runs under Wine/Proton) and run ctest:
+# the Windows .exe cross-compiled from Linux, and ctest
 python3 build.py path/to/UMK3_1.2.59.ipa --platform windows --target all
 
-# Build and run the native 32-bit headless fight simulation & table verification suite:
+# the 32-bit headless fight simulation and the table checks
 python3 build.py path/to/UMK3_1.2.59.ipa --target headless
 ```
 
-### 2. Direct CMake Build
+or with CMake directly:
 
 ```bash
 cmake -S . -B build -G Ninja -DUMK3_IPA=path/to/UMK3_1.2.59.ipa
 cmake --build build --target umk3-game
 ```
 
-### 3. Cross-Platform Desktop Launcher (Windows & Linux)
+The launcher's interface is a SvelteKit app built with `npm run ui` in `launcher/app` (see [Getting Started](docs/GETTING-STARTED.md)).
 
-On Windows and Linux, you can run **`UMK3-Launcher`** (built from [`launcher/app/`](launcher/app/)), which provides a self-contained arcade interface: it receives your `.ipa`, downloads the pinned `zig cc` compiler automatically (zero system compiler dependencies), unpacks the game assets, compiles the native game binary, and lets you configure graphics/controls (`umk3.ini`). Its **MODS** section manages mods (`mods/<mod>/`, files named like the game's replace them; priority and on/off in `mods/mods.ini`), shows the game's fighters, stages, models and textures, replaces any texture of a fighter, a stage, the interface or the effects (TEXTURES), and exports them for Blender as FBX, USD (USDA/USDC/USDZ) or OBJ with PNG textures, stages with their animation; exports and mods keep each fighter, stage, the interface and the effects in a folder of its own.
+## How the work is done
 
-Available distribution packages:
-- **Linux:** Standalone portable `.tar.gz` (works on a Linux machine since 0.1.10b, tried by Mary; see `launcher/README-linux.md`).
-- **Windows:** Portable `.zip` and `.exe`.
+- **The binary is the reference.** A function is written from its disassembly (`tools/decomp/disasm_range.py`), never from memory or from other releases of the game.
+- **Each function is checked.** `tools/decomp/armrecomp/recomp.py` translates the ARM code mechanically into C (the oracle); the hand-written C is compared with it fact by fact (`factdiff.py`: stores, calls, handlers) and by running both on thousands of generated inputs (`tools/decomp/difftest/`). Data tables are checked at build time.
+- **Behaviour the tools cannot reach** (indirect calls, jump tables) is checked by observation against the game running in touchHLE ([touchHLE patch](docs/engine/TOUCHHLE-PATCH.md)).
+- **Port code is marked.** Anything the binary does not have is labelled `Port, not in the binary` where it is.
+- **The tester plays every build** before it counts as working; problems are traced to the binary's own mechanism before anything is changed.
 
----
+[Methodology](docs/METHODOLOGY.md) and [Verification](docs/VERIFICATION.md) describe all of it in detail.
 
-## Controls
-
-| Action | Player 1 (Keyboard) | Gamepad |
-|---|---|---|
-| **Move** | `W` `A` `S` `D` or Arrow Keys | D-Pad / Left Stick |
-| **High Punch / Low Punch** | `U` / `I` (or Numpad `7` / `8`) | West / North |
-| **Block** | `O` (or Numpad `9`) | Right Shoulder / Trigger |
-| **High Kick / Low Kick** | `J` / `K` (or Numpad `4` / `5`) | South / East |
-| **Run** | `L` (or Numpad `6`) | Left Shoulder / Trigger |
-| **Pause / Moves List** | `P` / `M` | `Start` / `Back` (`Select`) |
-| **Settings Menu** | `Esc` | Configurable (`pad_settings`) |
-| **Debug Menu** (`debug_keys=1`) | `F2` (`F3` HUD, `F9`/`F10` KO, `F11`/`F12` Match) | `L3 + R3` |
-
----
-
-## Repository Layout
+## Repository layout
 
 ```text
-├── build.py                 # Unified cross-platform build script from a 1.2.59 .ipa
-├── CMakeLists.txt           # CMake build configuration (umk3-game & umk3-fight-headless)
+├── build.py              one-command build from a 1.2.59 .ipa
+├── CMakeLists.txt        umk3-game and umk3-fight-headless
 ├── src/
-│   ├── decomp/              # 1:1 decompiled C from the iOS armv7 binary (2,572 functions)
-│   │   ├── lime/            # LIME 3D engine core (matrices, meshes, scenes, fonts, camera)
-│   │   ├── gamecode/        # Front-end menus, HUD, 3D stage/player rendering, audio, MP
-│   │   └── gamecode/logic/  # Midway arcade fight engine (moves, AI, combos, finishers)
-│   └── runtime/             # Native PC port layer surrounding the decompiled code
-│       ├── platform/        # OS windowing, OpenGL context, audio & input (Win32 & SDL2)
-│       └── lime/            # Native asset loaders (PVRTC, PNG, meshset, skin, scene, par)
+│   ├── decomp/           the decompiled C (2,572 functions)
+│   │   ├── lime/         LIME 3D engine (matrices, meshes, scenes, fonts, camera)
+│   │   ├── gamecode/     front end, HUD, stage and fighter drawing, sound, multiplayer
+│   │   └── gamecode/logic/  the arcade fight engine (moves, AI, combos, finishers)
+│   ├── runtime/          the PC port around it (window, renderers, audio, input,
+│   │                     online, replays, mods, menus added by the port)
+│   └── thirdparty/       Blender's subdivision code (SMOOTH MODELS)
 ├── tools/
-│   ├── build/               # Build-time extractors (.ipa unpacker, Mach-O parser, 229 data tables)
-│   └── decomp/              # Reverse-engineering tools (armrecomp, difftest, disassembler, checkers)
-├── launcher/                # Electron desktop launcher, auto-updater, and release packager
-├── tests/                   # Differential verification harnesses for LIME engine modules
-└── docs/                    # Technical documentation
-    ├── formats/             # Binary asset specifications (.meshset, .skin, .scene, .events, .pvr)
-    └── engine/              # Engine internals, physics, move/fatality tables, touchHLE patch
+│   ├── build/            build-time extractors (.ipa, Mach-O, the 229 data tables)
+│   └── decomp/           reverse-engineering tools (armrecomp, difftest, factdiff, disassembler)
+├── launcher/             the desktop launcher (Electron + SvelteKit), updater, release packager
+├── tests/                differential tests of the LIME engine modules
+└── docs/                 documentation (below)
 ```
-
----
 
 ## Documentation
 
-- **Core Guides:** [Getting Started](docs/GETTING-STARTED.md) · [How the Game Works](docs/HOW-THE-GAME-WORKS.md) · [Architecture](docs/ARCHITECTURE.md) · [Methodology](docs/METHODOLOGY.md) · [Verification](docs/VERIFICATION.md)
-- **Asset Formats (`docs/formats/`):** [MeshSet](docs/formats/MESHSET-FORMAT.md) · [Skin & Bones](docs/formats/SKIN-FORMAT.md) · [Scene](docs/formats/SCENE-FORMAT.md) · [Events](docs/formats/EVENTS-FORMAT.md) · [PVR / PVRTC](docs/formats/PVR-FORMAT.md) · [Fonts](docs/formats/FONT-FORMAT.md) · [Lighting](docs/formats/LIGHTING.md) · [Animation Streams](docs/formats/ANIMATION-STREAMS.md) · [Frame Lists](docs/formats/FRAMELISTS.md) · [X-Tables](docs/formats/X-TABLES.md)
-- **Engine Reference (`docs/engine/`):** [LIME Engine](docs/engine/LIME-ENGINE.md) · [Physics](docs/engine/PHYSICS.md) · [Moves Tables](docs/engine/MOVES-TABLES.md) · [Fatality Tables](docs/engine/FATALITY-TABLES.md) · [Game Events](docs/engine/GAME-EVENTS.md) · [Roster](docs/engine/ROSTER.md) · [Stages](docs/engine/STAGES.md) · [Game Bugs](docs/engine/GAME-BUGS.md) · [Hidden Content](docs/engine/HIDDEN-CONTENT.md) · [iPad Build](docs/engine/IPAD-BUILD.md) · [MAME Arcade Reference](docs/engine/MAME-ARCADE.md) · [Mesh Viewer](docs/engine/MESH-VIEWER.md) · [touchHLE Patch](docs/engine/TOUCHHLE-PATCH.md)
-- **Project Info:** [Goals](docs/GOALS.md) · [Progress](docs/PROGRESS.md) · [Changelog](docs/CHANGELOG.md) · [Contributing](docs/CONTRIBUTING.md) · [AI Disclosure](docs/AI-DISCLOSURE.md)
+- **Start here:** [Getting Started](docs/GETTING-STARTED.md) · [How the Game Works](docs/HOW-THE-GAME-WORKS.md) · [Architecture](docs/ARCHITECTURE.md)
+- **How it is made:** [Methodology](docs/METHODOLOGY.md) · [Verification](docs/VERIFICATION.md) · [Contributing](docs/CONTRIBUTING.md) · [AGENTS.md](AGENTS.md)
+- **Where it stands:** [Progress](docs/PROGRESS.md) (current state, open problems) · [Handoff](docs/HANDOFF.md) (how to pick up the work) · [Changelog](docs/CHANGELOG.md) (every release) · [Goals](docs/GOALS.md)
+- **Asset formats** (`docs/formats/`): [MeshSet](docs/formats/MESHSET-FORMAT.md) · [Skin & Bones](docs/formats/SKIN-FORMAT.md) · [Scene](docs/formats/SCENE-FORMAT.md) · [Events](docs/formats/EVENTS-FORMAT.md) · [PVR / PVRTC](docs/formats/PVR-FORMAT.md) · [Fonts](docs/formats/FONT-FORMAT.md) · [Lighting](docs/formats/LIGHTING.md) · [Animation Streams](docs/formats/ANIMATION-STREAMS.md) · [Frame Lists](docs/formats/FRAMELISTS.md) · [X-Tables](docs/formats/X-TABLES.md)
+- **Engine reference** (`docs/engine/`): [LIME Engine](docs/engine/LIME-ENGINE.md) · [Physics](docs/engine/PHYSICS.md) · [Moves Tables](docs/engine/MOVES-TABLES.md) · [Fatality Tables](docs/engine/FATALITY-TABLES.md) · [Game Events](docs/engine/GAME-EVENTS.md) · [Roster](docs/engine/ROSTER.md) · [Stages](docs/engine/STAGES.md) · [Game Bugs](docs/engine/GAME-BUGS.md) · [Hidden Content](docs/engine/HIDDEN-CONTENT.md) · [iPad Build](docs/engine/IPAD-BUILD.md) · [MAME Arcade Reference](docs/engine/MAME-ARCADE.md) · [Mesh Viewer](docs/engine/MESH-VIEWER.md) · [touchHLE Patch](docs/engine/TOUCHHLE-PATCH.md)
 
----
-
-## Legal & Credits
+## Legal & credits
 
 *Ultimate Mortal Kombat 3* was created by **Midway Games** (1995) and ported to iOS by **EA Mobile** (2011). This project is an independent clean-room reverse-engineering effort for interoperability and software preservation, unaffiliated with Warner Bros. Entertainment or Electronic Arts. No copyrighted code or assets are distributed here.
 

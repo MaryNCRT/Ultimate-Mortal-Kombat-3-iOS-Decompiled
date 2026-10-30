@@ -1,22 +1,99 @@
-# Project Status & Verification Progress
+# Project Status & Progress
 
-**Last updated:** 2026-10-29 · See [CHANGELOG.md](CHANGELOG.md) for release history and [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md) for architecture.
+**Last updated:** 2026-10-30 (release 0.1.15 beta) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+
+This file has two parts. **Current state** says where everything stands
+today, for someone who knows nothing of the project. **Detailed log** is
+the record written as the work was done, newest first: every finding with
+its binary addresses and the checks that were run. A later entry can
+correct an earlier one; the current state is always the summary to trust.
 
 ---
 
-## Summary
+## Current state
 
-| Area | Total Functions | Transcribed (`src/decomp/`) | Status |
+### The decompilation
+
+| Area | Functions | Transcribed (`src/decomp/`) | Checked by |
 |---|---:|---:|---|
-| **LIME 3D Engine (`src/decomp/lime/`)** | 109 | 109 (100%) | Verified against recompiled oracle (`tests/test_*_diff.c`) |
-| **Game Front-End & Scene (`src/decomp/gamecode/`)** | 291 | 291 (100%) | Verified & running natively (51 front-end screens, HUD, audio, blood) |
-| **Arcade Fight Engine (`src/decomp/gamecode/logic/`)** | 2,172 | 2,172 (100%) | Behaviourally tested file-by-file (`tools/decomp/difftest/`) + 229 data tables verified by `ctest` |
-| **Total Game Core** | **2,572** | **2,572 (100%)** | **100% weighted verification score (`tools/decomp/progress.py`)** |
-| **Cross-Platform Launcher** | Multiplatform (Win/Linux) | 100% pure Node.js / Electron | Standalone compilation via `zig cc` (0.13.0), zero Python/CMake runtime dependency |
+| **LIME 3D engine** (`src/decomp/lime/`) | 109 | 109 (100%) | differential tests against the recompiled oracle (`tests/test_*_diff.c`) |
+| **Front end & scenes** (`src/decomp/gamecode/`) | 291 | 291 (100%) | running natively (51 front-end screens, HUD, audio, blood) |
+| **Arcade fight engine** (`src/decomp/gamecode/logic/`) | 2,172 | 2,172 (100%) | file-by-file differential tests (`tools/decomp/difftest/`), 229 data tables by `ctest` |
+| **Total** | **2,572** | **2,572 (100%)** | `tools/decomp/progress.py` |
+
+Every function was written from the armv7 disassembly of the player's own
+copy of the game (`OUTPUT/armv7/UMK3.armv7`), never from other sources
+([AGENTS.md](../AGENTS.md)). Findings made since are fixes to individual
+transcriptions, each one checked against the binary before it went in --
+the most recent: `repell_func` (2026-10-30, below).
+
+### The PC port (`src/runtime/`)
+
+Playable from start to end on Windows and Linux. What the port provides
+around the decompiled game:
+
+- **Renderers:** OpenGL, Vulkan, Direct3D 12 (`src/runtime/render/`; Vulkan and
+  Direct3D 12 through one fixed-function layer, `rgl_ff.c`), HD textures, MSAA,
+  real-time shadows, VSYNC, pipeline caches.
+- **Screens:** 3:2 (the iPhone's), 4:3 (the iPad build's layout), 16:9,
+  21:9; the port's own menus (settings, debug, STAGE SELECT, online,
+  replays) fit each.
+- **Sound:** a Win32 mixer and an SDL one, MP3 music, the game's 497 WAVs.
+- **Input:** keyboard and pads, remappable for fights and menus.
+- **Online:** LAN and internet through Epic Online Services, rollback
+  netcode, input delay from the ping.
+- **Replays:** every local fight recorded and played back with a player.
+- **Smoothing:** SMOOTH ANIMATIONS and SMOOTH MODELS (Blender's code,
+  `src/thirdparty/blender`, which makes the project GPL).
+- **Mods:** `mods\<mod>\` overlays on the game's files, `data.ini` over the
+  fight tables; online uses only models and textures from mods.
+- **Debug menu** (`F2`): fighters (bosses included), stages, rounds,
+  hitboxes, save states, logs.
+
+### The launcher (`launcher/`)
+
+Electron + SvelteKit (`launcher/app/ui`, built with `npm run ui`). It
+compiles the game from the player's `.ipa` with a bundled `zig cc`, keeps
+`umk3.ini`, updates itself from GitHub releases, and has the MODS section:
+MOD MANAGER, CHARACTER VIEWER (with REPLACE / EDIT MODEL: retargeting,
+weight paint, Blender-style bones, shape keys, corrective animation
+layers), STAGE VIEWER (the engine's stage playback, Blender-style element
+editing with keyframes and shape keys, texture replacement), CHARACTER
+EDITOR, TEXTURES and EXPORT (FBX, GLB, USD, OBJ).
+
+### What the tester has and has not played
+
+Mary plays every build in a test folder (`WORK\release-0.1.12\UMK3-PC-0.1.12-beta`
+on her machine) before it is released. **Played and confirmed:** everything
+up to 0.1.10b (the Linux package, the Vulkan and Direct3D 12 renderers),
+REAL-TIME SHADOWS' note on its own row in 0.1.13. **Not yet played as a whole:** 0.1.11 to
+0.1.15; she has tried pieces of them as she reported problems (STAGE
+SELECT's music and CANCEL, the 4:3 menus, the stage editor), each marked in
+the log below.
+
+### Open problems
+
+| Problem | State |
+|---|---|
+| A fight intro can drop a frame when smoothing two fighters takes more than a tick | known, not worked on |
+| Friendships and animalities can repeat a death scream | open: the logs show the game asking for one scream per finisher; the `death scream:` log line names the handler |
+| A fighter cannot be duplicated into a new slot | not started |
+| Losing to Motaro from the debug menu softlocks | open, needs a log |
+| The stage editor's SCULPT showed "500 Internal Error" once | not reproduced (`launcher/app/scripts/ui-harness.js`); navigation refused and native drag prevented as guards |
+| Slight slide in a kombo (issue #114) | **the original's rule**, checked instruction by instruction (`t_cc_*_punch` → `t_ccp3` → `t_separate_us`); nothing to fix |
+| After CANCEL in STAGE SELECT the select screen came back silent once | fixed by never stopping the tune on the way; the log says `stage select: the tune ...` if it happens again |
+
+### Where to look next
+
+The [HANDOFF](HANDOFF.md) lists how to build, test, verify and release.
+New work comes from Mary's reports (GitHub issues and her logs); each is
+traced to the binary's own mechanism before anything is changed.
 
 ---
 
-## After 0.1.13, second round: retarget, proportion trick, own materials, stage pictures, replay fixes (2026-10-29, not released)
+## Detailed log (newest first)
+
+## 0.1.14 to 0.1.15: retarget, proportion trick, own materials, stage pictures, replay fixes, STAGE VIEWER, shape keys (2026-10-29 to 2026-10-30, released in 0.1.14, 0.1.14b and 0.1.15)
 
 Branch `claude/viewer-tabs`. Built into
 `WORK\release-0.1.12\UMK3-PC-0.1.12-beta` for Mary to try; **not played
@@ -585,7 +662,7 @@ Checked here: the C files pass `gcc -fsyntax-only`; the launcher UI
 builds; the bone roles were checked on 40 names from those rigs. Not
 checked: any of it in the game or with a real Mixamo/AccuRig/Valve file.
 
-## After 0.1.13: model viewer, REPLACE MODEL (FBX/GLB/OBJ, a texture per material), replays, VSYNC (2026-10-29, not released)
+## After 0.1.13: model viewer, REPLACE MODEL (FBX/GLB/OBJ, a texture per material), replays, VSYNC (2026-10-29, released in 0.1.14)
 
 Branch `claude/viewer-tabs`. **Nothing here has been built into a game exe
 or played by Mary yet.** The C files pass `gcc -fsyntax-only` with the
@@ -655,7 +732,7 @@ is still unknown. Needs Mary to say which sound repeats and where
   their name only. A debug fight and a replay skip it.
 - **Online select: START presses PLAY**, as in VS and Arcade.
 
-## After 0.1.13: an update stopped by a leftover update\new (2026-10-29, not released)
+## After 0.1.13: an update stopped by a leftover update\new (2026-10-29, released in 0.1.14)
 
 Mary's update failed with "ENOTEMPTY: directory not empty, rmdir
 ...\update\new\UMK3-PC-0.1.11-beta\launcher\bin\resources". `unpack`

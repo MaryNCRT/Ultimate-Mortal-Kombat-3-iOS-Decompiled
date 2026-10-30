@@ -4,7 +4,86 @@ Release history for the native PC port of *Ultimate Mortal Kombat 3* (iOS 1.2.59
 
 ---
 
-## After 0.1.13: an update stopped by a leftover update\new (2026-10-29, not released)
+Newest first. Each release says what was added or fixed and whether the
+tester (Mary) has played it yet. The technical detail of every change -- the
+binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
+
+## 0.1.15 beta (2026-10-30) — STAGE VIEWER with Blender-style editing, shape keys, stage textures, select-screen music, 4:3 menus
+
+**Not yet played by Mary** as a whole; the items she reported are marked.
+
+**Game**
+- **STAGE SELECT** keeps the select screen's music playing without a break
+  (no fade, no stop on the way), and its CANCEL goes back to the select
+  screen instead of starting the fight (Mary's report). Online, the host's
+  CANCEL still takes the game's own stage, since the guest waits on it.
+  STAGE SELECT names and pictures all 16 stages apart (the Subway, Soul
+  Chamber and Lair were named Street, Balcony and Kave).
+- **4:3:** the ONLINE code box no longer runs off the screen, and the
+  settings / Esc menu is sized to the 4:3 picture instead of the 16:9
+  window around it (Mary's reports).
+- **`repell_func`**, the rule that pushes two close fighters apart, now
+  follows the binary when one is above the other (a juggle); checked
+  against the binary's own code on 200,000 states. The slight slide in a
+  kombo (issue #114) was checked too: it is the original game's rule.
+
+**Launcher**
+- **STAGE VIEWER** (new): a stage played as the engine plays it, with the
+  effects its events fire, the game's blending, element picking,
+  properties and isolate; exported with its animation and effects.
+  Elements are edited as in Blender: G / R / S with handles, axis locks and
+  typed values, I / Alt+I keyframes, REC, linear or bezier, a dope-sheet
+  timeline, and a model editor with shape keys and proportional sculpting.
+  Edits are kept per stage (`stage edits\`) and exported as GLB morph
+  targets, FBX blend shapes and USD BlendShapes. A **TEXTURES** tab shows
+  the stage's textures and replaces them into a mod.
+- **REPLACE / EDIT MODEL:** shape keys for fighters (Basis plus keys,
+  values keyed per animation frame, sculpting); the T-pose shown too.
+- **The timeline** under both editors is Blender-like: transport buttons,
+  frame field, a tick a frame, a Summary row, the playhead's frame.
+- **CHARACTER VIEWER** can put a playing stage behind the fighter.
+- **TARGET MOD** lists every installed mod (it showed only the one typed).
+- Editor windows are no longer covered by the launcher's bar or the
+  player card; the menu's description text shrinks to fit its box.
+
+**Known problems:** see the [README](../README.md#known-problems-0115-beta).
+
+## 0.1.14b beta (2026-10-30) — Liu Kang's endless scream, SMOOTH WEIGHTS, imported models lit
+
+Not yet played by Mary. 0.1.14 plus:
+- **Liu Kang's death scream no longer plays forever.** The Windows mixer
+  kept a sound's place as 16.16 in 32 bits, which wraps past 65,536 frames
+  (4.1 s); Lkdeath, Skdiemix and Vpdeath are longer. Now 64-bit.
+- **Linux sound:** a sound played again starts over instead of doubling.
+- **REPLACE MODEL:** SMOOTH WEIGHTS (Blender's Smooth Vertex Weights); GLB
+  bone names read from the file (dots kept); kept-proportion models bound
+  to bones along their own limbs; Blender's gizmo and G / R keys; FBX read
+  as Blender reads it.
+- **Imported models are shaded in the fight:** their `.lighting` bake is
+  made at load, byte-exact with the game's own.
+
+## 0.1.14 beta (2026-10-30) — REPLACE MODEL like Blender, corrective animation layers
+
+Not yet played by Mary.
+- **REPLACE MODEL:** bones moved and rotated with the mouse or G / R and
+  X / Y / Z, LOCATION / ROTATION fields mirrored left / right, WEIGHT PAINT,
+  Ctrl+Z / Ctrl+Y, reset to a clean T or A pose, Blender's camera (axis
+  gizmo, numpad views, orthographic), the file's own rig by default, EDIT
+  MODEL on the fighter's current model, a model put over an earlier one
+  fitted to the game's rig, the mod's own animations in the preview,
+  Mixamo / AccuRig / ValveBiped rigs, KEEP PROPORTIONS, a texture per
+  material.
+- **Model viewer:** tabs, derived models, layers, thumbnails, floor, solid
+  and weight views, CORRECTIVE ANIMATION LAYERS, GLB export, a
+  `mod.meta.xml` in every mod.
+- **Replays** record and load the rival actually fought; the player can be
+  hidden and resized.
+- **STAGE SELECT** after the fighters, with a picture for every stage;
+  VSYNC option.
+- **Custom models:** no black fighters with a large model, no SMOOTH
+  MODELS on them, no frames lost to their material parts.
+
+## After 0.1.13: an update stopped by a leftover update\new (2026-10-29, released in 0.1.14)
 
 Mary's update failed with "ENOTEMPTY: directory not empty, rmdir
 ...\update\new\UMK3-PC-0.1.11-beta\launcher\bin\resources". `unpack`
