@@ -118,18 +118,31 @@ bytes each:
 | Liu Kang | 568,856 | 829 | 347 | 1.978 |
 | Shao Kahn | 282,310 | 1,797 | 122 | 1.288 |
 
-That is the shape of **precomputed per-vertex lighting for every frame of
-animation** -- a prelight bake. The ratio is not constant, so there is a header,
-padding, or compression involved.
+That is **precomputed per-vertex lighting for every frame of animation** --
+a prelight bake -- and it is now decoded exactly (2026-10-30).
 
-**The encoding is not decoded.** The bytes are heavily skewed -- 62% zeros, 7%
-`0xFF`, with small values dominating the remainder and all 256 present -- which
-looks like delta coding or a simple compression rather than a flat array. Saying
-more than that would be guessing.
+**The format is flat.** One byte a vertex, a frame after another: frame `i`
+of the meshbase (the `.skinanim`), the first skin's vertices then the second
+skin's, each in the order DrawSkinnedMesh2 unwelds them (a skin vertex keeps
+its slot unless it already has another UV; each such corner is appended).
+`STATICLIGHTING/SONYA.lighting` is 456,488 bytes = 344 frames x 1,327
+unwelded vertices: `(meshCount - 1) x (size1 + size2)`, which is how
+LoadAnimatedCharacter slices it. (The top-level `<X>.lighting` files are
+another set; the loader reads `STATICLIGHTING/`.)
 
-If the bake is what it appears to be, then `LightVert` is the *fallback* path
-and most characters are lit from the table instead. Establishing which runs when
-means decompiling the loader, and is the natural next step here.
+**The values are LightVert.** Each byte is `floor(255 * l)` where `l` is
+LightVert on the vertex's skinned normal in that frame, with the lights in
+the table above -- light 1 from `(0, -300, -50)`, power 2, exponent 3.5,
+light 0 at power 0 -- which is exactly DrawSkinnedMesh2's lit path
+(`flags` 1). Checked byte for byte on Sonya, Scorpion and Liu Kang (every
+vertex within one step, and 0 mean error on the last two). The skew the
+earlier note saw -- many zeros, some `0xFF` -- is the hard falloff: anything
+facing down is 0, anything facing up saturates.
+
+So the light the fight draws a fighter with is LightVert, run offline and
+stored; at draw time `CreateFadedRGBS` adds the stage's ambient to the byte
+and scales it by the fade level. A skin a mod brings is baked the same way
+at load (`port_bake_lighting`, `decomp/gamecode/Players.c`).
 
 ## Where else lighting shows up
 

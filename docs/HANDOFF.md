@@ -53,6 +53,18 @@ yet**. Asked by Mary after trying the first round:
     `lime.h`), and a lighting file that does not fit the skin is replaced by
     its average light (`Players.c port_fit_lighting`, logged `flat light`).
     The importer refuses a block over 65,535 vertices once unwelded.
+  - **The `.lighting` bake decoded; a mod's model gets its own, Mary
+    2026-10-30 (built into the test folder, not tried yet).** In a fight a
+    fighter is lit from `STATICLIGHTING/<X>.lighting`, not live. A REPLACE
+    MODEL skin has another vertex count, so `port_fit_lighting` gave it one
+    flat grey: no shading. The file turned out to be LightVert on each
+    skinned normal, every frame, one byte an unwelded vertex
+    (`docs/formats/LIGHTING.md`); checked byte for byte on Sonya, Scorpion
+    and Liu Kang. `port_bake_lighting` (Players.c) now bakes it at load for
+    a mod's skin (`port_skin_custom`): GenerateMatrices for each frame, then
+    DrawSkinnedMesh2's lit path with the shipped lights, put back after.
+    Automatic for every imported model, and it follows the mod's own
+    `.skinanim`.
   - **Still crushed: a GLB's bone names lost their dots, Mary 2026-10-30
     (test launcher repacked, not tried yet).** Her Sonya GLB (the
     exporter's 49 bones, through Blender) showed 13/49 bones and 1688 of
