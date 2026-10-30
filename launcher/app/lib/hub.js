@@ -28,7 +28,6 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
-const { spawnSync } = require('child_process');
 const upd = require('./update');
 
 const REPO = 'MaryNCRT/UMK3-IOS-Mod-Hub';
@@ -36,7 +35,6 @@ const RAW = 'https://raw.githubusercontent.com/' + REPO + '/main/';
 const INDEX = RAW + 'index.json';
 const DL = 'https://github.com/' + REPO + '/releases/download/';
 const CATEGORIES = ['textures', 'audio', 'music', 'models', 'mixed'];
-const LINUX = process.platform === 'linux';
 
 const modsDir = root => path.join(root, 'mods');
 
@@ -147,18 +145,32 @@ async function range(fetchFn, mod, a, b) {
     return Buffer.from(await r.arrayBuffer());
 }
 
-/* the zip's files from its central directory: { path inside the mod
- * folder, crc, csize, usize, method, off }. The zip holds the mod's folder,
- * so its first part goes; folders and unsafe names are left out. */
-async function zipFiles(fetchFn, mod) {
-    if (!mod.size) throw new Error('the index has no size for this mod');
-    const tailAt = Math.max(0, mod.size - 65557);
-    const tail = await range(fetchFn, mod, tailAt, mod.size - 1);
+const remote = (fetchFn, mod) => (a, b) => range(fetchFn, mod, a, b);
+
+/* the same reads from a zip on disk (a whole mod just downloaded) */
+function localReader(file) {
+    return async (a, b) => {
+        const buf = Buffer.alloc(b - a + 1);
+        const fd = fs.openSync(file, 'r');
+        try { return buf.subarray(0, fs.readSync(fd, buf, 0, buf.length, a)); } finally { fs.closeSync(fd); }
+    };
+}
+
+/* The zip's files from its central directory: { path inside the mod
+ * folder, crc, csize, usize, method, off }. `read(a, b)` gives bytes [a, b]
+ * of the zip (by ranges, or from disk), `size` its length. The zip holds the
+ * mod's folder, so that first part goes when every file has it; folders and
+ * unsafe names are left out. The launcher unpacks zips itself: Linux's tar
+ * cannot. */
+async function zipFiles(read, size) {
+    if (!size) throw new Error('the index has no size for this mod');
+    const tailAt = Math.max(0, size - 65557);
+    const tail = await read(tailAt, size - 1);
     const e = tail.lastIndexOf(Buffer.from([0x50, 0x4b, 5, 6]));
     if (e < 0) throw new Error('not a zip');
     const cdSize = tail.readUInt32LE(e + 12), cdOff = tail.readUInt32LE(e + 16);
-    if (cdOff === 0xffffffff || cdOff + cdSize > mod.size) throw new Error('zip64 is not supported');
-    const cd = cdOff >= tailAt ? tail.subarray(cdOff - tailAt, cdOff - tailAt + cdSize) : await range(fetchFn, mod, cdOff, cdOff + cdSize - 1);
+    if (cdOff === 0xffffffff || cdOff + cdSize > size) throw new Error('zip64 is not supported');
+    const cd = cdOff >= tailAt ? tail.subarray(cdOff - tailAt, cdOff - tailAt + cdSize) : await read(cdOff, cdOff + cdSize - 1);
     const out = [];
     for (let p = 0; p + 46 <= cd.length && cd.readUInt32LE(p) === 0x02014b50;) {
         const nl = cd.readUInt16LE(p + 28), el = cd.readUInt16LE(p + 30), kl = cd.readUInt16LE(p + 32);
@@ -167,10 +179,14 @@ async function zipFiles(fetchFn, mod) {
             method: cd.readUInt16LE(p + 10), off: cd.readUInt32LE(p + 42) };
         p += 46 + nl + el + kl;
         if (name.endsWith('/')) continue;
-        const parts = name.split('/').filter(Boolean);
-        if (parts.length < 2 || parts.some(s => s === '..' || s === '.' || /[:*?"<>|]/.test(s))) continue;
-        ent.path = parts.slice(1).join('/');
+        ent.parts = name.split('/').filter(Boolean);
+        if (!ent.parts.length || ent.parts[0] === '__MACOSX' || ent.parts.some(s => s === '..' || s === '.' || /[:*?"<>|]/.test(s))) continue;
         out.push(ent);
+    }
+    const top = out.length && out.every(f => f.parts.length > 1 && f.parts[0] === out[0].parts[0]);
+    for (const f of out) {
+        f.path = (top ? f.parts.slice(1) : f.parts).join('/');
+        delete f.parts;
     }
     return out;
 }
@@ -230,7 +246,7 @@ async function check(fetchFn, root, list) {
         m.changes = null;
         if (!m.here) return;
         try {
-            const d = diff(root, m.here, await zipFiles(fetchFn, m), false);
+            const d = diff(root, m.here, await zipFiles(remote(fetchFn, m), m.size), false);
             m.changes = d.get.length + d.drop.length;
             m.changeBytes = d.get.reduce((s, f) => s + f.csize, 0);
         } catch { /* left unknown */ }
@@ -238,13 +254,13 @@ async function check(fetchFn, root, list) {
     return st;
 }
 
-/* One file out of the zip by its range: the local header's lengths are
- * not known before reading it, so the read takes some room for them. */
-async function fetchEntry(fetchFn, mod, f) {
-    let buf = await range(fetchFn, mod, f.off, Math.min(mod.size - 1, f.off + 30 + 1024 + f.csize - 1));
+/* One file out of the zip: the local header's lengths are not known before
+ * reading it, so the read takes some room for them. */
+async function readEntry(read, size, f) {
+    let buf = await read(f.off, Math.min(size - 1, f.off + 30 + 1024 + f.csize - 1));
     if (buf.readUInt32LE(0) !== 0x04034b50) throw new Error('bad zip entry ' + f.path);
     const start = 30 + buf.readUInt16LE(26) + buf.readUInt16LE(28);
-    if (buf.length < start + f.csize) buf = await range(fetchFn, mod, f.off, f.off + start + f.csize - 1);
+    if (buf.length < start + f.csize) buf = await read(f.off, f.off + start + f.csize - 1);
     const raw = buf.subarray(start, start + f.csize);
     const data = f.method === 8 ? zlib.inflateRawSync(raw) : f.method === 0 ? raw : null;
     if (!data) throw new Error('unsupported zip method ' + f.method);
@@ -259,14 +275,15 @@ async function sync(fetchFn, root, mod, onProgress) {
     const inst = readInstalled(root);
     const folder = folderOf(root, inst, mod);
     if (!folder) throw new Error('not installed');
-    const files = await zipFiles(fetchFn, mod);
+    const read = remote(fetchFn, mod);
+    const files = await zipFiles(read, mod.size);
     const d = diff(root, folder, files, true);
     const base = path.join(modsDir(root), folder);
     const total = d.get.reduce((s, f) => s + f.csize, 0);
     let got = 0;
     if (onProgress) onProgress(0, total);
     for (const f of d.get) {
-        const data = await fetchEntry(fetchFn, mod, f);
+        const data = await readEntry(read, mod.size, f);
         const p = path.join(base, f.path);
         fs.mkdirSync(path.dirname(p), { recursive: true });
         fs.writeFileSync(p + '.part', data);
@@ -303,23 +320,6 @@ async function fetchIndex(fetchFn) {
     return list;
 }
 
-function unzip(zip, dest) {
-    const tar = LINUX ? 'tar' : path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
-    let r = LINUX || fs.existsSync(tar) ? spawnSync(tar, ['-xf', zip, '-C', dest], { windowsHide: true }) : { status: 1 };
-    if (r.status !== 0 && !LINUX)
-        r = spawnSync('powershell.exe', ['-NoProfile', '-Command',
-            'Expand-Archive -LiteralPath ' + "'" + zip.replace(/'/g, "''") + "'" + ' -DestinationPath ' + "'" + dest.replace(/'/g, "''") + "'" + ' -Force'],
-            { windowsHide: true });
-    if (r.status !== 0) throw new Error('could not unpack the mod');
-}
-
-/* the unpacked mod: the zip's own top when it has mod files there, else the
- * one folder it holds */
-function modRoot(dest) {
-    const list = fs.readdirSync(dest, { withFileTypes: true }).filter(e => !e.name.startsWith('.') && e.name !== '__MACOSX');
-    if (list.length === 1 && list[0].isDirectory()) return path.join(dest, list[0].name);
-    return dest;
-}
 
 /* mods.ini kept as it is, with `folder` added at the top, on, when it is
  * not there yet (the same file lib/mods.js writes) */
@@ -351,10 +351,14 @@ async function install(fetchFn, root, mod, onProgress) {
     fs.mkdirSync(work, { recursive: true });
     try {
         const zip = await upd.download(fetchFn, mod, work, onProgress);
-        const out = path.join(work, 'out');
-        fs.mkdirSync(out);
-        unzip(zip, out);
-        const src = modRoot(out);
+        const src = path.join(work, 'out');
+        fs.mkdirSync(src);
+        const read = localReader(zip), size = fs.statSync(zip).size;
+        for (const f of await zipFiles(read, size)) {
+            const p = path.join(src, f.path);
+            fs.mkdirSync(path.dirname(p), { recursive: true });
+            fs.writeFileSync(p, await readEntry(read, size, f));
+        }
         const dest = path.join(dir, folder);
         const old = path.join(work, 'old');
         if (fs.existsSync(dest)) fs.renameSync(dest, old);
@@ -379,4 +383,4 @@ function get(fetchFn, root, mod, onProgress) {
     return folderOf(root, readInstalled(root), mod) ? sync(fetchFn, root, mod, onProgress) : install(fetchFn, root, mod, onProgress);
 }
 
-module.exports = { REPO, INDEX, parseIndex, status, check, fetchIndex, install, sync, get, register, readInstalled, zipFiles, crc32 };
+module.exports = { REPO, INDEX, parseIndex, status, check, fetchIndex, install, sync, get, register, readInstalled, zipFiles, remote, crc32 };

@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
-const { spawnSync } = require('child_process');
+const zlib = require('zlib');
 const hub = require('../lib/hub');
 
 const DL = 'https://github.com/MaryNCRT/UMK3-IOS-Mod-Hub/releases/download/';
@@ -66,20 +66,38 @@ test('register adds a new mod at the top, on, and leaves a known one where it is
     assert.equal(fs.readFileSync(ini, 'utf8'), '; c\non=B\non=A\noff=Rain\n');
 });
 
-const tar = process.platform === 'win32' ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'tar';
+/* a zip as publish.js makes one (the mod's folder at its top): deflated
+ * files, a folder entry, data descriptors' flag left off */
+function makeZip(files) {
+    const local = [], central = [];
+    let off = 0;
+    const entries = [['Rain/', null]].concat(Object.entries(files));
+    for (const [name, text] of entries) {
+        const data = text === null ? Buffer.alloc(0) : Buffer.from(text);
+        const comp = text === null ? data : zlib.deflateRawSync(data);
+        const nm = Buffer.from(name);
+        const h = Buffer.alloc(30);
+        h.writeUInt32LE(0x04034b50, 0); h.writeUInt16LE(20, 4); h.writeUInt16LE(text === null ? 0 : 8, 8);
+        h.writeUInt32LE(hub.crc32(data), 14); h.writeUInt32LE(comp.length, 18); h.writeUInt32LE(data.length, 22);
+        h.writeUInt16LE(nm.length, 26);
+        const c = Buffer.alloc(46);
+        c.writeUInt32LE(0x02014b50, 0); c.writeUInt16LE(20, 4); c.writeUInt16LE(20, 6); c.writeUInt16LE(text === null ? 0 : 8, 10);
+        c.writeUInt32LE(hub.crc32(data), 16); c.writeUInt32LE(comp.length, 20); c.writeUInt32LE(data.length, 24);
+        c.writeUInt16LE(nm.length, 28); c.writeUInt32LE(off, 42);
+        local.push(h, nm, comp);
+        central.push(c, nm);
+        off += 30 + nm.length + comp.length;
+    }
+    const cd = Buffer.concat(central);
+    const e = Buffer.alloc(22);
+    e.writeUInt32LE(0x06054b50, 0); e.writeUInt16LE(entries.length, 8); e.writeUInt16LE(entries.length, 10);
+    e.writeUInt32LE(cd.length, 12); e.writeUInt32LE(off, 16);
+    return Buffer.concat(local.concat([cd, e]));
+}
 
-test('install downloads, checks, unpacks and updates in place', { skip: !fs.existsSync(tar) && process.platform === 'win32' }, async () => {
+test('install downloads, checks, unpacks and updates in place', async () => {
     const root = tmpRoot();
-    const make = (ver, file) => {
-        const src = fs.mkdtempSync(path.join(os.tmpdir(), 'umk3hubsrc-'));
-        fs.mkdirSync(path.join(src, 'Rain'));
-        fs.writeFileSync(path.join(src, 'Rain', 'mod.ini'), 'name=Rain\nversion=' + ver + '\n');
-        fs.writeFileSync(path.join(src, 'Rain', file), 'x');
-        const zip = path.join(src, 'r.zip');
-        const r = spawnSync(tar, ['-a', '-c', '-f', zip, '-C', src, 'Rain']);
-        assert.equal(r.status, 0, String(r.stderr));
-        return fs.readFileSync(zip);
-    };
+    const make = (ver, file) => makeZip({ 'Rain/mod.ini': 'name=Rain\nversion=' + ver + '\n', ['Rain/' + file]: 'x'.repeat(300) });
     const fetchOf = bytes => async () => ({
         ok: true, headers: { get: () => String(bytes.length) },
         body: { getReader: () => { let done = false; return { read: async () => done ? { done: true } : (done = true, { done: false, value: bytes }) }; } },
@@ -106,15 +124,8 @@ test('install downloads, checks, unpacks and updates in place', { skip: !fs.exis
     assert.equal(fs.readFileSync(path.join(root, 'mods', 'mods.ini'), 'utf8'), 'on=X\noff=Rain\n');
 });
 
-test('a mod already here: found by folder, compared by range reads, only what differs fetched', { skip: !fs.existsSync(tar) && process.platform === 'win32' }, async () => {
-    const src = fs.mkdtempSync(path.join(os.tmpdir(), 'umk3hubsrc-'));
-    fs.mkdirSync(path.join(src, 'Rain', 'Sub'), { recursive: true });
-    fs.writeFileSync(path.join(src, 'Rain', 'mod.ini'), 'name=Rain\n');
-    fs.writeFileSync(path.join(src, 'Rain', 'A.png'), 'a'.repeat(5000));
-    fs.writeFileSync(path.join(src, 'Rain', 'Sub', 'B.png'), 'bbbb');
-    const zip = path.join(src, 'r.zip');
-    assert.equal(spawnSync(tar, ['-a', '-c', '-f', zip, '-C', src, 'Rain']).status, 0);
-    const bytes = fs.readFileSync(zip);
+test('a mod already here: found by folder, compared by range reads, only what differs fetched', async () => {
+    const bytes = makeZip({ 'Rain/mod.ini': 'name=Rain\n', 'Rain/A.png': 'a'.repeat(5000), 'Rain/Sub/B.png': 'bbbb' });
     const reads = [];
     const fetchFn = async (_url, opt) => {
         const m = /bytes=(\d+)-(\d+)/.exec(opt.headers.Range);
@@ -126,7 +137,7 @@ test('a mod already here: found by folder, compared by range reads, only what di
     const mod = hub.parseIndex({ mods: [{ id: 'rain', folder: 'Rain', version: '1.0', url: DL + 'r/rain.zip',
         size: bytes.length, sha256: crypto.createHash('sha256').update(bytes).digest('hex') }] })[0];
 
-    assert.deepEqual((await hub.zipFiles(fetchFn, mod)).map(f => f.path).sort(), ['A.png', 'Sub/B.png', 'mod.ini']);
+    assert.deepEqual((await hub.zipFiles(hub.remote(fetchFn, mod), mod.size)).map(f => f.path).sort(), ['A.png', 'Sub/B.png', 'mod.ini']);
 
     /* the player's copy: B.png changed at the same size, A.png missing, an extra file */
     const root = tmpRoot();

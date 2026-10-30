@@ -110,7 +110,9 @@ updatable.
   Rain (from Mary's test folder).
 - **Launcher:** `lib/hub.js` reads the index (an entry whose download is not
   a release of that repository is dropped), downloads with
-  `lib/update.js`'s `download()` (SHA-256 checked), unpacks with `tar`,
+  `lib/update.js`'s `download()` (SHA-256 checked), unpacks it itself
+  (zlib, each file CRC-checked: Linux's GNU tar cannot read a zip, which
+  the PR's Linux CI caught),
   replaces `mods\<folder>` and adds it to `mods.ini` on, at the top (an
   update keeps its place and on/off). What came from the hub is kept in
   `mods\hub.json` (id, folder, version); UPDATE shows when the index's
