@@ -28,9 +28,11 @@
     import { dataUrl } from '#lib/mods/thumbs.js';
 
     /* f the fighter; file what main.js file:pick gave; texture(stem) the
-     * viewer's game textures; outfit the outfit shown; onApply({ r, mdl }),
-     * onClose() */
-    let { f, file, texture, outfit, onApply, onClose } = $props();
+     * viewer's game textures; outfit the outfit shown; saved, picks: a
+     * model opened again from its mod -- what the window was set to
+     * (<skin>.import.json) and the pictures chosen for its materials;
+     * onApply({ r, mdl, settings, file, picks }), onClose() */
+    let { f, file, texture, outfit, saved = null, picks = null, onApply, onClose } = $props();
 
     let host = $state();
     let mdl = $state(null);
@@ -49,6 +51,7 @@
     let adjust = $state({ armAngle: 0, armRoll: 0, legAngle: 0, legRoll: 0, auto: false });
     let tab = $state('rig');                 /* the side's tab: 'mats' or 'rig' */
     let joints = $state({});                /* bone -> [dx, dy, dz] (buildSkin o.joints) */
+    let turns = $state({});                 /* bone -> [x, y, z] degrees (buildSkin o.turns) */
     let sel = $state(-1);                   /* the joint being moved */
     let mirror = $state(true), reweight = $state(false);
     let look = $state({ wire: false, solid: false, weights: false });
@@ -117,7 +120,7 @@
         if (!mdl) return;
         err = '';
         try {
-            res = buildSkin(f, mdl, { turn, blockOf, keep, scale, adjust: { ...adjust }, joints: $state.snapshot(joints), reweight, paint });
+            res = buildSkin(f, mdl, { turn, blockOf, keep, scale, adjust: { ...adjust }, joints: $state.snapshot(joints), turns: $state.snapshot(turns), reweight, paint });
             pf = withSkin(f, res.bytes, res.bones);
             await show();
         } catch (e) {
@@ -236,7 +239,9 @@
         if (!got) return;
         const pic = await decodePicture(got.bytes).catch(() => null);
         if (!pic) { err = tx('vwNotPicture'); return; }
+        remember();
         mdl.materials[i].image = pic;
+        mdl.materials[i].picked = got.bytes;
         mdl.materials[i].file = got.name;
         mdl.materials[i].game = false;
         await makeThumbs();
@@ -244,7 +249,9 @@
     }
     async function gameTex(i) {
         selectBlip();
+        remember();
         mdl.materials[i].image = null;
+        mdl.materials[i].picked = null;
         mdl.materials[i].game = true;    /* a copy of the outfit's, saved as its own */
         await makeThumbs();
         await rebuild();
@@ -282,6 +289,7 @@
     const choiceOf = i => blockOf[i] + '|' + (mdl.materials[i].rep || '');
     async function setChoice(i, v) {
         const [b, t] = v.split('|');
+        remember();
         blockOf[i] = Number(b);
         mdl.materials[i].rep = t;
         await makeThumbs();
@@ -290,9 +298,68 @@
 
     let scaleWait;
     function setScale(v) {
+        remember('scale');
         scale = Math.min(4, Math.max(0.25, Number(v) || 1));
         clearTimeout(scaleWait);
         scaleWait = setTimeout(rebuild, 150);
+    }
+
+    /* UNDO / REDO (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z): what the window is set
+     * to, kept before each change -- a slider's run of moves as one */
+    let undo = [], redo = [], lastKey = '', lastAt = 0;
+    let undoCount = $state(0), redoCount = $state(0);
+    function snap() {
+        return { joints: $state.snapshot(joints), turns: $state.snapshot(turns), paint: { ...paint }, adjust: $state.snapshot(adjust),
+            scale, keep, turn, reweight, blockOf: [...blockOf],
+            mats: mdl ? mdl.materials.map(m => ({ image: m.image, file: m.file, game: m.game, rep: m.rep, picked: m.picked })) : [] };
+    }
+    function remember(key = '') {
+        const now = Date.now();
+        if (key && key === lastKey && now - lastAt < 800) { lastAt = now; return; }
+        lastKey = key;
+        lastAt = now;
+        undo.push(snap());
+        if (undo.length > 100) undo.shift();
+        redo = [];
+        undoCount = undo.length;
+        redoCount = 0;
+    }
+    async function undoIt(back) {
+        endEdit(false);
+        const from = back ? undo : redo, to = back ? redo : undo;
+        if (!from.length || !mdl) return;
+        selectBlip();
+        to.push(snap());
+        const st = from.pop();
+        undoCount = undo.length;
+        redoCount = redo.length;
+        lastKey = '';
+        joints = st.joints; turns = st.turns; paint = st.paint; paintCount = Object.keys(paint).length;
+        adjust = st.adjust; scale = st.scale; keep = st.keep; turn = st.turn; reweight = st.reweight; blockOf = st.blockOf;
+        st.mats.forEach((m, i) => Object.assign(mdl.materials[i], m));
+        await makeThumbs();
+        await rebuild();
+    }
+
+    /* RESET TO A CLEAN T / A POSE: every change put back and the arms
+     * turned level (T) or 45 degrees down (A) -- the model's own arms when
+     * it keeps its proportions (or has the exporter's names), else the
+     * fighter's joints it is fitted to -- so the rig starts with nothing
+     * bent */
+    async function cleanPose(rise) {
+        selectBlip();
+        remember();
+        endEdit(false);
+        joints = {}; turns = {}; paint = {}; paintCount = 0; scale = 1; reweight = false;
+        adjust = { armAngle: 0, armRoll: 0, legAngle: 0, legRoll: 0, auto: false };
+        await rebuild();
+        if (res && res.pose) {
+            const from = keep || res.rig === 'names' ? res.pose.file.arm : res.pose.fighter.arm;
+            if (from !== null && from !== undefined) {
+                adjust.armAngle = Math.max(-90, Math.min(90, Math.round(rise - from)));
+                await rebuild();
+            }
+        }
     }
 
     /* By hand on the view, as Blender does. EDIT BONES: a click on a joint
@@ -374,6 +441,7 @@
             const u = axis >= 0 ? AX[axis].clone() : toCam;
             if (axis >= 0 && u.dot(toCam) < 0) u.negate();
             const q = new THREE.Quaternion().setFromAxisAngle(u, ang);
+            edit.deg = ang * 180 / Math.PI * (axis >= 0 && u.dot(AX[axis]) < 0 ? -1 : 1);
             for (const [i, T] of edit.base) out.set(i, T.clone().sub(P).applyQuaternion(q).add(P));
             editInfo = tx('imEditTurn') + ax + ' · ' + Math.round(((ang * 180 / Math.PI) + 540) % 360 - 180) + '° · ' + tx('imEditKeys');
         }
@@ -406,11 +474,28 @@
     }
     function endEdit(keepIt) {
         if (!edit) return;
+        if (keepIt && edit.out && edit.kind === 'turn' && edit.axis >= 0) {
+            /* about an axis: into the bone's ROTATION field */
+            const { b, axis, deg } = edit;
+            edit = null;
+            editInfo = '';
+            if (axisLine) axisLine.visible = false;
+            if (!deg) { pose(); return; }
+            remember();
+            const next = { ...turns }, add = (i, dv) => { const t = [...(next[i] || [0, 0, 0])]; t[axis] = ((t[axis] + dv + 540) % 360) - 180; next[i] = t; };
+            add(b, deg);
+            const o = mirror ? twin(b) : -1;
+            if (o >= 0) add(o, axis === 0 ? deg : -deg);
+            turns = next;
+            rebuild();
+            return;
+        }
         const d = keepIt && edit.out ? editDeltas() : null;
         edit = null;
         editInfo = '';
         if (axisLine) axisLine.visible = false;
         if (d && [...d.values()].some(v => v.some(x => Math.abs(x) > 1e-4))) {
+            remember();
             const next = { ...joints };
             for (const [i, v] of d) next[i] = (next[i] || [0, 0, 0]).map((x, c) => x + v[c]);
             joints = next;
@@ -472,6 +557,7 @@
     }
     function clearPaint() {
         selectBlip();
+        remember();
         paint = {};
         paintCount = 0;
         rebuild();
@@ -518,6 +604,7 @@
             ray.setFromCamera(ndc(e), camera);
             if (ray.intersectObjects(meshes.filter(m => m.visible), false).length) {
                 e.stopImmediatePropagation();
+                remember();
                 stroke = true;
                 clearTimeout(paintWait);
                 paintAt(e);
@@ -543,8 +630,14 @@
     }
     function onKey(e) {
         const tag = e.target && e.target.tagName;
-        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
         const k = e.key.toLowerCase();
+        if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y') && !(tag === 'INPUT' && e.target.type === 'text') && tag !== 'TEXTAREA') {
+            e.preventDefault();
+            e.stopPropagation();
+            undoIt(k === 'z' && !e.shiftKey);
+            return;
+        }
+        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
         if (edit) {
             if (k === 'x' || k === 'y' || k === 'z') { const a = 'xyz'.indexOf(k); edit.axis = edit.axis === a ? -1 : a; updateEdit(mouse); }
             else if (k === 'enter') endEdit(true);
@@ -572,6 +665,7 @@
     let jointWait;
     function setJoint(k, v) {
         if (sel < 0) return;
+        remember('j' + sel + k);
         const d = [...(joints[sel] || [0, 0, 0])];
         d[k] = Math.min(100, Math.max(-100, Number(v) || 0));
         const next = { ...joints, [sel]: d };
@@ -583,23 +677,42 @@
     }
     async function resetJoints(all) {
         selectBlip();
-        if (all) joints = {};
+        remember();
+        if (all) { joints = {}; turns = {}; }
         else if (sel >= 0) {
-            const next = { ...joints };
-            delete next[sel];
-            if (mirror && twin(sel) >= 0) delete next[twin(sel)];
+            const next = { ...joints }, nt = { ...turns };
+            for (const b of [sel, mirror ? twin(sel) : -1]) if (b >= 0) { delete next[b]; delete nt[b]; }
             joints = next;
+            turns = nt;
         }
         await rebuild();
     }
+    /* ROTATION X / Y / Z, as Blender's fields: the bone picked turned about
+     * its joint, its children with it; the other side mirrored (about X the
+     * same, about Y and Z the other way) */
+    let turnWait;
+    function setTurn(k, v) {
+        if (sel < 0) return;
+        remember('t' + sel + k);
+        const d = [...(turns[sel] || [0, 0, 0])];
+        d[k] = Math.min(180, Math.max(-180, Number(v) || 0));
+        const next = { ...turns, [sel]: d };
+        const o = mirror ? twin(sel) : -1;
+        if (o >= 0) next[o] = [d[0], -d[1], -d[2]];
+        turns = next;
+        clearTimeout(turnWait);
+        turnWait = setTimeout(rebuild, 120);
+    }
     async function setReweight(v) {
         selectBlip();
+        remember();
         reweight = v;
         await rebuild();
     }
 
     let adjWait;
     function setAdjust(key, v) {
+        remember('a' + key);
         adjust[key] = typeof v === 'boolean' ? v : Math.min(90, Math.max(-90, Number(v) || 0));
         clearTimeout(adjWait);
         adjWait = setTimeout(rebuild, 150);
@@ -609,12 +722,14 @@
 
     async function setKeep(v) {
         selectBlip();
+        remember();
         keep = v;
         await rebuild();
     }
 
     async function turnIt() {
         selectBlip();
+        remember();
         turn = (turn + 1) % 4;
         await rebuild();
     }
@@ -623,9 +738,29 @@
         if (!res) return;
         selectBlip();
         /* what this window was set to, kept beside the skin in the mod */
-        const settings = { file: file.name, keep, scale, turn, adjust: $state.snapshot(adjust), joints: $state.snapshot(joints), reweight, paint,
-            blockOf: $state.snapshot(blockOf), replaces: mdl.materials.map(m => m.rep || '') };
-        onApply({ r: res, mdl, settings });
+        const settings = { file: file.name, keep, scale, turn, adjust: $state.snapshot(adjust), joints: $state.snapshot(joints),
+            turns: $state.snapshot(turns), reweight, paint, blockOf: $state.snapshot(blockOf), replaces: mdl.materials.map(m => m.rep || ''),
+            game: mdl.materials.map(m => !!m.game), picked: mdl.materials.map(m => (m.picked ? m.file : '')) };
+        const chosen = Object.fromEntries(mdl.materials.map((m, i) => [i, m.picked]).filter(([, b]) => b));
+        onApply({ r: res, mdl, settings, file, picks: chosen });
+    }
+
+    /* a model opened again from its mod: as it was saved */
+    async function restoreSaved() {
+        const st = saved, n = mdl.materials.length;
+        keep = !!st.keep; scale = st.scale || 1; turn = st.turn || 0; reweight = !!st.reweight;
+        adjust = { ...adjust, ...(st.adjust || {}) };
+        joints = st.joints || {}; turns = st.turns || {};
+        paint = st.paint || {}; paintCount = Object.keys(paint).length;
+        if (st.blockOf) blockOf = mdl.materials.map((_, i) => Math.min(st.blockOf[i] ?? blockOf[i], f.rig.skin.length - 1));
+        for (let i = 0; i < n; i++) {
+            const m = mdl.materials[i];
+            m.rep = (st.replaces || [])[i] || '';
+            if ((st.game || [])[i]) { m.image = null; m.game = true; }
+            const b = picks && picks[i];
+            const pic = b && await decodePicture(b).catch(() => null);
+            if (pic) { m.image = pic; m.picked = b; m.file = (st.picked || [])[i] || m.file; m.game = false; }
+        }
     }
 
     onMount(async () => {
@@ -637,6 +772,7 @@
             /* every material its own texture, as the model has them; a game
              * texture is replaced only when chosen */
             for (const m of mdl.materials) m.rep = '';
+            if (saved) await restoreSaved();
             await makeThumbs();
             await rebuild();
         } catch (e) {
@@ -725,6 +861,15 @@
                 </ul>
                 {:else}
                 <div class="rigpane">
+                    <div class="pair">
+                        <button class="btn" disabled={!undoCount} onclick={() => undoIt(true)} title="Ctrl+Z">{tx('imUndo')} ({undoCount})</button>
+                        <button class="btn" disabled={!redoCount} onclick={() => undoIt(false)} title="Ctrl+Y">{tx('imRedo')} ({redoCount})</button>
+                    </div>
+                    <div class="pair">
+                        <button class="btn" disabled={!res} onclick={() => cleanPose(0)}>{tx('imCleanT')}</button>
+                        <button class="btn" disabled={!res} onclick={() => cleanPose(-45)}>{tx('imCleanA')}</button>
+                    </div>
+                    <p class="note">{tx('imCleanNote')}</p>
                     {#if res && !res.matched}
                         <button class="btn" onclick={turnIt}>{tx('imTurn')}</button>
                     {/if}
@@ -761,7 +906,7 @@
                     <span class="lbl head">{tx('imJoints')}</span>
                     <select class="sel" value={sel} onchange={e => { sel = Number(e.currentTarget.value); }}>
                         <option value={-1}>{tx('imJointPick')}</option>
-                        {#each f.names as n, i}{#if i !== f.rig.bones.root}<option value={i}>{n}{joints[i] && joints[i].some(x => x) ? ' *' : ''}</option>{/if}{/each}
+                        {#each f.names as n, i}{#if i !== f.rig.bones.root}<option value={i}>{n}{(joints[i] && joints[i].some(x => x)) || (turns[i] && turns[i].some(x => x)) ? ' *' : ''}</option>{/if}{/each}
                     </select>
                     <div class="pair">
                         <button class="btn" class:hot={tool === 'bones'} onclick={() => setTool('bones')}>{tx('imToolBones')}</button>
@@ -792,11 +937,22 @@
                         <p class="note">{tx('imPaintNote')}</p>
                     {/if}
                     {#if sel >= 0 && tool === 'bones'}
+                        <span class="lbl head">{tx('imLocation')}</span>
                         {#each ['X', 'Y', 'Z'] as ax, k}
                             <label class="scale">
-                                <span class="lbl">{ax} {((joints[sel] || [0, 0, 0])[k]).toFixed(1)}</span>
+                                <span class="lbl ax">{ax}</span>
                                 <input type="range" min="-100" max="100" step="0.5" value={(joints[sel] || [0, 0, 0])[k]} oninput={e => setJoint(k, e.currentTarget.value)}>
+                                <input class="num" type="number" step="0.5" value={((joints[sel] || [0, 0, 0])[k]).toFixed(1)} onchange={e => setJoint(k, e.currentTarget.value)}>
                                 <button class="eye" onclick={() => setJoint(k, 0)} title="0">0</button>
+                            </label>
+                        {/each}
+                        <span class="lbl head">{tx('imRotation')}</span>
+                        {#each ['X', 'Y', 'Z'] as ax, k}
+                            <label class="scale">
+                                <span class="lbl ax">{ax}</span>
+                                <input type="range" min="-180" max="180" step="1" value={(turns[sel] || [0, 0, 0])[k]} oninput={e => setTurn(k, e.currentTarget.value)}>
+                                <input class="num" type="number" step="1" value={Math.round((turns[sel] || [0, 0, 0])[k])} onchange={e => setTurn(k, e.currentTarget.value)}>
+                                <button class="eye" onclick={() => setTurn(k, 0)} title="0">0</button>
                             </label>
                         {/each}
                     {/if}
@@ -842,6 +998,8 @@
     .view :global(canvas) { width: 100%; height: 100%; display: block; }
     .scale { display: flex; align-items: center; gap: 8px; }
     .scale input { flex: 1; min-width: 0; }
+    .scale .num { flex: 0 0 calc(var(--u) * 6.5); background: var(--well); color: #fff; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 1px 4px; }
+    .lbl.ax { flex: 0 0 auto; }
     .over { position: absolute; inset: 0 0 auto 0; height: 60%; display: grid; place-items: center; pointer-events: none; }
     .msg { color: var(--dim); letter-spacing: .08em; }
     .edit { position: absolute; left: 50%; top: calc(var(--u) * .6); transform: translateX(-50%); padding: 2px 10px; border-radius: var(--r-sm);

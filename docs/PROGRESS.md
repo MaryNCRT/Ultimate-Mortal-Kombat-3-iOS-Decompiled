@@ -64,6 +64,30 @@ yet**. Asked by Mary after trying the first round:
     `lime.h`), and a lighting file that does not fit the skin is replaced by
     its average light (`Players.c port_fit_lighting`, logged `flat light`).
     The importer refuses a block over 65,535 vertices once unwelded.
+  - **REPLACE MODEL: undo, bone rotations, clean T / A, edit a saved
+    model, a model over another, Mary 2026-10-29 (built, not tried yet).**
+    UNDO / REDO (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z, and two buttons): every
+    change in the window (joints, rotations, paint strokes, angles, scale,
+    fit / keep, turn, materials) is kept before it is made, a slider's run
+    as one, up to 100. Each bone has Blender's LOCATION and ROTATION X / Y /
+    Z fields (a slider and a number): the rotation turns its children
+    about its joint, about the game's X, then Y, then Z, parents first
+    (`modelin.js movedJoints` `o.turns`), mirrored to the other side (X
+    the same, Y and Z the other way); R with an axis adds to that field.
+    RESET: CLEAN T POSE / CLEAN A POSE drops every change and turns the
+    arms level or 45 degrees down from the new model's own rig (its arms
+    when keeping proportions or with the exporter's names, else the
+    fighter's joints it is fitted to). **A model over an earlier one**
+    (Mary: the rig and the weights were laid over the old ones): the
+    window was given the viewer's fighter, which carried the mod's .skin
+    and .bones, so the new model was fitted to the old one's bones; it is
+    now given the game's own fighter (`store.svelte.js gameFighter`, layer
+    ''). **EDIT SAVED MODEL**: SAVE now also keeps the model it was made
+    from in the mod, `<skin>.source` (the file, what was beside it and the
+    pictures chosen for its materials; `packSource` / `unpackSource`,
+    checked round trip), and the viewer, on a mod that has one, opens it
+    in the window again as `<skin>.import.json` says it was set, to save
+    over it. `.source` counts as the mod's own file in mod.meta.xml.
   - **Bones and weights by hand in REPLACE MODEL, Mary 2026-10-29 (built,
     not tried yet).** Mary: move and turn them with the mouse, as Blender
     does. RIG tab, EDIT BONES: a click on a joint's dot picks it, a drag

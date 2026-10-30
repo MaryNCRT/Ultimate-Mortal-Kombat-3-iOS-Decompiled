@@ -79,10 +79,10 @@ let cacheBytes = 0;
  * the last ~200 MB kept */
 export const src = {
     files: [],
-    async read(rel) {
-        const key = ms.layer + '|' + rel;
+    async read(rel, layer = ms.layer) {
+        const key = layer + '|' + rel;
         if (cache.has(key)) return cache.get(key);
-        const b = await api.resRead(rel, ms.layer);
+        const b = await api.resRead(rel, layer);
         if (b) {
             cache.set(key, b);
             cacheBytes += b.length;
@@ -110,6 +110,20 @@ const fighters = new Map();
 export async function fighter(ch) {
     const key = ms.layer + '|' + ch.id;
     if (!fighters.has(key)) fighters.set(key, loadFighter(src, ch));
+    try {
+        return await fighters.get(key);
+    } catch (e) {
+        fighters.delete(key);
+        throw e;
+    }
+}
+
+/* the fighter as the game ships it, no mod on it: what REPLACE MODEL fits
+ * a model to, so an earlier model's bones and weights are not under it */
+const gameSrc = { get files() { return src.files; }, read: rel => src.read(rel, '') };
+export async function gameFighter(ch) {
+    const key = '|' + ch.id;
+    if (!fighters.has(key)) fighters.set(key, loadFighter(gameSrc, ch));
     try {
         return await fighters.get(key);
     } catch (e) {

@@ -112,7 +112,7 @@ function resIndex(root) {
  * mod.meta.xml, and what the windows keep to edit again (a model's import
  * settings, an animation's corrective layers, the animation before them) */
 const isOwn = rel => /^(mod\.ini|data\.ini|mod\.meta\.xml|(cover|preview)\.(png|jpe?g))$/i.test(rel)
-    || /\.(import|layers)\.json$|\.orig$/i.test(rel);
+    || /\.(import|layers)\.json$|\.orig$|\.source$/i.test(rel);
 
 /* mod.meta.xml: what the mod is and every file in it, with the game file
  * each replaces -- rewritten whenever the mod changes, for other tools and
