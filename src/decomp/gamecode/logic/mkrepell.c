@@ -74,18 +74,9 @@
  * ordinary play. A port implementing the overlap test faithfully (as
  * `_repell` in the Godot project now does) needs nothing further here.
  *
- * One loose thread from the same disassembly pass, worth a second look
- * rather than silently accepted: the SECOND overlap branch's own
- * `Pp + PP_STRIDE + 0x40` read, as transcribed in this file's C above,
- * disassembles as a load through `_G`'s own pointer slot (0x0038c1fc) and
- * ONE dereference of `G` itself, not through `_Pp`'s slot at all -- the
- * two are different globals with different addresses, confirmed by
- * reading each slot's contents directly. Either `G[0]` holds a runtime
- * copy of the same address `Pp + PP_STRIDE` would give (plausible, and
- * exactly the kind of convenience alias this codebase uses elsewhere), or
- * the C above mislabels this one comparison. Not resolved here because it
- * needs a genuine runtime value (what `G[0]` holds when this executes),
- * which static reading cannot settle -- recorded so it is not lost.
+ * The second overlap test's `Pp + PP_STRIDE + 0x40` (0xcc) is read through
+ * `_Pp`'s own slot, 0x000f3158, the same as the first (0xa52ec-0xa52f2):
+ * settled from the disassembly on 2026-10-30, it is not a read through `G`.
  */
 
 #include "mk3logic.h"
@@ -140,13 +131,17 @@ void repell_func(void)
     adx = dx < 0 ? -dx : dx;    /* the eor/sub asr#31 pair */
 
     /* Do the two fighters overlap vertically? Two tests, one per ordering, and
-     * which one applies is decided by each fighter's own Pp + 0x40. */
+     * which one applies is decided by each fighter's own Pp + 0x40. The first
+     * test passing with y1 at or past Pp + 0x40 goes on to the SECOND test
+     * (0xa5246 bge -> 0xa52b8), as failing it does; it does not skip to the
+     * arbitration (it did here, so a fighter over the other was never pushed
+     * apart). */
     if ((*(long *)(void *)(pl0 + P_BOT) - 0x30) + y1
-            < *(long *)(void *)(pl1 + P_TOP) + y2) {
-        if (y1 < *(long *)(void *)(Pp + 0x40))
-            goto setup;
-    } else if (y1 + *(long *)(void *)(pl0 + P_TOP)
-                   <= (*(long *)(void *)(pl1 + P_BOT) - 0x30) + y2) {
+            < *(long *)(void *)(pl1 + P_TOP) + y2
+        && y1 < *(long *)(void *)(Pp + 0x40))
+        goto setup;
+    if (y1 + *(long *)(void *)(pl0 + P_TOP)
+            <= (*(long *)(void *)(pl1 + P_BOT) - 0x30) + y2) {
         if (hold == 0)
             goto apart;
         goto arbitrate_1;

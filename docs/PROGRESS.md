@@ -108,24 +108,37 @@ yet**. Asked by Mary after trying the first round:
     fight's camera (GAME CAMERA button), log depth for the far skies; its
     textures marked sRGB there, as the fighter's are in that view. Not
     yet seen by Mary.
-  - **The fighter hit by a combo of three or more slides back (Mary
-    2026-10-30; checked against the binary, nothing changed).** Two rules in
-    the binary move fighters apart mid-combo, and the port's transcriptions
-    of both match it. (1) The corner rule, `t_avoid_corner_trap`
-    (0x47b50): when the fighter hit is within 103 of the level's limit
-    behind them (`am_i_close_to_edge`, `gdfe4`: the wall itself is 58 in on
-    the left, 48 on the right, so about 45 from the wall) and has taken at
-    least `field20` hits (1 from `t_cc_ken_masters`, `t_r_airborn_duck_kick`
-    and `t_cc_block_avoid_corner`), the ATTACKER is moved away
-    (`t_ken_masters_xfer`). Mary's log of 2026-10-30 10:15 shows it four
-    times, on the 1st to 3rd hit, all against a wall. (2) The punch chain,
-    `t_ccp3` (0x477bc) then `t_separate_us` (0x43250): after 6 high or 5
-    low punches in a row (4 and 3 against the machine, or a player holding
-    away) the one hit stumbles back, or at a wall the attacker is dragged.
-    It did not fire in that log. Still open: whether Mary's slide was one of
-    these or a reaction's own push (`away_x_vel` in the combo reactions);
-    the next log with the move and where on the stage will tell (the
-    `corner trap:` and `separate us:` lines name which rule fired).
+  - **The slide mid-kombo (issue #114, Mary 2026-10-30: "a slight slide";
+    checked against the binary, one real difference fixed in
+    `mkrepell.c`; built into the test folder, not tried yet).** The issue's
+    own log names the rule: `separate us: character 13, punches 3, hits 1,
+    edge 0`. That is the punch chain, and every step of it is the binary's,
+    read instruction by instruction: `t_cc_hi_punch` (0x415c4) / `t_cc_lo_punch`
+    (0x41604) set 6 / 4 and 5 / 3; `t_ccp3` (0x477bc) takes the smaller
+    number when the one hit is the machine (`am_i_joy`: proc+0x10 bit 0) or
+    a player holding away, and compares the punch count at proc+0x4c, which
+    `t_r_hi_punch` / `t_r_lo_punch` bump (`inc_p_block`) and only
+    `back_to_normal_px` clears -- so in a kombo, where the one hit never gets
+    back to normal, the 3rd low punch (4th high) against the machine sends
+    him to `t_separate_us` (0x43250): `t_stumble_back_vel` at 3.0 a tick, or
+    at a wall the attacker is moved instead. The corner rule
+    (`t_avoid_corner_trap`, 0x47b50, 1 hit within 103 of the level limit)
+    also matches. `tools/decomp/factdiff.py` over `mkreact.c`, `mkcombo.c`
+    and `other.c` against `armrecomp` transcriptions, the handler
+    addresses resolved by name: no store, call or handler differs but the
+    port's diagnostics and hooks. So the slide is the original's (the issue
+    thread found it in videos of the original too). **One real difference,
+    fixed:** `repell_func` (0xa51e4), which pushes two fighters closer than
+    60 apart at 3.0 a tick: when the first vertical test passed with y1 at
+    or past `Pp+0x40`, the binary goes on to the second test (0xa5246 ->
+    0xa52b8) and the C skipped to the arbitration, so a fighter over the
+    other (a juggle) was not pushed apart. Checked with the binary's own
+    code: `recompiled.c` from `armrecomp` and the C on 200,000 random
+    states, 3,278 differed before, 0 after (the test is a scratch harness:
+    `tools/decomp/difftest` makes no test of a function that only reads
+    globals, and its build no longer compiles mk3logic.h without
+    `-include savestate.h`). The note in `mkrepell.c` doubting which global
+    the second test reads is settled: `_Pp`'s slot, 0x000f3158, both times.
   - **Unbroken select-screen music into STAGE SELECT, a smaller ESC menu
     on 4:3, every mod in TARGET MOD, TEXTURES in the STAGE VIEWER (Mary
     2026-10-30; built into the test folder, not tried by Mary yet).** After
