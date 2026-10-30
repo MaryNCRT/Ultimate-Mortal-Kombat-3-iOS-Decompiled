@@ -22,7 +22,7 @@
     import { api } from '#lib/platform.js';
     import { selectBlip } from '#lib/sound.js';
     import { readModel, buildSkin, withSkin, solidPicture, poseName } from '#lib/mods/modelin.js';
-    import { makeFloor, placeFloor, weightColors, applyLook, makeRigLines, poseRigLines } from '#lib/mods/viewkit.js';
+    import { makeFloor, placeFloor, weightColors, heatColor, heatColors, applyLook, makeRigLines, poseRigLines } from '#lib/mods/viewkit.js';
     import { framePose, posedVerts } from '#lib/mods/rig.js';
     import { decodePicture } from '#lib/mods/image.js';
     import { dataUrl } from '#lib/mods/thumbs.js';
@@ -54,7 +54,7 @@
     let look = $state({ wire: false, solid: false, weights: false });
     let showRig = $state(true), showFloor = $state(true);
 
-    let renderer, scene, camera, controls, root, raf, meshes = [], floor, rigLines, lastPose = null;
+    let renderer, scene, camera, controls, root, raf, meshes = [], floor, rigLines, lastPose = null, framed = false;
     /* the fighter with the model, its clips under the view (state: the bar
      * shows once it is built) */
     let pf = $state.raw(null);
@@ -76,8 +76,15 @@
         rigLines = makeRigLines();
         scene.add(floor, rigLines);
         new ResizeObserver(fit).observe(host);
-        renderer.domElement.addEventListener('pointerdown', pickStart);
-        renderer.domElement.addEventListener('pointerup', pickJoint);
+        axisLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ depthTest: false, transparent: true }));
+        axisLine.renderOrder = 11;
+        axisLine.visible = false;
+        scene.add(axisLine);
+        renderer.domElement.addEventListener('pointerdown', onDown, { capture: true });
+        renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+        window.addEventListener('keydown', onKey, true);
         loop_();
     }
     function fit() {
@@ -110,7 +117,7 @@
         if (!mdl) return;
         err = '';
         try {
-            res = buildSkin(f, mdl, { turn, blockOf, keep, scale, adjust: { ...adjust }, joints: $state.snapshot(joints), reweight });
+            res = buildSkin(f, mdl, { turn, blockOf, keep, scale, adjust: { ...adjust }, joints: $state.snapshot(joints), reweight, paint });
             pf = withSkin(f, res.bytes, res.bones);
             await show();
         } catch (e) {
@@ -128,7 +135,10 @@
         /* a mesh a part: each material with its own picture, as the game
          * draws them (runtime/skin_mats.c) */
         const maps = new Map();
-        const colors = weightColors(pf.weights, pf.topo.src.length);
+        const colors = vertexColors();
+        /* each vertex the skin has, the ones drawn of it (WEIGHT PAINT) */
+        outs = new Map();
+        pf.topo.src.forEach((sv, o) => { if (!outs.has(sv)) outs.set(sv, []); outs.get(sv).push(o); });
         const pic = (key, im) => {
             if (!im) return null;
             if (!maps.has(key)) {
@@ -175,6 +185,9 @@
         const box = new THREE.Box3().setFromObject(root);
         const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3()).length() || 1;
         placeFloor(floor, box, true);
+        /* the camera put once; after, where it was left */
+        if (framed) return;
+        framed = true;
         controls.target.copy(c);
         camera.near = size / 500;
         camera.far = size * 50;
@@ -282,21 +295,273 @@
         scaleWait = setTimeout(rebuild, 150);
     }
 
-    /* a click (not a drag of the camera) on a joint picks it */
-    let downAt = null;
-    function pickStart(e) { downAt = [e.clientX, e.clientY]; }
-    function pickJoint(e) {
-        if (!downAt || !lastPose || !showRig || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) return;
+    /* By hand on the view, as Blender does. EDIT BONES: a click on a joint
+     * picks it, a drag of it moves it; G moves the one picked and R turns
+     * it (its children go round its joint), X / Y / Z keep to that axis
+     * (again: free), a click or Enter keeps it, Esc or the right button
+     * puts it back. WEIGHT PAINT: the brush paints the bone picked onto
+     * the vertices under it -- ADD, SUBTRACT (or Ctrl), SMOOTH -- its
+     * radius in pixels on the screen, the other bones' weights scaled so
+     * each vertex's add up to one; seen as Blender's colours, blue 0 to
+     * red 1. The painted weights are kept per vertex of the file (o.paint)
+     * and saved with the import's settings. */
+    let tool = $state('bones');             /* 'bones' or 'paint' */
+    let brush = $state({ mode: 'add', radius: 40, strength: 0.5 });
+    let editInfo = $state('');
+    let brushAt = $state(null);             /* the brush's ring, px in the view */
+    let paint = {};                         /* "mesh:vertex" -> [[bone, w]] */
+    let paintCount = $state(0);
+    let edit = null, stroke = false, downAt = null, mouse = null, outs = null, paintWait, axisLine;
+    const ray = new THREE.Raycaster();
+    const AX = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)];
+    const AXCOL = [0xff4466, 0x88ee44, 0x4488ff];
+
+    function ndc(e) {
         const r = renderer.domElement.getBoundingClientRect();
-        const x = (e.clientX - r.left) / r.width * 2 - 1, y = -(e.clientY - r.top) / r.height * 2 + 1;
+        return new THREE.Vector2((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
+    }
+    /* the joint under the pointer, or -1 */
+    function jointAt(e) {
+        if (!lastPose || !showRig) return -1;
+        const r = renderer.domElement.getBoundingClientRect(), m = ndc(e);
         let best = -1, bd = 0.03;
         lastPose.forEach((b, i) => {
             if (!b || i === f.rig.bones.root) return;
             const v = new THREE.Vector3(...b.T).project(camera);
-            const d = Math.hypot(v.x - x, (v.y - y) * r.height / r.width);
+            const d = Math.hypot(v.x - m.x, (v.y - m.y) * r.height / r.width);
             if (v.z < 1 && d < bd) { bd = d; best = i; }
         });
-        if (best >= 0) { selectBlip(); sel = best; tab = 'rig'; }
+        return best;
+    }
+    const inView = e => { const r = renderer.domElement.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
+    /* moved and painted at rest: an animation playing stops */
+    function atRest() {
+        if (clip >= 0) { clip = -1; playing = false; frame = 0; pose(); }
+    }
+    const subtree = b => { const out = [b]; for (let k = 0; k < out.length; k++) out.push(...f.rig.bones.children[out[k]]); return out; };
+
+    function startEdit(kind, at, drag = false) {
+        if (sel < 0 || !res || tool !== 'bones') return;
+        atRest();
+        const b = sel, P = new THREE.Vector3(...res.rest[b].T);
+        const moved = kind === 'turn' ? subtree(b).slice(1) : [b];
+        if (!moved.length) { editInfo = tx('imNoChildren'); return; }
+        edit = { kind, b, drag, at: at ? [at.clientX, at.clientY] : null, axis: -1, P, out: null,
+            base: new Map(moved.map(i => [i, new THREE.Vector3(...res.rest[i].T)])) };
+        updateEdit(at);
+    }
+    function planeHit(x, y, P) {
+        const r = renderer.domElement.getBoundingClientRect();
+        ray.setFromCamera(new THREE.Vector2((x - r.left) / r.width * 2 - 1, -(y - r.top) / r.height * 2 + 1), camera);
+        const n = camera.getWorldDirection(new THREE.Vector3());
+        return ray.ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(n, P), new THREE.Vector3()) || P.clone();
+    }
+    function updateEdit(e) {
+        if (!edit || !e) return;
+        if (!edit.at) edit.at = [e.clientX, e.clientY];
+        const { P, axis } = edit, out = new Map();
+        const ax = axis >= 0 ? ' · ' + 'XYZ'[axis] : '';
+        if (edit.kind === 'move') {
+            let d = planeHit(e.clientX, e.clientY, P).sub(planeHit(edit.at[0], edit.at[1], P));
+            if (axis >= 0) d = AX[axis].clone().multiplyScalar(d.dot(AX[axis]));
+            out.set(edit.b, P.clone().add(d));
+            editInfo = tx('imEditMove') + ax + ' · ' + d.toArray().map(x => (x / scale).toFixed(1)).join('  ') + ' · ' + tx('imEditKeys');
+        } else {
+            const r = renderer.domElement.getBoundingClientRect(), sp = P.clone().project(camera);
+            const sx = (sp.x + 1) / 2 * r.width + r.left, sy = (1 - sp.y) / 2 * r.height + r.top;
+            const ang = Math.atan2(sy - e.clientY, e.clientX - sx) - Math.atan2(sy - edit.at[1], edit.at[0] - sx);
+            const toCam = camera.position.clone().sub(P).normalize();
+            const u = axis >= 0 ? AX[axis].clone() : toCam;
+            if (axis >= 0 && u.dot(toCam) < 0) u.negate();
+            const q = new THREE.Quaternion().setFromAxisAngle(u, ang);
+            for (const [i, T] of edit.base) out.set(i, T.clone().sub(P).applyQuaternion(q).add(P));
+            editInfo = tx('imEditTurn') + ax + ' · ' + Math.round(((ang * 180 / Math.PI) + 540) % 360 - 180) + '° · ' + tx('imEditKeys');
+        }
+        edit.out = out;
+        showAxis();
+        previewEdit();
+    }
+    /* what the edit moves, as BONE POSITIONS' offsets (before the scale),
+     * each joint's other side mirrored */
+    function editDeltas() {
+        const m = new Map();
+        for (const [i, v] of edit.out) { const T = res.rest[i].T; m.set(i, [(v.x - T[0]) / scale, (v.y - T[1]) / scale, (v.z - T[2]) / scale]); }
+        if (mirror) for (const [i, d] of [...m]) { const t = twin(i); if (t >= 0 && !m.has(t)) m.set(t, [-d[0], d[1], d[2]]); }
+        return m;
+    }
+    function previewEdit() {
+        const d = editDeltas();
+        const p = res.rest.map((r, i) => (d.has(i) ? { ...r, T: r.T.map((x, c) => x + d.get(i)[c] * scale) } : r));
+        poseRigLines(rigLines, p, pf.rig.bones.parent, true, sel);
+        lastPose = p;
+    }
+    function showAxis() {
+        if (!axisLine) return;
+        axisLine.visible = !!edit && edit.axis >= 0;
+        if (!axisLine.visible) return;
+        const L = (new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3()).length() || 100);
+        const a = edit.P.clone().addScaledVector(AX[edit.axis], -L), b = edit.P.clone().addScaledVector(AX[edit.axis], L);
+        axisLine.geometry.setFromPoints([a, b]);
+        axisLine.material.color.setHex(AXCOL[edit.axis]);
+    }
+    function endEdit(keepIt) {
+        if (!edit) return;
+        const d = keepIt && edit.out ? editDeltas() : null;
+        edit = null;
+        editInfo = '';
+        if (axisLine) axisLine.visible = false;
+        if (d && [...d.values()].some(v => v.some(x => Math.abs(x) > 1e-4))) {
+            const next = { ...joints };
+            for (const [i, v] of d) next[i] = (next[i] || [0, 0, 0]).map((x, c) => x + v[c]);
+            joints = next;
+            rebuild();
+        } else pose();
+    }
+
+    /* WEIGHT PAINT */
+    function setBone(list, b, w) {
+        const others = list.filter(([x]) => x !== b), so = others.reduce((a, x) => a + x[1], 0);
+        let out;
+        if (so > 1e-6) out = [[b, w], ...others.map(([x, y]) => [x, y * (1 - w) / so])];
+        else {
+            const par = f.rig.bones.parent[b];
+            out = w >= 1 - 1e-6 || par < 0 ? [[b, 1]] : [[b, w], [par, 1 - w]];
+        }
+        out = out.filter(x => x[1] > 1e-3).sort((a, c) => c[1] - a[1]).slice(0, 4);
+        const t = out.reduce((a, x) => a + x[1], 0) || 1;
+        return out.length ? out.map(([x, y]) => [x, y / t]) : [[b, 1]];
+    }
+    function paintAt(e) {
+        ray.setFromCamera(ndc(e), camera);
+        const hit = ray.intersectObjects(meshes.filter(m => m.visible), false)[0];
+        if (!hit) return;
+        const r = renderer.domElement.getBoundingClientRect();
+        const R = brush.radius * 2 * camera.position.distanceTo(hit.point) * Math.tan(camera.fov * Math.PI / 360) / r.height;
+        const pos = meshes[0].geometry.attributes.position.array, W = pf.weights, src = pf.topo.src;
+        const h = hit.point, near = new Map();
+        for (let o = 0; o < src.length; o++) {
+            const d = Math.hypot(pos[o * 3] - h.x, pos[o * 3 + 1] - h.y, pos[o * 3 + 2] - h.z);
+            if (d >= R) continue;
+            const t = d / R, fall = 1 - t * t * (3 - 2 * t);
+            if (fall > (near.get(src[o]) || 0)) near.set(src[o], fall);
+        }
+        if (!near.size) return;
+        const b = sel, listOf = s => {
+            const o = outs.get(s)[0], l = [];
+            for (let k = 0; k < 4; k++) if (W.wt[o * 4 + k] > 0) l.push([W.idx[o * 4 + k], W.wt[o * 4 + k]]);
+            return l;
+        };
+        const wOf = l => l.reduce((a, [x, y]) => a + (x === b ? y : 0), 0);
+        let avg = 0, fs = 0;
+        if (brush.mode === 'smooth') { for (const [s, fall] of near) { avg += wOf(listOf(s)) * fall; fs += fall; } avg /= fs || 1; }
+        const sub = brush.mode === 'sub' || (brush.mode === 'add' && e.ctrlKey);
+        const colors = meshes[0].geometry.attributes.color.array;
+        for (const [s, fall] of near) {
+            const l = listOf(s), w0 = wOf(l), a = brush.strength * fall * 0.25;
+            const w = brush.mode === 'smooth' ? w0 + (avg - w0) * a * 2 : sub ? Math.max(0, w0 - a) : Math.min(1, w0 + a);
+            if (Math.abs(w - w0) < 1e-5) continue;
+            const nl = setBone(l, b, w);
+            for (const o of outs.get(s)) {
+                for (let k = 0; k < 4; k++) { W.idx[o * 4 + k] = k < nl.length ? nl[k][0] : 0; W.wt[o * 4 + k] = k < nl.length ? nl[k][1] : 0; }
+                heatColor(wOf(nl), colors, o * 3);
+            }
+            for (const key of res.src[s] || []) paint[key] = nl;
+        }
+        paintCount = Object.keys(paint).length;
+        for (const m of meshes) m.geometry.attributes.color.needsUpdate = true;
+    }
+    function clearPaint() {
+        selectBlip();
+        paint = {};
+        paintCount = 0;
+        rebuild();
+    }
+    /* the colours: WEIGHT PAINT the bone picked, else every bone's */
+    function vertexColors() {
+        return tool === 'paint' && sel >= 0 ? heatColors(pf.weights, pf.topo.src.length, sel) : weightColors(pf.weights, pf.topo.src.length);
+    }
+    function recolor() {
+        if (!pf || !meshes.length) return;
+        const c = vertexColors();
+        for (const m of meshes) { m.geometry.attributes.color.array.set(c); m.geometry.attributes.color.needsUpdate = true; }
+    }
+    function setTool(t) {
+        selectBlip();
+        endEdit(false);
+        tool = t;
+        if (t === 'paint') { atRest(); look.weights = true; look.solid = false; }
+    }
+    $effect(() => { tool; sel; recolor(); });
+
+    /* the pointer: in front of the camera's own handling of it */
+    function onDown(e) {
+        if (edit && !edit.drag) {
+            e.stopImmediatePropagation();
+            endEdit(e.button === 0);
+            return;
+        }
+        if (e.button !== 0) return;
+        downAt = [e.clientX, e.clientY];
+        const j = jointAt(e);
+        if (tool === 'bones' && j >= 0) {
+            e.stopImmediatePropagation();
+            if (j !== sel) selectBlip();
+            sel = j;
+            tab = 'rig';
+            startEdit('move', e, true);
+        } else if (tool === 'paint' && j >= 0) {
+            e.stopImmediatePropagation();
+            selectBlip();
+            sel = j;
+        } else if (tool === 'paint' && sel >= 0 && pf) {
+            atRest();
+            ray.setFromCamera(ndc(e), camera);
+            if (ray.intersectObjects(meshes.filter(m => m.visible), false).length) {
+                e.stopImmediatePropagation();
+                stroke = true;
+                clearTimeout(paintWait);
+                paintAt(e);
+            }
+        }
+    }
+    function onMove(e) {
+        mouse = e;
+        if (renderer && tool === 'paint' && inView(e)) {
+            const r = host.getBoundingClientRect();
+            brushAt = { x: e.clientX - r.left, y: e.clientY - r.top };
+        } else brushAt = null;
+        if (edit) updateEdit(e);
+        else if (stroke) paintAt(e);
+    }
+    function onUp(e) {
+        if (stroke) {
+            stroke = false;
+            paintWait = setTimeout(rebuild, 200);
+        }
+        if (edit && edit.drag) endEdit(!!downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 3);
+        downAt = null;
+    }
+    function onKey(e) {
+        const tag = e.target && e.target.tagName;
+        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+        const k = e.key.toLowerCase();
+        if (edit) {
+            if (k === 'x' || k === 'y' || k === 'z') { const a = 'xyz'.indexOf(k); edit.axis = edit.axis === a ? -1 : a; updateEdit(mouse); }
+            else if (k === 'enter') endEdit(true);
+            else if (k === 'escape') endEdit(false);
+            else if (k === 'g' || k === 'r') { endEdit(false); startEdit(k === 'g' ? 'move' : 'turn', mouse); }
+            else return;
+        } else if (tool === 'bones' && sel >= 0 && mouse && inView(mouse) && (k === 'g' || k === 'r')) startEdit(k === 'g' ? 'move' : 'turn', mouse);
+        else if (tool === 'paint' && (k === '[' || k === ']')) brush.radius = Math.min(200, Math.max(5, brush.radius + (k === ']' ? 5 : -5)));
+        else return;
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    /* MOVE / ROTATE on the side: as G / R, from the middle of the view */
+    function editButton(kind) {
+        selectBlip();
+        const r = renderer.domElement.getBoundingClientRect();
+        startEdit(kind, mouse && inView(mouse) ? mouse : { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 });
     }
 
     /* BONE POSITIONS: the joint picked, moved; its other side mirrored */
@@ -308,7 +573,7 @@
     function setJoint(k, v) {
         if (sel < 0) return;
         const d = [...(joints[sel] || [0, 0, 0])];
-        d[k] = Math.min(60, Math.max(-60, Number(v) || 0));
+        d[k] = Math.min(100, Math.max(-100, Number(v) || 0));
         const next = { ...joints, [sel]: d };
         const o = mirror ? twin(sel) : -1;
         if (o >= 0) next[o] = [-d[0], d[1], d[2]];
@@ -358,7 +623,7 @@
         if (!res) return;
         selectBlip();
         /* what this window was set to, kept beside the skin in the mod */
-        const settings = { file: file.name, keep, scale, turn, adjust: $state.snapshot(adjust), joints: $state.snapshot(joints), reweight,
+        const settings = { file: file.name, keep, scale, turn, adjust: $state.snapshot(adjust), joints: $state.snapshot(joints), reweight, paint,
             blockOf: $state.snapshot(blockOf), replaces: mdl.materials.map(m => m.rep || '') };
         onApply({ r: res, mdl, settings });
     }
@@ -384,6 +649,9 @@
         app.overlay--;
         cancelAnimationFrame(raf);
         if (root) root.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('keydown', onKey, true);
         renderer && renderer.dispose();
     });
 </script>
@@ -397,6 +665,8 @@
         <div class="body">
             <section class="main">
                 <div class="view" bind:this={host}></div>
+                {#if editInfo}<div class="edit">{editInfo}</div>{/if}
+                {#if brushAt && tool === 'paint'}<div class="ring" style="left: {brushAt.x}px; top: {brushAt.y}px; width: {brush.radius * 2}px; height: {brush.radius * 2}px"></div>{/if}
                 <div class="looks">
                     <button class="eye wide" class:hot={!look.solid && !look.weights} onclick={() => { look.solid = false; look.weights = false; }}>{tx('imLookTex')}</button>
                     <button class="eye wide" class:hot={look.solid} onclick={() => { look.solid = !look.solid; look.weights = false; }}>{tx('imLookSolid')}</button>
@@ -493,11 +763,39 @@
                         <option value={-1}>{tx('imJointPick')}</option>
                         {#each f.names as n, i}{#if i !== f.rig.bones.root}<option value={i}>{n}{joints[i] && joints[i].some(x => x) ? ' *' : ''}</option>{/if}{/each}
                     </select>
-                    {#if sel >= 0}
+                    <div class="pair">
+                        <button class="btn" class:hot={tool === 'bones'} onclick={() => setTool('bones')}>{tx('imToolBones')}</button>
+                        <button class="btn" class:hot={tool === 'paint'} onclick={() => setTool('paint')}>{tx('imToolPaint')}</button>
+                    </div>
+                    {#if tool === 'bones'}
+                        <div class="pair">
+                            <button class="btn" disabled={sel < 0} onclick={() => editButton('move')}>{tx('imMove')}</button>
+                            <button class="btn" disabled={sel < 0} onclick={() => editButton('turn')}>{tx('imRotate')}</button>
+                        </div>
+                        <p class="note">{tx('imBonesKeys')}</p>
+                    {:else}
+                        {#if sel < 0}<p class="note">{tx('imPaintPick')}</p>{/if}
+                        <div class="pair">
+                            <button class="btn" class:hot={brush.mode === 'add'} onclick={() => brush.mode = 'add'}>{tx('imBrushAdd')}</button>
+                            <button class="btn" class:hot={brush.mode === 'sub'} onclick={() => brush.mode = 'sub'}>{tx('imBrushSub')}</button>
+                            <button class="btn" class:hot={brush.mode === 'smooth'} onclick={() => brush.mode = 'smooth'}>{tx('imBrushSmooth')}</button>
+                        </div>
+                        <label class="scale">
+                            <span class="lbl">{tx('imBrushRadius')} {brush.radius}px</span>
+                            <input type="range" min="5" max="200" step="1" bind:value={brush.radius}>
+                        </label>
+                        <label class="scale">
+                            <span class="lbl">{tx('imBrushStrength')} {brush.strength.toFixed(2)}</span>
+                            <input type="range" min="0.05" max="1" step="0.05" bind:value={brush.strength}>
+                        </label>
+                        <button class="btn" disabled={!paintCount} onclick={clearPaint}>{tx('imPaintClear')} ({paintCount})</button>
+                        <p class="note">{tx('imPaintNote')}</p>
+                    {/if}
+                    {#if sel >= 0 && tool === 'bones'}
                         {#each ['X', 'Y', 'Z'] as ax, k}
                             <label class="scale">
                                 <span class="lbl">{ax} {((joints[sel] || [0, 0, 0])[k]).toFixed(1)}</span>
-                                <input type="range" min="-60" max="60" step="0.5" value={(joints[sel] || [0, 0, 0])[k]} oninput={e => setJoint(k, e.currentTarget.value)}>
+                                <input type="range" min="-100" max="100" step="0.5" value={(joints[sel] || [0, 0, 0])[k]} oninput={e => setJoint(k, e.currentTarget.value)}>
                                 <button class="eye" onclick={() => setJoint(k, 0)} title="0">0</button>
                             </label>
                         {/each}
@@ -546,6 +844,10 @@
     .scale input { flex: 1; min-width: 0; }
     .over { position: absolute; inset: 0 0 auto 0; height: 60%; display: grid; place-items: center; pointer-events: none; }
     .msg { color: var(--dim); letter-spacing: .08em; }
+    .edit { position: absolute; left: 50%; top: calc(var(--u) * .6); transform: translateX(-50%); padding: 2px 10px; border-radius: var(--r-sm);
+        background: rgba(10, 8, 32, .8); color: #fff; font-size: calc(var(--t) * 1.2); letter-spacing: .06em; pointer-events: none; white-space: nowrap; }
+    .ring { position: absolute; transform: translate(-50%, -50%); border: 1px solid #fff; border-radius: 50%; pointer-events: none;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, .5); }
     .msg.bad { color: #ff9aa0; max-width: 80%; text-align: center; }
     .info { position: absolute; left: calc(var(--u) * 1); top: calc(var(--u) * .6); font-size: calc(var(--t) * 1.3); color: var(--dim); pointer-events: none; }
     .play { display: flex; align-items: center; gap: calc(var(--u) * .9); margin-top: calc(var(--u) * .6); }

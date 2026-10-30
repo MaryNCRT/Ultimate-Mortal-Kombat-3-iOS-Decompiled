@@ -791,12 +791,15 @@ function autoWeights(f, rest, p) {
  *   o.joints     bone -> [dx, dy, dz]: joints moved by hand (movedJoints)
  *   o.reweight   every vertex weighted here to the nearest bones (the
  *                file's own weights left), as after moving the joints
+ *   o.paint      WEIGHT PAINT: "mesh:vertex" (the file's) -> [[bone, w]],
+ *                the weights painted by hand, over any other
  *   o.scale      the model's size, about the pivot at 0,0,0 (the floor
  *                under the fighter). Mesh, bones and the root's height
  *                together (written as <skin>.bones), so the animations
  *                play on it
  * Returns { bytes, verts, tris, kind, matched, of, auto (vertices weighted
  * here), parts: per block, its runs of triangles [{ mat, first, count }],
+ * src: per vertex written, the file's "mesh:vertex" that went into it,
  * rig ('names', 'humanoid' or ''), bones (the proportion trick's override,
  * for <skin>.bones, or null), pose (a humanoid rig: the file's and the
  * fighter's arm rise and leg spread, degrees, or null) }. */
@@ -818,7 +821,7 @@ export function buildSkin(f, mdl, o = {}) {
     /* a block's triangles, per material, put in a row at the end */
     const blocks = Array.from({ length: nblocks }, () => ({ verts: [], map: new Map(), tris: [], byMat: new Map() }));
     let auto = 0;
-    for (const m of mdl.meshes) {
+    for (const [mi, m] of mdl.meshes.entries()) {
         const nv = m.pos.length / 3;
         const gpos = [], ginf = [];
         for (let v = 0; v < nv; v++) {
@@ -827,7 +830,8 @@ export function buildSkin(f, mdl, o = {}) {
              * the same bone summed */
             const sum = new Map();
             if (m.inf) for (const [b, w] of m.inf[v]) { const g = place.byFile[b]; if (g >= 0) sum.set(g, (sum.get(g) || 0) + w); }
-            let l = o.reweight ? [] : [...sum];
+            const painted = o.paint && o.paint[mi + ':' + v];
+            let l = painted ? painted.map(x => [...x]) : o.reweight ? [] : [...sum];
             if (!l.length) {
                 if (adj && sum.size) p = adj.point(p, [...sum]);
                 if (conf && sum.size) p = conformPoint(conf, p, [...sum]);
@@ -852,8 +856,9 @@ export function buildSkin(f, mdl, o = {}) {
                 if (oi === undefined) {
                     oi = blk.verts.length;
                     blk.map.set(key, oi);
-                    blk.verts.push({ p, n: [0, 0, 0], inf: ginf[v] });
+                    blk.verts.push({ p, n: [0, 0, 0], inf: ginf[v], src: new Set() });
                 }
+                blk.verts[oi].src.add(mi + ':' + v);
                 let n = m.tn ? xdir(place.toGame, [m.tn[k * 3], m.tn[k * 3 + 1], m.tn[k * 3 + 2]]) : null;
                 if (n && adj && m.inf && !o.reweight) n = adj.dir(n, ginf[v]);
                 if (n && conf) n = conformDir(conf, n, ginf[v]);
@@ -902,6 +907,7 @@ export function buildSkin(f, mdl, o = {}) {
         rig: place.map ? place.map.kind : '', bones: scaledBones(f, mj.ov, k),
         pose: adj ? adj.info : null,
         rest: bindRest,
+        src: blocks.flatMap(b => b.verts.map(x => (x.src ? [...x.src] : []))),
     };
 }
 

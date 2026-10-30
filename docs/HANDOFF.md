@@ -53,6 +53,24 @@ yet**. Asked by Mary after trying the first round:
     `lime.h`), and a lighting file that does not fit the skin is replaced by
     its average light (`Players.c port_fit_lighting`, logged `flat light`).
     The importer refuses a block over 65,535 vertices once unwelded.
+  - **Bones and weights by hand in REPLACE MODEL, Mary 2026-10-29 (built,
+    not tried yet).** Mary: move and turn them with the mouse, as Blender
+    does. RIG tab, EDIT BONES: a click on a joint's dot picks it, a drag
+    moves it; G moves the joint picked and R turns it (its children go
+    round its joint, the joint itself stays), X / Y / Z keep to that axis
+    (drawn through it in Blender's colours), a click or Enter keeps it,
+    Esc or the right button puts it back; MOVE (G) / ROTATE (R) on the
+    side do the same. Both end as BONE POSITIONS' offsets (the other side
+    mirrored), so they are saved as before. WEIGHT PAINT: the bone picked
+    is shown as Blender's weight colours (blue 0, red 1) and painted with
+    a brush (ADD, SUBTRACT or Ctrl, SMOOTH; RADIUS in screen pixels, [ and ]
+    change it; STRENGTH); the other bones are scaled so each vertex adds
+    up to one, a vertex with no other bone gives the rest to the bone's
+    parent. Painted weights are kept per vertex of the file
+    (`buildSkin o.paint`, `res.src` maps each written vertex back to the
+    file's) and saved in `<skin>.import.json`; CLEAR PAINT drops them.
+    Editing and painting stop a playing clip and work at rest. The camera
+    is no longer put back after each rebuild.
   - **Second pass on REPLACE MODEL's rig, Mary 2026-10-29 (built, not
     tried yet).** The side has two tabs, RIG and MATERIALS. RIG: FIT TO THE
     FIGHTER / KEEP PROPORTIONS, the file's pose, AUTOMATIC T / A POSE now
