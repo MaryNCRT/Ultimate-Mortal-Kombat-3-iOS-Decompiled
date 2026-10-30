@@ -2,7 +2,8 @@
  * ships a CS_BG sheet for five of its stages (debug_menu.c k_stages); for
  * the rest the launcher renders the stage itself, as the engine draws it
  * (mods/stagerun.js: its objects blended as the game blends them, the
- * effects its events fire -- Scislac's sky is one -- on black), from where
+ * effects its events fire -- Scislac's sky is one -- the far skies the
+ * game never clips, on black), from where
  * the fight's camera stands when a round starts, a second in, into
  * "aditional textures/stages/<ID>.png", where the game's st_thumb finds it.
  * Once per stage: a picture already there is kept (the player may have put
@@ -30,7 +31,7 @@ async function make() {
     if (!todo.length) return;
 
     const canvas = new OffscreenCanvas(W, H);
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true, logarithmicDepthBuffer: true });
     renderer.setSize(W, H, false);
     renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     const tex = stageTextures(src);
@@ -40,11 +41,9 @@ async function make() {
             const scene = new THREE.Scene();
             scene.background = new THREE.Color(0, 0, 0);
             const view = new StageView(await loadStage(src, st), stem => { const p = tex(stem); p.then(t => t && used.add(t)); return p; });
+            await view.preload();               /* every texture in before the picture */
             view.seek(TICKS_PER_SECOND);
             scene.add(view.group);
-            /* every texture in before the picture */
-            await Promise.all([...view.live.values()].map(m => m.userData.src && tex(m.userData.draw.extra ? m.userData.draw.extra.texture : m.userData.src.texture)));
-            await new Promise(r => setTimeout(r, 0));
             const camera = new THREE.PerspectiveCamera(25, W / H, 1, 10);
             fightCamera(camera);
             renderer.render(scene, camera);
@@ -67,8 +66,8 @@ async function make() {
  * PlayerSize, 0.0102). */
 function fightCamera(camera) {
     const u = v => v / PLAYER_SIZE;
-    camera.near = u(0.5);
-    camera.far = u(400);
+    camera.near = u(0.33);
+    camera.far = u(1e5);         /* the game's projection has no far plane (StageViewer.svelte) */
     camera.position.set(0, u(1.5), u(8));
     camera.lookAt(0, u(1.25), 0);
     camera.updateProjectionMatrix();

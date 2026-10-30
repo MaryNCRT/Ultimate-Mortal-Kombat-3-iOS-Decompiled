@@ -345,7 +345,9 @@ export class StageSim {
     draws() {
         const out = [], st = this.stage;
         const sceneDraws = (sc, frame, world, tint, owner) => {
-            const fa = ((frame % sc.frames) + sc.frames) % sc.frames;
+            /* LIME_RenderScene: frame % n, below 0 taken as 0 (an effect
+             * wrapping back one length sits on -1 for a tick) */
+            const fa = Math.max(0, frame % sc.frames);
             sc.objects.forEach((o, i) => {
                 if (o.mesh < 0 || o.marker) return;
                 const pal = o.mats[Math.min(fa, o.mats.length - 1)];
@@ -439,6 +441,10 @@ function style(mat, d) {
         mat.vertexColors = d.lit;
         mat.depthTest = d.mode !== 'glow';
         mat.alphaTest = d.mode === 'atst' ? 0.9 : 0;
+        /* GL's default GL_LESS: of two surfaces at one depth the first drawn
+         * stays (three's LessEqual let the later one through, and coplanar
+         * pieces flickered) */
+        mat.depthFunc = THREE.LessDepth;
         if (d.mode === 'opaque' || d.mode === 'atst') {
             mat.transparent = false; mat.blending = THREE.NormalBlending; mat.depthWrite = true; mat.side = THREE.FrontSide;
         } else if (d.mode === 'alpha') {
@@ -468,6 +474,7 @@ export class StageView {
         this.live = new Map();              /* draw key -> mesh */
         this.geos = new Set();
         this.solo = null;
+        this.ready = new Map();             /* texture stem -> its texture, loaded */
         this.hidden = new Set();            /* stage nodes switched off */
         this.effects = true;                /* the events and the glow drawn */
         this.wire = false;
@@ -481,8 +488,11 @@ export class StageView {
             mesh = new THREE.Mesh(geometryOf(d.mesh, d.lit, this.stage.level.amb, this.geos), mat);
             mesh.matrixAutoUpdate = false;
             mesh.userData.src = d.mesh;
-            const stem = d.extra ? d.extra.texture : d.mesh.texture;
-            if (stem) this.tex(stem).then(t => { if (t && this.live.get(d.key) === mesh) { mat.map = t; mat.needsUpdate = true; } });
+            const stem = (d.extra ? d.extra.texture : d.mesh.texture || '').toUpperCase();
+            /* loaded before (preload): on at once, or a flipbook's new frame
+             * flashes white for the frame it takes to arrive */
+            if (this.ready.has(stem)) mat.map = this.ready.get(stem);
+            else if (stem) this.tex(stem).then(t => { this.ready.set(stem, t); if (t && this.live.get(d.key) === mesh) { mat.map = t; mat.needsUpdate = true; } });
             this.live.set(d.key, mesh);
             this.group.add(mesh);
         }
@@ -494,6 +504,18 @@ export class StageView {
         this.group.remove(m);
         m.material.dispose();
         this.live.delete(key);
+    }
+    /* every texture the stage and its effects can draw, before it plays */
+    async preload() {
+        const stems = new Set(this.stage.extras.map(x => x.texture.toUpperCase()));
+        const walk = (sc, seen) => {
+            if (!sc || seen.has(sc)) return;
+            seen.add(sc);
+            for (const m of sc.set) if (m.texture) stems.add(m.texture.toUpperCase());
+            for (const t of sc.tracks) walk(t.sceneNode, seen);
+        };
+        walk(this.stage.root, new Set());
+        await Promise.all([...stems].map(async st => { this.ready.set(st, await this.tex(st)); }));
     }
     update() {
         const draws = this.sim.draws(), seen = new Set(), to = this.stage.toOut;
@@ -510,7 +532,14 @@ export class StageView {
             mesh.visible = !(d.owner === 'stage' && this.hidden.has(d.obj)) && (this.effects || d.owner === 'stage') && (!this.solo || this.solo.has(d.key));
             mesh.material.wireframe = this.wire;
         }
-        for (const k of [...this.live.keys()]) if (!seen.has(k)) this.drop(k);
+        /* not drawn now: hidden, kept while its scene or effect is alive (a
+         * flipbook's frames come back); an effect that died, dropped */
+        const alive = new Set(this.sim.pool.filter(e => e.state > 0).map(e => 'ev' + e.id));
+        for (const [k, m] of [...this.live]) {
+            if (seen.has(k)) continue;
+            if (k.startsWith('ev') && !alive.has(k.slice(0, k.indexOf(':')))) this.drop(k);
+            else m.visible = false;
+        }
         this.group.updateMatrixWorld(true);
     }
     seek(ticks) { this.sim.seek(ticks); this.update(); }

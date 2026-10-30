@@ -52,7 +52,7 @@
     });
 
     function setup() {
-        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, logarithmicDepthBuffer: true });
         renderer.setPixelRatio(window.devicePixelRatio);
         /* the game's numbers as they are: blended as GL blends them */
         renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
@@ -98,13 +98,17 @@
 
     /* The fight's camera as a round starts (GameCode.c, SetToUseCamera): the
      * look-at 1.25 over the floor between the fighters, the eye 1.5 over it
-     * and 8 back, 25 degrees; here in fighter units, y up, the front +z. */
+     * and 8 back, 25 degrees; here in fighter units, y up, the front +z.
+     * The game's projection has no far plane (Matrix.c
+     * CreatePerspectiveMatrix writes 2fn/(n-f) where w is taken, so depth
+     * never passes 0.5): skies far beyond its 400 -- Jade's Desert's, the
+     * Bridge's -- are drawn, and are here. */
     function gameCamera() {
         const u = v => v / PLAYER_SIZE;
         nav.reframed();
         controls.target.set(0, u(1.25), 0);
-        camera.near = u(0.5);
-        camera.far = u(400);
+        camera.near = u(0.33);
+        camera.far = u(1e5);
         camera.position.set(0, u(1.5), u(8));
         camera.fov = 25;
         camera.updateProjectionMatrix();
@@ -127,6 +131,8 @@
             const stage = await loadStage(src, st);
             if (pick !== st) return;
             view = new StageView(stage, stageTextures(src));
+            await view.preload();
+            if (pick !== st) { view.dispose(); view = null; return; }
             view.group.visible = true;
             scene.add(view.group);
             length = Math.max(1, stage.root.frames);
