@@ -7,6 +7,7 @@
      *            the special moves and finishers the move list names (seq_*):
      *            what each fighter has and what is empty -- Noob Saibot,
      *            Motaro and Shao Kahn have no specials of their own;
+     *   KOMBOS   the kombo strings (ct_*): each hit's button and strike;
      *   DATA     the fighter's word in every per-fighter table of numbers;
      *   TEXTS    the game's strings (names, the move list), in a copy of
      *            the language file the mod carries;
@@ -35,7 +36,7 @@
         ['MOTARO', 'motaro'], ['SHAOKAHN', 'shaokahn'],
     ];
     const FINISHERS = ['fatality1', 'fatality2', 'animality', 'babality', 'friendship', 'stage'];
-    const PAGES = [['attacks', 'edAttacks'], ['data', 'edData'], ['texts', 'edTexts'], ['looks', 'edLooks']];
+    const PAGES = [['attacks', 'edAttacks'], ['kombos', 'edKombos'], ['data', 'edData'], ['texts', 'edTexts'], ['looks', 'edLooks']];
 
     let tables = $state(null);
     let saved = $state({});                 /* the mod's data.ini */
@@ -100,6 +101,62 @@
         const n = Math.max(0, Math.min(255, Number(v) | 0));
         set(stk, 5, which === 'full' ? (p & ~0xff00) | (n << 8) : (p & ~0xff) | n);
     }
+
+    /* ----------------------------------------------------------- kombos -- */
+
+    /* The kombo strings (mkcombo.c): ochar_elbow_combos / ochar_knee_combos
+     * name a fighter's first list after a punch or a kick starter. A list is
+     * 0x18-byte entries (six words), the last with bit 15 of word 0; in each,
+     * word 2's low byte is the button (switch id: _swtab maps HP 0, LP 1,
+     * BL 2, HK 3, LK 4), word 4's bits 8+ the strike (combo_strike_table),
+     * word 5 the next list, or a number when the string ends there. */
+    const BUTTONS = ['HP', 'LP', 'BL', 'HK', 'LK'];
+    const STARTS = [['ochar_elbow_combos', 'HP'], ['ochar_knee_combos', 'HK']];
+    const ref = r => {
+        const m = /^(\w+?)(?:\+0x([0-9a-f]+))?$/.exec(r);
+        return m ? [m[1], m[2] ? parseInt(m[2], 16) / 4 : 0] : null;
+    };
+    const kombos = $derived.by(() => {
+        if (!tables) return [];
+        const out = [];
+        /* the tables in address order (logic_tables.c's): a list runs on
+         * into the next symbol until bit 15 (ct_swat_knee2's second entry is
+         * ct_swat_elbow2) */
+        const order = Object.keys(tables);
+        const walk = (r, hits, seen) => {
+            const at = ref(r);
+            if (!at || !tables[at[0]] || seen.has(r) || hits.length > 8) return;
+            const s = new Set(seen).add(r);
+            const keys = [];
+            let [name, i] = at;
+            for (let guard = 0; guard < 16; guard++, i += 6) {
+                while (tables[name] && i + 5 >= tables[name].length) {
+                    i -= tables[name].length;
+                    name = order[order.indexOf(name) + 1];
+                }
+                const t = tables[name];
+                if (!t || i < 0) break;
+                const w0 = typeof t[i] === 'number' ? t[i] : 0;
+                const k = word(name, i + 2) & 0xff;
+                /* the port's rule (combo_scan_a11): a second entry with
+                 * the same button is taken with up held */
+                const hit = { t: name, i, k, up: keys.includes(k), stk: (word(name, i + 4) >>> 8) & 0xff };
+                keys.push(k);
+                const next = t[i + 5];
+                if (typeof next === 'string') walk(next, [...hits, hit], s);
+                else out.push([...hits, hit]);
+                if (w0 & 0x8000) break;
+            }
+        };
+        for (const [tab, start] of STARTS) {
+            const first = tables[tab] && tables[tab][c];
+            if (typeof first === 'string') walk(first, [{ start }], new Set());
+        }
+        return out;
+    });
+    const komboStrikes = $derived(tables && tables.combo_strike_table ? tables.combo_strike_table : []);
+    const hitName = h => (h.start ? h.start : (h.up ? 'U+' : '') + (BUTTONS[h.k] || '#' + h.k));
+    const setByte = (t, i, shift, v) => set(t, i, ((word(t, i) || 0) & ~(0xff << shift)) | ((Number(v) & 0xff) << shift));
 
     /* ------------------------------------------------------------- data -- */
 
@@ -327,6 +384,35 @@
                 </ul>
                 <p class="note">{tx('edAttacksNote')}</p>
             </div>
+        {:else if ms.edPage === 'kombos'}
+            <div class="scroll">
+                <p class="note">{tx('edKomboNote')}</p>
+                {#if !kombos.length}<p class="note bad">{tx('edNoKombos')}</p>{/if}
+                {#each kombos as hits, n}
+                    <h4>{n + 1} · {hits.map(hitName).join(', ')}</h4>
+                    <table class="grid">
+                        <thead><tr><th>#</th><th>{tx('edKomboButton')}</th><th>{tx('edKomboStrike')}</th><th>{tx('edDamage')}</th><th></th></tr></thead>
+                        <tbody>
+                            {#each hits as h, j}
+                                {#if h.start}
+                                    <tr class="dim"><td class="num">{j + 1}</td><td>{h.start}</td><td colspan="3">{tx('edKomboStart')}</td></tr>
+                                {:else}
+                                    {@const stk = komboStrikes[h.stk]}
+                                    <tr class:mod={[2, 4].some(i => (h.t + '[' + (h.i + i) + ']') in edits || (h.t + '[' + (h.i + i) + ']') in saved)}>
+                                        <td class="num">{j + 1}</td>
+                                        <td>{h.up ? 'U+ ' : ''}<select class="sel" value={h.k} onchange={e => setByte(h.t, h.i + 2, 0, e.currentTarget.value)}>
+                                            {#each BUTTONS as b, i}<option value={i}>{b}</option>{/each}</select></td>
+                                        <td><select class="sel" value={h.stk} onchange={e => setByte(h.t, h.i + 4, 8, e.currentTarget.value)}>
+                                            {#each komboStrikes as s, i}<option value={i}>{i} · {typeof s === 'string' ? s.replace(/^stk_/, '').toUpperCase() : '?'}</option>{/each}</select></td>
+                                        <td class="dim">{typeof stk === 'string' ? ((word(stk, 5) || 0) >> 8) & 255 : ''}</td>
+                                        <td><button class="x" title={tx('edReset')} onclick={() => [2, 4].forEach(i => resetWord(h.t, h.i + i))}>↺</button></td>
+                                    </tr>
+                                {/if}
+                            {/each}
+                        </tbody>
+                    </table>
+                {/each}
+            </div>
         {:else if ms.edPage === 'data'}
             <div class="scroll">
                 <p class="note">{tx('edDataNote')}</p>
@@ -425,6 +511,7 @@
     .txt { width: 100%; }
     .txt .edt { width: 100%; }
     .dim { color: var(--dim); }
+    .sel { background: var(--well); color: inherit; border: 1px solid var(--line); border-radius: 4px; font: inherit; }
     .x { background: none; border: 0; color: var(--dim); cursor: pointer; font-size: calc(var(--t) * 1.4); }
     .x:hover { color: #fff; }
     .chips { list-style: none; display: flex; flex-wrap: wrap; gap: calc(var(--u) * .5); margin: 0; padding: 0; }

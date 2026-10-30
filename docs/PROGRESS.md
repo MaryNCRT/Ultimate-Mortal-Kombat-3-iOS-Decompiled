@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-10-30 (release 0.1.16 beta, published as the pre-release `v0.1.16-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-10-30 (release 0.1.17 beta, published as the pre-release `v0.1.17-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -68,9 +68,10 @@ Mary plays every build in a test folder (`WORK\release-0.1.12\UMK3-PC-0.1.12-bet
 on her machine) before it is released. **Played and confirmed:** everything
 up to 0.1.10b (the Linux package, the Vulkan and Direct3D 12 renderers),
 REAL-TIME SHADOWS' note on its own row in 0.1.13. **Not yet played as a whole:** 0.1.11 to
-0.1.16; she has tried pieces of them as she reported problems (STAGE
+0.1.17; she has tried pieces of them as she reported problems (STAGE
 SELECT's music and CANCEL, the 4:3 menus, the stage editor, the MOD HUB,
-which she confirmed works), each marked in the log below.
+the kombo branch and the KOMBOS page, which she confirmed work), each
+marked in the log below.
 
 ### Open problems
 
@@ -93,6 +94,37 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## 0.1.17: kombos that share a start, CHARACTER EDITOR KOMBOS (2026-10-30, released in 0.1.17)
+
+Mary: Mileena's HK, HK, D, F + LK and HK, HK, U + LK, U + HK start alike and
+the game always gives the first.
+
+- **Traced to the binary.** `combo_scan_a11` (0x326d8) walks the 0x18-byte
+  entries of the next list and stops at the first whose button (word 2's
+  low byte, a switch id) was pressed; the stick is not read.
+  `ct_mileena_knee3` (0x1659dc) holds two entries, both switch 4 (LK): the
+  first goes on to `ct_mileena_dummy1`, the second to `ct_mileena_knee4`,
+  which no input reaches. A scan of the 114 `ct_*` lists finds the same in
+  `ct_tusk_knee3`, `ct_sonya_roundh`, `ct_swat_knee2`, `ct_kano_post_elbow2`
+  and `ct_sonya_elbow3`. The original behaves so; nothing was mistranscribed.
+- **Port rule** (`mkcombo.c`, marked in the code): on a match, with up held
+  (the stick word `joystick_in_a0_px` reads, bit 1), the next entry of the
+  list with the same button is taken. No proc field is touched; without up
+  the scan is the binary's.
+- **Switch ids**, from `_swtab` (0x16f10c) and checked against known kombos
+  (Liu Kang HP, HP, BL, LK, LK, HK, LK; Jax HP, HP, BL, LP, HP): HP 0, LP 1,
+  BL 2, HK 3, LK 4; 6 to 9 the stick.
+- **CHARACTER EDITOR → KOMBOS** (`ModEditor.svelte`): from
+  `ochar_elbow_combos` (HP starter) and `ochar_knee_combos` (HK starter),
+  every path through the lists, a list running on into the next table in
+  address order as the binary's does (`ct_swat_knee2` continues in
+  `ct_swat_elbow2`). Each hit's button (word 2, low byte) and strike (word
+  4, bits 8+, an index into `combo_strike_table`) go to `data.ini`. The
+  strike's damage is shown, not edited: the `stk_combo*` rows are shared by
+  every fighter. Checked against all 24 fighters with a script over
+  `build/logic_tables.c`.
+- **Played by Mary** in her test folder: both work.
 
 ## 0.1.16: MOD HUB (2026-10-30, released in 0.1.16)
 
