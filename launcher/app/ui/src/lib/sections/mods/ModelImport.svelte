@@ -34,7 +34,7 @@
      * model opened again from its mod -- what the window was set to
      * (<skin>.import.json) and the pictures chosen for its materials;
      * onApply({ r, mdl, settings, file, picks }), onClose() */
-    let { f, file, texture, outfit, saved = null, picks = null, onApply, onClose } = $props();
+    let { f, file, texture, outfit, saved = null, picks = null, fresh = false, onApply, onClose } = $props();
 
     let host = $state();
     let mdl = $state(null);
@@ -60,6 +60,9 @@
     let turns = $state({});                 /* bone -> [x, y, z] degrees (buildSkin o.turns) */
     let sel = $state(-1);                   /* the joint being moved */
     let mirror = $state(true), reweight = $state(false);
+    /* SMOOTH WEIGHTS (passes): 3 on a file just picked, as measured on
+     * Mary's Sonya; a model opened again keeps what it was saved with */
+    let smooth = $state(fresh ? 3 : 0);
     let look = $state({ wire: false, solid: false, weights: false });
     let showRig = $state(true), showFloor = $state(true);
     let looksEl;                            /* the buttons the camera gizmo sits under */
@@ -163,7 +166,7 @@
         if (!mdl) return;
         err = '';
         try {
-            res = buildSkin(f, mdl, { turn, blockOf, keep, scale, adjust: { ...adjust }, joints: $state.snapshot(joints), turns: $state.snapshot(turns), reweight, paint });
+            res = buildSkin(f, mdl, { turn, blockOf, keep, scale, adjust: { ...adjust }, joints: $state.snapshot(joints), turns: $state.snapshot(turns), reweight, smooth, paint });
             pf = withSkin(f, res.bytes, res.bones);
             await show();
         } catch (e) {
@@ -358,7 +361,7 @@
     let undoCount = $state(0), redoCount = $state(0);
     function snap() {
         return { joints: $state.snapshot(joints), turns: $state.snapshot(turns), paint: { ...paint }, adjust: $state.snapshot(adjust),
-            scale, keep, turn, reweight, blockOf: [...blockOf],
+            scale, keep, turn, reweight, smooth, blockOf: [...blockOf],
             mats: mdl ? mdl.materials.map(m => ({ image: m.image, file: m.file, game: m.game, rep: m.rep, picked: m.picked })) : [] };
     }
     function remember(key = '') {
@@ -383,7 +386,7 @@
         redoCount = redo.length;
         lastKey = '';
         joints = st.joints; turns = st.turns; paint = st.paint; paintCount = Object.keys(paint).length;
-        adjust = st.adjust; scale = st.scale; keep = st.keep; turn = st.turn; reweight = st.reweight; blockOf = st.blockOf;
+        adjust = st.adjust; scale = st.scale; keep = st.keep; turn = st.turn; reweight = st.reweight; smooth = st.smooth; blockOf = st.blockOf;
         st.mats.forEach((m, i) => Object.assign(mdl.materials[i], m));
         await makeThumbs();
         await rebuild();
@@ -1018,6 +1021,13 @@
         clearTimeout(turnWait);
         turnWait = setTimeout(rebuild, 120);
     }
+    let smoothWait;
+    function setSmooth(v) {
+        remember('smooth');
+        smooth = Number(v);
+        clearTimeout(smoothWait);
+        smoothWait = setTimeout(rebuild, 150);
+    }
     async function setReweight(v) {
         selectBlip();
         remember();
@@ -1054,7 +1064,7 @@
         selectBlip();
         /* what this window was set to, kept beside the skin in the mod */
         const settings = { file: file.name, keep, scale, turn, adjust: $state.snapshot(adjust), joints: $state.snapshot(joints),
-            turns: $state.snapshot(turns), reweight, paint, blockOf: $state.snapshot(blockOf), replaces: mdl.materials.map(m => m.rep || ''),
+            turns: $state.snapshot(turns), reweight, smooth, paint, blockOf: $state.snapshot(blockOf), replaces: mdl.materials.map(m => m.rep || ''),
             game: mdl.materials.map(m => !!m.game), picked: mdl.materials.map(m => (m.picked ? m.file : '')) };
         const chosen = Object.fromEntries(mdl.materials.map((m, i) => [i, m.picked]).filter(([, b]) => b));
         onApply({ r: res, mdl, settings, file, picks: chosen });
@@ -1063,7 +1073,7 @@
     /* a model opened again from its mod: as it was saved */
     async function restoreSaved() {
         const st = saved, n = mdl.materials.length;
-        keep = !!st.keep; scale = st.scale || 1; turn = st.turn || 0; reweight = !!st.reweight;
+        keep = !!st.keep; scale = st.scale || 1; turn = st.turn || 0; reweight = !!st.reweight; smooth = Number(st.smooth) || 0;
         adjust = { ...adjust, ...(st.adjust || {}) };
         joints = st.joints || {}; turns = st.turns || {};
         paint = st.paint || {}; paintCount = Object.keys(paint).length;
@@ -1295,6 +1305,10 @@
                         {/each}
                     {/if}
                     <label class="chk"><input type="checkbox" bind:checked={mirror}><span>{tx('imMirror')}</span></label>
+                    <label class="scale" title={tx('imSmoothNote')}>
+                        <span class="lbl">{tx('imSmooth')} {smooth}</span>
+                        <input type="range" min="0" max="10" step="1" value={smooth} oninput={e => setSmooth(e.currentTarget.value)}>
+                    </label>
                     <label class="chk" title={tx('imReweightNote')}><input type="checkbox" checked={reweight} onchange={e => setReweight(e.currentTarget.checked)}><span>{tx('imReweight')}</span></label>
                     <div class="pair">
                         <button class="btn" disabled={sel < 0} onclick={() => resetJoints(false)}>{tx('imJointReset')}</button>
