@@ -53,6 +53,22 @@ yet**. Asked by Mary after trying the first round:
     `lime.h`), and a lighting file that does not fit the skin is replaced by
     its average light (`Players.c port_fit_lighting`, logged `flat light`).
     The importer refuses a block over 65,535 vertices once unwelded.
+  - **Liu Kang's scream that never stops: found, Mary 2026-10-30 (built
+    into the test folder, not tried yet).** Her words: it repeats for ever.
+    The Windows mixer (`platform/win32_audio.c`) kept each voice's place in
+    the sound as 16.16 in 32 bits, which ends at 65,536 frames (4.1 s at
+    16 kHz). Three of the game's 497 sounds are longer: Liu Kang's death
+    scream `Lkdeath.wav` (67,093 frames, 4.19 s), `Skdiemix.wav` and
+    `Vpdeath.wav`. Past the end of the range the place wrapped to 0, never
+    reached the file's end, and the voice played on without stopping. The
+    place is 64-bit now. Also checked on her replay's log
+    (`20261030-013216_liukang_vs_shaokahn`): every voice the game asks for
+    is asked once (`group_sound` 0x580a4 and `t_do_flip` 0x30634 match the
+    binary instruction for instruction; the jump yell is one a diagonal
+    jump, as on the device); his hit screams `Lkwast1` / `Lkwast2` are
+    twice anyone's length (2.31 s / 1.94 s). Linux's SDL mixer gave a sound
+    played again a second voice on top of the first; it now starts it over
+    as `-[Sound play]` does and as the Windows mixer already did.
   - **Arms and hips still stretched: the file's weights; SMOOTH WEIGHTS,
     Mary 2026-10-30 (test launcher repacked, not tried yet).** Measured on
     her Sonya against the game's own, edge by edge over every frame (p99 of

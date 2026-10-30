@@ -28,6 +28,7 @@ typedef struct {
     Mix_Chunk *chunk;
     Uint8     *buffer;
     float      gain;
+    const unsigned char *src;   /* the sound it plays: one voice a sound */
 } voice;
 
 static int               g_open;
@@ -147,6 +148,20 @@ int plat_audio_play_at(const unsigned char *pcm, int frames, int rate, float gai
             quietest = i;
         }
     }
+    /* One sound, one voice, as on the device and as win32_audio.c: -[Sound
+     * play] (0xada08) stops a sound still playing and starts it over -- it
+     * never doubles over itself. Here every play took a channel of its own,
+     * so on Linux a long scream played again (Liu Kang's, twice anyone
+     * else's length) sounded on top of itself. */
+    for (int k = 0; k < g_channels; k++)
+        if (g_voice[k].chunk && g_voice[k].src == pcm && Mix_Playing(k)) {
+            Mix_HaltChannel(k);
+            Mix_FreeChunk(g_voice[k].chunk);
+            SDL_free(g_voice[k].buffer);
+            memset(&g_voice[k], 0, sizeof g_voice[k]);
+            i = k;
+            break;
+        }
     if (i == g_channels) {
         /* every voice busy: steal the quietest only for a louder newcomer */
         if (quietest < 0 || gain <= lowest)
@@ -202,6 +217,7 @@ int plat_audio_play_at(const unsigned char *pcm, int frames, int rate, float gai
     g_voice[i].chunk = chunk;
     g_voice[i].buffer = buffer;
     g_voice[i].gain = gain;
+    g_voice[i].src = pcm;
     return 1;
 }
 

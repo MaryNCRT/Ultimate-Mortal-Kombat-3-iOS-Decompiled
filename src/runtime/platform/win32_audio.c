@@ -54,7 +54,7 @@
 typedef struct {
     const unsigned char *pcm;   /* caller-owned, unsigned 8-bit mono */
     int                  frames;
-    unsigned             pos;   /* 16.16 into pcm, so a source rate that is
+    unsigned long long   pos;   /* 16.16 into pcm, so a source rate that is
                                  * not the device rate still plays at the
                                  * right SPEED */
     unsigned             step;  /* 16.16: src_rate / device_rate */
@@ -233,10 +233,14 @@ static void fill(short *out)
             continue;
 
         for (n = 0; n < BUF_FRAMES; n++) {
-            unsigned idx = v->pos >> 16;
+            /* 64 bits: in 32, 16.16 ends at 65,536 frames (4.1 s at
+             * 16 kHz). Liu Kang's death scream (Lkdeath, 67,093 frames),
+             * Skdiemix and Vpdeath ran past it, the position wrapped to 0
+             * and never reached the end: the scream played for ever (Mary). */
+            unsigned long long idx = v->pos >> 16;
             int s, m;
 
-            if ((int)idx >= v->frames) {
+            if (idx >= (unsigned long long)v->frames) {
                 v->active = 0;
                 break;
             }
@@ -249,7 +253,7 @@ static void fill(short *out)
 
             v->pos += v->step;
         }
-        if ((int)(v->pos >> 16) >= v->frames)
+        if ((v->pos >> 16) >= (unsigned long long)v->frames)
             v->active = 0;
     }
 }
