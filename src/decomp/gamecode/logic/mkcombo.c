@@ -631,6 +631,29 @@ long combo_scan_a11(MK3OBJ *obj)
             }
 
             if (seen <= 1) {                    /* MATCH */
+                /* Port, not in the binary: a list can hold two entries
+                 * for the same button (ct_mileena_knee3: LK twice; also
+                 * ct_tusk_knee3, ct_sonya_roundh, ct_swat_knee2,
+                 * ct_kano_post_elbow2, ct_sonya_elbow3). The binary takes
+                 * the first and never reaches the second, so Mileena's
+                 * HK, HK, U+LK, U+HK always came out as the other kombo.
+                 * Holding up takes the next entry with the same button.
+                 * Read straight from the stick word, as joystick_in_a0_px
+                 * does, so no proc field is touched. */
+                if ((((const uint32_t *)G)[obj->field00->field08]
+                     & MK3_STICK_UP) != 0) {
+                    char *alt = e;
+
+                    while ((*(uint32_t *)alt & 0x8000u) == 0) {
+                        alt += 0x18;
+                        if (*(uint8_t *)(alt + 8) == k) {
+                            e = alt;
+                            obj->field48 = (uint32_t)(uintptr_t)e;
+                            break;
+                        }
+                    }
+                }
+
                 n = *(uint8_t *)(e + 0x10);
                 obj->field1c = n;
                 if (n != 0)

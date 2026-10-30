@@ -8,6 +8,24 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## 0.1.17 beta (2026-10-30) — Kombos that share a start, KOMBOS in the CHARACTER EDITOR
+
+Published 2026-10-30 as the GitHub pre-release `v0.1.17-beta` (`UMK3-PC-0.1.17-beta.zip`, `UMK3-PC-0.1.17-beta-linux-x64.tar.gz`). Both changes were **played by Mary** in her test folder: work.
+
+**Game**
+- **Kombos that start alike can now be finished either way.** Mileena's
+  HK, HK, LK, HK and HK, HK, U+LK, HK share their first hits, and the game
+  always took the first: the third hit's list holds LK twice and the
+  original picks the first entry for the button pressed, without looking at
+  the stick. Holding **up** on that hit now takes the second. The same in
+  the five other lists of the game built that way (Kabal, Sonya twice,
+  Stryker, Kano). Port, not in the original.
+
+**Launcher**
+- **CHARACTER EDITOR → KOMBOS** (new page): every kombo of the fighter, hit
+  by hit, as the game's tables have it; each hit's button and strike can be
+  changed into the mod.
+
 ## 0.1.16 beta (2026-10-30) — MOD HUB
 
 Published 2026-10-30 as the GitHub pre-release `v0.1.16-beta` (`UMK3-PC-0.1.16-beta.zip`, `UMK3-PC-0.1.16-beta-linux-x64.tar.gz`). The MOD HUB was **played by Mary** in her test folder: works.
