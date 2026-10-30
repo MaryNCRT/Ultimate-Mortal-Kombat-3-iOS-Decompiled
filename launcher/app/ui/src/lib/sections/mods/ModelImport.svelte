@@ -18,6 +18,7 @@
     import { onMount, onDestroy } from 'svelte';
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { TransformControls } from 'three/addons/controls/TransformControls.js';
     import { app, tx } from '#lib/app.svelte.js';
     import { api } from '#lib/platform.js';
     import { selectBlip } from '#lib/sound.js';
@@ -78,7 +79,8 @@
         const sun = new THREE.DirectionalLight(0xffffff, 1.4);
         sun.position.set(1, 2, 3);
         scene.add(sun);
-        nav = new ViewNav({ host, renderer, controls, persp: camera, onCamera: c => { camera = c; }, onLabel: t => { viewName = t; },
+        nav = new ViewNav({ host, renderer, controls, persp: camera, onLabel: t => { viewName = t; },
+            onCamera: c => { camera = c; if (tcMove) { tcMove.camera = c; tcTurn.camera = c; } },
             names: { front: tx('nvFront'), back: tx('nvBack'), right: tx('nvRight'), left: tx('nvLeft'), top: tx('nvTop'), bottom: tx('nvBottom'),
                 user: tx('nvUser'), persp: tx('nvPersp'), ortho: tx('nvOrtho') }, below: () => looksEl });
         nav.label();
@@ -87,15 +89,38 @@
         rigLines = makeRigLines();
         scene.add(floor, rigLines);
         new ResizeObserver(fit).observe(host);
-        axisLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ depthTest: false, transparent: true }));
+        axisLine = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ vertexColors: true, depthTest: false, transparent: true }));
         axisLine.renderOrder = 11;
         axisLine.visible = false;
         scene.add(axisLine);
+        /* the gizmo on the bone picked (Blender's Move / Rotate / Transform
+         * tools) */
+        proxy = new THREE.Object3D();
+        scene.add(proxy);
+        tcMove = new TransformControls(camera, renderer.domElement);
+        tcTurn = new TransformControls(camera, renderer.domElement);
+        tcMove.setMode('translate');
+        tcTurn.setMode('rotate');
+        for (const tc of [tcMove, tcTurn]) {
+            tc.size = 0.9;
+            scene.add(tc.getHelper());
+            tc.addEventListener('dragging-changed', e => { controls.enabled = !e.value; });
+            tc.addEventListener('mouseDown', () => gizmoStart(tc));
+            tc.addEventListener('objectChange', gizmoMove);
+            tc.addEventListener('mouseUp', gizmoEnd);
+        }
+        /* both shown: an arrow, square or the middle wins over a ring */
+        tcMove.addEventListener('axis-changed', e => {
+            if (gizmo !== 'both') return;
+            tcTurn.enabled = !e.value;
+            if (e.value) tcTurn.axis = null;
+        });
         renderer.domElement.addEventListener('pointerdown', onDown, { capture: true });
         renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
         window.addEventListener('keydown', onKey, true);
+        window.addEventListener('keyup', onKeyUp, true);
         loop_();
     }
     function fit() {
@@ -226,6 +251,7 @@
         }
         poseRigLines(rigLines, p, pf.rig.bones.parent, showRig, sel);
         lastPose = p;
+        syncGizmo();
     }
     $effect(() => { clip; frame; showRig; sel; pose(); });
     $effect(() => { const l = { ...look }; for (const m of meshes) applyLook(m.material, l); });
@@ -366,7 +392,12 @@
         adjust = { armAngle: 0, armRoll: 0, legAngle: 0, legRoll: 0, auto: false };
         await rebuild();
         if (res && res.pose && rise !== null) {
-            const from = keep || res.rig === 'names' ? res.pose.file.arm : res.pose.fighter.arm;
+            /* the angle turns the file's arms where they are its own (KEEP
+             * PROPORTIONS, the exporter's rig), else the fighter's -- a model
+             * with no skeleton has no arms of its own to measure, and was
+             * left in T by both buttons */
+            const own = (keep || res.rig === 'names') && res.pose.file.arm !== null && res.pose.file.arm !== undefined;
+            const from = own ? res.pose.file.arm : res.pose.fighter.arm;
             if (from !== null && from !== undefined) {
                 adjust.armAngle = Math.max(-90, Math.min(90, Math.round(rise - from)));
                 await rebuild();
@@ -394,15 +425,25 @@
     const ray = new THREE.Raycaster();
     const AX = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)];
     const AXCOL = [0xff4466, 0x88ee44, 0x4488ff];
+    const DEG = Math.PI / 180;
+    /* The gizmo on the bone picked, as Blender's Move / Rotate / Transform
+     * tools draw it: an arrow moves along one axis, a square on a plane
+     * (2D), the middle free on the view (3D); a ring turns about one axis,
+     * the white ring about the view, inside it freely (trackball). GLOBAL
+     * the game's axes, LOCAL the bone's own. */
+    let gizmo = $state('both');             /* 'move', 'turn', 'both' or 'none' */
+    let orient = $state('global');          /* 'global' or 'local' */
+    let tcMove, tcTurn, proxy;
 
+    const rect = () => renderer.domElement.getBoundingClientRect();
     function ndc(e) {
-        const r = renderer.domElement.getBoundingClientRect();
+        const r = rect();
         return new THREE.Vector2((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
     }
     /* the joint under the pointer, or -1 */
     function jointAt(e) {
         if (!lastPose || !showRig) return -1;
-        const r = renderer.domElement.getBoundingClientRect(), m = ndc(e);
+        const r = rect(), m = ndc(e);
         let best = -1, bd = 0.03;
         lastPose.forEach((b, i) => {
             if (!b || i === f.rig.bones.root) return;
@@ -412,57 +453,249 @@
         });
         return best;
     }
-    const inView = e => { const r = renderer.domElement.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
+    const inView = e => { const r = rect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
     const subtree = b => { const out = [b]; for (let k = 0; k < out.length; k++) out.push(...f.rig.bones.children[out[k]]); return out; };
+    const viewSize = () => (root ? new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3()).length() : 0) || 100;
+    /* a row-form turn (v . R) as three.js's matrix */
+    const rowMat = R => new THREE.Matrix4().set(R[0], R[3], R[6], 0, R[1], R[4], R[7], 0, R[2], R[5], R[8], 0, 0, 0, 0, 1);
+
+    /* the gizmo where the bone picked is now (rest or the frame shown) */
+    function syncGizmo() {
+        if (!tcMove || (edit && edit.gizmo)) return;
+        const on = tool === 'bones' && sel >= 0 && showRig && !edit && !!lastPose && !!lastPose[sel];
+        const turnable = on && subtree(sel).length > 1;
+        for (const [tc, want] of [[tcMove, on && (gizmo === 'move' || gizmo === 'both')], [tcTurn, turnable && (gizmo === 'turn' || gizmo === 'both')]]) {
+            if (want && tc.object !== proxy) tc.attach(proxy);
+            else if (!want && tc.object) tc.detach();
+            tc.space = orient === 'local' ? 'local' : 'world';
+        }
+        tcTurn.enabled = true;
+        if (!on) return;
+        proxy.position.set(...lastPose[sel].T);
+        const m = rowMat(lastPose[sel].R);
+        if (m.determinant() > 0) proxy.quaternion.setFromRotationMatrix(m);
+        else proxy.quaternion.identity();
+        proxy.updateMatrixWorld();
+    }
+    $effect(() => { gizmo; orient; tool; sel; showRig; syncGizmo(); });
+    /* Ctrl: steps (1 unit, 5 degrees; with Shift 0.1 and 1), on the gizmo too */
+    function setSnaps(e) {
+        if (!tcMove) return;
+        tcMove.translationSnap = e.ctrlKey ? (e.shiftKey ? 0.1 : 1) * scale : null;
+        tcTurn.rotationSnap = e.ctrlKey ? (e.shiftKey ? 1 : 5) * DEG : null;
+    }
+    /* the gizmo's handles as a constraint: 'X' an axis, 'XY' a plane (the
+     * third axis left out), 'XYZ' free, 'E' the view, 'XYZE' trackball */
+    function gizmoStart(tc) {
+        const a = tc.axis || '', local = tc.space === 'local';
+        if (!begin(tc === tcMove ? 'move' : 'turn', null, true)) { syncGizmo(); return; }
+        edit.gizmo = true;
+        if (a.length === 1) edit.con = { i: 'XYZ'.indexOf(a), plane: false, local };
+        else if (a.length === 2) edit.con = { i: [0, 1, 2].find(i => !a.includes('XYZ'[i])), plane: true, local };
+        edit.track = a === 'XYZE';
+        edit.q0 = proxy.quaternion.clone();
+    }
+    function gizmoMove() {
+        if (!edit || !edit.gizmo) return;
+        if (edit.kind === 'move') return applyMove(proxy.position.clone().sub(edit.P));
+        const q = proxy.quaternion.clone().multiply(edit.q0.clone().invert()).normalize();
+        if (q.w < 0) q.set(-q.x, -q.y, -q.z, -q.w);
+        const s = Math.sqrt(Math.max(0, 1 - q.w * q.w)), ang = 2 * Math.acos(Math.min(1, q.w));
+        const u = s < 1e-6 ? AX[0].clone() : new THREE.Vector3(q.x / s, q.y / s, q.z / s);
+        /* about a ring's axis: the angle's sign by that axis */
+        if (edit.con && u.dot(axisOf(edit.con)) < 0) return applyTurn(u.negate(), -ang);
+        applyTurn(u, ang);
+    }
+    function gizmoEnd() {
+        if (edit && edit.gizmo) endEdit(!!edit.out);
+        else syncGizmo();
+    }
 
     /* At rest or on the frame of a clip shown: the edit is made on the
      * pose seen (a clip playing holds still while it is) and taken back to
      * the rest the skin is bound to -- a move through the parent's turn in
      * that frame, a turn about its axis through the bone's -- so what is
      * kept is what the game will play. */
-    function startEdit(kind, at, drag = false) {
-        if (sel < 0 || !res || tool !== 'bones' || !lastPose) return;
+    function begin(kind, at, drag) {
+        if (sel < 0 || !res || tool !== 'bones' || !lastPose) return false;
         const b = sel, base = lastPose, P = new THREE.Vector3(...base[b].T);
         const moved = kind === 'turn' ? subtree(b).slice(1) : [b];
-        if (!moved.length) { editInfo = tx('imNoChildren'); return; }
-        edit = { kind, b, drag, at: at ? [at.clientX, at.clientY] : null, axis: -1, P, out: null,
+        if (!moved.length) { editInfo = tx('imNoChildren'); return false; }
+        edit = { kind, b, drag, at: at ? [at.clientX, at.clientY] : null, con: null, track: false, num: null, P, out: null,
             pose: base, rest: clip < 0, wasPlaying: playing,
             base: new Map(moved.map(i => [i, new THREE.Vector3(...base[i].T)])) };
         playing = false;
+        return true;
+    }
+    function startEdit(kind, at, drag = false) {
+        if (!begin(kind, at, drag)) return;
+        for (const tc of [tcMove, tcTurn]) if (tc && tc.object) tc.detach();
         updateEdit(at);
     }
-    function planeHit(x, y, P) {
-        const r = renderer.domElement.getBoundingClientRect();
-        ray.setFromCamera(new THREE.Vector2((x - r.left) / r.width * 2 - 1, -(y - r.top) / r.height * 2 + 1), camera);
-        const n = camera.getWorldDirection(new THREE.Vector3());
-        return ray.ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(n, P), new THREE.Vector3()) || P.clone();
+    /* a constraint's axis: the game's, or the bone's own (LOCAL) */
+    function axisOf(c) {
+        if (!c.local) return AX[c.i].clone();
+        const R = edit.pose[edit.b].R;
+        return new THREE.Vector3(R[c.i * 3], R[c.i * 3 + 1], R[c.i * 3 + 2]).normalize();
     }
-    function updateEdit(e) {
-        if (!edit || !e) return;
-        if (!edit.at) edit.at = [e.clientX, e.clientY];
-        const { P, axis } = edit, out = new Map();
-        const ax = axis >= 0 ? ' · ' + 'XYZ'[axis] : '';
-        if (edit.kind === 'move') {
-            let d = planeHit(e.clientX, e.clientY, P).sub(planeHit(edit.at[0], edit.at[1], P));
-            if (axis >= 0) d = AX[axis].clone().multiplyScalar(d.dot(AX[axis]));
-            out.set(edit.b, P.clone().add(d));
-            edit.d = d;
-            editInfo = tx('imEditMove') + ax + ' · ' + d.toArray().map(x => (x / scale).toFixed(1)).join('  ') + ' · ' + tx('imEditKeys');
-        } else {
-            const r = renderer.domElement.getBoundingClientRect(), sp = P.clone().project(camera);
-            const sx = (sp.x + 1) / 2 * r.width + r.left, sy = (1 - sp.y) / 2 * r.height + r.top;
-            const ang = Math.atan2(sy - e.clientY, e.clientX - sx) - Math.atan2(sy - edit.at[1], edit.at[0] - sx);
-            const toCam = camera.position.clone().sub(P).normalize();
-            const u = axis >= 0 ? AX[axis].clone() : toCam;
-            if (axis >= 0 && u.dot(toCam) < 0) u.negate();
-            const q = new THREE.Quaternion().setFromAxisAngle(u, ang);
-            edit.deg = ang * 180 / Math.PI * (axis >= 0 && u.dot(AX[axis]) < 0 ? -1 : 1);
-            edit.u = u;
-            edit.ang = ang;
-            for (const [i, T] of edit.base) out.set(i, T.clone().sub(P).applyQuaternion(q).add(P));
-            editInfo = tx('imEditTurn') + ax + ' · ' + Math.round(((ang * 180 / Math.PI) + 540) % 360 - 180) + '° · ' + tx('imEditKeys');
+    const frameAxes = () => [0, 1, 2].map(i => axisOf({ i, local: !!(edit.con && edit.con.local) }));
+    function rayAt(x, y) {
+        const r = rect();
+        ray.setFromCamera(new THREE.Vector2((x - r.left) / r.width * 2 - 1, -(y - r.top) / r.height * 2 + 1), camera);
+        return ray.ray.clone();
+    }
+    /* where the line P + t a passes closest to a ray: t */
+    function lineParam(r, P, a) {
+        const w = P.clone().sub(r.origin), b = a.dot(r.direction), d = a.dot(w), e = r.direction.dot(w);
+        const den = 1 - b * b;
+        return den < 1e-6 ? 0 : (b * e - d) / den;
+    }
+    const toCam = P => (camera.isOrthographicCamera ? camera.getWorldDirection(new THREE.Vector3()).negate() : camera.position.clone().sub(P).normalize());
+
+    /* the pointer's move as Blender takes it: free on the view's plane, along
+     * an axis (the point of the axis under the pointer), or on a plane */
+    function dragMove() {
+        const { P, con } = edit, [x0, y0] = edit.at, [x1, y1] = edit.eff;
+        const view = camera.getWorldDirection(new THREE.Vector3());
+        const onPlane = (n, x, y) => rayAt(x, y).intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(n, P), new THREE.Vector3());
+        const free = () => { const a = onPlane(view, x0, y0), b = onPlane(view, x1, y1); return a && b ? b.sub(a) : new THREE.Vector3(); };
+        if (!con) return free();
+        const a = axisOf(con);
+        if (con.plane) {
+            if (Math.abs(a.dot(view)) > 0.05) { const p = onPlane(a, x0, y0), q = onPlane(a, x1, y1); if (p && q) return q.sub(p); }
+            const d = free();
+            return d.sub(a.clone().multiplyScalar(d.dot(a)));
         }
+        if (Math.abs(a.dot(view)) < 0.98) return a.clone().multiplyScalar(lineParam(rayAt(x1, y1), P, a) - lineParam(rayAt(x0, y0), P, a));
+        const d = free();
+        return a.clone().multiplyScalar(d.dot(a));
+    }
+    function snapMove(d) {
+        if (!edit.snap) return d;
+        const step = (edit.fine ? 0.1 : 1) * scale, out = new THREE.Vector3();
+        for (const a of frameAxes()) out.addScaledVector(a, Math.round(d.dot(a) / step) * step);
+        return out;
+    }
+    const numCount = () => (edit.kind === 'turn' ? 1 : !edit.con ? 3 : edit.con.plane ? 2 : 1);
+    const numVals = () => edit.num.f.map(x => { const v = parseFloat(x); return Number.isFinite(v) ? v : 0; });
+    function numMove() {
+        const v = numVals(), c = edit.con, F = frameAxes(), out = new THREE.Vector3();
+        if (c && !c.plane) return axisOf(c).multiplyScalar(v[0] * scale);
+        const ks = c ? [0, 1, 2].filter(i => i !== c.i) : [0, 1, 2];
+        ks.forEach((k, j) => out.addScaledVector(F[k], v[j] * scale));
+        return out;
+    }
+    /* a turn: the pointer's angle about the joint on the screen, counted
+     * past a full turn, about the view or the axis kept to; R twice the
+     * trackball */
+    function dragTurn() {
+        const { P, con } = edit, [x0, y0] = edit.at, [x1, y1] = edit.eff;
+        if (edit.track) {
+            const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion), right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+            const q = new THREE.Quaternion().setFromAxisAngle(up, (x1 - x0) * 0.01).multiply(new THREE.Quaternion().setFromAxisAngle(right, (y1 - y0) * 0.01));
+            if (q.w < 0) q.set(-q.x, -q.y, -q.z, -q.w);
+            const s = Math.sqrt(Math.max(0, 1 - q.w * q.w));
+            return s < 1e-6 ? [up, 0] : [new THREE.Vector3(q.x / s, q.y / s, q.z / s), 2 * Math.acos(Math.min(1, q.w))];
+        }
+        const r = rect(), sp = P.clone().project(camera);
+        const sx = (sp.x + 1) / 2 * r.width + r.left, sy = (1 - sp.y) / 2 * r.height + r.top;
+        const raw = Math.atan2(sy - y1, x1 - sx);
+        if (edit.prev === undefined) { edit.prev = Math.atan2(sy - y0, x0 - sx); edit.acc = 0; }
+        let dd = raw - edit.prev;
+        while (dd > Math.PI) dd -= 2 * Math.PI;
+        while (dd < -Math.PI) dd += 2 * Math.PI;
+        edit.acc += dd;
+        edit.prev = raw;
+        const c = toCam(P), u = con ? axisOf(con) : c;
+        return u.dot(c) < 0 ? [u.negate(), edit.acc] : [u, edit.acc];
+    }
+    const snapAng = a => (edit.snap ? Math.round(a / ((edit.fine ? 1 : 5) * DEG)) * (edit.fine ? 1 : 5) * DEG : a);
+
+    function updateEdit(e) {
+        if (!edit || edit.gizmo) return;
+        if (e) {
+            if (!edit.at) edit.at = [e.clientX, e.clientY];
+            if (!edit.eff) { edit.eff = [...edit.at]; edit.last = [...edit.at]; }
+            /* Shift: ten times finer from where it was pressed */
+            const k = e.shiftKey ? 0.1 : 1;
+            edit.eff = [edit.eff[0] + (e.clientX - edit.last[0]) * k, edit.eff[1] + (e.clientY - edit.last[1]) * k];
+            edit.last = [e.clientX, e.clientY];
+            if (e.ctrlKey !== undefined) { edit.snap = e.ctrlKey; edit.fine = e.shiftKey; }
+        }
+        if (!edit.at || !edit.eff) return;
+        if (edit.mmb) pickAxis();
+        if (edit.kind === 'move') applyMove(edit.num ? numMove() : snapMove(dragMove()));
+        else if (edit.num) applyTurn(edit.con ? axisOf(edit.con) : toCam(edit.P), numVals()[0] * DEG);
+        else { const [u, a] = dragTurn(); applyTurn(u, edit.track ? a : snapAng(a)); }
+    }
+    /* the middle button held: the axis the pointer goes along */
+    function pickAxis() {
+        const [x0, y0] = edit.mmb, [x1, y1] = edit.last, dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy);
+        if (l < 12) return;
+        const r = rect(), sp = edit.P.clone().project(camera), L = viewSize() * 0.05, local = orient === 'local';
+        let best = 0, bd = -1;
+        for (let i = 0; i < 3; i++) {
+            const q = edit.P.clone().addScaledVector(axisOf({ i, local }), L).project(camera);
+            const ax = (q.x - sp.x) * r.width, ay = -(q.y - sp.y) * r.height, al = Math.hypot(ax, ay) || 1;
+            const sc = Math.abs((ax * dx + ay * dy) / (al * l));
+            if (sc > bd) { bd = sc; best = i; }
+        }
+        edit.con = { i: best, plane: false, local };
+    }
+    /* X / Y / Z: the axis in the orientation set, again the other one (as
+     * Blender: global, local), again none; with Shift the plane without it */
+    function constrain(i, plane) {
+        const c = edit.con, first = orient === 'local';
+        if (c && c.i === i && c.plane === plane) edit.con = c.local === first ? { i, plane, local: !first } : null;
+        else edit.con = { i, plane, local: first };
+        edit.track = false;
+        updateEdit(null);
+    }
+    /* typed numbers, as Blender's: digits, '.', '-' the sign, Backspace,
+     * Tab the next field (X, Y, Z) */
+    function typeNum(e) {
+        const k = e.key;
+        if (!edit.num) {
+            if (k === 'Backspace') return;
+            edit.num = { f: ['', '', ''], k: 0 };
+        }
+        const n = edit.num, cnt = numCount();
+        if (k === 'Tab') n.k = (n.k + (e.shiftKey ? cnt - 1 : 1)) % cnt;
+        else if (k === 'Backspace') { if (n.f[n.k]) n.f[n.k] = n.f[n.k].slice(0, -1); else if (!n.f.some(Boolean)) edit.num = null; }
+        else if (k === '-') n.f[n.k] = n.f[n.k].startsWith('-') ? n.f[n.k].slice(1) : '-' + n.f[n.k];
+        else if (k === '.' || k === ',') { if (!n.f[n.k].includes('.')) n.f[n.k] += '.'; }
+        else n.f[n.k] += k;
+        if (edit.num && edit.num.k >= cnt) edit.num.k = 0;
+        updateEdit(null);
+    }
+
+    const fmt = x => (Math.abs(x) < 5e-5 ? 0 : x).toFixed(3);
+    const numShow = i => (edit.num.k === i ? '[' + (edit.num.f[i] || '') + '|]' : edit.num.f[i] || '0');
+    function conText() {
+        const c = edit.con;
+        if (edit.track) return ' · ' + tx('imTrackball');
+        if (!c) return '';
+        const sp = tx(c.local ? 'imLocal' : 'imGlobal');
+        if (c.plane && edit.kind === 'move') return ' · ' + tx('imPlaneOf') + ' ' + sp + ' ' + 'XYZ'.replace('XYZ'[c.i], '');
+        return ' · ' + tx('imAxisOf') + ' ' + sp + ' ' + 'XYZ'[c.i];
+    }
+    function applyMove(d) {
+        edit.d = d;
+        edit.out = new Map([[edit.b, edit.P.clone().add(d)]]);
+        const v = edit.num ? [...Array(numCount()).keys()].map(numShow) : frameAxes().map(a => fmt(d.dot(a) / scale));
+        editInfo = tx('imEditMove') + ' D: ' + v.join(' | ') + ' (' + fmt(d.length() / scale) + ')' + conText() + (edit.gizmo ? '' : ' · ' + tx('imEditKeys'));
+        showAxis();
+        previewEdit();
+    }
+    function applyTurn(u, ang) {
+        const c = edit.con;
+        edit.u = u;
+        edit.ang = ang;
+        edit.deg = ang / DEG * (c && u.dot(axisOf(c)) < 0 ? -1 : 1);
+        const q = new THREE.Quaternion().setFromAxisAngle(u, ang), out = new Map();
+        for (const [i, T] of edit.base) out.set(i, T.clone().sub(edit.P).applyQuaternion(q).add(edit.P));
         edit.out = out;
+        editInfo = tx('imEditTurn') + ' ' + (edit.num ? numShow(0) : fmt(edit.deg)) + '°' + conText() + (edit.gizmo ? '' : ' · ' + tx('imEditKeys'));
         showAxis();
         previewEdit();
     }
@@ -494,21 +727,29 @@
         poseRigLines(rigLines, p, pf.rig.bones.parent, true, sel);
         lastPose = p;
     }
+    /* the axis (or a plane's two) kept to, through the joint */
     function showAxis() {
         if (!axisLine) return;
-        axisLine.visible = !!edit && edit.axis >= 0;
-        if (!axisLine.visible) return;
-        const L = (new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3()).length() || 100);
-        const a = edit.P.clone().addScaledVector(AX[edit.axis], -L), b = edit.P.clone().addScaledVector(AX[edit.axis], L);
-        axisLine.geometry.setFromPoints([a, b]);
-        axisLine.material.color.setHex(AXCOL[edit.axis]);
+        const c = edit && !edit.gizmo && !edit.track ? edit.con : null;
+        axisLine.visible = !!c;
+        if (!c) return;
+        const L = viewSize(), pts = [], cols = [];
+        for (const i of c.plane && edit.kind === 'move' ? [0, 1, 2].filter(i => i !== c.i) : [c.i]) {
+            const a = axisOf({ i, local: c.local }), col = new THREE.Color(AXCOL[i]);
+            pts.push(edit.P.clone().addScaledVector(a, -L), edit.P.clone().addScaledVector(a, L));
+            cols.push(col.r, col.g, col.b, col.r, col.g, col.b);
+        }
+        axisLine.geometry.dispose();
+        axisLine.geometry = new THREE.BufferGeometry().setFromPoints(pts);
+        axisLine.geometry.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
     }
     function endEdit(keepIt) {
         if (!edit) return;
         if (edit.wasPlaying) playing = true;
-        if (keepIt && edit.out && edit.kind === 'turn' && edit.axis >= 0 && edit.rest) {
-            /* about an axis: into the bone's ROTATION field */
-            const { b, axis, deg } = edit;
+        const c = edit.con;
+        if (keepIt && edit.out && edit.kind === 'turn' && c && !c.local && !edit.track && edit.rest) {
+            /* about a global axis: into the bone's ROTATION field */
+            const { b, deg } = edit, axis = c.i;
             edit = null;
             editInfo = '';
             if (axisLine) axisLine.visible = false;
@@ -614,12 +855,23 @@
 
     /* the pointer: in front of the camera's own handling of it */
     function onDown(e) {
+        if (edit && edit.gizmo) {
+            if (e.button === 2) { e.stopImmediatePropagation(); endEdit(false); }
+            return;
+        }
         if (edit && !edit.drag) {
             e.stopImmediatePropagation();
+            if (e.button === 1) { edit.mmb = [e.clientX, e.clientY]; return; }
             endEdit(e.button === 0);
             return;
         }
         if (e.button !== 0) return;
+        /* a handle of the gizmo under the pointer: the gizmo takes it */
+        if (tool === 'bones' && tcMove) {
+            const m = ndc(e), pt = { x: m.x, y: m.y, button: 0 };
+            for (const tc of [tcMove, tcTurn])
+                if (tc.object && tc.enabled) { tc.pointerHover(pt); if (tc.axis) return; }
+        }
         downAt = [e.clientX, e.clientY];
         const j = jointAt(e);
         if (tool === 'bones' && j >= 0) {
@@ -649,7 +901,7 @@
             const r = host.getBoundingClientRect();
             brushAt = { x: e.clientX - r.left, y: e.clientY - r.top };
         } else brushAt = null;
-        if (edit) updateEdit(e);
+        if (edit && !edit.gizmo) updateEdit(e);
         else if (stroke) paintAt(e);
     }
     function onUp(e) {
@@ -657,12 +909,14 @@
             stroke = false;
             paintWait = setTimeout(rebuild, 200);
         }
-        if (edit && edit.drag) endEdit(!!downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 3);
+        if (edit && edit.mmb && e.button === 1) { edit.mmb = null; return; }
+        if (edit && edit.drag && !edit.gizmo) endEdit(!!downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 3);
         downAt = null;
     }
     function onKey(e) {
         const tag = e.target && e.target.tagName;
         const k = e.key.toLowerCase();
+        setSnaps(e);
         if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y') && !(tag === 'INPUT' && e.target.type === 'text') && tag !== 'TEXTAREA') {
             e.preventDefault();
             e.stopPropagation();
@@ -671,17 +925,35 @@
         }
         if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
         if (!edit && nav && nav.key(e)) { e.preventDefault(); e.stopPropagation(); return; }
-        if (edit) {
-            if (k === 'x' || k === 'y' || k === 'z') { const a = 'xyz'.indexOf(k); edit.axis = edit.axis === a ? -1 : a; updateEdit(mouse); }
-            else if (k === 'enter') endEdit(true);
+        if (edit && edit.gizmo) {
+            if (k === 'escape') endEdit(false);
+            else return;
+        } else if (edit) {
+            if (k === 'control' || k === 'shift') { edit.snap = e.ctrlKey; edit.fine = e.shiftKey; updateEdit(null); return; }
+            if (k === 'x' || k === 'y' || k === 'z') constrain('xyz'.indexOf(k), e.shiftKey);
+            else if (k === 'enter' || k === ' ') endEdit(true);
             else if (k === 'escape') endEdit(false);
-            else if (k === 'g' || k === 'r') { endEdit(false); startEdit(k === 'g' ? 'move' : 'turn', mouse); }
+            else if (k === 'r' && edit.kind === 'turn') {
+                /* R again: the trackball, from where the pointer is */
+                edit.track = !edit.track;
+                edit.con = null;
+                if (mouse) edit.at = [mouse.clientX, mouse.clientY];
+                edit.eff = null;
+                edit.prev = undefined;
+                updateEdit(mouse);
+            }
+            else if (k === 'g' || k === 'r') { const at = mouse; endEdit(false); startEdit(k === 'g' ? 'move' : 'turn', at); }
+            else if (/^[0-9.,-]$/.test(e.key) || e.key === 'Backspace' || e.key === 'Tab') typeNum(e);
             else return;
         } else if (tool === 'bones' && sel >= 0 && mouse && inView(mouse) && (k === 'g' || k === 'r')) startEdit(k === 'g' ? 'move' : 'turn', mouse);
         else if (tool === 'paint' && (k === '[' || k === ']')) brush.radius = Math.min(200, Math.max(5, brush.radius + (k === ']' ? 5 : -5)));
         else return;
         e.preventDefault();
         e.stopPropagation();
+    }
+    function onKeyUp(e) {
+        setSnaps(e);
+        if (edit && !edit.gizmo && (e.key === 'Control' || e.key === 'Shift')) { edit.snap = e.ctrlKey; edit.fine = e.shiftKey; updateEdit(null); }
     }
     /* MOVE / ROTATE on the side: as G / R, from the middle of the view */
     function editButton(kind) {
@@ -824,6 +1096,9 @@
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', onUp);
         window.removeEventListener('keydown', onKey, true);
+        window.removeEventListener('keyup', onKeyUp, true);
+        tcMove && tcMove.dispose();
+        tcTurn && tcTurn.dispose();
         nav && nav.dispose();
         renderer && renderer.dispose();
     });
@@ -951,6 +1226,16 @@
                         <button class="btn" class:hot={tool === 'paint'} onclick={() => setTool('paint')}>{tx('imToolPaint')}</button>
                     </div>
                     {#if tool === 'bones'}
+                        <span class="lbl">{tx('imGizmo')}</span>
+                        <div class="pair">
+                            {#each [['move', 'imGzMove'], ['turn', 'imGzTurn'], ['both', 'imGzBoth'], ['none', 'imGzNone']] as [g, key]}
+                                <button class="btn" class:hot={gizmo === g} onclick={() => { selectBlip(); gizmo = g; }}>{tx(key)}</button>
+                            {/each}
+                        </div>
+                        <div class="pair">
+                            <button class="btn" class:hot={orient === 'global'} onclick={() => { selectBlip(); orient = 'global'; }}>{tx('imGlobal')}</button>
+                            <button class="btn" class:hot={orient === 'local'} onclick={() => { selectBlip(); orient = 'local'; }}>{tx('imLocal')}</button>
+                        </div>
                         <div class="pair">
                             <button class="btn" disabled={sel < 0} onclick={() => editButton('move')}>{tx('imMove')}</button>
                             <button class="btn" disabled={sel < 0} onclick={() => editButton('turn')}>{tx('imRotate')}</button>
