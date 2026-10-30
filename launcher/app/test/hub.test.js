@@ -105,3 +105,56 @@ test('install downloads, checks, unpacks and updates in place', { skip: !fs.exis
     assert.equal(hub.readInstalled(root).rain.version, '1.1');
     assert.equal(fs.readFileSync(path.join(root, 'mods', 'mods.ini'), 'utf8'), 'on=X\noff=Rain\n');
 });
+
+test('a mod already here: found by folder, compared by range reads, only what differs fetched', { skip: !fs.existsSync(tar) && process.platform === 'win32' }, async () => {
+    const src = fs.mkdtempSync(path.join(os.tmpdir(), 'umk3hubsrc-'));
+    fs.mkdirSync(path.join(src, 'Rain', 'Sub'), { recursive: true });
+    fs.writeFileSync(path.join(src, 'Rain', 'mod.ini'), 'name=Rain\n');
+    fs.writeFileSync(path.join(src, 'Rain', 'A.png'), 'a'.repeat(5000));
+    fs.writeFileSync(path.join(src, 'Rain', 'Sub', 'B.png'), 'bbbb');
+    const zip = path.join(src, 'r.zip');
+    assert.equal(spawnSync(tar, ['-a', '-c', '-f', zip, '-C', src, 'Rain']).status, 0);
+    const bytes = fs.readFileSync(zip);
+    const reads = [];
+    const fetchFn = async (_url, opt) => {
+        const m = /bytes=(\d+)-(\d+)/.exec(opt.headers.Range);
+        const a = +m[1], b = Math.min(+m[2], bytes.length - 1);
+        reads.push(b - a + 1);
+        const part = bytes.subarray(a, b + 1);
+        return { status: 206, ok: true, arrayBuffer: async () => part.buffer.slice(part.byteOffset, part.byteOffset + part.length) };
+    };
+    const mod = hub.parseIndex({ mods: [{ id: 'rain', folder: 'Rain', version: '1.0', url: DL + 'r/rain.zip',
+        size: bytes.length, sha256: crypto.createHash('sha256').update(bytes).digest('hex') }] })[0];
+
+    assert.deepEqual((await hub.zipFiles(fetchFn, mod)).map(f => f.path).sort(), ['A.png', 'Sub/B.png', 'mod.ini']);
+
+    /* the player's copy: B.png changed at the same size, A.png missing, an extra file */
+    const root = tmpRoot();
+    const base = path.join(root, 'mods', 'Rain');
+    fs.mkdirSync(path.join(base, 'Sub'), { recursive: true });
+    fs.writeFileSync(path.join(base, 'mod.ini'), 'name=Rain\n');
+    fs.writeFileSync(path.join(base, 'Sub', 'B.png'), 'bxbb');
+    fs.writeFileSync(path.join(base, 'old.png'), 'o');
+    fs.writeFileSync(path.join(base, 'mod.meta.xml'), '<mod/>');
+    let [s] = await hub.check(fetchFn, root, [mod]);
+    assert.equal(s.here, 'Rain');
+    assert.equal(s.installed, '');            /* no version in its mod.ini */
+    assert.equal(s.update, false);
+    assert.equal(s.changes, 2);               /* A.png missing, old.png extra; B.png same size */
+
+    reads.length = 0;
+    const r = await hub.get(fetchFn, root, mod);
+    assert.deepEqual([r.fetched, r.dropped], [2, 1]);
+    assert.equal(reads.length, 1 + 2);        /* the zip's end with its directory, then one read per file */
+    assert.equal(fs.readFileSync(path.join(base, 'A.png'), 'utf8'), 'a'.repeat(5000));
+    assert.equal(fs.readFileSync(path.join(base, 'Sub', 'B.png'), 'utf8'), 'bbbb');
+    assert.ok(!fs.existsSync(path.join(base, 'old.png')));
+    assert.ok(fs.existsSync(path.join(base, 'mod.meta.xml')));
+    [s] = await hub.check(fetchFn, root, [mod]);
+    assert.deepEqual([s.installed, s.changes], ['1.0', 0]);
+    assert.deepEqual(await hub.get(fetchFn, root, mod).then(x => [x.fetched, x.dropped]), [0, 0]);
+});
+
+test('crc32 matches the zip standard', () => {
+    assert.equal(hub.crc32(Buffer.from('123456789')), 0xcbf43926);
+});

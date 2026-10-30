@@ -16,13 +16,18 @@
  *       "size": 1234, "sha256": "<64 hex>" } ] }
  *
  * What is installed from the HUB is kept in mods/hub.json (id -> folder,
- * version, sha256): the installed version and UPDATE come from there. An
- * install or update writes the mod's folder whole (an update replaces it)
- * and keeps its place and on/off in mods.ini; a new one goes to the top, on. */
+ * version, sha256). A mod counts as installed when hub.json names it or
+ * when mods/<folder> is already there (a mod copied by hand, as Mary had
+ * hers). A new install downloads the whole zip; a mod already there is
+ * compared file by file with the zip's central directory (size, CRC-32),
+ * read with HTTP ranges, and UPDATE downloads only the files that differ
+ * and deletes the ones the zip no longer has. Either way it keeps its place
+ * and on/off in mods.ini; a new one goes to the top, on. */
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const { spawnSync } = require('child_process');
 const upd = require('./update');
 
@@ -91,19 +96,189 @@ function writeInstalled(root, inst) {
     fs.writeFileSync(path.join(modsDir(root), 'hub.json'), JSON.stringify(inst, null, 2) + '\n');
 }
 
-/* each listed mod with what this folder has of it: installed (its version,
- * or null), and update when the hub's is newer. A HUB mod whose folder was
- * deleted counts as not installed. */
+/* where a listed mod is in this folder: the folder hub.json gave it, else
+ * mods/<its folder> when that exists; null when it is not here */
+function folderOf(root, inst, m) {
+    const i = inst[m.id];
+    if (i && safeName(i.folder) && fs.existsSync(path.join(modsDir(root), i.folder))) return i.folder;
+    return fs.existsSync(path.join(modsDir(root), m.folder)) ? m.folder : null;
+}
+
+/* each listed mod with what this folder has of it: installed (its version:
+ * hub.json's, else its mod.ini's; null when it is not here), and update
+ * when the hub's version is newer (a folder whose mod.ini has no version
+ * is told only by its files). A HUB mod whose folder was deleted
+ * counts as not installed. check() adds the files that differ. */
 function status(root, list) {
     const inst = readInstalled(root);
     return list.map(m => {
-        const i = inst[m.id];
-        const here = i && safeName(i.folder) && fs.existsSync(path.join(modsDir(root), i.folder)) ? i : null;
+        const folder = folderOf(root, inst, m);
+        let installed = null;
+        if (folder) {
+            const i = inst[m.id];
+            installed = i && i.folder === folder ? String(i.version || '')
+                : (readIni(path.join(modsDir(root), folder, 'mod.ini')).version || '');
+        }
         return Object.assign({}, m, {
-            installed: here ? String(here.version || '') : null,
-            update: !!here && upd.compareVersions(m.version, here.version) > 0,
+            installed, here: folder,
+            update: !!installed && upd.compareVersions(m.version, installed) > 0,
         });
     });
+}
+
+function readIni(file) {
+    const out = {};
+    let text = '';
+    try { text = fs.readFileSync(file, 'utf8'); } catch { return out; }
+    for (const line of text.split(/\r?\n/)) {
+        const mm = /^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$/.exec(line);
+        if (mm) out[mm[1].toLowerCase()] = mm[2];
+    }
+    return out;
+}
+
+/* ------------------------------------------------ the zip, by ranges ---- */
+
+/* bytes [a, b] of the mod's zip; throws when the server answers with the
+ * whole file instead (no range support) */
+async function range(fetchFn, mod, a, b) {
+    const r = await fetchFn(mod.url, { headers: { 'User-Agent': 'UMK3-Launcher', Range: 'bytes=' + a + '-' + b } });
+    if (r.status !== 206) throw new Error('no range reads (HTTP ' + r.status + ')');
+    return Buffer.from(await r.arrayBuffer());
+}
+
+/* the zip's files from its central directory: { path inside the mod
+ * folder, crc, csize, usize, method, off }. The zip holds the mod's folder,
+ * so its first part goes; folders and unsafe names are left out. */
+async function zipFiles(fetchFn, mod) {
+    if (!mod.size) throw new Error('the index has no size for this mod');
+    const tailAt = Math.max(0, mod.size - 65557);
+    const tail = await range(fetchFn, mod, tailAt, mod.size - 1);
+    const e = tail.lastIndexOf(Buffer.from([0x50, 0x4b, 5, 6]));
+    if (e < 0) throw new Error('not a zip');
+    const cdSize = tail.readUInt32LE(e + 12), cdOff = tail.readUInt32LE(e + 16);
+    if (cdOff === 0xffffffff || cdOff + cdSize > mod.size) throw new Error('zip64 is not supported');
+    const cd = cdOff >= tailAt ? tail.subarray(cdOff - tailAt, cdOff - tailAt + cdSize) : await range(fetchFn, mod, cdOff, cdOff + cdSize - 1);
+    const out = [];
+    for (let p = 0; p + 46 <= cd.length && cd.readUInt32LE(p) === 0x02014b50;) {
+        const nl = cd.readUInt16LE(p + 28), el = cd.readUInt16LE(p + 30), kl = cd.readUInt16LE(p + 32);
+        const name = cd.toString('utf8', p + 46, p + 46 + nl).replace(/\\/g, '/');
+        const ent = { crc: cd.readUInt32LE(p + 16), csize: cd.readUInt32LE(p + 20), usize: cd.readUInt32LE(p + 24),
+            method: cd.readUInt16LE(p + 10), off: cd.readUInt32LE(p + 42) };
+        p += 46 + nl + el + kl;
+        if (name.endsWith('/')) continue;
+        const parts = name.split('/').filter(Boolean);
+        if (parts.length < 2 || parts.some(s => s === '..' || s === '.' || /[:*?"<>|]/.test(s))) continue;
+        ent.path = parts.slice(1).join('/');
+        out.push(ent);
+    }
+    return out;
+}
+
+let g_crcTable = null;
+function crc32(buf) {
+    if (zlib.crc32) return zlib.crc32(buf) >>> 0;
+    if (!g_crcTable) {
+        g_crcTable = new Uint32Array(256);
+        for (let n = 0; n < 256; n++) {
+            let c = n;
+            for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+            g_crcTable[n] = c >>> 0;
+        }
+    }
+    let c = 0xffffffff;
+    for (let i = 0; i < buf.length; i++) c = g_crcTable[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+}
+
+/* the mod's own files the launcher writes, never counted as changes */
+const isOwn = rel => /^mod\.meta\.xml$/i.test(rel);
+
+function localFiles(base, rel = '', out = []) {
+    let list;
+    try { list = fs.readdirSync(path.join(base, rel), { withFileTypes: true }); } catch { return out; }
+    for (const e of list) {
+        const r = rel ? rel + '/' + e.name : e.name;
+        if (e.isDirectory()) localFiles(base, r, out);
+        else out.push(r);
+    }
+    return out;
+}
+
+/* what differs between mods/<folder> and the zip: { get: the zip's files
+ * missing or different here, drop: files here the zip does not have }.
+ * deep compares CRC-32 too, otherwise sizes only (fast, for the list). */
+function diff(root, folder, files, deep) {
+    const base = path.join(modsDir(root), folder);
+    const want = new Map(files.map(f => [f.path.toLowerCase(), f]));
+    const get = [];
+    for (const f of files) {
+        const p = path.join(base, f.path);
+        let st;
+        try { st = fs.statSync(p); } catch { st = null; }
+        if (!st || st.size !== f.usize || (deep && crc32(fs.readFileSync(p)) !== f.crc)) get.push(f);
+    }
+    const drop = localFiles(base).filter(r => !isOwn(r) && !want.has(r.toLowerCase()));
+    return { get, drop };
+}
+
+/* each installed mod's files that differ by size (one or two range reads
+ * of its zip's end); changes stays null when the zip cannot be read so */
+async function check(fetchFn, root, list) {
+    const st = status(root, list);
+    await Promise.all(st.map(async m => {
+        m.changes = null;
+        if (!m.here) return;
+        try {
+            const d = diff(root, m.here, await zipFiles(fetchFn, m), false);
+            m.changes = d.get.length + d.drop.length;
+            m.changeBytes = d.get.reduce((s, f) => s + f.csize, 0);
+        } catch { /* left unknown */ }
+    }));
+    return st;
+}
+
+/* One file out of the zip by its range: the local header's lengths are
+ * not known before reading it, so the read takes some room for them. */
+async function fetchEntry(fetchFn, mod, f) {
+    let buf = await range(fetchFn, mod, f.off, Math.min(mod.size - 1, f.off + 30 + 1024 + f.csize - 1));
+    if (buf.readUInt32LE(0) !== 0x04034b50) throw new Error('bad zip entry ' + f.path);
+    const start = 30 + buf.readUInt16LE(26) + buf.readUInt16LE(28);
+    if (buf.length < start + f.csize) buf = await range(fetchFn, mod, f.off, f.off + start + f.csize - 1);
+    const raw = buf.subarray(start, start + f.csize);
+    const data = f.method === 8 ? zlib.inflateRawSync(raw) : f.method === 0 ? raw : null;
+    if (!data) throw new Error('unsupported zip method ' + f.method);
+    if (data.length !== f.usize || crc32(data) !== f.crc) throw new Error('CRC does not match: ' + f.path);
+    return data;
+}
+
+/* UPDATE of a mod already here: only the files that differ (CRC-32), each
+ * downloaded and checked, written over; the ones the zip no longer has
+ * deleted. Returns how many were fetched and dropped. */
+async function sync(fetchFn, root, mod, onProgress) {
+    const inst = readInstalled(root);
+    const folder = folderOf(root, inst, mod);
+    if (!folder) throw new Error('not installed');
+    const files = await zipFiles(fetchFn, mod);
+    const d = diff(root, folder, files, true);
+    const base = path.join(modsDir(root), folder);
+    const total = d.get.reduce((s, f) => s + f.csize, 0);
+    let got = 0;
+    if (onProgress) onProgress(0, total);
+    for (const f of d.get) {
+        const data = await fetchEntry(fetchFn, mod, f);
+        const p = path.join(base, f.path);
+        fs.mkdirSync(path.dirname(p), { recursive: true });
+        fs.writeFileSync(p + '.part', data);
+        fs.renameSync(p + '.part', p);
+        got += f.csize;
+        if (onProgress) onProgress(got, total);
+    }
+    for (const r of d.drop) fs.rmSync(path.join(base, r), { force: true });
+    register(root, folder);
+    inst[mod.id] = { folder, version: mod.version, sha256: mod.sha256 };
+    writeInstalled(root, inst);
+    return { ok: true, folder, fetched: d.get.length, dropped: d.drop.length };
 }
 
 const headers = { 'User-Agent': 'UMK3-Launcher', 'Cache-Control': 'no-cache' };
@@ -198,4 +373,10 @@ async function install(fetchFn, root, mod, onProgress) {
     }
 }
 
-module.exports = { REPO, INDEX, parseIndex, status, fetchIndex, install, register, readInstalled };
+/* DOWNLOAD or UPDATE: the whole zip for a mod not here, only what differs
+ * for one that is */
+function get(fetchFn, root, mod, onProgress) {
+    return folderOf(root, readInstalled(root), mod) ? sync(fetchFn, root, mod, onProgress) : install(fetchFn, root, mod, onProgress);
+}
+
+module.exports = { REPO, INDEX, parseIndex, status, check, fetchIndex, install, sync, get, register, readInstalled, zipFiles, crc32 };

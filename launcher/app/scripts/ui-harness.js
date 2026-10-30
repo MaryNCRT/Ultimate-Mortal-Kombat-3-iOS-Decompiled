@@ -33,8 +33,8 @@ const calls = {
     stageEditsLoad: id => { try { return JSON.parse(fs.readFileSync(editFile(id), 'utf8')); } catch { return null; } },
     stageEditsSave: (id, json) => { fs.mkdirSync(path.dirname(editFile(id)), { recursive: true }); fs.writeFileSync(editFile(id), json); return true; },
     listPads: () => [], listMonitors: () => [], glyphs: () => ({}), replaysList: () => [],
-    hubList: async () => { g_hub = await hub.fetchIndex(fetch); return { ok: true, mods: hub.status(root, g_hub) }; },
-    hubInstall: async id => { const m = g_hub.find(x => x.id === id); return m ? Object.assign(await hub.install(fetch, root, m), { mods: hub.status(root, g_hub) }) : { ok: false, error: 'not in the hub' }; },
+    hubList: async () => { g_hub = await hub.fetchIndex(fetch); return { ok: true, mods: await hub.check(fetch, root, g_hub) }; },
+    hubInstall: async id => { const m = g_hub.find(x => x.id === id); return m ? Object.assign(await hub.get(fetch, root, m), { mods: await hub.check(fetch, root, g_hub) }) : { ok: false, error: 'not in the hub' }; },
 };
 
 /* the page's side: every call a POST, bytes back as base64 */

@@ -594,7 +594,8 @@ ipcMain.handle('mods:dataWrite', (_ev, folder, entries) => mods.dataWrite(g_root
 ipcMain.handle('res:files', () => mods.resFiles(g_root));
 
 /* The MOD HUB (lib/hub.js): the mods published in the hub repository, with
- * what this folder has of each, and one installed or updated by its id --
+ * what this folder has of each, and one installed or updated (only the files
+ * that differ, for one already here) by its id --
  * from the list fetched last, never from what the page sends. */
 let g_hub = [];
 ipcMain.handle('hub:list', async () => {
@@ -603,15 +604,15 @@ ipcMain.handle('hub:list', async () => {
     } catch (err) {
         return { ok: false, error: err.message, mods: hub.status(g_root, g_hub) };
     }
-    return { ok: true, mods: hub.status(g_root, g_hub) };
+    return { ok: true, mods: await hub.check(net.fetch, g_root, g_hub) };
 });
 ipcMain.handle('hub:install', async (_ev, id) => {
     const m = g_hub.find(x => x.id === id);
     if (!m)
         return { ok: false, error: 'not in the hub' };
     try {
-        const r = await hub.install(net.fetch, g_root, m, (got, total) => send('hub:progress', { id, got, total }));
-        return Object.assign(r, { mods: hub.status(g_root, g_hub) });
+        const r = await hub.get(net.fetch, g_root, m, (got, total) => send('hub:progress', { id, got, total }));
+        return Object.assign(r, { mods: await hub.check(net.fetch, g_root, g_hub) });
     } catch (err) {
         return { ok: false, error: err.message };
     }

@@ -1,8 +1,9 @@
 <script>
     /* MOD HUB: the mods published in the hub repository (lib/hub.js), each
      * with its picture, what it is, the version in the hub and the one in
-     * mods\. DOWNLOAD puts it in mods\ (on, at the top of the MOD MANAGER),
-     * UPDATE replaces it with the newer one. */
+     * mods\. DOWNLOAD puts it in mods\ (on, at the top of the MOD MANAGER);
+     * for a mod already there UPDATE (a newer version, or files that differ)
+     * and CHECK fetch only the files that differ. */
     import { onMount } from 'svelte';
     import { tx } from '#lib/app.svelte.js';
     import { api } from '#lib/platform.js';
@@ -43,7 +44,8 @@
         busy = null;
         if (r && r.ok) {
             list = r.mods;
-            msg[m.id] = [true, tx('hbDone') + r.folder];
+            msg[m.id] = [true, r.fetched === undefined ? tx('hbDone') + r.folder
+                : r.fetched + r.dropped ? (r.fetched + r.dropped) + ' ' + tx('hbSynced') : tx('hbSame')];
             await refreshMods();
         } else {
             msg[m.id] = [false, tx('hbErr') + (r && r.error ? ': ' + r.error : '')];
@@ -74,6 +76,7 @@
                     {tx('hbHub')} v{m.version}
                     {#if m.installed !== null} · {tx('hbYours')} {m.installed ? 'v' + m.installed : '?'}{/if}
                 </small>
+                {#if m.changes}<small class="warn">{m.changes} {tx('hbChanged')}{m.changeBytes ? ' · ' + mb(m.changeBytes) : ''}</small>{/if}
                 {#if busy === m.id}
                     <div class="prog"><i style="width: {prog.total ? Math.min(100, prog.got / prog.total * 100) : 0}%"></i></div>
                     <small>{tx('hbDl')} {mb(prog.got)}{prog.total ? ' / ' + mb(prog.total) : ''}</small>
@@ -84,7 +87,7 @@
             <div class="act">
                 {#if m.installed === null}
                     <button class="btn hot" onpointerenter={hoverBlip} disabled={!!busy} onclick={() => get(m)}>{tx('hbGet')}</button>
-                {:else if m.update}
+                {:else if m.update || m.changes}
                     <button class="btn hot" onpointerenter={hoverBlip} disabled={!!busy} onclick={() => get(m)}>{tx('hbUpdate')}</button>
                 {:else}
                     <span class="have">{tx('hbHave')}</span>
@@ -129,4 +132,5 @@
     .prog i { display: block; height: 100%; background: var(--grad-hot); }
     small.bad, .note.bad { color: #ff9aa0; }
     small.good { color: #8fe3a0; }
+    small.warn { color: var(--gold1); }
 </style>

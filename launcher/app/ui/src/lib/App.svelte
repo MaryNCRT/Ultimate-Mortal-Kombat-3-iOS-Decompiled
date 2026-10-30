@@ -57,6 +57,9 @@
         position: fixed; inset: 0;
         display: grid;
         grid-template-rows: calc(var(--u) * 4.2) minmax(0, 1fr) auto;
+        /* the window's width, never its content's: MODS' tab row made the
+         * column wider than a small window (Mary: the MOD HUB cut off) */
+        grid-template-columns: minmax(0, 1fr);
         grid-template-areas: "tb" "mid" "cmd";
     }
     .stage {

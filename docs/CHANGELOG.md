@@ -15,7 +15,11 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
   repository [MaryNCRT/UMK3-IOS-Mod-Hub](https://github.com/MaryNCRT/UMK3-IOS-Mod-Hub)
   with their pictures, downloads one into `mods\<mod>\` (checked against
   its SHA-256, turned on at the top of the MOD MANAGER) and offers UPDATE
-  when a newer version is published. Only the repository's owner and
+  when a newer version is published. A mod already in `mods\` (copied by
+  hand) is recognised by its folder and compared file by file with the
+  published zip; UPDATE then downloads only the files that differ, not the
+  whole mod. The MODS tab row wraps in a small window instead of pushing
+  the page past it (Mary's report). Only the repository's owner and
   collaborators can publish there. First mods: HD NINJAS, Sonya Blade MKX,
   Rain. **Not yet played by Mary.**
 

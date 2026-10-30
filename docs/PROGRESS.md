@@ -117,6 +117,19 @@ updatable.
   version is newer by `compareVersions`. IPC `hub:list`, `hub:install`
   (by id, from the list fetched last); page `sections/mods/ModHub.svelte`;
   the UI harness answers both.
+- **A mod already here** (Mary's report: she had all three by hand and the
+  HUB offered DOWNLOAD): a mod counts as installed when `hub.json` names it
+  or `mods\<folder>` exists. Its files are compared with the zip's central
+  directory, read with HTTP ranges (GitHub's release storage answers 206;
+  it refuses suffix ranges, so the index's `size` gives the offsets): sizes
+  when the list loads, CRC-32 on UPDATE / CHECK, which downloads only the
+  entries that differ (each its own range, inflated and CRC-checked) and
+  deletes files the zip lacks (`mod.meta.xml` kept). A folder whose
+  `mod.ini` has no version is judged by its files only.
+- **Small window** (Mary's report: the HUB cut off on the right): `.app`'s
+  grid had no column size, so the MODS tab row, one tab longer, made the
+  column wider than the window. It is `minmax(0, 1fr)` now and the tab row
+  wraps when it does not fit; at full width nothing changes.
 - **Checked:** `node --test test/*.js` (new `test/hub.test.js`: index
   parsing and filtering, installed/update status, `mods.ini` registration,
   a real zip installed and then updated in place, a bad hash refused).
