@@ -53,6 +53,39 @@ yet**. Asked by Mary after trying the first round:
     `lime.h`), and a lighting file that does not fit the skin is replaced by
     its average light (`Players.c port_fit_lighting`, logged `flat light`).
     The importer refuses a block over 65,535 vertices once unwelded.
+  - **0.1.14 beta: REPLACE MODEL like Blender, Mary 2026-10-30 (built,
+    not tried yet).**
+    - **Bones and weights while posed:** a clip's frame shown (or
+      playing: it holds while a bone is moved, paint goes on as it
+      plays) no longer jumps to the rest. A move is taken back to the
+      rest through the parent's turn in that frame, a turn about its
+      axis through the bone's (`editDeltas`), so the game plays what
+      was set.
+    - **Blender's camera** in the importer and the viewer
+      (`mods/viewnav.js`): the navigation gizmo (click an axis to look
+      down it, again for the other side, drag to orbit), the numpad
+      (1 / 3 / 7, Ctrl the other side, 9, 4 / 6 / 8 / 2, 5) or the top
+      row's digits, Auto Perspective (an axis view is orthographic;
+      orbiting off it goes back), the view's name bottom left. Checked
+      in node with a stubbed DOM: the views keep the distance, ortho
+      in and out, 9 the opposite.
+    - **EDIT MODEL** in the viewer: the fighter's skin as it is (the
+      mod's model, by its parts and textures; `fighterDesc` `parts`)
+      opened in REPLACE MODEL's window as an exporter GLB, no file to
+      pick. With a `<skin>.source` it opens that instead.
+    - **The file's own rig by default:** a model with a skeleton
+      (humanoid or the exporter's names) opens with KEEP PROPORTIONS,
+      its own bones. With the exporter's names that now keeps its
+      joints too (`proportions` for any mapped rig).
+    - **A model without a skeleton:** POSE T / POSE A / DEFAULT turn
+      the fighter's arms to the model's pose before its vertices are
+      weighted (`bareAdjust`, `fighterAngles`).
+    - **The preview as the game plays it:** the game reads the mod's
+      `<skin>.bones` the same way (offsets, root height on Y only,
+      `skin_mats.c` / `RenderSkinned.c`). The window played the game's
+      animations, though, where the fight plays the mod's .skinanim
+      (REPLACE ANIMATION, corrective layers). It now plays the mod's
+      (`gameFighter`: the game's bones and skin, the mod's .skinanim).
   - **REPLACE MODEL: undo, bone rotations, clean T / A, edit a saved
     model, a model over another, Mary 2026-10-29 (built, not tried yet).**
     UNDO / REDO (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z, and two buttons): every

@@ -118,12 +118,15 @@ export async function fighter(ch) {
     }
 }
 
-/* the fighter as the game ships it, no mod on it: what REPLACE MODEL fits
- * a model to, so an earlier model's bones and weights are not under it */
-const gameSrc = { get files() { return src.files; }, read: rel => src.read(rel, '') };
+/* what REPLACE MODEL fits a model to: the fighter's bones and skin as the
+ * game ships them, so an earlier model's bones and weights are not under
+ * it, with the animations the game will play -- the mod's own .skinanim
+ * when it has one (REPLACE ANIMATION, corrective layers), as the game
+ * reads it -- so the window plays what the fight will */
 export async function gameFighter(ch) {
-    const key = '|' + ch.id;
-    if (!fighters.has(key)) fighters.set(key, loadFighter(gameSrc, ch));
+    const layer = ms.layer, key = 'imp:' + layer + '|' + ch.id;
+    const from = { get files() { return src.files; }, read: rel => src.read(rel, /\.skinanim$/i.test(rel) ? layer : '') };
+    if (!fighters.has(key)) fighters.set(key, loadFighter(from, ch));
     try {
         return await fighters.get(key);
     } catch (e) {

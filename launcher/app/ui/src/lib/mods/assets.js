@@ -194,10 +194,10 @@ export function fighterDesc(f, opts) {
     const all = restPose === f.bind.pose ? posedVerts(f.rig, f.topo, restPose)
         : (f.fitted ||= fitRest(f.rig, f.topo, f.weights, restPose));
     const meshes = [], materials = [];
-    f.topo.blocks.forEach((blk, bi) => {
-        /* the block's triangles, with its own vertices */
+    /* a run of a block's triangles as a mesh, with its own vertices */
+    const emit = (bi, first, count, tex, name) => {
         const map = new Map(), pos = [], uv = [], idx = [], wt = [], faces = [];
-        for (let t = blk.first * 3; t < (blk.first + blk.count) * 3; t++) {
+        for (let t = first * 3; t < (first + count) * 3; t++) {
             const o = f.topo.faces[t];
             let k = map.get(o);
             if (k === undefined) {
@@ -209,11 +209,20 @@ export function fighterDesc(f, opts) {
             }
             faces.push(k);
         }
+        let m = opts.parts ? materials.findIndex(x => x.stem === tex) : -1;
+        if (m < 0) { m = materials.length; materials.push({ name: tex, texture: tex + '.png', stem: tex }); }
+        meshes.push({ name, pos: Float32Array.from(pos), uv: Float32Array.from(uv),
+            faces: Uint32Array.from(faces), material: m, skin: { idx: Int32Array.from(idx), wt: Float32Array.from(wt) } });
+    };
+    f.topo.blocks.forEach((blk, bi) => {
         let tex = f.blockTex[bi];
         if (opts.variant && bi === 0) tex = opts.variant;
-        materials.push({ name: tex, texture: tex + '.png', stem: tex });
-        meshes.push({ name: f.ch.file + (bi ? '_' + bi : ''), pos: Float32Array.from(pos), uv: Float32Array.from(uv),
-            faces: Uint32Array.from(faces), material: bi, skin: { idx: Int32Array.from(idx), wt: Float32Array.from(wt) } });
+        const name = f.ch.file + (bi ? '_' + bi : '');
+        /* opts.parts: a model brought in, each of its parts (the skin's
+         * .mats) a mesh with its own texture, as REPLACE MODEL made them */
+        const ps = opts.parts && f.parts && f.parts[bi] && f.parts[bi].length ? f.parts[bi] : null;
+        if (ps) ps.forEach((p, k) => emit(bi, blk.first + p.first, p.count, p.stem || tex, name + '_P' + (k + 1)));
+        else emit(bi, blk.first, blk.count, tex, name);
     });
     const skeleton = { names: f.names, parent: Array.from(f.rig.bones.parent), rest: restPose };
     const pick = opts.clips === 'all' ? f.clips : (opts.clips || []).map(i => f.clips[i]).filter(Boolean);
