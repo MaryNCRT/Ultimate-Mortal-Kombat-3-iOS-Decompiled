@@ -547,10 +547,12 @@ function conformDir(conf, n, inf) {
  * thigh's spread from straight down, beside the fighter's own rest.
  *
  * o.adjust: { armAngle, armRoll, legAngle, legRoll } in degrees, the same
- * on both sides, mirrored; auto (default on): KEEP PROPORTIONS turns the
- * file's arms to the fighter's rise first, so an A-pose model plays the
- * game's moves with the arms where the fighter's are (FIT TO THE FIGHTER
- * turns each part to its bone anyway).
+ * on both sides, mirrored; auto (off unless asked: Mary found it moved
+ * models that were fine): KEEP PROPORTIONS turns the file's arms to the
+ * fighter's rise first, so an A-pose model plays the game's moves with the
+ * arms where the fighter's are (FIT TO THE FIGHTER turns each part to its
+ * bone anyway). A file with the fighter's own bone names is turned as
+ * KEEP PROPORTIONS turns it: the model itself, its bones left.
  *   angle  raises the arms / spreads the legs (negative: lowers, closes)
  *   roll   turns the limb about its own length
  * The roll and, keeping proportions, the angle turn the model itself (each
@@ -587,6 +589,7 @@ export function poseName(rise) {
 
 function adjustments(f, mdl, place, o) {
     const J0 = fileJoints(mdl, place), rest = place.rest, a = o.adjust || {};
+    const pre = o.keep || place.map.kind === 'names';
     const hips = f.names.indexOf('hips');
     const cx = hips >= 0 ? (J0.get(hips) || rest[hips].T)[0] : rest[f.rig.bones.root].T[0];
     const limbs = limbsOf(f);
@@ -602,9 +605,9 @@ function adjustments(f, mdl, place, o) {
         const P = J0.get(L.g), d = vsub(J0.get(L.c), P), s = side(L, P, d);
         sum.file[L.kind].push(angleOf(L.kind, d));
         let ang = 0;
-        if (o.keep) {
+        if (pre) {
             ang = (L.kind === 'arm' ? a.armAngle : a.legAngle) || 0;
-            if (L.kind === 'arm' && a.auto !== false) ang += riseOf(fd) - riseOf(d);
+            if (L.kind === 'arm' && a.auto === true && o.keep) ang += riseOf(fd) - riseOf(d);
         }
         const roll = (L.kind === 'arm' ? a.armRoll : a.legRoll) || 0;
         if (!ang && !roll) continue;
@@ -618,7 +621,7 @@ function adjustments(f, mdl, place, o) {
 
     /* fitting: the angle on the fighter's joints, as bone offsets */
     let rest2 = rest, ov = null;
-    if (!o.keep)
+    if (!pre)
         for (const L of limbs) {
             const ang = (L.kind === 'arm' ? a.armAngle : a.legAngle) || 0;
             if (!ang) continue;
@@ -705,6 +708,29 @@ function proportions(f, J, rest) {
     return { rest: out, bones: { offsets: offs, rootY } };
 }
 
+/* BONE POSITIONS: joints moved by hand (o.joints: bone -> [dx, dy, dz], game
+ * units), each alone -- its children stay where they are, as the GTA SA
+ * viewer's joint markers move. The bones' offsets from their parents
+ * change with it, so they are written with the skin (<skin>.bones), as the
+ * proportion trick's are. The root is the animations' and is not moved. */
+function movedJoints(f, rest, joints, ov) {
+    const bones = f.rig.bones;
+    const moved = Object.entries(joints || {}).map(([b, d]) => [Number(b), d])
+        .filter(([b, d]) => b !== bones.root && b >= 0 && b < bones.num && d && d.some(x => x));
+    if (!moved.length) return { rest, ov };
+    const out = rest.slice();
+    for (const [b, d] of moved) out[b] = { ...rest[b], T: [rest[b].T[0] + d[0], rest[b].T[1] + d[1], rest[b].T[2] + d[2]] };
+    const ov2 = { offsets: new Map(ov ? ov.offsets : []), rootY: ov ? ov.rootY : 1 };
+    const touch = new Set();
+    for (const [b] of moved) { touch.add(b); for (const c of bones.children[b]) touch.add(c); }
+    for (const i of touch) {
+        const p = bones.parent[i];
+        if (p < 0) continue;
+        ov2.offsets.set(i, vmul(vsub(out[i].T, out[p].T), tr3(out[p].R)));
+    }
+    return { rest: out, ov: ov2 };
+}
+
 /* The bones' offsets and the root's height times the scale: every bone's
  * (the proportion trick's where it has one, else the fighter's own) */
 function scaledBones(f, ov, k) {
@@ -762,9 +788,13 @@ function autoWeights(f, rest, p) {
  *                one each in order, the rest sharing the last)
  *   o.adjust     a humanoid rig: { armAngle, armRoll, legAngle, legRoll,
  *                auto } (adjustments above)
- *   o.scale      the model's size, about its pivot: the floor under the
- *                fighter's root. Mesh, bones and the root's height together
- *                (written as <skin>.bones), so the animations play on it
+ *   o.joints     bone -> [dx, dy, dz]: joints moved by hand (movedJoints)
+ *   o.reweight   every vertex weighted here to the nearest bones (the
+ *                file's own weights left), as after moving the joints
+ *   o.scale      the model's size, about the pivot at 0,0,0 (the floor
+ *                under the fighter). Mesh, bones and the root's height
+ *                together (written as <skin>.bones), so the animations
+ *                play on it
  * Returns { bytes, verts, tris, kind, matched, of, auto (vertices weighted
  * here), parts: per block, its runs of triangles [{ mat, first, count }],
  * rig ('names', 'humanoid' or ''), bones (the proportion trick's override,
@@ -774,14 +804,14 @@ export function buildSkin(f, mdl, o = {}) {
     const nblocks = f.rig.skin.length;
     const place = placeModel(f, mdl, o.turn || 0);
     const human = place.map && place.map.kind === 'humanoid';
-    const adj = human ? adjustments(f, mdl, place, o) : null;
+    const adj = place.map ? adjustments(f, mdl, place, o) : null;
     const prop = human && o.keep ? proportions(f, adj.J, place.rest) : null;
     const conf = human && !o.keep ? conformers(place, adj.J, adj.rest) : null;
     const k = o.scale && o.scale !== 1 ? o.scale : 1;
-    const rest0 = prop ? prop.rest : adj ? adj.rest : place.rest;
-    const rT = rest0[f.rig.bones.root].T;
-    /* about the pivot: x and z about the root's, y about the floor */
-    const scaled = p => (k === 1 ? p : [rT[0] + (p[0] - rT[0]) * k, p[1] * k, rT[2] + (p[2] - rT[2]) * k]);
+    const mj = movedJoints(f, prop ? prop.rest : adj ? adj.rest : place.rest, o.joints, prop ? prop.bones : adj && adj.ov);
+    const rest0 = mj.rest;
+    /* about the pivot, 0,0,0 */
+    const scaled = p => (k === 1 ? p : [p[0] * k, p[1] * k, p[2] * k]);
     const bindRest = k === 1 ? rest0 : rest0.map(r => ({ ...r, T: scaled(r.T) }));
     const blockOf = mdl.materials.map((_, i) => (o.blockOf && o.blockOf[i] !== undefined ? o.blockOf[i] : Math.min(i, nblocks - 1)));
 
@@ -797,8 +827,13 @@ export function buildSkin(f, mdl, o = {}) {
              * the same bone summed */
             const sum = new Map();
             if (m.inf) for (const [b, w] of m.inf[v]) { const g = place.byFile[b]; if (g >= 0) sum.set(g, (sum.get(g) || 0) + w); }
-            let l = [...sum];
-            if (!l.length) { l = autoWeights(f, rest0, p); auto++; }
+            let l = o.reweight ? [] : [...sum];
+            if (!l.length) {
+                if (adj && sum.size) p = adj.point(p, [...sum]);
+                if (conf && sum.size) p = conformPoint(conf, p, [...sum]);
+                l = autoWeights(f, rest0, p);
+                auto++;
+            }
             else {
                 if (adj) p = adj.point(p, l);
                 if (conf) p = conformPoint(conf, p, l);
@@ -820,7 +855,7 @@ export function buildSkin(f, mdl, o = {}) {
                     blk.verts.push({ p, n: [0, 0, 0], inf: ginf[v] });
                 }
                 let n = m.tn ? xdir(place.toGame, [m.tn[k * 3], m.tn[k * 3 + 1], m.tn[k * 3 + 2]]) : null;
-                if (n && adj && m.inf) n = adj.dir(n, ginf[v]);
+                if (n && adj && m.inf && !o.reweight) n = adj.dir(n, ginf[v]);
                 if (n && conf) n = conformDir(conf, n, ginf[v]);
                 if (n) for (let q = 0; q < 3; q++) blk.verts[oi].n[q] += n[q];
                 tri.push({ o: oi, uv: [m.tuv[k * 2], m.tuv[k * 2 + 1]] });
@@ -864,8 +899,9 @@ export function buildSkin(f, mdl, o = {}) {
         bytes: writeSkin(blocks, bindRest, f.rig.skin.counted !== false),
         verts: blocks.reduce((s, b) => s + b.verts.length, 0), tris: blocks.reduce((s, b) => s + b.tris.length, 0),
         kind: place.kind, matched: place.matched, of: f.names.length, auto, parts,
-        rig: place.map ? place.map.kind : '', bones: scaledBones(f, prop ? prop.bones : adj && adj.ov, k),
+        rig: place.map ? place.map.kind : '', bones: scaledBones(f, mj.ov, k),
         pose: adj ? adj.info : null,
+        rest: bindRest,
     };
 }
 
