@@ -108,6 +108,24 @@ yet**. Asked by Mary after trying the first round:
     fight's camera (GAME CAMERA button), log depth for the far skies; its
     textures marked sRGB there, as the fighter's are in that view. Not
     yet seen by Mary.
+  - **The fighter hit by a combo of three or more slides back (Mary
+    2026-10-30; checked against the binary, nothing changed).** Two rules in
+    the binary move fighters apart mid-combo, and the port's transcriptions
+    of both match it. (1) The corner rule, `t_avoid_corner_trap`
+    (0x47b50): when the fighter hit is within 103 of the level's limit
+    behind them (`am_i_close_to_edge`, `gdfe4`: the wall itself is 58 in on
+    the left, 48 on the right, so about 45 from the wall) and has taken at
+    least `field20` hits (1 from `t_cc_ken_masters`, `t_r_airborn_duck_kick`
+    and `t_cc_block_avoid_corner`), the ATTACKER is moved away
+    (`t_ken_masters_xfer`). Mary's log of 2026-10-30 10:15 shows it four
+    times, on the 1st to 3rd hit, all against a wall. (2) The punch chain,
+    `t_ccp3` (0x477bc) then `t_separate_us` (0x43250): after 6 high or 5
+    low punches in a row (4 and 3 against the machine, or a player holding
+    away) the one hit stumbles back, or at a wall the attacker is dragged.
+    It did not fire in that log. Still open: whether Mary's slide was one of
+    these or a reaction's own push (`away_x_vel` in the combo reactions);
+    the next log with the move and where on the stage will tell (the
+    `corner trap:` and `separate us:` lines name which rule fired).
   - **Unbroken select-screen music into STAGE SELECT, a smaller ESC menu
     on 4:3, every mod in TARGET MOD, TEXTURES in the STAGE VIEWER (Mary
     2026-10-30; built into the test folder, not tried by Mary yet).** After
