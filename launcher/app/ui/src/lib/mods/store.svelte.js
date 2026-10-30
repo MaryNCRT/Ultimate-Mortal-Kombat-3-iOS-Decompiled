@@ -3,8 +3,9 @@
 import { api } from '../platform.js';
 import { catalog, loadFighter } from './assets.js';
 
-export const MODS_TABS = [['mgr', 'modsMgr'], ['view', 'modsView'], ['edit', 'modsEdit'], ['tex', 'modsTex'], ['exp', 'modsExp']];
-export const VIEW_KINDS = [['characters', 'vwChars'], ['stages', 'vwStages'], ['models', 'vwModels'], ['textures', 'vwTex']];
+export const MODS_TABS = [['mgr', 'modsMgr'], ['view', 'modsView'], ['stage', 'modsStage'], ['edit', 'modsEdit'], ['tex', 'modsTex'], ['exp', 'modsExp']];
+/* the stages have a viewer of their own (STAGE VIEWER, StageViewer.svelte) */
+export const VIEW_KINDS = [['characters', 'vwChars'], ['models', 'vwModels'], ['textures', 'vwTex']];
 
 export const ms = $state({
     tab: 'mgr',
