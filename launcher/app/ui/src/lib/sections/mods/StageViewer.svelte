@@ -500,7 +500,7 @@
         const el = sel && edits.els[sel.key];
         if (!el) return [];
         return [{ label: tx('stPlacement'), keys: el.keys.map(k => ({ f: k.f, i: k.i })) },
-            ...el.shapes.map(s => ({ label: s.name, keys: s.keys.map(k => ({ f: k.f, i: k.i })) }))];
+            ...el.shapes.map(s => ({ label: s.name, sub: true, keys: s.keys.map(k => ({ f: k.f, i: k.i })) }))];
     });
     const editKey = $derived(sel && editable(sel.key) ? sel.key : null);
     const hasEdits = $derived.by(() => { erev; return !!(editKey && edits.els[editKey]); });
@@ -607,7 +607,7 @@
                     {#each SPEEDS as v}<option value={v}>{v}x</option>{/each}
                 </select>
             </div>
-            <KeyTimeline {length} frame={frameOf(tick, length)} {rows} onSeek={f => { playing = false; seek(f); }} />
+            <KeyTimeline {length} frame={frameOf(tick, length)} {rows} onSeek={f => { playing = false; seek(f); }} {playing} onPlay={() => { selectBlip(); playing = !playing; }} />
         {/if}
     </section>
 
@@ -755,7 +755,7 @@
     .play .speed { flex: 0 0 calc(var(--u) * 8); }
     .play .interp { flex: 0 0 calc(var(--u) * 11); }
     .play .grow { flex: 1; }
-    .main :global(.tl) { margin-top: calc(var(--u) * .4); max-height: calc(var(--u) * 14); overflow-y: auto; }
+    .main :global(.tl) { margin-top: calc(var(--u) * .4); max-height: calc(var(--u) * 20); overflow-y: auto; overflow-x: hidden; }
     .edit { position: absolute; left: 50%; top: calc(var(--u) * .6); transform: translateX(-50%); padding: 2px 10px; border-radius: var(--r-sm);
         background: rgba(10, 8, 32, .8); color: #fff; font-size: calc(var(--t) * 1.2); letter-spacing: .06em; pointer-events: none; white-space: nowrap; }
     .trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(var(--u) * .4); }

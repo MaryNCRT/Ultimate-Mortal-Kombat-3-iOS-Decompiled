@@ -961,6 +961,7 @@
         const hit = ray.intersectObjects(meshes.filter(m => m.visible), false)[0];
         if (!hit) return;
         e.stopImmediatePropagation();
+        e.preventDefault();             /* no native drag or selection */
         remember();
         const r = renderer.domElement.getBoundingClientRect();
         const R = brush.radius * (camera.isOrthographicCamera ? (camera.top - camera.bottom) / camera.zoom
@@ -1061,7 +1062,7 @@
         for (const sh of shapes) for (const k of sh.keys) if (k.c === clip && k.f === frame) k.i = v;
         changed();
     }
-    const shapeRows = $derived.by(() => { srev; return clip < 0 ? [] : shapes.map(sh => ({ label: sh.name, keys: sh.keys.filter(k => k.c === clip).map(k => ({ f: k.f + 1, i: k.i })) })); });
+    const shapeRows = $derived.by(() => { srev; return clip < 0 ? [] : shapes.map(sh => ({ label: sh.name, sub: true, keys: sh.keys.filter(k => k.c === clip).map(k => ({ f: k.f + 1, i: k.i })) })); });
     const shapeShown = $derived.by(() => { srev; clip; frame; return shapes.map((sh, j) => ({ name: sh.name, v: shapeVal(j), mute: !!sh.mute, keyed: clip >= 0 && sh.keys.some(k => k.c === clip && k.f === frame) && !pend[j] })); });
 
     function setTool(t) {
@@ -1392,7 +1393,7 @@
                                 <option value="bezier">BEZIER</option><option value="linear">{tx('stLinear')}</option>
                             </select>
                         </div>
-                        <KeyTimeline length={pf.clips[clip].to - pf.clips[clip].from + 1} frame={frame + 1} rows={shapeRows} onSeek={f => { playing = false; frame = f - 1; }} />
+                        <KeyTimeline length={pf.clips[clip].to - pf.clips[clip].from + 1} frame={frame + 1} rows={shapeRows} onSeek={f => { playing = false; frame = f - 1; }} {playing} onPlay={() => { playing = !playing; }} />
                     {/if}
                 {/if}
             </section>
@@ -1617,7 +1618,7 @@
     .play .sel.speed { flex: 0 0 calc(var(--u) * 8); }
     .play .sel.interp { flex: 0 0 calc(var(--u) * 11); }
     .play .grow { flex: 1; }
-    .main :global(.tl) { margin-top: calc(var(--u) * .4); max-height: calc(var(--u) * 12); overflow-y: auto; }
+    .main :global(.tl) { margin-top: calc(var(--u) * .4); max-height: calc(var(--u) * 18); overflow-y: auto; overflow-x: hidden; }
     .shapes { list-style: none; margin: 0; padding: calc(var(--u) * .3); background: var(--well); border-radius: var(--r-sm); flex: none; display: flex; flex-direction: column; gap: 2px; }
     .shapes li { display: flex; align-items: center; gap: calc(var(--u) * .4); padding: 2px 4px; border-radius: 3px; }
     .shapes li.on { background: rgba(255, 160, 64, .18); }
