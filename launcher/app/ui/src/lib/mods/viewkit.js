@@ -41,6 +41,23 @@ export function weightColors(weights, n) {
     return out;
 }
 
+/* WEIGHT PAINT's colours, as Blender's: one bone's weight per vertex, blue
+ * at 0 through green to red at 1 */
+export function heatColor(w, out, o) {
+    const t = Math.max(0, Math.min(1, w)) * 4;
+    const r = t < 2 ? 0 : t < 3 ? t - 2 : 1, g = t < 1 ? t : t < 3 ? 1 : 4 - t, b = t < 1 ? 1 : t < 2 ? 2 - t : 0;
+    out[o] = r; out[o + 1] = g; out[o + 2] = b;
+}
+export function heatColors(weights, n, bone) {
+    const out = new Float32Array(n * 3);
+    for (let v = 0; v < n; v++) {
+        let w = 0;
+        for (let k = 0; k < 4; k++) if (weights.idx[v * 4 + k] === bone) w += weights.wt[v * 4 + k];
+        heatColor(w, out, v * 3);
+    }
+    return out;
+}
+
 /* How a material draws: look { wire, solid (no texture), weights (the
  * vertices' colours) }. Changed only when the look does. */
 export function applyLook(mt, look) {

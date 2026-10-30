@@ -30,6 +30,7 @@ export { parseBonesText } from './rig.js';
 import { mapBones } from './retarget.js';
 import { parseSkin } from './formats.js';
 import { decodePicture } from './image.js';
+import { eulerMat } from './corrective.js';
 
 const PICTURE = /\.(png|jpe?g|jfif|webp|gif|bmp|ico|avif|svg|tga)$/i;
 
@@ -710,18 +711,32 @@ function proportions(f, J, rest) {
 
 /* BONE POSITIONS: joints moved by hand (o.joints: bone -> [dx, dy, dz], game
  * units), each alone -- its children stay where they are, as the GTA SA
- * viewer's joint markers move. The bones' offsets from their parents
- * change with it, so they are written with the skin (<skin>.bones), as the
- * proportion trick's are. The root is the animations' and is not moved. */
-function movedJoints(f, rest, joints, ov) {
+ * viewer's joint markers move -- and bones turned (o.turns: bone -> [x, y,
+ * z] degrees about the game's X, then Y, then Z, as Blender's rotation
+ * fields), its children going round its joint, parents first. The bones'
+ * offsets from their parents change with it, so they are written with the
+ * skin (<skin>.bones), as the proportion trick's are. The root is the
+ * animations' and is not moved. */
+function movedJoints(f, rest, joints, ov, turns) {
     const bones = f.rig.bones;
-    const moved = Object.entries(joints || {}).map(([b, d]) => [Number(b), d])
+    const pick = o => Object.entries(o || {}).map(([b, d]) => [Number(b), d])
         .filter(([b, d]) => b !== bones.root && b >= 0 && b < bones.num && d && d.some(x => x));
-    if (!moved.length) return { rest, ov };
+    const moved = pick(joints), turned = pick(turns);
+    if (!moved.length && !turned.length) return { rest, ov };
     const out = rest.slice();
     for (const [b, d] of moved) out[b] = { ...rest[b], T: [rest[b].T[0] + d[0], rest[b].T[1] + d[1], rest[b].T[2] + d[2]] };
-    const ov2 = { offsets: new Map(ov ? ov.offsets : []), rootY: ov ? ov.rootY : 1 };
+    const below = b => { const l = [b]; for (let k = 0; k < l.length; k++) l.push(...bones.children[l[k]]); return l; };
+    const depth = b => { let d = 0; while (bones.parent[b] >= 0) { b = bones.parent[b]; d++; } return d; };
     const touch = new Set();
+    for (const [b, r] of turned.sort((x, y) => depth(x[0]) - depth(y[0]))) {
+        const M = eulerMat(r), P = out[b].T;
+        for (const c of below(b).slice(1)) {
+            const q = vmul(vsub(out[c].T, P), M);
+            out[c] = { ...out[c], T: [q[0] + P[0], q[1] + P[1], q[2] + P[2]] };
+            touch.add(c);
+        }
+    }
+    const ov2 = { offsets: new Map(ov ? ov.offsets : []), rootY: ov ? ov.rootY : 1 };
     for (const [b] of moved) { touch.add(b); for (const c of bones.children[b]) touch.add(c); }
     for (const i of touch) {
         const p = bones.parent[i];
@@ -789,14 +804,18 @@ function autoWeights(f, rest, p) {
  *   o.adjust     a humanoid rig: { armAngle, armRoll, legAngle, legRoll,
  *                auto } (adjustments above)
  *   o.joints     bone -> [dx, dy, dz]: joints moved by hand (movedJoints)
+ *   o.turns      bone -> [x, y, z] degrees: bones turned by hand (the same)
  *   o.reweight   every vertex weighted here to the nearest bones (the
  *                file's own weights left), as after moving the joints
+ *   o.paint      WEIGHT PAINT: "mesh:vertex" (the file's) -> [[bone, w]],
+ *                the weights painted by hand, over any other
  *   o.scale      the model's size, about the pivot at 0,0,0 (the floor
  *                under the fighter). Mesh, bones and the root's height
  *                together (written as <skin>.bones), so the animations
  *                play on it
  * Returns { bytes, verts, tris, kind, matched, of, auto (vertices weighted
  * here), parts: per block, its runs of triangles [{ mat, first, count }],
+ * src: per vertex written, the file's "mesh:vertex" that went into it,
  * rig ('names', 'humanoid' or ''), bones (the proportion trick's override,
  * for <skin>.bones, or null), pose (a humanoid rig: the file's and the
  * fighter's arm rise and leg spread, degrees, or null) }. */
@@ -808,7 +827,7 @@ export function buildSkin(f, mdl, o = {}) {
     const prop = human && o.keep ? proportions(f, adj.J, place.rest) : null;
     const conf = human && !o.keep ? conformers(place, adj.J, adj.rest) : null;
     const k = o.scale && o.scale !== 1 ? o.scale : 1;
-    const mj = movedJoints(f, prop ? prop.rest : adj ? adj.rest : place.rest, o.joints, prop ? prop.bones : adj && adj.ov);
+    const mj = movedJoints(f, prop ? prop.rest : adj ? adj.rest : place.rest, o.joints, prop ? prop.bones : adj && adj.ov, o.turns);
     const rest0 = mj.rest;
     /* about the pivot, 0,0,0 */
     const scaled = p => (k === 1 ? p : [p[0] * k, p[1] * k, p[2] * k]);
@@ -818,7 +837,7 @@ export function buildSkin(f, mdl, o = {}) {
     /* a block's triangles, per material, put in a row at the end */
     const blocks = Array.from({ length: nblocks }, () => ({ verts: [], map: new Map(), tris: [], byMat: new Map() }));
     let auto = 0;
-    for (const m of mdl.meshes) {
+    for (const [mi, m] of mdl.meshes.entries()) {
         const nv = m.pos.length / 3;
         const gpos = [], ginf = [];
         for (let v = 0; v < nv; v++) {
@@ -827,7 +846,8 @@ export function buildSkin(f, mdl, o = {}) {
              * the same bone summed */
             const sum = new Map();
             if (m.inf) for (const [b, w] of m.inf[v]) { const g = place.byFile[b]; if (g >= 0) sum.set(g, (sum.get(g) || 0) + w); }
-            let l = o.reweight ? [] : [...sum];
+            const painted = o.paint && o.paint[mi + ':' + v];
+            let l = painted ? painted.map(x => [...x]) : o.reweight ? [] : [...sum];
             if (!l.length) {
                 if (adj && sum.size) p = adj.point(p, [...sum]);
                 if (conf && sum.size) p = conformPoint(conf, p, [...sum]);
@@ -852,8 +872,9 @@ export function buildSkin(f, mdl, o = {}) {
                 if (oi === undefined) {
                     oi = blk.verts.length;
                     blk.map.set(key, oi);
-                    blk.verts.push({ p, n: [0, 0, 0], inf: ginf[v] });
+                    blk.verts.push({ p, n: [0, 0, 0], inf: ginf[v], src: new Set() });
                 }
+                blk.verts[oi].src.add(mi + ':' + v);
                 let n = m.tn ? xdir(place.toGame, [m.tn[k * 3], m.tn[k * 3 + 1], m.tn[k * 3 + 2]]) : null;
                 if (n && adj && m.inf && !o.reweight) n = adj.dir(n, ginf[v]);
                 if (n && conf) n = conformDir(conf, n, ginf[v]);
@@ -902,6 +923,7 @@ export function buildSkin(f, mdl, o = {}) {
         rig: place.map ? place.map.kind : '', bones: scaledBones(f, mj.ov, k),
         pose: adj ? adj.info : null,
         rest: bindRest,
+        src: blocks.flatMap(b => b.verts.map(x => (x.src ? [...x.src] : []))),
     };
 }
 
@@ -943,4 +965,32 @@ export async function sheetPng(pic) {
         cv.getContext('2d').drawImage(pic, 0, 0);
     }
     return new Uint8Array(await (await cv.convertToBlob({ type: 'image/png' })).arrayBuffer());
+}
+
+/* The model brought in, kept in the mod beside the skin (<skin>.source) so
+ * REPLACE MODEL can open it again with what it was set to: a 4-byte length,
+ * that much JSON ({ name, files: [[name, size]] }), then the files' bytes
+ * one after the other -- the model first, then what was beside it, then a
+ * picture chosen for a material as "pick:<material>". */
+export function packSource(file, picks) {
+    const list = [[file.name, file.bytes], ...Object.entries(file.beside || {}), ...Object.entries(picks || {}).map(([i, b]) => ['pick:' + i, b])];
+    const head = new TextEncoder().encode(JSON.stringify({ name: file.name, files: list.map(([n, b]) => [n, b.length]) }));
+    const out = new Uint8Array(4 + head.length + list.reduce((a, [, b]) => a + b.length, 0));
+    new DataView(out.buffer).setUint32(0, head.length, true);
+    out.set(head, 4);
+    let o = 4 + head.length;
+    for (const [, b] of list) { out.set(b, o); o += b.length; }
+    return out;
+}
+/* packSource's bytes as main.js file:pick gives a model, and the pictures */
+export function unpackSource(bytes) {
+    const d = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const n = d.getUint32(0, true);
+    const head = JSON.parse(new TextDecoder().decode(bytes.subarray(4, 4 + n)));
+    let o = 4 + n;
+    const parts = head.files.map(([name, size]) => { const b = bytes.slice(o, o + size); o += size; return [name, b]; });
+    const [[name, main], ...rest] = parts;
+    const beside = {}, picks = {};
+    for (const [k, b] of rest) if (k.startsWith('pick:')) picks[k.slice(5)] = b; else beside[k] = b;
+    return { file: { name, bytes: main, beside }, picks };
 }

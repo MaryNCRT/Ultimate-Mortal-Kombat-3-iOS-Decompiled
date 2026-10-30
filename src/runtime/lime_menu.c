@@ -475,6 +475,7 @@ typedef struct {
     unsigned char *pcm;          /* NULL: the slot is empty */
     int            frames;
     int            rate;
+    char           name[32];     /* port: the file, for the log */
 } lime_sound;
 
 static lime_sound g_sound[LIME_SOUNDS];
@@ -516,6 +517,7 @@ long limeLoadSound(const char *name)
 
     snprintf(rel, sizeof rel, "res/audio/%s.wav", name);
     lime_platform_resolve(rel, full, sizeof full);
+    snprintf(g_sound[i].name, sizeof g_sound[i].name, "%s", name);
     if (!wav_load_u8(full, &g_sound[i].pcm, &g_sound[i].frames, &g_sound[i].rate)) {
         g_sound[i].pcm = NULL;          /* as on device: the index, an empty slot */
         if (getenv("UMK3_LOG_SOUND"))
@@ -551,8 +553,9 @@ void limePlaySound(long h, float v, float p, long f)
             printf("limePlaySound: %ld is empty\n", h);
         return;
     }
-    if (getenv("UMK3_LOG_SOUND"))
-        printf("limePlaySound: %ld (%d frames, gain %.2f)\n", h, g_sound[h].frames, v);
+    /* Port diagnostic: every sound played, by its file -- to find the
+     * screams Mary hears repeat where they should not (Liu Kang) */
+    printf("sound: %s (%ld)\n", g_sound[h].name, h);
     plat_audio_play_at(g_sound[h].pcm, g_sound[h].frames, g_sound[h].rate, v);
 }
 

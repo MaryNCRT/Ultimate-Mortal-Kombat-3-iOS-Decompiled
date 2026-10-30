@@ -23,13 +23,13 @@
     import SharpSliders from '#lib/components/SharpSliders.svelte';
     import { api } from '#lib/platform.js';
     import { hoverBlip, selectBlip } from '#lib/sound.js';
-    import { ms, src, loadCatalog, fighter, refreshMods, reloadMods, exportThis, forgetMod, VIEW_KINDS } from '#lib/mods/store.svelte.js';
+    import { ms, src, loadCatalog, fighter, gameFighter, refreshMods, reloadMods, exportThis, forgetMod, VIEW_KINDS } from '#lib/mods/store.svelte.js';
     import { stageDesc, meshsetDesc, textureFile, pngBytes, exportFiles, isPng, attachVerts, fighterDesc } from '#lib/mods/assets.js';
     import { withLayers, bakeLayers, keyAt } from '#lib/mods/corrective.js';
     import { parseAnim } from '#lib/mods/formats.js';
     import { tuckUnder } from '#lib/mods/tuck.js';
     import { readFbx, fbxScene, fbxTakes, importAnim, rigDesc } from '#lib/mods/fbxin.js';
-    import { sheetPng, matsText, solidPicture, bonesText } from '#lib/mods/modelin.js';
+    import { sheetPng, matsText, solidPicture, bonesText, packSource, unpackSource } from '#lib/mods/modelin.js';
     import { decodePicture } from '#lib/mods/image.js';
     import { derivedModels } from '#lib/mods/derived.js';
     import { thumb, forgetThumbs, lazy } from '#lib/mods/thumbs.js';
@@ -51,6 +51,11 @@
     let stems = $state([]);                 /* the textures of what is open */
     let imp = $state(null);                 /* an FBX animation being brought in */
     let model = $state(null);               /* a model in REPLACE MODEL's window */
+    /* the window's fighter: the game's own, no mod on it, so a model put
+     * over an earlier one is not fitted to that one's bones and weights;
+     * saved / picks: a model opened again from its mod (EDIT SAVED MODEL) */
+    let modelF = $state.raw(null), modelSaved = $state.raw(null), modelPicks = $state.raw(null);
+    let hasSource = $state(false);          /* the mod open keeps the model it was made from */
     let done = $state('');
     let rtab = $state('view');              /* the right panel's tab */
     let layers = $state([]);                /* [{ key, name, on }]: the model's meshes */
@@ -248,6 +253,7 @@
         texInfo = null;
         fx = null;
         imp = null;
+        hasSource = false;
         done = '';
         texPick = '';
         stems = [];
@@ -262,6 +268,7 @@
                 if (my !== token) return;
                 fx = f;
                 await corrLoad(f);
+                hasSource = !!(ms.layer && ms.layer !== '*' && await src.read(f.ch.file + '.skin.source'));
                 /* with a replaced model, each material's own texture too
                  * (<skin>_M<n>), so REPLACE TEXTURE can change it */
                 stems = [...new Set([...f.blockTex, ...f.variants, ...(f.parts || []).flat().map(p => p.stem).filter(Boolean)])];
@@ -849,7 +856,31 @@
         if (!got) return;
         if (!target) target = (ms.layer && ms.layer !== '*' ? ms.layer : '') || fx.ch.name + ' mod';
         ms.playing = false;
+        try { modelF = await gameFighter(fx.ch); } catch (e) { ms.error = String(e && e.message || e); return; }
+        modelSaved = null;
+        modelPicks = null;
         model = got;
+    }
+    /* EDIT SAVED MODEL: the mod's model (<skin>.source) in REPLACE MODEL's
+     * window again, as it was set (<skin>.import.json), saved back to it */
+    async function editSaved() {
+        selectBlip();
+        done = '';
+        ms.error = '';
+        try {
+            const b = await src.read(fx.ch.file + '.skin.source');
+            if (!b) return;
+            const { file: got, picks } = unpackSource(b);
+            const j = await src.read(fx.ch.file + '.skin.import.json');
+            modelSaved = j ? JSON.parse(new TextDecoder().decode(j)) : null;
+            modelPicks = picks;
+            modelF = await gameFighter(fx.ch);
+            target = ms.layer;
+            ms.playing = false;
+            model = got;
+        } catch (e) {
+            ms.error = String(e && e.message || e);
+        }
     }
 
     /* the window's SAVE: the .skin, and each block's sheet of pictures as
@@ -862,7 +893,7 @@
      * texture the game shares with other models (derived models, other
      * fighters) is touched: a material without a picture is its colour, one
      * left on THE GAME'S a copy of the outfit's. */
-    async function applyModel({ r, mdl, settings }) {
+    async function applyModel({ r, mdl, settings, file: from, picks }) {
         const name = target.trim() || defaultTarget();
         model = null;
         ms.error = '';
@@ -903,6 +934,11 @@
             if (settings) {
                 await api.modsPut(name, file + '.import.json', new TextEncoder().encode(JSON.stringify(settings, null, 1)));
                 files.push(file + '.import.json');
+            }
+            /* the model itself, to open again (EDIT SAVED MODEL) */
+            if (from) {
+                await api.modsPut(name, file + '.source', packSource(from, picks));
+                files.push(file + '.source');
             }
             await refreshMods();
             forgetMod();
@@ -1198,6 +1234,7 @@
                 <button class="btn" onclick={() => exportRig('glb', true)}>{tx('vwExpAnimsGlb')}</button>
             </div>
             <button class="btn hot" onclick={pickModel}>{tx('vwImpModel')}</button>
+            {#if hasSource}<button class="btn" onclick={editSaved}>{tx('vwEditSaved')}</button>{/if}
             <p class="note">{tx('vwImpModelNote')}</p>
             <button class="btn" onclick={() => pickImport('anim')}>{tx('vwImpAnim')}</button>
             {#if imp}
@@ -1282,7 +1319,7 @@
 </div>
 
 {#if model && fx}
-    <ModelImport f={fx} file={model} {texture} outfit={shownOutfit()} onApply={applyModel} onClose={() => { model = null; }} />
+    <ModelImport f={modelF || fx} file={model} {texture} outfit={shownOutfit()} saved={modelSaved} picks={modelPicks} onApply={applyModel} onClose={() => { model = null; }} />
 {/if}
 
 <style>

@@ -64,6 +64,48 @@ yet**. Asked by Mary after trying the first round:
     `lime.h`), and a lighting file that does not fit the skin is replaced by
     its average light (`Players.c port_fit_lighting`, logged `flat light`).
     The importer refuses a block over 65,535 vertices once unwelded.
+  - **REPLACE MODEL: undo, bone rotations, clean T / A, edit a saved
+    model, a model over another, Mary 2026-10-29 (built, not tried yet).**
+    UNDO / REDO (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z, and two buttons): every
+    change in the window (joints, rotations, paint strokes, angles, scale,
+    fit / keep, turn, materials) is kept before it is made, a slider's run
+    as one, up to 100. Each bone has Blender's LOCATION and ROTATION X / Y /
+    Z fields (a slider and a number): the rotation turns its children
+    about its joint, about the game's X, then Y, then Z, parents first
+    (`modelin.js movedJoints` `o.turns`), mirrored to the other side (X
+    the same, Y and Z the other way); R with an axis adds to that field.
+    RESET: CLEAN T POSE / CLEAN A POSE drops every change and turns the
+    arms level or 45 degrees down from the new model's own rig (its arms
+    when keeping proportions or with the exporter's names, else the
+    fighter's joints it is fitted to). **A model over an earlier one**
+    (Mary: the rig and the weights were laid over the old ones): the
+    window was given the viewer's fighter, which carried the mod's .skin
+    and .bones, so the new model was fitted to the old one's bones; it is
+    now given the game's own fighter (`store.svelte.js gameFighter`, layer
+    ''). **EDIT SAVED MODEL**: SAVE now also keeps the model it was made
+    from in the mod, `<skin>.source` (the file, what was beside it and the
+    pictures chosen for its materials; `packSource` / `unpackSource`,
+    checked round trip), and the viewer, on a mod that has one, opens it
+    in the window again as `<skin>.import.json` says it was set, to save
+    over it. `.source` counts as the mod's own file in mod.meta.xml.
+  - **Bones and weights by hand in REPLACE MODEL, Mary 2026-10-29 (built,
+    not tried yet).** Mary: move and turn them with the mouse, as Blender
+    does. RIG tab, EDIT BONES: a click on a joint's dot picks it, a drag
+    moves it; G moves the joint picked and R turns it (its children go
+    round its joint, the joint itself stays), X / Y / Z keep to that axis
+    (drawn through it in Blender's colours), a click or Enter keeps it,
+    Esc or the right button puts it back; MOVE (G) / ROTATE (R) on the
+    side do the same. Both end as BONE POSITIONS' offsets (the other side
+    mirrored), so they are saved as before. WEIGHT PAINT: the bone picked
+    is shown as Blender's weight colours (blue 0, red 1) and painted with
+    a brush (ADD, SUBTRACT or Ctrl, SMOOTH; RADIUS in screen pixels, [ and ]
+    change it; STRENGTH); the other bones are scaled so each vertex adds
+    up to one, a vertex with no other bone gives the rest to the bone's
+    parent. Painted weights are kept per vertex of the file
+    (`buildSkin o.paint`, `res.src` maps each written vertex back to the
+    file's) and saved in `<skin>.import.json`; CLEAR PAINT drops them.
+    Editing and painting stop a playing clip and work at rest. The camera
+    is no longer put back after each rebuild.
   - **Second pass on REPLACE MODEL's rig, Mary 2026-10-29 (built, not
     tried yet).** The side has two tabs, RIG and MATERIALS. RIG: FIT TO THE
     FIGHTER / KEEP PROPORTIONS, the file's pose, AUTOMATIC T / A POSE now
@@ -107,6 +149,14 @@ yet**. Asked by Mary after trying the first round:
     23 WAVs are the same format as every other (PCM 16 kHz 8-bit mono). Her
     18:02 log plays his voice from group 6 as the binary would. Not found;
     the `voice:` lines stay in the log. Needs what is heard and when.
+    Also checked against the binary: `limePlaySound` (0x65344) is
+    `[sound play]; [sound setGain:]` on one Finch `Sound` (one OpenAL
+    source) a loaded file, `-[Sound play]` restarts it if it still sounds
+    -- the port's mixers already do the same (one voice a sound) -- and
+    `limeLoadSound` (0x65ad0) takes the first empty of 512 slots, as the
+    port does. Mary: screams repeat that should not sound. The log now
+    names every sound played (`sound: <file> (<slot>)`), not only the
+    voices, so the next fight with it shows which file and when.
   - **REPLACE MODEL: the rig before it is put on, arm/leg angle and roll,
     T or A pose** (Mary, with gtastuff.com's viewer as the reference for
     the floor, the joints and the weight colours). Over the preview:
