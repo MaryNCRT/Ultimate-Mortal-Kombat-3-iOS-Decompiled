@@ -588,6 +588,45 @@ export function poseName(rise) {
     return rise > -20 ? 'T' : 'A';
 }
 
+/* The arms' and legs' angle put on the fighter's own joints (fitting, and a
+ * model without a skeleton: its vertices are weighted to the fighter's
+ * bones as they stand, so the fighter's arms are turned to the model's T
+ * or A first) -- the bones' offsets, written with the skin */
+function fighterAngles(f, rest, a, limbs, side) {
+    let rest2 = rest, ov = null;
+    for (const L of limbs) {
+        const ang = (L.kind === 'arm' ? a.armAngle : a.legAngle) || 0;
+        if (!ang) continue;
+        const P = rest[L.g].T, d = vsub(rest[L.c].T, P);
+        const M = axisAngle([0, 0, 1], ang * side(L, P, d) * DEG);
+        if (rest2 === rest) { rest2 = rest.slice(); ov = { offsets: new Map(), rootY: 1 }; }
+        for (const g of L.sub) {
+            if (g === L.g) continue;
+            const q = vmul(vsub(rest[g].T, P), M);
+            rest2[g] = { ...rest[g], T: [q[0] + P[0], q[1] + P[1], q[2] + P[2]] };
+        }
+        for (const g of L.sub)
+            if (g !== L.g) {
+                const par = f.rig.bones.parent[g];
+                ov.offsets.set(g, vmul(vsub(rest2[g].T, rest2[par].T), tr3(rest2[par].R)));
+            }
+    }
+    return { rest: rest2, ov };
+}
+
+/* a model without a skeleton: the fighter's limbs at an angle, its pose
+ * (fighter's arm rise, leg spread) for the window */
+function bareAdjust(f, rest, a) {
+    const limbs = limbsOf(f), hips = f.names.indexOf('hips');
+    const cx = rest[hips >= 0 ? hips : f.rig.bones.root].T[0];
+    const side = (L, P, d) => (L.kind === 'arm' ? Math.sign(d[0]) : Math.sign(P[0] - cx)) || 1;
+    const { rest: rest2, ov } = fighterAngles(f, rest, a || {}, limbs, side);
+    const mean = l => (l.length ? l.reduce((x, y) => x + y, 0) / l.length : null);
+    const of = kind => mean(limbs.filter(L => L.kind === kind).map(L => angleOf(kind, vsub(rest[L.c].T, rest[L.g].T))));
+    return { J: new Map(), rest: rest2, ov, point: p => p, dir: n => n,
+        info: { file: { arm: null, leg: null }, fighter: { arm: of('arm'), leg: of('leg') } } };
+}
+
 function adjustments(f, mdl, place, o) {
     const J0 = fileJoints(mdl, place), rest = place.rest, a = o.adjust || {};
     const pre = o.keep || place.map.kind === 'names';
@@ -621,25 +660,7 @@ function adjustments(f, mdl, place, o) {
     }
 
     /* fitting: the angle on the fighter's joints, as bone offsets */
-    let rest2 = rest, ov = null;
-    if (!pre)
-        for (const L of limbs) {
-            const ang = (L.kind === 'arm' ? a.armAngle : a.legAngle) || 0;
-            if (!ang) continue;
-            const P = rest[L.g].T, d = vsub(rest[L.c].T, P);
-            const M = axisAngle([0, 0, 1], ang * side(L, P, d) * DEG);
-            if (rest2 === rest) { rest2 = rest.slice(); ov = { offsets: new Map(), rootY: 1 }; }
-            for (const g of L.sub) {
-                if (g === L.g) continue;
-                const q = vmul(vsub(rest[g].T, P), M);
-                rest2[g] = { ...rest[g], T: [q[0] + P[0], q[1] + P[1], q[2] + P[2]] };
-            }
-            for (const g of L.sub)
-                if (g !== L.g) {
-                    const par = f.rig.bones.parent[g];
-                    ov.offsets.set(g, vmul(vsub(rest2[g].T, rest2[par].T), tr3(rest2[par].R)));
-                }
-        }
+    const { rest: rest2, ov } = pre ? { rest, ov: null } : fighterAngles(f, rest, a, limbs, side);
 
     const mean = l => (l.length ? l.reduce((x, y) => x + y, 0) / l.length : null);
     const info = {
@@ -823,8 +844,8 @@ export function buildSkin(f, mdl, o = {}) {
     const nblocks = f.rig.skin.length;
     const place = placeModel(f, mdl, o.turn || 0);
     const human = place.map && place.map.kind === 'humanoid';
-    const adj = place.map ? adjustments(f, mdl, place, o) : null;
-    const prop = human && o.keep ? proportions(f, adj.J, place.rest) : null;
+    const adj = place.map ? adjustments(f, mdl, place, o) : limbsOf(f).length ? bareAdjust(f, place.rest, o.adjust) : null;
+    const prop = place.map && o.keep ? proportions(f, adj.J, place.rest) : null;
     const conf = human && !o.keep ? conformers(place, adj.J, adj.rest) : null;
     const k = o.scale && o.scale !== 1 ? o.scale : 1;
     const mj = movedJoints(f, prop ? prop.rest : adj ? adj.rest : place.rest, o.joints, prop ? prop.bones : adj && adj.ov, o.turns);

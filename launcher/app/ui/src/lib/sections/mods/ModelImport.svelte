@@ -23,8 +23,9 @@
     import { selectBlip } from '#lib/sound.js';
     import { readModel, buildSkin, withSkin, solidPicture, poseName } from '#lib/mods/modelin.js';
     import { makeFloor, placeFloor, weightColors, heatColor, heatColors, applyLook, makeRigLines, poseRigLines } from '#lib/mods/viewkit.js';
-    import { framePose, posedVerts } from '#lib/mods/rig.js';
+    import { framePose, posedVerts, vmul, mul3, tr3 } from '#lib/mods/rig.js';
     import { decodePicture } from '#lib/mods/image.js';
+    import { ViewNav } from '#lib/mods/viewnav.js';
     import { dataUrl } from '#lib/mods/thumbs.js';
 
     /* f the fighter; file what main.js file:pick gave; texture(stem) the
@@ -57,7 +58,8 @@
     let look = $state({ wire: false, solid: false, weights: false });
     let showRig = $state(true), showFloor = $state(true);
 
-    let renderer, scene, camera, controls, root, raf, meshes = [], floor, rigLines, lastPose = null, framed = false;
+    let renderer, scene, camera, controls, root, raf, meshes = [], floor, rigLines, lastPose = null, framed = false, nav;
+    let viewName = $state('');              /* Blender's view name, top left */
     /* the fighter with the model, its clips under the view (state: the bar
      * shows once it is built) */
     let pf = $state.raw(null);
@@ -75,6 +77,11 @@
         const sun = new THREE.DirectionalLight(0xffffff, 1.4);
         sun.position.set(1, 2, 3);
         scene.add(sun);
+        nav = new ViewNav({ host, renderer, controls, persp: camera, onCamera: c => { camera = c; }, onLabel: t => { viewName = t; },
+            names: { front: tx('nvFront'), back: tx('nvBack'), right: tx('nvRight'), left: tx('nvLeft'), top: tx('nvTop'), bottom: tx('nvBottom'),
+                user: tx('nvUser'), persp: tx('nvPersp'), ortho: tx('nvOrtho') } });
+        nav.label();
+        nav.gizmo.title = tx('nvKeys');
         floor = makeFloor();
         rigLines = makeRigLines();
         scene.add(floor, rigLines);
@@ -93,8 +100,8 @@
     function fit() {
         if (!renderer || !host) return;
         renderer.setSize(host.clientWidth, host.clientHeight, false);
-        camera.aspect = host.clientWidth / Math.max(1, host.clientHeight);
-        camera.updateProjectionMatrix();
+        if (nav) nav.resize();
+        else { camera.aspect = host.clientWidth / Math.max(1, host.clientHeight); camera.updateProjectionMatrix(); }
     }
     let last = 0, acc = 0;
     function loop_(t = 0) {
@@ -113,6 +120,7 @@
         }
         controls && controls.update();
         renderer && renderer.render(scene, camera);
+        nav && nav.draw();
     }
 
     /* the model as the game will have it, built again after each change */
@@ -191,11 +199,14 @@
         /* the camera put once; after, where it was left */
         if (framed) return;
         framed = true;
+        nav.reframed();
         controls.target.copy(c);
         camera.near = size / 500;
         camera.far = size * 50;
         camera.position.set(c.x + size * 0.15, c.y + size * 0.1, c.z + size * 1.1);
         camera.updateProjectionMatrix();
+        nav.reframed();
+        nav.label();
     }
 
     function pose() {
@@ -353,7 +364,7 @@
         joints = {}; turns = {}; paint = {}; paintCount = 0; scale = 1; reweight = false;
         adjust = { armAngle: 0, armRoll: 0, legAngle: 0, legRoll: 0, auto: false };
         await rebuild();
-        if (res && res.pose) {
+        if (res && res.pose && rise !== null) {
             const from = keep || res.rig === 'names' ? res.pose.file.arm : res.pose.fighter.arm;
             if (from !== null && from !== undefined) {
                 adjust.armAngle = Math.max(-90, Math.min(90, Math.round(rise - from)));
@@ -401,20 +412,22 @@
         return best;
     }
     const inView = e => { const r = renderer.domElement.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
-    /* moved and painted at rest: an animation playing stops */
-    function atRest() {
-        if (clip >= 0) { clip = -1; playing = false; frame = 0; pose(); }
-    }
     const subtree = b => { const out = [b]; for (let k = 0; k < out.length; k++) out.push(...f.rig.bones.children[out[k]]); return out; };
 
+    /* At rest or on the frame of a clip shown: the edit is made on the
+     * pose seen (a clip playing holds still while it is) and taken back to
+     * the rest the skin is bound to -- a move through the parent's turn in
+     * that frame, a turn about its axis through the bone's -- so what is
+     * kept is what the game will play. */
     function startEdit(kind, at, drag = false) {
-        if (sel < 0 || !res || tool !== 'bones') return;
-        atRest();
-        const b = sel, P = new THREE.Vector3(...res.rest[b].T);
+        if (sel < 0 || !res || tool !== 'bones' || !lastPose) return;
+        const b = sel, base = lastPose, P = new THREE.Vector3(...base[b].T);
         const moved = kind === 'turn' ? subtree(b).slice(1) : [b];
         if (!moved.length) { editInfo = tx('imNoChildren'); return; }
         edit = { kind, b, drag, at: at ? [at.clientX, at.clientY] : null, axis: -1, P, out: null,
-            base: new Map(moved.map(i => [i, new THREE.Vector3(...res.rest[i].T)])) };
+            pose: base, rest: clip < 0, wasPlaying: playing,
+            base: new Map(moved.map(i => [i, new THREE.Vector3(...base[i].T)])) };
+        playing = false;
         updateEdit(at);
     }
     function planeHit(x, y, P) {
@@ -432,6 +445,7 @@
             let d = planeHit(e.clientX, e.clientY, P).sub(planeHit(edit.at[0], edit.at[1], P));
             if (axis >= 0) d = AX[axis].clone().multiplyScalar(d.dot(AX[axis]));
             out.set(edit.b, P.clone().add(d));
+            edit.d = d;
             editInfo = tx('imEditMove') + ax + ' · ' + d.toArray().map(x => (x / scale).toFixed(1)).join('  ') + ' · ' + tx('imEditKeys');
         } else {
             const r = renderer.domElement.getBoundingClientRect(), sp = P.clone().project(camera);
@@ -442,6 +456,8 @@
             if (axis >= 0 && u.dot(toCam) < 0) u.negate();
             const q = new THREE.Quaternion().setFromAxisAngle(u, ang);
             edit.deg = ang * 180 / Math.PI * (axis >= 0 && u.dot(AX[axis]) < 0 ? -1 : 1);
+            edit.u = u;
+            edit.ang = ang;
             for (const [i, T] of edit.base) out.set(i, T.clone().sub(P).applyQuaternion(q).add(P));
             editInfo = tx('imEditTurn') + ax + ' · ' + Math.round(((ang * 180 / Math.PI) + 540) % 360 - 180) + '° · ' + tx('imEditKeys');
         }
@@ -452,14 +468,28 @@
     /* what the edit moves, as BONE POSITIONS' offsets (before the scale),
      * each joint's other side mirrored */
     function editDeltas() {
-        const m = new Map();
-        for (const [i, v] of edit.out) { const T = res.rest[i].T; m.set(i, [(v.x - T[0]) / scale, (v.y - T[1]) / scale, (v.z - T[2]) / scale]); }
+        const m = new Map(), { b } = edit, P0 = edit.pose, R0 = res.rest;
+        /* the pose's frame to the rest's: v . R_pose^T . R_rest */
+        const toRest = (v, i) => (edit.rest || i < 0 ? v : vmul(v, mul3(tr3(P0[i].R), R0[i].R)));
+        if (edit.kind === 'move') {
+            if (edit.d) m.set(b, toRest(edit.d.toArray(), f.rig.bones.parent[b]).map(x => x / scale));
+        } else if (edit.u) {
+            const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(...toRest(edit.u.toArray(), b)).normalize(), edit.ang);
+            const P = new THREE.Vector3(...R0[b].T);
+            for (const i of edit.base.keys()) {
+                const T = new THREE.Vector3(...R0[i].T);
+                m.set(i, T.clone().sub(P).applyQuaternion(q).add(P).sub(T).toArray().map(x => x / scale));
+            }
+        }
         if (mirror) for (const [i, d] of [...m]) { const t = twin(i); if (t >= 0 && !m.has(t)) m.set(t, [-d[0], d[1], d[2]]); }
         return m;
     }
     function previewEdit() {
-        const d = editDeltas();
-        const p = res.rest.map((r, i) => (d.has(i) ? { ...r, T: r.T.map((x, c) => x + d.get(i)[c] * scale) } : r));
+        let p;
+        if (edit.rest) {
+            const d = editDeltas();
+            p = res.rest.map((r, i) => (d.has(i) ? { ...r, T: r.T.map((x, c) => x + d.get(i)[c] * scale) } : r));
+        } else p = edit.pose.map((r, i) => (edit.out.has(i) ? { ...r, T: edit.out.get(i).toArray() } : r));
         poseRigLines(rigLines, p, pf.rig.bones.parent, true, sel);
         lastPose = p;
     }
@@ -474,7 +504,8 @@
     }
     function endEdit(keepIt) {
         if (!edit) return;
-        if (keepIt && edit.out && edit.kind === 'turn' && edit.axis >= 0) {
+        if (edit.wasPlaying) playing = true;
+        if (keepIt && edit.out && edit.kind === 'turn' && edit.axis >= 0 && edit.rest) {
             /* about an axis: into the bone's ROTATION field */
             const { b, axis, deg } = edit;
             edit = null;
@@ -521,7 +552,8 @@
         const hit = ray.intersectObjects(meshes.filter(m => m.visible), false)[0];
         if (!hit) return;
         const r = renderer.domElement.getBoundingClientRect();
-        const R = brush.radius * 2 * camera.position.distanceTo(hit.point) * Math.tan(camera.fov * Math.PI / 360) / r.height;
+        const R = brush.radius * (camera.isOrthographicCamera ? (camera.top - camera.bottom) / camera.zoom
+            : 2 * camera.position.distanceTo(hit.point) * Math.tan(camera.fov * Math.PI / 360)) / r.height;
         const pos = meshes[0].geometry.attributes.position.array, W = pf.weights, src = pf.topo.src;
         const h = hit.point, near = new Map();
         for (let o = 0; o < src.length; o++) {
@@ -575,7 +607,7 @@
         selectBlip();
         endEdit(false);
         tool = t;
-        if (t === 'paint') { atRest(); look.weights = true; look.solid = false; }
+        if (t === 'paint') { look.weights = true; look.solid = false; }
     }
     $effect(() => { tool; sel; recolor(); });
 
@@ -600,7 +632,6 @@
             selectBlip();
             sel = j;
         } else if (tool === 'paint' && sel >= 0 && pf) {
-            atRest();
             ray.setFromCamera(ndc(e), camera);
             if (ray.intersectObjects(meshes.filter(m => m.visible), false).length) {
                 e.stopImmediatePropagation();
@@ -638,6 +669,7 @@
             return;
         }
         if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+        if (!edit && nav && nav.key(e)) { e.preventDefault(); e.stopPropagation(); return; }
         if (edit) {
             if (k === 'x' || k === 'y' || k === 'z') { const a = 'xyz'.indexOf(k); edit.axis = edit.axis === a ? -1 : a; updateEdit(mouse); }
             else if (k === 'enter') endEdit(true);
@@ -775,6 +807,9 @@
             if (saved) await restoreSaved();
             await makeThumbs();
             await rebuild();
+            /* a skeleton in the file: its own rig and bones (KEEP
+             * PROPORTIONS), the model as it is */
+            if (!saved && res && res.rig) { keep = true; await rebuild(); }
         } catch (e) {
             err = String(e && e.message || e);
         } finally {
@@ -788,6 +823,7 @@
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', onUp);
         window.removeEventListener('keydown', onKey, true);
+        nav && nav.dispose();
         renderer && renderer.dispose();
     });
 </script>
@@ -800,7 +836,7 @@
         </header>
         <div class="body">
             <section class="main">
-                <div class="view" bind:this={host}></div>
+                <div class="view" bind:this={host}><div class="vname">{viewName}</div></div>
                 {#if editInfo}<div class="edit">{editInfo}</div>{/if}
                 {#if brushAt && tool === 'paint'}<div class="ring" style="left: {brushAt.x}px; top: {brushAt.y}px; width: {brush.radius * 2}px; height: {brush.radius * 2}px"></div>{/if}
                 <div class="looks">
@@ -868,12 +904,13 @@
                     <div class="pair">
                         <button class="btn" disabled={!res} onclick={() => cleanPose(0)}>{tx('imCleanT')}</button>
                         <button class="btn" disabled={!res} onclick={() => cleanPose(-45)}>{tx('imCleanA')}</button>
+                        <button class="btn" disabled={!res} onclick={() => cleanPose(null)}>{tx('imCleanDef')}</button>
                     </div>
-                    <p class="note">{tx('imCleanNote')}</p>
+                    <p class="note">{tx(res && !res.rig ? 'imCleanBare' : 'imCleanNote')}</p>
                     {#if res && !res.matched}
                         <button class="btn" onclick={turnIt}>{tx('imTurn')}</button>
                     {/if}
-                    {#if res && res.rig === 'humanoid'}
+                    {#if res && res.rig}
                         <!-- a humanoid rig (Mixamo, AccuRig, ValveBiped...): fitted
                              to the fighter's bones, or the proportion trick -->
                         <div class="pair">
@@ -1004,6 +1041,7 @@
     .msg { color: var(--dim); letter-spacing: .08em; }
     .edit { position: absolute; left: 50%; top: calc(var(--u) * .6); transform: translateX(-50%); padding: 2px 10px; border-radius: var(--r-sm);
         background: rgba(10, 8, 32, .8); color: #fff; font-size: calc(var(--t) * 1.2); letter-spacing: .06em; pointer-events: none; white-space: nowrap; }
+    .vname { position: absolute; left: calc(var(--u) * 1); bottom: calc(var(--u) * .6); font-size: calc(var(--t) * 1.1); color: var(--dim); pointer-events: none; letter-spacing: .06em; }
     .ring { position: absolute; transform: translate(-50%, -50%); border: 1px solid #fff; border-radius: 50%; pointer-events: none;
         box-shadow: 0 0 0 1px rgba(0, 0, 0, .5); }
     .msg.bad { color: #ff9aa0; max-width: 80%; text-align: center; }

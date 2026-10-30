@@ -34,6 +34,7 @@
     import { derivedModels } from '#lib/mods/derived.js';
     import { thumb, forgetThumbs, lazy } from '#lib/mods/thumbs.js';
     import ModelImport from './ModelImport.svelte';
+    import { ViewNav } from '#lib/mods/viewnav.js';
     import { framePose, framePoseBlend, posedVerts, fitRest } from '#lib/mods/rig.js';
     import { subsurfCreate } from '#lib/mods/subsurf.js';
     import { decodePvr } from '#lib/mods/formats.js';
@@ -61,7 +62,8 @@
     let layers = $state([]);                /* [{ key, name, on }]: the model's meshes */
     let pics = $state({});                  /* texture stem -> its small picture */
 
-    let renderer, scene, camera, controls, root, raf, skel, floor;
+    let renderer, scene, camera, controls, root, raf, skel, floor, nav;
+    let viewName = $state('');              /* Blender's view name, bottom left */
     let fighterView = null;                 /* { f, meshes: [{ mesh, map }], rest } */
 
     const items = $derived.by(() => {
@@ -107,6 +109,13 @@
         /* the floor (FLOOR): under a fighter at y 0, else at the model's feet */
         floor = makeFloor();
         scene.add(floor);
+        /* the camera as Blender's (mods/viewnav.js) */
+        nav = new ViewNav({ host, renderer, controls, persp: camera, onCamera: c => { camera = c; }, onLabel: t => { viewName = t; },
+            names: { front: tx('nvFront'), back: tx('nvBack'), right: tx('nvRight'), left: tx('nvLeft'), top: tx('nvTop'), bottom: tx('nvBottom'),
+                user: tx('nvUser'), persp: tx('nvPersp'), ortho: tx('nvOrtho') } });
+        nav.gizmo.title = tx('nvKeys');
+        nav.label();
+        window.addEventListener('keydown', navKey);
         const ro = new ResizeObserver(fit);
         ro.observe(host);
         loop();
@@ -132,8 +141,14 @@
         if (!renderer || !host) return;
         const w = host.clientWidth, h = host.clientHeight;
         renderer.setSize(w, h, false);
-        camera.aspect = w / Math.max(1, h);
-        camera.updateProjectionMatrix();
+        if (nav) nav.resize();
+        else { camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix(); }
+    }
+    /* the numpad's views, while REPLACE MODEL's window (its own) is shut */
+    function navKey(e) {
+        const tag = e.target && e.target.tagName;
+        if (model || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || !nav) return;
+        if (nav.key(e)) e.preventDefault();
     }
 
     let last = 0, acc = 0;
@@ -160,6 +175,7 @@
         } else blendT = 0;
         controls && controls.update();
         renderer && renderer.render(scene, camera);
+        nav && nav.draw();
     }
 
     function clear() {
@@ -188,6 +204,7 @@
             if (!near.isEmpty()) box = near;
         }
         const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3()).length() || 1;
+        nav && nav.reframed();
         placeFloor(floor, box, !!fighterView);
         floor.visible = ms.floor && ms.kind !== 'stages';
         controls.target.copy(c);
@@ -195,6 +212,7 @@
         camera.far = size * 50;
         camera.position.set(c.x + size * 0.15, c.y + size * 0.1, c.z + size * 1.1);
         camera.updateProjectionMatrix();
+        if (nav) { nav.reframed(); nav.axisView = ''; nav.label(); }
     }
 
     /* a texture by its name, the way the game finds it; PNG through the
@@ -861,6 +879,30 @@
         modelPicks = null;
         model = got;
     }
+    /* EDIT: the model the fighter has now -- the mod's own file when it
+     * kept it (EDIT SAVED MODEL below), else the skin shown, as the exporter
+     * writes it (GLB: the fighter's bones by name, its weights, each part
+     * with its texture) -- in REPLACE MODEL's window, without a file */
+    async function editCurrent() {
+        if (hasSource) return editSaved();
+        selectBlip();
+        done = '';
+        ms.error = '';
+        try {
+            const desc = fighterDesc(fx, { rest: 'bind', clips: [], variant: ms.outfit, parts: true });
+            const files = await exportFiles(src, desc, 'glb');
+            const name = Object.keys(files).find(n => /\.glb$/i.test(n));
+            modelF = await gameFighter(fx.ch);
+            modelSaved = null;
+            modelPicks = null;
+            if (!target) target = (ms.layer && ms.layer !== '*' ? ms.layer : '') || fx.ch.name + ' mod';
+            ms.playing = false;
+            model = { name, bytes: files[name], beside: {} };
+        } catch (e) {
+            ms.error = String(e && e.message || e);
+        }
+    }
+
     /* EDIT SAVED MODEL: the mod's model (<skin>.source) in REPLACE MODEL's
      * window again, as it was set (<skin>.import.json), saved back to it */
     async function editSaved() {
@@ -1043,6 +1085,8 @@
     onDestroy(() => {
         cancelAnimationFrame(raf);
         clear();
+        window.removeEventListener('keydown', navKey);
+        nav && nav.dispose();
         renderer && renderer.dispose();
     });
 </script>
@@ -1088,7 +1132,7 @@
     </aside>
 
     <section class="main">
-        <div class="view" class:hide={ms.kind === 'textures'} bind:this={host}></div>
+        <div class="view" class:hide={ms.kind === 'textures'} bind:this={host}><div class="vname">{viewName}</div></div>
         {#if ms.kind === 'textures'}
             <div class="texview"><canvas bind:this={pic} class:hide={!texInfo}></canvas></div>
         {/if}
@@ -1234,7 +1278,7 @@
                 <button class="btn" onclick={() => exportRig('glb', true)}>{tx('vwExpAnimsGlb')}</button>
             </div>
             <button class="btn hot" onclick={pickModel}>{tx('vwImpModel')}</button>
-            {#if hasSource}<button class="btn" onclick={editSaved}>{tx('vwEditSaved')}</button>{/if}
+            <button class="btn" onclick={editCurrent} title={tx('vwEditNote')}>{tx(hasSource ? 'vwEditSaved' : 'vwEdit')}</button>
             <p class="note">{tx('vwImpModelNote')}</p>
             <button class="btn" onclick={() => pickImport('anim')}>{tx('vwImpAnim')}</button>
             {#if imp}
@@ -1357,6 +1401,8 @@
         border: 1px solid var(--line);
     }
     .view :global(canvas) { width: 100%; height: 100%; display: block; }
+    .view :global(canvas.navgizmo) { width: 96px; height: 96px; }
+    .vname { position: absolute; left: calc(var(--u) * 1); bottom: calc(var(--u) * 1); font-size: calc(var(--t) * 1.1); color: var(--dim); pointer-events: none; letter-spacing: .06em; z-index: 2; }
     .texview { position: relative;
         background: repeating-conic-gradient(#1b1840 0 25%, #14112f 0 50%) 0 0 / 24px 24px; }
     .texview canvas { position: absolute; inset: 0; margin: auto; max-width: 100%; max-height: 100%; }
