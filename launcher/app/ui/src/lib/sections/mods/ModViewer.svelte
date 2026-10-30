@@ -52,6 +52,7 @@
     let stems = $state([]);                 /* the textures of what is open */
     let imp = $state(null);                 /* an FBX animation being brought in */
     let model = $state(null);               /* a model in REPLACE MODEL's window */
+    let modelFresh = false;                 /* a file just picked, not one opened again */
     /* the window's fighter: the game's own, no mod on it, so a model put
      * over an earlier one is not fitted to that one's bones and weights;
      * saved / picks: a model opened again from its mod (EDIT SAVED MODEL) */
@@ -878,6 +879,7 @@
         try { modelF = await gameFighter(fx.ch); } catch (e) { ms.error = String(e && e.message || e); return; }
         modelSaved = null;
         modelPicks = null;
+        modelFresh = true;
         model = got;
     }
     /* EDIT: the model the fighter has now -- the mod's own file when it
@@ -898,6 +900,7 @@
             modelPicks = null;
             if (!target) target = (ms.layer && ms.layer !== '*' ? ms.layer : '') || fx.ch.name + ' mod';
             ms.playing = false;
+            modelFresh = false;
             model = { name, bytes: files[name], beside: {} };
         } catch (e) {
             ms.error = String(e && e.message || e);
@@ -920,7 +923,8 @@
             modelF = await gameFighter(fx.ch);
             target = ms.layer;
             ms.playing = false;
-            model = got;
+            modelFresh = false;
+        model = got;
         } catch (e) {
             ms.error = String(e && e.message || e);
         }
@@ -1364,7 +1368,7 @@
 </div>
 
 {#if model && fx}
-    <ModelImport f={modelF || fx} file={model} {texture} outfit={shownOutfit()} saved={modelSaved} picks={modelPicks} onApply={applyModel} onClose={() => { model = null; }} />
+    <ModelImport f={modelF || fx} file={model} {texture} outfit={shownOutfit()} saved={modelSaved} picks={modelPicks} fresh={modelFresh} onApply={applyModel} onClose={() => { model = null; }} />
 {/if}
 
 <style>

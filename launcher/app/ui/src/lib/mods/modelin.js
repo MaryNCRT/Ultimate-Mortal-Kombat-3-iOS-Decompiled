@@ -815,6 +815,54 @@ function movedJoints(f, rest, joints, ov, turns) {
     return { rest: out, ov: ov2 };
 }
 
+/* SMOOTH WEIGHTS, as Blender's Smooth Vertex Weights (Weight Paint, Weights
+ * > Smooth, factor 0.5): each vertex's weights moved half way to its
+ * neighbours' average, `times` over, so a part goes from one bone to the
+ * next over a few rings of the mesh instead of at once. A file whose weights
+ * jump from a bone to one two joints away (Mary's Sonya: her sleeves hung on
+ * the clavicle and the forearm, the upper arm left with 0.7% of the
+ * vertices) stretched those edges whenever the elbow bent. The neighbours
+ * are the triangles' and, across a UV seam, the copies of the same point
+ * (welded by position). A painted vertex is held as painted. */
+function smoothWeights(m, inf, times, held) {
+    const nv = inf.length, nb = Array.from({ length: nv }, () => new Set());
+    for (let t = 0; t < m.tv.length; t += 3)
+        for (let c = 0; c < 3; c++) {
+            const a = m.tv[t + c], b = m.tv[t + (c + 1) % 3];
+            if (a !== b) { nb[a].add(b); nb[b].add(a); }
+        }
+    const at = new Map();
+    for (let v = 0; v < nv; v++) {
+        const k = Math.round(m.pos[v * 3] * 1e4) + ',' + Math.round(m.pos[v * 3 + 1] * 1e4) + ',' + Math.round(m.pos[v * 3 + 2] * 1e4);
+        if (at.has(k)) { const u = at.get(k); for (const x of nb[v]) nb[u].add(x); for (const x of nb[u]) nb[v].add(x); }
+        else at.set(k, v);
+    }
+    for (let v = 0; v < nv; v++) {
+        const k = Math.round(m.pos[v * 3] * 1e4) + ',' + Math.round(m.pos[v * 3 + 1] * 1e4) + ',' + Math.round(m.pos[v * 3 + 2] * 1e4);
+        const u = at.get(k);
+        if (u !== v) nb[v] = nb[u];
+    }
+    let cur = inf.map(l => new Map(l));
+    for (let it = 0; it < times; it++) {
+        const next = cur.map((w, v) => {
+            if (held(v) || !nb[v].size) return w;
+            const avg = new Map();
+            for (const u of nb[v]) for (const [b, x] of cur[u]) avg.set(b, (avg.get(b) || 0) + x / nb[v].size);
+            const out = new Map();
+            for (const [b, x] of w) out.set(b, x * 0.5);
+            for (const [b, x] of avg) out.set(b, (out.get(b) || 0) + x * 0.5);
+            return out;
+        });
+        cur = next;
+    }
+    for (let v = 0; v < nv; v++) {
+        if (held(v)) continue;
+        const l = [...cur[v]].filter(x => x[1] > 1e-3).sort((a, b) => b[1] - a[1]).slice(0, 4);
+        const s = l.reduce((a, x) => a + x[1], 0) || 1;
+        if (l.length) inf[v] = l.map(([b, x]) => [b, x / s]);
+    }
+}
+
 /* The bones' offsets and the root's height times the scale: every bone's
  * (the proportion trick's where it has one, else the fighter's own) */
 function scaledBones(f, ov, k) {
@@ -930,6 +978,7 @@ export function buildSkin(f, mdl, o = {}) {
             gpos.push(scaled(p));
             ginf.push(l);
         }
+        if (o.smooth > 0) smoothWeights(m, ginf, o.smooth, o.paint ? v => !!o.paint[mi + ':' + v] : () => false);
         const nt = m.tm.length;
         for (let t = 0; t < nt; t++) {
             const mi = m.tm[t], blk = blocks[blockOf[mi]];

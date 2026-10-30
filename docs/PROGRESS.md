@@ -64,6 +64,25 @@ yet**. Asked by Mary after trying the first round:
     `lime.h`), and a lighting file that does not fit the skin is replaced by
     its average light (`Players.c port_fit_lighting`, logged `flat light`).
     The importer refuses a block over 65,535 vertices once unwelded.
+  - **Arms and hips still stretched: the file's weights; SMOOTH WEIGHTS,
+    Mary 2026-10-30 (test launcher repacked, not tried yet).** Measured on
+    her Sonya against the game's own, edge by edge over every frame (p99 of
+    the stretch from the bind, by the bone a vertex hangs on): the bones
+    and their lengths and directions match the game's within 0-3 degrees,
+    and her file's weights are kept exactly, but those weights jump: no
+    finger weights, the hands holding 12% of the vertices up the forearm,
+    the right upper arm 0.7% (its sleeve hung on the clavicle and the
+    forearm). Upper arm L 4.57 against the game's 1.95, forearm R 4.81
+    against 1.50, thigh R 3.77 against 2.14, pelvis 4.97 against 3.05.
+    Tried and dropped, as measured: Blender's Preserve Volume (dual
+    quaternions; no gain, the stretch is not twist), copying the fighter's
+    weights (Data Transfer; worse, her coat is not Sonya's shape),
+    weighting again by distance (arms better, chest and neck far worse).
+    Kept: SMOOTH WEIGHTS, as Blender's Smooth Vertex Weights (factor 0.5,
+    neighbours by triangle and across UV seams, painted vertices held):
+    3 passes bring those to 2.87, 3.20, 2.82, 3.85 with nothing worse; 8
+    empties the chest. 3 by default on a file just picked; a model opened
+    again keeps what it was saved with (hers: 0, so it needs the slider).
   - **The `.lighting` bake decoded; a mod's model gets its own, Mary
     2026-10-30 (built into the test folder, not tried yet).** In a fight a
     fighter is lit from `STATICLIGHTING/<X>.lighting`, not live. A REPLACE
