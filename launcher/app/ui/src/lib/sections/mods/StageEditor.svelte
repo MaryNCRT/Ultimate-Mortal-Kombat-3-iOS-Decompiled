@@ -23,6 +23,7 @@
     import { ViewNav } from '#lib/mods/viewnav.js';
     import { Gizmo, trsAt, shapeAt, localMatrix, shapedPositions, copyTrs } from '#lib/mods/stageedit.js';
     import KeyTimeline from './KeyTimeline.svelte';
+    import { portal } from '#lib/portal.js';
 
     let { d, tex, erev, frame, length, rows, rec, interp, playing, act } = $props();
 
@@ -172,6 +173,7 @@
         const hit = hitOf(e);
         if (!hit) return;
         e.stopImmediatePropagation();
+        e.preventDefault();             /* no native drag or selection */
         act.remember();
         const local = obj.worldToLocal(hit.point.clone()), w = around(local), t = target(), d0 = new Map();
         for (const v of w.keys()) d0.set(v, t[v] ? [...t[v]] : [0, 0, 0]);
@@ -312,7 +314,7 @@
     const f3 = v => +v.toFixed(3);
 </script>
 
-<div class="veil" role="presentation">
+<div class="veil" role="presentation" use:portal>
     <div class="win" role="dialog" aria-label={tx('seTitle')}>
         <header>
             <span class="ttl">{tx('seTitle')} · {name}</span>
@@ -339,7 +341,7 @@
                         <option value="bezier">BEZIER</option><option value="linear">{tx('stLinear')}</option>
                     </select>
                 </div>
-                <KeyTimeline {length} {frame} {rows} onSeek={act.seek} />
+                <KeyTimeline {length} {frame} {rows} onSeek={act.seek} {playing} onPlay={act.play} />
             </section>
 
             <aside class="side">
@@ -398,7 +400,7 @@
 </div>
 
 <style>
-    .veil { position: fixed; inset: 0; z-index: 50; background: rgba(5, 4, 20, .72); display: grid; place-items: center; }
+    .veil { position: fixed; inset: 0; z-index: 1000; background: rgba(5, 4, 20, .72); display: grid; place-items: center; }
     .win {
         width: min(96vw, calc(var(--u) * 150)); height: min(92vh, calc(var(--u) * 90));
         display: flex; flex-direction: column; background: var(--bg); border: 1px solid var(--line);
@@ -423,7 +425,7 @@
     .play .btn { height: auto; padding: calc(var(--u) * .35) calc(var(--u) * .8); }
     .play .grow { flex: 1; }
     .play .interp { flex: 0 0 calc(var(--u) * 11); }
-    .main :global(.tl) { margin-top: calc(var(--u) * .4); max-height: calc(var(--u) * 14); overflow-y: auto; }
+    .main :global(.tl) { margin-top: calc(var(--u) * .4); max-height: calc(var(--u) * 20); overflow-y: auto; overflow-x: hidden; }
     .side { display: flex; flex-direction: column; gap: calc(var(--u) * .5); min-height: 0; overflow-y: auto; padding-right: calc(var(--u) * .3); }
     .side .btn { white-space: normal; height: auto; min-height: var(--ctl-h); flex: none; }
     .head { margin-top: calc(var(--u) * .6); border-top: 1px solid var(--line); padding-top: calc(var(--u) * .5); }

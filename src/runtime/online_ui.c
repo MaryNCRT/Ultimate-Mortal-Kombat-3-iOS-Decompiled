@@ -109,19 +109,20 @@ void online_after_frame(void)
     w = ui_space_width();
 
     if (CurrentTask == 3 && FE_CurrentTask == 51) {
-        /* FrontEnd.c's box, in its 480-wide space centred on this one */
-        extern const float PortOnlineBox[4];
+        /* FrontEnd.c's box where the menu drew it this frame (screen
+         * pixels), into this space as ui_nav_frame takes them: 320 high */
+        extern float PortOnlineBoxPx[4];
         extern int PortOnlineBoxActive;
-        float x0 = (w - 480.0f) * 0.5f;
+        extern int limeScreenHeight;
+        float k = limeScreenHeight > 0 ? 320.0f / (float)limeScreenHeight : 1.0f;
+        const float *b = PortOnlineBoxPx;
 
         badge(0, me->name, &ml, w * 0.5f - 120.0f, 64.0f, 1, 1.5f);
         if (PortOnlineBoxActive)
-            ui_rect_outline(x0 + PortOnlineBox[0], PortOnlineBox[1],
-                            PortOnlineBox[2], PortOnlineBox[3], 2.0f,
+            ui_rect_outline(b[0] * k, b[1] * k, b[2] * k, b[3] * k, 2.0f,
                             1.0f, 0.85f, 0.2f, 1.0f);
         else
-            ui_rect_outline(x0 + PortOnlineBox[0], PortOnlineBox[1],
-                            PortOnlineBox[2], PortOnlineBox[3], 1.5f,
+            ui_rect_outline(b[0] * k, b[1] * k, b[2] * k, b[3] * k, 1.5f,
                             1.0f, 1.0f, 1.0f, 0.6f);
         return;
     }

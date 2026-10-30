@@ -998,12 +998,22 @@ static int draw_ios(const char *title, const char *const *tabs, int ntabs,
     char sig[4096];
     int i, n = 0;
     GLint view[4];
-    float s;
+    float s, fit;
 
     glGetIntegerv(GL_VIEWPORT, view);
     s = view[3] / 320.0f;               /* by height: the shape is kept */
     if (s <= 0)
         return 0;
+    /* the space's width from this viewport before the box is sized from it:
+     * g_ow was still the last 2D pass's (the whole 16:9 window around a 4:3
+     * picture), and the box came out 464 wide on a 427 screen */
+    g_ow = view[3] > 0 ? 320.0f * view[2] / view[3] : 480.0f;
+    /* and should the box still be wider, all of it drawn smaller to fit,
+     * its pictures as sharp */
+    fit = g_ow / (ui_box_width(ntabs) + 12.0f);
+    if (fit > 1.0f)
+        fit = 1.0f;
+    s *= fit;
     g_split = ui_menu_cols > 1 ? ui_menu_split(lp, rows) : rows;
     g_tall = g_split > rows - g_split ? g_split : rows - g_split;
     n = snprintf(sig, sizeof sig, "%s|%s|%d|%d|", title, footer, ntabs,
@@ -1054,27 +1064,27 @@ static int draw_ios(const char *title, const char *const *tabs, int ntabs,
         glEnd();
     }
     {
-        float w = tw / ts, h = th / ts;
+        float w = tw * fit / ts, h = th * fit / ts, f = fit;
         float x = (g_ow - w) * 0.5f + ui_menu_shift, y = (320 - h) * 0.5f;
 
         /* plat_ui_menu's layout, in points: a 6 margin, the title band
          * 22 tall, the tab strip 20 (inset 9 at the sides), a 4 gap, rows
          * 15 tall inside a box 360 wide */
-        g_bx = x + 6 + 9;
-        g_bw = ui_box_width(ntabs) - 18;
-        g_title0 = y + 6 + 22;
-        g_top = y + 6 + 22 + (ntabs > 0 ? 20 + 4 : 4);
-        g_rowh = 15;
+        g_bx = x + (6 + 9) * f;
+        g_bw = (ui_box_width(ntabs) - 18) * f;
+        g_title0 = y + (6 + 22) * f;
+        g_top = y + (6 + 22 + (ntabs > 0 ? 20 + 4 : 4)) * f;
+        g_rowh = 15 * f;
         g_sx = g_sw = g_stop = g_srow = 0;
         if (ntabs < 0) {                /* the side panel's column */
-            g_bx = x + 6 + UI_SIDE + 6;
-            g_bw = ui_box_width(ntabs) - UI_SIDE - 6 - 9;
-            g_sx = x + 6 + 6;
-            g_sw = UI_SIDE - 10;
-            g_stop = g_top + 4;
-            g_srow = 24;
+            g_bx = x + (6 + UI_SIDE + 6) * f;
+            g_bw = (ui_box_width(ntabs) - UI_SIDE - 6 - 9) * f;
+            g_sx = x + (6 + 6) * f;
+            g_sw = (UI_SIDE - 10) * f;
+            g_stop = g_top + 4 * f;
+            g_srow = 24 * f;
         }
-        g_gap = 6;                      /* the columns, 6 apart */
+        g_gap = 6 * f;                  /* the columns, 6 apart */
         g_cw = g_split < rows ? (g_bw - g_gap) * 0.5f : g_bw;
 
         glEnable(GL_TEXTURE_2D);
@@ -2394,6 +2404,8 @@ static int eligible(void)
     return GameMode == 6 || GameMode == 2 || (GameMode == 1 && isParent());
 }
 
+static void st_music(int on);
+
 int stage_menu_gate(long *level)
 {
     int i;
@@ -2424,6 +2436,7 @@ int stage_menu_gate(long *level)
             g_st_cur = i;
     g_st_open = 1;
     g_st_fresh = 1;
+    st_music(1);
     plat_mouse_wheel();                 /* turns made while it was shut */
     g_st_hover = -1;
     printf("stage select: open (%d stages)\n", g_st_n);
@@ -2432,11 +2445,26 @@ int stage_menu_gate(long *level)
 
 int stage_menu_is_open(void) { return g_st_open; }
 
+/* The music while it is open: the select screen faded the tune out with
+ * the picture (FadeMusicOut leaves it playing at volume 0); it plays on at
+ * the player's volume here, and goes quiet again for the loading, as the
+ * binary has it. The fight starts its own tune at its own volume. */
+void limeSetTuneVol(long vol);
+extern int Settings[10];
+extern float MusicVol[];
+
+static void st_music(int on)
+{
+    if (Settings[2])
+        limeSetTuneVol(on ? (long)MusicVol[Settings[2]] : 0);
+}
+
 static void st_close(int pick)
 {
     g_st_chosen = pick ? g_st_ids[g_st_cur] : -1;
     g_st_open = 0;
     g_st_done = 1;
+    st_music(0);
 }
 
 static void st_move(int d)

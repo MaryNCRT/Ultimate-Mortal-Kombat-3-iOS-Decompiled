@@ -97,6 +97,37 @@ yet**. Asked by Mary after trying the first round:
     fight's camera (GAME CAMERA button), log depth for the far skies; its
     textures marked sRGB there, as the fighter's are in that view. Not
     yet seen by Mary.
+  - **Shape keys for fighters, a fuller timeline, 4:3 fixes, stage-select
+    music (Mary 2026-10-30; built into the test folder, not tried by Mary
+    yet).** REPLACE / EDIT MODEL has a SHAPE KEYS tab: Basis (the model as
+    the game draws it) and named keys with a value slider, a key button and
+    mute; SCULPT grabs the vertices under the brush with a smooth falloff
+    into the key picked, worked out in the skin's rest space so it holds in
+    any pose (`ModelImport.svelte` shapeDeltas / posedDeltas); with an
+    animation chosen the values are keyed per clip frame (I, Alt+I, REC,
+    linear / bezier). Kept in `<skin>.import.json` (`shapes`); the game does
+    not draw shape keys. `KeyTimeline.svelte` is now Blender-like:
+    transport (first, previous key, play, next key, last), a frame field,
+    a tick a frame where they fit, a Summary row, the playhead with its
+    frame, the wheel steps a frame. The editor windows are put on the page's
+    top (`lib/portal.js`), so the launcher's bar and the player's card no
+    longer show over them; the menu's description box shrinks a text that
+    does not fit (`Desc.svelte`; MODS' English ran out of it). Mary saw
+    "500 Internal Error" after SCULPT in the stage editor: not reproduced in
+    a browser with the same data (`launcher/app/scripts/ui-harness.js`
+    serves the UI with the preload's calls over HTTP); the window now
+    refuses any navigation (`will-navigate`) and SCULPT's drag prevents the
+    native drag, the likely cause, but this is unconfirmed. Game: the ONLINE
+    code box drew in the overlay's 3:2 space and ran off a 4:3 screen; the
+    menu now hands over where it drew it (`PortOnlineBoxPx`, FE_X/FE_Y/
+    FE_W/FE_H) and `online_ui.c` maps it as `ui_nav_frame` does. The
+    settings panel in 4:3 sized its box from the last 2D pass's width (the
+    whole 16:9 window): `draw_ios` now takes the width from its own
+    viewport, and shrinks the panel if it is still wider. STAGE SELECT
+    plays the select screen's tune at the player's volume while it is open
+    (the select screen had faded it to 0) and quiets it again for the
+    loading (`st_music`, debug_menu.c). Built: `npm run ui`, the game
+    (x64, test folder), the test folder's app.asar.
   - **STAGE VIEWER editing, as Blender (Mary 2026-10-30; built into the
     test folder, not tried by Mary yet).** `mods/stageedit.js`,
     `StageEditor.svelte`, `KeyTimeline.svelte`. A picked stage element (the

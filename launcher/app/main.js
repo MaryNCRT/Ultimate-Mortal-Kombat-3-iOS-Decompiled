@@ -159,6 +159,9 @@ function createWindow() {
     });
     /* UMK3_LAUNCHER_SEC=<section>: open on that page (with the shot aid);
      * UMK3_LAUNCHER_PICK=<kind>/<id>[@<clip>]: the MODS viewer opens that */
+    /* the launcher is one page: a drop, a link or a back button that would
+     * take the window elsewhere is refused (the page showed "500") */
+    g_win.webContents.on('will-navigate', e => e.preventDefault());
     g_win.loadFile(path.join(__dirname, 'renderer', 'index.html'),
                    { query: { sec: process.env.UMK3_LAUNCHER_SEC || '', pick: process.env.UMK3_LAUNCHER_PICK || '' } });
     g_win.webContents.once('did-finish-load', () => dbg('did-finish-load'));

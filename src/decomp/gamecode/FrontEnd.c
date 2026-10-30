@@ -11996,6 +11996,9 @@ int  plat_clipboard_set(const char *utf8);
 /* the box, for online_ui.c (it draws the frame over the finished frame) */
 int  PortOnlineBoxActive;
 const float PortOnlineBox[4] = { 250.0f, 92.0f, 220.0f, 34.0f };   /* x y w h */
+/* and where it is drawn, in screen pixels (FE_X FE_Y FE_W FE_H), this frame:
+ * the frame has to follow the menu's own scaling (4:3 ran it off the right) */
+float PortOnlineBoxPx[4];
 
 static char  PortOnlineCode[16];        /* what was typed, dashes included */
 static int   PortOnlineListening = 1;
@@ -12189,6 +12192,10 @@ void FE_Task_Online(void)
             PortOnlineListening = 1;
     }
     PortOnlineBoxActive = PortOnlineListening && !searching;
+    PortOnlineBoxPx[0] = (float)FE_X(PortOnlineBox[0]);
+    PortOnlineBoxPx[1] = (float)FE_Y(PortOnlineBox[1]);
+    PortOnlineBoxPx[2] = (float)FE_W(PortOnlineBox[2]);
+    PortOnlineBoxPx[3] = (float)FE_H(PortOnlineBox[3]);
 
     if (PortOnlineBoxActive) {
         char ch[8];

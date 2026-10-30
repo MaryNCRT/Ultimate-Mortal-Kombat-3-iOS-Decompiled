@@ -14,7 +14,12 @@
      * or A), the arms' and legs' angle and roll, the size about 0,0,0, and
      * each joint moved by hand (picked on the view or from the list, its
      * other side mirrored), as gtastuff.com's SA viewer does, with the
-     * weights kept or worked out again. */
+     * weights kept or worked out again. SHAPE KEYS, as Blender's: a Basis
+     * (the model as the game draws it) and named keys, each a value; SCULPT
+     * grabs the vertices under the brush into the key picked, and the values
+     * are keyed on the animation's frames (I, Alt+I, REC, linear or bezier)
+     * on the timeline under the view. Kept with the import's settings; the
+     * game does not draw shape keys. */
     import { onMount, onDestroy } from 'svelte';
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -28,6 +33,9 @@
     import { decodePicture } from '#lib/mods/image.js';
     import { ViewNav } from '#lib/mods/viewnav.js';
     import { dataUrl } from '#lib/mods/thumbs.js';
+    import { portal } from '#lib/portal.js';
+    import { curve, putKey, dropKey } from '#lib/mods/stageedit.js';
+    import KeyTimeline from './KeyTimeline.svelte';
 
     /* f the fighter; file what main.js file:pick gave; texture(stem) the
      * viewer's game textures; outfit the outfit shown; saved, picks: a
@@ -265,6 +273,11 @@
             p = smoothAnims && playing && blendT > 0 ? framePoseBlend(pf.rig, at, next, blendT) : framePose(pf.rig, at);
         } else p = restPose();
         const pos = posedVerts(pf.rig, pf.topo, p);
+        const D = shapeDeltas();
+        if (D) {
+            const P = posedDeltas(D, p), src = pf.topo.src;
+            for (let o = 0; o < src.length; o++) for (let k = 0; k < 3; k++) pos[o * 3 + k] += P[src[o] * 3 + k];
+        }
         for (const m of meshes) {
             m.geometry.attributes.position.array.set(pos);
             m.geometry.attributes.position.needsUpdate = true;
@@ -275,7 +288,8 @@
         lastPose = p;
         syncGizmo();
     }
-    $effect(() => { clip; frame; showRig; sel; restView; pose(); });
+    $effect(() => { clip; frame; showRig; sel; restView; tool; activeShape; pose(); });
+    $effect(() => { clip; frame; pend = {}; });
     $effect(() => { const l = { ...look }; for (const m of meshes) applyLook(m.material, l); });
     $effect(() => { if (floor) floor.visible = showFloor; });
 
@@ -370,7 +384,7 @@
     let undoCount = $state(0), redoCount = $state(0);
     function snap() {
         return { joints: $state.snapshot(joints), turns: $state.snapshot(turns), paint: { ...paint }, adjust: $state.snapshot(adjust),
-            scale, keep, turn, reweight, smooth, blockOf: [...blockOf],
+            scale, keep, turn, reweight, smooth, blockOf: [...blockOf], shapes: JSON.parse(JSON.stringify(shapes)),
             mats: mdl ? mdl.materials.map(m => ({ image: m.image, file: m.file, game: m.game, rep: m.rep, picked: m.picked })) : [] };
     }
     function remember(key = '') {
@@ -397,6 +411,7 @@
         joints = st.joints; turns = st.turns; paint = st.paint; paintCount = Object.keys(paint).length;
         adjust = st.adjust; scale = st.scale; keep = st.keep; turn = st.turn; reweight = st.reweight; smooth = st.smooth; blockOf = st.blockOf;
         st.mats.forEach((m, i) => Object.assign(mdl.materials[i], m));
+        shapes = st.shapes; pend = {}; srev++;
         await makeThumbs();
         await rebuild();
     }
@@ -442,6 +457,12 @@
     let editInfo = $state('');
     let brushAt = $state(null);             /* the brush's ring, px in the view */
     let paint = {};                         /* "mesh:vertex" -> [[bone, w]] */
+    /* SHAPE KEYS: [{ name, value, mute, d: { "mesh:vertex": [dx dy dz] (the
+     * rest, the skin's space) }, keys: [{ c (clip), f (frame), v, i }] }] */
+    let shapes = $state.raw([]);
+    let activeShape = $state(-1), shapeRec = $state(false), shapeInterp = $state('bezier'), srev = $state(0);
+    let pend = {};                          /* shape -> { c, f, v }: set, not keyed */
+    let keyVerts = null;                    /* "mesh:vertex" -> skin vertices */
     let paintCount = $state(0);
     let edit = null, stroke = false, downAt = null, mouse = null, outs = null, paintWait, axisLine;
     const ray = new THREE.Raycaster();
@@ -867,6 +888,183 @@
         const c = vertexColors();
         for (const m of meshes) { m.geometry.attributes.color.array.set(c); m.geometry.attributes.color.needsUpdate = true; }
     }
+    /* ------------------------------------------------------ SHAPE KEYS -- */
+
+    /* a shape key's value on the frame shown: what was set and not keyed,
+     * else its keys on this clip, else its own */
+    function shapeVal(j) {
+        const sh = shapes[j], p = pend[j];
+        if (p && p.c === clip && p.f === frame) return p.v;
+        const ks = clip >= 0 ? sh.keys.filter(k => k.c === clip) : [];
+        return ks.length ? curve(ks, frame, k => k.v) : sh.value;
+    }
+    function buildKeyVerts() {
+        keyVerts = new Map();
+        (res.src || []).forEach((list, v) => { for (const k of list || []) { if (!keyVerts.has(k)) keyVerts.set(k, []); keyVerts.get(k).push(v); } });
+    }
+    /* the rest's deltas, a skin vertex each: the keys by value (SCULPT: the
+     * key picked alone at 1, as Blender's edit mode shows it) */
+    function shapeDeltas() {
+        if (!shapes.length || !res || !res.src) return null;
+        if (!keyVerts || keyVerts.res !== res) { buildKeyVerts(); keyVerts.res = res; }
+        const n = pf.rig.numVerts, D = new Float32Array(n * 3), done = new Uint8Array(n);
+        let any = false;
+        const solo = tool === 'shape' ? activeShape : -2;
+        shapes.forEach((sh, j) => {
+            const w = solo !== -2 ? (j === solo ? 1 : 0) : sh.mute ? 0 : shapeVal(j);
+            if (!w) return;
+            done.fill(0);
+            for (const [k, x] of Object.entries(sh.d))
+                for (const v of keyVerts.get(k) || []) {
+                    if (done[v]) continue;
+                    done[v] = 1; any = true;
+                    D[v * 3] += x[0] * w; D[v * 3 + 1] += x[1] * w; D[v * 3 + 2] += x[2] * w;
+                }
+        });
+        return any ? D : null;
+    }
+    /* the rest's deltas carried through the skinning: each influence's
+     * bone from the bind pose to the pose (the delta has no translation) */
+    function posedDeltas(D, p) {
+        const { v, b, w } = pf.rig.inf, R0 = res.rest, out = new Float32Array(D.length);
+        for (let i = 0; i < v.length; i++) {
+            const o = v[i] * 3, dx = D[o], dy = D[o + 1], dz = D[o + 2];
+            if (!dx && !dy && !dz) continue;
+            const r = R0[b[i]].R, R = p[b[i]].R, wi = w[i];
+            const l = [0, 1, 2].map(j => dx * r[j * 3] + dy * r[j * 3 + 1] + dz * r[j * 3 + 2]);
+            for (let k = 0; k < 3; k++) out[o + k] += wi * (l[0] * R[k] + l[1] * R[3 + k] + l[2] * R[6 + k]);
+        }
+        return out;
+    }
+    /* the matrix taking a skin vertex's rest delta to the pose (row form) */
+    function deltaMat(s, p) {
+        const { v, b, w } = pf.rig.inf, M = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+        for (let i = 0; i < v.length; i++) {
+            if (v[i] !== s) continue;
+            const A = mul3(tr3(res.rest[b[i]].R), p[b[i]].R);
+            for (let k = 0; k < 9; k++) M[k] += w[i] * A[k];
+        }
+        return M;
+    }
+    function inv3(m) {
+        const [a, b, c, d, e, f2, g, h, i] = m;
+        const A = e * i - f2 * h, B = -(d * i - f2 * g), C = d * h - e * g, det = a * A + b * B + c * C;
+        if (Math.abs(det) < 1e-9) return [1, 0, 0, 0, 1, 0, 0, 0, 1];
+        return [A, -(b * i - c * h), b * f2 - c * e, B, a * i - c * g, -(a * f2 - c * d), C, -(a * h - b * g), a * e - b * d].map(x => x / det);
+    }
+    /* SCULPT: the vertices under the brush, grabbed with a smooth falloff */
+    let sdrag = null;
+    function shapeDown(e) {
+        const sh = shapes[activeShape];
+        if (!sh || !pf) return;
+        ray.setFromCamera(ndc(e), camera);
+        const hit = ray.intersectObjects(meshes.filter(m => m.visible), false)[0];
+        if (!hit) return;
+        e.stopImmediatePropagation();
+        e.preventDefault();             /* no native drag or selection */
+        remember();
+        const r = renderer.domElement.getBoundingClientRect();
+        const R = brush.radius * (camera.isOrthographicCamera ? (camera.top - camera.bottom) / camera.zoom
+            : 2 * camera.position.distanceTo(hit.point) * Math.tan(camera.fov * Math.PI / 360)) / r.height;
+        const pos = meshes[0].geometry.attributes.position.array, src = pf.topo.src, h = hit.point, w = new Map();
+        for (let o = 0; o < src.length; o++) {
+            const d = Math.hypot(pos[o * 3] - h.x, pos[o * 3 + 1] - h.y, pos[o * 3 + 2] - h.z);
+            if (d >= R) continue;
+            const t = d / R, fall = 1 - t * t * (3 - 2 * t);
+            if (fall > (w.get(src[o]) || 0)) w.set(src[o], fall);
+        }
+        const d0 = new Map(), inv = new Map(), p = lastPose || res.rest;
+        for (const s of w.keys()) {
+            const k0 = (res.src[s] || [])[0];
+            d0.set(s, k0 && sh.d[k0] ? [...sh.d[k0]] : [0, 0, 0]);
+            inv.set(s, inv3(deltaMat(s, p)));
+        }
+        sdrag = { P: h.clone(), w, d0, inv, n: camera.getWorldDirection(new THREE.Vector3()) };
+        controls.enabled = false;
+    }
+    function shapeMove(e) {
+        const sh = shapes[activeShape];
+        if (!sh) return;
+        ray.setFromCamera(ndc(e), camera);
+        const now = ray.ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(sdrag.n, sdrag.P), new THREE.Vector3());
+        if (!now) return;
+        const dW = now.sub(sdrag.P).toArray();
+        for (const [s, fall] of sdrag.w) {
+            const dr = vmul(dW.map(x => x * fall), sdrag.inv.get(s)), a = sdrag.d0.get(s);
+            for (const k of res.src[s] || []) sh.d[k] = [a[0] + dr[0], a[1] + dr[1], a[2] + dr[2]];
+        }
+        pose();
+    }
+    const changed = () => { shapes = [...shapes]; srev++; pose(); };
+    function addShape() {
+        selectBlip();
+        remember();
+        let n = shapes.length + 1;
+        while (shapes.some(x => x.name === 'Key ' + n)) n++;
+        shapes = [...shapes, { name: 'Key ' + n, value: 0, mute: false, d: {}, keys: [] }];
+        activeShape = shapes.length - 1;
+        changed();
+    }
+    function delShape(j) { selectBlip(); remember(); shapes = shapes.filter((_, i) => i !== j); pend = {}; if (activeShape >= shapes.length) activeShape = shapes.length - 1; changed(); }
+    function renameShape(j, name) {
+        const nm = name.trim();
+        if (!nm || shapes.some((x, i) => i !== j && x.name === nm)) { srev++; return; }
+        remember(); shapes[j].name = nm; changed();
+    }
+    function muteShape(j) { remember(); shapes[j].mute = !shapes[j].mute; changed(); }
+    /* a value set: keyed (REC), held on this frame (keys on the clip), or
+     * the key's own (none) */
+    function setShape(j, v) {
+        remember('shape' + j);
+        const sh = shapes[j];
+        if (clip >= 0 && shapeRec) { putKey(sh.keys, { c: clip, f: frame, v, i: shapeInterp }); delete pend[j]; }
+        else if (clip >= 0 && sh.keys.some(k => k.c === clip)) pend[j] = { c: clip, f: frame, v };
+        else sh.value = v;
+        changed();
+    }
+    /* the keys of a clip: putKey/dropKey work on one clip's at a time */
+    function withClip(sh, fn) {
+        const mine = sh.keys.filter(k => k.c === clip), rest = sh.keys.filter(k => k.c !== clip);
+        const r = fn(mine);
+        sh.keys = [...rest, ...mine];
+        return r;
+    }
+    function keyShape(j) {
+        if (clip < 0) return;
+        remember();
+        const sh = shapes[j], v = shapeVal(j);
+        withClip(sh, ks => { if (ks.some(k => k.f === frame) && !pend[j]) dropKey(ks, frame); else putKey(ks, { c: clip, f: frame, v, i: shapeInterp }); });
+        delete pend[j];
+        changed();
+    }
+    function shapeInsertKey() {
+        if (clip < 0 || !shapes.length) return;
+        remember();
+        selectBlip();
+        shapes.forEach((sh, j) => {
+            if (j !== activeShape && !pend[j]) return;
+            const v = shapeVal(j);
+            withClip(sh, ks => putKey(ks, { c: clip, f: frame, v, i: shapeInterp }));
+        });
+        pend = {};
+        changed();
+    }
+    function shapeDelKeys() {
+        if (clip < 0) return;
+        remember();
+        shapes.forEach((sh, j) => { const v = shapeVal(j); if (withClip(sh, ks => dropKey(ks, frame)) && !sh.keys.some(k => k.c === clip)) sh.value = v; });
+        changed();
+    }
+    function setShapeInterp(v) {
+        shapeInterp = v;
+        if (clip < 0) return;
+        remember();
+        for (const sh of shapes) for (const k of sh.keys) if (k.c === clip && k.f === frame) k.i = v;
+        changed();
+    }
+    const shapeRows = $derived.by(() => { srev; return clip < 0 ? [] : shapes.map(sh => ({ label: sh.name, sub: true, keys: sh.keys.filter(k => k.c === clip).map(k => ({ f: k.f + 1, i: k.i })) })); });
+    const shapeShown = $derived.by(() => { srev; clip; frame; return shapes.map((sh, j) => ({ name: sh.name, v: shapeVal(j), mute: !!sh.mute, keyed: clip >= 0 && sh.keys.some(k => k.c === clip && k.f === frame) && !pend[j] })); });
+
     function setTool(t) {
         selectBlip();
         endEdit(false);
@@ -888,6 +1086,7 @@
             return;
         }
         if (e.button !== 0) return;
+        if (tool === 'shape') { shapeDown(e); return; }
         /* a handle of the gizmo under the pointer: the gizmo takes it */
         if (tool === 'bones' && tcMove) {
             const m = ndc(e), pt = { x: m.x, y: m.y, button: 0 };
@@ -919,14 +1118,16 @@
     }
     function onMove(e) {
         mouse = e;
-        if (renderer && tool === 'paint' && inView(e)) {
+        if (renderer && (tool === 'paint' || tool === 'shape') && inView(e)) {
             const r = host.getBoundingClientRect();
             brushAt = { x: e.clientX - r.left, y: e.clientY - r.top };
         } else brushAt = null;
         if (edit && !edit.gizmo) updateEdit(e);
         else if (stroke) paintAt(e);
+        else if (sdrag) shapeMove(e);
     }
     function onUp(e) {
+        if (sdrag) { sdrag = null; controls.enabled = true; }
         if (stroke) {
             stroke = false;
             paintWait = setTimeout(rebuild, 200);
@@ -968,7 +1169,8 @@
             else if (/^[0-9.,-]$/.test(e.key) || e.key === 'Backspace' || e.key === 'Tab') typeNum(e);
             else return;
         } else if (tool === 'bones' && sel >= 0 && mouse && inView(mouse) && (k === 'g' || k === 'r')) startEdit(k === 'g' ? 'move' : 'turn', mouse);
-        else if (tool === 'paint' && (k === '[' || k === ']')) brush.radius = Math.min(200, Math.max(5, brush.radius + (k === ']' ? 5 : -5)));
+        else if (e.code === 'KeyI' && shapes.length && clip >= 0) { if (e.altKey) shapeDelKeys(); else shapeInsertKey(); }
+        else if ((tool === 'paint' || tool === 'shape') && (k === '[' || k === ']')) brush.radius = Math.min(200, Math.max(5, brush.radius + (k === ']' ? 5 : -5)));
         else return;
         e.preventDefault();
         e.stopPropagation();
@@ -1074,7 +1276,7 @@
         /* what this window was set to, kept beside the skin in the mod */
         const settings = { file: file.name, keep, scale, turn, adjust: $state.snapshot(adjust), joints: $state.snapshot(joints),
             turns: $state.snapshot(turns), reweight, smooth, paint, blockOf: $state.snapshot(blockOf), replaces: mdl.materials.map(m => m.rep || ''),
-            game: mdl.materials.map(m => !!m.game), picked: mdl.materials.map(m => (m.picked ? m.file : '')) };
+            game: mdl.materials.map(m => !!m.game), picked: mdl.materials.map(m => (m.picked ? m.file : '')), shapes };
         const chosen = Object.fromEntries(mdl.materials.map((m, i) => [i, m.picked]).filter(([, b]) => b));
         onApply({ r: res, mdl, settings, file, picks: chosen });
     }
@@ -1086,6 +1288,7 @@
         adjust = { ...adjust, ...(st.adjust || {}) };
         joints = st.joints || {}; turns = st.turns || {};
         paint = st.paint || {}; paintCount = Object.keys(paint).length;
+        shapes = Array.isArray(st.shapes) ? st.shapes : [];
         if (st.blockOf) blockOf = mdl.materials.map((_, i) => Math.min(st.blockOf[i] ?? blockOf[i], f.rig.skin.length - 1));
         for (let i = 0; i < n; i++) {
             const m = mdl.materials[i];
@@ -1133,7 +1336,7 @@
     });
 </script>
 
-<div class="veil" role="presentation">
+<div class="veil" role="presentation" use:portal>
     <div class="win" role="dialog" aria-label={tx('imTitle')}>
         <header>
             <span class="ttl">{tx('imTitle')} · {file.name}</span>
@@ -1143,7 +1346,7 @@
             <section class="main">
                 <div class="view" bind:this={host}><div class="vname">{viewName}</div></div>
                 {#if editInfo}<div class="edit">{editInfo}</div>{/if}
-                {#if brushAt && tool === 'paint'}<div class="ring" style="left: {brushAt.x}px; top: {brushAt.y}px; width: {brush.radius * 2}px; height: {brush.radius * 2}px"></div>{/if}
+                {#if brushAt && (tool === 'paint' || tool === 'shape')}<div class="ring" style="left: {brushAt.x}px; top: {brushAt.y}px; width: {brush.radius * 2}px; height: {brush.radius * 2}px"></div>{/if}
                 <div class="looks" bind:this={looksEl}>
                     <button class="eye wide" class:hot={!look.solid && !look.weights} onclick={() => { look.solid = false; look.weights = false; }}>{tx('imLookTex')}</button>
                     <button class="eye wide" class:hot={look.solid} onclick={() => { look.solid = !look.solid; look.weights = false; }}>{tx('imLookSolid')}</button>
@@ -1180,14 +1383,50 @@
                             </select>
                         {/if}
                     </div>
+                    {#if clip >= 0 && shapes.length}
+                        <div class="play">
+                            <span class="lbl grow">{tx('seShapes')}</span>
+                            <button class="btn" class:hot={shapeRec} onclick={() => { selectBlip(); shapeRec = !shapeRec; }} title={tx('stRecNote')}>{shapeRec ? '● REC' : '○ REC'}</button>
+                            <button class="btn" onclick={shapeInsertKey}>{tx('stKey')}</button>
+                            <button class="btn" onclick={() => { selectBlip(); shapeDelKeys(); }}>{tx('stDelKey')}</button>
+                            <select class="sel interp" value={shapeInterp} onchange={e => setShapeInterp(e.currentTarget.value)} title={tx('stInterp')}>
+                                <option value="bezier">BEZIER</option><option value="linear">{tx('stLinear')}</option>
+                            </select>
+                        </div>
+                        <KeyTimeline length={pf.clips[clip].to - pf.clips[clip].from + 1} frame={frame + 1} rows={shapeRows} onSeek={f => { playing = false; frame = f - 1; }} {playing} onPlay={() => { playing = !playing; }} />
+                    {/if}
                 {/if}
             </section>
             <aside class="side">
                 <div class="pair tabs2">
                     <button class="btn" class:hot={tab === 'rig'} onclick={() => { selectBlip(); tab = 'rig'; }}>{tx('imTabRig')}</button>
                     <button class="btn" class:hot={tab === 'mats'} onclick={() => { selectBlip(); tab = 'mats'; }}>{tx('imTextures')}</button>
+                    <button class="btn" class:hot={tab === 'shapes'} onclick={() => { selectBlip(); tab = 'shapes'; }}>{tx('seShapes')}</button>
                 </div>
-                {#if tab === 'mats'}
+                {#if tab === 'shapes'}
+                    <div class="pair">
+                        <button class="btn" class:hot={tool !== 'shape'} onclick={() => setTool('bones')}>{tx('seObject')}</button>
+                        <button class="btn" class:hot={tool === 'shape'} onclick={() => setTool('shape')}>{tx('seSculpt')}</button>
+                    </div>
+                    <ul class="shapes">
+                        <li class:on={activeShape === -1}><button class="snm" onclick={() => { selectBlip(); activeShape = -1; }}>Basis</button></li>
+                        {#each shapeShown as sh, j}
+                            <li class:on={activeShape === j}>
+                                <input class="snmin" value={sh.name} spellcheck="false" onfocus={() => { activeShape = j; }} onchange={e => renameShape(j, e.currentTarget.value)}>
+                                <input type="range" min="0" max="1" step="0.01" value={sh.v} title={sh.v.toFixed(2)} oninput={e => setShape(j, Number(e.currentTarget.value))}>
+                                <button class="eye" class:hot={sh.keyed} disabled={clip < 0} onclick={() => keyShape(j)} title={tx('seKeyShape')}>◆</button>
+                                <button class="eye" class:off={sh.mute} onclick={() => muteShape(j)} title={tx('seMute')}>{sh.mute ? '○' : '●'}</button>
+                                <button class="eye" onclick={() => delShape(j)} title={tx('seDelShape')}>✕</button>
+                            </li>
+                        {/each}
+                    </ul>
+                    <button class="btn" onclick={addShape}>{tx('seAddShape')}</button>
+                    <label class="scale">
+                        <span class="lbl">{tx('imBrushRadius')} {brush.radius}px</span>
+                        <input type="range" min="5" max="200" step="1" bind:value={brush.radius}>
+                    </label>
+                    <p class="note">{tool === 'shape' ? (activeShape >= 0 ? tx('seSculptOn') + ' ' + shapes[activeShape].name + '. ' : tx('imShapePick') + ' ') : ''}{tx('imShapeNote')}</p>
+                {:else if tab === 'mats'}
                 <ul class="mats">
                     {#each mdl ? mdl.materials : [] as m, i}
                         <li>
@@ -1347,7 +1586,7 @@
 </div>
 
 <style>
-    .veil { position: fixed; inset: 0; z-index: 50; background: rgba(5, 4, 20, .72); display: grid; place-items: center; }
+    .veil { position: fixed; inset: 0; z-index: 1000; background: rgba(5, 4, 20, .72); display: grid; place-items: center; }
     .win {
         width: min(96vw, calc(var(--u) * 150)); height: min(92vh, calc(var(--u) * 90));
         display: flex; flex-direction: column; background: var(--bg); border: 1px solid var(--line);
@@ -1377,6 +1616,16 @@
     .play { display: flex; align-items: center; gap: calc(var(--u) * .9); margin-top: calc(var(--u) * .6); }
     .play .sel { flex: 0 0 calc(var(--u) * 22); }
     .play .sel.speed { flex: 0 0 calc(var(--u) * 8); }
+    .play .sel.interp { flex: 0 0 calc(var(--u) * 11); }
+    .play .grow { flex: 1; }
+    .main :global(.tl) { margin-top: calc(var(--u) * .4); max-height: calc(var(--u) * 18); overflow-y: auto; overflow-x: hidden; }
+    .shapes { list-style: none; margin: 0; padding: calc(var(--u) * .3); background: var(--well); border-radius: var(--r-sm); flex: none; display: flex; flex-direction: column; gap: 2px; }
+    .shapes li { display: flex; align-items: center; gap: calc(var(--u) * .4); padding: 2px 4px; border-radius: 3px; }
+    .shapes li.on { background: rgba(255, 160, 64, .18); }
+    .snm { flex: 1; text-align: left; background: none; border: 0; color: var(--lav); cursor: pointer; padding: 0; }
+    .snmin { flex: 0 0 calc(var(--u) * 8); min-width: 0; background: transparent; color: var(--lav); border: 1px solid transparent; border-radius: 3px; padding: 0 2px; }
+    .snmin:focus { border-color: var(--line); color: #fff; }
+    .shapes input[type=range] { flex: 1; min-width: 0; accent-color: var(--blue); }
     .play .lbl { white-space: nowrap; }
     .play input[type=range] { flex: 1; accent-color: var(--blue); }
     .side { display: flex; flex-direction: column; gap: calc(var(--u) * .6); min-height: 0; }
