@@ -148,6 +148,30 @@ function rotY(a) { const c = Math.cos(a), s = Math.sin(a); return [c, 0, -s, 0, 
 function rotZ(a) { const c = Math.cos(a), s = Math.sin(a); return [c, s, 0, 0, -s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]; }
 /* Euler XYZ in degrees, as FBX means it: x first, then y, then z */
 const eulerM = e => mm(rotZ(e[2] * Math.PI / 180), mm(rotY(e[1] * Math.PI / 180), rotX(e[0] * Math.PI / 180)));
+/* a model's RotationOrder (0 XYZ, 1 XZY, 2 YZX, 3 YXZ, 4 ZXY, 5 ZYX: the
+ * first letter turned first), as Blender's importer reads it; the pre and
+ * post rotations are always XYZ */
+const ORDERS = ['xyz', 'xzy', 'yzx', 'yxz', 'zxy', 'zyx'];
+function eulerOrd(e, order) {
+    if (!order) return eulerM(e);
+    const one = { x: rotX(e[0] * Math.PI / 180), y: rotY(e[1] * Math.PI / 180), z: rotZ(e[2] * Math.PI / 180) };
+    const o = ORDERS[order] || 'xyz';
+    return mm(one[o[2]], mm(one[o[1]], one[o[0]]));
+}
+/* GlobalSettings' axes to the game's (Y up, the front +Z), as Blender's
+ * importer turns a file: a Z-up file (3ds Max, Blender's own with its
+ * defaults) stands up */
+function axisM(gs) {
+    const g = (k, d) => (gs[k] && Number.isFinite(Number(gs[k][0])) ? Number(gs[k][0]) : d);
+    const up = g('UpAxis', 1), us = g('UpAxisSign', 1), fr = g('FrontAxis', 2), fs = g('FrontAxisSign', 1), co = g('CoordAxis', 0), cs = g('CoordAxisSign', 1);
+    if (new Set([up, fr, co]).size !== 3 || ![up, fr, co].every(a => a >= 0 && a <= 2)) return null;
+    if (up === 1 && fr === 2 && co === 0 && us > 0 && fs > 0 && cs > 0) return null;
+    const M = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
+    M[co * 4] = cs < 0 ? -1 : 1;
+    M[up * 4 + 1] = us < 0 ? -1 : 1;
+    M[fr * 4 + 2] = fs < 0 ? -1 : 1;
+    return M;
+}
 
 /* a column matrix as the game's { R row form, T }, the scale taken out */
 function toPose(m) {
@@ -197,10 +221,23 @@ export function fbxScene(root) {
             rOff: p.RotationOffset || [0, 0, 0], rPiv: p.RotationPivot || [0, 0, 0],
             sOff: p.ScalingOffset || [0, 0, 0], sPiv: p.ScalingPivot || [0, 0, 0],
             gT: p.GeometricTranslation || [0, 0, 0], gR: p.GeometricRotation || [0, 0, 0], gS: p.GeometricScaling || [1, 1, 1],
+            order: p.RotationOrder ? Number(p.RotationOrder[0]) || 0 : 0,
             parent: (parentOf.get(id) || []).find(x => byId.get(x) && byId.get(x).name === 'Model') ?? null,
         });
     }
-    return { byId, parentOf, childrenOf, propLinks, models, fps };
+    const axis = axisM(gs);
+    /* the bind pose (Pose, BindPose): each node's matrix when the skin was
+     * bound -- Blender's rest for a bone with no cluster of its own */
+    const bindPose = new Map();
+    for (const [, n] of byId) {
+        const type = kid(n, 'Type') ? plain(kid(n, 'Type').props[0]) : plain(n.props[2]);
+        if (n.name !== 'Pose' || type !== 'BindPose') continue;
+        for (const pn of kids(n, 'PoseNode')) {
+            const id = kid(pn, 'Node') && kid(pn, 'Node').props[0], m = kid(pn, 'Matrix') && kid(pn, 'Matrix').props[0];
+            if (id !== undefined && m && m.length >= 16 && !bindPose.has(id)) bindPose.set(id, axis ? mm(axis, Array.from(m)) : Array.from(m));
+        }
+    }
+    return { byId, parentOf, childrenOf, propLinks, models, fps, axis, bindPose };
 }
 
 /* FBX's local transform: T Roff Rp Rpre R Rpost^-1 Rp^-1 Soff Sp S Sp^-1 */
@@ -208,7 +245,7 @@ function localM(m, over) {
     const T = (over && over.T) || m.T, R = (over && over.R) || m.R, S = (over && over.S) || m.S;
     const neg = v => [-v[0], -v[1], -v[2]];
     const rp = m.rPiv || [0, 0, 0], sp = m.sPiv || [0, 0, 0];
-    const rot = mm(trans(rp), mm(eulerM(m.pre), mm(eulerM(R), mm(inv4(eulerM(m.post)), trans(neg(rp))))));
+    const rot = mm(trans(rp), mm(eulerM(m.pre), mm(eulerOrd(R, m.order), mm(inv4(eulerM(m.post)), trans(neg(rp))))));
     const sc = mm(trans(m.sOff || [0, 0, 0]), mm(trans(sp), mm(scal(S), trans(neg(sp)))));
     return mm(trans(T), mm(trans(m.rOff || [0, 0, 0]), mm(rot, sc)));
 }
@@ -222,7 +259,7 @@ function globalM(sc, id, over, memo) {
     if (memo.has(id)) return memo.get(id);
     const m = sc.models.get(id);
     const l = localM(m, over && over.get(id));
-    const g = m.parent !== null && sc.models.has(m.parent) ? mm(globalM(sc, m.parent, over, memo), l) : l;
+    const g = m.parent !== null && sc.models.has(m.parent) ? mm(globalM(sc, m.parent, over, memo), l) : sc.axis ? mm(sc.axis, l) : l;
     memo.set(id, g);
     return g;
 }
@@ -237,7 +274,7 @@ function clusters(sc) {
         const geom = skin !== undefined ? (sc.parentOf.get(skin) || [])[0] : undefined;
         const link = kid(n, 'TransformLink');
         if (bone === undefined || !link) continue;
-        out.push({ bone, geom, link: link.props[0], idx: (kid(n, 'Indexes') || { props: [[]] }).props[0], wt: (kid(n, 'Weights') || { props: [[]] }).props[0] });
+        out.push({ bone, geom, link: sc.axis ? mm(sc.axis, Array.from(link.props[0])) : link.props[0], idx: (kid(n, 'Indexes') || { props: [[]] }).props[0], wt: (kid(n, 'Weights') || { props: [[]] }).props[0] });
     }
     return out;
 }

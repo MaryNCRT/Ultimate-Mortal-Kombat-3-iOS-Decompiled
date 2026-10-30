@@ -64,6 +64,26 @@ yet**. Asked by Mary after trying the first round:
     `lime.h`), and a lighting file that does not fit the skin is replaced by
     its average light (`Players.c port_fit_lighting`, logged `flat light`).
     The importer refuses a block over 65,535 vertices once unwelded.
+  - **The file read as Blender reads it; the gizmo under the buttons, Mary
+    2026-10-30 (test launcher repacked, not tried yet).**
+    - **The gizmo:** a click on an axis did nothing (the click looked for
+      where the ends were drawn on a fresh list that had none); it now
+      looks down that axis. It sits under the view's buttons (RIG,
+      FLOOR, SOLO) instead of over them (`ViewNav` `below`).
+    - **FBX as Blender's importer:** each model's RotationOrder (Maya's
+      ZXY and the rest; it was always XYZ), GlobalSettings' axes (a Z-up
+      file stands up), every LimbNode as a bone (end bones, bones with no
+      vertices; their rest from the BindPose, else the scene), and no
+      made-up normals when the file has none (worked out from the faces).
+      The order and axes go through `globalM` and the clusters, so a
+      take imported from the same file (REPLACE ANIMATION) moves the same
+      way.
+    - **GLB:** shape keys at the mesh's weights, and a part hung under a
+      bone without a skin (helmet, weapon) moves with that bone.
+    - Checked in node: a Z-up file's up and front land on Y and +Z; ZYX
+      order turns X to +Z for (90, 0, 90). The game's skeleton is fixed,
+      so bones the fighter has no match for still move with the nearest
+      matched bone above them.
   - **0.1.14 beta: REPLACE MODEL like Blender, Mary 2026-10-30 (built,
     not tried yet).**
     - **Published** as v0.1.14-beta (pre-release, 2026-10-30): the 0.1.13

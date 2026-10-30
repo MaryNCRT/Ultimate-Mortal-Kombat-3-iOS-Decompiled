@@ -63,7 +63,8 @@
     let pics = $state({});                  /* texture stem -> its small picture */
 
     let renderer, scene, camera, controls, root, raf, skel, floor, nav;
-    let viewName = $state('');              /* Blender's view name, bottom left */
+    let viewName = $state('');
+    let topEl;                              /* the buttons the camera gizmo sits under */              /* Blender's view name, bottom left */
     let fighterView = null;                 /* { f, meshes: [{ mesh, map }], rest } */
 
     const items = $derived.by(() => {
@@ -112,7 +113,7 @@
         /* the camera as Blender's (mods/viewnav.js) */
         nav = new ViewNav({ host, renderer, controls, persp: camera, onCamera: c => { camera = c; }, onLabel: t => { viewName = t; },
             names: { front: tx('nvFront'), back: tx('nvBack'), right: tx('nvRight'), left: tx('nvLeft'), top: tx('nvTop'), bottom: tx('nvBottom'),
-                user: tx('nvUser'), persp: tx('nvPersp'), ortho: tx('nvOrtho') } });
+                user: tx('nvUser'), persp: tx('nvPersp'), ortho: tx('nvOrtho') }, below: () => topEl });
         nav.gizmo.title = tx('nvKeys');
         nav.label();
         window.addEventListener('keydown', navKey);
@@ -1143,7 +1144,7 @@
             {:else if !ms.pick}<span class="msg">{tx('vwPick')}</span>{/if}
         </div>
         <div class="info">{info}</div>
-        <div class="topbtns">
+        <div class="topbtns" bind:this={topEl}>
             <button class="btn" onclick={() => { selectBlip(); ms.solo = !ms.solo; }}>{ms.solo ? tx('vwPanels') : tx('vwSolo')}</button>
             <button class="btn" onclick={toggleFull}>{full ? tx('vwFullExit') : tx('vwFull')}</button>
         </div>

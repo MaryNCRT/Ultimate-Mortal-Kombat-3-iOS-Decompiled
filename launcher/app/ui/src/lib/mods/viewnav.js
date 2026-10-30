@@ -24,9 +24,12 @@ const KEY_VIEW = { 1: ['front', 'back'], 3: ['right', 'left'], 7: ['top', 'botto
 
 export class ViewNav {
     /* persp the window's camera; onCamera(c) when the one drawn changes;
-     * onLabel(text) the view's name ('' a free one, as Blender shows it) */
-    constructor({ host, renderer, controls, persp, onCamera, onLabel, names }) {
-        Object.assign(this, { host, renderer, controls, persp, onCamera, onLabel, names: names || {} });
+     * onLabel(text) the view's name ('' a free one, as Blender shows it);
+     * below() the buttons over the view's top right, the gizmo kept under
+     * them */
+    constructor({ host, renderer, controls, persp, onCamera, onLabel, names, below }) {
+        Object.assign(this, { host, renderer, controls, persp, onCamera, onLabel, below, names: names || {} });
+        this.drawn = [];
         this.ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, persp.near, persp.far);
         this.camera = persp;
         this.axisView = '';
@@ -174,13 +177,18 @@ export class ViewNav {
     }
     draw() {
         const c = this.gizmo, dpr = window.devicePixelRatio || 1, W = 96;
+        const over = this.below && this.below();
+        const top = over ? Math.max(8, Math.round(over.getBoundingClientRect().bottom - this.host.getBoundingClientRect().top + 8)) + 'px' : '8px';
+        if (c.style.top !== top) c.style.top = top;
         if (c.width !== W * dpr) { c.width = c.height = W * dpr; }
         const g = c.getContext('2d');
         g.setTransform(dpr, 0, 0, dpr, 0, 0);
         g.clearRect(0, 0, W, W);
         const R = 34, cx = W / 2, cy = W / 2;
         if (this.hover) { g.fillStyle = 'rgba(255,255,255,.12)'; g.beginPath(); g.arc(cx, cy, W / 2 - 1, 0, Math.PI * 2); g.fill(); }
-        for (const p of this.ends()) {
+        /* where each end was drawn, for a click to find */
+        this.drawn = this.ends();
+        for (const p of this.drawn) {
             const x = cx + p.x * R, y = cy - p.y * R;
             if (p.s > 0) {
                 g.strokeStyle = p.a.color; g.lineWidth = 2;
@@ -213,10 +221,11 @@ export class ViewNav {
             window.removeEventListener('pointerup', up);
             if (dragged) return;
             const px = ev.clientX - r.left, py = ev.clientY - r.top;
-            let best = null, bd = 12;
-            for (const p of this.ends().reverse()) {
+            let best = null, bd = 14;
+            for (const p of [...this.drawn].reverse()) {
+                if (p.px === undefined) continue;
                 const d = Math.hypot(p.px - px, p.py - py);
-                if (p.px !== undefined && d < bd) { bd = d; best = p; }
+                if (d < bd) { bd = d; best = p; }
             }
             if (!best) return;
             const n = { X: ['right', 'left'], Y: ['top', 'bottom'], Z: ['front', 'back'] }[best.a.name][best.s > 0 ? 0 : 1];
