@@ -89,9 +89,13 @@ async function fbxModel(sc, beside) {
     const addBone = (id, rest) => {
         if (!boneOf.has(id)) { boneOf.set(id, bones.length); bones.push({ name: sc.models.get(id).name, rest }); }
     };
+    /* every bone of the armature, as Blender builds it: the skin's (their
+     * rest the cluster's TransformLink), then the rest of the LimbNodes --
+     * end bones, bones with no vertices -- at the bind pose, else where the
+     * scene has them */
     for (const c of cl) addBone(c.bone, c.link);
-    if (!bones.length)
-        for (const [id, m] of sc.models) if (m.type === 'LimbNode') addBone(id, globalM(sc, id, null, memo));
+    for (const [id, m] of sc.models)
+        if (m.type === 'LimbNode') addBone(id, sc.bindPose.get(id) || globalM(sc, id, null, memo));
     /* each bone's parent among them (past nulls between), -1 at the top */
     for (const [id, i] of boneOf) {
         let p = sc.models.get(id).parent;
@@ -186,16 +190,16 @@ async function fbxModel(sc, beside) {
             const put = j => {
                 const v = PVI[j] < 0 ? ~PVI[j] : PVI[j];
                 const uv = corner(uvEl, 'UV', 'UVIndex', j, v, poly, 2) || [0, 0];
-                const n = corner(nEl, 'Normals', 'NormalsIndex', j, v, poly, 3) || [0, 1, 0];
                 tv.push(v);
                 tuv.push(uv[0], 1 - uv[1]);
-                tn.push(...xdir(place, n));
+                if (nEl) tn.push(...xdir(place, corner(nEl, 'Normals', 'NormalsIndex', j, v, poly, 3)));
             };
             for (let j = start + 1; j + 1 <= k; j++) { put(start); put(j); put(j + 1); tm.push(mat); }
             poly++;
             start = k + 1;
         }
-        meshes.push(meshOf(modelId !== undefined ? sc.models.get(modelId).name : 'mesh', pos, inf, tv, tuv, tn, tm));
+        /* no normals in the file: worked out from the faces, as Blender does */
+        meshes.push(meshOf(modelId !== undefined ? sc.models.get(modelId).name : 'mesh', pos, inf, tv, tuv, nEl ? tn : null, tm));
     }
     return { bones, meshes, materials };
 }
@@ -313,8 +317,18 @@ async function glbModel(bytes, beside) {
         const n = P.count;
         const pos = new Array(n * 3), nrm = N ? new Array(n * 3) : null;
         nm.getNormalMatrix(o.matrixWorld);
+        /* the shape keys at the values the file gives them (the mesh's
+         * weights), as Blender shows them */
+        const MP = g.morphAttributes && g.morphAttributes.position, MI = o.morphTargetInfluences;
+        const keys = MP && MI ? MP.map((a, k) => [a, MI[k] || 0]).filter(x => x[1]) : [];
+        const d3 = new THREE.Vector3();
         for (let i = 0; i < n; i++) {
             v3.fromBufferAttribute(P, i);
+            for (const [a, w] of keys) {
+                d3.fromBufferAttribute(a, i);
+                if (g.morphTargetsRelative) v3.addScaledVector(d3, w);
+                else v3.addScaledVector(d3.sub(new THREE.Vector3().fromBufferAttribute(P, i)), w);
+            }
             if (o.isSkinnedMesh) o.applyBoneTransform(i, v3);
             v3.applyMatrix4(o.matrixWorld);
             pos[i * 3] = v3.x; pos[i * 3 + 1] = v3.y; pos[i * 3 + 2] = v3.z;
@@ -335,6 +349,12 @@ async function glbModel(bytes, beside) {
                 }
                 inf.push(l);
             }
+        } else {
+            /* not skinned but hung under a bone (a helmet, a sword): it
+             * moves with that bone, as Blender's bone parenting */
+            let p = o.parent;
+            while (p && !boneOf.has(p)) p = p.parent;
+            if (p) inf = Array.from({ length: n }, () => [[boneOf.get(p), 1]]);
         }
         const mats = (Array.isArray(o.material) ? o.material : [o.material]).map(material);
         const index = g.index ? g.index.array : null;

@@ -57,6 +57,7 @@
     let mirror = $state(true), reweight = $state(false);
     let look = $state({ wire: false, solid: false, weights: false });
     let showRig = $state(true), showFloor = $state(true);
+    let looksEl;                            /* the buttons the camera gizmo sits under */
 
     let renderer, scene, camera, controls, root, raf, meshes = [], floor, rigLines, lastPose = null, framed = false, nav;
     let viewName = $state('');              /* Blender's view name, top left */
@@ -79,7 +80,7 @@
         scene.add(sun);
         nav = new ViewNav({ host, renderer, controls, persp: camera, onCamera: c => { camera = c; }, onLabel: t => { viewName = t; },
             names: { front: tx('nvFront'), back: tx('nvBack'), right: tx('nvRight'), left: tx('nvLeft'), top: tx('nvTop'), bottom: tx('nvBottom'),
-                user: tx('nvUser'), persp: tx('nvPersp'), ortho: tx('nvOrtho') } });
+                user: tx('nvUser'), persp: tx('nvPersp'), ortho: tx('nvOrtho') }, below: () => looksEl });
         nav.label();
         nav.gizmo.title = tx('nvKeys');
         floor = makeFloor();
@@ -839,7 +840,7 @@
                 <div class="view" bind:this={host}><div class="vname">{viewName}</div></div>
                 {#if editInfo}<div class="edit">{editInfo}</div>{/if}
                 {#if brushAt && tool === 'paint'}<div class="ring" style="left: {brushAt.x}px; top: {brushAt.y}px; width: {brush.radius * 2}px; height: {brush.radius * 2}px"></div>{/if}
-                <div class="looks">
+                <div class="looks" bind:this={looksEl}>
                     <button class="eye wide" class:hot={!look.solid && !look.weights} onclick={() => { look.solid = false; look.weights = false; }}>{tx('imLookTex')}</button>
                     <button class="eye wide" class:hot={look.solid} onclick={() => { look.solid = !look.solid; look.weights = false; }}>{tx('imLookSolid')}</button>
                     <button class="eye wide" class:hot={look.weights} onclick={() => { look.weights = !look.weights; look.solid = false; }}>{tx('imLookWeights')}</button>
