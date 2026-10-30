@@ -8,7 +8,10 @@
  *     meshes:    [{ name, pos (rest, Float32 xyz), uv (Float32, the game's v
  *                   down from the top), faces (Uint32 triangles), material,
  *                   skin?: { idx, wt } four bones a vertex }],
- *     materials: [{ name, texture (a file name beside the export, or '') }],
+ *     materials: [{ name, texture (a file name beside the export, or ''),
+ *                   blend?: 'opaque' | 'alpha' | 'clip' | 'add' (how the game
+ *                   blends it: a stage, stagerun.js), color?: [r, g, b],
+ *                   alpha?, unlit? }],
  *     skeleton?: { names, parent, rest: [{ R, T }] }       global, row vectors
  *     clips?:    [{ name, poses: [[{ R, T }] a frame] }]   global
  *     fps
@@ -229,7 +232,8 @@ export function toFbx(desc) {
         const mid = id();
         add('Material', ['Material', [L(mid), S(cls(m.name, 'Material')), S('')], [
             ['Version', [I(102)]], ['ShadingModel', [S('Phong')]], ['MultiLayer', [I(0)]],
-            P70(P('DiffuseColor', 'Color', '', 'A', D(0.8), D(0.8), D(0.8)), P('DiffuseFactor', 'Number', '', 'A', D(1)))]]);
+            P70(...[P('DiffuseColor', 'Color', '', 'A', ...(m.color || [0.8, 0.8, 0.8]).map(D)), P('DiffuseFactor', 'Number', '', 'A', D(1))],
+                ...(m.blend && m.blend !== 'opaque' ? [P('TransparencyFactor', 'Number', '', 'A', D(1 - (m.alpha ?? 1))), P('Opacity', 'double', 'Number', '', D(m.alpha ?? 1))] : []))]]);
         if (m.texture) {
             const tid = id(), vid = id();
             add('Texture', ['Texture', [L(tid), S(cls(m.texture, 'Texture')), S('')], [
@@ -237,11 +241,12 @@ export function toFbx(desc) {
                 P70(P('UseMaterial', 'bool', '', '', I(1))),
                 ['Media', [S(cls(m.texture, 'Video'))]], ['FileName', [S(m.texture)]], ['RelativeFilename', [S(m.texture)]],
                 ['ModelUVTranslation', [D(0), D(0)]], ['ModelUVScaling', [D(1), D(1)]],
-                ['Texture_Alpha_Source', [S('None')]], ['Cropping', [I(0), I(0), I(0), I(0)]]]]);
+                ['Texture_Alpha_Source', [S(m.blend && m.blend !== 'opaque' ? 'Alpha_Black' : 'None')]], ['Cropping', [I(0), I(0), I(0), I(0)]]]]);
             add('Video', ['Video', [L(vid), S(cls(m.texture, 'Video')), S('Clip')], [
                 ['Type', [S('Clip')]], P70(P('Path', 'KString', 'XRefUrl', '', S(m.texture))),
                 ['UseMipMap', [I(0)]], ['Filename', [S(m.texture)]], ['RelativeFilename', [S(m.texture)]]]]);
             OP(tid, mid, 'DiffuseColor');
+            if (m.blend && m.blend !== 'opaque') OP(tid, mid, 'TransparentColor');
             OO(vid, tid);
         }
         return mid;
@@ -483,6 +488,7 @@ export function toGlb(desc, pictures = {}) {
     const FLOAT = 5126, U16 = 5123, U32 = 5125;
 
     const images = [], textures = [], picOf = new Map();
+    let unlit = false;
     const materials = desc.materials.map(m => {
         const out = { name: m.name, pbrMetallicRoughness: { metallicFactor: 0, roughnessFactor: 0.9 }, doubleSided: true };
         const png = m.texture && pictures[m.texture];
@@ -494,6 +500,16 @@ export function toGlb(desc, pictures = {}) {
             }
             out.pbrMetallicRoughness.baseColorTexture = { index: picOf.get(m.texture) };
         }
+        /* a stage's: how the game blends it (glTF has no additive; the
+         * extras say so) */
+        if (m.blend) {
+            out.pbrMetallicRoughness.baseColorFactor = [...(m.color || [1, 1, 1]), m.alpha ?? 1];
+            if (m.blend === 'clip') { out.alphaMode = 'MASK'; out.alphaCutoff = 0.9; }
+            else if (m.blend !== 'opaque') out.alphaMode = 'BLEND';
+            out.doubleSided = m.blend === 'add';
+            out.extras = { blend: m.blend };
+        }
+        if (m.unlit) { out.extensions = { KHR_materials_unlit: {} }; unlit = true; }
         return out;
     });
 
@@ -585,6 +601,7 @@ export function toGlb(desc, pictures = {}) {
         scene: 0, scenes: [{ name: desc.name, nodes: [0] }], nodes, meshes, materials,
         accessors, bufferViews: views, buffers: [{ byteLength: blen }],
     };
+    if (unlit) json.extensionsUsed = ['KHR_materials_unlit'];
     if (skins.length) json.skins = skins;
     if (animations.length) json.animations = animations;
     if (images.length) {

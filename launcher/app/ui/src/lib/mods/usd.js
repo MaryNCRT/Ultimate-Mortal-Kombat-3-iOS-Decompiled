@@ -134,8 +134,14 @@ export function stageOf(desc) {
         surf.props.push({ name: 'info:id', type: 'token', value: 'UsdPreviewSurface', uniform: true });
         if (mat.texture) {
             surf.props.push({ name: 'inputs:diffuseColor', type: 'color3f', connect: mb + '/Picture.outputs:rgb' });
-            surf.props.push({ name: 'inputs:opacity', type: 'float', connect: mb + '/Picture.outputs:a' });
-        } else surf.props.push({ name: 'inputs:diffuseColor', type: 'color3f', value: [0.8, 0.8, 0.8] });
+            if (!mat.blend || mat.blend !== 'opaque')
+                surf.props.push({ name: 'inputs:opacity', type: 'float', connect: mb + '/Picture.outputs:a' });
+        } else {
+            surf.props.push({ name: 'inputs:diffuseColor', type: 'color3f', value: mat.color || [0.8, 0.8, 0.8] });
+            if (mat.alpha != null && mat.alpha < 1) surf.props.push({ name: 'inputs:opacity', type: 'float', value: mat.alpha });
+        }
+        /* a stage's clipped texels (ATST: above 0.9) */
+        if (mat.blend === 'clip') surf.props.push({ name: 'inputs:opacityThreshold', type: 'float', value: 0.9 });
         surf.props.push({ name: 'inputs:roughness', type: 'float', value: 0.8 });
         surf.props.push({ name: 'outputs:surface', type: 'token' });
         M.children.push(surf);

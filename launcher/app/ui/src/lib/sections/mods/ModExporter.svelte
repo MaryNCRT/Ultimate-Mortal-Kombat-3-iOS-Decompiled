@@ -15,6 +15,7 @@
     import { hoverBlip, selectBlip, doneChord, failChord } from '#lib/sound.js';
     import { ms, src, loadCatalog, fighter, VIEW_KINDS } from '#lib/mods/store.svelte.js';
     import { fighterDesc, stageDesc, meshsetDesc, exportFiles, pngBytes, textureFile } from '#lib/mods/assets.js';
+    import { stageExport } from '#lib/mods/stagerun.js';
     import { homeOf, textureOwners, textureHome, exportTexDir } from '#lib/mods/owners.js';
 
     let kind = $state(ms.kind);
@@ -78,7 +79,9 @@
                                 }
                             }
                     } else {
-                        desc = kind === 'stages' ? await stageDesc(src, it, stageAnim && format !== 'obj')
+                        /* a stage with its animation: as the engine plays it,
+                         * its effects and glows too (mods/stagerun.js) */
+                        desc = kind === 'stages' ? (stageAnim && format !== 'obj' ? await stageExport(src, it) : await stageDesc(src, it))
                             : await meshsetDesc(src, it.id);
                         files = await exportFiles(src, desc, format);
                     }

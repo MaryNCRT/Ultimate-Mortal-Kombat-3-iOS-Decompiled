@@ -1,11 +1,12 @@
 <script>
-    /* MODS: five pages -- the MOD MANAGER, the MODEL VIEWER, the CHARACTER
-     * EDITOR, TEXTURES and EXPORT (sections/mods/). */
+    /* MODS: six pages -- the MOD MANAGER, the CHARACTER VIEWER, the STAGE
+     * VIEWER, the CHARACTER EDITOR, TEXTURES and EXPORT (sections/mods/). */
     import Page from '#lib/components/Page.svelte';
     import SubNav from '#lib/components/SubNav.svelte';
     import { ms, MODS_TABS } from '#lib/mods/store.svelte.js';
     import ModManager from './mods/ModManager.svelte';
     import ModViewer from './mods/ModViewer.svelte';
+    import StageViewer from './mods/StageViewer.svelte';
     import ModEditor from './mods/ModEditor.svelte';
     import ModExporter from './mods/ModExporter.svelte';
     import ModTextures from './mods/ModTextures.svelte';
@@ -17,6 +18,8 @@
         <ModManager />
     {:else if ms.tab === 'view'}
         <ModViewer />
+    {:else if ms.tab === 'stage'}
+        <StageViewer />
     {:else if ms.tab === 'edit'}
         <ModEditor />
     {:else if ms.tab === 'tex'}
