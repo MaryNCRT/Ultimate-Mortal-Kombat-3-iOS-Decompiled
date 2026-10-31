@@ -1128,6 +1128,10 @@ static void read_config(const char *dir)
             extern int port_smooth_anims;
             port_smooth_anims = atoi(v) == 1;
         }
+        else if (strcmp(line, "noob_saibot") == 0) {   /* FrontEnd.c */
+            extern int port_noob_saibot;
+            port_noob_saibot = atoi(v) == 1;
+        }
         else if (strcmp(line, "rt_shadows") == 0)      /* render/rgl.h */
             rgl_shadows = atoi(v) == 1;
         else if (strcmp(line, "smooth_models") == 0) { /* smooth_models.c */

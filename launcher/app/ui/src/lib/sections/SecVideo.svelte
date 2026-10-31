@@ -1,6 +1,6 @@
 <script>
-    /* GRAPHICS: three pages. VIDEO, the window and what draws into it;
-     * TEXTURES; INTERFACE, the shape of the screen and what is drawn over
+    /* GRAPHICS: four pages. VIDEO, the window; GRAPHICS, what draws into
+     * it; TEXTURES; INTERFACE, the shape of the screen and what is drawn over
      * the game. Every change writes umk3.ini at once. */
     import { app, tx, GFX_TABS, RES, ASPECT, AA, TEXQ, UISIZE, RENDERERS, save } from '#lib/app.svelte.js';
     import { api } from '#lib/platform.js';
@@ -64,7 +64,8 @@
                 </select>
             </div>
         </div>
-        <h3>{tx('gImage')}</h3>
+    {:else if app.gfxTab === 'gfx'}
+        <h3 class="first">{tx('gImage')}</h3>
         <div class="fields">
             <div class="field">
                 <label class="lbl" for="rres">{tx('rres')}</label>

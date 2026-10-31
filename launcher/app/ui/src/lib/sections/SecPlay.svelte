@@ -36,7 +36,10 @@
         onchange={e => save({ debug: e.currentTarget.checked })}><span>{tx('dbg')}</span></label>
     <label class="chk"><input type="checkbox" checked={!!app.cfg.skipIntro}
         onchange={e => save({ skipIntro: e.currentTarget.checked })}><span>{tx('skip')}</span></label>
+    <label class="chk"><input type="checkbox" checked={!!app.cfg.noobSaibot}
+        onchange={e => save({ noobSaibot: e.currentTarget.checked })}><span>{tx('noob')}</span></label>
     <label class="chk"><input type="checkbox" checked={!!app.cfg.compileShaders}
         onchange={e => save({ compileShaders: e.currentTarget.checked })}><span>{tx('shaders')}</span></label>
+    <p class="note">{tx('offlineNote')}</p>
     <button class="btn hot big" disabled={!app.ready || app.build.on} onpointerenter={hoverBlip} onclick={doPlay}>{tx('play')}</button>
 </Page>

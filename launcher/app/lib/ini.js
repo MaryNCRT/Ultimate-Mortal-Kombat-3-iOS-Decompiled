@@ -47,26 +47,26 @@ const path = require('path');
 const { StringDecoder } = require('string_decoder');
 
 /* The resolutions the launcher offers, index = g_cfg_res in launcher.c.
- * The first seven are the game's native 3:2; the last five are 16:9 for the
- * widescreen mode (the engine letterboxes/extends around them). */
+ * Smallest to largest, by width then height; umk3.ini keeps the width and
+ * height, never the index, so the order can change. */
 const RES = [
-    { w: 480,  h: 320 },
-    { w: 960,  h: 640 },
-    { w: 1440, h: 960 },
-    { w: 1920, h: 1280 },
-    { w: 2400, h: 1600 },
-    { w: 2880, h: 1920 },
-    { w: 3840, h: 2560 },
-    { w: 1280, h: 720 },
-    { w: 1600, h: 900 },
-    { w: 1920, h: 1080 },
-    { w: 2560, h: 1440 },
-    { w: 3840, h: 2160 },
+    { w: 480, h: 320 },
+    { w: 960, h: 640 },
     { w: 1024, h: 768 },
+    { w: 1280, h: 720 },
+    { w: 1440, h: 960 },
+    { w: 1600, h: 900 },
     { w: 1600, h: 1200 },
+    { w: 1920, h: 1080 },
+    { w: 1920, h: 1280 },
     { w: 2048, h: 1536 },
+    { w: 2400, h: 1600 },
     { w: 2560, h: 1080 },
+    { w: 2560, h: 1440 },
+    { w: 2880, h: 1920 },
     { w: 3440, h: 1440 },
+    { w: 3840, h: 2160 },
+    { w: 3840, h: 2560 },
 ];
 
 /* The languages Info.plist maps (LANGUAGE_TEXT_xx); "" follows Windows. */
@@ -173,6 +173,7 @@ function defaultConfig() {
         sharpAngle: SHARP_ANGLE,     /* sharp_edge_angle=: degrees, 0..180 */
         sharpStrength: SHARP_STRENGTH,   /* sharp_edge_strength=: percent, 0..100 */
         rtShadows: false,            /* rt_shadows=1: real-time shadows (experimental) */
+        noobSaibot: false,           /* noob_saibot=1: Noob Saibot on the select grid (offline only) */
         language: 0,                 /* "" = follow Windows */
         ui: 'EN',                    /* the launcher's own language */
         ipa: '',
@@ -243,6 +244,7 @@ function load(p) {
         else if (key === 'sharp_edge_angle') cfg.sharpAngle = clampInt(num, 0, 180, SHARP_ANGLE);
         else if (key === 'sharp_edge_strength') cfg.sharpStrength = clampInt(num, 0, 100, SHARP_STRENGTH);
         else if (key === 'rt_shadows') cfg.rtShadows = num === 1;
+        else if (key === 'noob_saibot') cfg.noobSaibot = num === 1;
         else if (key === 'language') {
             const i = LANGS.findIndex(l => l.code.toUpperCase() === val.toUpperCase());
             if (i >= 0)
@@ -341,6 +343,7 @@ function save(p, cfg) {
         'sharp_edge_angle=' + clampInt(cfg.sharpAngle, 0, 180, SHARP_ANGLE),
         'sharp_edge_strength=' + clampInt(cfg.sharpStrength, 0, 100, SHARP_STRENGTH),
         'rt_shadows=' + (cfg.rtShadows ? 1 : 0),
+        'noob_saibot=' + (cfg.noobSaibot ? 1 : 0),
         'buttons=' + (cfg.buttons === 6 ? 6 : 5),
         'pad=' + (cfg.pad || 'auto'),
         'arch=' + (cfg.arch === 'x64' ? 'x64' : 'x86'),

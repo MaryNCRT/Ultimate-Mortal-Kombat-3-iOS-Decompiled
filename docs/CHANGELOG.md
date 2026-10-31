@@ -8,6 +8,35 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## 0.1.18 beta (2026-10-30) — Noob Saibot on the roster, EXPORT ALL textures, settings by category
+
+Published 2026-10-30 as the GitHub pre-release `v0.1.18-beta` (`UMK3-PC-0.1.18-beta.zip`, `UMK3-PC-0.1.18-beta-linux-x64.tar.gz`). **Played by Mary** in her test folder: works.
+
+**Game**
+- **Noob Saibot can be chosen** (umk3.ini `noob_saibot=1`: the launcher's
+  PLAY page, or GAME in the Esc menu). The game already marks him
+  available but its grid has no cell for him; he takes the empty one right
+  of Smoke. Offline only: never in an online fight, whatever is set. Port,
+  not in the original.
+- **The Esc menu's categories:** VIDEO, GRAPHICS, TEXTURES and GAME are now
+  separate (they were all under GRAPHICS); GAME holds the interface and
+  what changes the game.
+- **Resolutions from smallest to largest** in the Esc menu and the
+  launcher (umk3.ini keeps width and height, so nothing saved changes).
+
+**Launcher**
+- **MODS → TEXTURES: EXPORT ALL** exports every texture of the fighter or
+  stage shown, and **EXPORT EVERY FIGHTER / STAGE** the whole group, each
+  to its place in `exports\`.
+- **GRAPHICS** has a page of its own beside VIDEO, TEXTURES and INTERFACE.
+- **CHARACTER EDITOR:** the note now says it as it is: character changes
+  (attacks, hitboxes, kombos, data) never apply online; online only models
+  and textures count (runtime/mods.c already worked that way).
+
+**Known problems closed** (Mary no longer sees them): the dropped fight
+intro frame, the repeated death scream, the Motaro softlock, SCULPT's
+"500 Internal Error"; duplicating a fighter is off the list.
+
 ## 0.1.17 beta (2026-10-30) — Kombos that share a start, KOMBOS in the CHARACTER EDITOR
 
 Published 2026-10-30 as the GitHub pre-release `v0.1.17-beta` (`UMK3-PC-0.1.17-beta.zip`, `UMK3-PC-0.1.17-beta-linux-x64.tar.gz`). Both changes were **played by Mary** in her test folder: work.
