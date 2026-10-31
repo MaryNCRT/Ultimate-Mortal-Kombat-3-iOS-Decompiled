@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-10-31 (release 0.1.20 beta: the game's leaderboards, published as the pre-release `v0.1.20-beta`).
+**Last updated:** 2026-10-31 (friends, unique profile names, live leaderboards, on main for 0.1.21).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
@@ -142,8 +142,13 @@ press COMPILE.
   here. The launcher's client is `launcher/app/lib/account.js`; its `SERVER`
   is the deployed address.
 - **Leaderboards in the game** work through the launcher: it writes
-  `leaderboards.txt` before PLAY and posts the game's `scores.txt` after
-  (gamecode_stubs.c, `lib/account.js`). A server change that needs a new
+  `leaderboards.txt` before PLAY and every 10 s while the game runs, and
+  posts the game's `scores.txt` as it grows (gamecode_stubs.c,
+  `lib/account.js`). A run with the debug menu's help is not posted
+  (`PortDbgTainted`, game_main.c).
+- **Friends and the profile on the account**: `claim()` in `lib/account.js`
+  ties the profile code and name to the account (names unique); FRIENDS is
+  a page of PROFILE (`ProfFriends.svelte`). A server change that needs a new
   column goes in the private repo's `migrations/`, applied before deploying.
 
 The table in [PROGRESS.md → Open problems](PROGRESS.md#open-problems) is the

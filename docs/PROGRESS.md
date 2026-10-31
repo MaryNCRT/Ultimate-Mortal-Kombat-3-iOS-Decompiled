@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-10-31 (release 0.1.20 beta: the game's leaderboards, published as the pre-release `v0.1.20-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-10-31 (friends, unique profile names, live leaderboards, on main for 0.1.21) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -94,6 +94,42 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## Friends, live leaderboards, no help from the debug menu (2026-10-31, on main, not released)
+
+Mary asked for friends (found by profile name or by a code tied to the
+account), unique profile names, the scores sent as soon as a run ends
+(a friend's run had not shown until he closed the game), new profile names
+shown on the boards, a run with the debug menu's help left off the boards,
+and ACCOUNT and FRIENDS moved into PROFILE. She played it and confirmed.
+
+- **Server** (private repo, commit bbb83a4; migration `0002_friends`,
+  applied to the live database). `accounts.pcode` / `pname`, unique
+  (`pname` under NOCASE). `PUT /v1/profile {code, name}`: the code is stored
+  once and returned after; a taken one is `code_taken`; a taken name leaves
+  the stored one and answers `taken`. `GET /v1/users?q=` (the code exactly,
+  or a name prefix of 2+ characters, 10 rows). `GET/POST/DELETE
+  /v1/friends`: a row is "src asked dst", both rows are a friendship. The
+  boards show `COALESCE(pname, scores.name)`.
+- **Launcher** (`lib/account.js`). `claim()` after every pull and after the
+  game: sends the profile's id and name; takes the stored code back into
+  profiles.ini; a `code_taken` (two accounts on one PC) gets a new id; a
+  taken name goes back to the stored one. `rename()` from PROFILE's name
+  field (on change). `friends`, `findPlayers`, `addFriend`, `removeFriend`.
+  `live()` every 10 s while the game runs (`main.js`, `stepAside`):
+  `flushScores` then `boards`, written to `leaderboards.txt.tmp` and renamed.
+  UI: `SecProfile.svelte` with `PROF_TABS` (PROFILE, ACCOUNT, FRIENDS;
+  `ProfAccount.svelte`, `ProfFriends.svelte`); the conflict at PLAY opens
+  PROFILE > ACCOUNT.
+- **Game** (Port). `gamecode_stubs.c`: `mayhem_load` reads
+  `leaderboards.txt` again when its time or size changed; a post with
+  `PortDbgTainted` set is dropped (and logged). `game_main.c`:
+  `PortDbgTainted` set by any debug request but SAVE STATE, by `fight_key`,
+  and in a fight while INFINITE HEALTH, FREEZE CLOCK or another speed is on
+  (`dbg_taint_watch`, each frame); cleared when `GameMode` changes and when a
+  run starts (a Karnage fight; Survival's first, `SurvivalStage == 0`).
+- **Checked:** Worker tests (profile, search, friends, board names);
+  launcher tests (20 pass); Mary in game and launcher.
 
 ## 0.1.20: the game's leaderboards on the account server (2026-10-31, released in 0.1.20)
 

@@ -7,7 +7,6 @@
     import { app, tx } from '#lib/app.svelte.js';
     import { api } from '#lib/platform.js';
     import { selectBlip, hoverBlip } from '#lib/sound.js';
-    import Page from '#lib/components/Page.svelte';
 
     let st = $state(null);              /* {server, user, guest} */
     let mode = $state('login');         /* login | register | recover */
@@ -85,7 +84,7 @@
     }
 </script>
 
-<Page>
+<div class="pane">
     {#if st && !st.server}
         <p class="note">{tx('acNoServer')}</p>
     {:else if st}
@@ -179,7 +178,7 @@
         {/if}
         {#if msg}<p class="msg">{msg}</p>{/if}
     {/if}
-</Page>
+</div>
 
 <style>
     .fields { grid-template-columns: minmax(0, 1fr); max-width: calc(var(--u) * 40); }

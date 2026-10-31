@@ -8,6 +8,32 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased (on main, for 0.1.21) — friends, live leaderboards
+
+Not published yet. **Played by Mary** in her test folder: works.
+
+**Launcher**
+- **FRIENDS**: find a player by the profile name (not the login) or by the
+  profile code, send a request, accept or decline one, remove a friend.
+  Accounts only.
+- **PROFILE has three pages now**: PROFILE, ACCOUNT and FRIENDS. ACCOUNT is
+  no longer in the main menu.
+- The profile code belongs to the account: the same on every PC.
+- **No two accounts share a profile name**, whatever the case. A name
+  another player has is refused, in the launcher and when it was changed
+  in the game.
+- **Leaderboards in real time**: while the game runs the launcher sends its
+  new scores and fetches everyone's every ten seconds, and the game reads
+  the boards again when they change. A new profile name shows on every
+  board at once.
+
+**Game**
+- A Survival or Shao Kahn run that used the debug menu's help (infinite
+  health, frozen clock, another fight speed, win / lose a round, the direct
+  fight keys, loading a state, jumping to a fight, screen or boss, forcing a
+  finisher) is not posted to the leaderboards. Having the debug menu on, or
+  its display options, is fine.
+
 ## 0.1.20 beta (2026-10-31) — the game's leaderboards
 
 Published 2026-10-31 as the GitHub pre-release `v0.1.20-beta` (`UMK3-PC-0.1.20-beta.zip`, `UMK3-PC-0.1.20-beta-linux-x64.tar.gz`). **Played by Mary** in her test folder: works, gamepad included.

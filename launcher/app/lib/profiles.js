@@ -23,7 +23,8 @@
  * random bits from the system's cryptographic generator as twelve Crockford
  * base-32 digits, XXXX-XXXX-XXXX -- about a billion billion possible. It is
  * never changed or deleted; RESET puts the name, icon and colour back and
- * keeps it. */
+ * keeps it. Logged in, the id is the account's (lib/account.js, claim()):
+ * every computer takes it, and it is the code friends find the player by. */
 'use strict';
 
 const fs = require('fs');
@@ -182,4 +183,4 @@ function iconAltData(root, i) {
     return null;
 }
 
-module.exports = { load, update, reset, newId, cleanName, cleanColor, cleanAngle, iconData, iconAltData, ICONS, NAME_MAX };
+module.exports = { load, save, update, reset, newId, cleanName, cleanColor, cleanAngle, iconData, iconAltData, ICONS, NAME_MAX };

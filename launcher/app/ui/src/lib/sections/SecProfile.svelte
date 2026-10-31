@@ -3,8 +3,13 @@
      * name, the id (one per installation, it never changes), the fighter in
      * his first or second outfit, the background's gradient (the gradient
      * picker: two colours and an angle) and a reset. The icon stays in sight
-     * while the page scrolls to the colours, so every change shows. */
-    import { app, tx, updateProf, resetProf } from '#lib/app.svelte.js';
+     * while the page scrolls to the colours, so every change shows. Its
+     * other pages: the account (ProfAccount) and the friends (ProfFriends). */
+    import { app, tx, updateProf, resetProf, PROF_TABS } from '#lib/app.svelte.js';
+    import SubNav from '#lib/components/SubNav.svelte';
+    import ProfAccount from './ProfAccount.svelte';
+    import ProfFriends from './ProfFriends.svelte';
+    import { api } from '#lib/platform.js';
     import { selectBlip, hoverBlip } from '#lib/sound.js';
     import Page from '#lib/components/Page.svelte';
     import IconCanvas from '#lib/components/IconCanvas.svelte';
@@ -17,6 +22,17 @@
     $effect(() => {
         if (p && !typing) name = p.name;
     });
+
+    /* Logged in, the name is the account's and no two players share one
+     * (lib/account.js, rename): a name someone else has goes back to the
+     * one the account keeps. */
+    let nameMsg = $state('');
+    async function nameDone() {
+        if (!name.trim()) await updateProf({ name: tx('profDefault') });
+        const r = await api.account.rename(app.prof.name);
+        nameMsg = r.error === 'name_taken' ? tx('profNameTaken') : '';
+        if (r.error === 'name_taken') await updateProf({ name: r.name || tx('profDefault') });
+    }
 
     function pick(fields) {
         selectBlip();
@@ -57,7 +73,12 @@
 </script>
 
 <Page>
-    {#if p}
+    <SubNav tabs={PROF_TABS} current={app.profTab} pick={t => app.profTab = t} />
+    {#if app.profTab === 'account'}
+        <ProfAccount />
+    {:else if app.profTab === 'friends'}
+        <ProfFriends />
+    {:else if p}
         <div class="prof">
             <IconCanvas class="big" size={192} icon={p.icon} color={p.color} shade={p.shade} color2={p.color2}
                         angle={p.angle} alt={p.alt} />
@@ -68,7 +89,8 @@
                            onfocus={() => typing = true}
                            onblur={() => typing = false}
                            oninput={() => updateProf({ name: name.replace(/[|\r\n\t]/g, ' ') })}
-                           onchange={() => { if (!name.trim()) updateProf({ name: tx('profDefault') }); }}>
+                           onchange={nameDone}>
+                    {#if nameMsg}<span class="taken">{nameMsg}</span>{/if}
                 </div>
                 <div class="field wide">
                     <span class="lbl">{tx('profId')}</span>
@@ -118,5 +140,6 @@
     .icongrid { display: grid; grid-template-columns: repeat(12, 1fr); gap: calc(var(--u) * .5); }
     .icongrid :global(canvas) { width: 100%; cursor: pointer; border-radius: 18%; outline: 2px solid transparent; }
     .icongrid :global(canvas.on) { outline-color: #fff; }
+    .taken { color: #ffb347; font-weight: bold; }
     .shades { margin: calc(var(--u) * .4) 0 0; }
 </style>

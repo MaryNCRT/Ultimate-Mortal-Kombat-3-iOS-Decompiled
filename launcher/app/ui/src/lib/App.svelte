@@ -22,11 +22,10 @@
     import SecVideo from './sections/SecVideo.svelte';
     import SecControls from './sections/SecControls.svelte';
     import SecProfile from './sections/SecProfile.svelte';
-    import SecAccount from './sections/SecAccount.svelte';
     import SecMods from './sections/SecMods.svelte';
     import SecReplays from './sections/SecReplays.svelte';
 
-    const PAGES = { build: SecBuild, play: SecPlay, video: SecVideo, controls: SecControls, profile: SecProfile, account: SecAccount, mods: SecMods, replays: SecReplays };
+    const PAGES = { build: SecBuild, play: SecPlay, video: SecVideo, controls: SecControls, profile: SecProfile, mods: SecMods, replays: SecReplays };
     const Sec = $derived(PAGES[app.sec]);
 
     onMount(init);

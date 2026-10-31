@@ -456,6 +456,11 @@ ipcMain.handle('account:delete', (_ev, p) => account.remove(g_root, p));
 ipcMain.handle('account:sync', () => account.pull(g_root));
 ipcMain.handle('account:resolve', (_ev, which) => account.resolve(g_root, which));
 ipcMain.handle('account:scores', (_ev, board) => account.scores(g_root, board));
+ipcMain.handle('account:rename', (_ev, name) => account.rename(g_root, String(name || '')));
+ipcMain.handle('account:friends', () => account.friends(g_root));
+ipcMain.handle('account:find', (_ev, q) => account.findPlayers(g_root, q));
+ipcMain.handle('account:addFriend', (_ev, code) => account.addFriend(g_root, String(code || '')));
+ipcMain.handle('account:removeFriend', (_ev, code) => account.removeFriend(g_root, String(code || '')));
 
 ipcMain.handle('profile:load', (_ev, name) => prof.load(g_root, name));
 ipcMain.handle('profile:update', (_ev, fields) => prof.update(g_root, fields || {}));
@@ -507,12 +512,21 @@ function stepAside(child) {
     if (!child || !g_win)
         return;
     const hide = setTimeout(() => g_win && g_win.hide(), 800);
-    child.once('error', () => clearTimeout(hide));
+    /* the leaderboards both ways every ten seconds while it runs */
+    let busy = false;
+    const tick = setInterval(() => {
+        if (busy) return;
+        busy = true;
+        account.live(g_root).catch(() => {}).then(() => { busy = false; });
+    }, 10000);
+    child.once('error', () => { clearTimeout(hide); clearInterval(tick); });
     child.once('exit', () => {
         clearTimeout(hide);
+        clearInterval(tick);
         /* the game's scores and the progress up to the account
          * (lib/account.js), not waited for */
         account.flushScores(g_root).catch(() => {})
+            .then(() => account.claim(g_root)).catch(() => {})
             .then(() => account.push(g_root))
             .then(r => g_win && g_win.webContents.send('account:synced', r), () => {});
         if (!g_win)

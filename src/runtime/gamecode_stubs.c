@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "gamecode_globals.h"
 
@@ -95,8 +96,14 @@ char *EASOC_FBGetFriendName(int index)          { (void)index; return ""; }
  *                          Mary|41
  *                          ...rows, best first
  *   scores.txt         appended here, one "<board> <score>" a line; the
- *                      launcher posts them when the game closes and empties
- *                      it. The server keeps each account's best.
+ *                      launcher posts them while the game runs (every few
+ *                      seconds) and empties it. The server keeps each
+ *                      account's best.
+ *
+ * The launcher writes leaderboards.txt again while the game runs, so the
+ * other players' new scores come in: the file is read again whenever it
+ * changed. A run that had the debug menu's help (game_main.c,
+ * PortDbgTainted) is not posted.
  *
  * "Ready, nothing pending, no name needed" is still the answer: the boards
  * are already on disk, and the name is the account's. A score posted here is
@@ -113,6 +120,7 @@ static char        g_mh_user[24];
 static MayhemBoard g_mh_board[MAYHEM_BOARDS];
 static long        g_mh_boards;
 static int         g_mh_loaded = -1;    /* -1 not read yet, 0 no account, 1 */
+static struct stat g_mh_st;             /* leaderboards.txt as last read */
 static const char *g_mh_stat;           /* the board the screen asked for */
 
 void mayhem_set_dir(const char *ini_path)
@@ -164,11 +172,16 @@ static int mayhem_load(void)
     MayhemBoard *bd = NULL;
     FILE *f;
 
-    if (g_mh_loaded >= 0)
+    struct stat st;
+
+    mayhem_path(path, sizeof path, "leaderboards.txt");
+    if (stat(path, &st) != 0)
+        memset(&st, 0, sizeof st);
+    if (g_mh_loaded >= 0 && st.st_mtime == g_mh_st.st_mtime && st.st_size == g_mh_st.st_size)
         return g_mh_loaded;
+    g_mh_st = st;
     g_mh_boards = 0;
     g_mh_user[0] = 0;
-    mayhem_path(path, sizeof path, "leaderboards.txt");
     f = fopen(path, "rb");
     g_mh_loaded = 0;
     if (!f)
@@ -237,9 +250,16 @@ void EASOC_MayhemPostStatWithData(const char *key, long value,
     MayhemBoard *bd;
     FILE *f;
 
+    extern int PortDbgTainted;
+
     (void)data; (void)size;
     if (!key || value < 0 || !mayhem_load())
         return;
+    if (PortDbgTainted) {
+        printf("leaderboards: %s %ld not posted, the run had the debug menu's help\n", key, value);
+        PortDbgTainted = 0;
+        return;
+    }
     mayhem_path(path, sizeof path, "scores.txt");
     f = fopen(path, "ab");
     if (f) {
