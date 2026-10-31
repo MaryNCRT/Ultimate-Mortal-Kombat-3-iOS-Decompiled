@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-10-31 (FRIENDS in the game's ONLINE menu, on main for 0.1.23) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-10-31 (release 0.1.23 beta: FRIENDS in the game's ONLINE menu, published as the pre-release `v0.1.23-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -95,7 +95,7 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
-## FRIENDS in the game's ONLINE menu (2026-10-31, on main, not released)
+## FRIENDS in the game's ONLINE menu (2026-10-31, released in 0.1.23)
 
 Mary: the invites belong in the game's ONLINE menu, with the friends' names
 and icons, and JOIN there. Played: works.
