@@ -497,15 +497,31 @@ function recoveryWindow(code, t) {
     w.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
 }
 
-/* Friend requests: asked for every minute while logged in. A new one gets a
+/* Friend requests and invites: asked for every 15 seconds while logged in. A new one gets a
  * Windows notification (a click opens PROFILE > FRIENDS); the count goes to
  * the page, the red dot on PROFILE and FRIENDS. */
-const g_frSeen = new Set();
+const g_frSeen = new Set(), g_invSeen = new Set();
 async function pollFriends() {
     if (!g_root || !g_win || !account.status(g_root).user) return;
     const r = await account.friends(g_root).catch(() => null);
     if (!r || !r.ok || !g_win) return;
-    g_win.webContents.send('account:requests', r.incoming.length);
+    g_win.webContents.send('account:requests', r.incoming.length + (r.invites || []).length, r);
+    for (const p of r.invites || []) {
+        if (g_invSeen.has(p.code) || !Notification.isSupported())
+            continue;
+        g_invSeen.add(p.code);
+        const n = new Notification({
+            title: 'UMK3 — Online fight',
+            body: (p.name || p.code) + ' invites you to an online fight. Open PROFILE > FRIENDS to join.',
+        });
+        n.on('click', () => {
+            if (!g_win) return;
+            g_win.show();
+            g_win.focus();
+            g_win.webContents.send('account:openFriends');
+        });
+        n.show();
+    }
     const fresh = r.incoming.filter(p => !g_frSeen.has(p.code));
     r.incoming.forEach(p => g_frSeen.add(p.code));
     if (!fresh.length || !Notification.isSupported())
@@ -600,9 +616,19 @@ function stepAside(child) {
     });
 }
 
-ipcMain.handle('play', async () => {
+/* PLAY, or an online fight with a friend (FRIENDS' INVITE and JOIN): the
+ * game opens on its ONLINE screen (--screen 51), the one who joins with the
+ * friend's code to find (UMK3_ONLINE_FIND). A game already running is told
+ * through online_join.txt (gamecode_stubs.c), and the player goes to ONLINE. */
+let g_child = null;
+async function startGame(online) {
     if (!ini.gameReady(g_root, arch()))
         return { ok: false };
+    if (g_child && online) {
+        if (online.join)
+            fs.writeFileSync(path.join(g_root, 'online_join.txt'), online.join + '\n');
+        return { ok: true, running: true };
+    }
     /* the account's progress down first; a conflict is the player's to
      * settle, offline plays on */
     const sync = await account.pull(g_root);
@@ -612,9 +638,30 @@ ipcMain.handle('play', async () => {
     await account.boards(g_root).catch(() => {});
     if (ini.load(path.join(g_root, 'umk3.ini')).compileShaders)
         await compileShaders(path.join(g_root, ini.gameExe(arch())));
-    stepAside(bld.play(g_root, ini.gameExe(arch())));
+    const child = online
+        ? bld.play(g_root, ini.gameExe(arch()), ['--screen', '51'], online.join ? { UMK3_ONLINE_FIND: online.join } : null)
+        : bld.play(g_root, ini.gameExe(arch()));
+    if (child) {
+        g_child = child;
+        child.once('exit', () => { if (g_child === child) g_child = null; });
+        child.once('error', () => { if (g_child === child) g_child = null; });
+    }
+    stepAside(child);
     return { ok: true };
+}
+ipcMain.handle('play', () => startGame(null));
+ipcMain.handle('account:invite', async (_ev, code) => {
+    const r = await account.invite(g_root, String(code || ''));
+    return r.ok ? { ...(await startGame({})), ok: true } : r;
 });
+ipcMain.handle('account:joinInvite', async (_ev, code) => {
+    code = String(code || '');
+    await account.dropInvite(g_root, code).catch(() => {});
+    if (!/^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(code))
+        return { ok: false, error: 'no_player' };
+    return startGame({ join: code });
+});
+ipcMain.handle('account:dropInvite', (_ev, code) => account.dropInvite(g_root, String(code || '')));
 
 /* ------------------------------------------------------------ replays --
  * REPLAYS (lib/replays.js): the last fights the game kept, the ones kept for
@@ -877,7 +924,7 @@ if (!gotLock) {
         dbg('ready root=' + g_root);
         createWindow();
         setTimeout(pollFriends, 5000);
-        setInterval(pollFriends, 60000);
+        setInterval(pollFriends, 15000);
         app.on('activate', () => {
             if (BrowserWindow.getAllWindows().length === 0)
                 createWindow();

@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-10-31 (friend requests, online sounds and desyncs fixed, on main for 0.1.22) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-10-31 (release 0.1.22 beta: invites, friend requests, online fixes, published as the pre-release `v0.1.22-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -95,7 +95,7 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
-## Friend requests, the late press's sounds, mods' bones online (2026-10-31, on main, not released)
+## 0.1.22: invites, friend requests, the late press's sounds, mods' bones online (2026-10-31, released in 0.1.22)
 
 Mary: a friend's name was not found; she wanted notices of requests,
 REMOVE EMAIL and the recovery code in a window; Nightwolf "mute, only air"
@@ -127,6 +127,26 @@ when he hits; the guest's screen black after an online fight.
   game's offsets back and drops the root height. The guest's black screen
   is likely this (the two machines ended different fights); not confirmed
   online yet.
+- **The guest's STAGE SELECT:** the guest waited in `Task_GameInit`
+  (`rb_host_level`) with nothing drawn. The host sends the stage it shows
+  (`PORT_PKT_STAGE` 24, six frames apart, debug_menu.c `st_tell_guest`);
+  the guest draws the same window without buttons (`stage_menu_watch_draw`,
+  game_main.c) and waits on while packets come (two seconds without one
+  ends it).
+- **Invites:** the Worker's `invites` table (`POST/DELETE /v1/invite`,
+  `invites` in `GET /v1/friends`, three minutes, friends only; private repo
+  3c44d13). main.js `startGame`: `--screen 51` for both, `UMK3_ONLINE_FIND`
+  for the one who joins; a game already running reads `online_join.txt`
+  (gamecode_stubs.c `port_online_join_code`, FrontEnd.c FE_Task_Online).
+  `pollFriends` every 15 s.
+- **FPS:** fights froze 250 to 900 ms as SMOOTH MODELS' mesh arrived:
+  `adopt` ran `umk_subsurf_set_sharp` (a full CCG sync) on the game's
+  thread. It runs in `build` now. Stages' first-frame events still pause
+  (STREET up to 1.3 s), not looked into.
+- **Loading:** the first menu took 6.5 s; a mod's model was baked again at
+  every load (`port_bake_lighting`, kept now by skin file, its time logged).
+  The launcher's `init` asks for glyphs, logo and hero at once.
+- **Not tried online with two players.** Published at Mary's request.
 
 ## 0.1.21: friends, live leaderboards, no help from the debug menu (2026-10-31, released in 0.1.21)
 

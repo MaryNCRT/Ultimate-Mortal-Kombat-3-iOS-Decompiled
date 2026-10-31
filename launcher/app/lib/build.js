@@ -165,7 +165,7 @@ function cancelBuild() {
     return true;
 }
 
-function play(root, exeName, args = []) {
+function play(root, exeName, args = [], env = null) {
     const exePath = path.join(root, exeName);
     if (!fs.existsSync(exePath)) {
         return false;
@@ -181,6 +181,7 @@ function play(root, exeName, args = []) {
      * caller hears when it ends (main.js brings its window back) */
     return spawn(exePath, args, {
         cwd: root,
+        env: env ? { ...process.env, ...env } : process.env,
         detached: true,
         stdio: 'ignore',
         windowsHide: false,

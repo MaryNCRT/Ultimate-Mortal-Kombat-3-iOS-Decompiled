@@ -6,7 +6,7 @@
      * asks back). Guests have none. Requests waiting show as a red dot on
      * PROFILE and FRIENDS, and new ones as a Windows notification (main.js,
      * pollFriends). */
-    import { onMount } from 'svelte';
+    import { onMount, untrack } from 'svelte';
     import { app, tx } from '#lib/app.svelte.js';
     import { api } from '#lib/platform.js';
     import { selectBlip, hoverBlip } from '#lib/sound.js';
@@ -27,7 +27,7 @@
 
     async function refresh() {
         const r = await api.account.friends();
-        if (r.ok) { fr = r; app.frIn = r.incoming.length; }
+        if (r.ok) { fr = r; app.frIn = r.incoming.length + (r.invites || []).length; }
         else msg = err(r.error);
     }
 
@@ -72,6 +72,27 @@
         });
     }
 
+    /* the lists main.js keeps asking for: an invite shows as it comes */
+    $effect(() => {
+        const live = app.frLive;
+        if (live) untrack(() => { if (fr) fr = live; });
+    });
+
+    const invite = code => run(async () => {
+        const r = await api.account.invite(code);
+        msg = r.ok ? tx('frInvited') : err(r.error);
+    });
+    const join = code => run(async () => {
+        const r = await api.account.joinInvite(code);
+        if (!r.ok) { msg = err(r.error); return; }
+        msg = tx(r.running ? 'frJoinRunning' : 'frJoining');
+        await refresh();
+    });
+    const dropInv = code => run(async () => {
+        await api.account.dropInvite(code);
+        await refresh();
+    });
+
     /* what a search row can do, from the lists */
     const has = (list, code) => fr && fr[list].some(f => f.code === code);
 </script>
@@ -112,6 +133,19 @@
         {/if}
         {#if msg}<p class="msg">{msg}</p>{/if}
 
+        {#if fr.invites && fr.invites.length}
+            <h3>{tx('frInvites')}</h3>
+            <ul class="list">
+                {#each fr.invites as p (p.code)}
+                    <li>
+                        <span class="who">{p.name || '—'}</span><span class="idcode">{p.code}</span>
+                        <button class="btn hot" disabled={busy} onpointerenter={hoverBlip} onclick={() => join(p.code)}>{tx('frJoin')}</button>
+                        <button class="btn" disabled={busy} onpointerenter={hoverBlip} onclick={() => dropInv(p.code)}>{tx('frDecline')}</button>
+                    </li>
+                {/each}
+            </ul>
+        {/if}
+
         {#if fr.incoming.length}
             <h3>{tx('frIncoming')}</h3>
             <ul class="list">
@@ -131,6 +165,8 @@
                 {#each fr.friends as p (p.code)}
                     <li>
                         <span class="who">{p.name || '—'}</span><span class="idcode">{p.code}</span>
+                        <button class="btn hot" disabled={busy} onpointerenter={hoverBlip}
+                                onclick={() => invite(p.code)}>{tx('frInvite')}</button>
                         <button class="btn" disabled={busy} onpointerenter={hoverBlip}
                                 onclick={() => drop(p.code, true)}>{tx(armed === p.code ? 'frRemoveAsk' : 'frRemove')}</button>
                     </li>

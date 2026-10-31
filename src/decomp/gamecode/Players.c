@@ -9,6 +9,7 @@
 #include "lime_glapi.h"   /* the GL calls' calling convention */
 #include <string.h>   /* memcpy, strcmp, strcpy */
 #include <stdio.h>    /* sprintf */
+#include <stdlib.h>   /* malloc, free: the bakes kept */
 #include "../../runtime/smooth_models.h"   /* port: SMOOTH MODELS */
 #include "../../runtime/skin_mats.h"       /* port: a modded skin's textures */
 int rgl_shadow_active(void);            /* port: REAL-TIME SHADOWS, render/rgl.h */
@@ -1894,12 +1895,17 @@ static void *port_fit_lighting(void *lighting, const char *path, size_t need)
  * Scorpion and Liu Kang come out byte for byte (scratch script over the
  * launcher's skin reader). Frame i is the meshbase's frame i, skin 1's
  * bytes then skin 2's, as LoadAnimatedCharacter slices them. The light
- * globals are set for the bake and put back. */
+ * globals are set for the bake and put back. A bake is kept for the
+ * session by the skin's file (BAKE_KEEP): the menu's fighter and every fight
+ * with that model took it again, a second or so each time. */
 extern float g_lightDir0[3], g_lightDir1[3];   /* lime/lime_globals.c */
+double plat_time(void);
+#define BAKE_KEEP 8
+static struct { char key[160]; long frames; size_t per; unsigned char *px; } g_bake[BAKE_KEEP];
 extern float g_lightPower0, g_lightPower1, g_lightExp0, g_lightExp1;
 static void *port_bake_lighting(ANIMATEDCHARACTER *c, SKININFO *skin,
                                 SKININFO *s2, long frames, long size1,
-                                long size2)
+                                long size2, const char *key)
 {
     char *P32 *w = (char *P32 *)c;
     const long *n = (const long *)c;
@@ -1907,12 +1913,20 @@ static void *port_bake_lighting(ANIMATEDCHARACTER *c, SKININFO *skin,
     unsigned char *out;
     float d0[3], d1[3], p0, p1, e0, e1;
     long f;
+    int k;
+    double t0 = plat_time();
 
     if (frames <= 0 || per == 0)
         return NULL;
     out = (unsigned char *)limeMalloc("port_lighting", (size_t)frames * per);
     if (out == NULL)
         return NULL;
+    for (k = 0; key && k < BAKE_KEEP; k++)
+        if (g_bake[k].px && g_bake[k].frames == frames && g_bake[k].per == per
+            && strcmp(g_bake[k].key, key) == 0) {
+            memcpy(out, g_bake[k].px, (size_t)frames * per);
+            return out;
+        }
     memcpy(d0, g_lightDir0, sizeof d0);
     memcpy(d1, g_lightDir1, sizeof d1);
     p0 = g_lightPower0; p1 = g_lightPower1;
@@ -1937,8 +1951,20 @@ static void *port_bake_lighting(ANIMATEDCHARACTER *c, SKININFO *skin,
     memcpy(g_lightDir1, d1, sizeof d1);
     g_lightPower0 = p0; g_lightPower1 = p1;
     g_lightExp0 = e0;   g_lightExp1 = e1;
-    printf("LAC: lighting baked for a mod's model, %ld frames of %lu bytes\n",
-           frames, (unsigned long)per);
+    printf("LAC: lighting baked for a mod's model, %ld frames of %lu bytes, %.0f ms\n",
+           frames, (unsigned long)per, (plat_time() - t0) * 1000.0);
+    if (key && strlen(key) < sizeof g_bake[0].key) {
+        for (k = 0; k < BAKE_KEEP - 1 && g_bake[k].px; k++)
+            ;
+        free(g_bake[k].px);             /* full: the last one goes */
+        g_bake[k].px = (unsigned char *)malloc((size_t)frames * per);
+        if (g_bake[k].px) {
+            memcpy(g_bake[k].px, out, (size_t)frames * per);
+            strcpy(g_bake[k].key, key);
+            g_bake[k].frames = frames;
+            g_bake[k].per = per;
+        }
+    }
     return out;
 }
 
@@ -2140,7 +2166,7 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
                     {
                         void *own = port_skin_custom(skin)
                             ? port_bake_lighting(c, skin, SKIN_NEXT(skin),
-                                                 meshCount - 1, size1, size2)
+                                                 meshCount - 1, size1, size2, skinFile)
                             : NULL;
                         if (own != NULL) {
                             if (lighting)

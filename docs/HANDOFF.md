@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-10-31 (friend requests, online sounds and desyncs fixed, on main for 0.1.22).
+**Last updated:** 2026-10-31 (release 0.1.22 beta: invites, friend requests, online fixes, published as the pre-release `v0.1.22-beta`).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
@@ -98,7 +98,7 @@ and answers the preload's calls over HTTP.
 
 A release is a GitHub pre-release `v<version>-beta` with two packages:
 
-1. Set the version in `launcher/app/package.json` (`0.1.21-beta`; a letter
+1. Set the version in `launcher/app/package.json` (`0.1.22-beta`; a letter
    release is `0.1.14-beta.b`, read by the updater as 0.1.14b).
 2. `npm run ui` in `launcher/app`.
 3. Windows: `npx electron-builder --win dir --x64`, then
@@ -146,9 +146,9 @@ press COMPILE.
   posts the game's `scores.txt` as it grows (gamecode_stubs.c,
   `lib/account.js`). A run with the debug menu's help is not posted
   (`PortDbgTainted`, game_main.c).
-- **Mary's open list (2026-10-31)**: the guest should see the host's stage
-  select after a fight (black screen now), FPS drops, inviting a friend to
-  an online match without a code, faster launcher and game start.
+- **To check online with two players (0.1.22)**: the guest's view of the
+  host's STAGE SELECT, invites, no desyncs with a model mod, the other
+  player's attack voices. Stages' first-frame pauses (STREET) are open.
 - **Friends and the profile on the account**: `claim()` in `lib/account.js`
   ties the profile code and name to the account (names unique); FRIENDS is
   a page of PROFILE (`ProfFriends.svelte`). A server change that needs a new

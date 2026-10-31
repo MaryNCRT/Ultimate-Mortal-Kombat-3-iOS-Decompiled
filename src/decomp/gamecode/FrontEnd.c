@@ -12195,9 +12195,17 @@ void FE_Task_Online(void)
          * code once, for two games driven by script */
         static int asked;
         const char *e = getenv("UMK3_ONLINE_FIND");
+        int  port_online_join_code(char *out, size_t n);    /* gamecode_stubs.c */
+        char code[16];
         if (e && !asked && mpnet_session_exists()) {
             asked = 1;
             mpnet_find(e);
+        }
+        /* port: a friend's invite, taken in the launcher (the game started
+         * for it has UMK3_ONLINE_FIND; one already running, this file) */
+        if (mpnet_session_exists() && !searching && port_online_join_code(code, sizeof code)) {
+            strcpy(PortOnlineCode, code);
+            PortOnlineFind();
         }
     }
 

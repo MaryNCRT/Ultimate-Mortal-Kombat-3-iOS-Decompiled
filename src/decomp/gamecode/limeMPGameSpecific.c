@@ -1046,6 +1046,12 @@ void processPacket(const void *payload, long len, long type)
             PortNetPalette[1] = w[0];
         break;
     }
+    case PORT_PKT_STAGE: {              /* port: the host's STAGE SELECT */
+        void stage_menu_remote(int level, int list);
+        if (len == 8)
+            stage_menu_remote(w[0], w[1]);
+        break;
+    }
     case RB_PKT_INPUT:                  /* port: rollback netcode */
     case RB_PKT_HELLO:
     case RB_PKT_HASH:

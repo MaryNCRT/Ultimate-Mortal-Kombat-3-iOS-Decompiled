@@ -50,6 +50,10 @@
 #include "rollback.h"
 #include "mods.h"
 
+/* debug_menu.c: the host's STAGE SELECT, as the guest sees it */
+int  stage_menu_watch_frame(void);
+void stage_menu_watch_end(void);
+
 /* the game's side */
 long isParent(void);                    /* limeMPGameSpecific.c */
 extern int CurrentTask;                 /* GameCode.c: 6 is the fight */
@@ -569,9 +573,11 @@ int rb_host_level(long *level)
      * the host's arrived mid-fight (RenderLevelBG) */
     if (isParent())
         return 0;
-    /* a minute: the host may be on STAGE SELECT (debug_menu.c) */
-    if (!g_hello && ++waited < 3600)
+    /* a minute, and on while the host's STAGE SELECT is up (debug_menu.c,
+     * which the guest sees) */
+    if (!g_hello && (stage_menu_watch_frame() || ++waited < 3600))
         return 1;
+    stage_menu_watch_end();
     if (g_hello && *level != g_their_setup[2]) {
         printf("rollback: the host's level %d, not %ld\n",
                (int)g_their_setup[2], *level);
