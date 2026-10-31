@@ -195,6 +195,114 @@ static void mayhem_name(char *out, size_t size, const char *in)
     out[k] = 0;
 }
 
+/* The ONLINE screen's FRIENDS (FrontEnd.c). friends.txt, written by the
+ * launcher while the game runs (main.js, pollFriends): the account's
+ * friends and the invites to an online fight, "friend|CODE|name|look" and
+ * "invite|CODE|name|look" (the look: profiles.ini's fields after the name),
+ * read again when it changes. online_invite.txt, what
+ * the player pressed ("invite CODE", "join CODE"), for the launcher to send
+ * on. No file: no account, no list. */
+#define OF_MAX 24
+static struct { char code[16], name[32]; int invite; char look[48]; } g_of[OF_MAX];
+static int g_of_n = -1;
+static struct stat g_of_st;
+
+int port_online_friend(int i, char *code, char *name, int *invite)
+{
+    static int tick;
+
+    if (i == 0 && (g_of_n < 0 || ++tick % 30 == 0)) {
+        char path[600], line[200];
+        struct stat st;
+        FILE *f;
+
+        mayhem_path(path, sizeof path, "friends.txt");
+        if (stat(path, &st) != 0) {
+            g_of_n = 0;
+            memset(&g_of_st, 0, sizeof g_of_st);
+        } else if (g_of_n < 0 || st.st_mtime != g_of_st.st_mtime || st.st_size != g_of_st.st_size) {
+            g_of_st = st;
+            g_of_n = 0;
+            if ((f = fopen(path, "r")) != NULL) {
+                while (g_of_n < OF_MAX && fgets(line, sizeof line, f)) {
+                    char *a = strchr(line, '|'), *b = a ? strchr(a + 1, '|') : NULL;
+                    if (!a || !b || b - a - 1 != 14)
+                        continue;
+                    g_of[g_of_n].invite = strncmp(line, "invite", 6) == 0;
+                    memcpy(g_of[g_of_n].code, a + 1, 14);
+                    g_of[g_of_n].code[14] = 0;
+                    b[strcspn(b, "\r\n")] = 0;
+                    {
+                        char *c = strchr(b + 1, '|');
+                        g_of[g_of_n].look[0] = 0;
+                        if (c) {
+                            *c = 0;
+                            snprintf(g_of[g_of_n].look, sizeof g_of[0].look, "%s", c + 1);
+                        }
+                    }
+                    mayhem_name(g_of[g_of_n].name, sizeof g_of[0].name, b + 1);
+                    g_of_n++;
+                }
+                fclose(f);
+            }
+        }
+    }
+    if (i < 0 || i >= g_of_n)
+        return 0;
+    memcpy(code, g_of[i].code, 15);
+    memcpy(name, g_of[i].name, sizeof g_of[0].name);
+    *invite = g_of[i].invite;
+    return 1;
+}
+
+/* A friend's look by code, as profiles.c reads its own: icon, colour, L / D
+ * / C, the other colour, the angle, the outfit. 0 for none. */
+int port_online_friend_look(const char *code, int *icon, unsigned *color, int *dark,
+                            unsigned *color2, int *angle, int *alt)
+{
+    char f[48], *fld[6] = { 0 }, *p;
+    int i, k = 0;
+
+    for (i = 0; i < g_of_n; i++)
+        if (strcmp(g_of[i].code, code) == 0)
+            break;
+    if (i >= g_of_n || !g_of[i].look[0])
+        return 0;
+    snprintf(f, sizeof f, "%s", g_of[i].look);
+    for (p = f; k < 6; k++) {
+        fld[k] = p;
+        if (!(p = strchr(p, '|')))
+            break;
+        *p++ = 0;
+    }
+    *icon = atoi(fld[0]);
+    if (*icon < 0 || *icon >= 24)
+        *icon = 0;
+    *color = fld[1] ? (unsigned)strtoul(fld[1], NULL, 16) & 0xffffff : 0x3a8ee6;
+    *dark = fld[2] && (*fld[2] == 'D' || *fld[2] == 'd') ? 1
+          : fld[2] && (*fld[2] == 'C' || *fld[2] == 'c') ? 2 : 0;
+    *color2 = fld[3] && fld[3][0] ? (unsigned)strtoul(fld[3], NULL, 16) & 0xffffff
+            : *dark == 1 ? 0x000000 : *dark == 2 ? 0x6e0b12 : 0xffffff;
+    *angle = fld[4] && fld[4][0] ? atoi(fld[4]) : -1;
+    *alt = fld[5] ? atoi(fld[5]) != 0 : 0;
+    return 1;
+}
+
+/* 1 when the launcher wrote friends.txt: an account is logged in */
+int port_online_friends_known(void) { return g_of_st.st_size > 0 || g_of_n > 0; }
+
+void port_online_tell(const char *what, const char *code)
+{
+    char path[600];
+    FILE *f;
+
+    mayhem_path(path, sizeof path, "online_invite.txt");
+    if ((f = fopen(path, "a")) != NULL) {
+        fprintf(f, "%s %s\n", what, code);
+        fclose(f);
+    }
+}
+
 static int mayhem_load(void)
 {
     char path[600], line[256];

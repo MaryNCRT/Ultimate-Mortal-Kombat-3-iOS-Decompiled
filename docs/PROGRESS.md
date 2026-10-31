@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-10-31 (release 0.1.22 beta: invites, friend requests, online fixes, published as the pre-release `v0.1.22-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-10-31 (FRIENDS in the game's ONLINE menu, on main for 0.1.23) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -94,6 +94,24 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## FRIENDS in the game's ONLINE menu (2026-10-31, on main, not released)
+
+Mary: the invites belong in the game's ONLINE menu, with the friends' names
+and icons, and JOIN there. Played: works.
+
+- **Launcher** (main.js): `writeGameFriends` writes `friends.txt` beside
+  umk3.ini with every `pollFriends` answer ("invite|CODE|name|look",
+  "friend|CODE|name|look"; removed for a guest); `gameAsked` reads the
+  game's `online_invite.txt` every two seconds while it runs ("invite CODE"
+  -> `POST /v1/invite`, "join CODE" -> `DELETE /v1/invite`).
+- **Server** (private repo 3fdcda8): the friends' and invites' rows carry
+  `look`, the synced profile's fields after the name. `deploy.cmd`: the
+  tests, then `wrangler deploy`.
+- **Game:** gamecode_stubs.c `port_online_friend` / `_look` / `_tell`;
+  FrontEnd.c `PortOnlineFriends` (four rows, invites first; INVITE writes
+  "invite", JOIN writes "join" and finds the code as FIND MATCH);
+  online_ui.c draws each row's badge (slots 1..4; `ui_badge_at` now has 8).
 
 ## 0.1.22: invites, friend requests, the late press's sounds, mods' bones online (2026-10-31, released in 0.1.22)
 
