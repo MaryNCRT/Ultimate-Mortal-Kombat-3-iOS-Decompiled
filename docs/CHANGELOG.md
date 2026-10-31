@@ -8,9 +8,9 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Next (after 0.1.18) — accounts, MULTIPLAYER over LAN and Radmin VPN
+## 0.1.19 beta (2026-10-30) — accounts, MULTIPLAYER over LAN and Radmin VPN
 
-On `main`, not released yet. **Played by Mary** in her test folder: works.
+Published 2026-10-30 as the GitHub pre-release `v0.1.19-beta` (`UMK3-PC-0.1.19-beta.zip`, `UMK3-PC-0.1.19-beta-linux-x64.tar.gz`). **Played by Mary** in her test folder: works.
 
 **Game**
 - **PLAY > MULTIPLAYER works again**, on the local network alone (no Epic
@@ -35,6 +35,8 @@ On `main`, not released yet. **Played by Mary** in her test folder: works.
   is here. Passwords and recovery codes are stored as salted PBKDF2 hashes,
   sealed with AES-GCM; emails are sealed too; each account reads only its
   own data. Leaderboards in the game are not hooked up yet.
+- **The menu's nine lines** (ACCOUNT made the ninth) on a symmetric curve,
+  QUIT in line again.
 
 ## 0.1.18 beta (2026-10-30) — Noob Saibot on the roster, EXPORT ALL textures, settings by category
 
