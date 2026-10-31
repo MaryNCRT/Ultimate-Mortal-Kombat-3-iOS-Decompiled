@@ -48,17 +48,18 @@
 <style>
     /* measured off the console's menu, in the backdrop's box: the text from
      * x 368 at its leftmost, the band 58 high; --u here is the menu's own
-     * unit. Eight lines (REPLAYS made the eighth) 67 units apart, centred
-     * on the ring: the first line's middle at y 226, the last at 694 */
+     * unit. Nine lines (ACCOUNT made the ninth), as tall together as the
+     * eight were -- each 3.1 high, 0.38 apart -- so they stay centred on the
+     * ring: the first line's middle near y 226, the last near 694 */
     .menu {
         --u: calc(var(--k) * 17);
         position: fixed; z-index: 3;
         left: calc(50vw + (251 - 800) * var(--k)); top: calc(50vh + (197 - 450) * var(--k));
-        display: flex; flex-direction: column; gap: calc(var(--u) * .54);
+        display: flex; flex-direction: column; gap: calc(var(--u) * .38);
     }
     .mi {
         display: flex; align-items: center; gap: calc(var(--u) * 2.3);
-        height: calc(var(--u) * 3.4);
+        height: calc(var(--u) * 3.1);
         background: none; border: 0; border-top: 1px solid transparent; border-bottom: 1px solid transparent;
         cursor: pointer; text-align: left;
         font-size: calc(var(--u) * 1.65); font-weight: 600; letter-spacing: .01em;
@@ -69,15 +70,16 @@
     .mi:hover, .mi.active { color: #fff; }
     .mi:focus { outline: none; }
     /* the menu follows the ring's curve, as the console's: deepest at the
-     * middle two lines, the first and last the furthest out */
+     * middle line, the first and last the furthest out, the same either side */
     .mi:nth-of-type(1) { margin-left: calc(var(--u) * 3.6); }
-    .mi:nth-of-type(2) { margin-left: calc(var(--u) * 1.9); }
-    .mi:nth-of-type(3) { margin-left: calc(var(--u) * .7); }
-    .mi:nth-of-type(4) { margin-left: 0; }
+    .mi:nth-of-type(2) { margin-left: calc(var(--u) * 2); }
+    .mi:nth-of-type(3) { margin-left: calc(var(--u) * .9); }
+    .mi:nth-of-type(4) { margin-left: calc(var(--u) * .2); }
     .mi:nth-of-type(5) { margin-left: 0; }
-    .mi:nth-of-type(6) { margin-left: calc(var(--u) * .7); }
-    .mi:nth-of-type(7) { margin-left: calc(var(--u) * 1.9); }
-    .mi:nth-of-type(8) { margin-left: calc(var(--u) * 3.6); }
+    .mi:nth-of-type(6) { margin-left: calc(var(--u) * .2); }
+    .mi:nth-of-type(7) { margin-left: calc(var(--u) * .9); }
+    .mi:nth-of-type(8) { margin-left: calc(var(--u) * 2); }
+    .mi:nth-of-type(9) { margin-left: calc(var(--u) * 3.6); }
     /* an update waiting: a red dot after COMPILE */
     .mi.news::after {
         content: ''; width: calc(var(--u) * .9); height: calc(var(--u) * .9); border-radius: 50%;
