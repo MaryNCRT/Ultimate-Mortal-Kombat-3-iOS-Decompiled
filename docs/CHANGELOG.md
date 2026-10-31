@@ -8,9 +8,9 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased (in main, not yet in a release) — the game's leaderboards
+## 0.1.20 beta (2026-10-31) — the game's leaderboards
 
-**Played by Mary** in her test folder (2026-10-31): works, gamepad included.
+Published 2026-10-31 as the GitHub pre-release `v0.1.20-beta` (`UMK3-PC-0.1.20-beta.zip`, `UMK3-PC-0.1.20-beta-linux-x64.tar.gz`). **Played by Mary** in her test folder: works, gamepad included.
 
 **Game**
 - **LEADERBOARDS work again**, for accounts. Survival and the Shao Kahn

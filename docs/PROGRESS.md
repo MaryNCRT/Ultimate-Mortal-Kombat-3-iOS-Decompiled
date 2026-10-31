@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-10-31 (the game's leaderboards on the account server, played by Mary; not released yet) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-10-31 (release 0.1.20 beta: the game's leaderboards, published as the pre-release `v0.1.20-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -95,7 +95,7 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
-## The game's leaderboards on the account server (2026-10-31, not released yet)
+## 0.1.20: the game's leaderboards on the account server (2026-10-31, released in 0.1.20)
 
 Mary asked for the leaderboards back, now that accounts exist; then for the
 profile name instead of the account's, the frame fixed on wide screens and
