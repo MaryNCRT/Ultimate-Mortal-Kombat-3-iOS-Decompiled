@@ -242,12 +242,21 @@ long isWorking(void)
 
 /* armv7 0x000afac4. The Bluetooth lobby's row `index`: the peer's display
  * name into `out`, cut to 32 characters with "..." when longer, and whether
- * the peer is on the invited list. There is no such list here. */
+ * the peer is on the invited list. There is no such list here. Port: the
+ * rows are the games on the local network (mp_net.c, MULTIPLAYER). */
 long getPeerNumber(long index, char *out, long size)
 {
-    (void)index;
-    if (out && size > 0)
-        out[0] = 0;
+    const struct mpnet_peer *p = mpnet_lobby_peer((int)index);
+
+    if (!out || size <= 0)
+        return 0;
+    out[0] = 0;
+    if (p) {
+        if (strlen(p->name) > 32)
+            snprintf(out, (size_t)size, "%.32s...", p->name);
+        else
+            snprintf(out, (size_t)size, "%s", p->name);
+    }
     return 0;
 }
 
@@ -260,7 +269,7 @@ long getNumberOfPeers(void)
 /* armv7 0x000afbfc */
 void connectToPeer(long index)
 {
-    (void)index;                        /* [gSession connectTo:index] */
+    mpnet_lobby_connect((int)index);    /* [gSession connectTo:index] */
 }
 
 /* armv7 0x000afc20. Also turns the idle timer back on

@@ -51,4 +51,13 @@ void mpnet_poll(void);
  * mpnet_poll does at the start of the next frame (rollback.c's inputs). */
 void mpnet_flush(void);
 
+/* ---- MULTIPLAYER: the local network alone ---- */
+
+/* Set before startMP: 1 for PLAY > MULTIPLAYER (no EOS, the games on the
+ * local network listed), 0 for ONLINE. */
+void mpnet_set_lan_only(int on);
+/* The lobby's row i (NULL past the end), and asking that game to play. */
+const struct mpnet_peer *mpnet_lobby_peer(int i);
+void mpnet_lobby_connect(int i);
+
 #endif

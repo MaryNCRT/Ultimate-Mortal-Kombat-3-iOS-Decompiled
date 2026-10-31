@@ -28,6 +28,18 @@
  * screen open owns a lobby named after its code. Whichever answers is the
  * link, and the same messages go over either: over EOS they are P2P
  * datagrams, acknowledged here exactly as over UDP.
+ *
+ * ## MULTIPLAYER: the local network alone
+ *
+ * PLAY > MULTIPLAYER is the iPhone's Bluetooth lobby (FE_Task_Multiplayer),
+ * a list of the players nearby. Here it lists the games on the local network
+ * with that screen open, and never touches EOS (mpnet_set_lan_only). Each
+ * game says HELLO with its profile once a second, broadcast; choosing a
+ * name asks that game by its code, the same JOIN as FIND MATCH, and from
+ * there the fight is the online one. The broadcasts go to 255.255.255.255
+ * and to every network adapter's own broadcast address, so a virtual LAN
+ * (Radmin VPN, Hamachi, ZeroTier) is reached as well as the real one:
+ * Windows sends 255.255.255.255 down one adapter only.
  */
 
 #ifdef _WIN32
@@ -37,8 +49,13 @@
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200112L
 #endif
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE                 /* getifaddrs */
+#endif
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <ifaddrs.h>
+#include <net/if.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -72,7 +89,13 @@ void endMP(void);
 #define LINK_LOST_MS  15000
 #define WINDOW        256               /* reliable packets in flight */
 
-enum { K_JOIN = 1, K_ACCEPT, K_BUSY, K_DATA_U, K_DATA_R, K_ACK, K_BYE, K_KEEP };
+#define HELLO_MS      1000              /* MULTIPLAYER: "I am here" */
+#define HELLO_GONE_MS 3500              /* off the list when not heard */
+#define LOBBY_MAX     16
+#define BCAST_MAX     16
+
+enum { K_JOIN = 1, K_ACCEPT, K_BUSY, K_DATA_U, K_DATA_R, K_ACK, K_BYE, K_KEEP,
+       K_HELLO };
 
 static SOCKET   g_sock = INVALID_SOCKET;
 static int      g_port;
@@ -189,6 +212,82 @@ static void send_to(const struct paddr *a, const void *p, int n)
 
 static void send_peer(const void *p, int n) { send_to(&g_peer_addr, p, n); }
 
+/* Every adapter's broadcast address (address | ~mask), looked at again
+ * every five seconds: Radmin VPN's 26.255.255.255 among them. */
+static uint32_t g_bcast[BCAST_MAX];     /* network order */
+static int      g_nbcast;
+static unsigned g_bcast_at;
+
+static void bcast_refresh(void)
+{
+    unsigned t = now_ms();
+
+    if (g_bcast_at && t - g_bcast_at < 5000)
+        return;
+    g_bcast_at = t ? t : 1;
+    g_nbcast = 0;
+#ifdef _WIN32
+    {
+        INTERFACE_INFO l[32];
+        DWORD got = 0;
+        int i;
+        if (g_sock == INVALID_SOCKET
+            || WSAIoctl(g_sock, SIO_GET_INTERFACE_LIST, NULL, 0, l, sizeof l,
+                        &got, NULL, NULL) != 0)
+            return;
+        for (i = 0; i < (int)(got / sizeof l[0]) && g_nbcast < BCAST_MAX; i++) {
+            uint32_t ad = l[i].iiAddress.AddressIn.sin_addr.s_addr;
+            uint32_t m = l[i].iiNetmask.AddressIn.sin_addr.s_addr;
+            if (!(l[i].iiFlags & IFF_UP) || (l[i].iiFlags & IFF_LOOPBACK)
+                || l[i].iiAddress.AddressIn.sin_family != AF_INET || !m)
+                continue;
+            g_bcast[g_nbcast++] = ad | ~m;
+        }
+    }
+#else
+    {
+        struct ifaddrs *all, *f;
+        if (getifaddrs(&all) != 0)
+            return;
+        for (f = all; f && g_nbcast < BCAST_MAX; f = f->ifa_next) {
+            if (!f->ifa_addr || f->ifa_addr->sa_family != AF_INET
+                || !(f->ifa_flags & IFF_UP) || (f->ifa_flags & IFF_LOOPBACK)
+                || !f->ifa_netmask)
+                continue;
+            g_bcast[g_nbcast++] =
+                ((struct sockaddr_in *)f->ifa_addr)->sin_addr.s_addr
+                | ~((struct sockaddr_in *)f->ifa_netmask)->sin_addr.s_addr;
+        }
+        freeifaddrs(all);
+    }
+#endif
+}
+
+/* To every game on this computer and on every network: localhost, the
+ * limited broadcast and each adapter's own, on all sixteen ports. */
+static void send_everywhere(const void *p, int n)
+{
+    struct sockaddr_in a;
+    int i, k;
+
+    bcast_refresh();
+    memset(&a, 0, sizeof a);
+    a.sin_family = AF_INET;
+    for (i = 0; i < PORT_COUNT; i++) {
+        if (PORT_FIRST + i == g_port)
+            continue;
+        a.sin_port = htons((unsigned short)(PORT_FIRST + i));
+        a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        send_in(&a, p, n);
+        a.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+        send_in(&a, p, n);
+        for (k = 0; k < g_nbcast; k++) {
+            a.sin_addr.s_addr = g_bcast[k];
+            send_in(&a, p, n);
+        }
+    }
+}
+
 /* ---------------------------------------------------------- profile */
 
 #define INFO_BYTES (16 + 100 + 16)
@@ -258,6 +357,60 @@ static int same_code(const char *a, const char *b)
     }
 }
 
+/* ------------------------------------------------- MULTIPLAYER lobby */
+
+static int g_lan_only;                  /* MULTIPLAYER, not ONLINE */
+static unsigned g_hello_last;
+static struct lobby { struct sockaddr_in in; struct mpnet_peer who;
+                      unsigned seen; } g_lobby[LOBBY_MAX];
+static int g_nlobby;
+static struct sockaddr_in g_direct;     /* the chosen one's address */
+
+static void lobby_heard(const struct sockaddr_in *a, const unsigned char *info)
+{
+    struct mpnet_peer p;
+    int i;
+
+    info_get(info, &p);
+    if (!p.code[0] || same_code(p.code, my_code()))
+        return;
+    for (i = 0; i < g_nlobby; i++)
+        if (same_code(g_lobby[i].who.code, p.code))
+            break;
+    if (i == g_nlobby) {
+        if (g_nlobby == LOBBY_MAX)
+            return;
+        g_nlobby++;
+        printf("online: %s (%s) is on the local network at %s\n", p.name,
+               p.code, inet_ntoa(a->sin_addr));
+    }
+    g_lobby[i].in = *a;
+    g_lobby[i].who = p;
+    g_lobby[i].seen = now_ms();
+}
+
+static void lobby_tick(unsigned t)
+{
+    int i;
+
+    for (i = 0; i < g_nlobby; i++)
+        if (t - g_lobby[i].seen > HELLO_GONE_MS) {
+            memmove(&g_lobby[i], &g_lobby[i + 1],
+                    (size_t)(g_nlobby - i - 1) * sizeof g_lobby[0]);
+            g_nlobby--;
+            i--;
+        }
+    if (!g_hello_last || t - g_hello_last > HELLO_MS) {
+        unsigned char b[4 + INFO_BYTES];
+        g_hello_last = t;
+        hdr(b, K_HELLO);
+        info_put(b + 4);
+        send_everywhere(b, sizeof b);
+    }
+}
+
+void mpnet_set_lan_only(int on) { g_lan_only = on; }
+
 /* ------------------------------------------------------- connection */
 
 static void reliable_reset(void)
@@ -308,12 +461,21 @@ void mpnet_session_create(void)
 {
     /* UMK3_ONLINE_NOLAN=1: the internet alone (testing EOS on one PC) */
     const char *nolan = getenv("UMK3_ONLINE_NOLAN");
-    int lan = !(nolan && nolan[0] == '1') && sock_open();
+    int lan = (g_lan_only || !(nolan && nolan[0] == '1')) && sock_open();
 
-    mpeos_start();
-    if (!lan && (mpeos_state() == MPEOS_OFF || mpeos_state() == MPEOS_FAILED))
-        return;
-    mpeos_advertise(my_code());
+    g_nlobby = 0;
+    g_hello_last = 0;
+    g_bcast_at = 0;
+    memset(&g_direct, 0, sizeof g_direct);
+    if (g_lan_only) {
+        if (!lan)
+            return;
+    } else {
+        mpeos_start();
+        if (!lan && (mpeos_state() == MPEOS_OFF || mpeos_state() == MPEOS_FAILED))
+            return;
+        mpeos_advertise(my_code());
+    }
     g_session = 1;
     g_connected = 0;
     g_server = 0;
@@ -341,7 +503,7 @@ int mpnet_connection_state(void) { return g_connected ? 2 : 0; }
 int mpnet_session_state(void)    { return g_connected ? 2 : 0; }
 int mpnet_am_server(void)        { return g_connected && g_server; }
 int mpnet_is_working(void)       { return g_session && g_want[0] != 0; }
-int mpnet_peer_count(void)       { return 0; }
+int mpnet_peer_count(void)       { return g_session && g_lan_only ? g_nlobby : 0; }
 int mpnet_internet(void)         { return mpeos_state(); }
 
 void mpnet_send(long type, const void *data, int len, int reliable)
@@ -390,7 +552,8 @@ void mpnet_find(const char *code)
         return;
     snprintf(g_want, sizeof g_want, "%s", code);
     g_eos_target[0] = 0;
-    mpeos_lookup(code);
+    if (!g_lan_only)
+        mpeos_lookup(code);
     g_find_start = now_ms();
     g_join_last = 0;
     g_status = MPNET_SEARCHING;
@@ -410,28 +573,33 @@ const struct mpnet_peer *mpnet_peer(void)
     return g_peer.code[0] ? &g_peer : NULL;
 }
 
+const struct mpnet_peer *mpnet_lobby_peer(int i)
+{
+    return g_session && g_lan_only && i >= 0 && i < g_nlobby
+           ? &g_lobby[i].who : NULL;
+}
+
+void mpnet_lobby_connect(int i)
+{
+    if (!mpnet_lobby_peer(i) || g_connected || g_want[0])
+        return;
+    printf("online: asking %s to play\n", g_lobby[i].who.name);
+    g_direct = g_lobby[i].in;
+    mpnet_find(g_lobby[i].who.code);
+}
+
 static void send_join(void)
 {
     unsigned char b[4 + 16 + INFO_BYTES];
-    struct sockaddr_in a;
     struct paddr e;
-    int i;
 
     hdr(b, K_JOIN);
     memset(b + 4, 0, 16);
     memcpy(b + 4, g_want, strlen(g_want) < 15 ? strlen(g_want) : 15);
     info_put(b + 20);
-    memset(&a, 0, sizeof a);
-    a.sin_family = AF_INET;
-    for (i = 0; i < PORT_COUNT; i++) {
-        if (PORT_FIRST + i == g_port)
-            continue;
-        a.sin_port = htons((unsigned short)(PORT_FIRST + i));
-        a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-        send_in(&a, b, sizeof b);
-        a.sin_addr.s_addr = htonl(INADDR_BROADCAST);
-        send_in(&a, b, sizeof b);
-    }
+    send_everywhere(b, sizeof b);
+    if (g_direct.sin_port)
+        send_in(&g_direct, b, sizeof b);
     if (g_eos_target[0]) {
         memset(&e, 0, sizeof e);
         e.eos = 1;
@@ -577,6 +745,10 @@ static void on_packet(const unsigned char *b, int n, const struct paddr *a)
         if (from_peer(a))
             g_heard = now_ms();
         break;
+    case K_HELLO:
+        if (g_lan_only && !a->eos && !g_connected && n >= 4 + INFO_BYTES)
+            lobby_heard(&a->in, b + 4);
+        break;
     }
 }
 
@@ -631,6 +803,8 @@ void mpnet_poll(void)
             send_join();
         }
     }
+    if (!g_connected && g_lan_only)
+        lobby_tick(t);
     if (!g_connected)
         return;
     for (i = 0; i < WINDOW; i++) {

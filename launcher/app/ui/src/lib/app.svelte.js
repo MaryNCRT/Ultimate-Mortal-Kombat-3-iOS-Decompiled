@@ -22,10 +22,10 @@ import { stagePictures } from './mods/stagepics.js';
 /* ------------------------------------------------------------ tables -- */
 
 /* the menu, in order; QUIT closes */
-export const SECTIONS = ['build', 'play', 'video', 'controls', 'profile', 'mods', 'replays', 'quit'];
+export const SECTIONS = ['build', 'play', 'video', 'controls', 'profile', 'account', 'mods', 'replays', 'quit'];
 /* each section's name in the menu and its full-screen header */
-export const TITLE = { build: 'mBuild', play: 'mPlay', video: 'mVideo', controls: 'mControls', profile: 'mProfile', mods: 'mMods', replays: 'mReplays', quit: 'mQuit' };
-export const DESC = { build: 'dBuild', video: 'dVideo', controls: 'dControls', profile: 'dProfile', play: 'dPlay', mods: 'dMods', replays: 'dReplays', quit: 'dQuit' };
+export const TITLE = { build: 'mBuild', play: 'mPlay', video: 'mVideo', controls: 'mControls', profile: 'mProfile', account: 'mAccount', mods: 'mMods', replays: 'mReplays', quit: 'mQuit' };
+export const DESC = { build: 'dBuild', video: 'dVideo', controls: 'dControls', profile: 'dProfile', account: 'dAccount', play: 'dPlay', mods: 'dMods', replays: 'dReplays', quit: 'dQuit' };
 /* the pages of GRAPHICS and CONTROLS, in their second row */
 export const GFX_TABS = [['video', 'gVideo'], ['gfx', 'gGfx'], ['tex', 'gTex'], ['ui', 'gUi']];
 export const CTL_TABS = [['p', 'tabKb'], ['pad', 'tabPad'], ['dbg', 'tabDbg']];
@@ -112,6 +112,7 @@ export const app = $state({
      * all (none: the menu offers COMPILE alone), both (PLAY picks) */
     ready: false, builtAt: null, locked: false, both: false, version: '',
     sec: 'build',
+    accConflict: false,                 /* SecAccount: THIS COMPUTER or THE CLOUD */
     full: false,                        /* a section fills the window */
     gfxTab: 'video', ctlTab: 'p',
     pl: 1,                              /* the player KEYBOARD and GAMEPAD edit */
@@ -525,6 +526,11 @@ export async function doPlay() {
     if (app.build.on || !app.ready) return;
     selectBlip();
     const r = await api.play();
+    if (r.conflict) {                   /* lib/account.js: the player chooses */
+        app.accConflict = true;
+        setSection('account');
+        return;
+    }
     if (!r.ok) {
         setStatus('need', tx('playFail'));
         failChord();
