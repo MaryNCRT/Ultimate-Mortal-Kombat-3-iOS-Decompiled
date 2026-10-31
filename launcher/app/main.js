@@ -510,9 +510,11 @@ function stepAside(child) {
     child.once('error', () => clearTimeout(hide));
     child.once('exit', () => {
         clearTimeout(hide);
-        /* the progress up to the account (lib/account.js), not waited for */
-        account.push(g_root).then(r => g_win && g_win.webContents.send('account:synced', r),
-                                  () => {});
+        /* the game's scores and the progress up to the account
+         * (lib/account.js), not waited for */
+        account.flushScores(g_root).catch(() => {})
+            .then(() => account.push(g_root))
+            .then(r => g_win && g_win.webContents.send('account:synced', r), () => {});
         if (!g_win)
             return;
         g_win.show();
@@ -529,6 +531,8 @@ ipcMain.handle('play', async () => {
     const sync = await account.pull(g_root);
     if (sync.error === 'conflict')
         return { ok: false, conflict: true };
+    /* the leaderboards for the game; offline, the last ones stay */
+    await account.boards(g_root).catch(() => {});
     if (ini.load(path.join(g_root, 'umk3.ini')).compileShaders)
         await compileShaders(path.join(g_root, ini.gameExe(arch())));
     stepAside(bld.play(g_root, ini.gameExe(arch())));

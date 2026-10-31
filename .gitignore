@@ -102,6 +102,8 @@ dist/
 /umk3.ini
 /profiles.ini
 /account.ini
+/leaderboards.txt
+/scores.txt
 /profiles-*.ini
 /aditional textures/
 /res/

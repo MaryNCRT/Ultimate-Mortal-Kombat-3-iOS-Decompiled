@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-10-30 (release 0.1.19 beta, published as the pre-release `v0.1.19-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-10-31 (the game's leaderboards on the account server, played by Mary; not released yet) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -95,6 +95,47 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+## The game's leaderboards on the account server (2026-10-31, not released yet)
+
+Mary asked for the leaderboards back, now that accounts exist; then for the
+profile name instead of the account's, the frame fixed on wide screens and
+the gamepad handled as ACHIEVEMENTS does. She played it and confirmed.
+
+- **Game** (`gamecode_stubs.c`, Port, not in the binary). The front end's
+  calls into EA's Mayhem stay where they were; their answers now come from
+  two files beside umk3.ini that the launcher carries to and from the
+  server. `leaderboards.txt` (`user=<profile name>`, `board=<key>`, then
+  `<name>|<score>` rows, best first, 100 at most) makes
+  `EASDK_ConnectedToNetwork` 1; without it (a GUEST) it is 0 as before, and
+  `FE_Task_Select_Leaderboard` shows its own no-internet modal.
+  `EASOC_MayhemPostStatWithData` (called by the Karnage and Survival
+  summaries with `shaokahn_med` / `survival_easy`) appends
+  `<key> <score>` to `scores.txt` and places the score in the board in
+  memory. `EASOC_MayhemGetLeaderBoard` calls
+  `FE_DrawLeaderBoardEntriesCallback` once a row (ranks 1..8 on the page)
+  and returns the page's row count -- 7 for a full last page, since every
+  period but 5 enables Next for any full page. `game_main.c` hands the
+  folder over with `mayhem_set_dir(g_ini_path)`.
+- **Front end** (`FrontEnd.c`, Port). `FE_Task_LeaderboardsSK` and
+  `FE_Task_Leaderboards`: the `FEBits3` frame is `FE_W(468) + PortFEExtraX`
+  wide, as in `FE_Task_Achievements` (the callback puts the score 60 in from
+  the screen's right edge, which fell outside a 468-wide frame on 16:9); with
+  `PortHideControls` no buttons, `PortMovesTurn` for the pages,
+  `PortPagesExit` to leave and `PortPagesLine` for the hints.
+- **Launcher** (`lib/account.js`, `main.js`). `boards()` before PLAY
+  (`/v1/scores/<key>?limit=100`, both boards; a guest's file deleted, an
+  offline one kept); `flushScores()` when the game exits, before the
+  progress push, the best per board posted with the profile's name; what
+  fails stays in `scores.txt`. Log-out and deleting the account delete
+  `leaderboards.txt`. Both files are git-ignored.
+- **Server** (private repo, commit 856237c): `scores.name` (migration
+  `0001_scores_name`, applied to the live database), the profile name the
+  boards show, the username when there is none.
+- **Checked:** Worker tests; launcher tests (20 pass); boards / flushScores
+  against the live server with a throwaway account (posted, best kept,
+  deleted with the account); Mary in game: boards, profile name, frame,
+  gamepad.
+
 ## 0.1.19: MULTIPLAYER over LAN, accounts and cloud progress (2026-10-30, released in 0.1.19)
 
 Mary asked for accounts (username, password, optional email, a recovery
@@ -143,8 +184,8 @@ of it in her test folder and confirmed.
   account.ini); the deployed server with a throwaway account (made, email
   sealed and read back, progress uploaded, deleted). Mary: account, sync
   and MULTIPLAYER in her test folder.
-- **Not done:** the game's own leaderboards (`EASOC_Mayhem*` in
-  gamecode_stubs.c) are not wired to `/v1/scores` yet.
+- **Not done (then):** the game's own leaderboards; done on 2026-10-31,
+  section above.
 
 ## 0.1.18: Noob Saibot on the roster, EXPORT ALL, settings by category (2026-10-30, released in 0.1.18)
 

@@ -8,6 +8,24 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased (in main, not yet in a release) — the game's leaderboards
+
+**Played by Mary** in her test folder (2026-10-31): works, gamepad included.
+
+**Game**
+- **LEADERBOARDS work again**, for accounts. Survival and the Shao Kahn
+  mode post their scores when the results screen is left; the board shows
+  the best of every account, under each player's profile name. A GUEST gets
+  the game's own "no internet" instead.
+- The board's frame spans the whole width on wide screens (as ACHIEVEMENTS),
+  so the scores sit inside it, and with the on-screen controls off it pages
+  with L1 / R1 and closes with circle, as ACHIEVEMENTS does.
+
+**Launcher**
+- Brings the boards down when PLAY is pressed and takes the game's new
+  scores up when it closes (the game has no HTTPS of its own). Offline, the
+  last boards stay and the scores wait for the next time.
+
 ## 0.1.19 beta (2026-10-30) — accounts, MULTIPLAYER over LAN and Radmin VPN
 
 Published 2026-10-30 as the GitHub pre-release `v0.1.19-beta` (`UMK3-PC-0.1.19-beta.zip`, `UMK3-PC-0.1.19-beta-linux-x64.tar.gz`). **Played by Mary** in her test folder: works.
