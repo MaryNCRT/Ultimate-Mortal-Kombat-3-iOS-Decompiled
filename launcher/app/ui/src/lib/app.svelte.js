@@ -115,7 +115,8 @@ export const app = $state({
     ready: false, builtAt: null, locked: false, both: false, version: '',
     sec: 'build',
     accConflict: false,                 /* ProfAccount: THIS COMPUTER or THE CLOUD */
-    frIn: 0,                            /* friend requests waiting: the red dot on PROFILE, FRIENDS */
+    frIn: 0,                            /* friend requests and invites waiting: the red dot on PROFILE, FRIENDS */
+    frLive: null,                       /* the last /v1/friends main.js heard (pollFriends) */
     full: false,                        /* a section fills the window */
     gfxTab: 'video', ctlTab: 'p', profTab: 'me',
     pl: 1,                              /* the player KEYBOARD and GAMEPAD edit */
@@ -679,11 +680,13 @@ function padTick() {
 /* --------------------------------------------------------------- init -- */
 
 export async function init() {
+    /* asked all at once: one after another, the window waited for each */
+    const glyphs = api.glyphs(), logo = api.logo(), hero = api.hero();
     const cfg = await api.loadConfig();
     app.ui = cfg.ui === 'ES' ? 'ES' : 'EN';
     app.cfg = cfg;
     await refreshRoot();
-    app.glyphs = (await api.glyphs()) || {};
+    app.glyphs = (await glyphs) || {};
     requestAnimationFrame(padTick);
     refreshProfile();
     fillMonitors();
@@ -715,11 +718,11 @@ export async function init() {
     api.account.onSynced(() => refreshProfile());
     /* friend requests (main.js, pollFriends); a click on the notification
      * opens them */
-    api.account.onRequests(n => { app.frIn = n | 0; });
+    api.account.onRequests((n, r) => { app.frIn = n | 0; if (r) app.frLive = r; });
     api.account.onOpenFriends(() => { app.profTab = 'friends'; setSection('profile', true); });
 
-    app.logo = await api.logo();
-    app.hero = await api.hero();
+    app.logo = await logo;
+    app.hero = await hero;
 
     /* UMK3_LAUNCHER_SEC=<section>[:<controls tab>], the capture aid */
     const [want, sub] = (new URLSearchParams(location.search).get('sec') || '').split(':');

@@ -62,6 +62,7 @@
 #include "platform/gl.h"
 #include "debug_menu.h"
 #include "rollback.h"
+#include "mp_net.h"
 
 #ifndef GL_CLAMP
 #define GL_CLAMP 0x2900
@@ -2437,6 +2438,73 @@ static void back_to_select(void)
     printf("stage select: back to the select screen\n");
 }
 
+/* the stages the window offers: the levels with a scene and no lock */
+static void st_build(void)
+{
+    int i;
+
+    g_st_n = 0;
+    for (i = 0; i < ST_MAX; i++) {
+        const char *s = *(const char *P32 const *)(Level_Info + i * LEVEL_INFO_STRIDE + 0x1c);
+        if (s && *(const int32_t *)(Level_Info + i * LEVEL_INFO_STRIDE + 0x70) == 0)
+            g_st_ids[g_st_n++] = i;
+    }
+}
+
+/* Online, the guest waited on a black screen while the host picked (Mary).
+ * The host sends the stage it shows a few times a second while its window is
+ * up; the guest draws the same window, without buttons, over its frame
+ * (game_main.c) until the host's hello brings the level (rollback.c
+ * rb_host_level, which waits on as long as these keep coming). */
+static int g_st_watch, g_st_heard;      /* the guest's window; frames since the last packet */
+
+static void st_tell_guest(void)
+{
+    static int every;
+    int32_t w[2];
+
+    if (GameMode != 1 || !isParent() || ++every % 6)
+        return;
+    w[0] = g_st_ids[g_st_cur];
+    w[1] = g_st_list;
+    mpnet_send(PORT_PKT_STAGE, w, sizeof w, 0);
+    mpnet_flush();
+}
+
+void stage_menu_remote(int level, int list)
+{
+    int i;
+
+    if (GameMode != 1 || isParent())
+        return;
+    if (!g_st_watch) {
+        st_build();
+        g_st_first = 0;
+        printf("stage select: the host is choosing\n");
+    }
+    g_st_watch = 1;
+    g_st_heard = 0;
+    g_st_list = list != 0;
+    for (i = 0; i < g_st_n; i++)
+        if (g_st_ids[i] == level)
+            g_st_cur = i;
+}
+
+int stage_menu_watch_frame(void)
+{
+    if (g_st_watch && ++g_st_heard > 120)       /* two seconds without a word */
+        g_st_watch = 0;
+    return g_st_watch;
+}
+
+void stage_menu_watch_end(void) { g_st_watch = 0; }
+
+void stage_menu_watch_draw(void)
+{
+    if (g_st_watch && g_st_n)
+        stage_menu_draw();
+}
+
 int stage_menu_gate(long *level)
 {
     int i;
@@ -2458,12 +2526,7 @@ int stage_menu_gate(long *level)
         return 1;
     if (!eligible())
         return 0;
-    g_st_n = 0;
-    for (i = 0; i < ST_MAX; i++) {
-        const char *s = *(const char *P32 const *)(Level_Info + i * LEVEL_INFO_STRIDE + 0x1c);
-        if (s && *(const int32_t *)(Level_Info + i * LEVEL_INFO_STRIDE + 0x70) == 0)
-            g_st_ids[g_st_n++] = i;
-    }
+    st_build();
     if (g_st_n < 2)
         return 0;
     g_st_cur = 0;
@@ -2596,10 +2659,11 @@ void stage_menu_draw(void)
     static const float veil0[4] = { 0.086f, 0.078f, 0.26f, 0.92f };
     static const float veil1[4] = { 0.031f, 0.027f, 0.12f, 0.95f };
     float pw, px, py = 14, ph = 292, bx, by, bw;
-    const char *title = st_tx("ELIGE ESCENARIO", "SELECT STAGE");
+    const char *title = g_st_watch ? st_tx("EL ANFITRION ELIGE ESCENARIO", "THE HOST PICKS THE STAGE")
+                                   : st_tx("ELIGE ESCENARIO", "SELECT STAGE");
     int i;
 
-    if (!g_st_open)
+    if (!g_st_open && !g_st_watch)
         return;
     begin_2d();
     g_st_nhit = 0;
@@ -2689,6 +2753,10 @@ void stage_menu_draw(void)
         }
     }
 
+    if (g_st_watch) {                   /* the guest's: no buttons */
+        end_2d();
+        return;
+    }
     /* CANCEL, LIST / LARGE, RANDOM, SELECT: small, centred along the foot */
     bw = 84;
     by = py + ph - ST_BTN_H - 8;
@@ -2770,6 +2838,7 @@ void stage_menu_keys(int left, int right, int up, int down, int ok, int back,
         was[i] = now[i];
     }
     g_st_fresh = 0;                     /* START / ENTER from PLAY still down */
+    st_tell_guest();
     if (!g_st_open)
         return;
     if (e[0]) st_move(-1);

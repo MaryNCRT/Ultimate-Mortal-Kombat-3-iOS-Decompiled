@@ -8,10 +8,20 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased (on main, for 0.1.22) — friend requests, online fixes
+## 0.1.22 beta (2026-10-31) — invites, friend requests, online fixes
 
-Not published yet. **Tried by Mary** in her test folder: works (no online
-fight in that log yet).
+Published 2026-10-31 as the GitHub pre-release `v0.1.22-beta`
+(`UMK3-PC-0.1.22-beta.zip`, `UMK3-PC-0.1.22-beta-linux-x64.tar.gz`).
+**Tried by Mary** in her test folder; not yet online with two players (her
+friend was away), published at her request.
+
+**Online**
+- INVITE beside each friend (PROFILE > FRIENDS): your game opens on ONLINE
+  and waits; the friend gets a notification and JOIN, and their game opens
+  on ONLINE and finds you, no code typed. A game already open finds you
+  once ONLINE is opened. Friends only; an invite lasts three minutes.
+- The guest sees the host's STAGE SELECT (the stage it shows, as it moves)
+  instead of a black screen, and waits as long as it is open.
 
 **Launcher**
 - A friend request gets a Windows notification (a click opens PROFILE >
@@ -29,6 +39,10 @@ fight in that log yet).
   two machines run different fights (78 desyncs in one fight). They are
   left out of an online fight, also on a fighter the menu had loaded; the
   model itself still shows.
+- SMOOTH MODELS no longer freezes the fight's first frames (0.25 to 0.9 s):
+  the sharp edges are set on the build's thread.
+- A mod's model has its lighting baked once a session, not at every load.
+- The launcher asks for its pictures and icons all at once at start.
 
 ## 0.1.21 beta (2026-10-31) — friends, live leaderboards
 

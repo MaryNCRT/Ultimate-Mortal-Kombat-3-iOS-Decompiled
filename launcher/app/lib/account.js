@@ -451,6 +451,9 @@ async function friends(root) {
 const findPlayers = (root, q) =>
     authedApi(root, 'GET', '/v1/users?q=' + encodeURIComponent(String(q || '').trim().slice(0, 24)));
 const addFriend = (root, code) => authedApi(root, 'POST', '/v1/friends', { code });
+/* a friend to an online fight, and an invite taken or turned down */
+const invite = (root, code) => authedApi(root, 'POST', '/v1/invite', { code });
+const dropInvite = (root, code) => authedApi(root, 'DELETE', '/v1/invite', { code });
 /* the recovery code again ("" for an account older than 0.1.22), or a new one */
 const recovery = root => authedApi(root, 'GET', '/v1/recovery');
 const newRecovery = (root, password) => authedApi(root, 'POST', '/v1/recovery', { password: String(password || '') });
@@ -459,4 +462,4 @@ const removeFriend = (root, code) => authedApi(root, 'DELETE', '/v1/friends', { 
 module.exports = { setVault, status, register, login, recover, logout, me, setEmail, setPassword,
                    remove, pull, push, resolve, scores, postScore, boards, flushScores, live, saveDir,
                    claim, rename, friends, findPlayers, addFriend, removeFriend, recovery, newRecovery,
-                   PROGRESS, BOARDS };
+                   invite, dropInvite, PROGRESS, BOARDS };

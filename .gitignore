@@ -126,3 +126,4 @@ tools/eos/SDK/Lib/
 !tools/eos/SDK/Bin/*.dll
 !tools/eos/SDK/Bin/*.so
 /leaderboards.txt.tmp
+/online_join.txt

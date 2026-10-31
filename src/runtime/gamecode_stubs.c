@@ -142,6 +142,35 @@ static void mayhem_path(char *out, size_t size, const char *name)
     snprintf(out, size, "%s%s", g_mh_dir, name);
 }
 
+/* A friend's invite taken in the launcher while the game runs: the launcher
+ * writes the friend's code to online_join.txt beside umk3.ini, and the
+ * ONLINE screen finds it (FrontEnd.c, FE_Task_Online). Read once, then
+ * removed. 1 and the code (XXXX-XXXX-XXXX) when there is one. */
+int port_online_join_code(char *out, size_t n)
+{
+    static int tick;
+    char path[600], line[32];
+    FILE *f;
+    size_t k = 0;
+    int i;
+
+    if (++tick % 30)                    /* twice a second is plenty */
+        return 0;
+    mayhem_path(path, sizeof path, "online_join.txt");
+    if (!(f = fopen(path, "r")))
+        return 0;
+    line[0] = 0;
+    if (!fgets(line, sizeof line, f))
+        line[0] = 0;
+    fclose(f);
+    remove(path);
+    for (i = 0; line[i] && k + 1 < n; i++)
+        if ((line[i] >= '0' && line[i] <= '9') || (line[i] >= 'A' && line[i] <= 'Z') || line[i] == '-')
+            out[k++] = line[i];
+    out[k] = 0;
+    return k == 14;
+}
+
 static MayhemBoard *mayhem_board(const char *key, int make)
 {
     long i;

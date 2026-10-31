@@ -126,10 +126,15 @@ typedef struct {
 static smooth_entry g_cache[SMOOTH_CACHE];
 static unsigned g_tick;
 
+/* The build and its SHARP EDGES (a full sync of the surface, ~as long as the
+ * build: on the game's thread it froze the fight's first frames, 250 to
+ * 900 ms, Mary's logs of 2026-10-30) on the thread */
 static void build(smooth_entry *e)
 {
     e->built = umk_subsurf_new_keyed(e->levels, e->weld, e->nverts, e->jpos, e->nfaces, e->jidx,
                                      e->jcu, e->jkey);
+    if (e->built)
+        umk_subsurf_set_sharp(e->built, e->sharp_a, e->sharp_s);
 }
 
 #ifdef _WIN32
@@ -504,10 +509,7 @@ static void adopt(smooth_entry *e)
     if (e->s) {
         int n;
 
-        umk_subsurf_set_sharp(e->s, port_sharp_angle, port_sharp_strength);
-        e->sharp_a = port_sharp_angle;
-        e->sharp_s = port_sharp_strength;
-        n = umk_subsurf_num_verts(e->s);
+        n = umk_subsurf_num_verts(e->s);  /* sharp_a / sharp_s: the build's */
         e->light = malloc((size_t)n);
         e->rgba = malloc((size_t)n * 4);
         printf("smooth models: mesh %d verts %d tris -> level %d, %d welded, %d verts %d tris, "
@@ -573,6 +575,8 @@ static smooth_entry *start_entry(smooth_entry *e, const void *skin, uint32_t has
     e->nverts = nverts;
     e->nfaces = nfaces;
     e->levels = port_smooth_models;
+    e->sharp_a = port_sharp_angle;      /* the build sets them (build) */
+    e->sharp_s = port_sharp_strength;
     e->used = ++g_tick;
     e->weld = UMK_WELD_DISTANCE_CM * VertScale;
     e->pos = malloc(sizeof(float) * 3 * (size_t)nverts);

@@ -143,6 +143,13 @@ int  dbg_clock_frozen(void);
  * it the frame while it is open, as the settings menu. */
 int  stage_menu_gate(long *level);
 int  stage_menu_is_open(void);
+/* Online, the guest sees the host's STAGE SELECT: the host's stage as it
+ * moves (the packet), each frame the guest waits (1 while the host's window
+ * is up), the end of the wait, and the window drawn over the guest's frame. */
+void stage_menu_remote(int level, int list);
+int  stage_menu_watch_frame(void);
+void stage_menu_watch_end(void);
+void stage_menu_watch_draw(void);
 void stage_menu_draw(void);
 void stage_menu_mouse(float fx, float fy, int down);
 void stage_menu_keys(int left, int right, int up, int down, int ok, int back,

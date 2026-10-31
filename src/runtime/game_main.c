@@ -3597,6 +3597,7 @@ int main(int argc, char **argv)
             /* the player's badge on the main menu (port) */
             if (CurrentTask == 3 && FE_CurrentTask == 0)
                 set_menu_badge();
+            stage_menu_watch_draw();    /* the host's STAGE SELECT, online's guest */
             online_after_frame();   /* the ONLINE screens' badges (port) */
             render_resolve();
             if (rp_playing() && g_rp_hidden) {          /* HIDE: the fight alone */
