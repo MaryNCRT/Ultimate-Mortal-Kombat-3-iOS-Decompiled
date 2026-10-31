@@ -27,18 +27,17 @@ export const SECTIONS = ['build', 'play', 'video', 'controls', 'profile', 'mods'
 export const TITLE = { build: 'mBuild', play: 'mPlay', video: 'mVideo', controls: 'mControls', profile: 'mProfile', mods: 'mMods', replays: 'mReplays', quit: 'mQuit' };
 export const DESC = { build: 'dBuild', video: 'dVideo', controls: 'dControls', profile: 'dProfile', play: 'dPlay', mods: 'dMods', replays: 'dReplays', quit: 'dQuit' };
 /* the pages of GRAPHICS and CONTROLS, in their second row */
-export const GFX_TABS = [['video', 'gVideo'], ['tex', 'gTex'], ['ui', 'gUi']];
+export const GFX_TABS = [['video', 'gVideo'], ['gfx', 'gGfx'], ['tex', 'gTex'], ['ui', 'gUi']];
 export const CTL_TABS = [['p', 'tabKb'], ['pad', 'tabPad'], ['dbg', 'tabDbg']];
 
-/* index = res in umk3.ini (lib/ini.js): the game's own 3:2 sizes and 16:9 ones */
+/* index = res in the launcher (lib/ini.js, the same list): smallest to largest */
 export const RES = [
-    { w: 480, h: 320 }, { w: 960, h: 640 }, { w: 1440, h: 960 },
-    { w: 1920, h: 1280 }, { w: 2400, h: 1600 }, { w: 2880, h: 1920 },
-    { w: 3840, h: 2560 },
-    { w: 1280, h: 720 }, { w: 1600, h: 900 }, { w: 1920, h: 1080 },
-    { w: 2560, h: 1440 }, { w: 3840, h: 2160 },
-    { w: 1024, h: 768 }, { w: 1600, h: 1200 }, { w: 2048, h: 1536 },
-    { w: 2560, h: 1080 }, { w: 3440, h: 1440 },
+    { w: 480, h: 320 }, { w: 960, h: 640 }, { w: 1024, h: 768 },
+    { w: 1280, h: 720 }, { w: 1440, h: 960 }, { w: 1600, h: 900 },
+    { w: 1600, h: 1200 }, { w: 1920, h: 1080 }, { w: 1920, h: 1280 },
+    { w: 2048, h: 1536 }, { w: 2400, h: 1600 }, { w: 2560, h: 1080 },
+    { w: 2560, h: 1440 }, { w: 2880, h: 1920 }, { w: 3440, h: 1440 },
+    { w: 3840, h: 2160 }, { w: 3840, h: 2560 },
 ];
 /* aspect= in umk3.ini */
 export const ASPECT = ['3:2', '4:3', '16:9', '21:9'];

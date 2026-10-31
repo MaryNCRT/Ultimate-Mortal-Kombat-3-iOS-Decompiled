@@ -4,7 +4,8 @@
      * a stage, the interface and menus, the effects (mods/owners.js) -- each
      * replaced by a picture into a mod, in that place's folder of the mod
      * (Stages\The Pit III\PIT1.png), or exported as PNG to the same place in
-     * exports\. The game takes a mod's file by name from any of its folders
+     * exports\ -- one, all of a fighter's or stage's, or every fighter's
+     * or stage's (EXPORT ALL). The game takes a mod's file by name from any of its folders
      * (runtime/mods.c).
      *
      * Each texture is shown as its picture, in groups (a fighter's outfits,
@@ -124,6 +125,37 @@
         if (png) note = tx('exDone') + ' ' + await api.exportSave(exportTexDir(home(t)), { [t.name + '.png']: png });
     }
 
+    /* EXPORT ALL: every texture of the fighter or stage shown (or of the
+     * whole group: every fighter, every stage), smaller copies included,
+     * each to its place in exports\, a few at a time */
+    async function exportMany(whole) {
+        selectBlip();
+        if (busy || !owners || !ms.cat) return;
+        const list = ms.cat.textures.filter(t => {
+            const o = owners.get(t.name.toUpperCase());
+            return o && o.group === ms.txGroup && (whole || !items.length || o.name === ms.txItem);
+        });
+        busy = true;
+        let done = 0, where = '';
+        try {
+            for (let i = 0; i < list.length; i += 16) {
+                const by = {};
+                for (const t of list.slice(i, i + 16)) {
+                    const png = await pngBytes(src, t.id);
+                    if (!png) continue;
+                    const d = exportTexDir(home(t));
+                    (by[d] = by[d] || {})[t.name + '.png'] = png;
+                    done++;
+                }
+                for (const d in by) where = await api.exportSave(d, by[d]);
+                note = tx('exBusy') + ' ' + Math.min(i + 16, list.length) + ' / ' + list.length;
+            }
+            note = tx('exDone') + ' ' + (whole || !items.length ? where.replace(/[\\/][^\\/]+[\\/]Textures$/, '') : where) + '  (' + done + ' ' + tx('txCount') + ')';
+        } finally {
+            busy = false;
+        }
+    }
+
     function see(t) {
         selectBlip();
         ms.kind = 'textures';
@@ -158,6 +190,8 @@
             <h3>{items.length ? ms.txItem : tx(GROUP_KEYS.find(g => g[0] === ms.txGroup)[1])}</h3>
             <span class="dim">{shown.length} {tx('txCount')}</span>
             <span class="grow"></span>
+            <button class="btn" disabled={busy || !owners} onpointerenter={hoverBlip} onclick={() => exportMany(false)}>{tx(items.length ? 'txExportOne' : 'txExportAll')}</button>
+            {#if items.length}<button class="btn" disabled={busy || !owners} onpointerenter={hoverBlip} onclick={() => exportMany(true)}>{tx(ms.txGroup === 'stages' ? 'txExportStages' : 'txExportChars')}</button>{/if}
             <label class="chk"><input type="checkbox" bind:checked={ms.autoSmall}><span>{tx('vwAutoSmall')}</span></label>
             <label class="chk"><input type="checkbox" bind:checked={ms.autoIce}><span>{tx('vwAutoIce')}</span></label>
         </div>

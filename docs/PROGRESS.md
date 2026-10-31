@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-10-30 (release 0.1.17 beta, published as the pre-release `v0.1.17-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-10-30 (release 0.1.18 beta, published as the pre-release `v0.1.18-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -68,9 +68,9 @@ Mary plays every build in a test folder (`WORK\release-0.1.12\UMK3-PC-0.1.12-bet
 on her machine) before it is released. **Played and confirmed:** everything
 up to 0.1.10b (the Linux package, the Vulkan and Direct3D 12 renderers),
 REAL-TIME SHADOWS' note on its own row in 0.1.13. **Not yet played as a whole:** 0.1.11 to
-0.1.17; she has tried pieces of them as she reported problems (STAGE
+0.1.18; she has tried pieces of them as she reported problems (STAGE
 SELECT's music and CANCEL, the 4:3 menus, the stage editor, the MOD HUB,
-the kombo branch and the KOMBOS page, which she confirmed work), each
+the kombo branch and the KOMBOS page, Noob Saibot on the roster, EXPORT ALL and the settings categories, which she confirmed work), each
 marked in the log below.
 
 ### Open problems
@@ -94,6 +94,40 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## 0.1.18: Noob Saibot on the roster, EXPORT ALL, settings by category (2026-10-30, released in 0.1.18)
+
+Mary asked for five things; all played in her test folder and confirmed.
+
+- **Noob Saibot.** `SetupLockedCharacters` (FrontEnd.c) already sets
+  `CharacterAvailable[23] = 2`; `CS_Layout` / `CS_Layout2` (0x00101630,
+  0x001016a0) just have no cell for 23. `drawCharacterSelection` now writes
+  23 into the empty cell [3][6] when `port_noob_saibot` (umk3.ini
+  `noob_saibot=`, read in game_main.c, written by the launcher's ini.js and
+  the Esc menu) is on and `GameMode` is neither 1 (online: both grids must
+  match) nor 2 (the one-character mode), and -1 otherwise. Port, not in the
+  binary.
+- **Online and character mods.** No code change: `mods_online(1)`
+  (runtime/mods.c, from `rb_online_begin`, classic netcode included) puts
+  every data.ini word back and serves only models and textures. The
+  CHARACTER EDITOR's note (`edOnline`) said the opposite and now says this.
+- **Esc menu categories** (settings_menu.c): `PAGE_VIDEO`, `PAGE_GFX`,
+  `PAGE_TEX`, `PAGE_GAME` instead of one GRAPHICS page; the game's own video
+  panel (`g_framed`) still shows them all on one page. GAME holds the
+  interface rows and NOOB SAIBOT ON THE ROSTER.
+- **Resolutions** sorted by width then height in `k_res` (settings_menu.c),
+  `RES` (lib/ini.js, app.svelte.js); the ini stores width and height, so
+  saved settings keep their size.
+- **TEXTURES: EXPORT ALL** (ModTextures.svelte `exportMany`): the shown
+  fighter's or stage's textures, or the whole group's, 16 at a time through
+  `exportSave`.
+- Also looked at, nothing changed: Mary's replay
+  `20261030-185205_sonya_vs_smoke.umkr`, where human Smoke (CPU) only hit
+  Sonya at FINISH HER and raised his arms. `t_drone_execute_fatality`
+  (0x000707cc) offers mercy only with `H[0] > 0 && H[1] > 0` (both won a
+  round; this fight was 2-0), else picks fatality 1 or 2 on a coin toss;
+  `_ochar_fatalities2[22]` is `t_non_violent_finish`, a plain hit. The
+  original's behaviour.
 
 ## 0.1.17: kombos that share a start, CHARACTER EDITOR KOMBOS (2026-10-30, released in 0.1.17)
 

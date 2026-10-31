@@ -12638,6 +12638,8 @@ static void palette_picker(void)
         palette_box(1, 262, p1, p2);
 }
 
+int port_noob_saibot;                   /* port: umk3.ini noob_saibot= */
+
 long drawCharacterSelection(long sel)
 {
     long row, cx;
@@ -12648,6 +12650,15 @@ long drawCharacterSelection(long sel)
         PortNavDual();                  /* port: both pads choose at once */
 
     SetupLockedCharacters();
+
+    /* Port, not in the binary: NOOB SAIBOT ON THE ROSTER (umk3.ini
+     * noob_saibot=1, the launcher's PLAY page and the settings menu's GAME
+     * tab). SetupLockedCharacters already makes him available (23 = 2); the
+     * grid just has no cell for him. He takes the empty cell right of Smoke,
+     * never online (GameMode 1: both machines' grids must match) nor in the
+     * one-character mode 2. */
+    CS_Layout[3][6] = CS_Layout2[3][6] =
+        port_noob_saibot && GameMode != 1 && GameMode != 2 ? 23 : -1;
 
     /* ---- pass one: the portraits ---- */
     for (row = 0; row < CS_ROWS; row++) {

@@ -14,7 +14,8 @@
  * the ini again when it comes to the front) and the next start keeps it;
  * the ini's other lines are kept as they were.
  *
- *     GRAPHICS   DISPLAY (window, borderless, fullscreen) and RESOLUTION,
+ *     VIDEO, GRAPHICS, TEXTURES and GAME (four categories since 0.1.18):
+ *                DISPLAY (window, borderless, fullscreen) and RESOLUTION,
  *                both taken by APPLY DISPLAY; 3D RESOLUTION, ANTIALIASING,
  *                RENDERER (OpenGL, Vulkan, DirectX 12: written for the
  *                next start, render/rgl.h), TEXTURES, ASPECT, LANGUAGE,
@@ -56,12 +57,12 @@ static const char *tx(const char *es, const char *en)
 }
 
 /* The launcher's lists (launcher/app/lib/ini.js RES, renderer.js AA). */
-static const struct { int w, h; } k_res[] = {
-    { 480, 320 }, { 960, 640 }, { 1440, 960 }, { 1920, 1280 },
-    { 2400, 1600 }, { 2880, 1920 }, { 3840, 2560 },
-    { 1280, 720 }, { 1600, 900 }, { 1920, 1080 }, { 2560, 1440 },
-    { 3840, 2160 }, { 1024, 768 }, { 1600, 1200 }, { 2048, 1536 },
-    { 2560, 1080 }, { 3440, 1440 },
+static const struct { int w, h; } k_res[] = {     /* smallest to largest */
+    { 480, 320 }, { 960, 640 }, { 1024, 768 }, { 1280, 720 },
+    { 1440, 960 }, { 1600, 900 }, { 1600, 1200 }, { 1920, 1080 },
+    { 1920, 1280 }, { 2048, 1536 }, { 2400, 1600 }, { 2560, 1080 },
+    { 2560, 1440 }, { 2880, 1920 }, { 3440, 1440 }, { 3840, 2160 },
+    { 3840, 2560 },
 };
 #define N_RES (int)(sizeof k_res / sizeof k_res[0])
 static const int k_aa[] = { 0, 2, 4, 8, 16 };
@@ -102,9 +103,11 @@ static const char *const k_pb[PB_COUNT] = {
     "SELECT", "START", "L3", "R3", "HOME",
 };
 
-/* Three categories down the side panel; GRAPHICS holds VIDEO, TEXTURES and
- * INTERFACE, CONTROLS the KEYBOARD and the GAMEPAD, each under its heading */
-enum { PAGE_GFX, PAGE_CTL, PAGE_PROF, N_PAGES };
+/* The categories down the side panel: VIDEO, GRAPHICS, TEXTURES, GAME (the
+ * interface and what changes the game), CONTROLS (the KEYBOARD and the
+ * GAMEPAD) and PROFILE. The game's own video panel (g_framed) shows the
+ * first three and the interface on one page, as before. */
+enum { PAGE_VIDEO, PAGE_GFX, PAGE_TEX, PAGE_GAME, PAGE_CTL, PAGE_PROF, N_PAGES };
 
 enum {
     R_DISPLAY, R_MONITOR, R_RES, R_APPLY, R_RRES, R_AA, R_TEXQ, R_ASPECT, R_UI, R_HIDE, R_LANG, R_REND, R_SMOOTH, R_SMODEL,
@@ -114,7 +117,8 @@ enum {
     R_CLOSE, R_QUIT, R_HEAD, R_CSUB,
     R_SHARPA, R_SHARPS,                 /* SMOOTH MODELS' sharp edges */
     R_RTSHADOW,                         /* REAL-TIME SHADOWS (render/rgl.h) */
-    R_PALT, R_PGRAD                     /* the outfit; the gradient picker */
+    R_PALT, R_PGRAD,                    /* the outfit; the gradient picker */
+    R_NOOB                              /* NOOB SAIBOT ON THE ROSTER (FrontEnd.c) */
 };
 
 /* PROFILE's gradient picker (plat_ui_gradient, the launcher's
@@ -301,7 +305,7 @@ void set_menu_open_video(void)
         return;
     g_want = 1;
     g_framed = 1;
-    g_page = PAGE_GFX;
+    g_page = PAGE_VIDEO;
     g_sel = 1;                          /* under the VIDEO heading */
     g_first = 0;
 }
@@ -573,12 +577,14 @@ static void build(void)
 
     g_n = 0;
     switch (g_page) {
-    case PAGE_GFX: {
+    case PAGE_VIDEO: case PAGE_GFX: case PAGE_TEX: case PAGE_GAME: {
+        int all = g_framed;
         static const char *mode_es[3] = { "VENTANA", "SIN BORDES", "PANTALLA COMPLETA" };
         static const char *mode_en[3] = { "WINDOW", "BORDERLESS", "FULLSCREEN" };
         static const char *tq_es[3] = { "IPHONE", "IPAD", "SIN LIMITE" };
         static const char *tq_en[3] = { "IPHONE", "IPAD", "NO LIMIT" };
 
+        if (all || g_page == PAGE_VIDEO) {
         head("VIDEO");
         add(R_DISPLAY, 0, tx("PANTALLA", "DISPLAY"), "< %s >",
             tx(mode_es[g_gfx.mode], mode_en[g_gfx.mode]));
@@ -601,15 +607,19 @@ static void build(void)
         else
             add(R_RRES, 0, tx("RESOLUCION 3D", "3D RESOLUTION"), "< %s >",
                 tx("LA DE LA VENTANA", "THE WINDOW'S"));
-        if (g_gfx.aa)
-            add(R_AA, 0, "ANTIALIASING", "< X%d >", g_gfx.aa);
-        else
-            add(R_AA, 0, "ANTIALIASING", "< %s >", tx("DESACTIVADO", "OFF"));
         add(R_REND, 0, tx("RENDERIZADOR", "RENDERER"), "< %s >%s",
             rend_name(port_renderer()),
             port_renderer() != rgl_renderer ? tx("  AL REINICIAR", "  AFTER A RESTART") : "");
         add(R_VSYNC, 0, "VSYNC", "< %s >",
             rgl_vsync ? tx("ACTIVADO", "ON") : tx("DESACTIVADO", "OFF"));
+        }
+        if (all || g_page == PAGE_GFX) {
+        if (!all)
+            head(tx("GRAFICOS", "GRAPHICS"));
+        if (g_gfx.aa)
+            add(R_AA, 0, "ANTIALIASING", "< X%d >", g_gfx.aa);
+        else
+            add(R_AA, 0, "ANTIALIASING", "< %s >", tx("DESACTIVADO", "OFF"));
         add(R_SMOOTH, 0, tx("ANIMACIONES SUAVES", "SMOOTH ANIMATIONS"), "< %s >",
             port_smooth_anims ? tx("ACTIVADAS", "ON") : tx("DESACTIVADAS", "OFF"));
         if (port_smooth_models)
@@ -636,9 +646,14 @@ static void build(void)
                            ? tx("  SOLO CON VULKAN O DIRECT3D 12", "  ONLY WITH VULKAN OR DIRECT3D 12")
                            : tx("  EXPERIMENTALES", "  EXPERIMENTAL"), "");
         g_rows[g_n - 1].en = 0;
+        }
+        if (all || g_page == PAGE_TEX) {
         head(tx("TEXTURAS", "TEXTURES"));
         add(R_TEXQ, 0, tx("CALIDAD", "QUALITY"), "< %s >",
             tx(tq_es[g_gfx.texq], tq_en[g_gfx.texq]));
+        }
+        if (!all && g_page != PAGE_GAME)
+            break;
         head(tx("INTERFAZ", "INTERFACE"));
         add(R_LANG, 0, tx("IDIOMA", "LANGUAGE"), "< %s >",
             tx(k_lang[lang_index()].es, k_lang[lang_index()].en));
@@ -648,6 +663,15 @@ static void build(void)
             g_gfx.ui ? "IPAD" : "IPHONE");
         add(R_HIDE, 0, tx("CONTROLES EN PANTALLA", "ON-SCREEN CONTROLS"), "< %s >",
             g_gfx.hidectl ? tx("OCULTOS", "HIDDEN") : tx("VISIBLES", "SHOWN"));
+        if (all)
+            break;
+        /* what changes the game: offline only, an online fight keeps the
+         * game as it ships whatever is set here */
+        head(tx("JUEGO", "GAME"));
+        add(R_NOOB, 0, tx("NOOB SAIBOT EN EL ROSTER", "NOOB SAIBOT ON THE ROSTER"), "< %s >",
+            port_noob_saibot ? tx("ACTIVADO", "ON") : tx("DESACTIVADO", "OFF"));
+        add(R_HEAD, 0, tx("  SOLO OFFLINE: NUNCA EN EL ONLINE", "  OFFLINE ONLY: NEVER ONLINE"), "");
+        g_rows[g_n - 1].en = 0;
         break;
     }
     case PAGE_CTL: {
@@ -758,7 +782,7 @@ static int has_value(int kind)
 {
     switch (kind) {
     case R_DISPLAY: case R_MONITOR: case R_RES: case R_RRES: case R_AA: case R_TEXQ:
-    case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_SMOOTH: case R_SMODEL: case R_VSYNC: case R_PLAYER: case R_LAYOUT:
+    case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_SMOOTH: case R_SMODEL: case R_VSYNC: case R_NOOB: case R_PLAYER: case R_LAYOUT:
     case R_RTSHADOW: case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE: case R_PCOLOR2:
     case R_PICONS:
         return 1;
@@ -995,6 +1019,10 @@ static void change(int kind, int d)
         port_smooth_anims = !port_smooth_anims;
         g_dirty = 1;
         return;
+    case R_NOOB:                        /* at the next select screen */
+        port_noob_saibot = !port_noob_saibot;
+        g_dirty = 1;
+        return;
     case R_SMODEL:                      /* at once (smooth_models.c) */
         port_smooth_models = wrap(port_smooth_models + d, 3);
         g_dirty = 1;
@@ -1173,6 +1201,12 @@ static int drop_fill(int kind)
         snprintf(L[1], 48, "%s", tx("ACTIVADAS", "ON"));
         n = 2;
         g_drop_cur = port_smooth_anims ? 1 : 0;
+        break;
+    case R_NOOB:
+        snprintf(L[0], 48, "%s", tx("DESACTIVADO", "OFF"));
+        snprintf(L[1], 48, "%s", tx("ACTIVADO", "ON"));
+        n = 2;
+        g_drop_cur = port_noob_saibot ? 1 : 0;
         break;
     case R_SMODEL:
         snprintf(L[0], 48, "%s", tx("DESACTIVADO", "OFF"));
@@ -1644,7 +1678,7 @@ static void capture(void)
 
 static void turn_page(int d)
 {
-    if (g_framed && g_page == PAGE_GFX)     /* the video settings: one page */
+    if (g_framed && g_page == PAGE_VIDEO)   /* the video settings: one page */
         return;
     if (g_framed) {                     /* the button setup: keys, pad */
         g_fsub ^= 1;
@@ -1781,7 +1815,10 @@ void set_menu_draw(void)
     if (g_first > g_n - VIS_ROWS)
         g_first = g_n - VIS_ROWS > 0 ? g_n - VIS_ROWS : 0;
     rows = g_n - g_first < VIS_ROWS ? g_n - g_first : VIS_ROWS;
+    tabs[PAGE_VIDEO] = "VIDEO";
     tabs[PAGE_GFX] = tx("GRAFICOS", "GRAPHICS");
+    tabs[PAGE_TEX] = tx("TEXTURAS", "TEXTURES");
+    tabs[PAGE_GAME] = tx("JUEGO", "GAME");
     tabs[PAGE_CTL] = tx("CONTROLES", "CONTROLS");
     tabs[PAGE_PROF] = tx("PERFIL", "PROFILE");
     if (g_first > 0 && g_first == g_sel && g_rows[g_sel - 1].kind == R_HEAD)
@@ -1828,14 +1865,14 @@ void set_menu_draw(void)
 
             if (g_capture)
                 snprintf(ff, sizeof ff, "%s", footer);
-            else if (g_page == PAGE_GFX)
+            else if (g_page == PAGE_VIDEO)
                 snprintf(ff, sizeof ff, "%s %s   %s %s", ok, tx("ELIGE", "PICK"),
                          k, tx("VUELVE", "BACK"));
             else
                 snprintf(ff, sizeof ff, "%s%s %s   %s %s   %s %s", ta, tb,
                          g_fsub ? tx("TECLADO", "KEYBOARD") : tx("MANDO", "GAMEPAD"),
                          ok, tx("ELIGE", "PICK"), k, tx("VUELVE", "BACK"));
-            if (g_page == PAGE_GFX)
+            if (g_page == PAGE_VIDEO)
                 snprintf(ft, sizeof ft, "%s", tx("AJUSTES DE VIDEO", "VIDEO SETTINGS"));
             else
                 snprintf(ft, sizeof ft, "%s - %s", tx("CONFIG. BOTONES", "BUTTON SETUP"),
@@ -2053,6 +2090,7 @@ static void save_ini(void)
     put("renderer", "%s", port_renderer() == RGL_VULKAN ? "vulkan"
                         : port_renderer() == RGL_D3D12 ? "d3d12" : "opengl");
     put("smooth_anims", "%d", port_smooth_anims);
+    put("noob_saibot", "%d", port_noob_saibot);
     put("vsync", "%d", rgl_vsync);
     put("smooth_models", "%d", port_smooth_models);
     put("sharp_edge_angle", "%d", (int)(port_sharp_angle + 0.5f));
