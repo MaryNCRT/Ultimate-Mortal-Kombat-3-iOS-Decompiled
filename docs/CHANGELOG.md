@@ -8,9 +8,11 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased (on main, for 0.1.23) — FRIENDS in the game's ONLINE menu
+## 0.1.23 beta (2026-10-31) — FRIENDS in the game's ONLINE menu
 
-Not published yet. **Tried by Mary** in her test folder: works.
+Published 2026-10-31 as the GitHub pre-release `v0.1.23-beta`
+(`UMK3-PC-0.1.23-beta.zip`, `UMK3-PC-0.1.23-beta-linux-x64.tar.gz`).
+**Tried by Mary** in her test folder: works.
 
 - The game's ONLINE screen has FRIENDS (under COPY): the friends with their
   icon and name, INVITE beside each (the launcher sends it; the screen

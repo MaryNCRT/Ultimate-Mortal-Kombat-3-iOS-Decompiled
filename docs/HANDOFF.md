@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-10-31 (FRIENDS in the game's ONLINE menu, on main for 0.1.23).
+**Last updated:** 2026-10-31 (release 0.1.23 beta: FRIENDS in the game's ONLINE menu, published as the pre-release `v0.1.23-beta`).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
@@ -98,7 +98,7 @@ and answers the preload's calls over HTTP.
 
 A release is a GitHub pre-release `v<version>-beta` with two packages:
 
-1. Set the version in `launcher/app/package.json` (`0.1.22-beta`; a letter
+1. Set the version in `launcher/app/package.json` (`0.1.23-beta`; a letter
    release is `0.1.14-beta.b`, read by the updater as 0.1.14b).
 2. `npm run ui` in `launcher/app`.
 3. Windows: `npx electron-builder --win dir --x64`, then
@@ -148,7 +148,7 @@ press COMPILE.
   (`PortDbgTainted`, game_main.c).
 - **Server deploys**: `deploy.cmd` in the private repo's `umk3-accounts`
   (tests, then `wrangler deploy`); Mary runs it.
-- **To check online with two players (0.1.22)**: the guest's view of the
+- **To check online with two players (0.1.23)**: the guest's view of the
   host's STAGE SELECT, invites, no desyncs with a model mod, the other
   player's attack voices. Stages' first-frame pauses (STREET) are open.
 - **Friends and the profile on the account**: `claim()` in `lib/account.js`
