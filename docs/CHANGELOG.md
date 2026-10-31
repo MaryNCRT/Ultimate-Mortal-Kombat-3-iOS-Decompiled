@@ -8,6 +8,28 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased (on main, for 0.1.22) — friend requests, online fixes
+
+Not published yet. **Tried by Mary** in her test folder: works (no online
+fight in that log yet).
+
+**Launcher**
+- A friend request gets a Windows notification (a click opens PROFILE >
+  FRIENDS) and a red dot on PROFILE and FRIENDS while it waits.
+- A player with an older launcher is found too: the server takes the
+  profile's code and name from the synced progress.
+- ACCOUNT: REMOVE EMAIL; SEE RECOVERY CODE opens it in a window of its own
+  (an account made before asks the password once and gets a new code).
+
+**Game**
+- Online: the other player's attack voices were never heard (the frames
+  that brought the late press ran again in silence). A frame run again now
+  plays the sounds it did not play the first time.
+- Online: a model mod's bone lengths and height (KEEP PROPORTIONS) made the
+  two machines run different fights (78 desyncs in one fight). They are
+  left out of an online fight, also on a fighter the menu had loaded; the
+  model itself still shows.
+
 ## 0.1.21 beta (2026-10-31) — friends, live leaderboards
 
 Published 2026-10-31 as the GitHub pre-release `v0.1.21-beta` (`UMK3-PC-0.1.21-beta.zip`, `UMK3-PC-0.1.21-beta-linux-x64.tar.gz`). **Played by Mary** in her test folder: works.

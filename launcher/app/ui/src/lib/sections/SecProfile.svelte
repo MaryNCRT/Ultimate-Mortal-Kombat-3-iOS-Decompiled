@@ -73,7 +73,7 @@
 </script>
 
 <Page>
-    <SubNav tabs={PROF_TABS} current={app.profTab} pick={t => app.profTab = t} />
+    <SubNav tabs={PROF_TABS} current={app.profTab} pick={t => app.profTab = t} dot={app.frIn ? ['friends'] : []} />
     {#if app.profTab === 'account'}
         <ProfAccount />
     {:else if app.profTab === 'friends'}

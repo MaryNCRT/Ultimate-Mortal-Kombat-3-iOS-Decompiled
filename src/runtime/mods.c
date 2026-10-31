@@ -30,6 +30,7 @@
  *     texture matches on its name without the extension.
  */
 #include "mods.h"
+#include "skin_mats.h"
 
 #include <ctype.h>
 #include <stdint.h>
@@ -498,6 +499,7 @@ void mods_online(int on)
         return;
     g_online = on;
     if (on) {
+        port_skin_bones_online();       /* skin_mats.c: models' lengths */
         for (i = 0; i < g_nold; i++)
             *g_old[i].at = g_old[i].v;
         if (g_nold)

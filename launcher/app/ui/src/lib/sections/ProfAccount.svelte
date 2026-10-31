@@ -1,7 +1,9 @@
 <script>
     /* ACCOUNT: log in, make an account or recover one (lib/account.js). A
      * GUEST plays with the profile code alone and has no leaderboards. The
-     * recovery code is shown once, when it is given. A conflict -- this
+     * recovery code is shown when it is given, and again in a window of its
+     * own on SEE RECOVERY CODE (main.js, recoveryWindow); an account older
+     * than 0.1.22 gets a new one there, for the password. A conflict -- this
      * computer and the cloud both changed -- is settled here. */
     import { onMount } from 'svelte';
     import { app, tx } from '#lib/app.svelte.js';
@@ -15,13 +17,15 @@
     let busy = $state(false);
     let code = $state('');              /* a new recovery code, shown once */
     let email = $state('');
+    let hasEmail = $state(false);       /* one is stored: REMOVE EMAIL shows */
     let delArmed = $state(false);
+    let recPass = $state(null);         /* null, or the password asked for a new code */
 
     async function refresh() {
         st = await api.account.status();
         if (st.user) {
             const m = await api.account.me();
-            if (m.ok) email = m.email || '';
+            if (m.ok) { email = m.email || ''; hasEmail = !!m.email; }
         }
     }
     onMount(refresh);
@@ -71,6 +75,21 @@
     const saveEmail = () => run(async () => {
         const r = await api.account.email(email.trim());
         msg = r.ok ? tx('acSaved') : err(r.error);
+        if (r.ok) hasEmail = !!email.trim();
+    });
+    const dropEmail = () => run(async () => {
+        const r = await api.account.email('');
+        if (!r.ok) { msg = err(r.error); return; }
+        email = '';
+        hasEmail = false;
+        msg = tx('acEmailGone');
+    });
+    const recTexts = () => ({ title: tx('acCodeTitle'), note: tx('acRecNote'), close: tx('acRecClose') });
+    const seeCode = () => run(async () => {
+        const r = await api.account.showRecovery(recTexts(), recPass || undefined);
+        if (!r.ok) { msg = err(r.error); return; }
+        if (r.none) { recPass = ''; msg = tx('acRecNone'); return; }
+        recPass = null;
     });
     function remove() {
         if (!delArmed) { delArmed = true; return; }
@@ -122,7 +141,26 @@
                 </div>
             </div>
             <p class="warn">{tx('acDisclaimer')}</p>
-            <div class="row"><button class="btn" disabled={busy} onpointerenter={hoverBlip} onclick={saveEmail}>{tx('acSaveEmail')}</button></div>
+            <div class="row">
+                <button class="btn" disabled={busy} onpointerenter={hoverBlip} onclick={saveEmail}>{tx('acSaveEmail')}</button>
+                {#if hasEmail}
+                    <button class="btn" disabled={busy} onpointerenter={hoverBlip} onclick={dropEmail}>{tx('acRemoveEmail')}</button>
+                {/if}
+            </div>
+
+            <h3>{tx('acRecTitle')}</h3>
+            {#if recPass !== null}
+                <div class="fields">
+                    <div class="field wide">
+                        <label class="lbl" for="acRecPass">{tx('acPassword')}</label>
+                        <input id="acRecPass" class="edt" type="password" maxlength="128" bind:value={recPass}>
+                    </div>
+                </div>
+            {/if}
+            <div class="row">
+                <button class="btn" disabled={busy || recPass === ''} onpointerenter={hoverBlip}
+                        onclick={seeCode}>{tx(recPass !== null ? 'acRecNew' : 'acRecSee')}</button>
+            </div>
 
             <h3>{tx('acDelete')}</h3>
             <div class="fields">

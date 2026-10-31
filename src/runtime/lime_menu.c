@@ -259,6 +259,7 @@ static long g_fills;
 int rb_fixed_step(void);               /* rollback_probe.c */
 int rb_active(void);                    /* rollback.c */
 int rb_quiet(void);
+int rb_sound_ok(long h);
 
 /* armv7 0x00066a74, transcribed whole. The one substitution is the clock:
  * CFAbsoluteTimeGetCurrent becomes the host-advanced clock above. */
@@ -540,7 +541,7 @@ void limeDeleteSound(long h)
 void limePlaySound(long h, float v, float p, long f)
 {
     (void)p; (void)f;                   /* not read by the original either */
-    if (rb_quiet())                     /* port: a frame run again (rollback.c) */
+    if (!rb_sound_ok(h))                /* port: a frame run again (rollback.c) */
         return;
     if (h == -1) {
         if (getenv("UMK3_LOG_SOUND"))

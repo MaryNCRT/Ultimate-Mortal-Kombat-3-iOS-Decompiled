@@ -115,6 +115,7 @@ export const app = $state({
     ready: false, builtAt: null, locked: false, both: false, version: '',
     sec: 'build',
     accConflict: false,                 /* ProfAccount: THIS COMPUTER or THE CLOUD */
+    frIn: 0,                            /* friend requests waiting: the red dot on PROFILE, FRIENDS */
     full: false,                        /* a section fills the window */
     gfxTab: 'video', ctlTab: 'p', profTab: 'me',
     pl: 1,                              /* the player KEYBOARD and GAMEPAD edit */
@@ -712,6 +713,10 @@ export async function init() {
     });
     /* after the game: the account may have put the profile's name back */
     api.account.onSynced(() => refreshProfile());
+    /* friend requests (main.js, pollFriends); a click on the notification
+     * opens them */
+    api.account.onRequests(n => { app.frIn = n | 0; });
+    api.account.onOpenFriends(() => { app.profTab = 'friends'; setSection('profile', true); });
 
     app.logo = await api.logo();
     app.hero = await api.hero();

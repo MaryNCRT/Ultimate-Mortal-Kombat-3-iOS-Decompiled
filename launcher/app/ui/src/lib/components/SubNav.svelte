@@ -6,8 +6,9 @@
     import { hoverBlip, selectBlip } from '#lib/sound.js';
     import Arrow from './Arrow.svelte';
 
-    /* tabs: [[value, text key]]; current; pick(value) */
-    let { tabs, current, pick } = $props();
+    /* tabs: [[value, text key]]; current; pick(value); dot: the values
+     * with something new (the red dot) */
+    let { tabs, current, pick, dot = [] } = $props();
 
     function choose(v, el) {
         selectBlip();
@@ -19,7 +20,7 @@
 <div class="subnav">
     <Arrow dir="l" onclick={() => stepPage(-1)} />
     {#each tabs as [v, key]}
-        <button class="pg" class:active={current === v} onpointerenter={hoverBlip}
+        <button class="pg" class:active={current === v} class:news={dot.includes(v)} onpointerenter={hoverBlip}
                 onclick={e => choose(v, e.currentTarget)}>{tx(key)}</button>
     {/each}
     <Arrow dir="r" onclick={() => stepPage(1)} />
@@ -41,6 +42,12 @@
         content: ""; position: absolute; left: 0; right: 0; height: 2px;
         background: linear-gradient(90deg, transparent, rgba(205, 215, 255, .9) 18%, rgba(205, 215, 255, .9) 82%, transparent);
         box-shadow: 0 0 calc(var(--u) * .6) rgba(140, 160, 255, .7);
+    }
+    /* the red dot, right of the text (the ::before / ::after are the lines) */
+    .pg.news {
+        padding-right: calc(var(--u) * 3.8);
+        background: radial-gradient(circle, var(--red) 0 45%, transparent 55%) no-repeat
+                    right calc(var(--u) * 1.4) center / calc(var(--u) * 1.1) calc(var(--u) * 1.1);
     }
     .pg.active::before { top: 0; }
     .pg.active::after { bottom: 0; }
