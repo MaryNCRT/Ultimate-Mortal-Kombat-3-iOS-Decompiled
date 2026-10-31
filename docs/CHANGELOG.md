@@ -33,6 +33,10 @@ Published 2026-10-30 as the GitHub pre-release `v0.1.18-beta` (`UMK3-PC-0.1.18-b
   (attacks, hitboxes, kombos, data) never apply online; online only models
   and textures count (runtime/mods.c already worked that way).
 
+**Known problems closed** (Mary no longer sees them): the dropped fight
+intro frame, the repeated death scream, the Motaro softlock, SCULPT's
+"500 Internal Error"; duplicating a fighter is off the list.
+
 ## 0.1.17 beta (2026-10-30) — Kombos that share a start, KOMBOS in the CHARACTER EDITOR
 
 Published 2026-10-30 as the GitHub pre-release `v0.1.17-beta` (`UMK3-PC-0.1.17-beta.zip`, `UMK3-PC-0.1.17-beta-linux-x64.tar.gz`). Both changes were **played by Mary** in her test folder: work.

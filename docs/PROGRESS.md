@@ -77,11 +77,11 @@ marked in the log below.
 
 | Problem | State |
 |---|---|
-| A fight intro can drop a frame when smoothing two fighters takes more than a tick | known, not worked on |
-| Friendships and animalities can repeat a death scream | open: the logs show the game asking for one scream per finisher; the `death scream:` log line names the handler |
-| A fighter cannot be duplicated into a new slot | not started |
-| Losing to Motaro from the debug menu softlocks | open, needs a log |
-| The stage editor's SCULPT showed "500 Internal Error" once | not reproduced (`launcher/app/scripts/ui-harness.js`); navigation refused and native drag prevented as guards |
+| A fight intro can drop a frame when smoothing two fighters takes more than a tick | **closed**: Mary no longer sees it (0.1.18) |
+| Friendships and animalities can repeat a death scream | **closed**: Mary no longer sees it (0.1.18); the `death scream:` log line still names the handler |
+| A fighter cannot be duplicated into a new slot | **closed** from the list by Mary (0.1.18); not built |
+| Losing to Motaro from the debug menu softlocks | **closed**: Mary no longer sees it (0.1.18) |
+| The stage editor's SCULPT showed "500 Internal Error" once | **closed**: Mary no longer sees it (0.1.18); the guards stay |
 | Slight slide in a kombo (issue #114) | **the original's rule**, checked instruction by instruction (`t_cc_*_punch` → `t_ccp3` → `t_separate_us`); nothing to fix |
 | After CANCEL in STAGE SELECT the select screen came back silent once | fixed by never stopping the tune on the way; the log says `stage select: the tune ...` if it happens again |
 

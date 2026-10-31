@@ -86,11 +86,7 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 
 ## Known problems (0.1.18 beta)
 
-- A fight intro can drop a frame where smoothing two fighters takes more than a tick.
-- Friendships and animalities can repeat a death scream (open: the logs show the game asking for one per finisher).
-- A fighter cannot be duplicated into a new slot yet.
-- Losing to Motaro from the debug menu softlocks (open, needs a log).
-- The stage editor's SCULPT once showed "500 Internal Error"; it could not be reproduced and is guarded, cause unknown.
+- Earlier entries (a dropped intro frame, the repeated death scream, duplicating a fighter, the Motaro softlock, SCULPT's "500 Internal Error") were closed by Mary in 0.1.18: she no longer sees them.
 - In a kombo the one hit slides back slightly after a few punches (issue #114). That is the original game's own rule (`t_ccp3` → `t_separate_us`), checked against the binary instruction by instruction.
 
 ## Building from source
