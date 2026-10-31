@@ -501,10 +501,57 @@ function recoveryWindow(code, t) {
  * Windows notification (a click opens PROFILE > FRIENDS); the count goes to
  * the page, the red dot on PROFILE and FRIENDS. */
 const g_frSeen = new Set(), g_invSeen = new Set();
+
+/* The game's ONLINE screen has FRIENDS too (FrontEnd.c, gamecode_stubs.c):
+ * friends.txt is the account's friends and invites, written with every
+ * answer, removed for a guest; online_invite.txt is what the player pressed
+ * there ("invite CODE", "join CODE"), sent on and removed. */
+function writeGameFriends(r) {
+    const f = g_root && path.join(g_root, 'friends.txt');
+    if (!f) return;
+    try {
+        if (!r) {
+            if (fs.existsSync(f)) fs.unlinkSync(f);
+            return;
+        }
+        const clean = s => String(s || '').replace(/[|\r\n]/g, ' ');
+        const look = p => String(p.look || '').replace(/[^0-9A-Za-z|-]/g, '');
+        const lines = (r.invites || []).map(p => `invite|${p.code}|${clean(p.name)}|${look(p)}`)
+            .concat(r.friends.map(p => `friend|${p.code}|${clean(p.name)}|${look(p)}`));
+        const text = lines.join('\n') + '\n';
+        if (!fs.existsSync(f) || fs.readFileSync(f, 'utf8') !== text) {
+            fs.writeFileSync(f + '.tmp', text);
+            fs.renameSync(f + '.tmp', f);
+        }
+    } catch (_) { /* the next answer writes it */ }
+}
+
+async function gameAsked() {
+    const f = g_root && path.join(g_root, 'online_invite.txt');
+    if (!f || !fs.existsSync(f)) return;
+    let text = '';
+    try {
+        text = fs.readFileSync(f, 'utf8');
+        fs.unlinkSync(f);
+    } catch (_) { return; }
+    for (const line of text.split(/\r?\n/)) {
+        const [what, code] = line.trim().split(/\s+/);
+        if (!/^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(code || '')) continue;
+        if (what === 'invite') await account.invite(g_root, code).catch(() => {});
+        else if (what === 'join') await account.dropInvite(g_root, code).catch(() => {});
+    }
+    pollFriends();
+}
+
 async function pollFriends() {
-    if (!g_root || !g_win || !account.status(g_root).user) return;
+    if (!g_root || !g_win) return;
+    if (!account.status(g_root).user) {
+        writeGameFriends(null);
+        return;
+    }
     const r = await account.friends(g_root).catch(() => null);
     if (!r || !r.ok || !g_win) return;
+    writeGameFriends(r);
     g_win.webContents.send('account:requests', r.incoming.length + (r.invites || []).length, r);
     for (const p of r.invites || []) {
         if (g_invSeen.has(p.code) || !Notification.isSupported())
@@ -598,10 +645,14 @@ function stepAside(child) {
         busy = true;
         account.live(g_root).catch(() => {}).then(() => { busy = false; });
     }, 10000);
-    child.once('error', () => { clearTimeout(hide); clearInterval(tick); });
+    /* FRIENDS on the game's ONLINE screen: its presses, every two seconds */
+    const asks = setInterval(() => gameAsked().catch(() => {}), 2000);
+    pollFriends();
+    child.once('error', () => { clearTimeout(hide); clearInterval(tick); clearInterval(asks); });
     child.once('exit', () => {
         clearTimeout(hide);
         clearInterval(tick);
+        clearInterval(asks);
         /* the game's scores and the progress up to the account
          * (lib/account.js), not waited for */
         account.flushScores(g_root).catch(() => {})

@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-10-31 (release 0.1.22 beta: invites, friend requests, online fixes, published as the pre-release `v0.1.22-beta`).
+**Last updated:** 2026-10-31 (FRIENDS in the game's ONLINE menu, on main for 0.1.23).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
@@ -146,6 +146,8 @@ press COMPILE.
   posts the game's `scores.txt` as it grows (gamecode_stubs.c,
   `lib/account.js`). A run with the debug menu's help is not posted
   (`PortDbgTainted`, game_main.c).
+- **Server deploys**: `deploy.cmd` in the private repo's `umk3-accounts`
+  (tests, then `wrangler deploy`); Mary runs it.
 - **To check online with two players (0.1.22)**: the guest's view of the
   host's STAGE SELECT, invites, no desyncs with a model mod, the other
   player's attack voices. Stages' first-frame pauses (STREET) are open.

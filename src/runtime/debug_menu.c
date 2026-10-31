@@ -1482,14 +1482,14 @@ void ui_badge_at(int slot, const char *name, const unsigned char *icon,
                  int icon_px, unsigned key, float x, float y, int align,
                  float size)
 {
-    static GLuint tex[4];
-    static unsigned last[4];
-    static int tw[4], th[4];
-    static float ts[4];
+    static GLuint tex[8];
+    static unsigned last[8];
+    static int tw[8], th[8];
+    static float ts[8];
     GLint view[4];
     float s, w, h;
 
-    if (slot < 0 || slot > 3)
+    if (slot < 0 || slot > 7)
         return;
     glGetIntegerv(GL_VIEWPORT, view);
     s = view[3] / 320.0f * size;

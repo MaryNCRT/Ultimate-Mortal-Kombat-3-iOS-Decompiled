@@ -34,9 +34,9 @@ struct look { int icon; unsigned color, color2; int dark, angle, alt; };
 /* The icon for a slot, made again only when the look changes. */
 static const unsigned char *slot_icon(int slot, const struct look *l)
 {
-    static unsigned char *px[4];
-    static struct look have[4];
-    static int made[4];
+    static unsigned char *px[8];
+    static struct look have[8];
+    static int made[8];
 
     if (!made[slot] || memcmp(&have[slot], l, sizeof *l) != 0) {
         free(px[slot]);
@@ -117,7 +117,27 @@ void online_after_frame(void)
         float k = limeScreenHeight > 0 ? 320.0f / (float)limeScreenHeight : 1.0f;
         const float *b = PortOnlineBoxPx;
 
+        extern int   PortOnlineFrShown;     /* FrontEnd.c: FRIENDS' rows */
+        extern char  PortOnlineFrCode[][16];
+        extern char  PortOnlineFrName[][32];
+        extern float PortOnlineFrY[];
+        extern int   PortOnlineFriendsOn;
+        int port_online_friend_look(const char *code, int *icon, unsigned *color, int *dark,
+                                    unsigned *color2, int *angle, int *alt);
+        int i;
+
         badge(0, me->name, &ml, w * 0.5f - 120.0f, 64.0f, 1, 1.5f);
+        /* FRIENDS: each friend's name and icon, left of INVITE / JOIN */
+        for (i = 0; i < PortOnlineFrShown && i < 4; i++) {
+            struct look fl;
+            memset(&fl, 0, sizeof fl);
+            fl.angle = -1;
+            port_online_friend_look(PortOnlineFrCode[i], &fl.icon, &fl.color, &fl.dark,
+                                    &fl.color2, &fl.angle, &fl.alt);
+            badge(1 + i, PortOnlineFrName[i], &fl, w * 0.5f + 8.0f, PortOnlineFrY[i] - 2.0f, 0, 0.75f);
+        }
+        if (PortOnlineFriendsOn)            /* the code's box is not up */
+            return;
         if (PortOnlineBoxActive)
             ui_rect_outline(b[0] * k, b[1] * k, b[2] * k, b[3] * k, 2.0f,
                             1.0f, 0.85f, 0.2f, 1.0f);
