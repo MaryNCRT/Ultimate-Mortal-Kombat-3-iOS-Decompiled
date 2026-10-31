@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-10-30 (release 0.1.18 beta, published as the pre-release `v0.1.18-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-10-30 (release 0.1.19 beta, published as the pre-release `v0.1.19-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -95,7 +95,7 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
-## After 0.1.18: MULTIPLAYER over LAN, accounts and cloud progress (2026-10-30, on main)
+## 0.1.19: MULTIPLAYER over LAN, accounts and cloud progress (2026-10-30, released in 0.1.19)
 
 Mary asked for accounts (username, password, optional email, a recovery
 code, hashed and encrypted secrets, progress synced across devices, the way
