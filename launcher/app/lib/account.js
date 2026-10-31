@@ -4,7 +4,7 @@
  * client is public. It speaks JSON over HTTPS: /v1/register, /v1/login,
  * /v1/recover, /v1/logout, /v1/me, /v1/password, /v1/email, /v1/progress
  * (GET, and PUT with the version it builds on: 409 when the cloud moved),
- * /v1/scores.
+ * /v1/scores (the game's leaderboards: boards() and flushScores() below).
  *
  * Without an account the player is a GUEST: the profile code alone, as
  * before, for playing online, and no leaderboards.
@@ -220,6 +220,7 @@ async function logout(root) {
     const { s, token } = session(root);
     if (token) await api(root, 'POST', '/v1/logout', null, token);
     writeState(root, { server: s.server });
+    fs.rmSync(path.join(root, 'leaderboards.txt'), { force: true });
     return { ok: true };
 }
 
@@ -242,7 +243,10 @@ async function setPassword(root, password, next) {
 async function remove(root, password) {
     const { s, token } = session(root);
     const r = await api(root, 'DELETE', '/v1/me', { password }, token);
-    if (r.ok) writeState(root, { server: s.server });
+    if (r.ok) {
+        writeState(root, { server: s.server });
+        fs.rmSync(path.join(root, 'leaderboards.txt'), { force: true });
+    }
     return r;
 }
 
@@ -307,11 +311,72 @@ async function scores(root, board, limit = 50) {
     return api(root, 'GET', `/v1/scores/${encodeURIComponent(board)}?limit=${limit}`);
 }
 
-async function postScore(root, board, score) {
+async function postScore(root, board, score, name) {
     const { token } = session(root);
     if (!token) return { ok: false, error: 'guest' };
-    return api(root, 'POST', '/v1/scores', { board, score }, token);
+    return api(root, 'POST', '/v1/scores', { board, score, name }, token);
+}
+
+/* ------------------------------------------------- the game's leaderboards
+ * The game has no HTTPS; it reads the boards from leaderboards.txt and
+ * leaves its scores in scores.txt (src/runtime/gamecode_stubs.c). Only an
+ * account gets the file -- without it the game is offline, and a guest has
+ * no leaderboards. */
+
+const BOARDS = ['shaokahn_med', 'survival_easy'];
+
+/* the profile's name (profiles.ini: profile=<id>|<name>|...), which is what
+ * the boards show; the account's username when there is none */
+function profileName(root, fallback) {
+    const l = profileLine(root);
+    const n = l ? l.slice(8).split('|')[1] || '' : '';
+    return n.replace(/[^\x20-\x7e]/g, '').trim().slice(0, 24) || fallback;
+}
+
+/* before the game starts: the boards down. Offline, the last ones stay. */
+async function boards(root) {
+    const file = path.join(root, 'leaderboards.txt');
+    const { s, token } = session(root);
+    if (!token) {
+        fs.rmSync(file, { force: true });
+        return { ok: true, guest: true };
+    }
+    const lines = ['; UMK3 leaderboards: written by the launcher before each game',
+                   `user=${profileName(root, s.user)}`];
+    for (const b of BOARDS) {
+        const r = await scores(root, b, 100);
+        if (!r.ok) return r;
+        lines.push(`board=${b}`);
+        for (const row of r.rows || [])
+            lines.push(`${String(row.name || row.username).replace(/[|\r\n]/g, '')}|${Number(row.score) || 0}`);
+    }
+    fs.writeFileSync(file, lines.join('\n') + '\n', 'utf8');
+    return { ok: true };
+}
+
+/* after the game: its scores up. What did not go stays for next time. */
+async function flushScores(root) {
+    const file = path.join(root, 'scores.txt');
+    let text;
+    try { text = fs.readFileSync(file, 'utf8'); } catch { return { ok: true, sent: 0 }; }
+    const { s, token } = session(root);
+    if (!token) return { ok: true, guest: true };
+    const name = profileName(root, s.user);
+    const best = new Map();
+    for (const line of text.split(/\r?\n/)) {
+        const m = /^([a-z0-9_]{1,32}) (\d{1,15})$/.exec(line.trim());
+        if (m) best.set(m[1], Math.max(best.get(m[1]) || 0, Number(m[2])));
+    }
+    const left = [];
+    for (const [b, v] of best) {
+        const r = await postScore(root, b, v, name);
+        if (!r.ok && r.error !== 'bad_board' && r.error !== 'bad_score') left.push(`${b} ${v}`);
+    }
+    if (left.length) fs.writeFileSync(file, left.join('\n') + '\n', 'utf8');
+    else fs.rmSync(file, { force: true });
+    return { ok: !left.length, sent: best.size - left.length };
 }
 
 module.exports = { setVault, status, register, login, recover, logout, me, setEmail, setPassword,
-                   remove, pull, push, resolve, scores, postScore, saveDir, PROGRESS };
+                   remove, pull, push, resolve, scores, postScore, boards, flushScores, saveDir,
+                   PROGRESS, BOARDS };

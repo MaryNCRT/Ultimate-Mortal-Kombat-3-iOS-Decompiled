@@ -8186,17 +8186,23 @@ void FE_Task_LeaderboardsSK(void)
     limeDrawSprite((TEXTURE *)*FEBackground, 0.0f, 0.0f,
                    (float)limeScreenWidth, (float)limeScreenHeight,
                    0.0f, 0.0234375f, 1.0f, 0.703125f, col);
+    /* Port, not in the binary: on wide screens the frame spans the whole
+     * width, as the achievements one does, so the scores (60 in from the
+     * right edge) are inside it. */
     limeDrawSprite((TEXTURE *)*FEBits3,
-                   FE_X(6.0f), FE_Y(66.0f), FE_W(468.0f), FE_H(218.0f),
+                   FE_X(6.0f), FE_Y(66.0f), FE_W(468.0f) + PortFEExtraX, FE_H(218.0f),
                    0.0f, 0.0f, 0.9140625f, 0.42578125f, col);
 
     limeDrawFONT(&GameFont, GameText(0xcb),
                  FE_X(240.0f), FE_Y(4.0f), 1, FE_WidthScale, rowcol);
 
+    sel = 0;
+    if (!PortHideControls) {
     sel = DrawButtonNew(&BUTTON_MINI_2, 0xf0, 0x12e, 1) ? 2 : 0;
 
     limeDrawFONT(&GameFont, GameText(7),
                  FE_X(240.0f), FE_Y(294.0f), 1, FE_WidthScale, rowcol);
+    }
 
     getMenuStartPos(Menu_Task_Leaderboards);    /* both results discarded */
     getMenuItemNum(Menu_Task_Leaderboards);
@@ -8263,6 +8269,17 @@ void FE_Task_LeaderboardsSK(void)
     prevEnabled = (currentLeaderBoardPage > 0) ? 1 : 2;
     prevShade   = (currentLeaderBoardPage > 0) ? 1.0f : 0.5f;
 
+    /* Port, not in the binary: as the achievements, with the on-screen
+     * controls off: no buttons, the pages with L1 / R1 (no further than the
+     * ends), out with circle, the hints in the bottom right corner. */
+    if (PortHideControls) {
+        char line[600];
+        int d = PortMovesTurn();
+
+        sel = d < 0 ? 1 : d > 0 ? 3 : PortPagesExit() ? 2 : 0;
+        PortPagesLine(line, sizeof line, 0);
+        PortNavDrawLine(line, 1);
+    } else {
     if (DrawButtonNew(&BUTTON_MINI_1, 0x52, 0x12e, (int)prevEnabled))
         sel = 1;
     if (DrawButtonNew(&BUTTON_MINI_2, 0xf0, 0x12e, 1))
@@ -8279,6 +8296,7 @@ void FE_Task_LeaderboardsSK(void)
     limeDrawFONT(&GameFont, GameText(0x12),
                  FE_WidthScale * 60.0f, FE_Y(294.0f),
                  0, FE_WidthScale, rowcol);
+    }
 
     if (nextEnabled == 1 && sel == 3) {
         currentLeaderboard = 0;
@@ -8342,17 +8360,23 @@ void FE_Task_Leaderboards(void)
     limeDrawSprite((TEXTURE *)*FEBackground, 0.0f, 0.0f,
                    (float)limeScreenWidth, (float)limeScreenHeight,
                    0.0f, 0.0234375f, 1.0f, 0.703125f, col);
+    /* Port, not in the binary: on wide screens the frame spans the whole
+     * width, as the achievements one does, so the scores (60 in from the
+     * right edge) are inside it. */
     limeDrawSprite((TEXTURE *)*FEBits3,
-                   FE_X(6.0f), FE_Y(66.0f), FE_W(468.0f), FE_H(218.0f),
+                   FE_X(6.0f), FE_Y(66.0f), FE_W(468.0f) + PortFEExtraX, FE_H(218.0f),
                    0.0f, 0.0f, 0.9140625f, 0.42578125f, col);
 
     limeDrawFONT(&GameFont, GameText(0xcb),
                  FE_X(240.0f), FE_Y(4.0f), 1, FE_WidthScale, rowcol);
 
+    sel = 0;
+    if (!PortHideControls) {
     sel = DrawButtonNew(&BUTTON_MINI_2, 0xf0, 0x12e, 1) ? 2 : 0;
 
     limeDrawFONT(&GameFont, GameText(7),
                  FE_X(240.0f), FE_Y(294.0f), 1, FE_WidthScale, rowcol);
+    }
 
     getMenuStartPos(Menu_Task_Leaderboards);
     getMenuItemNum(Menu_Task_Leaderboards);
@@ -8418,6 +8442,17 @@ void FE_Task_Leaderboards(void)
     prevEnabled = (currentLeaderBoardPage > 0) ? 1 : 2;
     prevShade   = (currentLeaderBoardPage > 0) ? 1.0f : 0.5f;
 
+    /* Port, not in the binary: as the achievements, with the on-screen
+     * controls off: no buttons, the pages with L1 / R1 (no further than the
+     * ends), out with circle, the hints in the bottom right corner. */
+    if (PortHideControls) {
+        char line[600];
+        int d = PortMovesTurn();
+
+        sel = d < 0 ? 1 : d > 0 ? 3 : PortPagesExit() ? 2 : 0;
+        PortPagesLine(line, sizeof line, 0);
+        PortNavDrawLine(line, 1);
+    } else {
     if (DrawButtonNew(&BUTTON_MINI_1, 0x52, 0x12e, (int)prevEnabled))
         sel = 1;
     if (DrawButtonNew(&BUTTON_MINI_2, 0xf0, 0x12e, 1))
@@ -8433,6 +8468,7 @@ void FE_Task_Leaderboards(void)
     rowcol[0] = rowcol[1] = rowcol[2] = prevShade;
     limeDrawFONT(&GameFont, GameText(0x12),
                  FE_X(60.0f), FE_Y(294.0f), 0, FE_WidthScale, rowcol);
+    }
 
     if (nextEnabled == 1 && sel == 3) {
         currentLeaderBoardPage++;

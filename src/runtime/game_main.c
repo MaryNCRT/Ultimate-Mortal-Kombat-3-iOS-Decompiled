@@ -100,6 +100,7 @@
 #include "debug_menu.h"
 #include "settings_menu.h"
 #include "profiles.h"
+void mayhem_set_dir(const char *ini_path);     /* gamecode_stubs.c */
 #include "mp_net.h"
 #include "online_ui.h"
 #include "pad_nav.h"
@@ -3060,6 +3061,7 @@ int main(int argc, char **argv)
     /* the player's profile: made, with this installation's id, the first
      * time (profiles.c, port) */
     prof_load(g_ini_path, Language[0] == 'E' && Language[1] == 'S' ? "JUGADOR" : "PLAYER");
+    mayhem_set_dir(g_ini_path);         /* the leaderboards' files (gamecode_stubs.c) */
     /* Before GameCodeInit: the front end and the fight engine have to share
      * one G, H, MKEventQueue and RoundParam -- the storage the fight's tables
      * point into -- before anything is written through them. */
