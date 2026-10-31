@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-10-30 (release 0.1.18 beta).
+**Last updated:** 2026-10-30 (after 0.1.18: accounts, MULTIPLAYER over LAN).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
@@ -135,6 +135,15 @@ press COMPILE.
 | Release packaging | `launcher/make_release.py`, `make_release_linux.py`, `launcher/stub/` |
 
 ## 7. Open work
+
+- **Accounts server.** It lives in Mary's private repository
+  (MaryNCRT-Universal-Game-Services, `umk3-accounts/`, a Cloudflare Worker;
+  its README has deploying and testing). Never put server code or secrets
+  here. The launcher's client is `launcher/app/lib/account.js`; its `SERVER`
+  is the deployed address.
+- **Leaderboards in the game:** the server has `/v1/scores` (accounts only);
+  the game's `EASOC_Mayhem*` stubs (gamecode_stubs.c) still answer as a
+  device with no network.
 
 The table in [PROGRESS.md → Open problems](PROGRESS.md#open-problems) is the
 list. Each entry says what is known and what is needed next (usually a log

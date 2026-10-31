@@ -8,6 +8,34 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Next (after 0.1.18) — accounts, MULTIPLAYER over LAN and Radmin VPN
+
+On `main`, not released yet. **Played by Mary** in her test folder: works.
+
+**Game**
+- **PLAY > MULTIPLAYER works again**, on the local network alone (no Epic
+  Online Services): the games with that screen open are listed by profile
+  name, and choosing one starts the same fight as ONLINE. It reaches
+  virtual LANs too (Radmin VPN, Hamachi, ZeroTier). ONLINE is unchanged.
+  Port: the original listed players over Bluetooth.
+
+**Launcher**
+- **ACCOUNT.** Username and password; email optional. Making an account
+  gives a recovery code, shown once (a new one each time it is used). The
+  log-in screen warns not to use a personal email or a password used
+  anywhere else. Without an account the player is a GUEST: the profile code
+  for online play, and no leaderboards.
+- **Progress in the cloud.** The profile (and its code) and the game's
+  progress (save, tower, survival, achievements, stats, treasures) come
+  down when PLAY is pressed and go up when the game closes; the controls and
+  settings stay on each PC. Changed on both sides: the player chooses which
+  stays, and the other is copied to `save\backup`.
+- The server (accounts, progress, leaderboards) is a Cloudflare Worker kept
+  in a private repository; only the client (`launcher/app/lib/account.js`)
+  is here. Passwords and recovery codes are stored as salted PBKDF2 hashes,
+  sealed with AES-GCM; emails are sealed too; each account reads only its
+  own data. Leaderboards in the game are not hooked up yet.
+
 ## 0.1.18 beta (2026-10-30) — Noob Saibot on the roster, EXPORT ALL textures, settings by category
 
 Published 2026-10-30 as the GitHub pre-release `v0.1.18-beta` (`UMK3-PC-0.1.18-beta.zip`, `UMK3-PC-0.1.18-beta-linux-x64.tar.gz`). **Played by Mary** in her test folder: works.

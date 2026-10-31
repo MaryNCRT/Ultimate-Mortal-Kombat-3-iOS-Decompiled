@@ -11,7 +11,7 @@
  */
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, nativeImage, net, Notification, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage, net, Notification, shell, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const ini = require('./lib/ini');
@@ -22,6 +22,8 @@ const prof = require('./lib/profiles');
 const mods = require('./lib/mods');
 const hub = require('./lib/hub');
 const replays = require('./lib/replays');
+const account = require('./lib/account');
+account.setVault(safeStorage);          /* the session token sealed by the system */
 
 let g_win = null;
 let g_root = null;
@@ -439,6 +441,22 @@ ipcMain.handle('monitors:list', () => new Promise(resolve => {
 /* The player's profile (lib/profiles.js): profiles.ini beside the game,
  * which the game's settings menu edits too. One per installation; its id is
  * given the first time and never changes. */
+/* ------------------------------------------------------------ account --
+ * ACCOUNT (lib/account.js): log in, and the progress kept in the cloud. */
+
+ipcMain.handle('account:status', () => account.status(g_root));
+ipcMain.handle('account:register', (_ev, f) => account.register(g_root, f || {}));
+ipcMain.handle('account:login', (_ev, f) => account.login(g_root, f || {}));
+ipcMain.handle('account:recover', (_ev, f) => account.recover(g_root, f || {}));
+ipcMain.handle('account:logout', () => account.logout(g_root));
+ipcMain.handle('account:me', () => account.me(g_root));
+ipcMain.handle('account:email', (_ev, e) => account.setEmail(g_root, e));
+ipcMain.handle('account:password', (_ev, p, n) => account.setPassword(g_root, p, n));
+ipcMain.handle('account:delete', (_ev, p) => account.remove(g_root, p));
+ipcMain.handle('account:sync', () => account.pull(g_root));
+ipcMain.handle('account:resolve', (_ev, which) => account.resolve(g_root, which));
+ipcMain.handle('account:scores', (_ev, board) => account.scores(g_root, board));
+
 ipcMain.handle('profile:load', (_ev, name) => prof.load(g_root, name));
 ipcMain.handle('profile:update', (_ev, fields) => prof.update(g_root, fields || {}));
 ipcMain.handle('profile:reset', (_ev, name) => prof.reset(g_root, name));
@@ -492,6 +510,9 @@ function stepAside(child) {
     child.once('error', () => clearTimeout(hide));
     child.once('exit', () => {
         clearTimeout(hide);
+        /* the progress up to the account (lib/account.js), not waited for */
+        account.push(g_root).then(r => g_win && g_win.webContents.send('account:synced', r),
+                                  () => {});
         if (!g_win)
             return;
         g_win.show();
@@ -503,6 +524,11 @@ function stepAside(child) {
 ipcMain.handle('play', async () => {
     if (!ini.gameReady(g_root, arch()))
         return { ok: false };
+    /* the account's progress down first; a conflict is the player's to
+     * settle, offline plays on */
+    const sync = await account.pull(g_root);
+    if (sync.error === 'conflict')
+        return { ok: false, conflict: true };
     if (ini.load(path.join(g_root, 'umk3.ini')).compileShaders)
         await compileShaders(path.join(g_root, ini.gameExe(arch())));
     stepAside(bld.play(g_root, ini.gameExe(arch())));

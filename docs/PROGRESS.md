@@ -95,6 +95,57 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+## After 0.1.18: MULTIPLAYER over LAN, accounts and cloud progress (2026-10-30, on main)
+
+Mary asked for accounts (username, password, optional email, a recovery
+code, hashed and encrypted secrets, progress synced across devices, the way
+back to leaderboards), a GUEST mode without leaderboards, a warning against
+personal emails and reused passwords, and PLAY > MULTIPLAYER working again
+as ONLINE does but over the LAN alone, Radmin VPN included. She played all
+of it in her test folder and confirmed.
+
+- **MULTIPLAYER** (Port, not in the binary). `FE_Task_Multiplayer`
+  (0x0001782c) is the iPhone's Bluetooth lobby; its peer list came from
+  `getNumberOfPeers` / `getPeerNumber` / `connectToPeer`
+  (limeMPGameSpecific.c, 0x000afbcc / 0x000afac4 / 0x000afbfc), which
+  returned nothing. The PLAY menu now calls `mpnet_set_lan_only(1)` before
+  `startMP` for MULTIPLAYER and `0` for ONLINE. In LAN-only mode
+  `mpnet_session_create` (mp_net.c) skips EOS; each game broadcasts a
+  `K_HELLO` with its profile every second and lists who it hears (dropped
+  after 3.5 s of silence); `connectToPeer` asks that game by its code with
+  the usual `K_JOIN`, also sent straight to the address it was heard from.
+  From there it is the online fight (GameMode 1, rollback). Every broadcast
+  (HELLO and JOIN, ONLINE's too) now goes to 255.255.255.255 **and** to each
+  adapter's own broadcast address (`SIO_GET_INTERFACE_LIST` on Windows,
+  `getifaddrs` on Linux): Windows sends the limited broadcast down one
+  adapter only, which missed Radmin VPN's 26.0.0.0/8.
+- **Accounts** (launcher only; the game is unchanged). `lib/account.js`
+  talks to a Cloudflare Worker + D1 database at
+  `https://umk3-accounts.umk3-accounts.workers.dev`, whose code is in
+  Mary's private repository (MaryNCRT-Universal-Game-Services,
+  `umk3-accounts/`; she asked for the server to stay out of this public
+  one). Server side: PBKDF2-SHA256 (100,000 rounds, 16-byte salt) sealed with
+  AES-GCM under a Worker secret for passwords and recovery codes; AES-GCM
+  for emails; SHA-256 of session tokens; a 15-minute lock after ten wrong
+  passwords; limits per IP; every account-bound route takes the account
+  from the session, never from the request. Client side: `account.ini`
+  (git-ignored, never packed) keeps the user, the session token sealed by
+  Electron's safeStorage, and the last synced version and hash; no
+  password. Synced: the `profile=` line of profiles.ini and the save files
+  `savedata`, `achievementsdata`, `statsdata`, `survival`, `towerdata`,
+  `unclaimedtreasure*`. `pull` before PLAY, `push` when the game exits;
+  conflicts (both changed) are settled on the ACCOUNT page, the replaced
+  side copied to `save/backup/<date>/`.
+- **Checked:** the Worker's own tests (every route, against node:sqlite
+  standing in for D1); the launcher client against that server on one
+  machine with two simulated PCs (upload, download with the profile id,
+  conflict, resolution, guest refused by the leaderboards, no password in
+  account.ini); the deployed server with a throwaway account (made, email
+  sealed and read back, progress uploaded, deleted). Mary: account, sync
+  and MULTIPLAYER in her test folder.
+- **Not done:** the game's own leaderboards (`EASOC_Mayhem*` in
+  gamecode_stubs.c) are not wired to `/v1/scores` yet.
+
 ## 0.1.18: Noob Saibot on the roster, EXPORT ALL, settings by category (2026-10-30, released in 0.1.18)
 
 Mary asked for five things; all played in her test folder and confirmed.

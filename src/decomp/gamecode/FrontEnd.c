@@ -10409,6 +10409,7 @@ void FE_Task_Play(void)
             PortPractice = 0;
             GameMode = PLAY_MODE_ARCADE;
             PushFETaskDeferred(PORT_TASK_ONLINE);
+            mpnet_set_lan_only(0);      /* port: EOS and the local network */
             startMP();
         } else if (sel == 1) {
             GameMode = PLAY_MODE_ARCADE;
@@ -10429,6 +10430,8 @@ void FE_Task_Play(void)
             PushFETaskDeferred(PLAY_TASK_LOBBY);
             EASDK_LogEvent(0xc35e, 15, "PLAY", 15, "MULTIPLAYER");
             resetPeerNames();
+            /* Port, not in the binary: the local network alone (mp_net.c) */
+            mpnet_set_lan_only(1);
             startMP();                  /* the radio is up before the screen */
         } else if (sel == 3) {
             if (SurvivalStage != 0) {
