@@ -1929,11 +1929,15 @@ static void clear_frame(int ww, int wh, int vx, int vy, int vw, int vh)
     glViewport(vx, vy, vw, vh);
 }
 
+/* the run had the debug menu's help (dbg_taint_watch below) */
+int PortDbgTainted;
+
 static void fight_key(int k)
 {
     {
         if (!dbg_round_live())
             return;
+        PortDbgTainted = 1;
         if (k >= 2 && WinsNeeded > 0) {                 /* F11 / F12 */
             RoundWins[k - 2] = WinsNeeded - 1;
             /* ...and the engine's own tally, H[0] / H[1], which
@@ -2397,8 +2401,34 @@ static double fight_speed(void)
     return pct / 100.0;
 }
 
+/* Port: a Survival or Shao Kahn Karnage run that had the debug menu's help
+ * -- a pick from it other than SAVE STATE, a direct fight key, INFINITE
+ * HEALTH, FREEZE CLOCK or another FIGHT SPEED during a fight -- is not
+ * posted to the leaderboards (gamecode_stubs.c). Having the menu, or its
+ * display options, on is fine. It is cleared when the mode changes and when
+ * a run starts: each Karnage fight, and Survival's first. */
+
+static void dbg_taint_watch(void)
+{
+    extern int PortDbgClock, PortDbgHealth;
+    extern long SurvivalStage;
+    static long mode = -1;
+    static int task = -1;
+
+    if (GameMode != mode
+        || (CurrentTask == 6 && task != 6
+            && (GameMode == 3 || (GameMode == 4 && SurvivalStage == 0))))
+        PortDbgTainted = 0;
+    if (CurrentTask == 6 && (PortDbgHealth || PortDbgClock || fight_speed() != 1.0))
+        PortDbgTainted = 1;
+    mode = GameMode;
+    task = CurrentTask;
+}
+
 static void debug_request(const struct dbg_request *rq)
 {
+    if (rq->what != DBG_SAVE_STATE)
+        PortDbgTainted = 1;
     switch (rq->what) {
     case DBG_SAVE_STATE:
         state_save(rq->a);
@@ -3428,6 +3458,7 @@ int main(int argc, char **argv)
 
             clear_frame(ww, wh, vx, vy, vw, vh);
             hb_update();
+            dbg_taint_watch();
             palette_sync();
             lime_menu_advance_clock(1.0 / 60.0);
             keyboard_buttons();

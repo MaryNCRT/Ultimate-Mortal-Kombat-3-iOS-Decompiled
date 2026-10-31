@@ -22,13 +22,15 @@ import { stagePictures } from './mods/stagepics.js';
 /* ------------------------------------------------------------ tables -- */
 
 /* the menu, in order; QUIT closes */
-export const SECTIONS = ['build', 'play', 'video', 'controls', 'profile', 'account', 'mods', 'replays', 'quit'];
+export const SECTIONS = ['build', 'play', 'video', 'controls', 'profile', 'mods', 'replays', 'quit'];
 /* each section's name in the menu and its full-screen header */
-export const TITLE = { build: 'mBuild', play: 'mPlay', video: 'mVideo', controls: 'mControls', profile: 'mProfile', account: 'mAccount', mods: 'mMods', replays: 'mReplays', quit: 'mQuit' };
-export const DESC = { build: 'dBuild', video: 'dVideo', controls: 'dControls', profile: 'dProfile', account: 'dAccount', play: 'dPlay', mods: 'dMods', replays: 'dReplays', quit: 'dQuit' };
+export const TITLE = { build: 'mBuild', play: 'mPlay', video: 'mVideo', controls: 'mControls', profile: 'mProfile', mods: 'mMods', replays: 'mReplays', quit: 'mQuit' };
+export const DESC = { build: 'dBuild', video: 'dVideo', controls: 'dControls', profile: 'dProfile', play: 'dPlay', mods: 'dMods', replays: 'dReplays', quit: 'dQuit' };
 /* the pages of GRAPHICS and CONTROLS, in their second row */
 export const GFX_TABS = [['video', 'gVideo'], ['gfx', 'gGfx'], ['tex', 'gTex'], ['ui', 'gUi']];
 export const CTL_TABS = [['p', 'tabKb'], ['pad', 'tabPad'], ['dbg', 'tabDbg']];
+/* PROFILE's pages: the profile, the account, the friends */
+export const PROF_TABS = [['me', 'tabProfile'], ['account', 'tabAccount'], ['friends', 'tabFriends']];
 
 /* index = res in the launcher (lib/ini.js, the same list): smallest to largest */
 export const RES = [
@@ -112,9 +114,9 @@ export const app = $state({
      * all (none: the menu offers COMPILE alone), both (PLAY picks) */
     ready: false, builtAt: null, locked: false, both: false, version: '',
     sec: 'build',
-    accConflict: false,                 /* SecAccount: THIS COMPUTER or THE CLOUD */
+    accConflict: false,                 /* ProfAccount: THIS COMPUTER or THE CLOUD */
     full: false,                        /* a section fills the window */
-    gfxTab: 'video', ctlTab: 'p',
+    gfxTab: 'video', ctlTab: 'p', profTab: 'me',
     pl: 1,                              /* the player KEYBOARD and GAMEPAD edit */
     waitingKey: null,                   /* the action waiting for its key */
     usingPad: false,                    /* the last input: the pad's pictures show */
@@ -207,14 +209,16 @@ export function stepSection(d) {
 
 /* left / right / the second row's arrows: the section's next page */
 export function stepPage(d) {
-    const tabs = app.sec === 'video' ? GFX_TABS : app.sec === 'controls' ? CTL_TABS : app.sec === 'mods' ? MODS_TABS : null;
+    const tabs = app.sec === 'video' ? GFX_TABS : app.sec === 'controls' ? CTL_TABS : app.sec === 'mods' ? MODS_TABS
+               : app.sec === 'profile' ? PROF_TABS : null;
     if (!tabs) return;
-    const cur = app.sec === 'video' ? app.gfxTab : app.sec === 'mods' ? ms.tab : app.ctlTab;
+    const cur = app.sec === 'video' ? app.gfxTab : app.sec === 'mods' ? ms.tab : app.sec === 'profile' ? app.profTab : app.ctlTab;
     const i = Math.max(0, tabs.findIndex(t => t[0] === cur));
     const next = tabs[(i + d + tabs.length) % tabs.length][0];
     selectBlip();
     if (app.sec === 'video') app.gfxTab = next;
     else if (app.sec === 'mods') ms.tab = next;
+    else if (app.sec === 'profile') app.profTab = next;
     else setCtlTab(next);
 }
 
@@ -528,7 +532,8 @@ export async function doPlay() {
     const r = await api.play();
     if (r.conflict) {                   /* lib/account.js: the player chooses */
         app.accConflict = true;
-        setSection('account');
+        app.profTab = 'account';
+        setSection('profile');
         return;
     }
     if (!r.ok) {
@@ -705,6 +710,8 @@ export async function init() {
         paintState();
         app.gameClosed++;
     });
+    /* after the game: the account may have put the profile's name back */
+    api.account.onSynced(() => refreshProfile());
 
     app.logo = await api.logo();
     app.hero = await api.hero();
@@ -719,6 +726,8 @@ export async function init() {
         setCtlTab(sub);
     else if (sub && GFX_TABS.some(t => t[0] === sub))
         app.gfxTab = sub;
+    else if (sub && PROF_TABS.some(t => t[0] === sub))
+        app.profTab = sub;
 
     /* an update just installed is compiled first; else ask GitHub, without
      * holding up the window */

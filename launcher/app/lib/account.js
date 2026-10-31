@@ -4,7 +4,8 @@
  * client is public. It speaks JSON over HTTPS: /v1/register, /v1/login,
  * /v1/recover, /v1/logout, /v1/me, /v1/password, /v1/email, /v1/progress
  * (GET, and PUT with the version it builds on: 409 when the cloud moved),
- * /v1/scores (the game's leaderboards: boards() and flushScores() below).
+ * /v1/scores (the game's leaderboards: boards() and flushScores() below),
+ * /v1/profile, /v1/users and /v1/friends (claim() and the friends below).
  *
  * Without an account the player is a GUEST: the profile code alone, as
  * before, for playing online, and no leaderboards.
@@ -36,6 +37,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const prof = require('./profiles');
 
 /* the public server, set once it is deployed (server/accounts/README.md) */
 const SERVER = 'https://umk3-accounts.umk3-accounts.workers.dev';
@@ -253,7 +255,7 @@ async function remove(root, password) {
 /* first: just logged in -- an empty cloud takes this computer's progress,
  * a full one is taken unless this computer has progress of its own (then
  * the player chooses) */
-async function pull(root, first = false) {
+async function pullProgress(root, first = false) {
     const { s, token } = session(root);
     if (!token) return { ok: true, guest: true };
     const cloud = await api(root, 'GET', '/v1/progress', null, token);
@@ -294,6 +296,13 @@ async function push(root, force = false) {
     st.hash = h;
     writeState(root, st);
     return { ok: true, took: 'local' };
+}
+
+/* the progress, then the profile's code and name on the account */
+async function pull(root, first = false) {
+    const r = await pullProgress(root, first);
+    if (r.ok && !r.guest) await claim(root).catch(() => {});
+    return r;
 }
 
 /* a conflict settled: 'local' uploads this computer's, 'cloud' takes the
@@ -350,11 +359,25 @@ async function boards(root) {
         for (const row of r.rows || [])
             lines.push(`${String(row.name || row.username).replace(/[|\r\n]/g, '')}|${Number(row.score) || 0}`);
     }
-    fs.writeFileSync(file, lines.join('\n') + '\n', 'utf8');
+    /* whole or not at all: the game may be reading it */
+    fs.writeFileSync(file + '.tmp', lines.join('\n') + '\n', 'utf8');
+    try {
+        fs.renameSync(file + '.tmp', file);
+    } catch {
+        fs.rmSync(file + '.tmp', { force: true });
+    }
     return { ok: true };
 }
 
-/* after the game: its scores up. What did not go stays for next time. */
+/* while the game runs: its new scores up and everyone's boards down, so a
+ * run shows on the other players' boards as soon as it ends */
+async function live(root) {
+    await flushScores(root);
+    return boards(root);
+}
+
+/* the game's scores up (live() while it runs, and once more after). What
+ * did not go stays for next time. */
 async function flushScores(root) {
     const file = path.join(root, 'scores.txt');
     let text;
@@ -377,6 +400,59 @@ async function flushScores(root) {
     return { ok: !left.length, sent: best.size - left.length };
 }
 
+/* ------------------------------------------------- profile and friends
+ * The profile's code and name belong to the account (PUT /v1/profile). The
+ * code is stored the first time and every computer takes it back; one that
+ * is another account's already (two accounts on one computer) is replaced
+ * by a new one. The name is one per account: a name another player has is
+ * not stored, and one changed in the game goes back to the stored one. */
+async function claim(root, name) {
+    const { token } = session(root);
+    if (!token) return { ok: true, guest: true };
+    const p = prof.load(root), before = p.id + '|' + p.name;
+    const want = name === undefined ? p.name : name;
+    let r = await api(root, 'PUT', '/v1/profile', { code: p.id, name: want }, token);
+    if (r.error === 'code_taken') {
+        p.id = prof.newId();
+        r = await api(root, 'PUT', '/v1/profile', { code: p.id, name: want }, token);
+    }
+    if (!r.ok) return r;
+    p.id = r.code;
+    if (name === undefined && r.taken && r.name) p.name = r.name;
+    if (p.id + '|' + p.name !== before) {
+        prof.save(root, p);
+        await push(root);
+    }
+    return { ok: true, code: r.code, name: r.name, taken: r.taken };
+}
+
+/* the profile's name changed in the launcher: kept only when free */
+async function rename(root, name) {
+    const r = await claim(root, prof.cleanName(name).trim());
+    if (r.ok && r.taken) return { ok: false, error: 'name_taken', name: r.name };
+    return r;
+}
+
+function authedApi(root, method, p, body) {
+    const { token } = session(root);
+    if (!token) return Promise.resolve({ ok: false, error: 'not_logged_in' });
+    return api(root, method, p, body, token);
+}
+
+async function friends(root) {
+    let r = await authedApi(root, 'GET', '/v1/friends');
+    if (r.ok && !r.code) {
+        await claim(root);
+        r = await authedApi(root, 'GET', '/v1/friends');
+    }
+    return r;
+}
+
+const findPlayers = (root, q) =>
+    authedApi(root, 'GET', '/v1/users?q=' + encodeURIComponent(String(q || '').trim().slice(0, 24)));
+const addFriend = (root, code) => authedApi(root, 'POST', '/v1/friends', { code });
+const removeFriend = (root, code) => authedApi(root, 'DELETE', '/v1/friends', { code });
+
 module.exports = { setVault, status, register, login, recover, logout, me, setEmail, setPassword,
-                   remove, pull, push, resolve, scores, postScore, boards, flushScores, saveDir,
-                   PROGRESS, BOARDS };
+                   remove, pull, push, resolve, scores, postScore, boards, flushScores, live, saveDir,
+                   claim, rename, friends, findPlayers, addFriend, removeFriend, PROGRESS, BOARDS };
