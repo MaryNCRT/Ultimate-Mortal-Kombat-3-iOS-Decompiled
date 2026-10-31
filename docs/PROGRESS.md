@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-10-31 (friends, unique profile names, live leaderboards, on main for 0.1.21) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-10-31 (release 0.1.21 beta: friends, unique profile names, live leaderboards, published as the pre-release `v0.1.21-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -95,7 +95,7 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
-## Friends, live leaderboards, no help from the debug menu (2026-10-31, on main, not released)
+## 0.1.21: friends, live leaderboards, no help from the debug menu (2026-10-31, released in 0.1.21)
 
 Mary asked for friends (found by profile name or by a code tied to the
 account), unique profile names, the scores sent as soon as a run ends

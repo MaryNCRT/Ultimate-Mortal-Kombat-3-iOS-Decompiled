@@ -8,9 +8,9 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased (on main, for 0.1.21) — friends, live leaderboards
+## 0.1.21 beta (2026-10-31) — friends, live leaderboards
 
-Not published yet. **Played by Mary** in her test folder: works.
+Published 2026-10-31 as the GitHub pre-release `v0.1.21-beta` (`UMK3-PC-0.1.21-beta.zip`, `UMK3-PC-0.1.21-beta-linux-x64.tar.gz`). **Played by Mary** in her test folder: works.
 
 **Launcher**
 - **FRIENDS**: find a player by the profile name (not the login) or by the
