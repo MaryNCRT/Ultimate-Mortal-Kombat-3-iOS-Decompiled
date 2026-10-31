@@ -257,12 +257,47 @@ static void send_hash(void)
 /* ------------------------------------------------------------ the frames */
 
 /* One run of the game's frame `f`. Returns 1 if the fight carried on. */
+/* The sounds each frame played (rb_sound_ok). Run again after a rollback, a
+ * frame plays the ones that are new -- the other side's attack voice, when
+ * its press came late, was only ever in frames run again, and was never
+ * heard -- and not twice the ones it played. A hold's frame plays nothing:
+ * it runs again for real. */
+#define RB_SND 12
+static long g_snd[RB_RING][RB_SND];
+static uint32_t g_snd_frame[RB_RING];
+static int g_snd_n[RB_RING], g_in_run, g_holding;
+static uint32_t g_run_frame;
+
+int rb_sound_ok(long h)
+{
+    uint32_t s = g_run_frame % RB_RING;
+    int i;
+
+    if (!g_in_run)
+        return !g_quiet;
+    if (g_holding)
+        return 0;
+    if (g_snd_frame[s] != g_run_frame) {
+        g_snd_frame[s] = g_run_frame;
+        g_snd_n[s] = 0;
+    }
+    for (i = 0; i < g_snd_n[s]; i++)
+        if (g_snd[s][i] == h)
+            return !g_quiet;            /* played the first time */
+    if (g_snd_n[s] < RB_SND)
+        g_snd[s][g_snd_n[s]++] = h;
+    return 1;
+}
+
 static int run(void (*frame)(void), uint32_t f)
 {
     g_cur[g_me] = g_in[g_me][f % RB_RING];
     g_cur[g_me ^ 1] = remote_input(f);
     g_used[f % RB_RING] = g_cur[g_me ^ 1];
+    g_run_frame = f;
+    g_in_run = 1;
     frame();
+    g_in_run = 0;
     g_hash[f % RB_RING] = rb_game_hash();
     g_hash_frame[f % RB_RING] = f;
     return CurrentTask == RB_FIGHT_TASK;
@@ -340,9 +375,9 @@ static void hold(void (*frame)(void))
 {
     g_holds++;
     save_slot(RB_SLOTS - 1);
-    g_quiet = 1;
+    g_quiet = g_holding = 1;
     run(frame, g_frame);
-    g_quiet = 0;
+    g_quiet = g_holding = 0;
     st_rb_load(RB_SLOTS - 1);
 }
 

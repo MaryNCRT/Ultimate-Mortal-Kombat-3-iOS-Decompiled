@@ -462,6 +462,69 @@ ipcMain.handle('account:find', (_ev, q) => account.findPlayers(g_root, q));
 ipcMain.handle('account:addFriend', (_ev, code) => account.addFriend(g_root, String(code || '')));
 ipcMain.handle('account:removeFriend', (_ev, code) => account.removeFriend(g_root, String(code || '')));
 
+/* The recovery code, in a window of its own: the stored one, or -- with the
+ * password -- a new one. t: the page's texts {title, note, close}. */
+ipcMain.handle('account:showRecovery', async (_ev, t, password) => {
+    const r = password ? await account.newRecovery(g_root, password) : await account.recovery(g_root);
+    if (!r.ok) return r;
+    if (!r.recovery) return { ok: true, none: true };
+    recoveryWindow(r.recovery, t || {});
+    return { ok: true };
+});
+
+function recoveryWindow(code, t) {
+    const esc = s => String(s || '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
+    const html = '<!doctype html><html><head><meta charset="utf-8">'
+        + '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; script-src \'unsafe-inline\'">'
+        + '<title>' + esc(t.title) + '</title><style>'
+        + 'body{margin:0;background:#050505;color:#dfe5ff;font:15px/1.4 Arial,sans-serif;display:flex;flex-direction:column;'
+        + 'align-items:center;justify-content:center;height:100vh;padding:0 24px;box-sizing:border-box;text-align:center;user-select:none}'
+        + 'h1{font-size:17px;letter-spacing:.06em;margin:0 0 14px}'
+        + '.c{font:bold 26px Consolas,monospace;letter-spacing:.12em;color:#7fd4ff;user-select:all;margin:0 0 14px}'
+        + 'p{margin:0 0 18px;font-size:13px;color:#ffb347}'
+        + 'button{background:#1a2340;color:#fff;border:1px solid #7fd4ff;padding:8px 22px;font:bold 14px Arial;cursor:pointer}'
+        + '</style></head><body><h1>' + esc(t.title) + '</h1><div class="c">' + esc(code) + '</div>'
+        + '<p>' + esc(t.note) + '</p><button onclick="window.close()">' + esc(t.close) + '</button></body></html>';
+    const w = new BrowserWindow({
+        width: 560, height: 300, resizable: false, minimizable: false, maximizable: false,
+        parent: g_win || undefined, backgroundColor: '#050505', autoHideMenuBar: true,
+        icon: path.join(__dirname, 'build', 'icon.ico'),
+        webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+    });
+    w.setMenu(null);
+    w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    w.webContents.on('will-navigate', e => e.preventDefault());
+    w.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+}
+
+/* Friend requests: asked for every minute while logged in. A new one gets a
+ * Windows notification (a click opens PROFILE > FRIENDS); the count goes to
+ * the page, the red dot on PROFILE and FRIENDS. */
+const g_frSeen = new Set();
+async function pollFriends() {
+    if (!g_root || !g_win || !account.status(g_root).user) return;
+    const r = await account.friends(g_root).catch(() => null);
+    if (!r || !r.ok || !g_win) return;
+    g_win.webContents.send('account:requests', r.incoming.length);
+    const fresh = r.incoming.filter(p => !g_frSeen.has(p.code));
+    r.incoming.forEach(p => g_frSeen.add(p.code));
+    if (!fresh.length || !Notification.isSupported())
+        return;
+    const n = new Notification({
+        title: 'UMK3 — Friend request',
+        body: (fresh.length === 1 ? (fresh[0].name || fresh[0].code) + ' wants to be your friend.'
+                                  : fresh.length + ' new friend requests.') + ' Open PROFILE > FRIENDS.',
+    });
+    n.on('click', () => {
+        if (!g_win) return;
+        g_win.show();
+        g_win.focus();
+        g_win.webContents.send('account:openFriends');
+    });
+    n.show();
+}
+ipcMain.handle('account:pollFriends', () => pollFriends());
+
 ipcMain.handle('profile:load', (_ev, name) => prof.load(g_root, name));
 ipcMain.handle('profile:update', (_ev, fields) => prof.update(g_root, fields || {}));
 ipcMain.handle('profile:reset', (_ev, name) => prof.reset(g_root, name));
@@ -813,6 +876,8 @@ if (!gotLock) {
         g_cfg = ini.load(path.join(g_root, 'umk3.ini'));
         dbg('ready root=' + g_root);
         createWindow();
+        setTimeout(pollFriends, 5000);
+        setInterval(pollFriends, 60000);
         app.on('activate', () => {
             if (BrowserWindow.getAllWindows().length === 0)
                 createWindow();

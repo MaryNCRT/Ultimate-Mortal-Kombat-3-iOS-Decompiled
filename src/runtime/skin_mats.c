@@ -35,6 +35,7 @@
 #include "platform/gl.h"
 #include "../decomp/lime/lime.h"
 #include "skin_mats.h"
+#include "rollback.h"
 
 #ifndef GL_REPEAT
 #define GL_REPEAT 0x2901
@@ -288,25 +289,49 @@ int port_skin_mats_draw(const unsigned short *indices, long nfaces,
  * animations turn but never change: with the model's in their place the
  * game's moves play on its lengths. Read when the fighter's bones are
  * (LoadAnimatedCharacter), the scale given to the palette's root
- * (CreateMatrixPaletteForGeneratingMesh) and forgotten with the bones. */
+ * (CreateMatrixPaletteForGeneratingMesh) and forgotten with the bones.
+ * Not in an online fight: the lengths move the fighter, and the other
+ * machine, without the mod, ran another fight (78 desyncs a fight, Mary's
+ * log of 2026-10-30; none without it). The model itself still shows. A
+ * fighter loaded before (the menu's) gets the game's lengths back when the
+ * fight starts (port_skin_bones_online, from mods_online) -- the game's
+ * offsets are kept for that. */
 #define BONES_MAX 8
-static struct { const void *bones; float rooty; } g_rooty[BONES_MAX];
+static struct { const void *bones; float rooty; float *game; int n; } g_rooty[BONES_MAX];
 
 void port_skin_bones_loaded(void *bones, const char *skinfile)
 {
     char rel[160], path[1024], line[160];
     BONESINFO *info = (BONESINFO *)bones;
     FILE *f;
-    int n = 0, i;
-    float rooty = 1.0f;
+    int n = 0, i, b, slot = -1;
+    float rooty = 1.0f, *game = NULL;
 
     if (!info || !skinfile)
         return;
     snprintf(rel, sizeof rel, "%s.bones", skinfile);
-    if (!mods_find(rel, path, sizeof path) || !(f = fopen(path, "r")))
+    if (!mods_find(rel, path, sizeof path))
         return;
+    if (rb_active()) {
+        printf("skin_mats: %s left out, an online fight\n", rel);
+        return;
+    }
+    if (!(f = fopen(path, "r")))
+        return;
+    for (i = 0; i < BONES_MAX && g_rooty[i].bones; i++)
+        ;
+    if (i < BONES_MAX && (game = malloc(sizeof(float) * 3 * (size_t)info->numBones)) != NULL) {
+        for (b = 0; b < info->numBones; b++) {
+            game[b * 3] = info->bones[b].x;
+            game[b * 3 + 1] = info->bones[b].y;
+            game[b * 3 + 2] = info->bones[b].z;
+        }
+        g_rooty[i].bones = bones;
+        g_rooty[i].game = game;
+        g_rooty[i].n = (int)info->numBones;
+        slot = i;
+    }
     while (fgets(line, sizeof line, f)) {
-        int b;
         float x, y, z;
         if (line[0] == '#')
             continue;
@@ -322,13 +347,8 @@ void port_skin_bones_loaded(void *bones, const char *skinfile)
         }
     }
     fclose(f);
-    if (rooty != 1.0f)
-        for (i = 0; i < BONES_MAX; i++)
-            if (!g_rooty[i].bones) {
-                g_rooty[i].bones = bones;
-                g_rooty[i].rooty = rooty;
-                break;
-            }
+    if (slot >= 0)
+        g_rooty[slot].rooty = rooty;
     printf("skin_mats: %s, %d bone offsets, root height x%.3f\n", rel, n,
            (double)rooty);
 }
@@ -346,6 +366,32 @@ void port_skin_bones_forget(const void *bones)
 {
     int i;
     for (i = 0; i < BONES_MAX; i++)
-        if (g_rooty[i].bones == bones)
+        if (g_rooty[i].bones == bones) {
+            free(g_rooty[i].game);
+            g_rooty[i].game = NULL;
             g_rooty[i].bones = NULL;
+        }
+}
+
+/* An online fight starts: every fighter loaded with a model's lengths gets
+ * the game's back, and the root its height. A later load reads them again. */
+void port_skin_bones_online(void)
+{
+    int i, b, n = 0;
+    for (i = 0; i < BONES_MAX; i++) {
+        BONESINFO *info = (BONESINFO *)g_rooty[i].bones;
+        if (!info)
+            continue;
+        for (b = 0; b < g_rooty[i].n && b < info->numBones; b++) {
+            info->bones[b].x = g_rooty[i].game[b * 3];
+            info->bones[b].y = g_rooty[i].game[b * 3 + 1];
+            info->bones[b].z = g_rooty[i].game[b * 3 + 2];
+        }
+        free(g_rooty[i].game);
+        g_rooty[i].game = NULL;
+        g_rooty[i].bones = NULL;
+        n++;
+    }
+    if (n)
+        printf("skin_mats: online, the game's bone lengths back on %d fighters\n", n);
 }

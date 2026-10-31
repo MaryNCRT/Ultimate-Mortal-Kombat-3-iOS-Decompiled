@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-10-31 (release 0.1.21 beta: friends, unique profile names, live leaderboards, published as the pre-release `v0.1.21-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-10-31 (friend requests, online sounds and desyncs fixed, on main for 0.1.22) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -94,6 +94,39 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## Friend requests, the late press's sounds, mods' bones online (2026-10-31, on main, not released)
+
+Mary: a friend's name was not found; she wanted notices of requests,
+REMOVE EMAIL and the recovery code in a window; Nightwolf "mute, only air"
+when he hits; the guest's screen black after an online fight.
+
+- **Not found:** the friend's account had no `pcode` / `pname` (his
+  launcher predates 0.1.21, `claim()` never ran). The Worker now takes both
+  from every `PUT /v1/progress` (`adoptProfile`), and migrates the database
+  itself on the first request after a deploy (`migrate()`: columns,
+  tables, then the profile of every account that lacks one). Private repo,
+  commit a536d7c; no migration is run by hand any more.
+- **Recovery code:** kept sealed (`accounts.recovery_seal`), `GET/POST
+  /v1/recovery`; the launcher shows it in its own window (main.js,
+  `recoveryWindow`). Accounts older than this have none: a new one for the
+  password.
+- **Requests:** `pollFriends` (main.js) every minute; `account:requests`
+  sets `app.frIn` (the red dot, MainMenu and SubNav `dot`).
+- **"Nightwolf mute":** an online fight, Nightwolf the other player's. His
+  attack voice (voice group 2, sounds 119/120, Dfatt1/2) was asked for 32
+  times and played 0: the frame that brought his late press only ever ran
+  inside a rollback, and `limePlaySound` skipped every sound while
+  `rb_quiet`. `rb_sound_ok` (rollback.c) keeps the sounds each frame played;
+  a frame run again plays the new ones. His character sound 1 (`st_indian`
+  row 1) is "" in the binary too (0x17a7cc), left as it is.
+- **Desyncs:** Mary's 2026-10-30 fight: 78 desyncs; the day before, none.
+  Her Sonya mod has a `.bones` (KEEP PROPORTIONS). `mods_online` already kept
+  `.bones` out, but the menu's Sonya was loaded with it and the fight reused
+  her. `port_skin_bones_online` (skin_mats.c, from `mods_online(1)`) puts the
+  game's offsets back and drops the root height. The guest's black screen
+  is likely this (the two machines ended different fights); not confirmed
+  online yet.
 
 ## 0.1.21: friends, live leaderboards, no help from the debug menu (2026-10-31, released in 0.1.21)
 

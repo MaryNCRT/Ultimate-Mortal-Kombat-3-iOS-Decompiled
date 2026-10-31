@@ -3,9 +3,11 @@
      * /v1/friends). A player is found by the profile's name -- not the
      * login's -- or by the profile code, which belongs to the account. Adding
      * sends a request; it is a friendship once the other one accepts (or
-     * asks back). Guests have none. */
+     * asks back). Guests have none. Requests waiting show as a red dot on
+     * PROFILE and FRIENDS, and new ones as a Windows notification (main.js,
+     * pollFriends). */
     import { onMount } from 'svelte';
-    import { tx } from '#lib/app.svelte.js';
+    import { app, tx } from '#lib/app.svelte.js';
     import { api } from '#lib/platform.js';
     import { selectBlip, hoverBlip } from '#lib/sound.js';
 
@@ -25,7 +27,7 @@
 
     async function refresh() {
         const r = await api.account.friends();
-        if (r.ok) fr = r;
+        if (r.ok) { fr = r; app.frIn = r.incoming.length; }
         else msg = err(r.error);
     }
 

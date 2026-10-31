@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-10-31 (release 0.1.21 beta: friends, unique profile names, live leaderboards, published as the pre-release `v0.1.21-beta`).
+**Last updated:** 2026-10-31 (friend requests, online sounds and desyncs fixed, on main for 0.1.22).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
@@ -146,6 +146,9 @@ press COMPILE.
   posts the game's `scores.txt` as it grows (gamecode_stubs.c,
   `lib/account.js`). A run with the debug menu's help is not posted
   (`PortDbgTainted`, game_main.c).
+- **Mary's open list (2026-10-31)**: the guest should see the host's stage
+  select after a fight (black screen now), FPS drops, inviting a friend to
+  an online match without a code, faster launcher and game start.
 - **Friends and the profile on the account**: `claim()` in `lib/account.js`
   ties the profile code and name to the account (names unique); FRIENDS is
   a page of PROFILE (`ProfFriends.svelte`). A server change that needs a new

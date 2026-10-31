@@ -30,5 +30,7 @@ int  port_skin_mats_draw(const unsigned short *indices, long nfaces,
 void  port_skin_bones_loaded(void *bones, const char *skinfile);
 float port_skin_root_y(const void *bones);
 void  port_skin_bones_forget(const void *bones);
+/* an online fight: the game's lengths back on every fighter loaded */
+void  port_skin_bones_online(void);
 
 #endif

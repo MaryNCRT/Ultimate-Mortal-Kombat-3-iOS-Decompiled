@@ -16,6 +16,10 @@
 int  rb_active(void);
 /* 1 while a frame is run again after a rollback (or a stall): no sound. */
 int  rb_quiet(void);
+/* limePlaySound's sound h: 1 to play it. A frame run again plays the sounds
+ * it did not play the first time -- the other side's late press -- and not
+ * the ones it did. */
+int  rb_sound_ok(long h);
 /* the rollback's numbers on one line, 0 when no rollback fight is on */
 int  rb_stats(char *out, int n);
 /* 1 while a frame is run again after a rollback: nothing drawn. */

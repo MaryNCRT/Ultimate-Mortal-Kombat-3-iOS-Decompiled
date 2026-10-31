@@ -37,7 +37,7 @@
         <i class="orb"></i>
     </div>
     {#each shown as s, i (s)}
-        <button class="mi" class:active={app.sec === s} class:news={s === 'build' && app.upd.news}
+        <button class="mi" class:active={app.sec === s} class:news={(s === 'build' && app.upd.news) || (s === 'profile' && app.frIn > 0)}
                 bind:this={lines[i]} onpointerenter={hoverBlip}
                 onclick={e => pick(s, e.currentTarget)}>
             <i class="orb"></i><span>{tx(TITLE[s])}</span>
