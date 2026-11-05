@@ -161,6 +161,10 @@ press COMPILE.
   ties the profile code and name to the account (names unique); FRIENDS is
   a page of PROFILE (`ProfFriends.svelte`). A server change that needs a new
   column goes in the private repo's `migrations/`, applied before deploying.
+- **Dynamic stage music (Genesis style)**: investigated, not built; the
+  design and the open questions are in
+  [research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md). Paused
+  until Mary records a Soul Chamber fight on the Genesis (WAV + GYM).
 
 The table in [PROGRESS.md → Open problems](PROGRESS.md#open-problems) is the
 list. Each entry says what is known and what is needed next (usually a log
