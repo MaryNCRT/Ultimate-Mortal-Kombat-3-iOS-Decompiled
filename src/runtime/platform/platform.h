@@ -54,6 +54,8 @@ void plat_monitor_list(void);
  * device's name; --list-audio prints them, "audio<TAB>name" a line */
 void plat_audio_device(const char *name);
 void plat_audio_list(void);
+const char *plat_audio_device_name(void);  /* "" the system's */
+int  plat_audio_names(char (*out)[64], int max);   /* the outputs, for the settings menu */
 void plat_quit(void);
 
 /* Typed text, for a player's name (settings_menu.c, port): the next

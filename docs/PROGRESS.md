@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-05 (frame drops, load times, GPU and sound output, on main for 0.1.24) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-05 (release 0.2.0 beta: performance, audio, devices, kombos, published as the pre-release `v0.2.0-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -95,7 +95,23 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
-## Frame drops, load times, devices (2026-11-05, on main, not released)
+## KOMBO SLIDE, AUDIO, the profiler (2026-11-05, released in 0.2.0)
+
+- **KOMBO SLIDE** (`port_kombo_slide`, kombo_slide=): `PortNoKomboSlide`
+  (mkreact.c, set by game_main.c each tick, offline outside replays only)
+  makes `t_ccp3` take the plain pop instead of `t_separate_us`, and
+  `away_x_vel` (other.c) drop a hit's push once the punch count (field4c)
+  is 2 or more. `kombo push:` lines in the log. Mary, Liu Kang: works.
+- **AUDIO**: `port_music_pct` / `port_sfx_pct` (lime_menu.c) over the
+  game's own volumes; the bar rows (`"\003" + 000..100 + text`, drawn by
+  ui_alert.c, `ui_geo_bar` / `ui_bar_value` in debug_menu.c, the well
+  UI_BAR_X0..X1 of the row); SOUND OUTPUT and GRAPHICS CARD rows
+  (`plat_audio_names`, `rgl_gpu_names`), at the next start. Launcher:
+  GRAPHICS > AUDIO (AudioSliders.svelte), music_volume= / sfx_volume=.
+- `UMK3_PROFILE=1` (win32_gl.c): the game's thread sampled every ms; a
+  slow frame's commonest places as exe offsets in the log.
+
+## Frame drops, load times, devices (2026-11-05, released in 0.2.0)
 
 Mary: the frame drops other players see in fatalities and hits, the load
 times, the renderers, the Steam Deck controls; then her three performance

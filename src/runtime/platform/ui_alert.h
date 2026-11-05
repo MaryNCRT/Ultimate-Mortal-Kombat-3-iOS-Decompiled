@@ -32,4 +32,10 @@ int  ui_ask_native(const unsigned short *msg, const unsigned short *ok,
 /* Whether "aditional textures/glyphs/<name>.png" is there (plat_key_glyph). */
 int  ui_glyph_have(const char *name);
 
+/* a BAR row's well, as a share of the row (debug_menu.h ui_geo_bar) */
+#ifndef UI_BAR_X0                      /* the same in debug_menu.h */
+#define UI_BAR_X0 0.46f
+#define UI_BAR_X1 0.80f
+#endif
+
 #endif

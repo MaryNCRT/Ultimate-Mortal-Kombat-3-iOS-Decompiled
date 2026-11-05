@@ -538,6 +538,8 @@ void limeDeleteSound(long h)
     g_sound[h].pcm = NULL;
 }
 
+extern int port_sfx_pct;                /* EFFECTS, below */
+
 static void play_sound(long h, float v, float p, long f)
 {
     (void)p; (void)f;                   /* not read by the original either */
@@ -557,7 +559,8 @@ static void play_sound(long h, float v, float p, long f)
     /* Port diagnostic: every sound played, by its file -- to find the
      * screams Mary hears repeat where they should not (Liu Kang) */
     printf("sound: %s (%ld)\n", g_sound[h].name, h);
-    plat_audio_play_at(g_sound[h].pcm, g_sound[h].frames, g_sound[h].rate, v);
+    plat_audio_play_at(g_sound[h].pcm, g_sound[h].frames, g_sound[h].rate,
+                       v * (float)port_sfx_pct / 100.0f);      /* EFFECTS */
 }
 
 /* limePlayTune keeps the path, the loop flag and the volume (lasttunevol,
@@ -565,6 +568,24 @@ static void play_sound(long h, float v, float p, long f)
  * tune that does not repeat, which is what makes the restart skip it. */
 static char g_tune_path[1400];
 static long g_tune_vol = -1, g_tune_loop;
+
+/* Port, not in the binary: MUSIC and EFFECTS (the settings menu's AUDIO,
+ * umk3.ini music_volume= / sfx_volume=), 0..100, over the game's own
+ * volumes -- which stay as the game sets them (Settings[2], [3]). */
+int port_music_pct = 100, port_sfx_pct = 100;
+static long g_tune_asked = 100;         /* the game's last music volume */
+
+static void music_volume(long v)
+{
+    g_tune_asked = v;
+    plat_music_volume((float)v / 100.0f * (float)port_music_pct / 100.0f);
+}
+
+/* MUSIC changed: the tune playing, at once */
+void port_volume_apply(void)
+{
+    plat_music_volume((float)g_tune_asked / 100.0f * (float)port_music_pct / 100.0f);
+}
 
 void limePlayTune(const char *name, long vol, long loop)
 {
@@ -575,7 +596,8 @@ void limePlayTune(const char *name, long vol, long loop)
     snprintf(rel, sizeof rel, "res/audio/%s", name);
     lime_platform_resolve(rel, g_tune_path, sizeof g_tune_path);
     g_tune_loop = loop;
-    g_tune_vol  = loop ? vol : -1;    plat_music_volume((float)vol / 100.0f);
+    g_tune_vol  = loop ? vol : -1;
+    music_volume(vol);
     plat_music_play(g_tune_path, loop != 0);
 }
 
@@ -585,7 +607,7 @@ void limeRestartPlayTune(void)
 {
     if (g_tune_vol == -1)
         return;
-    plat_music_volume((float)g_tune_vol / 100.0f);
+    music_volume(g_tune_vol);
     plat_music_play(g_tune_path, g_tune_loop != 0);
 }
 
@@ -595,7 +617,7 @@ void limeSetTuneVol(long v)
     if (rb_quiet())                     /* port: a frame run again (rollback.c) */
         return;
     g_tune_vol = v;                     /* lasttunevol, as limeSetTuneVol stores it */
-    plat_music_volume((float)v / 100.0f);
+    music_volume(v);
 }
 /* AudioSessionGetProperty('othr') on device -- "is another app's audio
  * playing?" -- as 1 or 0. ResetSettingsData turns the game's music OFF when it

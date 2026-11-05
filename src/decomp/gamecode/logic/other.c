@@ -2342,8 +2342,20 @@ void ReallyKillHisProjectile(MK3OBJ *obj)
  */
 void set_x_vel_player(MK3OBJ *obj);
 
+extern int PortNoKomboSlide;            /* mkreact.c: KOMBO SLIDE off, offline */
+
 void away_x_vel(MK3OBJ *obj)
 {
+    /* Port, not in the binary (issue #114): a hit's push away inside a
+     * chain -- the second hit on, his punch count (field4c, inc_p_block)
+     * at 2 or more -- logged, and dropped when KOMBO SLIDE is off. */
+    if (obj->field00 && obj->field00->field4c >= 2 && obj->field1c) {
+        printf("kombo push: character %u, speed %d, punches %u%s\n",
+               (unsigned)obj->field08->field24, (int)obj->field1c >> 16,
+               (unsigned)obj->field00->field4c, PortNoKomboSlide ? ", dropped" : "");
+        if (PortNoKomboSlide)
+            obj->field1c = 0;
+    }
     if (is_he_right(obj))
         obj->field1c = (uint32_t)(-(int32_t)obj->field1c);
     set_x_vel_player(obj);

@@ -197,6 +197,85 @@ static HMONITOR mon_target(void)
  * for the other player, a test run -- frames of 300-500 ms with nothing in
  * them, measured 2026-11-05. A game asks not to be. Through GetProcAddress:
  * Windows 7 and 8 have no SetProcessInformation. */
+/* UMK3_PROFILE=1 (diagnostic, port): a thread looks at where the game's
+ * thread is every millisecond; plat_profile_dump prints a slow frame's ten
+ * commonest places as exe offsets (llvm-symbolizer with the .pdb names
+ * them). Off unless asked: it stops the thread a moment each time. */
+static void plat_profile_dump(int slow);
+#define PROF_N 4096
+static volatile LONG g_prof_n;
+static DWORD64 g_prof_pc[PROF_N];
+static HANDLE g_prof_main;
+
+static DWORD WINAPI prof_thread(LPVOID a)
+{
+    (void)a;
+    for (;;) {
+        CONTEXT c;
+        Sleep(1);
+        if (SuspendThread(g_prof_main) == (DWORD)-1)
+            continue;
+        memset(&c, 0, sizeof c);
+        c.ContextFlags = CONTEXT_CONTROL;
+        if (GetThreadContext(g_prof_main, &c)) {
+            LONG i = InterlockedIncrement(&g_prof_n) - 1;
+            if (i < PROF_N)
+                g_prof_pc[i] = c.Rip;
+        }
+        ResumeThread(g_prof_main);
+    }
+    return 0;
+}
+
+static void prof_start(void)
+{
+    if (!getenv("UMK3_PROFILE"))
+        return;
+    DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(),
+                    &g_prof_main, 0, FALSE, DUPLICATE_SAME_ACCESS);
+    CloseHandle(CreateThread(NULL, 0, prof_thread, NULL, 0, NULL));
+    rgl_profile_dump = plat_profile_dump;
+}
+
+/* the samples since the last call: printed when `slow`, dropped anyway */
+static void plat_profile_dump(int slow)
+{
+    static DWORD64 pc[PROF_N];
+    static int cnt[PROF_N];
+    LONG n = InterlockedExchange(&g_prof_n, 0), i;
+    int m = 0, k, j;
+    DWORD64 base = (DWORD64)(uintptr_t)GetModuleHandleA(NULL);
+
+    if (!g_prof_main || !slow || n <= 0)
+        return;
+    if (n > PROF_N)
+        n = PROF_N;
+    for (i = 0; i < n; i++) {
+        for (k = 0; k < m && pc[k] != g_prof_pc[i]; k++)
+            ;
+        if (k == m) {
+            pc[m] = g_prof_pc[i];
+            cnt[m++] = 0;
+        }
+        cnt[k]++;
+    }
+    printf("profile: %ld samples:", (long)n);
+    for (j = 0; j < 10 && j < m; j++) {
+        int b = 0;
+        for (k = 1; k < m; k++)
+            if (cnt[k] > cnt[b])
+                b = k;
+        if (cnt[b] <= 0)
+            break;
+        if (pc[b] >= base && pc[b] < base + 0x10000000)
+            printf(" %d@exe+0x%llx", cnt[b], (unsigned long long)(pc[b] - base));
+        else
+            printf(" %d@0x%llx", cnt[b], (unsigned long long)pc[b]);
+        cnt[b] = 0;
+    }
+    printf("\n");
+}
+
 static void no_power_throttling(void)
 {
     struct { ULONG Version, ControlMask, StateMask; } st = { 1, 1, 0 };   /* EXECUTION_SPEED, off */
@@ -213,6 +292,7 @@ bool plat_open(const char *title, int width, int height)
     HINSTANCE inst = GetModuleHandleA(NULL);
 
     no_power_throttling();
+    prof_start();
 
     WNDCLASSA wc;
     ZeroMemory(&wc, sizeof(wc));

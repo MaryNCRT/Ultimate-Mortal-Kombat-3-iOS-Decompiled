@@ -535,13 +535,10 @@ static void build(void)
         head(tx("PELEA", "FIGHT"));
         add(ROW_HITBOX, tx("CAJAS DE GOLPE", "HITBOXES"), "< %s >", on_off(g_hitbox));
         {
-            char bar[N_SPEEDS + 1];
-            int i;
-            for (i = 0; i < N_SPEEDS; i++)
-                bar[i] = i <= g_speed ? '#' : '-';
-            bar[N_SPEEDS] = 0;
-            add(ROW_SPEED, tx("VELOCIDAD DE LA PELEA", "FIGHT SPEED"),
-                "< %s %3d%% >", bar, k_speed[g_speed]);
+            char bar[24], pc[12];
+            snprintf(pc, sizeof pc, "%d%%", k_speed[g_speed]);
+            add(ROW_SPEED, tx("VELOCIDAD DE LA PELEA", "FIGHT SPEED"), "%s",
+                ui_bar_value(bar, sizeof bar, (float)g_speed / (N_SPEEDS - 1), pc));
         }
         head(tx("ESTADOS GUARDADOS", "SAVE STATES"));
         add(ROW_SLOT, tx("RANURA", "SLOT"), "< %d %s >", g_slot + 1,
@@ -830,6 +827,14 @@ int dbg_menu_tick(struct dbg_request *rq)
     if (prev || next)
         turn_page(next ? 1 : -1);
 
+    /* FIGHT SPEED's bar: clicked or dragged along */
+    if (g_mdown && ui_geo_bar(&g_geo, g_mx, g_my, VIS_ROWS) >= 0
+        && g_first + ui_geo_row(&g_geo, g_mx, g_my, VIS_ROWS) < g_n
+        && g_rows[g_first + ui_geo_row(&g_geo, g_mx, g_my, VIS_ROWS)].kind == ROW_SPEED) {
+        g_sel = g_first + ui_geo_row(&g_geo, g_mx, g_my, VIS_ROWS);
+        g_speed = (int)(ui_geo_bar(&g_geo, g_mx, g_my, VIS_ROWS) * (N_SPEEDS - 1) + 0.5f);
+        click = 0;
+    }
     if (click && g_geo.srow > 0 && g_mx >= g_geo.sx && g_mx < g_geo.sx + g_geo.sw
         && g_my >= g_geo.stop && g_my < g_geo.stop + N_PAGES * g_geo.srow) {
         int t = (int)((g_my - g_geo.stop) / g_geo.srow);   /* a category */
@@ -954,6 +959,30 @@ int ui_geo_row(const struct ui_geo *g, float x, float y, int rows)
     if (c == 0)
         return r < split ? r : -1;
     return split + r < rows ? split + r : -1;
+}
+
+float ui_geo_bar(const struct ui_geo *g, float x, float y, int rows)
+{
+    int r = ui_geo_row(g, x, y, rows), split = g->split > 0 && g->split < rows ? g->split : rows;
+    float cw = g->cw > 0 ? g->cw : g->bw, c0, x0, x1, f;
+
+    if (r < 0)
+        return -1.0f;
+    c0 = g->bx + (r >= split ? cw + g->gap : 0.0f);
+    x0 = c0 + cw * UI_BAR_X0;
+    x1 = c0 + cw * UI_BAR_X1;
+    if (x < x0 - cw * 0.05f || x > x1 + cw * 0.05f)
+        return -1.0f;
+    f = (x - x0) / (x1 - x0);
+    return f < 0 ? 0 : f > 1 ? 1 : f;
+}
+
+const char *ui_bar_value(char *buf, int n, float share, const char *text)
+{
+    int p = (int)(share * 100.0f + 0.5f);
+
+    snprintf(buf, (size_t)n, "\003%03d%s", p < 0 ? 0 : p > 100 ? 100 : p, text);
+    return buf;
 }
 
 /* Where the right column starts: at a section's heading ("\002"), so no
@@ -1211,7 +1240,8 @@ void ui_menu_show(const char *title, const char *const *tabs, int ntabs,
                 glColor4f(0.45f, 0.45f, 0.45f, 1.0f);
             text(cx, y, px, lp[i]);
             if (vp[i][0])
-                text(cx + (g_split < rows ? 70 : 100), y, px, vp[i]);
+                text(cx + (g_split < rows ? 70 : 100), y, px,
+                     vp[i][0] == 3 && vp[i][1] && vp[i][2] && vp[i][3] ? vp[i] + 4 : vp[i]);
         }
         glColor4f(0.7f, 0.7f, 0.7f, 1.0f);
         text(x0, y0 + g_tall * lh + 6, px, footer);

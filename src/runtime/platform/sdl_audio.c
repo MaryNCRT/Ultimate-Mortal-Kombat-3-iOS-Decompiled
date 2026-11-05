@@ -28,6 +28,21 @@ void plat_audio_device(const char *name)
              name && strcmp(name, "auto") != 0 ? name : "");
 }
 
+const char *plat_audio_device_name(void) { return g_audio_want; }
+
+int plat_audio_names(char (*out)[64], int max)
+{
+    int i, n, k = 0;
+
+    if (!SDL_WasInit(SDL_INIT_AUDIO) && SDL_InitSubSystem(SDL_INIT_AUDIO) != 0)
+        return 0;
+    n = SDL_GetNumAudioDevices(0);
+    for (i = 0; i < n && k < max; i++)
+        if (SDL_GetAudioDeviceName(i, 0))
+            snprintf(out[k++], 64, "%s", SDL_GetAudioDeviceName(i, 0));
+    return k;
+}
+
 void plat_audio_list(void)
 {
     int i, n;

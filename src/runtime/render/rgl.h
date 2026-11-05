@@ -34,6 +34,7 @@ extern int rgl_renderer;
 extern char rgl_gpu[128];
 int  rgl_gpu_match(const char *name);      /* 1 when `name` is the one gpu= names */
 void rgl_gpu_list(void);                   /* --list-gpus: "gpu<TAB>name" a line */
+int  rgl_gpu_names(char (*out)[128], int max);  /* the same, for the settings menu */
 int  rgl_parse(const char *name);          /* RGL_* for an ini value */
 const char *rgl_label(int renderer);       /* "OpenGL", "Vulkan", "Direct3D 12" */
 
@@ -183,6 +184,7 @@ extern double rgl_shadow_ms;           /* this frame's map and held draws, for t
 extern double rgl_game_ms;             /* game_main.c: this frame's ticks (logic and draws), for the log */
 extern int    rgl_game_ticks;          /* and how many ran */
 extern long   rgl_smooth_tris;         /* smooth_models.c: the frame before's smoothed triangles */
+extern void (*rgl_profile_dump)(int slow);  /* UMK3_PROFILE's (win32_gl.c), NULL without */
 extern int rgl_shadow_tris;            /* the triangles the last map was drawn from */
 double rgl_now_ms(void);
 void rgl_shadow_camera(int on);
