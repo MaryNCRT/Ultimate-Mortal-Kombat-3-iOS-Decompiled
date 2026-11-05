@@ -2178,6 +2178,8 @@ float  sqrtf(float x);
  *
  * `dx` and `dy` are both `touch - centre` (see the note in the body).
  */
+extern int PortHideControls;            /* port: hide_controls=1, defined below */
+
 long CheckLeftDial(int player)
 {
     float cx, cy;
@@ -2202,7 +2204,10 @@ long CheckLeftDial(int player)
     outer2 = JOUTERDIAL * JOUTERDIAL;
     inner2 = JINNERDIAL * JINNERDIAL;
 
-    for (i = 0; i < TOUCH_SLOTS; i++) {
+    /* Port, not in the binary (Mary): with the on-screen controls hidden a
+     * click on the screen moved the fighter through the stick it could not
+     * see. No stick, no touch on it; the pad and the keys are read apart. */
+    for (i = 0; i < TOUCH_SLOTS && !PortHideControls; i++) {
         float dx, dy, d2, len, t;
         long dir;
 
@@ -4586,7 +4591,7 @@ void ReadControls(void)
         ButtonStates[i] = 0;
     }
 
-    for (t = 0; t < TOUCH_SLOTS_RC; t++) {
+    for (t = 0; t < TOUCH_SLOTS_RC && !PortHideControls; t++) {   /* port: as CheckLeftDial */
         float best = 999.0f;
         long nearest = -1;
 
@@ -4645,7 +4650,7 @@ void ReadControls(void)
         ButtonStatesP2[i] = 0;
     }
 
-    for (t = 0; t < TOUCH_SLOTS_RC; t++) {
+    for (t = 0; t < TOUCH_SLOTS_RC && !PortHideControls; t++) {   /* port: as CheckLeftDial */
         float best = 999.0f;
         long nearest = -1;
 
