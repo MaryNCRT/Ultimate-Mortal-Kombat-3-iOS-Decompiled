@@ -973,6 +973,9 @@ float ui_geo_bar(const struct ui_geo *g, float x, float y, int rows)
     x1 = c0 + cw * UI_BAR_X1;
     if (x < x0 - cw * 0.05f || x > x1 + cw * 0.05f)
         return -1.0f;
+    /* the well is the row's lower half, under its label (ui_alert.c) */
+    if (y < g->top + (float)(r >= split ? r - split : r) * g->rowh + g->rowh * 0.5f)
+        return -1.0f;
     f = (x - x0) / (x1 - x0);
     return f < 0 ? 0 : f > 1 ? 1 : f;
 }
@@ -1152,7 +1155,7 @@ static int draw_ios(const char *title, const char *const *tabs, int ntabs,
             g_sx = x + (6 + 6) * f;
             g_sw = (UI_SIDE - 10) * f;
             g_stop = g_top + 4 * f;
-            g_srow = 24 * f;
+            g_srow = UI_SIDE_STEP(-ntabs) * f;
         }
         g_gap = 6 * f;                  /* the columns, 6 apart */
         g_cw = g_split < rows ? (g_bw - g_gap) * 0.5f : g_bw;
@@ -2801,13 +2804,16 @@ void stage_menu_draw(void)
             glEnd();
             st_hit(8 + i, x, y, tw, th + 12);
         }
-        if (g_st_n > vis) {             /* more below or above */
+        if (g_st_n > vis) {             /* a scroll bar: where the rows shown are */
+            int lines = (g_st_n + cols - 1) / cols;
+            float bx = px + pw - 8, h = rows * (th + 14) - 14;
+            float y0 = gy + h * (float)(g_st_first / cols) / (float)lines;
+            float y1 = gy + h * (float)(g_st_first / cols + rows) / (float)lines;
             glBegin(GL_QUADS);
-            glColor4f(0.7f, 0.67f, 0.95f, 1.0f);
-            if (g_st_first > 0)
-                text(px + pw - 16, gy, 1.0f, "^");
-            if (g_st_first + vis < g_st_n)
-                text(px + pw - 16, gy + rows * (th + 14) - 12, 1.0f, "V");
+            glColor4f(0.0f, 0.0f, 0.0f, 0.55f);
+            rect(bx, gy, 3, h);
+            glColor4f(0.95f, 0.82f, 0.45f, 1.0f);
+            rect(bx, y0, 3, (y1 < gy + h ? y1 : gy + h) - y0);
             glEnd();
         }
     }

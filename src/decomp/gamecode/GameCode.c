@@ -3666,6 +3666,13 @@ void EASDK_LogEventEnumEnumString(long id, long a, const char *s1,
  * one state change is what an unreliable link gets instead of an ack, and the
  * stale first argument suggests it was written that way rather than looped.
  */
+/* Port, not in the binary (Mary): umk3.ini corner_buttons=0 hides the
+ * fight's INFO and PAUSE buttons, for a pad; a finger on their corners then
+ * does nothing, while the pad's and the keys' own presses -- taps that
+ * hud_keys (game_main.c) makes there, PortKeyTap -- still open them. */
+extern int port_corner_buttons;         /* game_main.c: not a state file's */
+extern int PortKeyTap;
+
 void TogglePauseMenu(void)
 {
     float lx, ly;
@@ -3673,6 +3680,8 @@ void TogglePauseMenu(void)
     /* Port, not in the binary: a pause taken on one machine is not one of the
      * inputs both run the fight from, so a rollback fight has none (yet). */
     if (rb_active())
+        return;
+    if (!port_corner_buttons && PortKeyTap == 0)
         return;
     if (*FE_FadeAddP != 0.0f)
         return;
@@ -6976,6 +6985,11 @@ int  PortMoveGlyph(long value, int p, char *out, int n);
 TEXTURE *lime_load_extra_texture(const char *file);
 void lime_extra_texture_size(const TEXTURE *t, int *w, int *h);
 
+/* Port, not in the binary: the three-column page (MovesList) draws the
+ * entries smaller, and measures a sequence before drawing it centred. */
+static float PortMvScale = 1.0f;
+static int   PortMvMeasure;
+
 static long PortMoveListGlyphs(long value, long cursor, int right, float y)
 {
     int who = PortMovePlayers(), p, k = 0, i;
@@ -6993,24 +7007,25 @@ static long PortMoveListGlyphs(long value, long cursor, int right, float y)
         if (!t[k])
             continue;
         lime_extra_texture_size(t[k], &tw, &th);
-        w[k] = th > 0 ? FE_WidthScale * 16.0f * (float)tw / (float)th : FE_WidthScale * 16.0f;
+        w[k] = (th > 0 ? FE_WidthScale * 16.0f * (float)tw / (float)th : FE_WidthScale * 16.0f)
+               * PortMvScale;
         k++;
     }
     if (k == 0)
         return -1;
-    total = w[0] + (k > 1 ? FE_WidthScale * 8.0f + w[1] : 0.0f);
+    total = w[0] + (k > 1 ? FE_WidthScale * 8.0f * PortMvScale + w[1] : 0.0f);
     x0 = right ? (float)(limeScreenWidth - cursor) - total : (float)cursor;
-    for (i = 0; i < k; i++) {
-        limeDrawSprite(t[i], x0, y + FE_HeightScale * -2.0f, w[i],
-                       FE_HeightScale * 16.0f, 0.0f, 0.0f, 1.0f, 1.0f, col);
+    for (i = 0; i < k && !PortMvMeasure; i++) {
+        limeDrawSprite(t[i], x0, y + FE_HeightScale * -2.0f * PortMvScale, w[i],
+                       FE_HeightScale * 16.0f * PortMvScale, 0.0f, 0.0f, 1.0f, 1.0f, col);
         x0 += w[i];
         if (i == 0 && k > 1) {
-            limeDrawFONT(&GameFont, limeUC("/"), x0 + FE_WidthScale * 1.0f, y,
-                         0, 0.75f * FE_WidthScale, fontcol);
-            x0 += FE_WidthScale * 8.0f;
+            limeDrawFONT(&GameFont, limeUC("/"), x0 + FE_WidthScale * 1.0f * PortMvScale, y,
+                         0, 0.75f * FE_WidthScale * PortMvScale, fontcol);
+            x0 += FE_WidthScale * 8.0f * PortMvScale;
         }
     }
-    return (long)((float)cursor + total + FE_WidthScale * 1.0f);
+    return (long)((float)cursor + total + FE_WidthScale * 1.0f * PortMvScale);
 }
 
 /* Draw one entry and return the new cursor. The two directions differ only in
@@ -7041,11 +7056,12 @@ static long DrawMoveListEntry(long value, long cursor, int right, float y,
         if (text != 0)
             usprintf(buf, UC("%s "), text);
 
-        limeDrawFONT(&GameFont, limeUC(buf), x, y,
-                     right ? 2 : 0, 0.75f * FE_WidthScale, fontcol);
+        if (!PortMvMeasure)
+            limeDrawFONT(&GameFont, limeUC(buf), x, y,
+                         right ? 2 : 0, 0.75f * FE_WidthScale * PortMvScale, fontcol);
 
         return cursor + (long)((double)limeGetStringWidth(&GameFont, limeUC(buf))
-                               * 0.75 * (double)FE_WidthScale);
+                               * 0.75 * (double)FE_WidthScale * PortMvScale);
     }
 
     {
@@ -7053,16 +7069,17 @@ static long DrawMoveListEntry(long value, long cursor, int right, float y,
 
         /* Right-anchored icons are shifted back by their own width so the
          * right edge sits on the cursor. */
-        limeDrawSprite((TEXTURE *)MoveIconsTexture,
-                       right ? x + FE_WidthScale * -16.0f : x,
-                       y + FE_HeightScale * -2.0f,
-                       FE_WidthScale * 16.0f,
-                       FE_HeightScale * 16.0f,
-                       MoveIconUV[cell][1], MoveIconUV[cell][0],
-                       0.25f, 0.25f, col);
+        if (!PortMvMeasure)
+            limeDrawSprite((TEXTURE *)MoveIconsTexture,
+                           right ? x + FE_WidthScale * -16.0f * PortMvScale : x,
+                           y + FE_HeightScale * -2.0f * PortMvScale,
+                           FE_WidthScale * 16.0f * PortMvScale,
+                           FE_HeightScale * 16.0f * PortMvScale,
+                           MoveIconUV[cell][1], MoveIconUV[cell][0],
+                           0.25f, 0.25f, col);
     }
 
-    return (long)((float)cursor + FE_WidthScale * 17.0f);
+    return (long)((float)cursor + FE_WidthScale * 17.0f * PortMvScale);
 }
 
 void DrawMoveListIcons(int y, const int *seq, const char *caption,
@@ -8046,6 +8063,172 @@ static void DrawCharacterPage(long character, long section)
                      s->nameId, s->captionId, 1);
 }
 
+/* Port, not in the binary (Mary: three columns, everything on one page):
+ * the fighter's whole list on one page -- SPECIAL MOVES (section 1),
+ * FINISHING MOVES (section 2) and KOMBOS, the table's third section, which
+ * the original never showed and has no names for. Each entry centred in its
+ * column: the name, the notation below it, the caption under that. The
+ * basic moves follow on the next pages. */
+static const char *PortMvTx(const char *es, const char *en)
+{
+    return Language[0] == 'E' && Language[1] == 'S' ? es : en;
+}
+
+/* Text centred on cx at `scale`, smaller when wider than the column */
+static void PortMvText(const char *s, float cx, float y, float scale)
+{
+    float w = (float)limeGetStringWidth(&GameFont, s) * scale * FE_WidthScale;
+    float room = (float)limeScreenWidth / 3.0f - 16.0f * FE_WidthScale;
+
+    if (w > room && w > 0.0f)
+        scale *= room / w;
+    limeDrawFONT(&GameFont, s, cx, y, 1, scale * FE_WidthScale, fontcol);
+}
+
+/* A caption that is more than blanks (the specials' are two spaces) */
+static int PortMvHasCaption(const char *caption)
+{
+    return caption && limeFontStrLen(caption) > 0
+        && limeGetStringWidth(&GameFont, limeUC(caption)) * 0.42f > 6.0f;
+}
+
+/* One entry centred on cx, its lines `vs` apart (1 at most, less when the
+ * column is long); returns the y under it. */
+static float PortMvEntry(float cx, float y, const char *name, const int *seq,
+                         const char *caption, float vs)
+{
+    char  buf[128];
+    long  cursor = 0, n = 0, i;
+    float line = FE_HeightScale * vs;
+    float room = (float)limeScreenWidth / 3.0f - 16.0f * FE_WidthScale;
+
+    PortMvText(name, cx, y, 0.52f);
+    y += 11.0f * line;
+    while (n < 15 && seq[n] != -1)
+        n++;
+    PortMvScale = 0.72f;
+    PortMvMeasure = 1;
+    for (i = 0; i < n; i++)
+        cursor = DrawMoveListEntry(seq[i], cursor, 0, y, buf);
+    if ((float)cursor > room) {         /* a long kombo: smaller icons */
+        PortMvScale *= room / (float)cursor;
+        cursor = (long)room;
+    }
+    PortMvMeasure = 0;
+    cursor = (long)(cx - (float)cursor * 0.5f);
+    for (i = 0; i < n; i++)
+        cursor = DrawMoveListEntry(seq[i], cursor, 0, y, buf);
+    PortMvScale = 1.0f;
+    y += 12.0f * line;
+    if (PortMvHasCaption(caption)) {
+        PortMvText(limeUC(caption), cx, y, 0.42f);
+        y += 9.0f * line;
+    }
+    return y + 4.0f * line;
+}
+
+/* How much of the panel's height (52..286) a column's entries leave room
+ * for: 1 when they fit, less to close them up */
+static float PortMvSpacing(long rows, long captions)
+{
+    float need = (float)rows * 27.0f + (float)captions * 9.0f;
+
+    return need > 234.0f ? 234.0f / need : 1.0f;
+}
+
+static void PortMvColumn(int c, const char *title)
+{
+    float w = (float)limeScreenWidth / 3.0f, cx = w * ((float)c + 0.5f);
+
+    PortMvText(title, cx, 30.0f * FE_HeightScale, 0.6f);
+    limeFillRect(w * (float)c + 10.0f * FE_WidthScale, 45.0f * FE_HeightScale,
+                 w - 20.0f * FE_WidthScale, 1.0f * FE_HeightScale,
+                 0.6f, 0.6f, 0.6f, 0.5f);
+    if (c)
+        limeFillRect(w * (float)c, 30.0f * FE_HeightScale, 1.0f * FE_HeightScale,
+                     258.0f * FE_HeightScale, 0.6f, 0.6f, 0.6f, 0.35f);
+}
+
+/* The fighter's picture, as the tower draws it (FrontEnd.c, the
+ * IPAD...PORTRAIT.PNG sheets, one a character in CharacterNames' order) */
+TEXTURE *lime_load_res_picture(const char *file);
+
+static void PortMvPortrait(long character)
+{
+    static const char *const file[26] = {
+        "KANO", "SONYA", "JAX", "NIGHTWOLF", "SUBZERO", "STRYKER", "SINDEL",
+        "SEKTOR", "CYRAX", "KUNGLAO", "KABAL", "SHEEVA", "SHANGTSUNG",
+        "LIUKANG", "SMOKE", "KITANA", "JADE", "MILEENA", "SCORPION",
+        "REPTILE", "ERMAC", "OLDSUBZERO", "OLDSMOKE", "NOOBSAIBOT",
+        "MOTARO", "SHAOKAHN",
+    };
+    char name[64];
+    TEXTURE *t;
+    int w, h;
+    float s;
+
+    if (character < 0 || character >= 26)
+        return;
+    sprintf(name, "IPAD%sPORTRAIT.PNG", file[character]);   /* 26 at most: fits */
+    t = lime_load_res_picture(name);
+    if (!t)
+        return;
+    lime_extra_texture_size(t, &w, &h);
+    s = 23.0f * FE_HeightScale;
+    limeDrawSprite(t, 8.0f * FE_HeightScale, 1.0f * FE_HeightScale,
+                   h > 0 ? s * (float)w / (float)h : s, s,
+                   0.0f, 0.0f, 1.0f, 1.0f, col);
+}
+
+static void PortMvAllPage(long character, int p2)
+{
+    const MOVESLISTENTRY *e = &MovesListTab[character];
+    const long *table = ((p2 ? Player2NumButtons : Player1NumButtons) == 5)
+                        ? e->section[0].moves5 : e->section[0].moves6;
+    float w = (float)limeScreenWidth / 3.0f, y;
+    char  name[128], cap[128];
+    long  r, base = 0;
+    int   s;
+
+    limeFillRect(0.0f, 26.0f * FE_HeightScale, (float)limeScreenWidth,
+                 266.0f * FE_HeightScale, 0.0f, 0.0f, 0.0f, 0.7f);
+    float vs;
+
+    PortMvColumn(0, limeUC(GameTextNoHeader(0xef)));
+    usprintf(name, UC(PortMvTx("REMATES", "FINISHING MOVES")));
+    PortMvColumn(1, limeUC(name));
+    usprintf(name, UC("KOMBOS"));
+    PortMvColumn(2, limeUC(name));
+    for (s = 0; s < 2; s++) {
+        long caps = 0;
+
+        for (r = 0; r < e->section[s].rows; r++) {
+            usprintf(cap, UC("%s"), GameTextNoHeader(e->section[s].captionId + r));
+            caps += PortMvHasCaption(cap);
+        }
+        vs = PortMvSpacing(e->section[s].rows, caps);
+        y = 52.0f * FE_HeightScale;
+        for (r = 0; r < e->section[s].rows; r++) {
+            usprintf(name, UC("%s"), GameTextNoHeader(e->section[s].nameId + r));
+            usprintf(cap, UC("%s"), GameTextNoHeader(e->section[s].captionId + r));
+            y = PortMvEntry(w * ((float)s + 0.5f), y, limeUC(name),
+                            (const int *)((const char *)table + (base + r) * 0x40),
+                            cap, vs);
+        }
+        base += e->section[s].rows;
+    }
+    vs = PortMvSpacing(e->rows3, 0);
+    y = 52.0f * FE_HeightScale;
+    for (r = 0; r < e->rows3; r++) {
+        usprintf(name, UC("KOMBO %d"), (int)r + 1);
+        y = PortMvEntry(w * 2.5f, y, limeUC(name),
+                        (const int *)((const char *)table + (base + r) * 0x40), 0, vs);
+    }
+    if (e->rows3 == 0)
+        limeDrawFONT(&GameFont, limeUC("-"), w * 2.5f, 60.0f * FE_HeightScale, 1,
+                     0.6f * FE_WidthScale, fontcol);
+}
+
 void MovesList(void)
 {
     char title[128];                    /* sp+0x170 */
@@ -8061,32 +8244,48 @@ void MovesList(void)
     if (PortMovesWho() == 2)
         character = PLAYER2MODEL;
 
-    /* Port, not in the binary: L1 / R1, left / right (Q / E, A / D) turn
-     * the pages */
+    /* Port, not in the binary (Mary): two pages -- this player's fighter,
+     * then the other's. L1 / R1, left / right (Q / E, A / D) and NEXT /
+     * BACK turn them. The original's five pages (the basic moves in three,
+     * then DrawGenericPage / DrawCharacterPage) are no longer reached. */
+    if (PortMovesTurn())
+        MoveListPage ^= 1;
+    if (MoveListPage > 1)
+        MoveListPage = 0;
+    page = MoveListPage;
     {
-        long n = (GameMode == 6) ? 10 : 5;
-        int  d = PortMovesTurn();
+        /* this side is player 2: the same tests as above (a mirror match
+         * has one character on both sides) */
+        int p2 = (GameMode == 1 && !(rb_active() ? isParent() : isParentBasedOnSpeed()))
+                 || PortMovesWho() == 2;
+        float gold[4];
+        int k;
 
-        if (d)
-            MoveListPage = (MoveListPage + n + d) % n;
+        if (page == 1)
+            p2 = !p2;
+        character = p2 ? PLAYER2MODEL : PLAYER1MODEL;
+        (void)header;
+        /* the header as in Mary's reference: the portrait, the name in
+         * gold beside it, and under the name the side and the layout */
+        PortMvPortrait(character);
+        for (k = 0; k < 4; k++)
+            gold[k] = fontcol[k];
+        asciiToUnicode(CharacterNames[character], title, 0x80);
+        usprintf(strBuf, UC("%s"), limeUC(title));
+        fontcol[0] = 1.0f; fontcol[1] = 0.78f; fontcol[2] = 0.2f;
+        limeDrawFONT(&GameFont, strBuf, 36.0f * FE_HeightScale,
+                     0.0f, 0, 0.8f * FE_WidthScale, fontcol);
+        for (k = 0; k < 4; k++)
+            fontcol[k] = gold[k];
+        usprintf(strBuf, Language[0] == 'E' && Language[1] == 'S'
+                         ? UC("P%d / %d BOTONES") : UC("P%d / %d BUTTONS"),
+                 p2 ? 2 : 1, (int)(p2 ? Player2NumButtons : Player1NumButtons));
+        limeDrawFONT(&GameFont, limeUC(strBuf), 37.0f * FE_HeightScale,
+                     15.0f * FE_HeightScale, 0, 0.4f * FE_WidthScale, fontcol);
+        PortMvAllPage(character, p2);
     }
-
-    page   = MoveListPage;
-    header = (page == 3 || page == 4 || page == 8 || page == 9) ? 0xef : 0xee;
-
-    asciiToUnicode(CharacterNames[character], title, 0x80);
-    usprintf(strBuf, UC("%s - %s"), limeUC(title), GameTextNoHeader(header));
-    limeDrawFONT(&GameFont, strBuf, (float)(limeScreenWidth / 2),
-                 8.0f * FE_HeightScale, 1, FE_WidthScale, fontcol);
-
-    switch (page) {
-    case 0: case 5: DrawGenericPage(0);              break;
-    case 1: case 6: DrawGenericPage(6);              break;
-    case 2: case 7: DrawGenericPage(12);             break;
-    case 3: case 8: DrawCharacterPage(character, 0); break;
-    case 4: case 9: DrawCharacterPage(character, 1); break;
-    default: break;
-    }
+    (void)DrawCharacterPage;
+    (void)DrawGenericPage;
 
     /* Port, not in the binary: on 16:9 and 21:9 NEXT and its label sit at
      * the screen's right edge, as on the front end's screens */
@@ -8096,8 +8295,7 @@ void MovesList(void)
      * turn with L1 / R1 and there is no NEXT */
     if (!PortHideControls) {
         if (DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1)) {
-            MoveListPage = MoveListPage + 1;
-            MoveListPage %= (GameMode == 6) ? 10 : 5;
+            MoveListPage ^= 1;
         }
 
         limeDrawFONT(&GameFont, GameText(8), (float)FE_X(423.0f),
@@ -8110,9 +8308,7 @@ void MovesList(void)
         PortFERightEdgeSet(2);
         PortNavAsOk = 2;
         if (DrawButtonNew(&BUTTON_BACK, 480 - 0x1a7, 0x130, 1)) {
-            long n = (GameMode == 6) ? 10 : 5;
-
-            MoveListPage = (MoveListPage + n - 1) % n;
+            MoveListPage ^= 1;
         }
         limeDrawFONT(&GameFont, GameText(7), (float)FE_X(480.0f - 423.0f),
                      (float)FE_Y(296.0f), 1, FE_WidthScale, fontcol);
@@ -8747,6 +8943,8 @@ void DrawHUD(void)
          * 0x2a170). Modes 0 and 1 also count timeInGame, outside the intro. */
         if (GameMode <= 1 && !DoIntro)
             timeInGame += (1.0f / 60.0f) / limeFPSScaleFactor;
+        if (!port_corner_buttons)       /* port: hidden (TogglePauseMenu) */
+            goto corners_done;
 
         limeEnableAlphaBlending_Additive();
 
@@ -8782,6 +8980,7 @@ void DrawHUD(void)
                        (float)limeScreenWidth - s * 32.0f, s * -7.0f,
                        s * 36.0f, s * 36.0f, 0.0f, 0.0f, 1.0f, 1.0f, col);
         limeEnableAlphaBlending_Basic();
+    corners_done:;
     }
 
     sprintf(strBuf, "%d", (int)GameTime);
@@ -9177,6 +9376,8 @@ int PortHideControls;                   /* port: see the end of DrawControls */
 extern long PortButtonAlpha[3][6];      /* port: FrontEnd.c, per button */
 extern long PortStick[3][4];            /* port: FrontEnd.c, the stick */
 void set_menu_open_controls(void);     /* port: runtime/settings_menu.c */
+void set_menu_open_audio(void);        /* port: runtime/settings_menu.c */
+void set_menu_open_video(void);
 
 void DrawControls(void)
 {
@@ -12040,7 +12241,14 @@ static void UpdateInGamePauseMenu_(void)
 
         /* ---- row 3: the first layout line ---- */
         LastTouch_Pause3 = Touch_Pause3;
-        if (GameMode == 6)
+        /* port (Mary): with the on-screen controls off (a pad or the keys)
+         * rows 3 to 6 are the MOVES LIST, BUTTON SETUP, AUDIO SETTINGS and
+         * VIDEO SETTINGS: the layout lines belong to the on-screen
+         * controls, and the volumes are the AUDIO SETTINGS' bars */
+        if (PortHideControls)
+            usprintf(text, Language[0] == 'E' && Language[1] == 'S'
+                           ? UC("LISTA DE MOVIMIENTOS") : UC("MOVES LIST"));
+        else if (GameMode == 6)
             usprintf(text, UC("%s - %s : %s"),
                      GameTextNoHeader(TXT_BUTTONS_P1),
                      GameTextNoHeader(TXT_LAYOUT_A),
@@ -12054,12 +12262,19 @@ static void UpdateInGamePauseMenu_(void)
                                           PAUSE_SCALE,
                                           PAUSE_COL(LastTouch_Pause3),
                                           FE_W(PAUSE_WIDTH));
-        if (PAUSE_RELEASED(LastTouch_Pause3, Touch_Pause3))
+        if (PAUSE_RELEASED(LastTouch_Pause3, Touch_Pause3)) {
+            if (PortHideControls) {
+                PauseClick();
+                MoveListPage = 0;
+                GamePaused = 2;         /* the moves list, as INFO opens it */
+                return;
+            }
             sel = 3;
+        }
 
         /* ---- row 4: the second layout line ---- */
         LastTouch_Pause4 = Touch_Pause4;
-        if (PortHideControls && GameMode != 6)
+        if (PortHideControls)
             /* port: with the on-screen controls off, their layout gives
              * way to the keys and pads' setup */
             usprintf(text, Language[0] == 'E' && Language[1] == 'S'
@@ -12079,7 +12294,7 @@ static void UpdateInGamePauseMenu_(void)
                                           PAUSE_COL(LastTouch_Pause4),
                                           FE_W(PAUSE_WIDTH));
         if (PAUSE_RELEASED(LastTouch_Pause4, Touch_Pause4)) {
-            if (PortHideControls && GameMode != 6) {
+            if (PortHideControls) {
                 PauseClick();
                 set_menu_open_controls();   /* port: see row 4 */
             } else
@@ -12089,6 +12304,10 @@ static void UpdateInGamePauseMenu_(void)
         /* ---- row 5: MUSIC.  The fourth argument is one too many for the
          * format and is never consumed -- it is in the binary all four ways. */
         LastTouch_Pause5 = Touch_Pause5;
+        if (PortHideControls)           /* port: see row 3 */
+            usprintf(text, Language[0] == 'E' && Language[1] == 'S'
+                           ? UC("AJUSTES DE AUDIO") : UC("AUDIO SETTINGS"));
+        else
         switch (Settings[2]) {
         case 1:  usprintf(text, UC("%s : %s"), GameText(TXT_MUSIC),
                           GameText(TXT_VOL_LOW),
@@ -12108,11 +12327,21 @@ static void UpdateInGamePauseMenu_(void)
                                           PAUSE_SCALE,
                                           PAUSE_COL(LastTouch_Pause5),
                                           FE_W(PAUSE_WIDTH));
-        if (PAUSE_RELEASED(LastTouch_Pause5, Touch_Pause5))
+        if (PAUSE_RELEASED(LastTouch_Pause5, Touch_Pause5)) {
+            if (PortHideControls) {
+                PauseClick();
+                set_menu_open_audio();
+                return;
+            }
             sel = 5;
+        }
 
         /* ---- row 6: SFX, which jumps straight to its own handler ---- */
         LastTouch_Pause6 = Touch_Pause6;
+        if (PortHideControls)           /* port: see row 3 */
+            usprintf(text, Language[0] == 'E' && Language[1] == 'S'
+                           ? UC("AJUSTES DE VIDEO") : UC("VIDEO SETTINGS"));
+        else
         switch (Settings[3]) {
         case 1:  usprintf(text, UC("%s : %s"), GameText(TXT_SFX),
                           GameText(TXT_VOL_LOW),
@@ -12132,6 +12361,11 @@ static void UpdateInGamePauseMenu_(void)
                                           PAUSE_SCALE,
                                           PAUSE_COL(LastTouch_Pause6),
                                           FE_W(PAUSE_WIDTH));
+        if (PAUSE_RELEASED(LastTouch_Pause6, Touch_Pause6) && PortHideControls) {
+            PauseClick();
+            set_menu_open_video();
+            return;
+        }
         if (PAUSE_RELEASED(LastTouch_Pause6, Touch_Pause6)) {
             /* the SFX option acts here rather than through `sel`, so it plays
              * its click AFTER the change instead of before it */

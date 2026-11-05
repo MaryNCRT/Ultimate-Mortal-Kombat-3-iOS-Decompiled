@@ -1,10 +1,11 @@
 <script>
     /* A section's page on the backdrop: a light veil with faded rules over
      * and under it instead of a framed box, scrolling when it is long. */
-    let { children, class: cls = '' } = $props();
+    let { children, class: cls = '', bare = false } = $props();
 </script>
 
-<section class="page {cls}">{@render children()}</section>
+<!-- bare: inside another page (SETTINGS' CONTROLS), no veil or scroll of its own -->
+{#if bare}{@render children()}{:else}<section class="page {cls}">{@render children()}</section>{/if}
 
 <style>
     .page {

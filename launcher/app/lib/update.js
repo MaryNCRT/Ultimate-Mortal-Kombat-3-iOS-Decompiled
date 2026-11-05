@@ -37,7 +37,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 
-const REPO = 'MaryNCRT/Ultimate-Mortal-Kombat-3-iOS-Recomp';
+const REPO = 'MaryNCRT/Ultimate-Mortal-Kombat-3-iOS-Decompiled';  /* renamed from -Recomp, which GitHub still redirects */
 const API = 'https://api.github.com/repos/' + REPO + '/releases?per_page=10';
 const MIRROR = ['src', 'launcher', 'tools\\build'];
 const LINUX = process.platform === 'linux';

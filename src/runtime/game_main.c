@@ -1150,6 +1150,10 @@ static void read_config(const char *dir)
         }
         else if (strcmp(line, "kombo_slide") == 0)     /* mkreact.c, offline only */
             port_kombo_slide = atoi(v) != 0;
+        else if (strcmp(line, "corner_buttons") == 0) {    /* GameCode.c */
+            extern int port_corner_buttons;
+            port_corner_buttons = atoi(v) != 0;
+        }
         else if (strcmp(line, "noob_saibot") == 0) {   /* FrontEnd.c */
             extern int port_noob_saibot;
             port_noob_saibot = atoi(v) == 1;
@@ -1445,6 +1449,11 @@ void PortBackLine(char *line, int n)
              Language[0] == 'E' && Language[1] == 'S' ? "ATR\xc1S" : "BACK");
 }
 
+/* corner_buttons= and the pad's taps (GameCode.c TogglePauseMenu); here,
+ * outside the save states, so a rollback never turns the setting back */
+int port_corner_buttons = 1;
+int PortKeyTap;
+
 static void hud_keys(void)
 {
     static int was[2];
@@ -1452,6 +1461,8 @@ static void hud_keys(void)
 
     if (g_ktap_left > 0 && --g_ktap_left == 0)
         lime_touch_ended(g_ktap_x, g_ktap_y, g_ktap_x, g_ktap_y);
+    if (PortKeyTap > 0)
+        PortKeyTap--;
 
     for (k = 0; k < 2; k++) {
         /* the pad: start is P, select (Back / Share / Create) is M */
@@ -1494,6 +1505,7 @@ static void hud_keys(void)
             g_ktap_x = x * g_ui_k;
         g_ktap_y = y * g_ui_k;
         g_ktap_left = 3;
+        PortKeyTap = 8;                 /* GameCode.c: not a finger's */
         lime_touch_began(g_ktap_x, g_ktap_y);
     }
 }
@@ -2025,8 +2037,11 @@ static int parse_screen(const char *s)
 {
     int i;
 
+    /* 51 is the port's ONLINE screen, past the game's: the launcher's
+     * invites open the game with --screen 51, which up to 0.2.0 read as no
+     * screen ("debug: screen -1") */
     if (s[0] >= '0' && s[0] <= '9')
-        return atoi(s) < DBG_SCREENS ? atoi(s) : -1;
+        return atoi(s) <= DBG_SCREENS ? atoi(s) : -1;
     if (_stricmp(s, "online") == 0)     /* the port's ONLINE screen */
         return 51;
     for (i = 0; i < DBG_SCREENS; i++)   /* "treasure" -> FE_Task_Treasure */
@@ -2048,6 +2063,8 @@ static void leave_fight(int task)
 
 static void jump_screen(int task)
 {
+    if (task < 0)
+        return;
     printf("debug: screen %d %s\n", task,
            task < DBG_SCREENS ? FETaskNames[task] : "FE_Task_Online");
     if (CurrentTask == 6)
@@ -3383,6 +3400,16 @@ int main(int argc, char **argv)
                     if (q)
                         q++;
                 }
+            }
+            if (getenv("UMK3_MOVES") && CurrentTask == 6  /* the moves list, a script's */
+                && ticks == atol(getenv("UMK3_MOVES")))
+                GamePaused = 2;
+            if (getenv("UMK3_SETTINGS")                 /* "tick[:page]", a script's */
+                && ticks == atol(getenv("UMK3_SETTINGS")) && !set_menu_is_open()) {
+                const char *c = strchr(getenv("UMK3_SETTINGS"), ':');
+                set_menu_toggle();
+                if (c)
+                    set_menu_page(atoi(c + 1));
             }
             if (g_cfg_debug_keys && getenv("UMK3_DBG_STATE")) {
                 /* "tick:s1;tick:l1" -- save / load state slot 1..4 */

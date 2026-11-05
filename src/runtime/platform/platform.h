@@ -143,6 +143,9 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
  * left, the rest down the right; a row too long for its column is drawn
  * smaller. */
 #define UI_SIDE 96
+/* the side panel's category step, in points: closer from 7 on, so the box
+ * still fits a 16:9 screen's 320 (7 since AUDIO) */
+#define UI_SIDE_STEP(n) ((n) > 6 ? 20 : 24)
 
 /* A grid of pictures in the same dress (the settings menu's icons and
  * colours, port): the title, `n` cells of cpx x cpx straight RGBA, `cols`

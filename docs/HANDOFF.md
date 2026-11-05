@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-11-05 (release 0.2.0 beta: performance, audio, devices, kombos, published as the pre-release `v0.2.0-beta`).
+**Last updated:** 2026-11-05 (release 0.2.1 beta: online fixes, the moves list, settings in one order, published as the pre-release `v0.2.1-beta`).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
@@ -98,7 +98,7 @@ and answers the preload's calls over HTTP.
 
 A release is a GitHub pre-release `v<version>-beta` with two packages:
 
-1. Set the version in `launcher/app/package.json` (`0.2.0-beta`; a letter
+1. Set the version in `launcher/app/package.json` (`0.2.1-beta`; a letter
    release is `0.1.14-beta.b`, read by the updater as 0.1.14b).
 2. `npm run ui` in `launcher/app`.
 3. Windows: `npx electron-builder --win dir --x64`, then

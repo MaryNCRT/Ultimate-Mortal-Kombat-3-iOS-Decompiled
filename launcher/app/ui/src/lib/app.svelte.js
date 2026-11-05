@@ -22,12 +22,14 @@ import { stagePictures } from './mods/stagepics.js';
 /* ------------------------------------------------------------ tables -- */
 
 /* the menu, in order; QUIT closes */
-export const SECTIONS = ['build', 'play', 'video', 'controls', 'profile', 'mods', 'replays', 'quit'];
+export const SECTIONS = ['build', 'play', 'video', 'profile', 'mods', 'replays', 'quit'];
 /* each section's name in the menu and its full-screen header */
 export const TITLE = { build: 'mBuild', play: 'mPlay', video: 'mVideo', controls: 'mControls', profile: 'mProfile', mods: 'mMods', replays: 'mReplays', quit: 'mQuit' };
 export const DESC = { build: 'dBuild', video: 'dVideo', controls: 'dControls', profile: 'dProfile', play: 'dPlay', mods: 'dMods', replays: 'dReplays', quit: 'dQuit' };
-/* the pages of GRAPHICS and CONTROLS, in their second row */
-export const GFX_TABS = [['video', 'gVideo'], ['gfx', 'gGfx'], ['tex', 'gTex'], ['audio', 'gAudio'], ['ui', 'gUi']];
+/* the pages of SETTINGS (once GRAPHICS; CONTROLS, a section of its own up to
+ * 0.2.0, is its last page) in the game's settings menu's order, and
+ * CONTROLS' own pages under it */
+export const GFX_TABS = [['video', 'gVideo'], ['gfx', 'gGfx'], ['tex', 'gTex'], ['audio', 'gAudio'], ['ui', 'gUi'], ['ctl', 'mControls']];
 export const CTL_TABS = [['p', 'tabKb'], ['pad', 'tabPad'], ['dbg', 'tabDbg']];
 /* PROFILE's pages: the profile, the account, the friends */
 export const PROF_TABS = [['me', 'tabProfile'], ['account', 'tabAccount'], ['friends', 'tabFriends']];
@@ -213,7 +215,16 @@ export function stepSection(d) {
 
 /* left / right / the second row's arrows: the section's next page */
 export function stepPage(d) {
-    const tabs = app.sec === 'video' ? GFX_TABS : app.sec === 'controls' ? CTL_TABS : app.sec === 'mods' ? MODS_TABS
+    /* SETTINGS' CONTROLS page: through its own pages first, then on */
+    if (app.sec === 'video' && app.gfxTab === 'ctl') {
+        const j = Math.max(0, CTL_TABS.findIndex(t => t[0] === app.ctlTab)) + d;
+        if (j >= 0 && j < CTL_TABS.length) {
+            selectBlip();
+            setCtlTab(CTL_TABS[j][0]);
+            return;
+        }
+    }
+    const tabs = app.sec === 'video' ? GFX_TABS : app.sec === 'mods' ? MODS_TABS
                : app.sec === 'profile' ? PROF_TABS : null;
     if (!tabs) return;
     const cur = app.sec === 'video' ? app.gfxTab : app.sec === 'mods' ? ms.tab : app.sec === 'profile' ? app.profTab : app.ctlTab;
@@ -357,7 +368,7 @@ export function setPadDbg(v) {
  * again every few seconds while the GAMEPAD tab is open. */
 let padScanBusy = false;
 export async function scanPads() {
-    if (padScanBusy || app.sec !== 'controls' || app.ctlTab !== 'pad') return;
+    if (padScanBusy || app.sec !== 'video' || app.gfxTab !== 'ctl' || app.ctlTab !== 'pad') return;
     padScanBusy = true;
     try {
         const now = {};

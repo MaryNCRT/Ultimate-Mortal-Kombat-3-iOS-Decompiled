@@ -1040,8 +1040,8 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
     per = split > n - split ? split : n - split;    /* the taller column */
     fs = cols > 1 ? 10 : 11;
     b.by1 = top + per * rowh + 26 * s;
-    if (side && b.by1 < top + (nt * 24 + 8 + UI_SIDE) * s + 26 * s)
-        b.by1 = top + (nt * 24 + 8 + UI_SIDE) * s + 26 * s;   /* room for the icon */
+    if (side && b.by1 < top + (nt * UI_SIDE_STEP(nt) + 8 + UI_SIDE) * s + 26 * s)
+        b.by1 = top + (nt * UI_SIDE_STEP(nt) + 8 + UI_SIDE) * s + 26 * s;   /* room for the icon */
     b.w = (int)(b.bx1 + m + 1);
     b.h = (int)(b.by1 + m + 1);
     b.px = (al_px *)malloc(sizeof(al_px) * b.w * b.h);
@@ -1064,7 +1064,7 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
                     al_over(&b.px[y * b.w + x], 0, 0, 0.04f, c * 0.45f);
             }
         for (i = 0; i < nt; i++) {
-            float ty0 = top + (4 + i * 24) * s, ty1 = ty0 + 20 * s;
+            float ty0 = top + (4 + i * UI_SIDE_STEP(nt)) * s, ty1 = ty0 + (UI_SIDE_STEP(nt) - 4) * s;
             if (i == tab)
                 for (y = (int)ty0; y <= (int)ty1; y++)
                     for (x = (int)px0 + 2; x <= (int)px1 - 2; x++) {
@@ -1132,14 +1132,20 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
         if (value[i][0] == 3) {             /* a bar: "\003" + 000..100 + its text */
             float pct = (float)atoi((char[4]){ value[i][1], value[i][2], value[i][3], 0 }) / 100.0f;
             const char *txt = value[i][1] && value[i][2] && value[i][3] ? value[i] + 4 : "";
+            /* the label and the value on the row's upper part, the well
+             * under them across the row: a long label never meets it */
             float bx0 = cx0 + (cx1 - cx0) * UI_BAR_X0, bx1 = cx0 + (cx1 - cx0) * UI_BAR_X1;
-            float cy = y0 + rowh * 0.5f, hh = 3.0f * s, kr = 6.0f * s;
+            float ly = y0 + rowh * 0.36f;
+            float cy = y0 + rowh * 0.80f, hh = 1.6f * s, kr = 3.2f * s;
             float kx = bx0 + (bx1 - bx0) * (pct < 0 ? 0 : pct > 1 ? 1 : pct);
             int x, y;
 
-            while (f > 7 && al_width(label[i], (int)(f * s), 1) + 10 * s > bx0 - cx0)
+            if (f > 9)
+                f = 9;
+            while (f > 6 && al_width(label[i], (int)(f * s), 1)
+                            + al_width(txt, (int)(f * s), 0) + 18 * s > cx1 - cx0)
                 f--;
-            al_say(&b, label[i], (int)(f * s), 1, cx0 + 6 * s, cy, 0, 1, 1, 1, a);
+            al_say(&b, label[i], (int)(f * s), 1, cx0 + 6 * s, ly, 0, 1, 1, 1, a);
             for (y = (int)(cy - kr - 2 * s); y <= (int)(cy + kr + 2 * s); y++)
                 for (x = (int)(bx0 - kr - 2 * s); x <= (int)(bx1 + kr + 2 * s); x++) {
                     float px_ = x + 0.5f, py = y + 0.5f, t, d, k;
@@ -1174,7 +1180,7 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
                             al_over(o, lit, lit, lit, edge * a);
                     }
                 }
-            al_say(&b, txt, (int)(f * s), 0, cx1 - 6 * s, cy, 2, 1, 1, 1, a);
+            al_say(&b, txt, (int)(f * s), 0, cx1 - 6 * s, ly, 2, 1, 1, 1, a);
             continue;
         }
         while (f > 7 && al_width(label[i], (int)(f * s), 1)       /* never */

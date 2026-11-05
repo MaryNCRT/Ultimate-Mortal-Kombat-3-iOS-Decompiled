@@ -1,4 +1,6 @@
 <script>
+    /* embedded: SETTINGS' last page (SecVideo.svelte), inside its page */
+    let { embedded = false } = $props();
     /* CONTROLS: three pages. KEYBOARD and GAMEPAD, for player one or two
      * (DUEL), with the 6- and 5-button layouts (each its keys, and the one
      * the game starts with); DEBUG, the debug mode's keys and its pad
@@ -70,7 +72,7 @@
     </div>
 {/snippet}
 
-<Page>
+<Page bare={embedded}>
     <SubNav tabs={CTL_TABS} current={app.ctlTab} pick={setCtlTab} />
 
     <h2>{app.ctlTab === 'p' ? tx(app.pl === 2 ? 'hControls2' : 'hControls')

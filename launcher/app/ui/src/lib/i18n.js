@@ -5,7 +5,7 @@ import { isWin } from './platform.js';
 export const T = {
     ES: {
         ui: 'ENGLISH', ttlSub: 'PORT DE PC',
-        mBuild: 'Compilar tu .ipa', mVideo: 'Gráficos', mControls: 'Controles',
+        mBuild: 'Compilar tu .ipa', mVideo: 'Configuración', mControls: 'Controles',
         mPlay: 'Jugar', mQuit: 'Salir', mProfile: 'Perfil',
         mAccount: 'Cuenta', dAccount: 'Inicia sesión para guardar tu perfil y tu progreso en la nube, tenerlos igual en cualquier PC y entrar en los leaderboards. Sin cuenta juegas como invitado.',
         mFriends: 'Amigos', dFriends: 'Tus amigos: búscalos por su nombre de perfil o por su código y añádelos. Necesitas una cuenta.',
@@ -63,7 +63,8 @@ export const T = {
         profLight: 'CLARO', profDark: 'OSCURO', profCustom: 'PERSONALIZADO', profShadeLbl: 'DEGRADADO', profColor2: 'HACIA EL COLOR', profColorLight: 'COLOR CLARO (ARRIBA)', profColorDark: 'COLOR OSCURO (ABAJO)',
         profDefault: 'JUGADOR', profReset: 'REINICIAR DATOS', profResetAsk: '¿SEGURO? PULSA OTRA VEZ',
         dBuild: 'El juego se compila en tu PC a partir de tu propio .ipa de UMK3 para iPhone (1.2.59).',
-        dVideo: 'Resolución de ventana, resolución 3D, modo de pantalla y el marco de las barras.',
+        dVideo: 'Video, gráficos, texturas, audio, interfaz y controles: el mismo orden que el menú del juego.',
+        corner: 'BOTONES DE INFO Y PAUSA EN LA PELEA (OCULTOS: NO RESPONDEN AL RATÓN, EL MANDO Y EL TECLADO SÍ ABREN)',
         dControls: 'Teclado y mando de los jugadores 1 y 2 (Xbox, PlayStation, Switch y otros), para 5 y 6 botones, y las teclas del modo debug.',
         dPlay: 'Arranca Ultimate Mortal Kombat 3: idioma del juego, intros y modo debug.',
         dQuit: 'Cierra el launcher.',
@@ -187,7 +188,7 @@ export const T = {
     },
     EN: {
         ui: 'ESPAÑOL', ttlSub: 'PC PORT',
-        mBuild: 'Compile your .ipa', mVideo: 'Graphics', mControls: 'Controls',
+        mBuild: 'Compile your .ipa', mVideo: 'Settings', mControls: 'Controls',
         monitorLbl: 'MONITOR', monitorAuto: 'AUTOMATIC (THE MAIN ONE)', monitorMain: 'MAIN',
         gpuLbl: 'GRAPHICS CARD', gpuAuto: 'AUTOMATIC (THE MOST POWERFUL)',
         gpuGl: "OPENGL USES THE DRIVER'S CHOICE (THE DISCRETE ONE ON LAPTOPS)",
@@ -245,7 +246,8 @@ export const T = {
         profLight: 'LIGHT', profDark: 'DARK', profCustom: 'CUSTOM', profShadeLbl: 'GRADIENT', profColor2: 'INTO THE COLOUR', profColorLight: 'LIGHT COLOUR (TOP)', profColorDark: 'DARK COLOUR (BOTTOM)',
         profDefault: 'PLAYER', profReset: 'RESET DATA', profResetAsk: 'SURE? PRESS AGAIN',
         dBuild: 'The game is compiled on your PC from your own UMK3 iPhone .ipa (1.2.59).',
-        dVideo: 'Window resolution, 3D resolution, display mode and the bars frame.',
+        dVideo: "Video, graphics, textures, audio, interface and controls: the game's settings menu's order.",
+        corner: 'INFO AND PAUSE BUTTONS IN A FIGHT (HIDDEN: THE MOUSE DOES NOTHING, THE PAD AND THE KEYS STILL OPEN THEM)',
         dControls: 'Players 1 and 2 keyboard and gamepad (Xbox, PlayStation, Switch and others), for 5 and 6 buttons, and debug mode\'s keys.',
         dPlay: 'Starts Ultimate Mortal Kombat 3: game language, intros and debug mode.',
         dQuit: 'Closes the launcher.',
