@@ -167,6 +167,7 @@ function defaultConfig() {
         compileShaders: false,       /* compile_shaders=1: PLAY runs --compile-shaders first */
         replays: true,               /* replays=1: the game keeps the last fights (REPLAYS) */
         hideControls: false,         /* hide_controls=1: no on-screen stick and buttons */
+        cornerButtons: true,         /* corner_buttons=0: no INFO / PAUSE buttons in a fight */
         vsync: true,                 /* vsync=0: no waiting for the screen's refresh */
         smoothAnims: false,          /* smooth_anims=1: blend the fighters' frames (drawing only) */
         smoothModels: 0,             /* smooth_models=: 0 off, 1 or 2 the subdivision level */
@@ -243,6 +244,7 @@ function load(p) {
         else if (key === 'compile_shaders') cfg.compileShaders = num === 1;
         else if (key === 'replays') cfg.replays = num !== 0;
         else if (key === 'hide_controls') cfg.hideControls = num === 1;
+        else if (key === 'corner_buttons') cfg.cornerButtons = num !== 0;
         else if (key === 'vsync') cfg.vsync = num !== 0;
         else if (key === 'smooth_anims') cfg.smoothAnims = num === 1;
         else if (key === 'smooth_models') cfg.smoothModels = num >= 1 && num <= 2 ? num : 0;
@@ -350,6 +352,7 @@ function save(p, cfg) {
         'compile_shaders=' + (cfg.compileShaders ? 1 : 0),
         'replays=' + (cfg.replays ? 1 : 0),
         'hide_controls=' + (cfg.hideControls ? 1 : 0),
+        'corner_buttons=' + (cfg.cornerButtons === false ? 0 : 1),
         'vsync=' + (cfg.vsync === false ? 0 : 1),
         'smooth_anims=' + (cfg.smoothAnims ? 1 : 0),
         'smooth_models=' + (cfg.smoothModels === 1 || cfg.smoothModels === 2 ? cfg.smoothModels : 0),

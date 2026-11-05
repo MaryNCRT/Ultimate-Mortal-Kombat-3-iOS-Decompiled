@@ -9,6 +9,7 @@
     import SubNav from '#lib/components/SubNav.svelte';
     import SharpSliders from '#lib/components/SharpSliders.svelte';
     import AudioSliders from '#lib/components/AudioSliders.svelte';
+    import SecControls from '#lib/sections/SecControls.svelte';
 
     const c = $derived(app.cfg);
     const label = (r, i) => r.w + ' × ' + r.h + (i === 0 ? '  ' + tx('original') : '');
@@ -150,6 +151,8 @@
             </div>
         </div>
         <p class="note">{tx('texNote')}</p>
+    {:else if app.gfxTab === 'ctl'}
+        <SecControls embedded />
     {:else}
         <div class="fields">
             <div class="field">
@@ -168,6 +171,8 @@
             </div>
             <label class="chk wide"><input type="checkbox" checked={!!c.hideControls}
                 onchange={e => save({ hideControls: e.currentTarget.checked })}><span>{tx('hidectl')}</span></label>
+            <label class="chk wide"><input type="checkbox" checked={c.cornerButtons !== false}
+                onchange={e => save({ cornerButtons: e.currentTarget.checked })}><span>{tx('corner')}</span></label>
         </div>
         <p class="note">{tx('wsNote')}</p>
     {/if}

@@ -8169,7 +8169,7 @@ static void PortMvPortrait(long character)
 
     if (character < 0 || character >= 26)
         return;
-    snprintf(name, sizeof name, "IPAD%sPORTRAIT.PNG", file[character]);
+    sprintf(name, "IPAD%sPORTRAIT.PNG", file[character]);   /* 26 at most: fits */
     t = lime_load_res_picture(name);
     if (!t)
         return;

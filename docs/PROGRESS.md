@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-05 (online rollback and desyncs, stale objects after an update, the moves list in three columns; on main for 0.2.1) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-05 (release 0.2.1 beta: online fixes, the moves list, settings in one order, published as the pre-release `v0.2.1-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -95,7 +95,43 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
-## Online after 0.2.0, stale objects, moves list (2026-11-05, for 0.2.1)
+## Settings in one order, pause menu, corner buttons (2026-11-05, released in 0.2.1)
+
+- **The game's panel** (FrontEnd.c `PortControlsPanel`, settings_menu.c
+  `g_framed`): VIDEO SETTINGS (`set_menu_open_video`, every category but
+  AUDIO) and AUDIO SETTINGS (`set_menu_open_audio`, from the SETTINGS
+  screen's one AUDIO tile, which replaces `drawPage2x2BigForSettings`' two
+  volume tiles) turn into each other with L1 / R1. `framed_columns` lays the
+  rows out in columns of FR_COL (15) that start at a heading; two at a time,
+  the pair with the selection, and a scroll bar beside them. A bar row
+  (`"\003"`) is drawn as a well with a red-to-gold fill there too, its text
+  in ASCII (the font has no degree sign).
+- **Bars** (ui_alert.c): the label and the value on the row's upper part,
+  the well under them from UI_BAR_X0 0.04 to UI_BAR_X1 0.96;
+  `ui_geo_bar` takes the row's lower half only.
+- **Pause menu** (GameCode.c, the six rows): with `PortHideControls` rows 3
+  to 6 are MOVES LIST (`GamePaused = 2`), BUTTON SETUP, AUDIO SETTINGS and
+  VIDEO SETTINGS. Online they do not open (`online_now`).
+- **`corner_buttons=`** (`port_corner_buttons`, game_main.c, outside the
+  save states): DrawHUD skips INFO and PAUSE; `TogglePauseMenu` ignores a
+  touch unless `hud_keys` made it (`PortKeyTap`, 8 frames).
+- **Moves list:** two pages (`MoveListPage ^= 1`), this side's fighter then
+  the other's; the header is `PortMvPortrait` (IPAD<NAME>PORTRAIT.PNG via
+  `lime_load_res_picture`, draw_gl.c, outside the game's memory), the name
+  in gold, `P1 / 5 BUTTONS`. `PortMvText` and `PortMvSpacing` shrink what
+  does not fit a column. Checked at 4:3, 16:9 and 21:9.
+- **Invites:** `port_online_tell_pending` (gamecode_stubs.c) is 1 while
+  online_invite.txt is there; once the launcher has taken it, SENT ends a
+  second later.
+- **Launcher:** SECTIONS has no `controls`; GFX_TABS ends in `ctl`, which
+  shows SecControls (`embedded`, `Page bare`); left / right walk CONTROLS'
+  own pages first. ini.js `cornerButtons`.
+- **docs/SUBZERO-ICE-BALL.md:** how Sub-Zero's Ice Ball is programmed, from
+  `t_do_sz_forward_zap` to `t_r_freeze`.
+- Not checked by script: the launcher's new SETTINGS (Mary), the stage
+  list's scroll bar.
+
+## Online after 0.2.0, stale objects, moves list (2026-11-05, released in 0.2.1)
 
 - **Rollback off:** Mary's online logs since the 11:33 builds had
   `savestate: arena full at 1043940768 bytes; save states off` at tick 3 one

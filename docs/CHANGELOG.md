@@ -8,10 +8,34 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased (on main, for 0.2.1)
+## 0.2.1 beta (2026-11-05) — online fixes, the moves list, settings in one order
 
-Checked in scripted runs on Mary's PC (two games online over the LAN on
-one machine); **not yet played online by Mary**.
+Published 2026-11-05 as the GitHub pre-release `v0.2.1-beta`. Checked in
+scripted runs on Mary's PC (two games online over the LAN on one machine)
+and by Mary in the menus; **not yet played online between two machines**.
+Both players need 0.2.1, built fresh.
+
+- **Settings in one order everywhere** (Mary): VIDEO, GRAPHICS, TEXTURES,
+  AUDIO, INTERFACE, then CONTROLS. The launcher's GRAPHICS is SETTINGS, with
+  CONTROLS as its last page. In the game, the SETTINGS screen has one
+  AUDIO SETTINGS tile in place of MUSIC VOL. and EFFECTS VOL. (off / low /
+  medium / high): the two bars and the sound output. VIDEO SETTINGS and
+  AUDIO SETTINGS are two pages of one panel (L1 / R1, Q / E); its columns
+  start at a category, with a scroll bar when they do not all fit.
+- **Bars** under their label, across the row, in every menu (the debug
+  menu's FIGHT SPEED ran under a long label) and in the game's own panel.
+- **Pause menu** with a pad or the keys (the on-screen controls hidden):
+  MOVES LIST, BUTTON SETUP, AUDIO SETTINGS and VIDEO SETTINGS, in place of
+  the layout and the two volume lines.
+- **INFO AND PAUSE BUTTONS** (INTERFACE, `corner_buttons=`): hidden, a
+  click on their corners does nothing; the pad and the keys still open
+  them.
+- **The moves list:** the fighter's portrait, name and side at the top;
+  NEXT / BACK go to the other fighter's list; every column fits its width
+  and height, in 4:3, 16:9 and 21:9.
+- **Invites:** SENT until the launcher has sent the invite, then INVITE
+  again, so it can be sent once more.
+- **STAGE SELECT**'s list has a scroll bar.
 
 - **Online rollback was off one boot in two since 0.2.0** ("arena full ...
   save states off" in the log, then "NO SNAPSHOTS"): the textures read ahead
