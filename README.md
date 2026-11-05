@@ -86,15 +86,11 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 
 ## Known problems (0.2.1 beta)
 
-- Online in 0.2.0: the rollback was off one boot in two, and fights drifted apart (desyncs). Fixed in 0.2.1, checked with two games on one PC; not yet played online between two machines. Both players need 0.2.1, built fresh.
+- Online: 0.2.1's fixes (the rollback off one boot in two, fights drifting apart) were checked with two games on one PC, not yet between two machines. Both players need 0.2.1, built fresh.
+- With the on-screen controls hidden, a click on the screen still moves the fighter (Mary); next on the list.
 - Joining online, a pad's X glyph showed over START (Mary); not reproduced yet.
-- With the on-screen controls hidden, a click on the screen still moves the fighter (Mary); to be fixed after 0.2.1.
-- Some stages still pause up to ~1.3 s on their first frames (THE STREET), as their events load.
-- 0.2.0's performance work (hits and fatalities without frame drops, SMOOTH MODELS at a fraction, a 3 s faster boot) was measured in scripted runs; not yet played through by Mary. A round's start can still show a slow frame or two.
-- Steam Deck: the fight played the 5-button layout whatever was chosen (#171); likely the buttons fix above, not yet checked on a Deck.
-
-- Earlier entries (a dropped intro frame, the repeated death scream, duplicating a fighter, the Motaro softlock, SCULPT's "500 Internal Error") were closed by Mary in 0.1.18: she no longer sees them.
-- In a kombo the one hit slides back slightly after a few punches (issue #114). That is the original game's own rule (`t_ccp3` → `t_separate_us`), checked against the binary instruction by instruction.
+- Some stages still pause up to ~1.3 s on their first frames (THE STREET), as their events load. A round's start can still show a slow frame or two.
+- Steam Deck: the fight played the 5-button layout whatever was chosen (#171); 0.2.0 changed how the choice is kept, not yet checked on a Deck.
 
 ## Building from source
 
