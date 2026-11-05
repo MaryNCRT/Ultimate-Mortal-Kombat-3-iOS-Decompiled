@@ -96,6 +96,20 @@ static UINT audio_id(void)
     return WAVE_MAPPER;
 }
 
+const char *plat_audio_device_name(void) { return g_audio_want; }
+
+int plat_audio_names(char (*out)[64], int max)
+{
+    UINT i, n = waveOutGetNumDevs();
+    WAVEOUTCAPSA c;
+    int k = 0;
+
+    for (i = 0; i < n && k < max; i++)
+        if (waveOutGetDevCapsA(i, &c, sizeof c) == MMSYSERR_NOERROR && c.szPname[0])
+            snprintf(out[k++], 64, "%s", c.szPname);
+    return k;
+}
+
 void plat_audio_list(void)
 {
     UINT i, n = waveOutGetNumDevs();

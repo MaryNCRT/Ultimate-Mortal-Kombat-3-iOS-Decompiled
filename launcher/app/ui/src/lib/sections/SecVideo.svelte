@@ -8,6 +8,7 @@
     import Page from '#lib/components/Page.svelte';
     import SubNav from '#lib/components/SubNav.svelte';
     import SharpSliders from '#lib/components/SharpSliders.svelte';
+    import AudioSliders from '#lib/components/AudioSliders.svelte';
 
     const c = $derived(app.cfg);
     const label = (r, i) => r.w + ' × ' + r.h + (i === 0 ? '  ' + tx('original') : '');
@@ -74,13 +75,6 @@
                 </select>
             </div>
             <div class="field">
-                <label class="lbl" for="audioDev">{tx('audioLbl')}</label>
-                <select id="audioDev" class="sel" value={c.audioDevice || 'auto'}
-                        onchange={e => { selectBlip(); save({ audioDevice: e.currentTarget.value }); }}>
-                    {#each audios as a}<option value={a.value}>{a.name}</option>{/each}
-                </select>
-            </div>
-            <div class="field">
                 <label class="lbl" for="res">{tx('res')}</label>
                 <select id="res" class="sel" value={c.res >= 0 ? c.res : 1}
                         onchange={e => save({ res: e.currentTarget.selectedIndex })}>
@@ -88,6 +82,19 @@
                 </select>
             </div>
         </div>
+    {:else if app.gfxTab === 'audio'}
+        <h3 class="first">{tx('hGAudio')}</h3>
+        <AudioSliders />
+        <div class="fields">
+            <div class="field">
+                <label class="lbl" for="audioDev">{tx('audioLbl')}</label>
+                <select id="audioDev" class="sel" value={c.audioDevice || 'auto'}
+                        onchange={e => { selectBlip(); save({ audioDevice: e.currentTarget.value }); }}>
+                    {#each audios as a}<option value={a.value}>{a.name}</option>{/each}
+                </select>
+            </div>
+        </div>
+        <p class="note">{tx('audioNote')}</p>
     {:else if app.gfxTab === 'gfx'}
         <h3 class="first">{tx('gImage')}</h3>
         <div class="fields">

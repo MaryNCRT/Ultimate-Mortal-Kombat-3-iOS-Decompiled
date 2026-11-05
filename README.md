@@ -32,7 +32,7 @@ The only source of truth is the binary. Nothing enters the tree that is not deri
 |---|---|---|
 | **Decompilation** (`src/decomp/`) | **2,572 / 2,572 (100%)** | LIME 3D engine (109), front end & scenes (291), arcade fight engine (2,172). |
 | **Verification** (`tools/decomp/`) | **100%** | Differential tests against the `armrecomp` ARM→C oracle; 229 data tables checked at build time (`ctest`). |
-| **PC port** (`src/runtime/`) | **Playable — v0.1.23 beta** | OpenGL, Vulkan, Direct3D 12; Windows and Linux; 3:2 / 4:3 / 16:9 / 21:9; keyboard and pads; local 2 players, LAN (MULTIPLAYER, Radmin VPN too) and online with rollback; replays; mods. |
+| **PC port** (`src/runtime/`) | **Playable — v0.2.0 beta** | OpenGL, Vulkan, Direct3D 12; Windows and Linux; 3:2 / 4:3 / 16:9 / 21:9; keyboard and pads; local 2 players, LAN (MULTIPLAYER, Radmin VPN too) and online with rollback; replays; mods. |
 | **Launcher** (`launcher/`) | Windows and Linux | Compiles the game with a bundled `zig cc` (nothing to install), updates itself, MODS tools, PROFILE with ACCOUNT (optional; progress in the cloud, the game's leaderboards live) and FRIENDS. |
 
 Every release is tested by the project's tester, Mary, before the next one builds on it; the [Changelog](docs/CHANGELOG.md) says for each change whether she has played it yet.
@@ -84,11 +84,11 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 - **TEXTURES:** every texture of the game by where it belongs, replaced into a mod.
 - **EXPORT:** fighters, stages, models and textures as FBX, GLB, USD (USDA/USDC/USDZ) or OBJ with PNG textures.
 
-## Known problems (0.1.23 beta)
+## Known problems (0.2.0 beta)
 
 - Not yet tried online with two players (Mary's friend was away): the guest seeing the host's STAGE SELECT, invites from FRIENDS, and the fixes to the desyncs and to the other player's lost attack voices. Published at Mary's request.
 - Some stages still pause up to ~1.3 s on their first frames (THE STREET), as their events load.
-- On main, not released: hits and fatalities no longer drop frames, SMOOTH MODELS costs a fraction, the boot is 3 s faster, the 5 / 6 buttons choice stays, the babality's baby stands on the floor, and GRAPHICS CARD / SOUND OUTPUT can be chosen. Not yet played by Mary.
+- 0.2.0's performance work (hits and fatalities without frame drops, SMOOTH MODELS at a fraction, a 3 s faster boot) was measured in scripted runs; not yet played through by Mary. A round's start can still show a slow frame or two.
 - Steam Deck: the fight played the 5-button layout whatever was chosen (#171); likely the buttons fix above, not yet checked on a Deck.
 
 - Earlier entries (a dropped intro frame, the repeated death scream, duplicating a fighter, the Motaro softlock, SCULPT's "500 Internal Error") were closed by Mary in 0.1.18: she no longer sees them.

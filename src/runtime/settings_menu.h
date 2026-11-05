@@ -66,6 +66,7 @@ void port_renderer_set(int r);
 /* smooth_anims=: the fighters' frames blended when drawn (GameCode.c) */
 extern int port_smooth_anims;
 extern int port_noob_saibot;          /* FrontEnd.c: umk3.ini noob_saibot= */
+extern int port_kombo_slide;          /* game_main.c: umk3.ini kombo_slide= */
 /* smooth_models=: 0 off, 1 or 2 the subdivision level (smooth_models.c) */
 extern int port_smooth_models;
 /* sharp_edge_angle= (degrees) and sharp_edge_strength= (0..1), smooth_models.c */

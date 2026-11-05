@@ -48,6 +48,16 @@ struct ui_geo { float bx, bw, title0, top, rowh, ow, sx, sw, stop, srow,
 /* the row under (x, y), 0 the first shown: rows 0..split-1 down the left
  * column (cw wide), the rest down the right, gap further; -1 none */
 int ui_geo_row(const struct ui_geo *g, float x, float y, int rows);
+/* A BAR row: its value is "\003" + the setting as 000..100 + the text shown
+ * at its right (ui_bar_value). The well runs from UI_BAR_X0 to UI_BAR_X1 of
+ * the row's width; ui_geo_bar says where (x, y) falls along it, 0..1, or -1
+ * when it is not over the bar of the row under it. */
+#ifndef UI_BAR_X0                      /* the same in platform/ui_alert.h */
+#define UI_BAR_X0 0.46f
+#define UI_BAR_X1 0.80f
+#endif
+float ui_geo_bar(const struct ui_geo *g, float x, float y, int rows);
+const char *ui_bar_value(char *buf, int n, float share, const char *text);
 /* where the right column starts: at a section's heading, so a section is
  * never cut in two; rows when it is all one column */
 int ui_menu_split(const char *const *label, int rows);

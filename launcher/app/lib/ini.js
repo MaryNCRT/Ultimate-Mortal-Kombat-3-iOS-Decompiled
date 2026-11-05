@@ -174,6 +174,7 @@ function defaultConfig() {
         sharpStrength: SHARP_STRENGTH,   /* sharp_edge_strength=: percent, 0..100 */
         rtShadows: false,            /* rt_shadows=1: real-time shadows (experimental) */
         noobSaibot: false,           /* noob_saibot=1: Noob Saibot on the select grid (offline only) */
+        komboSlide: true,            /* kombo_slide=0: no push apart mid-kombo (offline only) */
         language: 0,                 /* "" = follow Windows */
         ui: 'EN',                    /* the launcher's own language */
         ipa: '',
@@ -186,6 +187,8 @@ function defaultConfig() {
         monitor: 0,                  /* monitor=: 0 automatic, 1..n */
         gpu: 'auto',                 /* gpu=: auto (the most powerful) or a card's name */
         audioDevice: 'auto',         /* audio_device=: auto (the system's) or a name */
+        musicVolume: 100,            /* music_volume=: 0..100, over the game's own */
+        sfxVolume: 100,              /* sfx_volume=: 0..100 */
         p2PadIcons: 'auto',          /* p2pad_icons= */         /* pad_dbg_menu=: the pad buttons that open the debug menu */
         keys,
         keys5,
@@ -247,6 +250,7 @@ function load(p) {
         else if (key === 'sharp_edge_strength') cfg.sharpStrength = clampInt(num, 0, 100, SHARP_STRENGTH);
         else if (key === 'rt_shadows') cfg.rtShadows = num === 1;
         else if (key === 'noob_saibot') cfg.noobSaibot = num === 1;
+        else if (key === 'kombo_slide') cfg.komboSlide = num !== 0;
         else if (key === 'language') {
             const i = LANGS.findIndex(l => l.code.toUpperCase() === val.toUpperCase());
             if (i >= 0)
@@ -261,6 +265,9 @@ function load(p) {
             cfg.gpu = val || 'auto';
         } else if (key === 'audio_device') {
             cfg.audioDevice = val || 'auto';
+        } else if (key === 'music_volume' || key === 'sfx_volume') {
+            cfg[key === 'music_volume' ? 'musicVolume' : 'sfxVolume'] =
+                Number.isFinite(num) ? Math.max(0, Math.min(100, num)) : 100;
         } else if (key === 'monitor') {
             cfg.monitor = num >= 0 && num < 16 ? num : 0;
         } else if (key === 'pad_icons' || key === 'p2pad_icons') {
@@ -350,6 +357,7 @@ function save(p, cfg) {
         'sharp_edge_strength=' + clampInt(cfg.sharpStrength, 0, 100, SHARP_STRENGTH),
         'rt_shadows=' + (cfg.rtShadows ? 1 : 0),
         'noob_saibot=' + (cfg.noobSaibot ? 1 : 0),
+        'kombo_slide=' + (cfg.komboSlide === false ? 0 : 1),
         'buttons=' + (cfg.buttons === 6 ? 6 : 5),
         'pad=' + (cfg.pad || 'auto'),
         'arch=' + (cfg.arch === 'x64' ? 'x64' : 'x86'),
@@ -361,6 +369,8 @@ function save(p, cfg) {
         'monitor=' + (cfg.monitor | 0),
         'gpu=' + String(cfg.gpu || 'auto').replace(/[\r\n=]/g, ' '),
         'audio_device=' + String(cfg.audioDevice || 'auto').replace(/[\r\n=]/g, ' '),
+        'music_volume=' + (Number.isFinite(cfg.musicVolume) ? cfg.musicVolume : 100),
+        'sfx_volume=' + (Number.isFinite(cfg.sfxVolume) ? cfg.sfxVolume : 100),
         'p2pad_icons=' + (cfg.p2PadIcons || 'auto'),
     ];
     if (cfg.padName)

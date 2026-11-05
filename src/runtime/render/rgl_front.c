@@ -315,11 +315,13 @@ int rgl_gpu_match(const char *name)
 
 #ifndef _WIN32
 void rgl_gpu_list(void) { }             /* Linux: the launcher offers AUTO */
+int  rgl_gpu_names(char (*out)[128], int max) { (void)out; (void)max; return 0; }
 #endif
 
 double rgl_game_ms;
 int    rgl_game_ticks;
 long   rgl_smooth_tris;
+void (*rgl_profile_dump)(int slow);
 double port_prof_ms[5];                /* this frame's: smoothing, sounds, loads */
 
 void rgl_present(void)
@@ -347,6 +349,8 @@ void rgl_present(void)
                        rgl_smooth_tris, port_prof_ms[0], port_prof_ms[1], port_prof_ms[2]);
             }
             memset(port_prof_ms, 0, sizeof port_prof_ms);
+            if (rgl_profile_dump)               /* UMK3_PROFILE (win32_gl.c) */
+                rgl_profile_dump(t1 - last > 100.0);
             frame_ms += t1 - last;
             present_ms += t1 - t0;
             shadow_ms += rgl_shadow_ms;

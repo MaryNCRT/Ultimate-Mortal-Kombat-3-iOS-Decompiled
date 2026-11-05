@@ -539,6 +539,9 @@ static void save_shot_as(const char *name, int w, int h)
 
 static int  g_cfg_buttons;            /* buttons=5|6: the launcher's layout */
 int port_tick_unseen;                   /* this tick's picture is not shown (smooth_models.c) */
+/* KOMBO SLIDE (umk3.ini kombo_slide=, the settings menu's GAME): 1 the
+ * original's push apart mid-kombo, 0 none -- offline only (mkreact.c) */
+int port_kombo_slide = 1;
 
 /* -[UMK3AppDelegate startAppWithOptions:application:], the part that is the
  * game's: the language, with English when the bundle has no terms-of-service
@@ -1122,6 +1125,11 @@ static void read_config(const char *dir)
             snprintf(rgl_gpu, sizeof rgl_gpu, "%s", v);
         else if (strcmp(line, "audio_device") == 0)    /* port: auto or a name */
             plat_audio_device(v);
+        else if (strcmp(line, "music_volume") == 0 || strcmp(line, "sfx_volume") == 0) {
+            extern int port_music_pct, port_sfx_pct;   /* lime_menu.c, 0..100 */
+            int pc = atoi(v) < 0 ? 0 : atoi(v) > 100 ? 100 : atoi(v);
+            if (line[0] == 'm') port_music_pct = pc; else port_sfx_pct = pc;
+        }
         else if (strcmp(line, "monitor") == 0)     /* port: 0 auto, 1..n */
             plat_monitor_select(atoi(v));
         else if (strcmp(line, "antialiasing") == 0)
@@ -1140,6 +1148,8 @@ static void read_config(const char *dir)
             extern int port_smooth_anims;
             port_smooth_anims = atoi(v) == 1;
         }
+        else if (strcmp(line, "kombo_slide") == 0)     /* mkreact.c, offline only */
+            port_kombo_slide = atoi(v) != 0;
         else if (strcmp(line, "noob_saibot") == 0) {   /* FrontEnd.c */
             extern int port_noob_saibot;
             port_noob_saibot = atoi(v) == 1;
@@ -3311,6 +3321,12 @@ int main(int argc, char **argv)
             int i;
 
             rgl_game_ticks++;
+            {
+                /* KOMBO SLIDE off: offline and outside a replay only */
+                extern int PortNoKomboSlide;            /* mkreact.c */
+                PortNoKomboSlide = !port_kombo_slide && !rb_active()
+                                   && !rp_playing() && GameMode != 1;
+            }
             /* another tick follows in this frame: this one's picture is
              * cleared unseen, so its models are drawn as made, not smoothed
              * (smooth_models.c). Smoothing every catch-up tick made a late

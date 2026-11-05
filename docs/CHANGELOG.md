@@ -8,10 +8,22 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased (on main, for 0.1.24) — frame drops, load times, devices
+## 0.2.0 beta (2026-11-05) — performance, audio, devices, kombos
 
-Not published yet. Checked in scripted runs on Mary's PC (RTX 5070,
-Direct3D 12); **not yet played by Mary**.
+Published 2026-11-05 as the GitHub pre-release `v0.2.0-beta`
+(`UMK3-PC-0.2.0-beta.zip`, `UMK3-PC-0.2.0-beta-linux-x64.tar.gz`).
+Checked in scripted runs on Mary's PC (RTX 5070, Direct3D 12); the KOMBO
+SLIDE option **tried by Mary**: works.
+
+- **KOMBO SLIDE** (issue #114), the settings menu's GAME and the launcher's
+  PLAY: off, a kombo no longer pushes the opponent away (neither the chain
+  rule nor the hits' push from the second hit on). The original's by
+  default; offline only (online and replays keep the original's).
+- **AUDIO**: a page of its own in the game's settings menu and the
+  launcher's GRAPHICS: MUSIC and EFFECTS AND VOICES, 0-100 %, as bars that
+  take the mouse (a click or a drag), the arrows and the pad; and SOUND
+  OUTPUT. The game's settings menu has GRAPHICS CARD too. The bars replace
+  the debug menu's FIGHT SPEED text bar and the sharp-edge values.
 
 - **Hits and fatalities no longer drop frames.** The session log was
   unbuffered: every line a write to the disk (~4 ms), and a hit prints

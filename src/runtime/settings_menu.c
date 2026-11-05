@@ -107,7 +107,7 @@ static const char *const k_pb[PB_COUNT] = {
  * interface and what changes the game), CONTROLS (the KEYBOARD and the
  * GAMEPAD) and PROFILE. The game's own video panel (g_framed) shows the
  * first three and the interface on one page, as before. */
-enum { PAGE_VIDEO, PAGE_GFX, PAGE_TEX, PAGE_GAME, PAGE_CTL, PAGE_PROF, N_PAGES };
+enum { PAGE_VIDEO, PAGE_GFX, PAGE_TEX, PAGE_AUDIO, PAGE_GAME, PAGE_CTL, PAGE_PROF, N_PAGES };
 
 enum {
     R_DISPLAY, R_MONITOR, R_RES, R_APPLY, R_RRES, R_AA, R_TEXQ, R_ASPECT, R_UI, R_HIDE, R_LANG, R_REND, R_SMOOTH, R_SMODEL,
@@ -118,8 +118,55 @@ enum {
     R_SHARPA, R_SHARPS,                 /* SMOOTH MODELS' sharp edges */
     R_RTSHADOW,                         /* REAL-TIME SHADOWS (render/rgl.h) */
     R_PALT, R_PGRAD,                    /* the outfit; the gradient picker */
-    R_NOOB                              /* NOOB SAIBOT ON THE ROSTER (FrontEnd.c) */
+    R_NOOB,                             /* NOOB SAIBOT ON THE ROSTER (FrontEnd.c) */
+    R_SLIDE,                            /* KOMBO SLIDE (mkreact.c t_ccp3) */
+    R_MUSIC, R_SFX,                     /* AUDIO's bars (lime_menu.c) */
+    R_AUDIODEV, R_GPU                   /* SOUND OUTPUT, GRAPHICS CARD: at the next start */
 };
+
+/* The bars: a value 0..1 shown as a slider (ui_alert.c), set by a click or
+ * a drag along it and by left / right a step at a time */
+static char g_bar_txt[24];              /* a bar's text, while its row is made */
+
+static int is_bar(int kind)
+{
+    return kind == R_MUSIC || kind == R_SFX || kind == R_SHARPA || kind == R_SHARPS;
+}
+
+/* SOUND OUTPUT and GRAPHICS CARD: the system's, read once; 0 is AUTO */
+extern int port_music_pct, port_sfx_pct;   /* lime_menu.c */
+void port_volume_apply(void);
+static char g_auds[16][64], g_gpus[8][128];
+static int  g_naud = -1, g_ngpu = -1;
+
+static void devices_read(void)
+{
+    if (g_naud < 0)
+        g_naud = plat_audio_names(g_auds, 16);
+    if (g_ngpu < 0)
+        g_ngpu = rgl_gpu_names(g_gpus, 8);
+}
+
+static int aud_index(void)
+{
+    const char *w = plat_audio_device_name();
+    int i;
+
+    for (i = 0; w && w[0] && i < g_naud; i++)
+        if (strncmp(g_auds[i], w, strlen(g_auds[i])) == 0)
+            return i + 1;
+    return 0;
+}
+
+static int gpu_index(void)
+{
+    int i;
+
+    for (i = 0; i < g_ngpu; i++)
+        if (rgl_gpu_match(g_gpus[i]))
+            return i + 1;
+    return 0;
+}
 
 /* PROFILE's gradient picker (plat_ui_gradient, the launcher's
  * GradientPicker.svelte): open over the menu, the control the keys and the
@@ -577,7 +624,7 @@ static void build(void)
 
     g_n = 0;
     switch (g_page) {
-    case PAGE_VIDEO: case PAGE_GFX: case PAGE_TEX: case PAGE_GAME: {
+    case PAGE_VIDEO: case PAGE_GFX: case PAGE_TEX: case PAGE_AUDIO: case PAGE_GAME: {
         int all = g_framed;
         static const char *mode_es[3] = { "VENTANA", "SIN BORDES", "PANTALLA COMPLETA" };
         static const char *mode_en[3] = { "WINDOW", "BORDERLESS", "FULLSCREEN" };
@@ -630,16 +677,24 @@ static void build(void)
                 tx("DESACTIVADO", "OFF"));
         /* GRAPHICS' two sliders in the launcher (SharpSliders.svelte): which
          * edges the smoothing keeps, and how much; off with the smoothing */
-        add(R_SHARPA, 0, tx("ANGULO DE BORDES AFILADOS", "SHARP EDGE ANGLE"), "< %d\xc2\xb0 >",
-            (int)(port_sharp_angle + 0.5f));
+        add(R_SHARPA, 0, tx("ANGULO DE BORDES AFILADOS", "SHARP EDGE ANGLE"), "%s",
+            ui_bar_value(v, sizeof v, port_sharp_angle / 180.0f,
+                         (snprintf(g_bar_txt, sizeof g_bar_txt, "%d\xc2\xb0", (int)(port_sharp_angle + 0.5f)), g_bar_txt)));
         g_rows[g_n - 1].en = port_smooth_models != 0;
-        add(R_SHARPS, 0, tx("CONSERVACION DE BORDES AFILADOS", "SHARP EDGE PRESERVATION"), "< %d%% >",
-            (int)(port_sharp_strength * 100.0f + 0.5f));
+        add(R_SHARPS, 0, tx("CONSERVACION DE BORDES AFILADOS", "SHARP EDGE PRESERVATION"), "%s",
+            ui_bar_value(v, sizeof v, port_sharp_strength,
+                         (snprintf(g_bar_txt, sizeof g_bar_txt, "%d%%", (int)(port_sharp_strength * 100.0f + 0.5f)), g_bar_txt)));
         g_rows[g_n - 1].en = port_smooth_models != 0;
         /* REAL-TIME SHADOWS, experimental: drawn with Vulkan and Direct3D
          * 12; with them on the flattened shadow under a fighter goes. The
          * note is a row of its own, shown, not chosen: beside the value it
          * ran over the label */
+        devices_read();
+        add(R_GPU, 0, tx("TARJETA GRAFICA", "GRAPHICS CARD"), "< %s >",
+            gpu_index() ? g_gpus[gpu_index() - 1] : tx("AUTOMATICA (LA MAS POTENTE)", "AUTOMATIC (THE MOST POWERFUL)"));
+        add(R_HEAD, 0, tx("  TARJETA: AL REINICIAR EL JUEGO (VULKAN Y DIRECT3D 12)",
+                          "  CARD: AT THE NEXT START (VULKAN AND DIRECT3D 12)"), "");
+        g_rows[g_n - 1].en = 0;
         add(R_RTSHADOW, 0, tx("SOMBRAS EN TIEMPO REAL", "REAL-TIME SHADOWS"), "< %s >",
             rgl_shadows ? tx("ACTIVADAS", "ON") : tx("DESACTIVADAS", "OFF"));
         add(R_HEAD, 0, rgl_renderer == RGL_OPENGL
@@ -651,6 +706,21 @@ static void build(void)
         head(tx("TEXTURAS", "TEXTURES"));
         add(R_TEXQ, 0, tx("CALIDAD", "QUALITY"), "< %s >",
             tx(tq_es[g_gfx.texq], tq_en[g_gfx.texq]));
+        }
+        if (all || g_page == PAGE_AUDIO) {
+        char pc[12];
+        devices_read();
+        head(tx("SONIDO", "SOUND"));
+        snprintf(pc, sizeof pc, "%d%%", port_music_pct);
+        add(R_MUSIC, 0, tx("MUSICA", "MUSIC"), "%s",
+            ui_bar_value(v, sizeof v, port_music_pct / 100.0f, pc));
+        snprintf(pc, sizeof pc, "%d%%", port_sfx_pct);
+        add(R_SFX, 0, tx("EFECTOS Y VOCES", "EFFECTS AND VOICES"), "%s",
+            ui_bar_value(v, sizeof v, port_sfx_pct / 100.0f, pc));
+        add(R_AUDIODEV, 0, tx("SALIDA DE SONIDO", "SOUND OUTPUT"), "< %s >",
+            aud_index() ? g_auds[aud_index() - 1] : tx("LA DEL SISTEMA", "THE SYSTEM'S"));
+        add(R_HEAD, 0, tx("  SALIDA: AL REINICIAR EL JUEGO", "  OUTPUT: AT THE NEXT START"), "");
+        g_rows[g_n - 1].en = 0;
         }
         if (!all && g_page != PAGE_GAME)
             break;
@@ -670,6 +740,8 @@ static void build(void)
         head(tx("JUEGO", "GAME"));
         add(R_NOOB, 0, tx("NOOB SAIBOT EN EL ROSTER", "NOOB SAIBOT ON THE ROSTER"), "< %s >",
             port_noob_saibot ? tx("ACTIVADO", "ON") : tx("DESACTIVADO", "OFF"));
+        add(R_SLIDE, 0, tx("DESLIZAMIENTO EN KOMBOS", "KOMBO SLIDE"), "< %s >",
+            port_kombo_slide ? tx("EL ORIGINAL", "THE ORIGINAL'S") : tx("NO", "OFF"));
         add(R_HEAD, 0, tx("  SOLO OFFLINE: NUNCA EN EL ONLINE", "  OFFLINE ONLY: NEVER ONLINE"), "");
         g_rows[g_n - 1].en = 0;
         break;
@@ -782,7 +854,7 @@ static int has_value(int kind)
 {
     switch (kind) {
     case R_DISPLAY: case R_MONITOR: case R_RES: case R_RRES: case R_AA: case R_TEXQ:
-    case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_SMOOTH: case R_SMODEL: case R_VSYNC: case R_NOOB: case R_PLAYER: case R_LAYOUT:
+    case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_SMOOTH: case R_SMODEL: case R_VSYNC: case R_NOOB: case R_SLIDE: case R_AUDIODEV: case R_GPU: case R_PLAYER: case R_LAYOUT:
     case R_RTSHADOW: case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE: case R_PCOLOR2:
     case R_PICONS:
         return 1;
@@ -908,6 +980,35 @@ static int gp_in(const float *b, float x, float y)
     return x >= b[0] && x < b[2] && y >= b[1] && y < b[3];
 }
 
+/* a bar set from the pointer, 0..1 along it */
+static void bar_set(int kind, float f)
+{
+    int was;
+
+    switch (kind) {
+    case R_MUSIC:
+        was = port_music_pct;
+        port_music_pct = (int)(f * 20.0f + 0.5f) * 5;
+        if (was != port_music_pct)
+            port_volume_apply();
+        g_dirty |= was != port_music_pct;
+        break;
+    case R_SFX:
+        was = port_sfx_pct;
+        port_sfx_pct = (int)(f * 20.0f + 0.5f) * 5;
+        g_dirty |= was != port_sfx_pct;
+        break;
+    case R_SHARPA:
+        port_sharp_angle = (float)((int)(f * 36.0f + 0.5f) * 5);
+        g_dirty = 1;
+        break;
+    case R_SHARPS:
+        port_sharp_strength = (float)(int)(f * 20.0f + 0.5f) * 0.05f;
+        g_dirty = 1;
+        break;
+    }
+}
+
 static void change(int kind, int d)
 {
     int i;
@@ -1021,6 +1122,31 @@ static void change(int kind, int d)
         return;
     case R_NOOB:                        /* at the next select screen */
         port_noob_saibot = !port_noob_saibot;
+        g_dirty = 1;
+        return;
+    case R_SLIDE:                       /* at once (mkreact.c) */
+        port_kombo_slide = !port_kombo_slide;
+        g_dirty = 1;
+        return;
+    case R_MUSIC:                       /* at once, 5 a step */
+        port_music_pct += 5 * d;
+        port_music_pct = port_music_pct < 0 ? 0 : port_music_pct > 100 ? 100 : port_music_pct;
+        port_volume_apply();
+        g_dirty = 1;
+        return;
+    case R_SFX:
+        port_sfx_pct += 5 * d;
+        port_sfx_pct = port_sfx_pct < 0 ? 0 : port_sfx_pct > 100 ? 100 : port_sfx_pct;
+        g_dirty = 1;
+        return;
+    case R_AUDIODEV:                    /* at the next start */
+        i = wrap(aud_index() + d, g_naud + 1);
+        plat_audio_device(i ? g_auds[i - 1] : "auto");
+        g_dirty = 1;
+        return;
+    case R_GPU:
+        i = wrap(gpu_index() + d, g_ngpu + 1);
+        snprintf(rgl_gpu, sizeof rgl_gpu, "%s", i ? g_gpus[i - 1] : "auto");
         g_dirty = 1;
         return;
     case R_SMODEL:                      /* at once (smooth_models.c) */
@@ -1207,6 +1333,24 @@ static int drop_fill(int kind)
         snprintf(L[1], 48, "%s", tx("ACTIVADO", "ON"));
         n = 2;
         g_drop_cur = port_noob_saibot ? 1 : 0;
+        break;
+    case R_AUDIODEV:
+        snprintf(L[0], 48, "%s", tx("LA DEL SISTEMA", "THE SYSTEM'S"));
+        for (n = 1; n <= g_naud && n < 17; n++)
+            snprintf(L[n], 48, "%s", g_auds[n - 1]);
+        g_drop_cur = aud_index();
+        break;
+    case R_GPU:
+        snprintf(L[0], 48, "%s", tx("AUTOMATICA (LA MAS POTENTE)", "AUTOMATIC (THE MOST POWERFUL)"));
+        for (n = 1; n <= g_ngpu && n < 9; n++)
+            snprintf(L[n], 48, "%s", g_gpus[n - 1]);
+        g_drop_cur = gpu_index();
+        break;
+    case R_SLIDE:
+        snprintf(L[0], 48, "%s", tx("NO", "OFF"));
+        snprintf(L[1], 48, "%s", tx("EL ORIGINAL", "THE ORIGINAL'S"));
+        n = 2;
+        g_drop_cur = port_kombo_slide ? 1 : 0;
         break;
     case R_SMODEL:
         snprintf(L[0], 48, "%s", tx("DESACTIVADO", "OFF"));
@@ -1760,6 +1904,16 @@ void set_menu_tick(void)
         build();
     }
 
+    /* a bar: clicked or dragged along, the value where the pointer is */
+    if (g_mdown && ui_geo_bar(&g_geo, g_mx, g_my, VIS_ROWS) >= 0) {
+        int i = g_first + ui_geo_row(&g_geo, g_mx, g_my, VIS_ROWS);
+        float f = ui_geo_bar(&g_geo, g_mx, g_my, VIS_ROWS);
+        if (i < g_n && g_rows[i].en && is_bar(g_rows[i].kind)) {
+            g_sel = i;
+            bar_set(g_rows[i].kind, f);
+            click = 0;
+        }
+    }
     if (click && g_geo.srow > 0 && g_mx >= g_geo.sx && g_mx < g_geo.sx + g_geo.sw
         && g_my >= g_geo.stop && g_my < g_geo.stop + N_PAGES * g_geo.srow) {
         int t = (int)((g_my - g_geo.stop) / g_geo.srow);   /* a category */
@@ -1818,6 +1972,7 @@ void set_menu_draw(void)
     tabs[PAGE_VIDEO] = "VIDEO";
     tabs[PAGE_GFX] = tx("GRAFICOS", "GRAPHICS");
     tabs[PAGE_TEX] = tx("TEXTURAS", "TEXTURES");
+    tabs[PAGE_AUDIO] = "AUDIO";
     tabs[PAGE_GAME] = tx("JUEGO", "GAME");
     tabs[PAGE_CTL] = tx("CONTROLES", "CONTROLS");
     tabs[PAGE_PROF] = tx("PERFIL", "PROFILE");
@@ -2091,6 +2246,11 @@ static void save_ini(void)
                         : port_renderer() == RGL_D3D12 ? "d3d12" : "opengl");
     put("smooth_anims", "%d", port_smooth_anims);
     put("noob_saibot", "%d", port_noob_saibot);
+    put("kombo_slide", "%d", port_kombo_slide);
+    put("music_volume", "%d", port_music_pct);
+    put("sfx_volume", "%d", port_sfx_pct);
+    put("gpu", "%s", rgl_gpu[0] ? rgl_gpu : "auto");
+    put("audio_device", "%s", plat_audio_device_name()[0] ? plat_audio_device_name() : "auto");
     put("vsync", "%d", rgl_vsync);
     put("smooth_models", "%d", port_smooth_models);
     put("sharp_edge_angle", "%d", (int)(port_sharp_angle + 0.5f));

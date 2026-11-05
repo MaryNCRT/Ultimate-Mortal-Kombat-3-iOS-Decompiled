@@ -38,6 +38,8 @@
         onchange={e => save({ skipIntro: e.currentTarget.checked })}><span>{tx('skip')}</span></label>
     <label class="chk"><input type="checkbox" checked={!!app.cfg.noobSaibot}
         onchange={e => save({ noobSaibot: e.currentTarget.checked })}><span>{tx('noob')}</span></label>
+    <label class="chk"><input type="checkbox" checked={app.cfg.komboSlide === false}
+        onchange={e => save({ komboSlide: !e.currentTarget.checked })}><span>{tx('noSlide')}</span></label>
     <label class="chk"><input type="checkbox" checked={!!app.cfg.compileShaders}
         onchange={e => save({ compileShaders: e.currentTarget.checked })}><span>{tx('shaders')}</span></label>
     <p class="note">{tx('offlineNote')}</p>

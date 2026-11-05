@@ -27,7 +27,7 @@ export const SECTIONS = ['build', 'play', 'video', 'controls', 'profile', 'mods'
 export const TITLE = { build: 'mBuild', play: 'mPlay', video: 'mVideo', controls: 'mControls', profile: 'mProfile', mods: 'mMods', replays: 'mReplays', quit: 'mQuit' };
 export const DESC = { build: 'dBuild', video: 'dVideo', controls: 'dControls', profile: 'dProfile', play: 'dPlay', mods: 'dMods', replays: 'dReplays', quit: 'dQuit' };
 /* the pages of GRAPHICS and CONTROLS, in their second row */
-export const GFX_TABS = [['video', 'gVideo'], ['gfx', 'gGfx'], ['tex', 'gTex'], ['ui', 'gUi']];
+export const GFX_TABS = [['video', 'gVideo'], ['gfx', 'gGfx'], ['tex', 'gTex'], ['audio', 'gAudio'], ['ui', 'gUi']];
 export const CTL_TABS = [['p', 'tabKb'], ['pad', 'tabPad'], ['dbg', 'tabDbg']];
 /* PROFILE's pages: the profile, the account, the friends */
 export const PROF_TABS = [['me', 'tabProfile'], ['account', 'tabAccount'], ['friends', 'tabFriends']];

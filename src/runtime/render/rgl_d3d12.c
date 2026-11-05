@@ -1496,6 +1496,34 @@ rgl_backend rgl_d3d12 = {
 
 /* --list-gpus (the launcher's GRAPHICS > GPU): every hardware adapter, its
  * "gpu<TAB>name" a line, the most video memory first */
+int rgl_gpu_names(char (*out)[128], int max)
+{
+    HMODULE dx = LoadLibraryA("dxgi.dll");
+    HRESULT (WINAPI *mk)(UINT, REFIID, void **) =
+        dx ? (HRESULT (WINAPI *)(UINT, REFIID, void **))(void *)GetProcAddress(dx, "CreateDXGIFactory2") : NULL;
+    IDXGIFactory4 *f = NULL;
+    IDXGIAdapter1 *ad;
+    UINT i;
+    int n = 0, k;
+
+    if (!mk || FAILED(mk(0, &IID_IDXGIFactory4, (void **)&f)))
+        return 0;
+    for (i = 0; n < max && IDXGIFactory4_EnumAdapters1(f, i, &ad) != DXGI_ERROR_NOT_FOUND; i++) {
+        DXGI_ADAPTER_DESC1 d;
+        IDXGIAdapter1_GetDesc1(ad, &d);
+        if (!(d.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) {
+            WideCharToMultiByte(CP_UTF8, 0, d.Description, -1, out[n], 128, NULL, NULL);
+            for (k = 0; k < n && strcmp(out[k], out[n]) != 0; k++)
+                ;
+            if (k == n)
+                n++;
+        }
+        IDXGIAdapter1_Release(ad);
+    }
+    IDXGIFactory4_Release(f);
+    return n;
+}
+
 void rgl_gpu_list(void)
 {
     HMODULE dx = LoadLibraryA("dxgi.dll");

@@ -1129,6 +1129,54 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
                         0.45f * (1 - (x - cx0) / (cx1 - cx0)));
             continue;
         }
+        if (value[i][0] == 3) {             /* a bar: "\003" + 000..100 + its text */
+            float pct = (float)atoi((char[4]){ value[i][1], value[i][2], value[i][3], 0 }) / 100.0f;
+            const char *txt = value[i][1] && value[i][2] && value[i][3] ? value[i] + 4 : "";
+            float bx0 = cx0 + (cx1 - cx0) * UI_BAR_X0, bx1 = cx0 + (cx1 - cx0) * UI_BAR_X1;
+            float cy = y0 + rowh * 0.5f, hh = 3.0f * s, kr = 6.0f * s;
+            float kx = bx0 + (bx1 - bx0) * (pct < 0 ? 0 : pct > 1 ? 1 : pct);
+            int x, y;
+
+            while (f > 7 && al_width(label[i], (int)(f * s), 1) + 10 * s > bx0 - cx0)
+                f--;
+            al_say(&b, label[i], (int)(f * s), 1, cx0 + 6 * s, cy, 0, 1, 1, 1, a);
+            for (y = (int)(cy - kr - 2 * s); y <= (int)(cy + kr + 2 * s); y++)
+                for (x = (int)(bx0 - kr - 2 * s); x <= (int)(bx1 + kr + 2 * s); x++) {
+                    float px_ = x + 0.5f, py = y + 0.5f, t, d, k;
+                    al_px *o;
+                    if (x < 0 || x >= b.w || y < 0 || y >= b.h)
+                        continue;
+                    o = &b.px[y * b.w + x];
+                    /* the well, dark, with a light lower edge */
+                    k = al_rr((float)x, (float)y, bx0, cy - hh, bx1, cy + hh, hh);
+                    if (k > 0)
+                        al_over(o, 0.06f, 0.07f, 0.10f, k * 0.85f * a);
+                    /* the part set: red into gold, lit on top */
+                    k = al_rr((float)x, (float)y, bx0, cy - hh + 0.5f * s, kx, cy + hh - 0.5f * s, hh);
+                    if (k > 0) {
+                        t = (px_ - bx0) / (bx1 - bx0 > 1 ? bx1 - bx0 : 1);
+                        d = (py - (cy - hh)) / (2 * hh);
+                        al_over(o, 0.80f + 0.20f * t, 0.10f + 0.68f * t - 0.10f * d,
+                                0.08f + 0.10f * t, k * a);
+                    }
+                    /* the knob: a shadow, a white disc, a rim */
+                    d = sqrtf((px_ - kx) * (px_ - kx) + (py - cy - 1.0f * s) * (py - cy - 1.0f * s));
+                    if (d < kr + 1.5f * s)
+                        al_over(o, 0, 0, 0, 0.35f * a * (1 - d / (kr + 1.5f * s)));
+                    d = sqrtf((px_ - kx) * (px_ - kx) + (py - cy) * (py - cy));
+                    if (d < kr + 0.5f) {
+                        float edge = d > kr - 0.5f ? kr + 0.5f - d : 1.0f;
+                        float lit = 0.80f + 0.20f * (1 - (py - (cy - kr)) / (2 * kr));
+                        if (d > kr - 1.6f * s)  /* the rim: the selection's blue */
+                            al_over(o, i == sel ? 0.35f : 0.55f, i == sel ? 0.62f : 0.55f,
+                                    i == sel ? 1.0f : 0.60f, edge * a);
+                        else
+                            al_over(o, lit, lit, lit, edge * a);
+                    }
+                }
+            al_say(&b, txt, (int)(f * s), 0, cx1 - 6 * s, cy, 2, 1, 1, 1, a);
+            continue;
+        }
         while (f > 7 && al_width(label[i], (int)(f * s), 1)       /* never */
                         + al_width(value[i], (int)(f * s), 0)     /* over */
                         + 18 * s > cx1 - cx0)                    /* each other */

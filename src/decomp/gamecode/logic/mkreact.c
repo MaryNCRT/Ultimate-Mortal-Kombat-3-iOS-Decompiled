@@ -4594,6 +4594,13 @@ long t_separate_us(struct MK3THREAD *thread);
  * `t_local_reaction_exit` only if the stack runs out early, which is the
  * same safety floor every one-shot pop in this file falls back to.
  */
+/* Port, not in the binary (issue #114): 1 when the KOMBO SLIDE option is
+ * off -- a kombo's hits past the threshold no longer push the fighters
+ * apart. Set by game_main.c every tick, and only offline outside a replay:
+ * online and in a replay the binary's rule always runs, so both games and
+ * a replay compute the same fight. 0 here (the headless tests). */
+int PortNoKomboSlide;
+
 long t_ccp3(MK3THREAD *thread)
 {
     MK3OBJ *obj = (MK3OBJ *)thread->proc;
@@ -4610,7 +4617,7 @@ long t_ccp3(MK3THREAD *thread)
     }
 
     obj->field1c = obj->field00->field4c;
-    if ((long)obj->field1c < (long)obj->field34) {
+    if ((long)obj->field1c < (long)obj->field34 || PortNoKomboSlide) {
         if ((long)thread->frame > 0) {
             thread->frame = thread->frame - 1;
             return 0;
