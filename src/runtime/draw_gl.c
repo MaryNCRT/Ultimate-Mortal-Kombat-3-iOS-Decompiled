@@ -905,19 +905,18 @@ void lime_glyph_shadow(uint8_t *px, int w, int h)
  * (FrontEnd.c, the continue screens), from "aditional textures" beside the
  * game's res folder. Loaded once and kept, as the game's own. NULL when it
  * is not there. */
-TEXTURE *lime_load_extra_texture(const char *file)
+static TEXTURE *load_picture(const char *file, const char *dir)
 {
     char key[300], full[1200];
     TexEntry *e;
     LimeImage img;
     GLuint name = 0;
 
-    snprintf(key, sizeof key, "extra:%s", file);
+    snprintf(key, sizeof key, "extra:%s%s", dir, file);
     e = tex_find(key);
     if (e)
         return &e->tex;
-    snprintf(full, sizeof full, "%s/../aditional textures/%s",
-             lime_platform_asset_root(), file);
+    snprintf(full, sizeof full, "%s/%s%s", lime_platform_asset_root(), dir, file);
     memset(&img, 0, sizeof(img));
     if (!try_one(full, &img))
         return NULL;
@@ -938,6 +937,19 @@ TEXTURE *lime_load_extra_texture(const char *file)
     tex_add(e);
     printf("extra texture: %s (%dx%d)\n", full, img.width, img.height);
     return &e->tex;
+}
+
+TEXTURE *lime_load_extra_texture(const char *file)
+{
+    return load_picture(file, "../aditional textures/");
+}
+
+/* Port: one of the game's own pictures (res/Textures), kept the same way --
+ * outside the game's memory, so loading it mid-fight changes nothing a
+ * rollback snapshot holds (the moves list's portrait, GameCode.c). */
+TEXTURE *lime_load_res_picture(const char *file)
+{
+    return load_picture(file, "Textures/");
 }
 
 /* A texture lime_load_extra_texture gave: its picture's size. */

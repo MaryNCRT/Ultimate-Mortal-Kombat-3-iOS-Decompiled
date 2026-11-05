@@ -8065,15 +8065,35 @@ static const char *PortMvTx(const char *es, const char *en)
     return Language[0] == 'E' && Language[1] == 'S' ? es : en;
 }
 
-/* One entry centred on cx; returns the y under it. */
+/* Text centred on cx at `scale`, smaller when wider than the column */
+static void PortMvText(const char *s, float cx, float y, float scale)
+{
+    float w = (float)limeGetStringWidth(&GameFont, s) * scale * FE_WidthScale;
+    float room = (float)limeScreenWidth / 3.0f - 16.0f * FE_WidthScale;
+
+    if (w > room && w > 0.0f)
+        scale *= room / w;
+    limeDrawFONT(&GameFont, s, cx, y, 1, scale * FE_WidthScale, fontcol);
+}
+
+/* A caption that is more than blanks (the specials' are two spaces) */
+static int PortMvHasCaption(const char *caption)
+{
+    return caption && limeFontStrLen(caption) > 0
+        && limeGetStringWidth(&GameFont, limeUC(caption)) * 0.42f > 6.0f;
+}
+
+/* One entry centred on cx, its lines `vs` apart (1 at most, less when the
+ * column is long); returns the y under it. */
 static float PortMvEntry(float cx, float y, const char *name, const int *seq,
-                         const char *caption)
+                         const char *caption, float vs)
 {
     char  buf[128];
     long  cursor = 0, n = 0, i;
-    float line = FE_HeightScale;
+    float line = FE_HeightScale * vs;
+    float room = (float)limeScreenWidth / 3.0f - 16.0f * FE_WidthScale;
 
-    limeDrawFONT(&GameFont, name, cx, y, 1, 0.52f * FE_WidthScale, fontcol);
+    PortMvText(name, cx, y, 0.52f);
     y += 11.0f * line;
     while (n < 15 && seq[n] != -1)
         n++;
@@ -8081,31 +8101,74 @@ static float PortMvEntry(float cx, float y, const char *name, const int *seq,
     PortMvMeasure = 1;
     for (i = 0; i < n; i++)
         cursor = DrawMoveListEntry(seq[i], cursor, 0, y, buf);
+    if ((float)cursor > room) {         /* a long kombo: smaller icons */
+        PortMvScale *= room / (float)cursor;
+        cursor = (long)room;
+    }
     PortMvMeasure = 0;
     cursor = (long)(cx - (float)cursor * 0.5f);
     for (i = 0; i < n; i++)
         cursor = DrawMoveListEntry(seq[i], cursor, 0, y, buf);
     PortMvScale = 1.0f;
     y += 12.0f * line;
-    if (caption && limeFontStrLen(caption) > 0) {
-        limeDrawFONT(&GameFont, limeUC(caption), cx, y, 1, 0.42f * FE_WidthScale, fontcol);
+    if (PortMvHasCaption(caption)) {
+        PortMvText(limeUC(caption), cx, y, 0.42f);
         y += 9.0f * line;
     }
     return y + 4.0f * line;
+}
+
+/* How much of the panel's height (52..286) a column's entries leave room
+ * for: 1 when they fit, less to close them up */
+static float PortMvSpacing(long rows, long captions)
+{
+    float need = (float)rows * 27.0f + (float)captions * 9.0f;
+
+    return need > 234.0f ? 234.0f / need : 1.0f;
 }
 
 static void PortMvColumn(int c, const char *title)
 {
     float w = (float)limeScreenWidth / 3.0f, cx = w * ((float)c + 0.5f);
 
-    limeDrawFONT(&GameFont, title, cx, 30.0f * FE_HeightScale, 1,
-                 0.6f * FE_WidthScale, fontcol);
+    PortMvText(title, cx, 30.0f * FE_HeightScale, 0.6f);
     limeFillRect(w * (float)c + 10.0f * FE_WidthScale, 45.0f * FE_HeightScale,
                  w - 20.0f * FE_WidthScale, 1.0f * FE_HeightScale,
                  0.6f, 0.6f, 0.6f, 0.5f);
     if (c)
         limeFillRect(w * (float)c, 30.0f * FE_HeightScale, 1.0f * FE_HeightScale,
                      258.0f * FE_HeightScale, 0.6f, 0.6f, 0.6f, 0.35f);
+}
+
+/* The fighter's picture, as the tower draws it (FrontEnd.c, the
+ * IPAD...PORTRAIT.PNG sheets, one a character in CharacterNames' order) */
+TEXTURE *lime_load_res_picture(const char *file);
+
+static void PortMvPortrait(long character)
+{
+    static const char *const file[26] = {
+        "KANO", "SONYA", "JAX", "NIGHTWOLF", "SUBZERO", "STRYKER", "SINDEL",
+        "SEKTOR", "CYRAX", "KUNGLAO", "KABAL", "SHEEVA", "SHANGTSUNG",
+        "LIUKANG", "SMOKE", "KITANA", "JADE", "MILEENA", "SCORPION",
+        "REPTILE", "ERMAC", "OLDSUBZERO", "OLDSMOKE", "NOOBSAIBOT",
+        "MOTARO", "SHAOKAHN",
+    };
+    char name[64];
+    TEXTURE *t;
+    int w, h;
+    float s;
+
+    if (character < 0 || character >= 26)
+        return;
+    snprintf(name, sizeof name, "IPAD%sPORTRAIT.PNG", file[character]);
+    t = lime_load_res_picture(name);
+    if (!t)
+        return;
+    lime_extra_texture_size(t, &w, &h);
+    s = 24.0f * FE_HeightScale;
+    limeDrawSprite(t, 8.0f * FE_HeightScale, 2.0f * FE_HeightScale,
+                   h > 0 ? s * (float)w / (float)h : s, s,
+                   0.0f, 0.0f, 1.0f, 1.0f, col);
 }
 
 static void PortMvAllPage(long character)
@@ -8121,27 +8184,37 @@ static void PortMvAllPage(long character)
 
     limeFillRect(0.0f, 26.0f * FE_HeightScale, (float)limeScreenWidth,
                  266.0f * FE_HeightScale, 0.0f, 0.0f, 0.0f, 0.7f);
+    float vs;
+
     PortMvColumn(0, limeUC(GameTextNoHeader(0xef)));
     usprintf(name, UC(PortMvTx("REMATES", "FINISHING MOVES")));
     PortMvColumn(1, limeUC(name));
     usprintf(name, UC("KOMBOS"));
     PortMvColumn(2, limeUC(name));
     for (s = 0; s < 2; s++) {
+        long caps = 0;
+
+        for (r = 0; r < e->section[s].rows; r++) {
+            usprintf(cap, UC("%s"), GameTextNoHeader(e->section[s].captionId + r));
+            caps += PortMvHasCaption(cap);
+        }
+        vs = PortMvSpacing(e->section[s].rows, caps);
         y = 52.0f * FE_HeightScale;
         for (r = 0; r < e->section[s].rows; r++) {
             usprintf(name, UC("%s"), GameTextNoHeader(e->section[s].nameId + r));
             usprintf(cap, UC("%s"), GameTextNoHeader(e->section[s].captionId + r));
             y = PortMvEntry(w * ((float)s + 0.5f), y, limeUC(name),
                             (const int *)((const char *)table + (base + r) * 0x40),
-                            cap);
+                            cap, vs);
         }
         base += e->section[s].rows;
     }
+    vs = PortMvSpacing(e->rows3, 0);
     y = 52.0f * FE_HeightScale;
-    for (r = 0; r < e->rows3 && r < 9; r++) {
+    for (r = 0; r < e->rows3; r++) {
         usprintf(name, UC("KOMBO %d"), (int)r + 1);
         y = PortMvEntry(w * 2.5f, y, limeUC(name),
-                        (const int *)((const char *)table + (base + r) * 0x40), 0);
+                        (const int *)((const char *)table + (base + r) * 0x40), 0, vs);
     }
     if (e->rows3 == 0)
         limeDrawFONT(&GameFont, limeUC("-"), w * 2.5f, 60.0f * FE_HeightScale, 1,
@@ -8179,12 +8252,16 @@ void MovesList(void)
     header = 0xee;
 
     asciiToUnicode(CharacterNames[character], title, 0x80);
-    if (page == 0)
+    if (page == 0) {
+        PortMvPortrait(character);
         usprintf(strBuf, UC("%s"), limeUC(title));
-    else
+        limeDrawFONT(&GameFont, strBuf, 38.0f * FE_HeightScale,
+                     4.0f * FE_HeightScale, 0, FE_WidthScale, fontcol);
+    } else {
         usprintf(strBuf, UC("%s - %s"), limeUC(title), GameTextNoHeader(header));
-    limeDrawFONT(&GameFont, strBuf, (float)(limeScreenWidth / 2),
-                 4.0f * FE_HeightScale, 1, FE_WidthScale, fontcol);
+        limeDrawFONT(&GameFont, strBuf, (float)(limeScreenWidth / 2),
+                     4.0f * FE_HeightScale, 1, FE_WidthScale, fontcol);
+    }
 
     /* port: the three columns first (above); the original's five pages were
      * the basic moves in three, then each of the fighter's two sections
