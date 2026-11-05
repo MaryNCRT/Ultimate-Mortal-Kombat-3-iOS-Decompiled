@@ -13,6 +13,7 @@ void set_menu_open_controls(void);
 /* The settings screen's VIDEO SETTINGS box: the GRAPHICS page alone, in
  * the game's own panel, as the button setup. */
 void set_menu_open_video(void);
+void set_menu_open_audio(void);        /* the SETTINGS screen's AUDIO SETTINGS */
 /* After GameCodeMain: a pending open grabs the frame just drawn. */
 void set_menu_after_frame(int vx, int vy, int vw, int vh);
 /* Each frame the menu is open, instead of the game's tick: the pointer as
@@ -65,6 +66,7 @@ int  port_renderer(void);
 void port_renderer_set(int r);
 /* smooth_anims=: the fighters' frames blended when drawn (GameCode.c) */
 extern int port_smooth_anims;
+extern int port_corner_buttons;        /* GameCode.c: umk3.ini corner_buttons= */
 extern int port_noob_saibot;          /* FrontEnd.c: umk3.ini noob_saibot= */
 void set_menu_page(int page);           /* a page by number (scripts) */
 extern int port_kombo_slide;          /* game_main.c: umk3.ini kombo_slide= */

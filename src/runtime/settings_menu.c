@@ -119,6 +119,7 @@ enum {
     R_RTSHADOW,                         /* REAL-TIME SHADOWS (render/rgl.h) */
     R_PALT, R_PGRAD,                    /* the outfit; the gradient picker */
     R_NOOB,                             /* NOOB SAIBOT ON THE ROSTER (FrontEnd.c) */
+    R_CORNER,                           /* the fight's INFO and PAUSE buttons (GameCode.c) */
     R_SLIDE,                            /* KOMBO SLIDE (mkreact.c t_ccp3) */
     R_MUSIC, R_SFX,                     /* AUDIO's bars (lime_menu.c) */
     R_AUDIODEV, R_GPU                   /* SOUND OUTPUT, GRAPHICS CARD: at the next start */
@@ -358,9 +359,24 @@ void set_menu_open_controls(void)
     g_first = 0;
 }
 
+/* The game's SETTINGS screen's AUDIO SETTINGS (FrontEnd.c, in place of
+ * the original's MUSIC VOL. and EFFECTS VOL. tiles, Mary): the same panel
+ * as VIDEO SETTINGS with the AUDIO rows alone -- the two bars and the
+ * sound output. */
+void set_menu_open_audio(void)
+{
+    if (g_open || g_want || online_now())
+        return;
+    g_want = 1;
+    g_framed = 1;
+    g_page = PAGE_AUDIO;
+    g_sel = 1;                          /* under the AUDIO heading */
+    g_first = 0;
+}
+
 void set_menu_open_video(void)
 {
-    if (g_open || g_want)
+    if (g_open || g_want || online_now())
         return;
     g_want = 1;
     g_framed = 1;
@@ -637,7 +653,7 @@ static void build(void)
     g_n = 0;
     switch (g_page) {
     case PAGE_VIDEO: case PAGE_GFX: case PAGE_TEX: case PAGE_AUDIO: case PAGE_GAME: {
-        int all = g_framed;
+        int all = g_framed && g_page == PAGE_VIDEO;     /* VIDEO SETTINGS: all but AUDIO */
         static const char *mode_es[3] = { "VENTANA", "SIN BORDES", "PANTALLA COMPLETA" };
         static const char *mode_en[3] = { "WINDOW", "BORDERLESS", "FULLSCREEN" };
         static const char *tq_es[3] = { "IPHONE", "IPAD", "SIN LIMITE" };
@@ -673,8 +689,7 @@ static void build(void)
             rgl_vsync ? tx("ACTIVADO", "ON") : tx("DESACTIVADO", "OFF"));
         }
         if (all || g_page == PAGE_GFX) {
-        if (!all)
-            head(tx("GRAFICOS", "GRAPHICS"));
+        head(tx("GRAFICOS", "GRAPHICS"));
         if (g_gfx.aa)
             add(R_AA, 0, "ANTIALIASING", "< X%d >", g_gfx.aa);
         else
@@ -704,8 +719,8 @@ static void build(void)
         devices_read();
         add(R_GPU, 0, tx("TARJETA GRAFICA", "GRAPHICS CARD"), "< %s >",
             gpu_index() ? g_gpus[gpu_index() - 1] : tx("AUTOMATICA (LA MAS POTENTE)", "AUTOMATIC (THE MOST POWERFUL)"));
-        add(R_HEAD, 0, tx("  TARJETA: AL REINICIAR EL JUEGO (VULKAN Y DIRECT3D 12)",
-                          "  CARD: AT THE NEXT START (VULKAN AND DIRECT3D 12)"), "");
+        add(R_HEAD, 0, tx("  AL REINICIAR (VULKAN Y DIRECT3D 12)",
+                          "  AT THE NEXT START (VULKAN, DIRECT3D 12)"), "");
         g_rows[g_n - 1].en = 0;
         add(R_RTSHADOW, 0, tx("SOMBRAS EN TIEMPO REAL", "REAL-TIME SHADOWS"), "< %s >",
             rgl_shadows ? tx("ACTIVADAS", "ON") : tx("DESACTIVADAS", "OFF"));
@@ -719,10 +734,10 @@ static void build(void)
         add(R_TEXQ, 0, tx("CALIDAD", "QUALITY"), "< %s >",
             tx(tq_es[g_gfx.texq], tq_en[g_gfx.texq]));
         }
-        if (all || g_page == PAGE_AUDIO) {
+        if (g_page == PAGE_AUDIO) {     /* VIDEO SETTINGS' next page (Mary) */
         char pc[12];
         devices_read();
-        head(tx("SONIDO", "SOUND"));
+        head("AUDIO");
         snprintf(pc, sizeof pc, "%d%%", port_music_pct);
         add(R_MUSIC, 0, tx("MUSICA", "MUSIC"), "%s",
             ui_bar_value(v, sizeof v, port_music_pct / 100.0f, pc));
@@ -736,6 +751,8 @@ static void build(void)
         }
         if (!all && g_page != PAGE_GAME)
             break;
+        /* VIDEO SETTINGS has the categories in the tabs' order: VIDEO,
+         * GRAPHICS, TEXTURES, INTERFACE, GAME; AUDIO is its next page */
         head(tx("INTERFAZ", "INTERFACE"));
         add(R_LANG, 0, tx("IDIOMA", "LANGUAGE"), "< %s >",
             tx(k_lang[lang_index()].es, k_lang[lang_index()].en));
@@ -745,8 +762,8 @@ static void build(void)
             g_gfx.ui ? "IPAD" : "IPHONE");
         add(R_HIDE, 0, tx("CONTROLES EN PANTALLA", "ON-SCREEN CONTROLS"), "< %s >",
             g_gfx.hidectl ? tx("OCULTOS", "HIDDEN") : tx("VISIBLES", "SHOWN"));
-        if (all)
-            break;
+        add(R_CORNER, 0, tx("BOTONES DE INFO Y PAUSA", "INFO AND PAUSE BUTTONS"), "< %s >",
+            port_corner_buttons ? tx("VISIBLES", "SHOWN") : tx("OCULTOS", "HIDDEN"));
         /* what changes the game: offline only, an online fight keeps the
          * game as it ships whatever is set here */
         head(tx("JUEGO", "GAME"));
@@ -866,7 +883,7 @@ static int has_value(int kind)
 {
     switch (kind) {
     case R_DISPLAY: case R_MONITOR: case R_RES: case R_RRES: case R_AA: case R_TEXQ:
-    case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_SMOOTH: case R_SMODEL: case R_VSYNC: case R_NOOB: case R_SLIDE: case R_AUDIODEV: case R_GPU: case R_PLAYER: case R_LAYOUT:
+    case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_SMOOTH: case R_SMODEL: case R_VSYNC: case R_NOOB: case R_CORNER: case R_SLIDE: case R_AUDIODEV: case R_GPU: case R_PLAYER: case R_LAYOUT:
     case R_RTSHADOW: case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE: case R_PCOLOR2:
     case R_PICONS:
         return 1;
@@ -1136,6 +1153,10 @@ static void change(int kind, int d)
         port_noob_saibot = !port_noob_saibot;
         g_dirty = 1;
         return;
+    case R_CORNER:                      /* at once (GameCode.c DrawHUD) */
+        port_corner_buttons = !port_corner_buttons;
+        g_dirty = 1;
+        return;
     case R_SLIDE:                       /* at once (mkreact.c) */
         port_kombo_slide = !port_kombo_slide;
         g_dirty = 1;
@@ -1345,6 +1366,12 @@ static int drop_fill(int kind)
         snprintf(L[1], 48, "%s", tx("ACTIVADO", "ON"));
         n = 2;
         g_drop_cur = port_noob_saibot ? 1 : 0;
+        break;
+    case R_CORNER:
+        snprintf(L[0], 48, "%s", tx("OCULTOS", "HIDDEN"));
+        snprintf(L[1], 48, "%s", tx("VISIBLES", "SHOWN"));
+        n = 2;
+        g_drop_cur = port_corner_buttons ? 1 : 0;
         break;
     case R_AUDIODEV:
         snprintf(L[0], 48, "%s", tx("LA DEL SISTEMA", "THE SYSTEM'S"));
@@ -1834,8 +1861,13 @@ static void capture(void)
 
 static void turn_page(int d)
 {
-    if (g_framed && g_page == PAGE_VIDEO)   /* the video settings: one page */
+    if (g_framed && g_page != PAGE_CTL) {   /* VIDEO SETTINGS <-> AUDIO SETTINGS */
+        g_page = g_page == PAGE_AUDIO ? PAGE_VIDEO : PAGE_AUDIO;
+        g_sel = 1;
+        g_first = 0;
+        build();
         return;
+    }
     if (g_framed) {                     /* the button setup: keys, pad */
         g_fsub ^= 1;
         g_sel = 0;
@@ -1968,6 +2000,40 @@ void set_menu_tick(void)
         build();
 }
 
+/* The game's own panel (g_framed): columns of at most FR_COL rows, each
+ * starting at a category's heading (Mary: a category split over two
+ * columns looked wrong; a category longer than a column is cut). Two shown
+ * at a time, the pair with the selection; cs[] the columns' first rows.
+ * Returns the number of columns. */
+#define FR_COL 15
+static int framed_columns(int *cs, int max)
+{
+    int n = 0, i = 0;
+
+    while (i < g_n && n < max) {
+        int start = i, used = 0;
+
+        cs[n++] = start;
+        while (i < g_n) {
+            int j = i + 1;
+            while (j < g_n && g_rows[j].label[0] != 2)
+                j++;                    /* i..j-1: one category */
+            if (used && used + (j - i) > FR_COL)
+                break;
+            if (j - i > FR_COL - used)  /* longer than a column: cut */
+                j = i + (FR_COL - used);
+            used += j - i;
+            i = j;
+            if (used >= FR_COL)
+                break;
+        }
+    }
+    cs[n] = g_n;
+    return n;
+}
+
+void limeFillRect(float x, float y, float w, float h, float r, float g, float b, float a);
+
 void set_menu_draw(void)
 {
     const char *tabs[N_PAGES], *lp[VIS_ROWS], *vp[VIS_ROWS];
@@ -1985,7 +2051,7 @@ void set_menu_draw(void)
     tabs[PAGE_GFX] = tx("GRAFICOS", "GRAPHICS");
     tabs[PAGE_TEX] = tx("TEXTURAS", "TEXTURES");
     tabs[PAGE_AUDIO] = "AUDIO";
-    tabs[PAGE_GAME] = tx("JUEGO", "GAME");
+    tabs[PAGE_GAME] = tx("INTERFAZ", "INTERFACE");     /* the launcher's name; GAME is its second part */
     tabs[PAGE_CTL] = tx("CONTROLES", "CONTROLS");
     tabs[PAGE_PROF] = tx("PERFIL", "PROFILE");
     if (g_first > 0 && g_first == g_sel && g_rows[g_sel - 1].kind == R_HEAD)
@@ -2025,22 +2091,39 @@ void set_menu_draw(void)
     {
         if (g_framed) {                 /* the game's own panel */
             float bx, top, bw, rh, cw, gap, km = 320.0f / (float)limeScreenHeight;
-            int split = ui_menu_split(lp, rows);
+            int split, cs[64], nc = framed_columns(cs, 63), c = 0, left;
             char ff[384];
+
+            while (c + 1 < nc && cs[c + 1] <= g_sel)
+                c++;
+            left = c & ~1;              /* the pair (0 1), (2 3), ... */
+            g_first = cs[left];
+            split = cs[left + 1 <= nc ? left + 1 : nc] - g_first;
+            rows = cs[left + 2 <= nc ? left + 2 : nc] - g_first;
+            if (rows > VIS_ROWS)
+                rows = VIS_ROWS;
+            for (i = 0; i < rows; i++) {
+                lp[i] = g_rows[g_first + i].label;
+                vp[i] = g_rows[g_first + i].value;
+                en[i] = g_rows[g_first + i].en;
+            }
 
             char ft[64];
 
             if (g_capture)
                 snprintf(ff, sizeof ff, "%s", footer);
-            else if (g_page == PAGE_VIDEO)
-                snprintf(ff, sizeof ff, "%s %s   %s %s", ok, tx("ELIGE", "PICK"),
-                         k, tx("VUELVE", "BACK"));
+            else if (g_page != PAGE_CTL)
+                snprintf(ff, sizeof ff, "%s%s %s   %s %s   %s %s", ta, tb,
+                         g_page == PAGE_AUDIO ? "VIDEO" : "AUDIO",
+                         ok, tx("ELIGE", "PICK"), k, tx("VUELVE", "BACK"));
             else
                 snprintf(ff, sizeof ff, "%s%s %s   %s %s   %s %s", ta, tb,
                          g_fsub ? tx("TECLADO", "KEYBOARD") : tx("MANDO", "GAMEPAD"),
                          ok, tx("ELIGE", "PICK"), k, tx("VUELVE", "BACK"));
             if (g_page == PAGE_VIDEO)
                 snprintf(ft, sizeof ft, "%s", tx("AJUSTES DE VIDEO", "VIDEO SETTINGS"));
+            else if (g_page == PAGE_AUDIO)
+                snprintf(ft, sizeof ft, "%s", tx("AJUSTES DE AUDIO", "AUDIO SETTINGS"));
             else
                 snprintf(ft, sizeof ft, "%s - %s", tx("CONFIG. BOTONES", "BUTTON SETUP"),
                          g_fsub ? tx("MANDO", "GAMEPAD") : tx("TECLADO", "KEYBOARD"));
@@ -2054,6 +2137,13 @@ void set_menu_draw(void)
             g_geo.gap = gap * km;
             g_geo.split = split;
             g_geo.srow = 0;
+            if (nc > 2) {               /* the scroll bar, at the frame's right */
+                float x = bx + bw + 10.0f / km, h = rh * FR_COL;
+                float y0 = top + h * (float)left / (float)nc;
+                float y1 = top + h * (float)(left + 2 < nc ? left + 2 : nc) / (float)nc;
+                limeFillRect(x, top, 3.0f / km, h, 0.0f, 0.0f, 0.0f, 0.6f);
+                limeFillRect(x, y0, 3.0f / km, y1 - y0, 1.0f, 0.85f, 0.2f, 0.95f);
+            }
             goto drop;
         }
         /* the categories down the side panel, and under them the player's
@@ -2258,6 +2348,7 @@ static void save_ini(void)
                         : port_renderer() == RGL_D3D12 ? "d3d12" : "opengl");
     put("smooth_anims", "%d", port_smooth_anims);
     put("noob_saibot", "%d", port_noob_saibot);
+    put("corner_buttons", "%d", port_corner_buttons);
     put("kombo_slide", "%d", port_kombo_slide);
     put("music_volume", "%d", port_music_pct);
     put("sfx_volume", "%d", port_sfx_pct);

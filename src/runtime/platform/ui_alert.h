@@ -34,8 +34,8 @@ int  ui_glyph_have(const char *name);
 
 /* a BAR row's well, as a share of the row (debug_menu.h ui_geo_bar) */
 #ifndef UI_BAR_X0                      /* the same in debug_menu.h */
-#define UI_BAR_X0 0.46f
-#define UI_BAR_X1 0.80f
+#define UI_BAR_X0 0.04f
+#define UI_BAR_X1 0.96f
 #endif
 
 #endif

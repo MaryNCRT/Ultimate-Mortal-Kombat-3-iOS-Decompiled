@@ -156,6 +156,7 @@ int PortPagesExit(void);
 void PortNavDrawLine(const char *s, int right);
 void set_menu_open_controls(void);      /* runtime/settings_menu.c */
 void set_menu_open_video(void);         /* runtime/settings_menu.c */
+void set_menu_open_audio(void);
 int PortNavHover;
 int PortPadPalette[2];
 /* the same for the moves list's NEXT, drawn from GameCode.c */
@@ -6286,7 +6287,17 @@ void FE_Task_Settings(void)
                    (float)limeScreenWidth, (float)limeScreenHeight,
                    0.0f, 0.0234375f, 1.0f, 0.703125f, col);
 
-    choice = drawPage2x2BigForSettings();
+    /* port (Mary): the original's MUSIC VOL. and EFFECTS VOL. tiles, which
+     * stepped through off / low / medium / high, are one AUDIO SETTINGS
+     * tile in the middle: the bars and the sound output
+     * (set_menu_open_audio). drawPage2x2BigForSettings' top-left tile is
+     * kept. */
+    choice = 0;
+    if (DrawButtonNew(&BUTTON_BOXLT, 0x9c, 0x59, 1) && FE_FadeAdd == 0.0f)
+        choice = 1;
+    if (DrawButtonNew(&BUTTON_BOXLB, 0xf0, 0xe0, 1) && FE_FadeAdd == 0.0f)
+        choice = 6;
+    (void)drawPage2x2BigForSettings;
     if (DrawButtonNew(&BUTTON_BOXRT, 0x145, 0x59, 1) && FE_FadeAdd == 0.0f)
         choice = 5;                     /* port: VIDEO SETTINGS */
     {
@@ -6301,23 +6312,15 @@ void FE_Task_Settings(void)
                  (float)FE_Y(72.0f), 1, FE_WidthScale, fontcol);
     limeDrawFONT(&GameFont, GameText(0x119), (float)FE_X(156.0f),
                  (float)FE_Y(88.0f), 1, FE_WidthScale, fontcol);
-    limeDrawFONT(&GameFont, GameText(0xdc), (float)FE_X(156.0f),
-                 (float)FE_Y(208.0f), 1, FE_WidthScale, fontcol);
-
-    musicLabel = (Settings[2] == 3) ? 0xe0
-               : (Settings[2] == 2) ? 0xdf
-               : (Settings[2] == 1) ? 0xde : 0xe2;
-    limeDrawFONT(&GameFont, GameText(musicLabel), (float)FE_X(156.0f),
-                 (float)FE_Y(224.0f), 1, FE_WidthScale, fontcol);
-
-    limeDrawFONT(&GameFont, GameText(0xdd), (float)FE_X(325.0f),
-                 (float)FE_Y(208.0f), 1, FE_WidthScale, fontcol);
-
-    sfxLabel = (Settings[3] == 3) ? 0xe0
-             : (Settings[3] == 2) ? 0xdf
-             : (Settings[3] == 1) ? 0xde : 0xe2;
-    limeDrawFONT(&GameFont, GameText(sfxLabel), (float)FE_X(325.0f),
-                 (float)FE_Y(224.0f), 1, FE_WidthScale, fontcol);
+    {
+        int es = Language[0] == 'E' && Language[1] == 'S';
+        limeDrawFONT(&GameFont, es ? "AJUSTES" : "AUDIO", (float)FE_X(240.0f),
+                     (float)FE_Y(208.0f), 1, FE_WidthScale, fontcol);
+        limeDrawFONT(&GameFont, es ? "DE AUDIO" : "SETTINGS", (float)FE_X(240.0f),
+                     (float)FE_Y(224.0f), 1, FE_WidthScale, fontcol);
+    }
+    (void)musicLabel;
+    (void)sfxLabel;
 
     back = DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1);
 
@@ -6328,6 +6331,8 @@ void FE_Task_Settings(void)
         PushFETaskDeferred(0x2f);
     } else if (choice == 5) {
         set_menu_open_video();
+    } else if (choice == 6) {
+        set_menu_open_audio();
     } else if (choice == 2) {
         Settings[1] ^= 1;
     } else if (choice == 3) {
@@ -12216,6 +12221,14 @@ static void PortOnlineFriends(int searching)
                      FE_X(360.0f), FE_Y(130.0f), 1, FE_WidthScale * 0.55f, fontcol);
         return;
     }
+    /* port: SENT until the invite has gone out -- the launcher has taken
+     * it (port_online_tell_pending) -- and a second after, then INVITE
+     * again, so it can be sent once more (Mary: it stayed SENT) */
+    {
+        int port_online_tell_pending(void);     /* gamecode_stubs.c */
+        if (PortOnlineSent > 60.0f && !port_online_tell_pending())
+            PortOnlineSent = 60.0f;
+    }
     /* the invites first, then the friends */
     for (int pass = 1; pass >= 0 && n < PORT_FR_ROWS; pass--)
         for (i = 0; port_online_friend(i, code, name, &invite) && n < PORT_FR_ROWS; i++) {
@@ -15570,6 +15583,47 @@ void PortControlsPanel(const char *title, const char *const *label,
 
         if (lab[0] == 2) {              /* a heading */
             limeDrawFONT(&GameFont, lab + 1, cl, y, 0, sc * 0.9f, red);
+            continue;
+        }
+        if (value[i][0] == 3) {         /* a bar: "\003" + 000..100 + its text */
+            const char *src = value[i][1] && value[i][2] && value[i][3] ? value[i] + 4 : "";
+            char txt[32];
+            int o = 0;
+
+            while (*src && o < (int)sizeof txt - 1) {   /* the font is ASCII: no degree sign */
+                if ((unsigned char)*src < 0x80)
+                    txt[o++] = *src;
+                src++;
+            }
+            txt[o] = 0;
+            float pct = (float)atoi((char[4]){ value[i][1], value[i][2], value[i][3], 0 }) / 100.0f;
+            float bx0 = cl + cw * 0.04f, bx1 = cl + cw * 0.96f;   /* UI_BAR_X0..X1 */
+            float by = y + rh * 0.62f, bh = rh * 0.22f, kx;
+            int q;
+
+            s *= 0.8f;
+            while (s > sc * 0.45f
+                   && rich_width(lab, rh * 0.8f, s) + rich_width(txt, rh * 0.8f, s)
+                      + FE_WidthScale * 16.0f > cw)
+                s *= 0.94f;
+            rich_draw(lab, cl + FE_WidthScale * 8.0f, y - rh * 0.12f, rh * 0.7f, s, c);
+            rich_draw(txt, cl + cw - rich_width(txt, rh * 0.7f, s), y - rh * 0.12f,
+                      rh * 0.7f, s, c);
+            pct = pct < 0 ? 0 : pct > 1 ? 1 : pct;
+            kx = bx0 + (bx1 - bx0) * pct;
+            limeFillRect(bx0, by, bx1 - bx0, bh, 0.05f, 0.06f, 0.09f, 0.9f);
+            for (q = 0; q < 24; q++) {      /* red into gold, up to the value */
+                float a = bx0 + (bx1 - bx0) * q / 24.0f, b2 = bx0 + (bx1 - bx0) * (q + 1) / 24.0f;
+                float t = (float)q / 23.0f;
+                if (a >= kx)
+                    break;
+                limeFillRect(a, by, (b2 < kx ? b2 : kx) - a, bh,
+                             0.80f + 0.20f * t, 0.10f + 0.68f * t, 0.08f + 0.10f * t,
+                             enabled[i] ? 1.0f : 0.4f);
+            }
+            limeFillRect(kx - rh * 0.2f, by - rh * 0.14f, rh * 0.4f, bh + rh * 0.28f,
+                         i == sel ? 1.0f : 0.85f, i == sel ? 1.0f : 0.85f,
+                         i == sel ? 0.2f : 0.85f, enabled[i] ? 1.0f : 0.4f);
             continue;
         }
         while (s > sc * 0.6f            /* label and value never overlap */

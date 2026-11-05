@@ -3666,6 +3666,13 @@ void EASDK_LogEventEnumEnumString(long id, long a, const char *s1,
  * one state change is what an unreliable link gets instead of an ack, and the
  * stale first argument suggests it was written that way rather than looped.
  */
+/* Port, not in the binary (Mary): umk3.ini corner_buttons=0 hides the
+ * fight's INFO and PAUSE buttons, for a pad; a finger on their corners then
+ * does nothing, while the pad's and the keys' own presses -- taps that
+ * hud_keys (game_main.c) makes there, PortKeyTap -- still open them. */
+extern int port_corner_buttons;         /* game_main.c: not a state file's */
+extern int PortKeyTap;
+
 void TogglePauseMenu(void)
 {
     float lx, ly;
@@ -3673,6 +3680,8 @@ void TogglePauseMenu(void)
     /* Port, not in the binary: a pause taken on one machine is not one of the
      * inputs both run the fight from, so a rollback fight has none (yet). */
     if (rb_active())
+        return;
+    if (!port_corner_buttons && PortKeyTap == 0)
         return;
     if (*FE_FadeAddP != 0.0f)
         return;
@@ -8934,6 +8943,8 @@ void DrawHUD(void)
          * 0x2a170). Modes 0 and 1 also count timeInGame, outside the intro. */
         if (GameMode <= 1 && !DoIntro)
             timeInGame += (1.0f / 60.0f) / limeFPSScaleFactor;
+        if (!port_corner_buttons)       /* port: hidden (TogglePauseMenu) */
+            goto corners_done;
 
         limeEnableAlphaBlending_Additive();
 
@@ -8969,6 +8980,7 @@ void DrawHUD(void)
                        (float)limeScreenWidth - s * 32.0f, s * -7.0f,
                        s * 36.0f, s * 36.0f, 0.0f, 0.0f, 1.0f, 1.0f, col);
         limeEnableAlphaBlending_Basic();
+    corners_done:;
     }
 
     sprintf(strBuf, "%d", (int)GameTime);
@@ -9364,6 +9376,8 @@ int PortHideControls;                   /* port: see the end of DrawControls */
 extern long PortButtonAlpha[3][6];      /* port: FrontEnd.c, per button */
 extern long PortStick[3][4];            /* port: FrontEnd.c, the stick */
 void set_menu_open_controls(void);     /* port: runtime/settings_menu.c */
+void set_menu_open_audio(void);        /* port: runtime/settings_menu.c */
+void set_menu_open_video(void);
 
 void DrawControls(void)
 {
@@ -12227,7 +12241,14 @@ static void UpdateInGamePauseMenu_(void)
 
         /* ---- row 3: the first layout line ---- */
         LastTouch_Pause3 = Touch_Pause3;
-        if (GameMode == 6)
+        /* port (Mary): with the on-screen controls off (a pad or the keys)
+         * rows 3 to 6 are the MOVES LIST, BUTTON SETUP, AUDIO SETTINGS and
+         * VIDEO SETTINGS: the layout lines belong to the on-screen
+         * controls, and the volumes are the AUDIO SETTINGS' bars */
+        if (PortHideControls)
+            usprintf(text, Language[0] == 'E' && Language[1] == 'S'
+                           ? UC("LISTA DE MOVIMIENTOS") : UC("MOVES LIST"));
+        else if (GameMode == 6)
             usprintf(text, UC("%s - %s : %s"),
                      GameTextNoHeader(TXT_BUTTONS_P1),
                      GameTextNoHeader(TXT_LAYOUT_A),
@@ -12241,12 +12262,19 @@ static void UpdateInGamePauseMenu_(void)
                                           PAUSE_SCALE,
                                           PAUSE_COL(LastTouch_Pause3),
                                           FE_W(PAUSE_WIDTH));
-        if (PAUSE_RELEASED(LastTouch_Pause3, Touch_Pause3))
+        if (PAUSE_RELEASED(LastTouch_Pause3, Touch_Pause3)) {
+            if (PortHideControls) {
+                PauseClick();
+                MoveListPage = 0;
+                GamePaused = 2;         /* the moves list, as INFO opens it */
+                return;
+            }
             sel = 3;
+        }
 
         /* ---- row 4: the second layout line ---- */
         LastTouch_Pause4 = Touch_Pause4;
-        if (PortHideControls && GameMode != 6)
+        if (PortHideControls)
             /* port: with the on-screen controls off, their layout gives
              * way to the keys and pads' setup */
             usprintf(text, Language[0] == 'E' && Language[1] == 'S'
@@ -12266,7 +12294,7 @@ static void UpdateInGamePauseMenu_(void)
                                           PAUSE_COL(LastTouch_Pause4),
                                           FE_W(PAUSE_WIDTH));
         if (PAUSE_RELEASED(LastTouch_Pause4, Touch_Pause4)) {
-            if (PortHideControls && GameMode != 6) {
+            if (PortHideControls) {
                 PauseClick();
                 set_menu_open_controls();   /* port: see row 4 */
             } else
@@ -12276,6 +12304,10 @@ static void UpdateInGamePauseMenu_(void)
         /* ---- row 5: MUSIC.  The fourth argument is one too many for the
          * format and is never consumed -- it is in the binary all four ways. */
         LastTouch_Pause5 = Touch_Pause5;
+        if (PortHideControls)           /* port: see row 3 */
+            usprintf(text, Language[0] == 'E' && Language[1] == 'S'
+                           ? UC("AJUSTES DE AUDIO") : UC("AUDIO SETTINGS"));
+        else
         switch (Settings[2]) {
         case 1:  usprintf(text, UC("%s : %s"), GameText(TXT_MUSIC),
                           GameText(TXT_VOL_LOW),
@@ -12295,11 +12327,21 @@ static void UpdateInGamePauseMenu_(void)
                                           PAUSE_SCALE,
                                           PAUSE_COL(LastTouch_Pause5),
                                           FE_W(PAUSE_WIDTH));
-        if (PAUSE_RELEASED(LastTouch_Pause5, Touch_Pause5))
+        if (PAUSE_RELEASED(LastTouch_Pause5, Touch_Pause5)) {
+            if (PortHideControls) {
+                PauseClick();
+                set_menu_open_audio();
+                return;
+            }
             sel = 5;
+        }
 
         /* ---- row 6: SFX, which jumps straight to its own handler ---- */
         LastTouch_Pause6 = Touch_Pause6;
+        if (PortHideControls)           /* port: see row 3 */
+            usprintf(text, Language[0] == 'E' && Language[1] == 'S'
+                           ? UC("AJUSTES DE VIDEO") : UC("VIDEO SETTINGS"));
+        else
         switch (Settings[3]) {
         case 1:  usprintf(text, UC("%s : %s"), GameText(TXT_SFX),
                           GameText(TXT_VOL_LOW),
@@ -12319,6 +12361,11 @@ static void UpdateInGamePauseMenu_(void)
                                           PAUSE_SCALE,
                                           PAUSE_COL(LastTouch_Pause6),
                                           FE_W(PAUSE_WIDTH));
+        if (PAUSE_RELEASED(LastTouch_Pause6, Touch_Pause6) && PortHideControls) {
+            PauseClick();
+            set_menu_open_video();
+            return;
+        }
         if (PAUSE_RELEASED(LastTouch_Pause6, Touch_Pause6)) {
             /* the SFX option acts here rather than through `sel`, so it plays
              * its click AFTER the change instead of before it */

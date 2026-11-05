@@ -303,6 +303,17 @@ void port_online_tell(const char *what, const char *code)
     }
 }
 
+/* 1 while the launcher has not yet taken what port_online_tell wrote: it
+ * deletes the file once it has sent it on (main.js gameAsked) */
+int port_online_tell_pending(void)
+{
+    char path[600];
+    struct stat st;
+
+    mayhem_path(path, sizeof path, "online_invite.txt");
+    return stat(path, &st) == 0;
+}
+
 static int mayhem_load(void)
 {
     char path[600], line[256];

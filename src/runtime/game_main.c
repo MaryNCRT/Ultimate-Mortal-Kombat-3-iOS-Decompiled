@@ -1150,6 +1150,10 @@ static void read_config(const char *dir)
         }
         else if (strcmp(line, "kombo_slide") == 0)     /* mkreact.c, offline only */
             port_kombo_slide = atoi(v) != 0;
+        else if (strcmp(line, "corner_buttons") == 0) {    /* GameCode.c */
+            extern int port_corner_buttons;
+            port_corner_buttons = atoi(v) != 0;
+        }
         else if (strcmp(line, "noob_saibot") == 0) {   /* FrontEnd.c */
             extern int port_noob_saibot;
             port_noob_saibot = atoi(v) == 1;
@@ -1445,6 +1449,11 @@ void PortBackLine(char *line, int n)
              Language[0] == 'E' && Language[1] == 'S' ? "ATR\xc1S" : "BACK");
 }
 
+/* corner_buttons= and the pad's taps (GameCode.c TogglePauseMenu); here,
+ * outside the save states, so a rollback never turns the setting back */
+int port_corner_buttons = 1;
+int PortKeyTap;
+
 static void hud_keys(void)
 {
     static int was[2];
@@ -1452,6 +1461,8 @@ static void hud_keys(void)
 
     if (g_ktap_left > 0 && --g_ktap_left == 0)
         lime_touch_ended(g_ktap_x, g_ktap_y, g_ktap_x, g_ktap_y);
+    if (PortKeyTap > 0)
+        PortKeyTap--;
 
     for (k = 0; k < 2; k++) {
         /* the pad: start is P, select (Back / Share / Create) is M */
@@ -1494,6 +1505,7 @@ static void hud_keys(void)
             g_ktap_x = x * g_ui_k;
         g_ktap_y = y * g_ui_k;
         g_ktap_left = 3;
+        PortKeyTap = 8;                 /* GameCode.c: not a finger's */
         lime_touch_began(g_ktap_x, g_ktap_y);
     }
 }
