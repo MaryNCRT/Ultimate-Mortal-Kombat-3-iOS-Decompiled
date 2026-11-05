@@ -87,6 +87,14 @@ void umk_subsurf_set_fit(UmkSubsurf *s, const float *w);
  * triangle corner (ntris x 3, e.g. the light value) that is carried the way
  * Blender carries loop data through a subdivision. 0 on failure. */
 int umk_subsurf_eval(UmkSubsurf *s, const float *pos, const float *corner_attr);
+
+/* Port: the stencil tables, so umk_subsurf_eval costs one sparse multiply
+ * instead of two syncs (umk3_subsurf.c). Made once the creases are set, on
+ * any thread that owns `s`; dropped by umk_subsurf_set_sharp. Returns the
+ * tables' weights, or 0 when they did not match the syncs and are not used.
+ * `colors`: the probes' colours; `err`: the check's largest difference,
+ * relative. */
+int umk_subsurf_make_stencils(UmkSubsurf *s, int *colors, float *err);
 /* A pose subdivided before, its output positions put back: the next
  * umk_subsurf_eval with the same `pos` only spreads the attribute. */
 int  umk_subsurf_is_last(const UmkSubsurf *s, const float *pos);

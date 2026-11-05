@@ -105,6 +105,8 @@ void dbg_frame_draw(int ww, int wh);
 int  dbg_keys_on(void);                /* the menu's DIRECT KEYS row */
 int  dbg_hitboxes_on(void);            /* TOOLS: HITBOXES */
 int  dbg_speed_percent(void);          /* TOOLS: FIGHT SPEED, 10..400 */
+int  dbg_fight_mode(void);             /* START FIGHT: 0 the menu's, 1 ARCADE, 2 TRAINING */
+int  dbg_cpu_difficulty(void);         /* -1 the ladder's, else 0..9 */
 /* game_main.c answers: a state can be saved now / slot n holds one */
 int  dbg_state_can_save(void);
 int  dbg_state_has(int slot);

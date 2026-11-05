@@ -936,6 +936,8 @@ static int vk_open(void *window, int width, int height)
             if ((qf[q].queueFlags & VK_QUEUE_GRAPHICS_BIT) && pres) {
                 int score = p.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 3
                           : p.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU ? 2 : 1;
+                if (rgl_gpu_match(p.deviceName))   /* gpu= in umk3.ini */
+                    score += 10;
                 if (score > best_score) {
                     best_score = score;
                     best = (int)i;

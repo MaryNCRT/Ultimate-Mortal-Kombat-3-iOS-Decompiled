@@ -27,6 +27,13 @@ enum { RGL_OPENGL, RGL_VULKAN, RGL_D3D12 };
 /* What draws: umk3.ini renderer=opengl|vulkan|d3d12, set before the window
  * opens; a backend that cannot start falls back to OpenGL. */
 extern int rgl_renderer;
+/* GPU (umk3.ini gpu=): "auto" (or empty) the most powerful -- the one with
+ * the most video memory, a discrete one first -- else a card's name, or a
+ * part of it ("5070"). OpenGL cannot choose: the exe asks the drivers of a
+ * laptop with two for the discrete one (win32_gl.c). */
+extern char rgl_gpu[128];
+int  rgl_gpu_match(const char *name);      /* 1 when `name` is the one gpu= names */
+void rgl_gpu_list(void);                   /* --list-gpus: "gpu<TAB>name" a line */
 int  rgl_parse(const char *name);          /* RGL_* for an ini value */
 const char *rgl_label(int renderer);       /* "OpenGL", "Vulkan", "Direct3D 12" */
 
@@ -173,6 +180,9 @@ extern int (*rgl_vk_make_surface)(void *window, void *instance, void *surface);
  *                         shadow under a fighter is left out */
 extern int rgl_shadows;
 extern double rgl_shadow_ms;           /* this frame's map and held draws, for the log */
+extern double rgl_game_ms;             /* game_main.c: this frame's ticks (logic and draws), for the log */
+extern int    rgl_game_ticks;          /* and how many ran */
+extern long   rgl_smooth_tris;         /* smooth_models.c: the frame before's smoothed triangles */
 extern int rgl_shadow_tris;            /* the triangles the last map was drawn from */
 double rgl_now_ms(void);
 void rgl_shadow_camera(int on);

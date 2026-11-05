@@ -501,7 +501,7 @@ void limeInitSound(void)
     limeInitAudio();                    /* all it does on device */
 }
 
-long limeLoadSound(const char *name)
+static long load_sound(const char *name)
 {
     char rel[160], full[1200];
     long i;
@@ -538,7 +538,7 @@ void limeDeleteSound(long h)
     g_sound[h].pcm = NULL;
 }
 
-void limePlaySound(long h, float v, float p, long f)
+static void play_sound(long h, float v, float p, long f)
 {
     (void)p; (void)f;                   /* not read by the original either */
     if (!rb_sound_ok(h))                /* port: a frame run again (rollback.c) */
@@ -1003,4 +1003,25 @@ void limeLoadURLInternal(const char *url)  { (void)url; }
 void limeInit(void)
 {
     currenttime = lasttime = g_clock;
+}
+
+/* port: its time, for the slow-frame line (rgl_front.c) */
+void limePlaySound(long h, float v, float p, long f)
+{
+    extern double port_prof_ms[5];
+    double plat_time(void);
+    double t0 = plat_time();
+    play_sound(h, v, p, f);
+    port_prof_ms[1] += (plat_time() - t0) * 1000.0;
+}
+
+/* port: its time, for the slow-frame line (rgl_front.c) */
+long limeLoadSound(const char *name)
+{
+    extern double port_prof_ms[5];
+    double plat_time(void);
+    double t0 = plat_time();
+    long r = load_sound(name);
+    port_prof_ms[1] += (plat_time() - t0) * 1000.0;
+    return r;
 }

@@ -72,6 +72,41 @@ static int      g_next;         /* the buffer to refill next */
 static int      g_music;
 static float    g_music_gain = 1.0f;
 
+/* audio_device=: the device by name, else the system's (WAVE_MAPPER) */
+static char g_audio_want[128];
+
+void plat_audio_device(const char *name)
+{
+    snprintf(g_audio_want, sizeof g_audio_want, "%s",
+             name && _stricmp(name, "auto") != 0 ? name : "");
+}
+
+static UINT audio_id(void)
+{
+    UINT i, n = waveOutGetNumDevs();
+    WAVEOUTCAPSA c;
+
+    if (!g_audio_want[0])
+        return WAVE_MAPPER;
+    for (i = 0; i < n; i++)             /* the caps name is cut at 31 */
+        if (waveOutGetDevCapsA(i, &c, sizeof c) == MMSYSERR_NOERROR && c.szPname[0]
+            && strncmp(c.szPname, g_audio_want, strlen(c.szPname)) == 0)
+            return i;
+    printf("audio: no device \"%s\", the system's\n", g_audio_want);
+    return WAVE_MAPPER;
+}
+
+void plat_audio_list(void)
+{
+    UINT i, n = waveOutGetNumDevs();
+    WAVEOUTCAPSA c;
+
+    for (i = 0; i < n; i++)
+        if (waveOutGetDevCapsA(i, &c, sizeof c) == MMSYSERR_NOERROR && c.szPname[0])
+            printf("audio\t%s\n", c.szPname);
+    fflush(stdout);
+}
+
 int plat_audio_open(int rate)
 {
     WAVEFORMATEX wf;
@@ -90,7 +125,7 @@ int plat_audio_open(int rate)
     wf.nBlockAlign     = (WORD)(wf.nChannels * wf.wBitsPerSample / 8);
     wf.nAvgBytesPerSec = wf.nSamplesPerSec * wf.nBlockAlign;
 
-    if (waveOutOpen(&g_dev, WAVE_MAPPER, &wf, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
+    if (waveOutOpen(&g_dev, audio_id(), &wf, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
         /* Said once, not once a frame. Silence is a working state. */
         fprintf(stderr, "audio: no output device, running silent\n");
         g_dev = NULL;
@@ -512,7 +547,7 @@ void plat_music_play(const char *path, int loop)
     wf.wBitsPerSample  = 16;
     wf.nBlockAlign     = (WORD)(ch * 2);
     wf.nAvgBytesPerSec = (DWORD)rate * wf.nBlockAlign;
-    if (waveOutOpen(&g_mdev, WAVE_MAPPER, &wf, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
+    if (waveOutOpen(&g_mdev, audio_id(), &wf, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
         free(g_mpcm);
         g_mpcm = NULL;
         return;                         /* silent, as with no sound device */

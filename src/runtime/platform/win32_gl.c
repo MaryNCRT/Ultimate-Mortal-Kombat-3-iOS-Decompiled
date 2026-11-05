@@ -159,6 +159,12 @@ void plat_monitor_name(int i, char *out, int n)
              (mi.dwFlags & MONITORINFOF_PRIMARY) ? " *" : "");
 }
 
+/* OpenGL cannot pick a GPU: on a laptop with two these ask NVIDIA's and
+ * AMD's drivers for the discrete one, as games do (gpu= picks for Vulkan
+ * and Direct3D 12, rgl_d3d12.c, rgl_vk.c). */
+__declspec(dllexport) unsigned long NvOptimusEnablement = 1;
+__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+
 void plat_monitor_list(void)
 {
     int i, n = plat_monitor_count();
@@ -186,9 +192,27 @@ static HMONITOR mon_target(void)
                  : MonitorFromPoint(o, MONITOR_DEFAULTTOPRIMARY);
 }
 
+/* Windows 11 slows a process whose window is not in front (EcoQoS, the
+ * "efficiency mode"): a fight left in the background, an online one waiting
+ * for the other player, a test run -- frames of 300-500 ms with nothing in
+ * them, measured 2026-11-05. A game asks not to be. Through GetProcAddress:
+ * Windows 7 and 8 have no SetProcessInformation. */
+static void no_power_throttling(void)
+{
+    struct { ULONG Version, ControlMask, StateMask; } st = { 1, 1, 0 };   /* EXECUTION_SPEED, off */
+    BOOL (WINAPI *set)(HANDLE, int, void *, DWORD) =
+        (BOOL (WINAPI *)(HANDLE, int, void *, DWORD))(void *)
+        GetProcAddress(GetModuleHandleA("kernel32.dll"), "SetProcessInformation");
+
+    if (set)
+        set(GetCurrentProcess(), 4 /* ProcessPowerThrottling */, &st, sizeof st);
+}
+
 bool plat_open(const char *title, int width, int height)
 {
     HINSTANCE inst = GetModuleHandleA(NULL);
+
+    no_power_throttling();
 
     WNDCLASSA wc;
     ZeroMemory(&wc, sizeof(wc));

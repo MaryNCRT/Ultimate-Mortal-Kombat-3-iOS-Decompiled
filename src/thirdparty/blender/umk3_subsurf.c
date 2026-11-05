@@ -631,7 +631,18 @@ struct UmkSubsurf {
 	float *welded_pos;          /* scratch, nwelded x 3 */
 	CCGFace **faceMap;          /* positions ss, by face handle */
 	CCGFace **uvFaceMap;
+
+	/* Port, not Blender: the stencil tables (umk_subsurf_make_stencils).
+	 * st_s: each output vertex as weights of the welded control points;
+	 * st_l: each welded vertex's subdivided self, for the correction pass;
+	 * st_lhas: the welded vertex is in the surface (getVert not NULL). */
+	int st_on;
+	int *st_s_start, *st_s_idx, *st_l_start, *st_l_idx;
+	float *st_s_w, *st_l_w;
+	unsigned char *st_lhas;
 };
+
+static void stencils_drop(UmkSubsurf *s);   /* the stencil tables, below */
 
 static int edge_lookup_or_add(EdgeKey **edges, int *n, int *cap, int **hash, int *hcap, int a, int b)
 {
@@ -1279,6 +1290,7 @@ void umk_subsurf_set_sharp(UmkSubsurf *s, float angle_deg, float strength)
 {
 	if (!s || !set_creases(s, angle_deg, strength))
 		return;
+	stencils_drop(s);                   /* the creases are in them */
 	/* the creases changed: CCG's full sync again (the edges' crease is a
 	 * full sync's, as when Blender's crease is edited), its faces mapped
 	 * again, and the next evaluation is not skipped as a repeat */
@@ -1331,6 +1343,368 @@ void umk_subsurf_set_fit(UmkSubsurf *s, const float *w)
 		s->have_last = 0;
 }
 
+/* ------------------------------------------------- stencil tables (port)
+ *
+ * For a fixed mesh and fixed creases the subdivision is linear in the
+ * control points: every output vertex is a fixed weighted sum of the welded
+ * vertices around it, and so is every welded vertex's subdivided self, which
+ * the correction pass reads. OpenSubdiv calls these stencils. They are found
+ * once, by probing the surface itself: control points too far apart to share
+ * an output (a "colour") are set to 1 together, one colour per coordinate,
+ * and each output's value is the weight of the one control point of that
+ * colour around it. Then a pose costs one sparse multiply instead of two
+ * syncs of the surface -- the same surface, to float rounding, checked
+ * against the syncs before the tables are used. */
+static void stencils_drop(UmkSubsurf *s)
+{
+	free(s->st_s_start); free(s->st_s_idx); free(s->st_s_w);
+	free(s->st_l_start); free(s->st_l_idx); free(s->st_l_w);
+	free(s->st_lhas);
+	s->st_s_start = s->st_s_idx = s->st_l_start = s->st_l_idx = NULL;
+	s->st_s_w = s->st_l_w = NULL;
+	s->st_lhas = NULL;
+	s->st_on = 0;
+}
+
+typedef struct { int *row, *col; float *w; int n, cap; } StTrip;
+
+static int trip_add(StTrip *t, int row, int col, float w)
+{
+	if (t->n == t->cap) {
+		int ncap = t->cap ? t->cap * 2 : 65536;
+		int *r = realloc(t->row, sizeof(int) * (size_t)ncap);
+		int *c = r ? realloc(t->col, sizeof(int) * (size_t)ncap) : NULL;
+		float *ww = c ? realloc(t->w, sizeof(float) * (size_t)ncap) : NULL;
+		if (r) t->row = r;
+		if (c) t->col = c;
+		if (ww) t->w = ww;
+		if (!r || !c || !ww)
+			return 0;
+		t->cap = ncap;
+	}
+	t->row[t->n] = row;
+	t->col[t->n] = col;
+	t->w[t->n] = w;
+	t->n++;
+	return 1;
+}
+
+/* triplets to rows (a counting sort on the row) */
+static int trip_rows(const StTrip *t, int nrows, int **start, int **idx, float **w)
+{
+	int i, *at;
+
+	*start = calloc((size_t)nrows + 1, sizeof(int));
+	*idx = malloc(sizeof(int) * (size_t)(t->n > 0 ? t->n : 1));
+	*w = malloc(sizeof(float) * (size_t)(t->n > 0 ? t->n : 1));
+	at = malloc(sizeof(int) * (size_t)(nrows > 0 ? nrows : 1));
+	if (!*start || !*idx || !*w || !at) {
+		free(at);
+		return 0;
+	}
+	for (i = 0; i < t->n; i++)
+		(*start)[t->row[i] + 1]++;
+	for (i = 0; i < nrows; i++)
+		(*start)[i + 1] += (*start)[i];
+	memcpy(at, *start, sizeof(int) * (size_t)nrows);
+	for (i = 0; i < t->n; i++) {
+		int k = at[t->row[i]]++;
+		(*idx)[k] = t->col[i];
+		(*w)[k] = t->w[i];
+	}
+	free(at);
+	return 1;
+}
+
+/* the correction pass and the output, from s->welded_pos, by the tables */
+static void stencil_apply(UmkSubsurf *s)
+{
+	int i, j, k;
+
+	memcpy(s->fit_base, s->welded_pos, sizeof(float) * 3 * (size_t)s->nwelded);
+	for (i = 0; i < s->nwelded; i++) {
+		float lim[3] = { 0.0f, 0.0f, 0.0f };
+
+		if (!s->st_lhas[i])
+			continue;
+		for (k = s->st_l_start[i]; k < s->st_l_start[i + 1]; k++) {
+			const float *b = s->fit_base + s->st_l_idx[k] * 3;
+			const float w = s->st_l_w[k];
+			lim[0] += w * b[0];
+			lim[1] += w * b[1];
+			lim[2] += w * b[2];
+		}
+		if (!s->fit_w || s->fit_w[i] == 1.0f)
+			for (j = 0; j < 3; j++)
+				s->welded_pos[i * 3 + j] = s->fit_base[i * 3 + j] * 2.0f - lim[j];
+		else
+			for (j = 0; j < 3; j++)
+				s->welded_pos[i * 3 + j] = s->fit_base[i * 3 + j]
+				                         + s->fit_w[i] * (s->fit_base[i * 3 + j] - lim[j]);
+	}
+#pragma omp parallel for private(k) if (s->out_nverts > 4096)
+	for (i = 0; i < s->out_nverts; i++) {
+		float o0 = 0.0f, o1 = 0.0f, o2 = 0.0f;
+
+		for (k = s->st_s_start[i]; k < s->st_s_start[i + 1]; k++) {
+			const float *p = s->welded_pos + s->st_s_idx[k] * 3;
+			const float w = s->st_s_w[k];
+			o0 += w * p[0];
+			o1 += w * p[1];
+			o2 += w * p[2];
+		}
+		s->out_pos[i * 3 + 0] = o0;
+		s->out_pos[i * 3 + 1] = o1;
+		s->out_pos[i * 3 + 2] = o2;
+	}
+}
+
+/* the two syncs of umk_subsurf_eval, from s->welded_pos, into out_pos */
+static int full_apply(UmkSubsurf *s)
+{
+	int i, j;
+
+	if (!sync_positions_partial(s))
+		return 0;
+	memcpy(s->fit_base, s->welded_pos, sizeof(float) * 3 * (size_t)s->nwelded);
+	for (i = 0; i < s->nwelded; i++) {
+		CCGVert *v = ccgSubSurf_getVert(s->ss, POINTER_FROM_INT(i));
+		const float *lim;
+
+		if (v == NULL)
+			continue;
+		lim = ccgSubSurf_getVertData(s->ss, v);
+		if (!s->fit_w || s->fit_w[i] == 1.0f)
+			for (j = 0; j < 3; j++)
+				s->welded_pos[i * 3 + j] = s->fit_base[i * 3 + j] * 2.0f - lim[j];
+		else
+			for (j = 0; j < 3; j++)
+				s->welded_pos[i * 3 + j] = s->fit_base[i * 3 + j]
+				                         + s->fit_w[i] * (s->fit_base[i * 3 + j] - lim[j]);
+	}
+	if (!sync_positions_partial(s))
+		return 0;
+	for (i = 0; i < s->out_nverts; i++) {
+		const int *r = s->out_ref + i * 4;
+		const float *co = ccgSubSurf_getFaceGridData(s->ss, s->faceMap[r[0]], r[1], r[2], r[3]);
+		s->out_pos[i * 3 + 0] = co[0];
+		s->out_pos[i * 3 + 1] = co[1];
+		s->out_pos[i * 3 + 2] = co[2];
+	}
+	return 1;
+}
+
+int umk_subsurf_make_stencils(UmkSubsurf *s, int *colors_out, float *err_out)
+{
+	const int nw = s ? s->nwelded : 0, nf = s ? s->nfaces : 0;
+	int *vf_start = NULL, *vf = NULL, *sup_start = NULL, *sup = NULL, *inv_start = NULL, *inv = NULL;
+	int *stamp = NULL, *color = NULL, *forb = NULL;
+	int i, j, k, f, ncolors = 0, nsup = 0, ok = 0;
+	StTrip ts = { 0 }, tl = { 0 };
+	float *keep = NULL, *want = NULL, err = 0.0f;
+
+	if (colors_out) *colors_out = 0;
+	if (err_out) *err_out = 0.0f;
+	if (!s || nw <= 0 || nf <= 0 || !s->out_nverts)
+		return 0;
+	stencils_drop(s);
+
+	/* the faces at each welded vertex */
+	vf_start = calloc((size_t)nw + 1, sizeof(int));
+	vf = malloc(sizeof(int) * 3 * (size_t)nf);
+	stamp = malloc(sizeof(int) * (size_t)nw);
+	color = malloc(sizeof(int) * (size_t)nw);
+	forb = malloc(sizeof(int) * ((size_t)nw + 1));
+	if (!vf_start || !vf || !stamp || !color || !forb)
+		goto out;
+	for (i = 0; i < nf * 3; i++)
+		vf_start[s->face_v[i] + 1]++;
+	for (i = 0; i < nw; i++)
+		vf_start[i + 1] += vf_start[i];
+	memcpy(stamp, vf_start, sizeof(int) * (size_t)nw);
+	for (i = 0; i < nf * 3; i++)
+		vf[stamp[s->face_v[i]]++] = i / 3;
+
+	/* each face's support: the vertices of every face sharing a vertex
+	 * with it (a Catmull-Clark patch reads its one-ring) */
+	for (i = 0; i < nw; i++) stamp[i] = -1;
+	for (f = 0; f < nf; f++)
+		for (j = 0; j < 3; j++) {
+			const int v = s->face_v[f * 3 + j];
+			for (k = vf_start[v]; k < vf_start[v + 1]; k++) {
+				const int g = vf[k];
+				int m;
+				for (m = 0; m < 3; m++)
+					if (stamp[s->face_v[g * 3 + m]] != f) {
+						stamp[s->face_v[g * 3 + m]] = f;
+						nsup++;
+					}
+			}
+		}
+	sup_start = calloc((size_t)nf + 1, sizeof(int));
+	sup = malloc(sizeof(int) * (size_t)(nsup > 0 ? nsup : 1));
+	if (!sup_start || !sup)
+		goto out;
+	for (i = 0; i < nw; i++) stamp[i] = -1;
+	nsup = 0;
+	for (f = 0; f < nf; f++) {
+		sup_start[f] = nsup;
+		for (j = 0; j < 3; j++) {
+			const int v = s->face_v[f * 3 + j];
+			for (k = vf_start[v]; k < vf_start[v + 1]; k++) {
+				const int g = vf[k];
+				int m;
+				for (m = 0; m < 3; m++) {
+					const int q = s->face_v[g * 3 + m];
+					if (stamp[q] != f) {
+						stamp[q] = f;
+						sup[nsup++] = q;
+					}
+				}
+			}
+		}
+	}
+	sup_start[nf] = nsup;
+
+	/* the faces whose support holds each vertex */
+	inv_start = calloc((size_t)nw + 1, sizeof(int));
+	inv = malloc(sizeof(int) * (size_t)(nsup > 0 ? nsup : 1));
+	if (!inv_start || !inv)
+		goto out;
+	for (i = 0; i < nsup; i++)
+		inv_start[sup[i] + 1]++;
+	for (i = 0; i < nw; i++)
+		inv_start[i + 1] += inv_start[i];
+	memcpy(stamp, inv_start, sizeof(int) * (size_t)nw);
+	for (f = 0; f < nf; f++)
+		for (k = sup_start[f]; k < sup_start[f + 1]; k++)
+			inv[stamp[sup[k]]++] = f;
+
+	/* colours: no two control points of one support alike */
+	for (i = 0; i < nw; i++) color[i] = -1;
+	for (i = 0; i <= nw; i++) forb[i] = -1;
+	for (i = 0; i < nw; i++) {
+		int c = 0;
+		for (k = inv_start[i]; k < inv_start[i + 1]; k++) {
+			f = inv[k];
+			for (j = sup_start[f]; j < sup_start[f + 1]; j++)
+				if (color[sup[j]] >= 0)
+					forb[color[sup[j]]] = i;
+		}
+		while (forb[c] == i)
+			c++;
+		color[i] = c;
+		if (c + 1 > ncolors)
+			ncolors = c + 1;
+	}
+
+	/* the probes: colour 3t + c on coordinate c */
+	keep = malloc(sizeof(float) * 3 * (size_t)nw);
+	if (!keep)
+		goto out;
+	memcpy(keep, s->welded_pos, sizeof(float) * 3 * (size_t)nw);
+	s->st_lhas = calloc((size_t)nw, 1);
+	if (!s->st_lhas)
+		goto out;
+	for (i = 0; i < (ncolors + 2) / 3; i++) {
+		int c;
+
+		for (j = 0; j < nw; j++)
+			for (c = 0; c < 3; c++)
+				s->welded_pos[j * 3 + c] = color[j] == i * 3 + c ? 1.0f : 0.0f;
+		if (!sync_positions_partial(s))
+			goto out;
+		for (j = 0; j < s->out_nverts; j++) {
+			const int *r = s->out_ref + j * 4;
+			const float *co = ccgSubSurf_getFaceGridData(s->ss, s->faceMap[r[0]], r[1], r[2], r[3]);
+			for (c = 0; c < 3; c++) {
+				const int want_c = i * 3 + c;
+				int q = -1;
+				if (co[c] == 0.0f || want_c >= ncolors)
+					continue;
+				for (k = sup_start[r[0]]; k < sup_start[r[0] + 1]; k++)
+					if (color[sup[k]] == want_c) {
+						q = sup[k];
+						break;
+					}
+				if (q < 0 || !trip_add(&ts, j, q, co[c]))
+					goto out;   /* outside the support: no tables */
+			}
+		}
+		for (j = 0; j < nw; j++) {
+			CCGVert *v = ccgSubSurf_getVert(s->ss, POINTER_FROM_INT(j));
+			const float *lim;
+			if (v == NULL)
+				continue;
+			s->st_lhas[j] = 1;
+			lim = ccgSubSurf_getVertData(s->ss, v);
+			for (c = 0; c < 3; c++) {
+				const int want_c = i * 3 + c;
+				int q = -1, m;
+				if (lim[c] == 0.0f || want_c >= ncolors)
+					continue;
+				if (color[j] == want_c)
+					q = j;
+				for (k = vf_start[j]; k < vf_start[j + 1] && q < 0; k++)
+					for (m = 0; m < 3; m++)
+						if (color[s->face_v[vf[k] * 3 + m]] == want_c) {
+							q = s->face_v[vf[k] * 3 + m];
+							break;
+						}
+				if (q < 0 || !trip_add(&tl, j, q, lim[c]))
+					goto out;
+			}
+		}
+	}
+	if (!trip_rows(&ts, s->out_nverts, &s->st_s_start, &s->st_s_idx, &s->st_s_w)
+	    || !trip_rows(&tl, nw, &s->st_l_start, &s->st_l_idx, &s->st_l_w))
+		goto out;
+
+	/* checked against the two syncs on a pose of their own: the model as
+	 * made, each vertex moved a little */
+	want = malloc(sizeof(float) * 3 * (size_t)s->out_nverts);
+	if (!want)
+		goto out;
+	for (j = 0; j < nw * 3; j++)
+		s->welded_pos[j] = keep[j] + (float)((j * 2654435761u) % 1000u) * 0.001f - 0.5f;
+	memcpy(s->fit_base, s->welded_pos, sizeof(float) * 3 * (size_t)nw);
+	if (!full_apply(s))
+		goto out;
+	memcpy(want, s->out_pos, sizeof(float) * 3 * (size_t)s->out_nverts);
+	for (j = 0; j < nw * 3; j++)
+		s->welded_pos[j] = keep[j] + (float)((j * 2654435761u) % 1000u) * 0.001f - 0.5f;
+	stencil_apply(s);
+	{
+		float scale = 1.0f;
+		for (j = 0; j < s->out_nverts * 3; j++) {
+			const float d = fabsf(s->out_pos[j] - want[j]);
+			if (fabsf(want[j]) > scale)
+				scale = fabsf(want[j]);
+			if (d > err)
+				err = d;
+		}
+		err /= scale;
+	}
+	ok = err < 1e-4f;
+
+out:
+	if (keep)
+		memcpy(s->welded_pos, keep, sizeof(float) * 3 * (size_t)nw);
+	s->have_last = 0;
+	free(vf_start); free(vf); free(sup_start); free(sup); free(inv_start); free(inv);
+	free(stamp); free(color); free(forb); free(keep); free(want);
+	free(ts.row); free(ts.col); free(ts.w);
+	free(tl.row); free(tl.col); free(tl.w);
+	if (colors_out) *colors_out = ncolors;
+	if (err_out) *err_out = err;
+	if (!ok) {
+		stencils_drop(s);
+		return 0;
+	}
+	s->st_on = 1;
+	return s->st_s_start[s->out_nverts] + s->st_l_start[nw];
+}
+
 int umk_subsurf_eval(UmkSubsurf *s, const float *pos, const float *corner_attr)
 {
 	int i, j;
@@ -1350,6 +1724,11 @@ int umk_subsurf_eval(UmkSubsurf *s, const float *pos, const float *corner_attr)
 		goto spread;
 
 	weld_positions(s, pos);
+	if (s->st_on) {                     /* the stencil tables (above) */
+		stencil_apply(s);
+		memcpy(s->last_pos, pos, sizeof(float) * 3 * (size_t)s->nverts);
+		goto spread;
+	}
 	if (!sync_positions_partial(s))
 		return 0;
 
@@ -1391,7 +1770,7 @@ spread:
 	for (i = 0; i < s->out_nverts; i++) {
 		const int *r = s->out_ref + i * 4;
 
-		if (!same_pos) {
+		if (!same_pos && !s->st_on) {
 			const float *co = ccgSubSurf_getFaceGridData(s->ss, s->faceMap[r[0]], r[1], r[2], r[3]);
 
 			s->out_pos[i * 3 + 0] = co[0];
@@ -1441,6 +1820,7 @@ void umk_subsurf_free(UmkSubsurf *s)
 {
 	if (!s)
 		return;
+	stencils_drop(s);
 	if (s->ss) ccgSubSurf_free(s->ss);
 	if (s->uvss) ccgSubSurf_free(s->uvss);
 	if (s->weld_map) MEM_freeN(s->weld_map);

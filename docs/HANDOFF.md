@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-10-31 (release 0.1.23 beta: FRIENDS in the game's ONLINE menu, published as the pre-release `v0.1.23-beta`).
+**Last updated:** 2026-11-05 (frame drops, load times, GPU and sound output, on main for 0.1.24).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
@@ -148,6 +148,12 @@ press COMPILE.
   (`PortDbgTainted`, game_main.c).
 - **Server deploys**: `deploy.cmd` in the private repo's `umk3-accounts`
   (tests, then `wrangler deploy`); Mary runs it.
+- **Performance**: [PERFORMANCE-AUDIT.md](PERFORMANCE-AUDIT.md) has the audit
+  and the roadmap (step 1, the smoothing stencils, is done). Measure with
+  the slow-frame line and a scripted fight: `UMK3_ARCADE=0,0` (else a
+  `--fight` takes the menu's mode and may chain opponents with no FINISH
+  HIM), `UMK3_DBG_KEY="600:0;1100:0"`, `UMK3_DBG_FIN="1000:2"`. A run whose
+  window is behind another measures the machine, not the game.
 - **To check online with two players (0.1.23)**: the guest's view of the
   host's STAGE SELECT, invites, no desyncs with a model mod, the other
   player's attack voices. Stages' first-frame pauses (STREET) are open.

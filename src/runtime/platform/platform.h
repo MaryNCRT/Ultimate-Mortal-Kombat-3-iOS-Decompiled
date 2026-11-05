@@ -50,6 +50,10 @@ void plat_monitor_name(int i, char *out, int n);
 /* Print them for the launcher, `umk3-game --list-monitors`: one
  * "index<TAB>name" a line. */
 void plat_monitor_list(void);
+/* SOUND OUTPUT (umk3.ini audio_device=): "auto" the system's, else a
+ * device's name; --list-audio prints them, "audio<TAB>name" a line */
+void plat_audio_device(const char *name);
+void plat_audio_list(void);
 void plat_quit(void);
 
 /* Typed text, for a player's name (settings_menu.c, port): the next

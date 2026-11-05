@@ -19,6 +19,28 @@
 #include <stdio.h>
 #include <string.h>
 
+/* audio_device= (both builds): the device by name, else the system's */
+static char g_audio_want[128];
+
+void plat_audio_device(const char *name)
+{
+    snprintf(g_audio_want, sizeof g_audio_want, "%s",
+             name && strcmp(name, "auto") != 0 ? name : "");
+}
+
+void plat_audio_list(void)
+{
+    int i, n;
+
+    if (!SDL_WasInit(SDL_INIT_AUDIO) && SDL_InitSubSystem(SDL_INIT_AUDIO) != 0)
+        return;
+    n = SDL_GetNumAudioDevices(0);
+    for (i = 0; i < n; i++)
+        if (SDL_GetAudioDeviceName(i, 0))
+            printf("audio\t%s\n", SDL_GetAudioDeviceName(i, 0));
+    fflush(stdout);
+}
+
 #ifndef UMK3_NO_SDL_MIXER
 
 #define VOICES      16
@@ -366,7 +388,11 @@ int plat_audio_open(int rate)
     want.channels = 2;
     want.samples = 1024;
     want.callback = mix;
-    g_dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+    g_dev = SDL_OpenAudioDevice(g_audio_want[0] ? g_audio_want : NULL, 0, &want, &have, 0);
+    if (!g_dev && g_audio_want[0]) {    /* gone: the system's */
+        printf("audio: no device \"%s\", the system's\n", g_audio_want);
+        g_dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+    }
     if (!g_dev) {
         fprintf(stderr, "audio: %s, running silent\n", SDL_GetError());
         return 0;

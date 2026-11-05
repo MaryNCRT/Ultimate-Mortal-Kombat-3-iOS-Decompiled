@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include "rgl.h"
 
 #ifdef _WIN32
@@ -294,6 +295,33 @@ double rgl_now_ms(void)
 #endif
 }
 
+char rgl_gpu[128];
+
+int rgl_gpu_match(const char *name)
+{
+    char a[256], b[128];
+    int i;
+
+    if (!rgl_gpu[0] || _stricmp(rgl_gpu, "auto") == 0 || !name)
+        return 0;
+    for (i = 0; name[i] && i < 255; i++)
+        a[i] = (char)tolower((unsigned char)name[i]);
+    a[i] = 0;
+    for (i = 0; rgl_gpu[i] && i < 127; i++)
+        b[i] = (char)tolower((unsigned char)rgl_gpu[i]);
+    b[i] = 0;
+    return strstr(a, b) != NULL;
+}
+
+#ifndef _WIN32
+void rgl_gpu_list(void) { }             /* Linux: the launcher offers AUTO */
+#endif
+
+double rgl_game_ms;
+int    rgl_game_ticks;
+long   rgl_smooth_tris;
+double port_prof_ms[5];                /* this frame's: smoothing, sounds, loads */
+
 void rgl_present(void)
 {
     /* REAL-TIME SHADOWS: where a frame's time goes, in the log every 600
@@ -309,9 +337,16 @@ void rgl_present(void)
         g_b->present();
         t1 = rgl_now_ms();
         if (last > 0.0) {
-            if (t1 - last > 40.0)
-                printf("slow frame: %.0f ms, %.0f the map and the scene's draws, %.0f presenting\n",
-                       t1 - last, rgl_shadow_ms, t1 - t0);
+            if (t1 - last > 40.0) {
+                /* where it went: the game's ticks (its logic and draws,
+                 * loading included), the smoothed models, the GPU */
+                printf("slow frame: %.0f ms, %.0f the map and the scene's draws, %.0f presenting, "
+                       "%.0f in %d game ticks, %ld smoothed triangles (%.0f ms), "
+                       "%.0f sounds, %.0f loading\n",
+                       t1 - last, rgl_shadow_ms, t1 - t0, rgl_game_ms, rgl_game_ticks,
+                       rgl_smooth_tris, port_prof_ms[0], port_prof_ms[1], port_prof_ms[2]);
+            }
+            memset(port_prof_ms, 0, sizeof port_prof_ms);
             frame_ms += t1 - last;
             present_ms += t1 - t0;
             shadow_ms += rgl_shadow_ms;

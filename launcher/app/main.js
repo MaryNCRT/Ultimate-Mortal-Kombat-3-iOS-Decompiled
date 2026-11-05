@@ -438,6 +438,25 @@ ipcMain.handle('monitors:list', () => new Promise(resolve => {
         });
 }));
 
+/* The GPUs and the sound outputs, as the game sees them: `umk3-game
+ * --list-gpus` / `--list-audio` print a name a line (gpu=, audio_device=). */
+function listNames(flag) {
+    return new Promise(resolve => {
+        const exe = anyExe();
+        if (!exe)
+            return resolve([]);
+        require('child_process').execFile(exe, [flag],
+            { cwd: g_root, timeout: 10000, windowsHide: true }, (err, out) => {
+                /* "gpu<TAB>name" / "audio<TAB>name": the game prints more */
+                const tag = flag === '--list-gpus' ? 'gpu\t' : 'audio\t';
+                resolve(String(out || '').split(/\r?\n/).filter(s => s.startsWith(tag))
+                    .map(s => s.slice(tag.length).trim()).filter(Boolean));
+            });
+    });
+}
+ipcMain.handle('gpus:list', () => listNames('--list-gpus'));
+ipcMain.handle('audio:list', () => listNames('--list-audio'));
+
 /* The player's profile (lib/profiles.js): profiles.ini beside the game,
  * which the game's settings menu edits too. One per installation; its id is
  * given the first time and never changes. */

@@ -184,6 +184,8 @@ function defaultConfig() {
         padDbgMenu: 'L3+R3',
         padIcons: 'auto',            /* pad_icons=: auto xbox ps5 ps4 nintendo */
         monitor: 0,                  /* monitor=: 0 automatic, 1..n */
+        gpu: 'auto',                 /* gpu=: auto (the most powerful) or a card's name */
+        audioDevice: 'auto',         /* audio_device=: auto (the system's) or a name */
         p2PadIcons: 'auto',          /* p2pad_icons= */         /* pad_dbg_menu=: the pad buttons that open the debug menu */
         keys,
         keys5,
@@ -255,6 +257,10 @@ function load(p) {
             cfg.ipa = val;
         } else if (key === 'marco') {
             cfg.marco = val;
+        } else if (key === 'gpu') {
+            cfg.gpu = val || 'auto';
+        } else if (key === 'audio_device') {
+            cfg.audioDevice = val || 'auto';
         } else if (key === 'monitor') {
             cfg.monitor = num >= 0 && num < 16 ? num : 0;
         } else if (key === 'pad_icons' || key === 'p2pad_icons') {
@@ -353,6 +359,8 @@ function save(p, cfg) {
         'pad_dbg_menu=' + (cfg.padDbgMenu === undefined ? 'L3+R3' : cfg.padDbgMenu),
         'pad_icons=' + (cfg.padIcons || 'auto'),
         'monitor=' + (cfg.monitor | 0),
+        'gpu=' + String(cfg.gpu || 'auto').replace(/[\r\n=]/g, ' '),
+        'audio_device=' + String(cfg.audioDevice || 'auto').replace(/[\r\n=]/g, ' '),
         'p2pad_icons=' + (cfg.p2PadIcons || 'auto'),
     ];
     if (cfg.padName)

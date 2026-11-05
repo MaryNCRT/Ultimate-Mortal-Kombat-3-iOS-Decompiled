@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-10-31 (release 0.1.23 beta: FRIENDS in the game's ONLINE menu, published as the pre-release `v0.1.23-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-05 (frame drops, load times, GPU and sound output, on main for 0.1.24) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -94,6 +94,60 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## Frame drops, load times, devices (2026-11-05, on main, not released)
+
+Mary: the frame drops other players see in fatalities and hits, the load
+times, the renderers, the Steam Deck controls; then her three performance
+briefs. Measured in scripted fights on her PC (`UMK3_ARCADE=0,0` so a
+`--fight` has a FINISH HIM; `UMK3_DBG_KEY="600:0;1100:0"` two KOs;
+`UMK3_DBG_FIN="1000:2"`). The audit and the roadmap: [PERFORMANCE-AUDIT.md](PERFORMANCE-AUDIT.md).
+
+- **The hits' drops were the session log.** `open_session_log` set stdout
+  unbuffered: every printf a disk write, ~4 ms; a hit prints its sounds and
+  voices. Now a 64 KB buffer, flushed once a frame and first thing in
+  `on_crash`. Before: 485-578 slow frames in a fight; after: 6.
+- **SMOOTH MODELS stencils** (`umk3_subsurf.c` `umk_subsurf_make_stencils`):
+  the surface and the correction pass's vertex points are linear in the
+  welded control points; probed with a distance-2 colouring of the faces'
+  one-ring supports (27-34 colours, three per probe), checked against the
+  two syncs on a pose of its own (3.0e-7 relative) and dropped if it does
+  not match. Built on the build thread (13-30 ms); dropped and rebuilt with
+  `umk_subsurf_set_sharp`. `port_tick_unseen`: catch-up ticks draw plain.
+  `port_smooth_wait`: a fight's second frame waits for the builds the first
+  started.
+- **Boot** (`draw_gl.c` read-ahead): `umk3-preload.txt` (sheets over 15 ms)
+  decoded on up to 8 threads; `lime_par_for` runs a second caller's job
+  alone; **the save-state arena's allocator has a lock** (`savestate.c`):
+  `runtime/lime` is a state file, its decoders' malloc is the arena's, and
+  unguarded the boot crashed 4 times in 5. A C-heap free skips the lock
+  (the smoothing builds free thousands).
+- `no_power_throttling` (win32_gl.c): EcoQoS off for the process.
+- **Buttons** (`game_main.c`): the launcher's `buttons=` is applied once at
+  boot; after that a change from the game's own menus is the layout and is
+  written to umk3.ini (`port_ini_put_buttons`, settings_menu.c).
+  `port_buttons_set` sets `Player1NumButtons` too (not online).
+- **Babality** (GameCode.c, after `ArcadePosTo3dPos` in the fighters' draw):
+  checked against armv7 `_t_turn_into_a_baby` 0x4fe40 and
+  `_ArcadePosTo3dPos` 0x1c464 instruction by instruction, and the baby
+  frames' boxes (`_FrameInfo` 0x10df1c; `_FrameInfo2` is all zero and never
+  written) byte by byte: the binary places the baby at floor less its arcade
+  sprite's height (44 Sub-Zero/Scorpion/Kano ... 60 Sindel). Drawn lower by
+  (h - 44) / 64; the logic keeps the binary's position. Port, not in the
+  binary.
+- **Devices**: `gpu=` (rgl_front.c `rgl_gpu_match`; rgl_d3d12.c orders the
+  adapters by name match then dedicated memory; rgl_vk.c +10 for a match;
+  `NvOptimusEnablement` / `AmdPowerXpressRequestHighPerformance` for OpenGL),
+  `audio_device=` (win32_audio.c waveOut by name, sdl_audio.c
+  `SDL_OpenAudioDevice`), `--list-gpus` / `--list-audio` ("gpu<TAB>name",
+  "audio<TAB>name"); the launcher's GRAPHICS > VIDEO lists them.
+- Debug menu MODE / CPU DIFFICULTY (`dbg_fight_mode`, `port_cpu_difficulty`
+  over `RoundParam[3]` in `Task_GameInit`); `UMK3_CPU_DIFF` for scripts.
+- Checked: `tests/rgl_test.c` on OpenGL, Vulkan and Direct3D 12 (0 failed);
+  `tools/ci_compile_linux.py` (85 of 85); 8 boots in a row without a crash.
+- **Not checked:** the Steam Deck itself; the fights' remaining 1-tick
+  spikes at a round's start (100-500 ms) vary from run to run with the test
+  window in the background -- Mary to look in front.
 
 ## FRIENDS in the game's ONLINE menu (2026-10-31, released in 0.1.23)
 

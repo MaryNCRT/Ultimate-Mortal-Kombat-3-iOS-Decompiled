@@ -128,7 +128,7 @@ size_t limeFileSize(const char *path)
 /* Returns a buffer the caller owns and must limeFree(). NULL on any failure --
  * the engine checks for it everywhere, and LIME_LoadEvents in particular treats
  * an empty file and an absent one identically, so this does too. */
-void *limeLoadFile(const char *path)
+static void *load_file(const char *path)
 {
     char full[1100];
     FILE *f;
@@ -709,3 +709,15 @@ void LIME_GLAPI glShadeModel(unsigned mode)                  { (void)mode; }
 void LIME_GLAPI glCullFace(unsigned mode)                    { (void)mode; }
 
 #endif  /* !UMK3_REAL_GL */
+/* port: its time, for the slow-frame line (rgl_front.c) */
+void *limeLoadFile(const char *path)
+{
+    extern double port_prof_ms[5];
+    double plat_time(void);
+    double t0 = plat_time();
+    void *r = load_file(path);
+    if (plat_time() - t0 > 0.1)         /* the slow ones, for the load times */
+        printf("load: file %s %.0f ms\n", path ? path : "", (plat_time() - t0) * 1000.0);
+    port_prof_ms[2] += (plat_time() - t0) * 1000.0;
+    return r;
+}
