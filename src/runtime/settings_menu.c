@@ -2360,3 +2360,13 @@ static void write_kv(const char *path)
     free(buf);
     printf("settings menu: saved %s\n", path);
 }
+
+/* UMK3_SETTINGS="tick[:page]" (game_main.c): the menu open at that page,
+ * for a script's screenshot */
+void set_menu_page(int page)
+{
+    if (page >= 0 && page < N_PAGES && page != g_page) {
+        turn_page(page - g_page);
+        build();
+    }
+}

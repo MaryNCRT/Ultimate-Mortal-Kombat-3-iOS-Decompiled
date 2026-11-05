@@ -341,7 +341,10 @@ Environment variables read by `runtime/game_main.c` (all listed in its header):
 | `UMK3_PAD=<auto\|off\|xinput\|vvvv:pppp>`, `UMK3_LOG_PAD=1` | the pad over `pad=`; log its buttons (and read it even in a scripted run). `umk3-game --list-pads` prints the pads attached |
 | `UMK3_DBG_HITBOX=1`, `UMK3_DBG_SPEED=<percent>` | the TOOLS page's hitboxes and fight speed |
 | `UMK3_DBG_STATE="tick:s1;tick:l1"` | save / load state slot 1-4 at those ticks: test a moment again without replaying up to it |
-| `UMK3_DBG_FIN="tick:n;..."` | the FINISHER row (0-6) at the first FINISH HIM from that tick |
+| `UMK3_DBG_FIN="tick:n;..."` | the FINISHER row (0-6) at the first FINISH HIM from that tick (with `UMK3_ARCADE=0,0`, so a `--fight` has one) |
+| `UMK3_CPU_DIFF=<0..9>` | the CPU's difficulty for the fight (the debug menu's CPU DIFFICULTY) |
+| `UMK3_SETTINGS="tick[:page]"` | open the settings menu at that tick, at that page (0 VIDEO ... 3 AUDIO ...) |
+| `UMK3_PROFILE=1` | Windows: sample the game's thread; each slow frame's commonest places as exe offsets (`llvm-symbolizer --obj=umk3-game64.exe <0x400000 + offset>`) |
 
 A scripted run ignores the real mouse and keyboard, so it is not disturbed by
 someone typing in another window. Example -- the moves list in a fight:

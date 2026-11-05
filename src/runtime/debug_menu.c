@@ -1152,7 +1152,7 @@ static int draw_ios(const char *title, const char *const *tabs, int ntabs,
             g_sx = x + (6 + 6) * f;
             g_sw = (UI_SIDE - 10) * f;
             g_stop = g_top + 4 * f;
-            g_srow = 24 * f;
+            g_srow = UI_SIDE_STEP(-ntabs) * f;
         }
         g_gap = 6 * f;                  /* the columns, 6 apart */
         g_cw = g_split < rows ? (g_bw - g_gap) * 0.5f : g_bw;

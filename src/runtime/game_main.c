@@ -3384,6 +3384,13 @@ int main(int argc, char **argv)
                         q++;
                 }
             }
+            if (getenv("UMK3_SETTINGS")                 /* "tick[:page]", a script's */
+                && ticks == atol(getenv("UMK3_SETTINGS")) && !set_menu_is_open()) {
+                const char *c = strchr(getenv("UMK3_SETTINGS"), ':');
+                set_menu_toggle();
+                if (c)
+                    set_menu_page(atoi(c + 1));
+            }
             if (g_cfg_debug_keys && getenv("UMK3_DBG_STATE")) {
                 /* "tick:s1;tick:l1" -- save / load state slot 1..4 */
                 const char *q = getenv("UMK3_DBG_STATE");

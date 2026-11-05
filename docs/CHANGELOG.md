@@ -8,6 +8,12 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased (on main, for 0.2.1)
+
+- The settings menu fits a 16:9 screen again: with AUDIO it has seven
+  categories, and the box ran off the bottom (Mary). The categories are
+  closer together from seven on.
+
 ## 0.2.0 beta (2026-11-05) — performance, audio, devices, kombos
 
 Published 2026-11-05 as the GitHub pre-release `v0.2.0-beta`

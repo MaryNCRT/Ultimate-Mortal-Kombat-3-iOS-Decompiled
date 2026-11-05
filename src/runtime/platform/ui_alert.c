@@ -1040,8 +1040,8 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
     per = split > n - split ? split : n - split;    /* the taller column */
     fs = cols > 1 ? 10 : 11;
     b.by1 = top + per * rowh + 26 * s;
-    if (side && b.by1 < top + (nt * 24 + 8 + UI_SIDE) * s + 26 * s)
-        b.by1 = top + (nt * 24 + 8 + UI_SIDE) * s + 26 * s;   /* room for the icon */
+    if (side && b.by1 < top + (nt * UI_SIDE_STEP(nt) + 8 + UI_SIDE) * s + 26 * s)
+        b.by1 = top + (nt * UI_SIDE_STEP(nt) + 8 + UI_SIDE) * s + 26 * s;   /* room for the icon */
     b.w = (int)(b.bx1 + m + 1);
     b.h = (int)(b.by1 + m + 1);
     b.px = (al_px *)malloc(sizeof(al_px) * b.w * b.h);
@@ -1064,7 +1064,7 @@ unsigned char *plat_ui_menu(const char *title, const char *const *tabs,
                     al_over(&b.px[y * b.w + x], 0, 0, 0.04f, c * 0.45f);
             }
         for (i = 0; i < nt; i++) {
-            float ty0 = top + (4 + i * 24) * s, ty1 = ty0 + 20 * s;
+            float ty0 = top + (4 + i * UI_SIDE_STEP(nt)) * s, ty1 = ty0 + (UI_SIDE_STEP(nt) - 4) * s;
             if (i == tab)
                 for (y = (int)ty0; y <= (int)ty1; y++)
                     for (x = (int)px0 + 2; x <= (int)px1 - 2; x++) {
