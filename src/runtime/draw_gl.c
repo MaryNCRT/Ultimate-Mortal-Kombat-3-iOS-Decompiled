@@ -587,7 +587,179 @@ static void tex_upload(GLuint name, LimeImage *img)
         gen_mip(GL_TEXTURE_2D);
 }
 
-TEXTURE *limeLoadTexture(const char *path, int a, int b)
+/* ------------------------------------------------ textures read ahead
+ *
+ * Port, not in the binary. The boot loads every fighter's sheets for the
+ * select screen, one after another on the game's thread: 35-370 ms each,
+ * about five seconds (measured 2026-11-05). The sheets a boot took long
+ * over are written to umk3-preload.txt beside the game; the next boot reads
+ * and decodes them on threads of their own from its first moment, in the
+ * order it will ask for them, and load_texture takes each one ready, only
+ * the upload left to do. A list that no longer matches costs nothing but
+ * the reading: what is not asked for is freed once the menus are up. */
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <pthread.h>
+#include <sched.h>
+#include <unistd.h>
+#endif
+
+#define PF_MAX 160
+static struct pf {
+    char      path[96];
+    LimeImage img;
+    int       ok;
+    volatile int state;                 /* 0 waiting, 1 reading, 2 done, 3 taken */
+} g_pf[PF_MAX];
+static int g_pf_n, g_pf_on;
+static volatile int g_pf_next;
+static char g_pf_file[1200];
+static char g_pf_seen[PF_MAX][96];      /* this boot's slow ones, to write */
+static int g_pf_seen_n, g_pf_recording;
+
+static void pf_work(void)
+{
+    for (;;) {
+        int i = __atomic_fetch_add(&g_pf_next, 1, __ATOMIC_SEQ_CST);
+        struct pf *p;
+
+        if (i >= g_pf_n)
+            return;
+        p = &g_pf[i];
+        memset(&p->img, 0, sizeof p->img);
+        p->ok = load_rgba(p->path, &p->img);
+        if (p->ok && PortTextureQuality >= 2)
+            upscale_small(&p->img);
+        __atomic_store_n(&p->state, 2, __ATOMIC_RELEASE);
+    }
+}
+
+#ifdef _WIN32
+static DWORD WINAPI pf_thread(LPVOID a) { (void)a; pf_work(); return 0; }
+#else
+static void *pf_thread(void *a) { (void)a; pf_work(); return NULL; }
+#endif
+
+/* the list read and the threads started; `dir` is the game's folder */
+void lime_tex_prefetch_start(const char *dir)
+{
+    char line[128];
+    FILE *f;
+    int i, n;
+
+    snprintf(g_pf_file, sizeof g_pf_file, "%sumk3-preload.txt", dir ? dir : "");
+    g_pf_recording = 1;
+    if ((f = fopen(g_pf_file, "r")) == NULL)
+        return;
+    while (g_pf_n < PF_MAX && fgets(line, sizeof line, f)) {
+        line[strcspn(line, "\r\n")] = 0;
+        if (line[0])
+            snprintf(g_pf[g_pf_n++].path, sizeof g_pf[0].path, "%s", line);
+    }
+    fclose(f);
+    if (!g_pf_n)
+        return;
+    g_pf_on = 1;
+#ifdef _WIN32
+    {
+        SYSTEM_INFO si;
+        GetSystemInfo(&si);
+        n = (int)si.dwNumberOfProcessors - 1;
+    }
+#else
+    n = (int)sysconf(_SC_NPROCESSORS_ONLN) - 1;
+#endif
+    if (n > 8) n = 8;
+    if (n < 1) n = 1;
+    for (i = 0; i < n; i++) {
+#ifdef _WIN32
+        HANDLE t = CreateThread(NULL, 1 << 20, pf_thread, NULL, 0, NULL);
+        if (t) CloseHandle(t);
+#else
+        pthread_t t;
+        if (pthread_create(&t, NULL, pf_thread, NULL) == 0)
+            pthread_detach(t);
+#endif
+    }
+    printf("textures: %d read ahead on %d threads\n", g_pf_n, n);
+}
+
+/* 1 and the image when `path` was read ahead (waiting for it if a thread
+ * has it now) */
+static int pf_take(const char *path, LimeImage *img, int *ok)
+{
+    int i;
+
+    if (!g_pf_on)
+        return 0;
+    for (i = 0; i < g_pf_n; i++)
+        if (g_pf[i].state != 3 && strcmp(g_pf[i].path, path) == 0)
+            break;
+    if (i == g_pf_n)
+        return 0;
+    while (__atomic_load_n(&g_pf[i].state, __ATOMIC_ACQUIRE) != 2) {
+        if (__atomic_load_n(&g_pf_next, __ATOMIC_SEQ_CST) <= i) {
+            /* not started: this thread reads it, and the threads skip it */
+            int want = 0;
+            if (__atomic_compare_exchange_n(&g_pf[i].state, &want, 1, 0,
+                                            __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+                return 0;
+        }
+#ifdef _WIN32
+        Sleep(0);
+#else
+        sched_yield();
+#endif
+    }
+    *img = g_pf[i].img;
+    *ok = g_pf[i].ok;
+    g_pf[i].state = 3;
+    return 1;
+}
+
+/* a texture this boot took long over: on the list for the next */
+static void pf_note(const char *path)
+{
+    int i;
+
+    if (!g_pf_recording || !path || strlen(path) >= sizeof g_pf_seen[0])
+        return;
+    for (i = 0; i < g_pf_seen_n; i++)
+        if (strcmp(g_pf_seen[i], path) == 0)
+            return;
+    if (g_pf_seen_n < PF_MAX)
+        snprintf(g_pf_seen[g_pf_seen_n++], sizeof g_pf_seen[0], "%s", path);
+}
+
+/* The menus are up: the list written for the next boot, and what was read
+ * ahead and not asked for freed (once the threads are done with it). */
+void lime_tex_prefetch_end(void)
+{
+    FILE *f;
+    int i, same = g_pf_seen_n == g_pf_n;
+
+    if (!g_pf_recording)
+        return;
+    g_pf_recording = 0;
+    for (i = 0; same && i < g_pf_n; i++)
+        same = strcmp(g_pf_seen[i], g_pf[i].path) == 0;
+    if (!same && g_pf_seen_n && (f = fopen(g_pf_file, "w")) != NULL) {
+        for (i = 0; i < g_pf_seen_n; i++)
+            fprintf(f, "%s\n", g_pf_seen[i]);
+        fclose(f);
+    }
+    for (i = 0; i < g_pf_n; i++) {
+        int s = __atomic_load_n(&g_pf[i].state, __ATOMIC_ACQUIRE);
+        if (s == 2) {
+            free(g_pf[i].img.rgba);
+            g_pf[i].state = 3;
+        }
+    }
+    g_pf_on = 0;
+}
+
+static TEXTURE *load_texture(const char *path, int a, int b)
 {
     TexEntry *e;
     LimeImage img;
@@ -602,13 +774,26 @@ TEXTURE *limeLoadTexture(const char *path, int a, int b)
         return &e->tex;
 
     memset(&img, 0, sizeof(img));
-    if (!load_rgba(path, &img)) {
-        if (getenv("LIME_TRACE_TEX"))
-            fprintf(stderr, "[tex] %s MISSING\n", path);
-        return NULL;                    /* the failure branch the engine has */
+    {
+        int ok = 0;
+        double t0 = plat_time();
+
+        if (pf_take(path, &img, &ok)) {  /* read ahead (above) */
+            if (!ok)
+                return NULL;
+            pf_note(path);
+        } else {
+            if (!load_rgba(path, &img)) {
+                if (getenv("LIME_TRACE_TEX"))
+                    fprintf(stderr, "[tex] %s MISSING\n", path);
+                return NULL;            /* the failure branch the engine has */
+            }
+            if (PortTextureQuality >= 2)
+                upscale_small(&img);
+            if (plat_time() - t0 > 0.015)
+                pf_note(path);
+        }
     }
-    if (PortTextureQuality >= 2)
-        upscale_small(&img);
     if (getenv("LIME_TRACE_TEX"))
         fprintf(stderr, "[tex] %s %dx%d\n", path, img.width, img.height);
 
@@ -1231,4 +1416,17 @@ void limeDrawFaceMeSpriteWH(TEXTURE *tex, const float *m, float x, float y, floa
     }
     face_draw(tex, xyz, uv, rgba, GL_FLOAT);
     glDisableClientState(GL_VERTEX_ARRAY);
+}
+
+/* port: its time, for the slow-frame line (rgl_front.c) */
+TEXTURE *limeLoadTexture(const char *path, int a, int b)
+{
+    extern double port_prof_ms[5];
+    double plat_time(void);
+    double t0 = plat_time();
+    TEXTURE *r = load_texture(path, a, b);
+    if (plat_time() - t0 > 0.1)         /* the slow ones, for the load times */
+        printf("load: texture %s %.0f ms\n", path ? path : "", (plat_time() - t0) * 1000.0);
+    port_prof_ms[2] += (plat_time() - t0) * 1000.0;
+    return r;
 }

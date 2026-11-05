@@ -88,6 +88,8 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 
 - Not yet tried online with two players (Mary's friend was away): the guest seeing the host's STAGE SELECT, invites from FRIENDS, and the fixes to the desyncs and to the other player's lost attack voices. Published at Mary's request.
 - Some stages still pause up to ~1.3 s on their first frames (THE STREET), as their events load.
+- On main, not released: hits and fatalities no longer drop frames, SMOOTH MODELS costs a fraction, the boot is 3 s faster, the 5 / 6 buttons choice stays, the babality's baby stands on the floor, and GRAPHICS CARD / SOUND OUTPUT can be chosen. Not yet played by Mary.
+- Steam Deck: the fight played the 5-button layout whatever was chosen (#171); likely the buttons fix above, not yet checked on a Deck.
 
 - Earlier entries (a dropped intro frame, the repeated death scream, duplicating a fighter, the Motaro softlock, SCULPT's "500 Internal Error") were closed by Mary in 0.1.18: she no longer sees them.
 - In a kombo the one hit slides back slightly after a few punches (issue #114). That is the original game's own rule (`t_ccp3` → `t_separate_us`), checked against the binary instruction by instruction.

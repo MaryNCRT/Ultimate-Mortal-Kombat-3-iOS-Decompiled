@@ -23,6 +23,16 @@
         return out;
     });
 
+    /* the GPUs and sound outputs the game reports, and one chosen that is gone */
+    const named = (list, cur, auto) => {
+        const out = [{ value: 'auto', name: auto }];
+        for (const n of list) out.push({ value: n, name: n });
+        if (cur && cur !== 'auto' && !list.includes(cur)) out.push({ value: cur, name: cur });
+        return out;
+    };
+    const gpus = $derived(named(app.gpus, c.gpu, tx('gpuAuto')));
+    const audios = $derived(named(app.audios, c.audioDevice, tx('audioAuto')));
+
     async function frame() {
         const p = await api.browseFrame();
         if (p) await save({ marco: p });
@@ -54,6 +64,20 @@
                 <select id="monitor" class="sel" value={String(c.monitor || 0)}
                         onchange={e => { selectBlip(); save({ monitor: Number(e.currentTarget.value) || 0 }); }}>
                     {#each monitors as m}<option value={m.value}>{m.name}</option>{/each}
+                </select>
+            </div>
+            <div class="field">
+                <label class="lbl" for="gpu">{tx('gpuLbl')}</label>
+                <select id="gpu" class="sel" value={c.gpu || 'auto'} title={c.renderer === 'opengl' || !c.renderer ? tx('gpuGl') : ''}
+                        onchange={e => { selectBlip(); save({ gpu: e.currentTarget.value }); }}>
+                    {#each gpus as g}<option value={g.value}>{g.name}</option>{/each}
+                </select>
+            </div>
+            <div class="field">
+                <label class="lbl" for="audioDev">{tx('audioLbl')}</label>
+                <select id="audioDev" class="sel" value={c.audioDevice || 'auto'}
+                        onchange={e => { selectBlip(); save({ audioDevice: e.currentTarget.value }); }}>
+                    {#each audios as a}<option value={a.value}>{a.name}</option>{/each}
                 </select>
             </div>
             <div class="field">

@@ -24,6 +24,7 @@ static void          *g_ctx;
 static int            g_n, g_chunk, g_chunks;
 static volatile LONG  g_next;           /* next chunk to take */
 static volatile LONG  g_left;           /* chunks not finished */
+static volatile LONG  g_busy;           /* a caller is using the pool */
 
 static void run_chunks(void)
 {
@@ -89,7 +90,9 @@ void lime_par_for(int n, lime_par_fn fn, void *ctx)
         return;
     if (g_workers < 0)
         start();
-    if (g_workers == 0 || n < 2) {
+    /* the pool is one team: a second thread calling while it works (the
+     * textures read ahead, draw_gl.c) runs its job on its own */
+    if (g_workers == 0 || n < 2 || InterlockedCompareExchange(&g_busy, 1, 0) != 0) {
         fn(ctx, 0, n);
         return;
     }
@@ -112,6 +115,7 @@ void lime_par_for(int n, lime_par_fn fn, void *ctx)
     ReleaseSemaphore(g_go, g_workers < chunks - 1 ? g_workers : chunks - 1, NULL);
     run_chunks();
     WaitForSingleObject(g_done, INFINITE);
+    InterlockedExchange(&g_busy, 0);
 }
 
 #else

@@ -59,9 +59,17 @@ int  rgl_shadow_active(void);           /* render/rgl.h, REAL-TIME SHADOWS */
 void rgl_shadow_proxy(int mode);
 extern long limeRenderedPolyCount;
 static long g_frame_tris;               /* smoothed triangles this frame */
+/* 1 for a frame that waits for the builds the frame before started: a
+ * fight's second frame (game_main.c), so every fighter is smoothed from the
+ * start -- the builds run side by side, one short wait for all (Mary) */
+int port_smooth_wait;
+extern int port_tick_unseen;            /* game_main.c: another tick follows in this frame */
+
+extern long rgl_smooth_tris;            /* render/rgl_front.c: the slow-frame line's */
 
 void port_smooth_frame(void)
 {
+    rgl_smooth_tris = g_frame_tris;
     g_frame_tris = 0;
 }
 extern void (*lime_port_skin_freed)(const void *skin);   /* RenderSkinned.c */
@@ -129,12 +137,27 @@ static unsigned g_tick;
 /* The build and its SHARP EDGES (a full sync of the surface, ~as long as the
  * build: on the game's thread it froze the fight's first frames, 250 to
  * 900 ms, Mary's logs of 2026-10-30) on the thread */
+/* the stencil tables (umk3_subsurf.c): a pose then costs a multiply, not
+ * two syncs of the surface (6-11 ms a frame, 57 ms a new pose, measured) */
+static void stencils(UmkSubsurf *s)
+{
+    int colors, n;
+    float err;
+    double t0 = plat_time();
+
+    n = umk_subsurf_make_stencils(s, &colors, &err);
+    printf("smooth models: stencils %s, %d weights, %d colours, error %.1e, %.0f ms\n",
+           n ? "on" : "off (the syncs)", n, colors, (double)err, (plat_time() - t0) * 1000.0);
+}
+
 static void build(smooth_entry *e)
 {
     e->built = umk_subsurf_new_keyed(e->levels, e->weld, e->nverts, e->jpos, e->nfaces, e->jidx,
                                      e->jcu, e->jkey);
-    if (e->built)
+    if (e->built) {
         umk_subsurf_set_sharp(e->built, e->sharp_a, e->sharp_s);
+        stencils(e->built);             /* on this thread too */
+    }
 }
 
 #ifdef _WIN32
@@ -594,7 +617,7 @@ static smooth_entry *start_entry(smooth_entry *e, const void *skin, uint32_t has
         e->jcu[i * 2 + 0] = ruv[idx[i] * 2 + 0];
         e->jcu[i * 2 + 1] = ruv[idx[i] * 2 + 1];
     }
-    if (build_start(e))
+    if (build_start(e) && !(port_smooth_wait && build_done(e, 1)))
         return NULL;                    /* the plain skin until it is done */
     adopt(e);
     return e->s ? e : NULL;
@@ -613,7 +636,7 @@ static smooth_entry *lookup(const void *skin, int nverts, int nfaces,
             if (c->levels == port_smooth_models) {
                 c->used = ++g_tick;
                 if (c->job) {
-                    if (!build_done(c, 0))
+                    if (!build_done(c, port_smooth_wait))
                         return NULL;    /* still building: the plain skin */
                     adopt(c);
                 }
@@ -768,8 +791,8 @@ static void draw(smooth_entry *e, TEXTURE *tex, float alpha, const limeVECTOR3 *
     glDisableClientState(GL_COLOR_ARRAY);
 }
 
-int port_smooth_draw(const void *skin, const void *rec, long second,
-                     void *tex_p, float alpha, const void *fade_p)
+static int smooth_draw(const void *skin, const void *rec, long second,
+                       void *tex_p, float alpha, const void *fade_p)
 {
     TEXTURE *tex = (TEXTURE *)tex_p;
     const limeVECTOR3 *fade = (const limeVECTOR3 *)fade_p;
@@ -805,7 +828,7 @@ int port_smooth_draw(const void *skin, const void *rec, long second,
      * and a slow frame runs several ticks between its draws, so the budget
      * never filled (measured: ~150 copies of 180,000 vertices a frame,
      * 1 GB sent, ~900 ms frames). */
-    if (g_frame_tris > SMOOTH_FRAME_TRIS) {
+    if (g_frame_tris > SMOOTH_FRAME_TRIS || port_tick_unseen) {
         if (!second)
             tuck(skin, (int)*(const long *)r);
         return 0;
@@ -832,6 +855,7 @@ int port_smooth_draw(const void *skin, const void *rec, long second,
 
     if (e->sharp_a != port_sharp_angle || e->sharp_s != port_sharp_strength) {
         umk_subsurf_set_sharp(e->s, port_sharp_angle, port_sharp_strength);
+        stencils(e->s);
         e->sharp_a = port_sharp_angle;
         e->sharp_s = port_sharp_strength;
     }
@@ -861,3 +885,15 @@ int port_smooth_draw(const void *skin, const void *rec, long second,
     return 1;
 }
 
+
+/* port: its time, for the slow-frame line (rgl_front.c) */
+int port_smooth_draw(const void *skin, const void *rec, long second,
+                     void *tex_p, float alpha, const void *fade_p)
+{
+    extern double port_prof_ms[5];
+    double plat_time(void);
+    double t0 = plat_time();
+    int r = smooth_draw(skin, rec, second, tex_p, alpha, fade_p);
+    port_prof_ms[0] += (plat_time() - t0) * 1000.0;
+    return r;
+}

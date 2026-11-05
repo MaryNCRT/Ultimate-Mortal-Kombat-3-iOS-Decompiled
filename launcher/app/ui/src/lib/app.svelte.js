@@ -126,6 +126,8 @@ export const app = $state({
     glyphs: {},
     seenPads: {}, padLooking: false,
     monitors: [],
+    gpus: [],                       /* --list-gpus */
+    audios: [],                     /* --list-audio */
     status: { kind: '', text: '' },
     build: { on: false, show: false, pct: 0, fail: false, label: '', log: '', console: false },
     upd: { cls: '', text: '', canGet: false, busy: false, bar: false, pct: 0, label: '',
@@ -381,6 +383,8 @@ export function closePicker() {
  * game is compiled only AUTOMATIC. */
 export async function fillMonitors() {
     try { app.monitors = await api.listMonitors(); } catch (err) { app.monitors = []; }
+    try { app.gpus = (await api.listGpus?.()) || []; } catch (err) { app.gpus = []; }
+    try { app.audios = (await api.listAudio?.()) || []; } catch (err) { app.audios = []; }
 }
 
 /* -------------------------------------------------------------- build -- */

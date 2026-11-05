@@ -292,7 +292,7 @@ static const char *tx(const char *es, const char *en)
 enum { PAGE_FIGHT, PAGE_MENUS, PAGE_TOOLS, N_PAGES };
 
 enum {
-    ROW_P1, ROW_PAL1, ROW_P2, ROW_PAL2, ROW_STAGE, ROW_FIGHT,
+    ROW_P1, ROW_PAL1, ROW_P2, ROW_PAL2, ROW_STAGE, ROW_MODE, ROW_DIFF, ROW_FIGHT,
     ROW_SCREEN, ROW_MAIN,
     ROW_WIN_ROUND, ROW_LOSE_ROUND, ROW_WIN_MATCH, ROW_LOSE_MATCH,
     ROW_FINISHER,
@@ -316,6 +316,26 @@ static int g_open, g_want_open, g_page, g_sel;
 static int g_p1 = 15, g_p2 = 25, g_stage, g_screen;   /* Kitana vs Shao Kahn */
 static int g_info, g_fps, g_net;
 static int g_fin = 2;                   /* FATALITY 1 */
+/* START FIGHT's mode (0 the menu's own, 1 ARCADE, 2 TRAINING: player two
+ * stands still) and the CPU's difficulty (0 the ladder's, else 1 + 0..9,
+ * RoundParam[3]: Task_GameInit) -- for Mary and for the scripted runs */
+static int g_mode, g_diff;
+static const char *mode_name(int i)
+{
+    static const char *const es[3] = { "EL DEL MENU", "ARCADE", "ENTRENAMIENTO" };
+    static const char *const en[3] = { "THE MENU'S", "ARCADE", "TRAINING" };
+    return tx(es[i % 3], en[i % 3]);
+}
+static const char *diff_name(int i)
+{
+    static char b[8];
+    if (i <= 0)
+        return tx("LA DEL ARCADE", "THE LADDER'S");
+    snprintf(b, sizeof b, "%d", i - 1);
+    return b;
+}
+int dbg_fight_mode(void)     { return g_mode; }
+int dbg_cpu_difficulty(void) { return g_diff - 1; }
 static const char *const k_fin_es[7] = {
     "FOSO / ESCENARIO", "MERCY", "FATALITY 1", "FATALITY 2", "ANIMALITY",
     "BABALITY", "FRIENDSHIP"
@@ -472,6 +492,9 @@ static void build(void)
         add(ROW_PAL2, tx("PALETA 2", "PALETTE 2"), "< %s >", pal_name(DbgPalette[1]));
         add(ROW_STAGE, tx("ESCENARIO", "STAGE"), "< %2d %s >", g_stage,
             stage_name(g_stage));
+        add(ROW_MODE, tx("MODO", "MODE"), "< %s >", mode_name(g_mode));
+        add(ROW_DIFF, tx("DIFICULTAD CPU (0-9)", "CPU DIFFICULTY (0-9)"), "< %s >",
+            diff_name(g_diff));
         add(ROW_FIGHT, tx("EMPEZAR PELEA", "START FIGHT"), "");
         head(tx("RONDA", "ROUND"));
         add(ROW_WIN_ROUND, tx("GANAR RONDA", "WIN ROUND"), "");
@@ -548,6 +571,8 @@ static int *list_var(int row, int *n)
     case ROW_STAGE:    *n = N_STAGES;        return &g_stage;
     case ROW_SCREEN:   *n = DBG_SCREENS;     return &g_screen;
     case ROW_FINISHER: *n = 7;               return &g_fin;
+    case ROW_MODE:     *n = 3;               return &g_mode;
+    case ROW_DIFF:     *n = 11;              return &g_diff;
     case ROW_HEALTH:   *n = 4;               return &g_health;
     case ROW_SPEED:    *n = N_SPEEDS;        return &g_speed;
     case ROW_SLOT:     *n = DBG_STATE_SLOTS; return &g_slot;
@@ -599,6 +624,10 @@ static void drop_open(int row)
             snprintf(L, 48, "%s", tx(k_fin_es[i], k_fin_en[i])); break;
         case ROW_HEALTH:
             snprintf(L, 48, "%s", health_name(i)); break;
+        case ROW_MODE:
+            snprintf(L, 48, "%s", mode_name(i)); break;
+        case ROW_DIFF:
+            snprintf(L, 48, "%s", diff_name(i)); break;
         case ROW_SPEED:
             snprintf(L, 48, "%d%%", k_speed[i]); break;
         case ROW_SLOT:

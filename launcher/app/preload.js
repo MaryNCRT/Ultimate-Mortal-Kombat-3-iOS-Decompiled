@@ -49,6 +49,8 @@ contextBridge.exposeInMainWorld('umk3', {
     glyphs: () => ipcRenderer.invoke('glyphs:all'),
     listPads: () => ipcRenderer.invoke('pads:list'),
     listMonitors: () => ipcRenderer.invoke('monitors:list'),
+    listGpus: () => ipcRenderer.invoke('gpus:list'),
+    listAudio: () => ipcRenderer.invoke('audio:list'),
     close: () => ipcRenderer.invoke('window:close'),
     relaunch: () => ipcRenderer.invoke('app:relaunch'),
     minimize: () => ipcRenderer.invoke('window:minimize'),

@@ -479,17 +479,50 @@ static int dx_open(void *window, int width, int height)
     mkfactory = (HRESULT (WINAPI *)(UINT, REFIID, void **))(void *)GetProcAddress(g_dxgi, "CreateDXGIFactory2");
     if (!create || !mkfactory || !ok(mkfactory(0, &IID_IDXGIFactory4, (void **)&g_factory), "CreateDXGIFactory2"))
         return 0;
-    /* the first hardware adapter that makes a device, as the system orders them */
-    for (i = 0; IDXGIFactory4_EnumAdapters1(g_factory, i, &ad) != DXGI_ERROR_NOT_FOUND; i++) {
-        DXGI_ADAPTER_DESC1 d;
-        IDXGIAdapter1_GetDesc1(ad, &d);
-        if (!(d.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
-            && SUCCEEDED(create((IUnknown *)ad, D3D_FEATURE_LEVEL_11_0, &IID_ID3D12Device, (void **)&g_dev))) {
-            WideCharToMultiByte(CP_UTF8, 0, d.Description, -1, g_adapter, sizeof g_adapter, NULL, NULL);
-            IDXGIAdapter1_Release(ad);
-            break;
+    /* The adapter: the one gpu= names, else the most powerful -- the most
+     * video memory of its own, so a laptop's discrete card before the
+     * integrated one the system lists first (Mary: play on the 5070).
+     * Then the others in that order if it makes no device. */
+    {
+        IDXGIAdapter1 *all[16];
+        SIZE_T mem[16];
+        int named[16], n = 0, k, best;
+
+        for (i = 0; n < 16 && IDXGIFactory4_EnumAdapters1(g_factory, i, &ad) != DXGI_ERROR_NOT_FOUND; i++) {
+            DXGI_ADAPTER_DESC1 d;
+            char nm[128];
+            IDXGIAdapter1_GetDesc1(ad, &d);
+            if (d.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
+                IDXGIAdapter1_Release(ad);
+                continue;
+            }
+            WideCharToMultiByte(CP_UTF8, 0, d.Description, -1, nm, sizeof nm, NULL, NULL);
+            all[n] = ad;
+            mem[n] = d.DedicatedVideoMemory;
+            named[n] = rgl_gpu_match(nm);
+            n++;
         }
-        IDXGIAdapter1_Release(ad);
+        while (!g_dev) {
+            best = -1;
+            for (k = 0; k < n; k++)
+                if (all[k] && (best < 0 || named[k] > named[best]
+                               || (named[k] == named[best] && mem[k] > mem[best])))
+                    best = k;
+            if (best < 0)
+                break;
+            if (SUCCEEDED(create((IUnknown *)all[best], D3D_FEATURE_LEVEL_11_0, &IID_ID3D12Device, (void **)&g_dev))) {
+                DXGI_ADAPTER_DESC1 d;
+                IDXGIAdapter1_GetDesc1(all[best], &d);
+                WideCharToMultiByte(CP_UTF8, 0, d.Description, -1, g_adapter, sizeof g_adapter, NULL, NULL);
+                if (rgl_gpu[0] && _stricmp(rgl_gpu, "auto") != 0 && !named[best])
+                    printf("d3d12: no adapter is \"%s\", the most powerful instead\n", rgl_gpu);
+            }
+            IDXGIAdapter1_Release(all[best]);
+            all[best] = NULL;
+        }
+        for (k = 0; k < n; k++)
+            if (all[k])
+                IDXGIAdapter1_Release(all[k]);
     }
     if (!g_dev) {
         printf("d3d12: no adapter makes a Direct3D 12 device\n");
@@ -1460,3 +1493,44 @@ rgl_backend rgl_d3d12 = {
 };
 
 #endif
+
+/* --list-gpus (the launcher's GRAPHICS > GPU): every hardware adapter, its
+ * "gpu<TAB>name" a line, the most video memory first */
+void rgl_gpu_list(void)
+{
+    HMODULE dx = LoadLibraryA("dxgi.dll");
+    HRESULT (WINAPI *mk)(UINT, REFIID, void **) =
+        dx ? (HRESULT (WINAPI *)(UINT, REFIID, void **))(void *)GetProcAddress(dx, "CreateDXGIFactory2") : NULL;
+    IDXGIFactory4 *f = NULL;
+    IDXGIAdapter1 *ad;
+    char nm[16][128];
+    SIZE_T mem[16];
+    UINT i;
+    int n = 0, k, j;
+
+    if (!mk || FAILED(mk(0, &IID_IDXGIFactory4, (void **)&f)))
+        return;
+    for (i = 0; n < 16 && IDXGIFactory4_EnumAdapters1(f, i, &ad) != DXGI_ERROR_NOT_FOUND; i++) {
+        DXGI_ADAPTER_DESC1 d;
+        IDXGIAdapter1_GetDesc1(ad, &d);
+        if (!(d.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) {
+            WideCharToMultiByte(CP_UTF8, 0, d.Description, -1, nm[n], sizeof nm[0], NULL, NULL);
+            mem[n] = d.DedicatedVideoMemory;
+            for (k = 0; k < n && strcmp(nm[k], nm[n]) != 0; k++)
+                ;
+            if (k == n)                 /* one name once */
+                n++;
+        }
+        IDXGIAdapter1_Release(ad);
+    }
+    IDXGIFactory4_Release(f);
+    for (k = 0; k < n; k++) {
+        int b = -1;
+        for (j = 0; j < n; j++)
+            if (nm[j][0] && (b < 0 || mem[j] > mem[b]))
+                b = j;
+        printf("gpu\t%s\n", nm[b]);
+        nm[b][0] = 0;
+    }
+    fflush(stdout);
+}

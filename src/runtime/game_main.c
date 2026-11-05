@@ -77,6 +77,7 @@
  *                                           (rollback_probe.c; the launcher's REPLAYS)
  *   umk3-game --list-pads                   the pads attached (for the launcher)
  *   umk3-game --list-monitors               the monitors (for the launcher)
+ *   umk3-game --list-gpus / --list-audio    the GPUs and sound outputs (same)
  * goes straight from the main menu into a fight. A fighter is a name from
  * CharacterNames ("kitana", "kunglao", "sub-zero") or its number 0..25; the
  * stage is a Level_Info row, 0..15 (default 0). It sets what the select
@@ -537,6 +538,7 @@ static void save_shot_as(const char *name, int w, int h)
 }
 
 static int  g_cfg_buttons;            /* buttons=5|6: the launcher's layout */
+int port_tick_unseen;                   /* this tick's picture is not shown (smooth_models.c) */
 
 /* -[UMK3AppDelegate startAppWithOptions:application:], the part that is the
  * game's: the language, with English when the bundle has no terms-of-service
@@ -825,6 +827,7 @@ void plat_crash_restore(void);          /* win32_gl.c: desktop mode, no window *
  * send the file and the next fix starts from a name instead of an address. */
 static LONG WINAPI on_crash(EXCEPTION_POINTERS *ep)
 {
+    fflush(stdout);                     /* the session log's last lines */
     static char path[MAX_PATH + 64], msg[2048];
     HMODULE self = GetModuleHandleA(NULL);
     unsigned long code = (unsigned long)ep->ExceptionRecord->ExceptionCode;
@@ -957,7 +960,11 @@ static int open_session_log(void)
             t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
     if (!freopen(path, "w", stdout))
         return 0;
-    setvbuf(stdout, NULL, _IONBF, 0);
+    /* Buffered, emptied once a frame (the main loop) and before a crash
+     * report: unbuffered, every line was a write to the disk, ~4 ms each,
+     * and a hit prints several (its sounds and voices) -- the hits' frame
+     * drops, measured 2026-11-05. */
+    setvbuf(stdout, NULL, _IOFBF, 1 << 16);
     if (_dup2(_fileno(stdout), _fileno(stderr)) == 0)
         setvbuf(stderr, NULL, _IONBF, 0);
     printf("session log %04d-%02d-%02d %02d:%02d:%02d\n",
@@ -1111,6 +1118,10 @@ static void read_config(const char *dir)
             g_cfg_full = atoi(v) != 0;
         else if (strcmp(line, "borderless") == 0)
             g_cfg_borderless = atoi(v) != 0;
+        else if (strcmp(line, "gpu") == 0)         /* port: auto or a card's name */
+            snprintf(rgl_gpu, sizeof rgl_gpu, "%s", v);
+        else if (strcmp(line, "audio_device") == 0)    /* port: auto or a name */
+            plat_audio_device(v);
         else if (strcmp(line, "monitor") == 0)     /* port: 0 auto, 1..n */
             plat_monitor_select(atoi(v));
         else if (strcmp(line, "antialiasing") == 0)
@@ -2812,15 +2823,32 @@ void port_pad_device_set(int player, const char *v)
         plat_pad_select(v);
 }
 
+/* the CPU's difficulty for a fight: the debug menu's, else UMK3_CPU_DIFF
+ * (scripted runs), else -1 the ladder's (GameCode.c Task_GameInit) */
+int port_cpu_difficulty(void)
+{
+    int d = dbg_cpu_difficulty();
+
+    if (d < 0 && getenv("UMK3_CPU_DIFF"))
+        d = atoi(getenv("UMK3_CPU_DIFF"));
+    return d < 0 ? -1 : d > 9 ? 9 : d;
+}
+
 int port_buttons(void)
 {
     return Settings[4] == 5 ? 5 : 6;
 }
 
+int rb_active(void);                    /* rollback.c */
+
+/* The settings menu's LAYOUT: at once, in a fight too (the game's pause menu
+ * does the same); an online fight keeps the host's (rb_game_buttons). */
 void port_buttons_set(int n)
 {
     g_cfg_buttons = n;
     Settings[4] = n;
+    if (!rb_active())
+        Player1NumButtons = n;
 }
 
 const char *port_ini_path(void) { return g_ini_path; }
@@ -2895,6 +2923,15 @@ int main(int argc, char **argv)
      * GRAPHICS > MONITOR) */
     if (argc > 1 && strcmp(argv[1], "--list-monitors") == 0) {
         plat_monitor_list();
+        return 0;
+    }
+    /* --list-gpus / --list-audio: the launcher's GPU and SOUND OUTPUT */
+    if (argc > 1 && strcmp(argv[1], "--list-gpus") == 0) {
+        rgl_gpu_list();
+        return 0;
+    }
+    if (argc > 1 && strcmp(argv[1], "--list-audio") == 0) {
+        plat_audio_list();
         return 0;
     }
 #ifdef _WIN32
@@ -3083,6 +3120,12 @@ int main(int argc, char **argv)
         load_frame();
     }
     lime_platform_set_asset_root(root);
+    {
+        /* the sheets the last boot took long over, read on threads now
+         * (draw_gl.c); umk3-preload.txt beside the game */
+        void lime_tex_prefetch_start(const char *dir);
+        lime_tex_prefetch_start(rgl_dir);
+    }
     mods_apply_data();                  /* the mods' numbers (mods.c) */
     setup_surfaces();
     use_surface(0);
@@ -3254,9 +3297,26 @@ int main(int argc, char **argv)
         }
         was_down = down;
 
+        {
+            /* SMOOTH MODELS: a fight's first frame starts every fighter's
+             * build, the second waits for them (smooth_models.c) */
+            extern int port_smooth_wait;
+            static int fight_frames;
+            fight_frames = CurrentTask == 6 ? fight_frames + 1 : 0;
+            port_smooth_wait = fight_frames == 2;
+        }
+        rgl_game_ms = plat_time() * 1000.0;   /* the slow-frame line's (rgl_front.c) */
+        rgl_game_ticks = 0;
         while (acc >= 1.0 / 60.0) {
             int i;
 
+            rgl_game_ticks++;
+            /* another tick follows in this frame: this one's picture is
+             * cleared unseen, so its models are drawn as made, not smoothed
+             * (smooth_models.c). Smoothing every catch-up tick made a late
+             * frame later still: 3 to 15 ticks a frame, measured, a fight
+             * at 15 FPS. */
+            port_tick_unseen = acc >= 2.0 / 60.0;
             /* UMK3_CRASH_TEST=<tick>: crash on purpose, to check the
              * crash report and its message box */
             if (getenv("UMK3_CRASH_TEST")
@@ -3522,6 +3582,7 @@ int main(int argc, char **argv)
                     rp_frame(GameCodeMain);
                 else
                     GameCodeMain();
+
                 PortPadPalette[0] = PortPadPalette[1] = 0;  /* off the select screen */
                 if (on) {
                     limeTouchScreenX[0] = limeLastTouchScreenX[0] = -1.0f;
@@ -3597,6 +3658,10 @@ int main(int argc, char **argv)
             /* the player's badge on the main menu (port) */
             if (CurrentTask == 3 && FE_CurrentTask == 0)
                 set_menu_badge();
+            if (CurrentTask == 3) {     /* the boot is over: the list kept */
+                void lime_tex_prefetch_end(void);
+                lime_tex_prefetch_end();
+            }
             stage_menu_watch_draw();    /* the host's STAGE SELECT, online's guest */
             online_after_frame();   /* the ONLINE screens' badges (port) */
             render_resolve();
@@ -3694,6 +3759,12 @@ int main(int argc, char **argv)
                 printf("--fight: %s vs %s, stage %ld\n",
                        CharacterNames[g_fight_p1], CharacterNames[g_fight_p2],
                        g_fight_stage);
+                /* the debug menu's MODE: ARCADE, its first rung */
+                if (dbg_fight_mode() == 1 && !getenv("UMK3_ARCADE")) {
+                    GameMode = 0;
+                    Destiny = 0;
+                    Stage = 0;
+                }
                 /* UMK3_ARCADE="destiny,stage": the fight as that rung of
                  * an Arcade ladder, so a test reaches the last one */
                 if (getenv("UMK3_ARCADE")) {
@@ -3704,7 +3775,7 @@ int main(int argc, char **argv)
                 }
                 /* UMK3_PRACTICE=1: the fight as TRAINING (player two
                  * stands still), so a test can land a kombo */
-                if (getenv("UMK3_PRACTICE")) {
+                if (getenv("UMK3_PRACTICE") || dbg_fight_mode() == 2) {
                     extern int PortPractice;
                     GameMode = 6;               /* PLAY_MODE_TWOUP */
                     PortPractice = 1;
@@ -3787,11 +3858,23 @@ int main(int argc, char **argv)
                  * layout back over the launcher's: buttons=6 played with
                  * five. Apply it again the tick the loading screen after
                  * it (task 8, boot order 0, 1, 8, 2) hands over. */
-                static int was8;
-                if (was8 && CurrentTask != 8
-                    && (g_cfg_buttons == 5 || g_cfg_buttons == 6))
-                    Settings[4] = g_cfg_buttons;
+                static int was8, booted;
+                void port_ini_put_buttons(int n);   /* settings_menu.c */
+                if (!booted && was8 && CurrentTask != 8) {
+                    booted = 1;
+                    if (g_cfg_buttons == 5 || g_cfg_buttons == 6)
+                        Settings[4] = g_cfg_buttons;
+                }
                 was8 = CurrentTask == 8;
+                /* After that, the game's own menus (OPTIONS, the pause
+                 * menu) change it: theirs is the layout from then on,
+                 * kept in umk3.ini, and never put back by the launcher's
+                 * (it was, at every loading screen: 5 and 6 swapped back) */
+                if (booted && (Settings[4] == 5 || Settings[4] == 6)
+                    && Settings[4] != g_cfg_buttons) {
+                    g_cfg_buttons = (int)Settings[4];
+                    port_ini_put_buttons(g_cfg_buttons);
+                }
             }
             /* UMK3_LOG_FADE=1: every start of a screen fade, for finding
              * who starts one. FE_FadeAdd < 0 fades out, > 0 back in. */
@@ -3816,6 +3899,7 @@ int main(int argc, char **argv)
             ticks++;
             g_tick = ticks;
         }
+        rgl_game_ms = plat_time() * 1000.0 - rgl_game_ms;
         plat_input_used();      /* the taps this frame's ticks have seen */
         plat_audio_update();
         render_present();
@@ -3843,6 +3927,7 @@ int main(int argc, char **argv)
         mem_log();
         pace_work_end();
         port_smooth_frame();
+        fflush(stdout);         /* the session log, once a frame */
         if (!plat_swap())
             break;
         pace_frame();

@@ -8,6 +8,40 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased (on main, for 0.1.24) — frame drops, load times, devices
+
+Not published yet. Checked in scripted runs on Mary's PC (RTX 5070,
+Direct3D 12); **not yet played by Mary**.
+
+- **Hits and fatalities no longer drop frames.** The session log was
+  unbuffered: every line a write to the disk (~4 ms), and a hit prints
+  several. It is now written once a frame (and before a crash report).
+- **SMOOTH MODELS costs a fraction:** each model's subdivision becomes a
+  table of weights, made once on a thread and checked against the full
+  subdivision (largest difference 3e-7); a pose is then one multiply. 6-11 ms
+  a frame became 3-4, and a new pose no longer stalls (36-57 ms before). A
+  fight's fighters are all smoothed from its first frames (one short wait
+  as it starts), never drawn plain first.
+- A late frame no longer smooths the catch-up ticks nobody sees.
+- **The boot is faster:** 7.7 s to the menus became 3.2 s. The sheets a boot
+  took long over are listed in `umk3-preload.txt` and decoded on threads
+  from the next boot's first moment.
+- The game asks Windows 11 not to slow it in the background (EcoQoS).
+- **5 / 6 buttons**: a layout chosen in OPTIONS or the pause menu stays
+  (each loading screen put the launcher's back) and is saved in umk3.ini;
+  the settings menu's LAYOUT takes at once in a fight too. Likely the Steam
+  Deck report (#171): the fight played the 5-button layout.
+- **The babality's baby stands on the floor** (Jax, Sindel, Sonya... floated
+  by how much taller their arcade sprite was than Sub-Zero's).
+- **GRAPHICS CARD and SOUND OUTPUT** in the launcher's GRAPHICS > VIDEO:
+  automatic (the most powerful card; the system's output) or one by name.
+  Direct3D 12 now picks the card with the most video memory, not the first
+  the system lists; OpenGL asks laptop drivers for the discrete one.
+- Debug menu: MODE (the menu's, ARCADE, TRAINING) and CPU DIFFICULTY (0-9)
+  for START FIGHT.
+- The slow-frame line in the log says where a frame went (the game's ticks,
+  smoothing, sounds, loading).
+
 ## 0.1.23 beta (2026-10-31) — FRIENDS in the game's ONLINE menu
 
 Published 2026-10-31 as the GitHub pre-release `v0.1.23-beta`

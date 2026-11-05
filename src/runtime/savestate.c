@@ -174,7 +174,53 @@ static int class_of(size_t n)
     return ((size_t)1 << c) >= n ? c : -1;
 }
 
+/* One thread at a time: the textures read ahead at boot (draw_gl.c) decode
+ * on threads of their own, and the decoders' malloc is this one (runtime/lime
+ * is a state file). Unguarded, two threads took the same block and the boot
+ * crashed four times in five. */
+static volatile int g_st_lock;
+
+static void st_lock(void)
+{
+    while (__atomic_exchange_n(&g_st_lock, 1, __ATOMIC_ACQUIRE))
+        SwitchToThread();
+}
+
+static void st_unlock(void)
+{
+    __atomic_store_n(&g_st_lock, 0, __ATOMIC_RELEASE);
+}
+
+static void *st_malloc_locked(size_t n);
+static void st_free_locked(void *p);
+
 void *st_malloc(size_t n)
+{
+    void *p;
+
+    st_lock();
+    p = st_malloc_locked(n);
+    st_unlock();
+    return p;
+}
+
+void st_free(void *p)
+{
+    /* a block from the C library's heap (every free of the files outside
+     * the state comes here, st_free_any) goes back without the lock: the
+     * SMOOTH MODELS builds free thousands of them while a fight starts */
+    if (!p)
+        return;
+    if (!in_arena(p)) {
+        free(p);
+        return;
+    }
+    st_lock();
+    st_free_locked(p);
+    st_unlock();
+}
+
+static void *st_malloc_locked(size_t n)
 {
     int c, i;
     uint32_t off, need;
@@ -241,7 +287,7 @@ static size_t block_size(const void *p)
     return (size_t)1 << b->cls;
 }
 
-void st_free(void *p)
+static void st_free_locked(void *p)
 {
     struct st_block *b;
     int i;

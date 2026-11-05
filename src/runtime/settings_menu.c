@@ -2051,6 +2051,8 @@ static void put_pad(const char *pre, int player)
     }
 }
 
+static void write_kv(const char *path);
+
 static void save_ini(void)
 {
     static const char *const kn[10] = {
@@ -2060,9 +2062,7 @@ static void save_ini(void)
     static const char *const tq[3] = { "iphone", "ipad", "max" };
     const char *path = port_ini_path();
     struct port_gfx g;
-    char k[24], *buf = NULL, *line, *next;
-    long size = 0;
-    FILE *f;
+    char k[24];
     int i;
 
     if (!path || !path[0])
@@ -2124,6 +2124,29 @@ static void save_ini(void)
     }
     put_pad("pad", 0);
     put_pad("p2pad", 1);
+    write_kv(path);
+}
+
+/* buttons= alone: the layout the game's own menus changed (OPTIONS, the
+ * pause menu), kept for the next start (game_main.c) */
+void port_ini_put_buttons(int n)
+{
+    const char *path = port_ini_path();
+
+    if (!path || !path[0])
+        return;
+    g_nkv = 0;
+    put("buttons", "%d", n);
+    write_kv(path);
+}
+
+/* g_kv's lines into umk3.ini, the rest kept */
+static void write_kv(const char *path)
+{
+    char *buf = NULL, *line, *next;
+    long size = 0;
+    FILE *f;
+    int i;
 
     f = fopen(path, "rb");
     if (f) {

@@ -7758,6 +7758,13 @@ long GameInit_LoadABit(long step)
             RoundParam[0x0c / 4] = GameMode - 3;
             RoundParam[0x14 / 4] = GameMode - 3;
         }
+        /* Port, not in the binary: the debug menu's CPU DIFFICULTY (or
+         * UMK3_CPU_DIFF) over the ladder's, 0..9 */
+        {
+            extern int port_cpu_difficulty(void);   /* game_main.c */
+            if (port_cpu_difficulty() >= 0)
+                RoundParam[0x0c / 4] = port_cpu_difficulty();
+        }
 
         Player1Pos[0] = 1.36f;
         Player1Pos[1] = -0.44f;
@@ -11196,6 +11203,27 @@ void RenderLevelPlayers(void)
             }
 
             ArcadePosTo3dPos(obj, &pf[0x5c8 / 4], &os[GOBJ_CHR]);
+            /* Port, not in the binary: a babality's baby stood on the floor.
+             * t_turn_into_a_baby (mkstat.c) puts it at the floor less its
+             * frame's box height, the arcade sprite's -- 44 for Sub-Zero,
+             * Scorpion and Kano, up to 60 for Sindel -- while every 3D baby
+             * is about the same size: those of 44 sit on the floor and the
+             * rest floated by the difference (Mary, Jax). Drawn lower by it;
+             * the logic keeps the binary's position. */
+            {
+                extern uint32_t ochar_babies[];     /* 0x00167350 */
+                const long bf = (short)ou[GOBJ_FRAME / 2];
+                int k;
+
+                for (k = 0; k < 24; k++)
+                    if ((long)ochar_babies[k] == bf) {
+                        long y0 = 0, y1 = 0;
+                        FrameID_GetBBox(bf, NULL, &y0, NULL, &y1);
+                        if (y1 - y0 > 44)
+                            pf[0x5c8 / 4 + 2] -= (float)(y1 - y0 - 44) / WorldScaleAdjust;
+                        break;
+                    }
+            }
 
             flags100 = ou[GOBJ_FLAGS / 2] & GOBJ_NOOWNER;
 
