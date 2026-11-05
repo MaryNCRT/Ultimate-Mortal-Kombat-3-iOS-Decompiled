@@ -8165,17 +8165,16 @@ static void PortMvPortrait(long character)
     if (!t)
         return;
     lime_extra_texture_size(t, &w, &h);
-    s = 24.0f * FE_HeightScale;
-    limeDrawSprite(t, 8.0f * FE_HeightScale, 2.0f * FE_HeightScale,
+    s = 23.0f * FE_HeightScale;
+    limeDrawSprite(t, 8.0f * FE_HeightScale, 1.0f * FE_HeightScale,
                    h > 0 ? s * (float)w / (float)h : s, s,
                    0.0f, 0.0f, 1.0f, 1.0f, col);
 }
 
-static void PortMvAllPage(long character)
+static void PortMvAllPage(long character, int p2)
 {
     const MOVESLISTENTRY *e = &MovesListTab[character];
-    const long *table = ((PortMovesWho() == 2 ? Player2NumButtons
-                                               : Player1NumButtons) == 5)
+    const long *table = ((p2 ? Player2NumButtons : Player1NumButtons) == 5)
                         ? e->section[0].moves5 : e->section[0].moves6;
     float w = (float)limeScreenWidth / 3.0f, y;
     char  name[128], cap[128];
@@ -8236,44 +8235,48 @@ void MovesList(void)
     if (PortMovesWho() == 2)
         character = PLAYER2MODEL;
 
-    /* Port, not in the binary: L1 / R1, left / right (Q / E, A / D) turn
-     * the pages */
-    {
-        long n = 4;                     /* port: all, then the basic moves */
-        int  d = PortMovesTurn();
-
-        if (d)
-            MoveListPage = (MoveListPage + n + d) % n;
-    }
-
-    if (MoveListPage > 3)
+    /* Port, not in the binary (Mary): two pages -- this player's fighter,
+     * then the other's. L1 / R1, left / right (Q / E, A / D) and NEXT /
+     * BACK turn them. The original's five pages (the basic moves in three,
+     * then DrawGenericPage / DrawCharacterPage) are no longer reached. */
+    if (PortMovesTurn())
+        MoveListPage ^= 1;
+    if (MoveListPage > 1)
         MoveListPage = 0;
-    page   = MoveListPage;
-    header = 0xee;
+    page = MoveListPage;
+    {
+        /* this side is player 2: the same tests as above (a mirror match
+         * has one character on both sides) */
+        int p2 = (GameMode == 1 && !(rb_active() ? isParent() : isParentBasedOnSpeed()))
+                 || PortMovesWho() == 2;
+        float gold[4];
+        int k;
 
-    asciiToUnicode(CharacterNames[character], title, 0x80);
-    if (page == 0) {
+        if (page == 1)
+            p2 = !p2;
+        character = p2 ? PLAYER2MODEL : PLAYER1MODEL;
+        (void)header;
+        /* the header as in Mary's reference: the portrait, the name in
+         * gold beside it, and under the name the side and the layout */
         PortMvPortrait(character);
+        for (k = 0; k < 4; k++)
+            gold[k] = fontcol[k];
+        asciiToUnicode(CharacterNames[character], title, 0x80);
         usprintf(strBuf, UC("%s"), limeUC(title));
-        limeDrawFONT(&GameFont, strBuf, 38.0f * FE_HeightScale,
-                     4.0f * FE_HeightScale, 0, FE_WidthScale, fontcol);
-    } else {
-        usprintf(strBuf, UC("%s - %s"), limeUC(title), GameTextNoHeader(header));
-        limeDrawFONT(&GameFont, strBuf, (float)(limeScreenWidth / 2),
-                     4.0f * FE_HeightScale, 1, FE_WidthScale, fontcol);
-    }
-
-    /* port: the three columns first (above); the original's five pages were
-     * the basic moves in three, then each of the fighter's two sections
-     * (DrawCharacterPage) */
-    switch (page) {
-    case 0: PortMvAllPage(character); break;
-    case 1: DrawGenericPage(0);       break;
-    case 2: DrawGenericPage(6);       break;
-    case 3: DrawGenericPage(12);      break;
-    default: break;
+        fontcol[0] = 1.0f; fontcol[1] = 0.78f; fontcol[2] = 0.2f;
+        limeDrawFONT(&GameFont, strBuf, 36.0f * FE_HeightScale,
+                     0.0f, 0, 0.8f * FE_WidthScale, fontcol);
+        for (k = 0; k < 4; k++)
+            fontcol[k] = gold[k];
+        usprintf(strBuf, Language[0] == 'E' && Language[1] == 'S'
+                         ? UC("P%d / %d BOTONES") : UC("P%d / %d BUTTONS"),
+                 p2 ? 2 : 1, (int)(p2 ? Player2NumButtons : Player1NumButtons));
+        limeDrawFONT(&GameFont, limeUC(strBuf), 37.0f * FE_HeightScale,
+                     15.0f * FE_HeightScale, 0, 0.4f * FE_WidthScale, fontcol);
+        PortMvAllPage(character, p2);
     }
     (void)DrawCharacterPage;
+    (void)DrawGenericPage;
 
     /* Port, not in the binary: on 16:9 and 21:9 NEXT and its label sit at
      * the screen's right edge, as on the front end's screens */
@@ -8283,7 +8286,7 @@ void MovesList(void)
      * turn with L1 / R1 and there is no NEXT */
     if (!PortHideControls) {
         if (DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1)) {
-            MoveListPage = (MoveListPage + 1) % 4;
+            MoveListPage ^= 1;
         }
 
         limeDrawFONT(&GameFont, GameText(8), (float)FE_X(423.0f),
@@ -8296,7 +8299,7 @@ void MovesList(void)
         PortFERightEdgeSet(2);
         PortNavAsOk = 2;
         if (DrawButtonNew(&BUTTON_BACK, 480 - 0x1a7, 0x130, 1)) {
-            MoveListPage = (MoveListPage + 3) % 4;
+            MoveListPage ^= 1;
         }
         limeDrawFONT(&GameFont, GameText(7), (float)FE_X(480.0f - 423.0f),
                      (float)FE_Y(296.0f), 1, FE_WidthScale, fontcol);
