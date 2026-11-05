@@ -8,6 +8,12 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased (on main, for 0.2.2)
+
+- With the on-screen controls hidden, a click on the screen no longer
+  moves the fighter or presses a button (Mary): the touch is not read for
+  the stick or the buttons it cannot see. The pad and the keys as before.
+
 ## 0.2.1 beta (2026-11-05) — online fixes, the moves list, settings in one order
 
 Published 2026-11-05 as the GitHub pre-release `v0.2.1-beta`. Checked in
