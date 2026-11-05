@@ -194,10 +194,21 @@ static void st_unlock(void)
 static void *st_malloc_locked(size_t n);
 static void st_free_locked(void *p);
 
+/* A thread that keeps nothing of the game's (the textures read ahead,
+ * draw_gl.c) takes the C library's heap: up to 0.2.0 their 84 sheets,
+ * decoded at once, went into the arena too, which runs out at 1 GB with
+ * them and the boot's own; save states, so an online fight's rollback, were
+ * then off one boot in two (Mary's logs, "arena full at 1043940768"). */
+static __thread int g_st_heap;
+
+void st_heap_this_thread(void) { g_st_heap = 1; }
+
 void *st_malloc(size_t n)
 {
     void *p;
 
+    if (g_st_heap)
+        return malloc(n);
     st_lock();
     p = st_malloc_locked(n);
     st_unlock();
@@ -833,6 +844,7 @@ uint64_t st_probe_hash(void)
 
 #else   /* no arena elsewhere yet: the C library's heap, and no states */
 
+void st_heap_this_thread(void)           { }
 void *st_malloc(size_t n)                 { return malloc(n); }
 void *st_calloc(size_t n, size_t s)       { return calloc(n, s); }
 void *st_realloc(void *p, size_t n)       { return realloc(p, n); }

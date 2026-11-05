@@ -343,6 +343,7 @@ Environment variables read by `runtime/game_main.c` (all listed in its header):
 | `UMK3_DBG_STATE="tick:s1;tick:l1"` | save / load state slot 1-4 at those ticks: test a moment again without replaying up to it |
 | `UMK3_DBG_FIN="tick:n;..."` | the FINISHER row (0-6) at the first FINISH HIM from that tick (with `UMK3_ARCADE=0,0`, so a `--fight` has one) |
 | `UMK3_CPU_DIFF=<0..9>` | the CPU's difficulty for the fight (the debug menu's CPU DIFFICULTY) |
+| `UMK3_MOVES=<tick>` | in a fight, open the pause menu's moves list at that tick |
 | `UMK3_SETTINGS="tick[:page]"` | open the settings menu at that tick, at that page (0 VIDEO ... 3 AUDIO ...) |
 | `UMK3_PROFILE=1` | Windows: sample the game's thread; each slow frame's commonest places as exe offsets (`llvm-symbolizer --obj=umk3-game64.exe <0x400000 + offset>`) |
 

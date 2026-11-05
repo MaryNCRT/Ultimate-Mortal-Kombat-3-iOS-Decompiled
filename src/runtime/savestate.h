@@ -47,6 +47,7 @@ void *st_malloc(size_t n);
 void *st_calloc(size_t n, size_t size);
 void *st_realloc(void *p, size_t n);
 void  st_free(void *p);
+void  st_heap_this_thread(void);   /* this thread's malloc: the C library's */
 
 #if defined(UMK3_LOW32) && defined(UMK3_STATE_FILE)
 /* The 64-bit build (UMK3_LOW32): the game's words stay 32 bits, as on the

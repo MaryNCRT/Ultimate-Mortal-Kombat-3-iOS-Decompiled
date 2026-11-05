@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-11-05 (release 0.2.0 beta: performance, audio, devices, kombos, published as the pre-release `v0.2.0-beta`).
+**Last updated:** 2026-11-05 (online rollback and desyncs, stale objects after an update, the moves list in three columns; on main for 0.2.1).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,

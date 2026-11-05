@@ -324,10 +324,22 @@ static void close_menu(void)
     printf("settings menu: closed\n");
 }
 
+/* Not online (Mary): the menu changes what both machines must agree on --
+ * the buttons, the fight's speed, KOMBO SLIDE -- and stops this one's
+ * frames while the other plays on. */
+static int online_now(void)
+{
+    extern long GameMode;
+    int mpnet_session_exists(void);
+    return GameMode == 1 || mpnet_session_exists();
+}
+
 void set_menu_toggle(void)
 {
     if (g_open)
         close_menu();
+    else if (online_now())
+        return;
     else {
         g_want = 1;                     /* opened after the next frame */
         g_framed = 0;
@@ -336,7 +348,7 @@ void set_menu_toggle(void)
 
 void set_menu_open_controls(void)
 {
-    if (g_open || g_want)
+    if (g_open || g_want || online_now())
         return;
     g_want = 1;
     g_framed = 1;

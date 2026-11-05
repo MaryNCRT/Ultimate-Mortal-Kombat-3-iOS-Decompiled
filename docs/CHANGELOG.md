@@ -10,6 +10,31 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased (on main, for 0.2.1)
 
+Checked in scripted runs on Mary's PC (two games online over the LAN on
+one machine); **not yet played online by Mary**.
+
+- **Online rollback was off one boot in two since 0.2.0** ("arena full ...
+  save states off" in the log, then "NO SNAPSHOTS"): the textures read ahead
+  at boot went into the save-state arena with the game's memory. They take
+  the normal heap now. Six boots in a row: none full.
+- **An update could leave old compiled code behind**: the launcher kept an
+  object when its source was not newer, and an update's sources keep the
+  release's dates. A player's build then failed ("undefined symbol:
+  rb_sound_ok"), or mixed two versions' code, which makes an online fight
+  drift apart. An object is now kept only when its sources have the very
+  date and size they had; a failed link rebuilds everything next time.
+- **Online desyncs:** every machine now compiles the same floating point
+  (no fused multiply-add; Linux no longer builds for its own CPU), so a
+  Windows and a Linux player compute the same fight.
+- **The settings menu does not open online** (Esc, the pad's combination,
+  the replay player's button), as Mary asked.
+- **An invite opens ONLINE again:** the launcher starts the game with
+  `--screen 51`, which the game read as no screen.
+- **The moves list in three columns on one page** (Mary's reference):
+  SPECIAL MOVES, FINISHING MOVES and KOMBOS -- the fighter's kombos, a part
+  of the game's tables the original never showed. The basic moves follow on
+  the next three pages.
+- The update check asks the repository by its current name.
 - The settings menu fits a 16:9 screen again: with AUDIO it has seven
   categories, and the box ran off the bottom (Mary). The categories are
   closer together from seven on.

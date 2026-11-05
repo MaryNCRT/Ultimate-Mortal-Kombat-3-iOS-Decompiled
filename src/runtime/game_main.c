@@ -2025,8 +2025,11 @@ static int parse_screen(const char *s)
 {
     int i;
 
+    /* 51 is the port's ONLINE screen, past the game's: the launcher's
+     * invites open the game with --screen 51, which up to 0.2.0 read as no
+     * screen ("debug: screen -1") */
     if (s[0] >= '0' && s[0] <= '9')
-        return atoi(s) < DBG_SCREENS ? atoi(s) : -1;
+        return atoi(s) <= DBG_SCREENS ? atoi(s) : -1;
     if (_stricmp(s, "online") == 0)     /* the port's ONLINE screen */
         return 51;
     for (i = 0; i < DBG_SCREENS; i++)   /* "treasure" -> FE_Task_Treasure */
@@ -2048,6 +2051,8 @@ static void leave_fight(int task)
 
 static void jump_screen(int task)
 {
+    if (task < 0)
+        return;
     printf("debug: screen %d %s\n", task,
            task < DBG_SCREENS ? FETaskNames[task] : "FE_Task_Online");
     if (CurrentTask == 6)
@@ -3384,6 +3389,9 @@ int main(int argc, char **argv)
                         q++;
                 }
             }
+            if (getenv("UMK3_MOVES") && CurrentTask == 6  /* the moves list, a script's */
+                && ticks == atol(getenv("UMK3_MOVES")))
+                GamePaused = 2;
             if (getenv("UMK3_SETTINGS")                 /* "tick[:page]", a script's */
                 && ticks == atol(getenv("UMK3_SETTINGS")) && !set_menu_is_open()) {
                 const char *c = strchr(getenv("UMK3_SETTINGS"), ':');

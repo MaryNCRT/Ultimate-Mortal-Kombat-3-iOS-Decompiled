@@ -86,7 +86,8 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 
 ## Known problems (0.2.0 beta)
 
-- Not yet tried online with two players (Mary's friend was away): the guest seeing the host's STAGE SELECT, invites from FRIENDS, and the fixes to the desyncs and to the other player's lost attack voices. Published at Mary's request.
+- Online in 0.2.0: the rollback was off one boot in two, and fights drifted apart (desyncs). Fixed on main for 0.2.1, checked with two games on one PC; not yet played online between two machines. Both players need the new version, built fresh.
+- Joining online, a pad's X glyph showed over START (Mary); not reproduced yet.
 - Some stages still pause up to ~1.3 s on their first frames (THE STREET), as their events load.
 - 0.2.0's performance work (hits and fatalities without frame drops, SMOOTH MODELS at a fraction, a 3 s faster boot) was measured in scripted runs; not yet played through by Mary. A round's start can still show a slow frame or two.
 - Steam Deck: the fight played the 5-button layout whatever was chosen (#171); likely the buttons fix above, not yet checked on a Deck.

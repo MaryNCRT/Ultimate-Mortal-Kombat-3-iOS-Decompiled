@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-05 (release 0.2.0 beta: performance, audio, devices, kombos, published as the pre-release `v0.2.0-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-05 (online rollback and desyncs, stale objects after an update, the moves list in three columns; on main for 0.2.1) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -94,6 +94,48 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## Online after 0.2.0, stale objects, moves list (2026-11-05, for 0.2.1)
+
+- **Rollback off:** Mary's online logs since the 11:33 builds had
+  `savestate: arena full at 1043940768 bytes; save states off` at tick 3 one
+  boot in two, then `rollback: NO SNAPSHOTS`, 0 rollbacks and hundreds of
+  holds. The 84 sheets read ahead (draw_gl.c `pf_work`) decode at once, and
+  their decoders' malloc (runtime/lime, a state file) was the arena's, whose
+  power-of-two classes never merge. `st_heap_this_thread` (savestate.c, a
+  `__thread` flag) sends those threads to the C heap. Six boots: no arena
+  full.
+- **Desyncs:** every hash check (one a second) had differed since Mary's
+  30 October fights, against the same Windows player; on 29 October none
+  did. Two games on one PC over the LAN (`--screen online`,
+  `UMK3_ONLINE_FIND`, scripted keys; the guest in a folder of its own) gave
+  0 desyncs over 3,600 frames, and a recorded fight replays the same 1,714
+  ticks in another process: the game is deterministic on one build. The
+  likely cause is the other player's build: compile.js kept an object when
+  no source in its .d was newer, and an update's sources carry the
+  release's dates, so after an update their exe mixed versions (the same
+  player's later build failed on `rb_sound_ok`, defined in a new
+  rollback.c their old rollback.o lacked). compile.js now writes a .stamp
+  beside each object, every dependency's mtime and size, and keeps the
+  object only on an exact match; a failed link deletes the .rsp files.
+  Tested: a changed rollback.c dated 2020 is compiled again.
+  `-ffp-contract=off` for all, and `-mcpu=x86_64` on Linux, where zig took
+  the host CPU (AVX2, FMA) without a `-target`; Windows' `-target` was
+  already the baseline. Not yet confirmed by an online fight between two
+  machines.
+- **Settings menu online:** `set_menu_toggle` / `set_menu_open_controls`
+  refuse to open while `GameMode == 1` or an online session exists.
+- **`--screen 51`** (the launcher's invites) read as -1: `parse_screen`
+  allowed numbers below DBG_SCREENS (51) only.
+- **Moves list:** `MovesList` (GameCode.c) page 0 is `PortMvAllPage`: three
+  columns, sections 1 and 2 of `MovesListTab` and the third section
+  (`rows3`, the kombos, after the other two in the same table; named KOMBO
+  1..n), each entry centred by measuring it first (`PortMvMeasure`,
+  `PortMvScale` in `DrawMoveListEntry`). Pages 1-3 are the basic moves; the
+  original's two section pages (`DrawCharacterPage`) are no longer reached.
+  Checked with Sonya and Jax at 1920x1080.
+- Not found: "the X button over START when joining" (Mary); no screen
+  showed it in the scripted LAN runs. Possibly the broken `--screen 51`.
 
 ## KOMBO SLIDE, AUDIO, the profiler (2026-11-05, released in 0.2.0)
 

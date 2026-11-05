@@ -618,8 +618,11 @@ static char g_pf_file[1200];
 static char g_pf_seen[PF_MAX][96];      /* this boot's slow ones, to write */
 static int g_pf_seen_n, g_pf_recording;
 
+void st_heap_this_thread(void);        /* savestate.c */
+
 static void pf_work(void)
 {
+    st_heap_this_thread();              /* the pixels are no state */
     for (;;) {
         int i = __atomic_fetch_add(&g_pf_next, 1, __ATOMIC_SEQ_CST);
         struct pf *p;

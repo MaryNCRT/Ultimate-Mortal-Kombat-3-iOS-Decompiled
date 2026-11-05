@@ -71,9 +71,14 @@ function isStateFile(srcPath, buildDir) {
  * Compiles a single source file into an object file.
  */
 /* An object is kept when it was compiled with these very arguments (its
- * .rsp) and nothing it was built from -- the source and every header, as
- * clang's .d lists them -- is newer. Every compile used to build all of the
- * game's sources again, an update's included. */
+ * .rsp) and everything it was built from -- the source and every header, as
+ * clang's .d lists them -- still has the date and size it had then (its
+ * .stamp). Every compile used to build all of the game's sources again, an
+ * update's included. Up to 0.2.0 a file only had to be no newer than the
+ * object: an update's sources keep the dates they had when the release was
+ * made, often older than the player's last compile, so a changed source
+ * kept its old object (a player: "undefined symbol: rb_sound_ok", an
+ * updated lime_menu.c over the old rollback.o). */
 function depFiles(depPath) {
     const text = fs.readFileSync(depPath, 'utf8').replace(/\\\r?\n/g, ' ');
     const toks = [];
@@ -95,7 +100,8 @@ let g_mtimes = new Map();
 function mtime(f) {
     let t = g_mtimes.get(f);
     if (t === undefined) {
-        t = fs.statSync(f).mtimeMs;
+        const s = fs.statSync(f);
+        t = s.mtimeMs + '/' + s.size;
         g_mtimes.set(f, t);
     }
     return t;
@@ -104,12 +110,25 @@ function mtime(f) {
 function upToDate(objPath, rspPath, rspContent, depPath) {
     try {
         if (fs.readFileSync(rspPath, 'utf8') !== rspContent) return false;
-        const built = fs.statSync(objPath).mtimeMs;
+        fs.statSync(objPath);
         const deps = depFiles(depPath);
         if (!deps || !deps.length) return false;
-        return deps.every(d => mtime(d) <= built);
+        const was = JSON.parse(fs.readFileSync(objPath + '.stamp', 'utf8'));
+        return deps.length === Object.keys(was).length && deps.every(d => was[d] === mtime(d));
     } catch (_) {
         return false;
+    }
+}
+
+/* what upToDate compares against, after a compile */
+function writeStamp(objPath, depPath) {
+    try {
+        const was = {};
+        for (const d of depFiles(depPath) || [])
+            was[d] = fs.statSync(d).mtimeMs + '/' + fs.statSync(d).size;
+        fs.writeFileSync(objPath + '.stamp', JSON.stringify(was));
+    } catch (_) {
+        fs.rmSync(objPath + '.stamp', { force: true });
     }
 }
 
@@ -124,6 +143,7 @@ function compileSingleFile(zigExe, args, rspPath, objPath) {
             return;
         }
         fs.writeFileSync(rspPath, rspContent, 'utf8');
+        fs.rmSync(objPath + '.stamp', { force: true });
 
         const child = spawn(zigExe, ['cc', `@${rspPath}`], {
             stdio: ['ignore', 'pipe', 'pipe'],
@@ -135,6 +155,7 @@ function compileSingleFile(zigExe, args, rspPath, objPath) {
 
         child.on('close', code => {
             if (code === 0) {
+                writeStamp(objPath, depPath);
                 resolve();
             } else {
                 /* not kept: a failed compile must run again */
@@ -290,6 +311,9 @@ async function compileGame({
         '-fno-strict-aliasing',
         '-fno-sanitize=undefined',
         '-fwrapv',
+        /* the same floating point on every machine, or an online fight's two
+         * sides drift apart: no a*b+c fused where one CPU has FMA */
+        '-ffp-contract=off',
         '-DUMK3_HAVE_MK3',
         '-DUMK3_REAL_GL',
         '-DUMK3_SHELL',
@@ -306,6 +330,12 @@ async function compileGame({
         if (process.platform !== 'linux') {
             baseFlags.push(`-target`, isLow32 ? 'x86_64-linux-gnu' : 'x86-linux-gnu');
         }
+        /* Linux compiles for this machine's own target (no -target, for
+         * its system's libraries), which zig takes as this CPU's: AVX2, FMA.
+         * Windows' -target is the baseline x86-64; Linux takes it too, so
+         * both compute the same fight. */
+        if (process.platform === 'linux')
+            baseFlags.push(isLow32 ? '-mcpu=x86_64' : '-mcpu=i686');
         baseFlags.push('-D_GNU_SOURCE=1', '-D_REENTRANT', '-DUMK3_NO_SDL_MIXER=1', '-D_strdup=strdup', '-D_snprintf=snprintf');
         if (fs.existsSync('/usr/include')) {
             baseFlags.push('-I', '/usr/include');
@@ -519,6 +549,12 @@ async function compileGame({
                 }
                 resolve();
             } else {
+                /* a failed link keeps no object: the next compile builds
+                 * them all again, so a stale one cannot stop it twice */
+                try {
+                    for (const f of fs.readdirSync(objDir))
+                        if (f.endsWith('.rsp')) fs.rmSync(path.join(objDir, f), { force: true });
+                } catch (_) { /* none */ }
                 reject(new Error(`Link failed: ${linkErr || 'code ' + code}`));
             }
         });
