@@ -49,6 +49,28 @@ sky's grid gone.
   `d3d12 slow present:` breakdown and any pipeline compiled in play,
   should it.
 
+## Every fighter's kombos in the moves list (2026-11-06, after 0.2.1)
+
+Mary played it: works.
+
+- **The KOMBOS column showed "-" for 11 fighters** (Kano, Sindel, Sektor,
+  Kung Lao, Kabal, Shang Tsung, Smoke, Mileena, Reptile, classic Sub-Zero
+  and Smoke). Their kombos now come from the fight engine's kombo trees,
+  as Cyrax's do. Each row is the buttons in order (B+HK for the
+  roundhouse); a row repeated in a tree, such as Mileena's, is shown once.
+
+## Cyrax's kombos in the moves list (2026-11-06, after 0.2.1)
+
+Mary played it: works.
+
+- **The moves list's KOMBOS column showed "-" for Cyrax.** The binary's
+  moves tables (`MovesListTab`) have no kombo section for him. His kombos
+  are in the fight engine's own kombo trees, and the column now reads them
+  from there: HP, HP, LP; HP, HP, HK, HP, HK, HK; HK, HK, B+HK (P and K with
+  5 buttons). Kano, Sindel, Sektor, Kung Lao, Kabal, Shang Tsung, Smoke,
+  Mileena, Reptile and the two classic fighters still show "-": some of
+  their trees hold entry kinds not decoded yet.
+
 ## DYNAMIC LIGHTS' shadows, phase 5 (2026-11-06, after 0.2.1)
 
 Mary played it: everything looks right, though the change is subtle.
