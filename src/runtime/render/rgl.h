@@ -104,6 +104,10 @@ typedef struct {
                                             * bits above: the receiver's own
                                             * caster, skipped), or the map's
                                             * texel itself */
+    float bump;                            /* ENHANCED LIGHTING's relief: how
+                                            * steep the texture's own Sobel
+                                            * slopes are made (0 none; only
+                                            * with shadow RECEIVE; rgl_ff.c) */
 } rgl_frag;
 
 /* A texture's sampling, packed: filter and wrap as GL has them. */
@@ -163,7 +167,9 @@ extern rgl_backend rgl_d3d12;
 extern const char *const *(*rgl_vk_instance_exts)(unsigned *count);
 extern int (*rgl_vk_make_surface)(void *window, void *instance, void *surface);
 
-/* REAL-TIME SHADOWS (umk3.ini rt_shadows=1, experimental; rgl_ff.c): the
+/* ENHANCED LIGHTING (umk3.ini rt_shadows=1, experimental; rgl_ff.c): the
+ * REAL-TIME SHADOWS below, and with them every texture drawn with relief,
+ * the texture taken as its own normal map (rgl_frag.bump). REAL-TIME SHADOWS: the
  * fighters and the stage about them seen from a light over it, into a
  * shadow map, and every 3D draw of the scene darkened where it is behind
  * something. Vulkan and

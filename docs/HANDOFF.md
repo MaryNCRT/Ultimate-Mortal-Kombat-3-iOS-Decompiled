@@ -161,6 +161,12 @@ press COMPILE.
   ties the profile code and name to the account (names unique); FRIENDS is
   a page of PROFILE (`ProfFriends.svelte`). A server change that needs a new
   column goes in the private repo's `migrations/`, applied before deploying.
+- **Dynamic lighting**: ENHANCED LIGHTING (shadows, texture relief,
+  specular, mipmaps) is in; point and spot lights with their shadows, on
+  the stage and the fighters, come next, in the order and with the costs in
+  [research/DYNAMIC-LIGHTING.md](research/DYNAMIC-LIGHTING.md). The shaders
+  are rebuilt with `render/shaders/build.py` (glslang in
+  `WORK/tools/glslang`, fxc from the Windows SDK).
 - **Dynamic stage music (Genesis style)**: investigated, not built; the
   design and the open questions are in
   [research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md). Paused

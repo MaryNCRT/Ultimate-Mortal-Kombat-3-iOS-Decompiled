@@ -116,7 +116,7 @@ enum {
     R_PNAME, R_PICON, R_PCOLOR, R_PSHADE, R_PCOLOR2, R_PID, R_PRESET2,
     R_CLOSE, R_QUIT, R_HEAD, R_CSUB,
     R_SHARPA, R_SHARPS,                 /* SMOOTH MODELS' sharp edges */
-    R_RTSHADOW,                         /* REAL-TIME SHADOWS (render/rgl.h) */
+    R_RTSHADOW,                         /* ENHANCED LIGHTING: REAL-TIME SHADOWS and relief (render/rgl.h) */
     R_PALT, R_PGRAD,                    /* the outfit; the gradient picker */
     R_NOOB,                             /* NOOB SAIBOT ON THE ROSTER (FrontEnd.c) */
     R_CORNER,                           /* the fight's INFO and PAUSE buttons (GameCode.c) */
@@ -722,7 +722,7 @@ static void build(void)
         add(R_HEAD, 0, tx("  AL REINICIAR (VULKAN Y DIRECT3D 12)",
                           "  AT THE NEXT START (VULKAN, DIRECT3D 12)"), "");
         g_rows[g_n - 1].en = 0;
-        add(R_RTSHADOW, 0, tx("SOMBRAS EN TIEMPO REAL", "REAL-TIME SHADOWS"), "< %s >",
+        add(R_RTSHADOW, 0, tx("ILUMINACION MEJORADA", "ENHANCED LIGHTING"), "< %s >",
             rgl_shadows ? tx("ACTIVADAS", "ON") : tx("DESACTIVADAS", "OFF"));
         add(R_HEAD, 0, rgl_renderer == RGL_OPENGL
                            ? tx("  SOLO CON VULKAN O DIRECT3D 12", "  ONLY WITH VULKAN OR DIRECT3D 12")

@@ -9,7 +9,7 @@
  *     sharp_edge_angle=80  sharp_edge_strength=100   (the smoothing keeps an edge
  *       whose faces turn by more than the angle, by that percent of a crease;
  *       src/thirdparty/blender/umk3_subsurf.h)
- *     rt_shadows=1      (real-time shadows, experimental: a shadow map from a
+ *     rt_shadows=1      (ENHANCED LIGHTING: real-time shadows and texture relief, experimental: a shadow map from a
  *       light over the stage, Vulkan and Direct3D 12; the flattened shadow
  *       under a fighter goes; src/runtime/render/rgl.h)
  *     texture_quality=iphone|ipad|max
@@ -405,6 +405,21 @@ function save(p, cfg) {
         lines.push('p2pad_' + name + '=' + (p2k[name] === undefined ? PAD_DEFAULTS[name] : p2k[name]));
     for (const name of PAD5_NAMES)
         lines.push('p2pad5_' + name + '=' + (p2k5[name] === undefined ? PAD5_DEFAULTS[name] : p2k5[name]));
+    /* keys this file does not know (the game's own: p2key_pause,
+     * p2key_moves, p2key_ok, replay_scale, ...) are kept as they were --
+     * written over, they were lost at every change made here (Mary). The
+     * ones the launcher leaves out on purpose stay out. */
+    const mine = new Set(lines.map(l => l.slice(0, l.indexOf('='))));
+    for (const k of ['render_width', 'render_height', 'pad_name', 'p2pad_name', 'marco'])
+        mine.add(k);
+    let old = '';
+    try { old = readFileText(p); } catch (_) { old = ''; }
+    for (const raw of old.split(/\r?\n/)) {
+        const l = raw.trim();
+        const eq = l.indexOf('=');
+        if (eq > 0 && !l.startsWith(';') && !l.startsWith('#') && !mine.has(l.slice(0, eq).trim()))
+            lines.push(l);
+    }
     fs.writeFileSync(p, lines.join('\n') + '\n', 'utf8');
 }
 
