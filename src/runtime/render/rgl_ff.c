@@ -1576,6 +1576,9 @@ static void point_shadows(rgl_light_block *b)
  *   sky_color=255,40,20    the sky's colour, in place of the measured one
  *   fighter_lift=0.15      the fighters' own light, in place of the guess
  *   glow_power=1.0         the glows' lights (emissive draws), times this
+ *   no_relief=Plane006     meshes drawn without relief and specular, by
+ *                          name, commas between (a sky whose texture's
+ *                          own lines showed: Mary, The Rooftop)
  *
  *   [light]                a light of the stage's own, up to CFG_LIGHTS
  *   type=point             point | spot | directional
@@ -1605,6 +1608,7 @@ static struct {
     char scene[64];
     float sky_strength, sky_col[3], fighter_lift, glow_power;
     int has_sky_col, has_lift;
+    char no_relief[256];                /* ",name,name," */
     cfg_light l[CFG_LIGHTS];
     int n;
 } g_cfg;
@@ -1725,6 +1729,13 @@ static void cfg_load(const char *scene)
             if (!strcmp(k, "sky_strength")) g_cfg.sky_strength = strtof(v, NULL);
             else if (!strcmp(k, "glow_power")) g_cfg.glow_power = strtof(v, NULL);
             else if (!strcmp(k, "fighter_lift")) { g_cfg.fighter_lift = strtof(v, NULL); g_cfg.has_lift = 1; }
+            else if (!strcmp(k, "no_relief")) {
+                char *q;
+                snprintf(g_cfg.no_relief, sizeof g_cfg.no_relief, ",%s,", v);
+                for (q = g_cfg.no_relief; *q; q++)  /* "a, b" as "a,b" */
+                    if (*q == ' ' || *q == '\t')
+                        memmove(q, q + 1, strlen(q)), q--;
+            }
             else if (!strcmp(k, "sky_color") && cfg_floats(v, g_cfg.sky_col, 3) == 3) {
                 int i;
                 for (i = 0; i < 3; i++)
@@ -1752,6 +1763,16 @@ static void cfg_load(const char *scene)
     g_cfg.loaded = 1;
     printf("lighting: lighting/%s.ini, %d lights, sky x%.2f%s, glows x%.2f\n", g_cfg.scene, g_cfg.n,
            g_cfg.sky_strength, g_cfg.has_sky_col ? " (its own colour)" : "", g_cfg.glow_power);
+}
+
+/* a mesh the stage's file draws without relief (no_relief) */
+static int cfg_no_relief(const char *mesh)
+{
+    char key[70];
+    if (!mesh || !g_cfg.no_relief[0])
+        return 0;
+    snprintf(key, sizeof key, ",%s,", mesh);
+    return strstr(g_cfg.no_relief, key) != NULL;
 }
 
 /* the file's lights into the block, first */
@@ -2443,6 +2464,8 @@ static void submit(int topo, rgl_vtx *v, int n)
         && !(p.blend && p.dst == RGL_BF_ONE) && (p.depth_write || !SH.caster))
         f.bump = (t->bump > 0.0f ? t->bump : 1e-4f)   /* flat: the specular still */
                * (SH.caster ? BUMP_FIGHTER : BUMP_STAGE);
+    if (f.bump > 0.0f && !SH.caster && g_sky_stage && cfg_no_relief(g_mesh_now))
+        f.bump = 0.0f;                  /* the stage's file: this one flat */
     /* DYNAMIC LIGHTS: what is lit by them, what gives them */
     if (g_sh_on && rgl_shadows && topo == RGL_TRIS) {
         if (p.blend && p.dst == RGL_BF_ONE)

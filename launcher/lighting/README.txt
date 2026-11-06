@@ -18,6 +18,9 @@ Every key is optional; ";" starts a comment.
   fighter_lift=0.15      the fighters' own light (0 none), in place of
                          the guess made on a dark stage
   glow_power=1.0         the glows' lights (fire, projectiles), times this
+  no_relief=Plane006     meshes drawn flat (no relief, no specular), by
+                         name, commas between: a sky whose texture shows
+                         lines under the relief
 
   [light]                a light of the stage's own (8 at most)
   type=point             point | spot | directional
