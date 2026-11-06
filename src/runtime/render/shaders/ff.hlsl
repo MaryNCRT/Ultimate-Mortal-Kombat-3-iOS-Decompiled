@@ -150,7 +150,7 @@ float specular(float3 col, bool fighter)
 // face's from the screen derivatives, turned to the camera.
 struct Light { float4 pos; float4 col; float4 dir; float4 cone; };
 cbuffer Lights : register(b1) { float4 lb_eye; float4 lb_sky; float4 lb_ground;
-    float4 lb_aoproj; float4 lb_aoparm; float4 lb_aovp; float4 lb_aoparm2; int4 lb_count; Light lb_l[16]; };
+    float4 lb_aoproj; float4 lb_aoparm; float4 lb_aovp; float4 lb_aoparm2; float4 lb_aodbg; int4 lb_count; Light lb_l[16]; };
 
 // DYNAMIC LIGHTS' shadows (rgl_ff.c point_shadows): a point light's six
 // cube faces, each a tile of patlas -- three across, two rows a light --
@@ -385,6 +385,32 @@ float ao_at(float2 fc)
     return lerp(lerp(a00, a10, f.x), lerp(a01, a11, f.x), f.y);
 }
 
+
+// AMBIENT OCCLUSION's debug views (rgl_ff.c rgl_ao_debug): the screen map
+// at this pixel as grey, or the depth's normals as colour
+float3 ao_debug_view(float2 fc, float contrib)
+{
+    int m = int(lb_aodbg.x + 0.5);
+    float2 uv = (fc - lb_aovp.xy) / lb_aovp.zw;
+    if (m == 5)
+        return contrib.xxx;
+    if (m == 3) {                       // the distance, 0-30 units, near white
+        float d = unpack_depth(scr.SampleLevel(spt, uv, 0)) * lb_aoproj.z;
+        return (1.0 - clamp(d / 30.0, 0.0, 1.0)).xxx;
+    }
+    if (m == 4) {
+        float dw_, dh_, dl_;
+        scr.GetDimensions(0, dw_, dh_, dl_);
+        float2 px = 1.0 / float2(dw_, dh_);
+        float3 P = view_at(uv), Px = view_at(uv + float2(px.x, 0.0)), Py = view_at(uv + float2(0.0, px.y));
+        float3 n = normalize(cross(Px - P, Py - P));
+        if (dot(n, -P) < 0.0)
+            n = -n;
+        return n * 0.5 + 0.5;
+    }
+    return ao_at(fc).xxx;                 // 1 after the blur, 2 before it
+}
+
 float4 ps(PSIn i) : SV_Target
 {
     if ((shadow & 15) == 4)             // AMBIENT OCCLUSION's passes (rgl_ff.c)
@@ -457,6 +483,8 @@ float4 ps(PSIn i) : SV_Target
                 float ao = lerp(1.0, ao_at(i.pos.xy), fighter ? lb_aoparm2.y : 1.0);
                 ao = lerp(ao, 1.0, (1.0 - lt) * 0.5);
                 lin *= max(ao, lb_aoparm.z);
+                if (lb_aodbg.x > 0.5 && lb_aoparm2.w > 0.5)    // a debug view: that, alone
+                    return float4(ao_debug_view(i.pos.xy, max(ao, lb_aoparm.z)), 1.0);
                 // a dark stage's slight light on its fighters (rgl_ff.c FIGHTER_LIFT)
                 if (fighter)
                     lin += al * lb_eye.w;

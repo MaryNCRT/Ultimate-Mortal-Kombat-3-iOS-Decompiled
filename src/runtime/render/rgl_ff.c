@@ -2307,6 +2307,7 @@ static int hold_clear(const rgl_rect *sc, int color, const float rgba[4], int de
 int   rgl_ao = 2, rgl_ao_samples = 8, rgl_ao_blur = 1;
 float rgl_ao_radius = 1.0f, rgl_ao_intensity = 1.8f, rgl_ao_bias = 0.03f;
 float rgl_ao_floor = 0.40f, rgl_ao_scale = 0.5f;   /* Mary: a drop in fps, and hardly seen */
+int   rgl_ao_debug;                     /* the debug views (rgl.h) */
 
 #define AO_FAR 3000.0f                  /* the distance packed, as a fraction of this */
 #define FIGHTER_AO 0.7f                 /* a fighter's share: his light is painted in */
@@ -2358,6 +2359,7 @@ static void ao_block(rgl_light_block *b)
     b->aoparm2[1] = FIGHTER_AO;
     b->aoparm2[2] = (float)rgl_ao_blur;
     b->aoparm2[3] = AO.have && rgl_ao && rgl_shadows && B && B->screen_map ? 1.0f : 0.0f;
+    b->aodbg[0] = (float)rgl_ao_debug;
 }
 
 /* a full-screen draw into the current target, the fragment mode given */
@@ -2500,10 +2502,22 @@ static void ao_passes(void)
             B->draw(&p, &f, 0, &sm, &vp, NULL, AO.fv, nv);
         }
     }
+    if (rgl_ao_debug == 3 || rgl_ao_debug == 4) {   /* the depth itself, to look at */
+        B->screen_map(AO.target_d);
+        B->target_use(cur_target(g_draw_fb));
+        AO.valid = 1;
+        return;
+    }
     /* 2 the occlusion, from the depth */
     B->target_use(AO.target_r);
     B->screen_map(AO.target_d);
     ao_quad(RGL_AO_PASS, w, h);
+    if (rgl_ao_debug == 2) {            /* the occlusion before the blur */
+        B->screen_map(AO.target_r);
+        B->target_use(cur_target(g_draw_fb));
+        AO.valid = 1;
+        return;
+    }
     /* 3 the blur, back into AO.depth */
     B->target_use(AO.target_d);
     B->screen_map(AO.target_r);

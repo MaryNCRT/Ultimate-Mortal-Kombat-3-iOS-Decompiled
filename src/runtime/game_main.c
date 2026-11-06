@@ -1175,6 +1175,8 @@ static void read_config(const char *dir)
             rgl_ao_blur = atoi(v) != 0;
         else if (strcmp(line, "ao_scale") == 0)        /* of the 3D resolution */
             rgl_ao_scale = (float)atof(v) < 0.25f ? 0.25f : (float)atof(v) > 1.0f ? 1.0f : (float)atof(v);
+        else if (strcmp(line, "ao_debug") == 0)        /* 0-5, render/rgl.h */
+            rgl_ao_debug = atoi(v) < 0 ? 0 : atoi(v) > 5 ? 5 : atoi(v);
         else if (strcmp(line, "ao_floor") == 0)        /* the darkest it makes anything */
             rgl_ao_floor = (float)atof(v) < 0.0f ? 0.0f : (float)atof(v) > 1.0f ? 1.0f : (float)atof(v);
         else if (strcmp(line, "smooth_models") == 0) { /* smooth_models.c */
