@@ -151,7 +151,59 @@ float specular(float3 col, bool fighter)
 struct Light { float4 pos; float4 col; float4 dir; float4 cone; };
 cbuffer Lights : register(b1) { float4 lb_eye; float4 lb_sky; float4 lb_ground; int4 lb_count; Light lb_l[16]; };
 
-float3 dynamic(float3 P, float3 N, float3 albedo, float smap, bool fighter)
+// DYNAMIC LIGHTS' shadows (rgl_ff.c point_shadows): a point light's six
+// cube faces, each a tile of patlas -- three across, two rows a light --
+// seen with a field of view of tan 1.05 and a near plane of 0.05, the
+// texel the shadow map's (depth in RGB, the caster in A). The face is the
+// one the point lies most along; its depth there back to a distance, and
+// nine taps 1.5 texels apart kept inside the tile. A fighter does not
+// shadow himself (self).
+Texture2D patlas : register(t2);
+
+float point_shadow(int slot, float3 D, float far, int self)
+{
+    float3 ad = abs(D), F, U;
+    int fc;
+    if (ad.x >= ad.y && ad.x >= ad.z)
+        fc = D.x > 0.0 ? 0 : 1;
+    else if (ad.y >= ad.z)
+        fc = D.y > 0.0 ? 2 : 3;
+    else
+        fc = D.z > 0.0 ? 4 : 5;
+    F = fc == 0 ? float3(1.0, 0.0, 0.0) : fc == 1 ? float3(-1.0, 0.0, 0.0)
+      : fc == 2 ? float3(0.0, 1.0, 0.0) : fc == 3 ? float3(0.0, -1.0, 0.0)
+      : fc == 4 ? float3(0.0, 0.0, 1.0) : float3(0.0, 0.0, -1.0);
+    U = fc < 4 ? float3(0.0, 0.0, 1.0) : float3(0.0, 1.0, 0.0);
+    float3 R = cross(U, -F);
+    float z = dot(D, F);
+    if (z < 1e-4)
+        return 1.0;
+    float2 nd = float2(dot(D, R), dot(D, U)) / (z * 1.05);
+    float sw, shh, slv;
+    patlas.GetDimensions(0, sw, shh, slv);
+    float2 sz = float2(sw, shh);
+    float T = sz.x / 3.0;
+    float2 o = float2(float(fc % 3), float(slot * 2 + fc / 3)) * T;
+    float2 px = o + (nd * 0.5 + 0.5) * T;
+    float n = 0.05, f = max(far, 0.1);
+    float bias = 0.03 + 0.02 * z;
+    float occ = 0.0;
+    [unroll] for (int y = -1; y <= 1; y++)
+        [unroll] for (int x = -1; x <= 1; x++) {
+            float2 q = clamp(px + float2(float(x), float(y)) * 1.5, o + 1.0, o + T - 1.0);
+            float4 e = patlas.SampleLevel(spt, float2(q.x / sz.x, 1.0 - q.y / sz.y), 0);
+            float d = unpack_depth(e);
+            int id = int(e.a * 255.0 + 0.5);
+            if (d >= 0.999 || (self != 0 && id == self))
+                continue;
+            float zl = 2.0 * n * f / ((f + n) - (d * 2.0 - 1.0) * (f - n));
+            if (zl < z - bias)
+                occ += 1.0;
+        }
+    return 1.0 - occ / 9.0;
+}
+
+float3 dynamic(float3 P, float3 N, float3 albedo, float smap, bool fighter, int self)
 {
     float3 V = normalize(lb_eye.xyz - P);
     float3 dif = lerp(lb_ground.rgb, lb_sky.rgb, N.z * 0.5 + 0.5);  // world Z is up
@@ -175,6 +227,8 @@ float3 dynamic(float3 P, float3 N, float3 albedo, float smap, bool fighter)
             att = w * w / (1.0 + 16.0 * x * x);
             if (type == 1)
                 att *= smoothstep(L.cone.y, L.cone.x, dot(-Ld, normalize(L.dir.xyz)));
+            if (L.cone.z > 0.5)         // a light with shadows (point_shadows)
+                att *= point_shadow(int(L.cone.z + 0.5) - 1, P - L.pos.xyz, L.pos.w, self);
         }
         float ndl = max(dot(N, Ld), 0.0);
         float3 c = L.col.rgb * L.col.w * att;
@@ -242,7 +296,7 @@ float4 ps(PSIn i) : SV_Target
                 // the texture's colour, the baked light only half in it
                 float3 al = pow(tc.rgb, 2.2) * (mode == 2 ? float3(1.0, 1.0, 1.0) : i.col.rgb * 0.5 + 0.5);
                 float sm2 = smoothstep(0.25, 0.85, dot(al, float3(0.299, 0.587, 0.114)));
-                lin += dynamic(i.p, N, al, sm2, fighter);
+                lin += dynamic(i.p, N, al, sm2, fighter, shadow >> 4);
             }
         }
         c.rgb = pow(lin, 1.0 / 2.2);

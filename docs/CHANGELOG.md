@@ -8,6 +8,23 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## DYNAMIC LIGHTS' shadows, phase 5 (2026-11-06, after 0.2.1)
+
+Mary played it: everything looks right, though the change is subtle.
+
+- The two strongest point lights (power times reach) cast the fighters'
+  shadows all round, as a cube map: six views a little over 90 degrees
+  (tan 1.05, so a filter does not run off a face) into 512-texel tiles of
+  one target, three across and two rows a light (`rgl_ff.c`
+  `point_shadows`). Only the fighters cast, on the stage and the other
+  fighter; a fighter skips his own texels. The texel is the key light's
+  (packed depth + caster id), so the same shader mode writes it.
+- The shaders (`point_shadow`) pick the face the point lies most along,
+  turn its depth back into a distance, and take nine taps kept inside the
+  tile.
+- Backends: a third texture (`shadow_map2`: Vulkan binding 3, D3D12 t2).
+- The log says `dynamic lights: point shadows on` the first time.
+
 ## DYNAMIC LIGHTS, phases 1-2 (2026-11-06, after 0.2.1)
 
 Part of ENHANCED LIGHTING (Vulkan and Direct3D 12). Mary played it: "se ve
