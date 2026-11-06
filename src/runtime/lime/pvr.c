@@ -247,6 +247,93 @@ static bool decode_pvrtc(const uint8_t *raw, long raw_len, int width, int height
     return true;
 }
 
+/* Port, not in the binary: PVRTC's 4x4 (8x4) blocks show as a grid of faint
+ * lines over a smooth gradient -- a sky, a backdrop (Mary: THE ROOFTOP's
+ * ROOFTOP_BACKDROP, the lines there with or without ENHANCED LIGHTING).
+ * Where the picture is nearly flat -- the colour varies by under DEBLOCK_FLAT
+ * across a 5x5 window -- it is replaced by a soft blur of itself (a 5-tap
+ * binomial each way), fading back to the original as the window's range
+ * nears DEBLOCK_EDGE, so an edge or a detail is never touched. Colour only;
+ * alpha stays as decoded. */
+#define DEBLOCK_FLAT 10                 /* fully smoothed under this range (0-255) */
+#define DEBLOCK_EDGE 26                 /* untouched from this range up */
+
+static void pvr_deblock(uint8_t *px, int w, int h)
+{
+    size_t n = (size_t)w * h;
+    uint8_t *lo = malloc(n * 3), *hi = malloc(n * 3), *lo2 = malloc(n * 3), *hi2 = malloc(n * 3);
+    uint16_t *tmp = malloc(n * 3 * sizeof *tmp);
+    int x, y, c, k;
+
+    if (w < 8 || h < 8 || !lo || !hi || !lo2 || !hi2 || !tmp) {
+        free(lo); free(hi); free(lo2); free(hi2); free(tmp);
+        return;
+    }
+    /* the 5x5 window's least and most of each channel, rows then columns */
+    for (y = 0; y < h; y++)
+        for (x = 0; x < w; x++)
+            for (c = 0; c < 3; c++) {
+                int mn = 255, mx = 0;
+                for (k = -2; k <= 2; k++) {
+                    int xx = x + k < 0 ? 0 : x + k >= w ? w - 1 : x + k;
+                    int v = px[((size_t)y * w + xx) * 4 + c];
+                    if (v < mn) mn = v;
+                    if (v > mx) mx = v;
+                }
+                lo[((size_t)y * w + x) * 3 + c] = (uint8_t)mn;
+                hi[((size_t)y * w + x) * 3 + c] = (uint8_t)mx;
+            }
+    for (y = 0; y < h; y++)
+        for (x = 0; x < w; x++)
+            for (c = 0; c < 3; c++) {
+                int mn = 255, mx = 0;
+                for (k = -2; k <= 2; k++) {
+                    int yy = y + k < 0 ? 0 : y + k >= h ? h - 1 : y + k;
+                    size_t i = ((size_t)yy * w + x) * 3 + c;
+                    if (lo[i] < mn) mn = lo[i];
+                    if (hi[i] > mx) mx = hi[i];
+                }
+                lo2[((size_t)y * w + x) * 3 + c] = (uint8_t)mn;
+                hi2[((size_t)y * w + x) * 3 + c] = (uint8_t)mx;
+            }
+    /* the blur, 1 4 6 4 1 each way (into tmp, x16; then back, /256) */
+    for (y = 0; y < h; y++)
+        for (x = 0; x < w; x++)
+            for (c = 0; c < 3; c++) {
+                static const int wt[5] = { 1, 4, 6, 4, 1 };
+                int s = 0;
+                for (k = -2; k <= 2; k++) {
+                    int xx = x + k < 0 ? 0 : x + k >= w ? w - 1 : x + k;
+                    s += wt[k + 2] * px[((size_t)y * w + xx) * 4 + c];
+                }
+                tmp[((size_t)y * w + x) * 3 + c] = (uint16_t)s;
+            }
+    for (y = 0; y < h; y++)
+        for (x = 0; x < w; x++) {
+            size_t i = (size_t)y * w + x;
+            int range = 0;
+            for (c = 0; c < 3; c++) {
+                int r = hi2[i * 3 + c] - lo2[i * 3 + c];
+                if (r > range) range = r;
+            }
+            if (range >= DEBLOCK_EDGE)
+                continue;
+            for (c = 0; c < 3; c++) {
+                static const int wt[5] = { 1, 4, 6, 4, 1 };
+                int s = 0, b, o = px[i * 4 + c];
+                for (k = -2; k <= 2; k++) {
+                    int yy = y + k < 0 ? 0 : y + k >= h ? h - 1 : y + k;
+                    s += wt[k + 2] * tmp[((size_t)yy * w + x) * 3 + c];
+                }
+                b = (s + 128) / 256;
+                if (range > DEBLOCK_FLAT)   /* fading back towards an edge */
+                    b = o + (b - o) * (DEBLOCK_EDGE - range) / (DEBLOCK_EDGE - DEBLOCK_FLAT);
+                px[i * 4 + c] = (uint8_t)b;
+            }
+        }
+    free(lo); free(hi); free(lo2); free(hi2); free(tmp);
+}
+
 bool lime_pvr_load(const char *path, LimeImage *out)
 {
     memset(out, 0, sizeof(*out));
@@ -281,6 +368,8 @@ bool lime_pvr_load(const char *path, LimeImage *out)
     else if (fmt == 0x18)                  /* PVRTC 2bpp */
         ok = decode_pvrtc(raw + PVR_HEADER, size - PVR_HEADER,
                           (int)width, (int)height, 1, out);
+    if (ok && out->rgba)                /* port: the blocks' grid on a gradient */
+        pvr_deblock(out->rgba, out->width, out->height);
 
     free(raw);
     return ok;
