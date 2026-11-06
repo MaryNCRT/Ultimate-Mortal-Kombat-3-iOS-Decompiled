@@ -699,19 +699,33 @@ static int dx_tex_new(void)
  * order) -- or sooner, when the buffers pass 64 MB or a resource is
  * released. Each upload used to make its own allocator and list, run them
  * and wait for the GPU: one wait per texture, hundreds in a load. */
+/* diagnostic (the startup freeze, dx_present): the uploads since the last
+ * present, their bytes, the time run and waited for, and released */
+static double g_diag_up_ms, g_diag_rel_ms;
+static UINT64 g_diag_up_bytes;
+static int g_diag_up_n, g_diag_up_lists;
+
 static void upload_submit(void)
 {
     ID3D12CommandList *one;
     int i;
+    double t0, t1;
     if (!g_ulist_on)
         return;
+    t0 = rgl_now_ms();
     g_ulist_on = 0;
     ID3D12GraphicsCommandList_Close(g_ulist);
     one = (ID3D12CommandList *)g_ulist;
     ID3D12CommandQueue_ExecuteCommandLists(g_queue, 1, &one);
     wait_gpu();
+    t1 = rgl_now_ms();
+    g_diag_up_ms += t1 - t0;
+    g_diag_up_bytes += g_ubytes;
+    g_diag_up_n += g_nubufs;
+    g_diag_up_lists++;
     for (i = 0; i < g_nubufs; i++)
         ID3D12Resource_Release(g_ubufs[i]);
+    g_diag_rel_ms += rgl_now_ms() - t1;
     g_nubufs = 0;
     g_ubytes = 0;
 }
@@ -1546,9 +1560,15 @@ static void dx_present(void)
     wait_gpu();
     if (rgl_now_ms() - t0 > 300.0)
         printf("d3d12 slow present: %.0f ms -- begin %.0f, the frame's commands run %.0f "
-               "(%d pipelines made since the last), Present %.0f, the GPU after %.0f\n",
-               rgl_now_ms() - t0, t1 - t0, t2 - t1, g_psos_new, t3 - t2, rgl_now_ms() - t3);
+               "(%d pipelines made since the last), Present %.0f, the GPU after %.0f; "
+               "since the last present: %d texture uploads in %d lists, %.1f MB, %.0f ms run and "
+               "waited for, %.0f ms releasing\n",
+               rgl_now_ms() - t0, t1 - t0, t2 - t1, g_psos_new, t3 - t2, rgl_now_ms() - t3,
+               g_diag_up_n, g_diag_up_lists, g_diag_up_bytes / 1048576.0, g_diag_up_ms, g_diag_rel_ms);
     g_psos_new = 0;
+    g_diag_up_ms = g_diag_rel_ms = 0.0;
+    g_diag_up_bytes = 0;
+    g_diag_up_n = g_diag_up_lists = 0;
     g_bi = IDXGISwapChain3_GetCurrentBackBufferIndex(g_swap);
     g_bound_target = -1;
 }
