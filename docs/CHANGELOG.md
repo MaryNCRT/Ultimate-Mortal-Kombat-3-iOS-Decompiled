@@ -8,6 +8,18 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Cyrax's kombos in the moves list (2026-11-06, after 0.2.1)
+
+Mary played it: works.
+
+- **The moves list's KOMBOS column showed "-" for Cyrax.** The binary's
+  moves tables (`MovesListTab`) have no kombo section for him. His kombos
+  are in the fight engine's own kombo trees, and the column now reads them
+  from there: HP, HP, LP; HP, HP, HK, HP, HK, HK; HK, HK, B+HK (P and K with
+  5 buttons). Kano, Sindel, Sektor, Kung Lao, Kabal, Shang Tsung, Smoke,
+  Mileena, Reptile and the two classic fighters still show "-": some of
+  their trees hold entry kinds not decoded yet.
+
 ## DYNAMIC LIGHTS' shadows, phase 5 (2026-11-06, after 0.2.1)
 
 Mary played it: everything looks right, though the change is subtle.

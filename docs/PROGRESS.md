@@ -85,6 +85,7 @@ marked in the log below.
 | Slight slide in a kombo (issue #114) | **the original's rule**, checked instruction by instruction (`t_cc_*_punch` → `t_ccp3` → `t_separate_us`); nothing to fix |
 | Dynamic stage music, Genesis style (Soul Chamber first) | **research only**, nothing built: [research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md); waits for Mary's Genesis recording (WAV + GYM) |
 | Ambient occlusion and screen-space contact shadows (ENHANCED LIGHTING) | **research only**, nothing built: [research/AMBIENT-OCCLUSION.md](research/AMBIENT-OCCLUSION.md), [research/CONTACT-SHADOWS.md](research/CONTACT-SHADOWS.md); after `claude/dynamic-lighting` lands |
+| Kombos in the moves list for the other fighters with no section 3 (Kano, Sindel, Sektor, Kung Lao, Kabal, Shang Tsung, Smoke, Mileena, Reptile, classic Sub-Zero and Smoke) | open: Cyrax's come from the engine's kombo trees (`PortKombosRead`); the others' trees hold entry kinds 0x6 / 0xc not decoded yet |
 | After CANCEL in STAGE SELECT the select screen came back silent once | fixed by never stopping the tune on the way; the log says `stage select: the tune ...` if it happens again |
 
 ### Where to look next
@@ -96,6 +97,31 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## Cyrax's kombos in the moves list (2026-11-06, after 0.2.1)
+
+Mary played it: works.
+
+- **Cause:** `MovesListTab[8]` (0x0010d918 + 8 * 52) has `rows3 = 0`, as in
+  the binary, so `PortMvAllPage` drew "-". 12 of the 23 entries have no
+  section 3. The table, `Cyrax_Moves5/6` and his GameText ids
+  (0x1e2-0x1ee, 0x2f7-0x303) were checked against the binary and
+  `english_text.dat`: all match.
+- **Fix:** `PortKombosRead` (GameCode.c, port) walks the engine's kombo
+  trees: `ochar_elbow_combos[c]` (0x001663fc, the list after a landed high
+  punch, `t_do_elbow`) and `ochar_knee_combos[c]` (0x0016645c, high kick,
+  `t_do_knee`), the 0x18-byte entries `combo_scan_a11` walks (+0 bit 15 ends
+  a list, low bits 9; +4 animation >> 8; +8 low byte the button in
+  `last_switch_ram` order, 0 HP 1 LP 2 BL 3 HK 4 LK 5 RUN; +0x14 the next
+  list when > 0x100). Each path is one kombo. The button order was checked
+  against the trees of Sonya, Jax, Jade and Scorpion, whose kombos the
+  binary's lists do print: same buttons, same order. Animation 0x15 on a
+  kick (`ct_*_roundh*`) is shown as B+HK, as those lists print it; the scan
+  itself reads buttons only.
+- Cyrax (`ct_cyrax_*`, 0x1660e4-0x1661a4): HP HP LP; HP HP HK HP HK HK;
+  HK HK B+HK. Only Cyrax is switched on (`PortKomboFromEngine`); other
+  fighters' trees hold entries of kind 0x6 and 0xc (and Sub-Zero's loops),
+  not decoded, and a walk that meets one shows "-" rather than a guess.
 
 ## DYNAMIC LIGHTS' shadows, phase 5 (2026-11-06, after 0.2.1)
 
