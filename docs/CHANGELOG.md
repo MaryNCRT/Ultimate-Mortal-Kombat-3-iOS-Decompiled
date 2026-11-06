@@ -32,6 +32,7 @@ moves list's portrait from her texture pack with no FPS drop.
   included: it now looks in the mods first. A mod's HD portrait (1080x1080)
   took 40-100 ms to decode when the list first opened, an FPS drop; both
   fighters' are now loaded while the fight loads.
+
 ## After 0.3.0: frames back under 16.7 ms (2026-11-06)
 
 Mary saw stutters in SMOOTH ANIMATIONS (Sindel) and drops in fps: fights

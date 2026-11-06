@@ -129,6 +129,7 @@ traced to the binary's own mechanism before anything is changed.
 - Seen in the same logs, not changed: opening the settings menu takes
   ~150 ms over two frames; one 931 ms tick in a fight with nothing logged
   around it.
+
 ## After 0.3.0: frames back under 16.7 ms (2026-11-06)
 
 Mary saw stutters in SMOOTH ANIMATIONS (Sindel) and drops in fps: fights
