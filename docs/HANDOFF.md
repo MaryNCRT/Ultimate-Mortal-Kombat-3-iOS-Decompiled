@@ -169,6 +169,13 @@ press COMPILE.
   sky colour and lighting files (phases 3-4). The shaders
   are rebuilt with `render/shaders/build.py` (glslang in
   `WORK/tools/glslang`, fxc from the Windows SDK).
+- **Ambient occlusion and contact shadows**: investigated, not built. The
+  designs (a technique selector Crytek SSAO / HBAO / Alchemy AO, and
+  ray-marched contact shadows sharing one depth pre-pass in `scene_flush`)
+  are in [research/AMBIENT-OCCLUSION.md](research/AMBIENT-OCCLUSION.md) and
+  [research/CONTACT-SHADOWS.md](research/CONTACT-SHADOWS.md). Start after
+  `claude/dynamic-lighting` is merged: both touch `ff.frag` / `ff.hlsl`.
+  The shabaazxh AO repo has no license: ideas only, no code.
 - **Dynamic stage music (Genesis style)**: investigated, not built; the
   design and the open questions are in
   [research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md). Paused

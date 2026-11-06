@@ -84,6 +84,7 @@ marked in the log below.
 | The stage editor's SCULPT showed "500 Internal Error" once | **closed**: Mary no longer sees it (0.1.18); the guards stay |
 | Slight slide in a kombo (issue #114) | **the original's rule**, checked instruction by instruction (`t_cc_*_punch` → `t_ccp3` → `t_separate_us`); nothing to fix |
 | Dynamic stage music, Genesis style (Soul Chamber first) | **research only**, nothing built: [research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md); waits for Mary's Genesis recording (WAV + GYM) |
+| Ambient occlusion and screen-space contact shadows (ENHANCED LIGHTING) | **research only**, nothing built: [research/AMBIENT-OCCLUSION.md](research/AMBIENT-OCCLUSION.md), [research/CONTACT-SHADOWS.md](research/CONTACT-SHADOWS.md); after `claude/dynamic-lighting` lands |
 | After CANCEL in STAGE SELECT the select screen came back silent once | fixed by never stopping the tune on the way; the log says `stage select: the tune ...` if it happens again |
 
 ### Where to look next
