@@ -1,7 +1,11 @@
 # Real-time dynamic lighting: compatibility report and plan
 
-Research only. Nothing here is implemented yet; no game code was changed
-for it. Asked for by Mary on 2026-11-06, after ENHANCED LIGHTING (real-time
+**Status (2026-11-06):** phases 1 and 2 are in (normals and world
+positions to the GPU; point/spot/directional lights in the shaders, with
+emissive draws as point lights). Played by Mary. The rest is still plan.
+Phase 1 found that the fighters' light is baked per animation frame, so
+their normals are made from their triangles in `rgl_ff.c`, not taken from
+the skinning. Asked for by Mary on 2026-11-06, after ENHANCED LIGHTING (real-time
 shadows, texture relief, specular, mipmaps) was built for testing.
 
 References read (all for ideas and technique, no code copied):

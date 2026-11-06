@@ -187,6 +187,16 @@ static int g_dpool_used;
 
 static VkBuffer g_vbuf;
 static VkDeviceMemory g_vmem;
+/* DYNAMIC LIGHTS: the light blocks, a ring of slots read at a dynamic
+ * offset; every submit waits, so the ring starts again after one, the
+ * block in use moved to the first slot */
+#define LRING 256
+static VkBuffer g_lbuf;
+static VkDeviceMemory g_lmem;
+static unsigned char *g_lmap;
+static VkDeviceSize g_lslot;            /* a slot, aligned for the device */
+static int g_lnext;                     /* the next free slot */
+static uint32_t g_lcur;                 /* the offset the draws read */
 static unsigned char *g_vmap;
 static VkDeviceSize g_vsize, g_voff;
 static struct { VkBuffer b; VkDeviceMemory m; } g_retired[16];   /* outgrown this frame, still read */
@@ -409,6 +419,11 @@ static void flush(int signal_done)
     }
     vkResetDescriptorPool(g_dev, g_dpool, 0);
     g_dpool_used = 0;
+    if (g_lmap && g_lcur) {             /* the block in use to the first slot */
+        memcpy(g_lmap, g_lmap + g_lcur, sizeof(rgl_light_block));
+        g_lcur = 0;
+    }
+    g_lnext = 1;
     g_voff = 0;
     g_serial++;
 }
@@ -1019,11 +1034,11 @@ static int vk_open(void *window, int width, int height)
         VkCommandBufferAllocateInfo ai;
         VkFenceCreateInfo fi;
         VkSemaphoreCreateInfo si;
-        VkDescriptorSetLayoutBinding b[2];
+        VkDescriptorSetLayoutBinding b[3];
         VkDescriptorSetLayoutCreateInfo dl;
         VkPushConstantRange pc;
         VkPipelineLayoutCreateInfo pl;
-        VkDescriptorPoolSize ps;
+        VkDescriptorPoolSize ps[2];
         VkDescriptorPoolCreateInfo dp;
 
         memset(&pi, 0, sizeof pi);
@@ -1053,9 +1068,12 @@ static int vk_open(void *window, int width, int height)
         b[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         b[1] = b[0];
         b[1].binding = 1;
+        b[2] = b[0];                    /* 2 DYNAMIC LIGHTS' block */
+        b[2].binding = 2;
+        b[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         memset(&dl, 0, sizeof dl);
         dl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        dl.bindingCount = 2;
+        dl.bindingCount = 3;
         dl.pBindings = b;
         vkCreateDescriptorSetLayout(g_dev, &dl, NULL, &g_dsl);
         pc.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -1069,13 +1087,15 @@ static int vk_open(void *window, int width, int height)
         pl.pPushConstantRanges = &pc;
         vkCreatePipelineLayout(g_dev, &pl, NULL, &g_layout);
         cache_open();
-        ps.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        ps.descriptorCount = DPOOL_SETS * 2;
+        ps[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        ps[0].descriptorCount = DPOOL_SETS * 2;
+        ps[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        ps[1].descriptorCount = DPOOL_SETS;
         memset(&dp, 0, sizeof dp);
         dp.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         dp.maxSets = DPOOL_SETS;
-        dp.poolSizeCount = 1;
-        dp.pPoolSizes = &ps;
+        dp.poolSizeCount = 2;
+        dp.pPoolSizes = ps;
         vkCreateDescriptorPool(g_dev, &dp, NULL, &g_dpool);
     }
     g_vs = shader(k_vk_vs, sizeof k_vk_vs);
@@ -1083,6 +1103,17 @@ static int vk_open(void *window, int width, int height)
     g_vsize = 4u << 20;
     if (!make_buffer(g_vsize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &g_vbuf, &g_vmem, (void **)&g_vmap))
         return 0;
+    {
+        VkDeviceSize a = g_props.limits.minUniformBufferOffsetAlignment;
+        if (a < 16)
+            a = 16;
+        g_lslot = (sizeof(rgl_light_block) + a - 1) / a * a;
+        if (!make_buffer(g_lslot * LRING, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &g_lbuf, &g_lmem, (void **)&g_lmap))
+            return 0;
+        memset(g_lmap, 0, sizeof(rgl_light_block));  /* slot 0: no lights */
+        g_lcur = 0;
+        g_lnext = 1;
+    }
     if (!recreate_swapchain())
         return 0;
 
@@ -1143,6 +1174,9 @@ static void vk_close(void)
         free_buffer(g_retired[g_nretired].b, g_retired[g_nretired].m);
     }
     free_buffer(g_vbuf, g_vmem);
+    free_buffer(g_lbuf, g_lmem);
+    g_lbuf = VK_NULL_HANDLE;
+    g_lmap = NULL;
     vkDestroyShaderModule(g_dev, g_vs, NULL);
     vkDestroyShaderModule(g_dev, g_fs, NULL);
     vkDestroyDescriptorPool(g_dev, g_dpool, NULL);
@@ -1516,7 +1550,7 @@ static VkPipeline get_pipe(const rgl_pipe *k, int pass)
 {
     VkPipelineShaderStageCreateInfo st[2];
     VkVertexInputBindingDescription vb;
-    VkVertexInputAttributeDescription va[4];
+    VkVertexInputAttributeDescription va[6];
     VkPipelineVertexInputStateCreateInfo vi;
     VkPipelineInputAssemblyStateCreateInfo ia;
     VkPipelineViewportStateCreateInfo vp;
@@ -1550,11 +1584,15 @@ static VkPipeline get_pipe(const rgl_pipe *k, int pass)
     va[1].location = 1; va[1].binding = 0; va[1].format = VK_FORMAT_R8G8B8A8_UNORM; va[1].offset = 16;
     va[2].location = 2; va[2].binding = 0; va[2].format = VK_FORMAT_R32G32_SFLOAT; va[2].offset = 20;
     va[3].location = 3; va[3].binding = 0; va[3].format = VK_FORMAT_R32G32B32A32_SFLOAT; va[3].offset = 28;
+    va[4].location = 4; va[4].binding = 0; va[4].format = VK_FORMAT_R32G32B32_SFLOAT;
+    va[4].offset = (uint32_t)offsetof(rgl_vtx, n);
+    va[5].location = 5; va[5].binding = 0; va[5].format = VK_FORMAT_R32G32B32_SFLOAT;
+    va[5].offset = (uint32_t)offsetof(rgl_vtx, p);
     memset(&vi, 0, sizeof vi);
     vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vi.vertexBindingDescriptionCount = 1;
     vi.pVertexBindingDescriptions = &vb;
-    vi.vertexAttributeDescriptionCount = 4;
+    vi.vertexAttributeDescriptionCount = 6;
     vi.pVertexAttributeDescriptions = va;
     memset(&ia, 0, sizeof ia);
     ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -1682,7 +1720,8 @@ static VkDescriptorSet get_set(int tex, const rgl_samp *s, VkImageView shadow)
     static unsigned last_serial;
     VkDescriptorSetAllocateInfo ai;
     VkDescriptorImageInfo ii[2];
-    VkWriteDescriptorSet w[2];
+    VkDescriptorBufferInfo bi;
+    VkWriteDescriptorSet w[3];
     VkDescriptorSet set = VK_NULL_HANDLE;
     rgl_samp point;
 
@@ -1720,7 +1759,15 @@ static VkDescriptorSet get_set(int tex, const rgl_samp *s, VkImageView shadow)
     w[1] = w[0];
     w[1].dstBinding = 1;
     w[1].pImageInfo = &ii[1];
-    vkUpdateDescriptorSets(g_dev, 2, w, 0, NULL);
+    bi.buffer = g_lbuf;
+    bi.offset = 0;
+    bi.range = sizeof(rgl_light_block);
+    w[2] = w[0];
+    w[2].dstBinding = 2;
+    w[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+    w[2].pImageInfo = NULL;
+    w[2].pBufferInfo = &bi;
+    vkUpdateDescriptorSets(g_dev, 3, w, 0, NULL);
     last_tex = tex;
     last_s = *s;
     last_shadow = shadow;
@@ -1826,7 +1873,7 @@ static void vk_draw(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_sam
     vkCmdSetViewport(g_cmd, 0, 1, &vp);
     vkCmdSetScissor(g_cmd, 0, 1, &sc);
     vkCmdPushConstants(g_cmd, g_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof *f, f);
-    vkCmdBindDescriptorSets(g_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, g_layout, 0, 1, &set, 0, NULL);
+    vkCmdBindDescriptorSets(g_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, g_layout, 0, 1, &set, 1, &g_lcur);
     vkCmdBindVertexBuffers(g_cmd, 0, 1, &g_vbuf, &off);
     vkCmdDraw(g_cmd, (unsigned)n, 1, 0, 0);
 }
@@ -1951,9 +1998,25 @@ static void vk_present(void) { present(); }
 static void vk_finish(void) { }
 static void vk_shadow_map(int t) { g_shadow = t > 0 && t < g_ntg && g_tg[t].used ? t : 0; }
 
+/* DYNAMIC LIGHTS: a block into the next slot; the draws from now on read it */
+static void vk_lights(const void *block, int bytes)
+{
+    if (!g_lmap || bytes > (int)sizeof(rgl_light_block))
+        return;
+    if (g_lnext >= LRING) {             /* the ring is full: wait, start again */
+        if (g_cmd_on)
+            flush(0);
+        g_lnext = 1;
+    }
+    g_lcur = (uint32_t)(g_lslot * (VkDeviceSize)g_lnext++);
+    memset(g_lmap + g_lcur, 0, sizeof(rgl_light_block));
+    memcpy(g_lmap + g_lcur, block, (size_t)bytes);
+}
+
 rgl_backend rgl_vk = {
     "Vulkan", vk_open, vk_close, vk_device, 4096, 1,
     vk_tex_new, vk_tex_image, vk_tex_sub, vk_tex_free,
     vk_target_new, vk_target_free, vk_target_use, vk_target_size,
     vk_clear, vk_draw, vk_blit, vk_read, vk_present, vk_finish, vk_shadow_map,
+    vk_lights,
 };

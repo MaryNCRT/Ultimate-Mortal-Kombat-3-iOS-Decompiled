@@ -46,6 +46,73 @@ static const uint8_t *read_64_chars(const uint8_t *src, char *dst)
     return src + 64;
 }
 
+/* Port, not in the binary: DYNAMIC LIGHTS (render/rgl_ff.c) want each
+ * vertex's normal. The 12 bytes the loader skips after u and v ARE the
+ * normal (unit length in every vertex of the stage and fighter files read,
+ * matching the faces: docs/research/DYNAMIC-LIGHTING.md), so they are kept
+ * here, outside the engine's heap and its savestates, keyed by the mesh's
+ * vertex block, and handed to GL when the mesh is drawn. The game itself
+ * neither reads nor changes them. */
+#define PN_SLOTS 16384
+#define PN_GONE ((const void *)1)
+static struct { const void *key; float *n; } g_pn[PN_SLOTS];
+
+static unsigned pn_hash(const void *k)
+{
+    uintptr_t x = (uintptr_t)k;
+    x ^= x >> 17;
+    x *= 0x9E3779B1u;
+    return (unsigned)(x >> 7) & (PN_SLOTS - 1);
+}
+
+static int pn_find(const void *key)
+{
+    unsigned h = pn_hash(key), i;
+    for (i = 0; i < PN_SLOTS; i++, h = (h + 1) & (PN_SLOTS - 1)) {
+        if (g_pn[h].key == key)
+            return (int)h;
+        if (!g_pn[h].key)
+            return -1;
+    }
+    return -1;
+}
+
+static void pn_forget(const void *key)
+{
+    int i = key ? pn_find(key) : -1;
+    if (i >= 0) {
+        free(g_pn[i].n);
+        g_pn[i].n = NULL;
+        g_pn[i].key = PN_GONE;
+    }
+}
+
+static void pn_keep(const void *key, float *n)
+{
+    unsigned h = pn_hash(key), i;
+    pn_forget(key);
+    for (i = 0; i < PN_SLOTS; i++, h = (h + 1) & (PN_SLOTS - 1))
+        if (!g_pn[h].key || g_pn[h].key == PN_GONE) {
+            g_pn[h].key = key;
+            g_pn[h].n = n;
+            return;
+        }
+    free(n);                            /* full: drawn without */
+}
+
+/* set by the runtime (lime_platform.c): 1 while the lights want normals.
+ * NULL in the tests, which then see the original's GL calls only */
+int (*lime_port_dyn_normals)(void);
+
+static const float *pn_get(const void *key)
+{
+    int i;
+    if (!key || !lime_port_dyn_normals || !lime_port_dyn_normals())
+        return NULL;
+    i = pn_find(key);
+    return i >= 0 ? g_pn[i].n : NULL;
+}
+
 void LIME_FreeMeshSet(MESHSETINFO *set)
 {
     if (!set) {
@@ -58,6 +125,7 @@ void LIME_FreeMeshSet(MESHSETINFO *set)
                 continue;
             }
             /* Same order the original frees in. */
+            pn_forget(m->verts);        /* port: DYNAMIC LIGHTS */
             limeFree(m->meshName);
             limeFree(m->textureName);
             limeFree(m->verts);
@@ -242,6 +310,15 @@ MESHSETINFO *LIME_LoadMeshSet(const char *filename, int useLighting)
             dst->pad = 0;
             memcpy(&dst->u, src + 6, 4);
             memcpy(&dst->v, src + 10, 4);
+        }
+        {   /* port: DYNAMIC LIGHTS keep the normals (pn_keep) */
+            float *nrm = m->numVerts > 0
+                       ? (float *)malloc((size_t)m->numVerts * 12) : NULL;
+            if (nrm) {
+                for (int v = 0; v < m->numVerts; v++)
+                    memcpy(nrm + v * 3, p + (size_t)v * DISK_VERT_STRIDE + 14, 12);
+                pn_keep(m->verts, nrm);
+            }
         }
         p += (size_t)m->numVerts * DISK_VERT_STRIDE;
     }
@@ -445,6 +522,7 @@ void LIME_FreeSingleMesh(MESHSETINFO *set, int index)
     if (mesh == NULL)
         return;
 
+    pn_forget(set->meshes[index]->verts);        /* port: DYNAMIC LIGHTS */
     limeFree(set->meshes[index]->meshName);      /* +0x3c */
     limeFree(set->meshes[index]->textureName);   /* +0x40 */
     limeFree(set->meshes[index]->verts);         /* +0x18 */
@@ -1254,9 +1332,16 @@ void LIME_RenderMeshSingle(MESHINFO *mesh, TEXTURE *t0, TEXTURE *t1,
     {   /* Port, not in the binary: the edge clamp (draw_gl.c) */
         const int clamp = t0 ? lime_port_edge_clamp(&mesh->verts[0].u, 4,
                                    mesh->indices, mesh->numFaces * 3) : 0;
+        const float *nrm = pn_get(mesh->verts);  /* port: DYNAMIC LIGHTS */
+        if (nrm) {
+            glNormalPointer(GL_FLOAT, 0, nrm);
+            glEnableClientState(GL_NORMAL_ARRAY);
+        }
         if (!rb_nodraw())               /* port: a frame run again (rollback.c) */
             glDrawElements(GL_TRIANGLES, mesh->numFaces * 3,
                            GL_UNSIGNED_SHORT, mesh->indices);   /* +0x1c */
+        if (nrm)
+            glDisableClientState(GL_NORMAL_ARRAY);
         lime_port_edge_restore(clamp);
     }
     glPopMatrix();

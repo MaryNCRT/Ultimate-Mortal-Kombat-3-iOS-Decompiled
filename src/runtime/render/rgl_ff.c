@@ -199,7 +199,7 @@ static int g_mvp_dirty = 1;
 static mat4 g_mvp;
 
 typedef struct { int on, size; GLenum type; int stride; const unsigned char *p; } carray;
-static carray g_va, g_ca, g_ta;
+static carray g_va, g_ca, g_ta, g_na;  /* g_na: DYNAMIC LIGHTS' normals */
 
 /* textures by GL name */
 typedef struct {
@@ -208,6 +208,8 @@ typedef struct {
     int gen_mip;
     float aniso;
     float bump;                         /* ENHANCED LIGHTING: tex_bump's */
+    float avg[3];                       /* DYNAMIC LIGHTS: its mean colour (linear),
+                                         * an emissive draw's light */
     int subbed;                         /* changed by glTexSubImage2D: its
                                          * mip levels (if any) are stale */
 } ff_tex;
@@ -379,7 +381,7 @@ void ff_glDisable(GLenum c) { unsigned char *p = cap(c); if (p) *p = 0; }
 static carray *arr(GLenum a)
 {
     return a == E_VERTEX_ARRAY ? &g_va : a == E_COLOR_ARRAY ? &g_ca
-         : a == E_TEXTURE_COORD_ARRAY ? &g_ta : NULL;
+         : a == E_TEXTURE_COORD_ARRAY ? &g_ta : a == E_NORMAL_ARRAY ? &g_na : NULL;
 }
 void ff_glEnableClientState(GLenum a) { carray *p = arr(a); if (p) p->on = 1; }
 void ff_glDisableClientState(GLenum a) { carray *p = arr(a); if (p) p->on = 0; }
@@ -391,7 +393,7 @@ static void set_array(carray *a, GLint n, GLenum t, GLsizei s, const GLvoid *p)
 void ff_glVertexPointer(GLint n, GLenum t, GLsizei s, const GLvoid *p) { set_array(&g_va, n, t, s, p); }
 void ff_glColorPointer(GLint n, GLenum t, GLsizei s, const GLvoid *p) { set_array(&g_ca, n, t, s, p); }
 void ff_glTexCoordPointer(GLint n, GLenum t, GLsizei s, const GLvoid *p) { set_array(&g_ta, n, t, s, p); }
-void ff_glNormalPointer(GLenum t, GLsizei s, const GLvoid *p) { (void)t; (void)s; (void)p; }
+void ff_glNormalPointer(GLenum t, GLsizei s, const GLvoid *p) { set_array(&g_na, 3, t, s, p); }
 
 void ff_glAlphaFunc(GLenum f, GLclampf r) { S.alpha_func = f; S.alpha_ref = r; }
 void ff_glBlendFunc(GLenum s, GLenum d) { S.src = s; S.dst = d; }
@@ -647,6 +649,27 @@ static float tex_bump(const unsigned char *px, int w, int h)
     return (float)(sum > BUMP_MAX ? BUMP_MAX : sum);
 }
 
+/* DYNAMIC LIGHTS: a texture's mean colour, linear, weighted by its alpha
+ * (a glow's black or see-through edge is not its colour) */
+static void tex_avg(const unsigned char *px, int w, int h, float out[3])
+{
+    int step = (w > h ? w : h) / 64, x, y, k;
+    double a[3] = { 0, 0, 0 }, n = 0;
+
+    if (step < 1)
+        step = 1;
+    for (y = 0; y < h; y += step)
+        for (x = 0; x < w; x += step) {
+            const unsigned char *q = px + ((size_t)y * w + x) * 4;
+            double wt = q[3] / 255.0;
+            for (k = 0; k < 3; k++)
+                a[k] += pow(q[k] / 255.0, 2.2) * wt;
+            n += wt;
+        }
+    for (k = 0; k < 3; k++)
+        out[k] = n > 0 ? (float)(a[k] / n) : 0.0f;
+}
+
 static int wants_mips(const ff_tex *x)
 {
     return x->gen_mip || (x->min != E_NEAREST && x->min != E_LINEAR);
@@ -701,6 +724,7 @@ void ff_glTexImage2D(GLenum t, GLint level, GLint internal, GLsizei w, GLsizei h
     x->h = h;
     x->levels = n;
     x->bump = tex_bump(lv[0], w, h);
+    tex_avg(lv[0], w, h, x->avg);
     x->subbed = 0;
     for (i = 0; i < n; i++)
         free(lv[i]);
@@ -1348,6 +1372,128 @@ static void shadow_drop(void)
     SH.valid = SH.lit = 0;
 }
 
+/* ------------------------------------------------------- DYNAMIC LIGHTS
+ *
+ * ENHANCED LIGHTING's lights (rgl.h rgl_light_block, the shaders' dynamic):
+ * added over the game's own light, per pixel, on the stage and the
+ * fighters alike. Their first source is what the game draws as light: every
+ * additive draw of the scene (a fireball, a glow, sparks, a teleport) is an
+ * emissive surface, and each becomes a point light of its own colour where
+ * it is -- the texture's mean colour (tex_avg) times the draw's vertex
+ * colour -- so a projectile lights the floor and the fighters as it goes
+ * (Mary: emissive materials should light with their colour). Draws close
+ * together are merged, up to RGL_MAX_LIGHTS. Spot and directional lights
+ * use the same block; they come from a stage's or a fighter's lighting file
+ * (research/DYNAMIC-LIGHTING.md, phase 4). */
+#define EMIT_MAX 128
+#define EMIT_RADIUS 6.0f                /* a light reaches its draw's size times this */
+#define EMIT_RMIN 2.5f                  /* and at least this far (a fighter is ~3 tall) */
+#define EMIT_RMAX 12.0f
+#define EMIT_POWER 2.5f
+
+static struct { float p[3], ext, col[3], w; } g_emit[EMIT_MAX];
+static int g_nemit;
+static long g_lights_log;
+
+/* an additive draw of the scene, n vertices with their world places */
+static void emit_note(const ff_tex *t, const rgl_vtx *v, int n)
+{
+    float lo[3] = { 1e30f, 1e30f, 1e30f }, hi[3] = { -1e30f, -1e30f, -1e30f };
+    float vc[4] = { 0, 0, 0, 0 }, e;
+    int i, k;
+
+    if (n < 3 || g_nemit >= EMIT_MAX)
+        return;
+    for (i = 0; i < n; i++) {
+        for (k = 0; k < 3; k++) {
+            if (v[i].p[k] < lo[k]) lo[k] = v[i].p[k];
+            if (v[i].p[k] > hi[k]) hi[k] = v[i].p[k];
+        }
+        for (k = 0; k < 4; k++)
+            vc[k] += v[i].rgba[k] / 255.0f;
+    }
+    for (k = 0; k < 4; k++)
+        vc[k] /= (float)n;
+    if (vc[3] < 0.05f)
+        return;                         /* faded out */
+    e = 0.0f;
+    for (k = 0; k < 3; k++) {
+        g_emit[g_nemit].p[k] = (lo[k] + hi[k]) * 0.5f;
+        if (hi[k] - lo[k] > e)
+            e = hi[k] - lo[k];
+        g_emit[g_nemit].col[k] = (t ? t->avg[k] : 1.0f) * powf(vc[k], 2.2f);
+    }
+    g_emit[g_nemit].ext = e * 0.5f;
+    g_emit[g_nemit].w = vc[3];
+    g_nemit++;
+}
+
+/* the lights for the held draws: the emissive draws merged into point
+ * lights, and the camera, into a block for the backend */
+static void lights_build(void)
+{
+    rgl_light_block b;
+    int i, k, j;
+
+    if (!B || !B->lights)
+        return;
+    memset(&b, 0, sizeof b);
+    for (k = 0; k < 3; k++)
+        b.eye[k] = SH.inv_view.m[12 + k];
+    for (i = 0; i < g_nemit; i++) {
+        float r = g_emit[i].ext * EMIT_RADIUS, mx = 0.0f;
+        rgl_light *l = NULL;
+        if (r < EMIT_RMIN) r = EMIT_RMIN;
+        if (r > EMIT_RMAX) r = EMIT_RMAX;
+        for (j = 0; j < b.count; j++) {     /* close to one already: merged */
+            float d = 0.0f;
+            for (k = 0; k < 3; k++)
+                d += (b.l[j].pos[k] - g_emit[i].p[k]) * (b.l[j].pos[k] - g_emit[i].p[k]);
+            if (d < (r * 0.5f) * (r * 0.5f)) {
+                l = &b.l[j];
+                break;
+            }
+        }
+        if (l) {
+            float w0 = l->dir[0], w1 = g_emit[i].w, s = w0 + w1;
+            for (k = 0; k < 3; k++) {
+                l->pos[k] = (l->pos[k] * w0 + g_emit[i].p[k] * w1) / s;
+                l->col[k] += g_emit[i].col[k] * w1;
+            }
+            if (r > l->pos[3]) l->pos[3] = r;
+            l->dir[0] = s;
+            continue;
+        }
+        if (b.count >= RGL_MAX_LIGHTS)
+            continue;
+        l = &b.l[b.count++];
+        for (k = 0; k < 3; k++) {
+            l->pos[k] = g_emit[i].p[k];
+            l->col[k] = g_emit[i].col[k] * g_emit[i].w;
+        }
+        l->pos[3] = r;
+        l->dir[0] = g_emit[i].w;        /* its weight while merging */
+        (void)mx;
+    }
+    for (j = 0; j < b.count; j++) {     /* the colour made a hue, its brightness the power */
+        rgl_light *l = &b.l[j];
+        float m = l->col[0] > l->col[1] ? l->col[0] : l->col[1];
+        if (l->col[2] > m) m = l->col[2];
+        if (m < 1e-4f) { l->col[3] = 0.0f; continue; }
+        for (k = 0; k < 3; k++)
+            l->col[k] /= m;
+        l->col[3] = EMIT_POWER * (m > 1.0f ? 1.0f : sqrtf(m));
+        l->dir[0] = l->dir[1] = l->dir[2] = 0.0f;
+        l->dir[3] = (float)RGL_LIGHT_POINT;
+    }
+    if (b.count && (g_lights_log++ % 600) == 0)
+        printf("dynamic lights: %d from %d emissive draws, the first at (%.1f %.1f %.1f) r %.1f "
+               "colour %.2f %.2f %.2f x%.2f\n", b.count, g_nemit, b.l[0].pos[0], b.l[0].pos[1],
+               b.l[0].pos[2], b.l[0].pos[3], b.l[0].col[0], b.l[0].col[1], b.l[0].col[2], b.l[0].col[3]);
+    g_nemit = 0;
+    B->lights(&b, (int)sizeof b);
+}
+
 static void shadow_forget(void)
 {
     SH.target = 0;
@@ -1591,6 +1737,10 @@ static void scene_flush(void)
     t0 = rgl_now_ms();
     rgl_shadow_tris = SH.nw / 12;
     if (rgl_shadows)
+        lights_build();
+    else
+        g_nemit = 0;
+    if (rgl_shadows)
         shadow_build();
     else {
         shadow_drop();
@@ -1625,7 +1775,8 @@ static void scene_flush(void)
 }
 
 /* one vertex out: position transformed, colour and texture coordinate */
-static void put(rgl_vtx *o, const float p[4], const float c[4], float s, float t)
+static void put(rgl_vtx *o, const float p[4], const float c[4], float s, float t,
+                const float *nrm)
 {
     const float *m = g_mvp.m;
     const float *x = g_tx.s[g_tx.top].m;
@@ -1643,8 +1794,24 @@ static void put(rgl_vtx *o, const float p[4], const float c[4], float s, float t
         o->s[1] = h[1] * p[0] + h[5] * p[1] + h[9] * p[2] + h[13] * p[3];
         o->s[2] = h[2] * p[0] + h[6] * p[1] + h[10] * p[2] + h[14] * p[3];
         o->s[3] = h[3] * p[0] + h[7] * p[1] + h[11] * p[2] + h[15] * p[3];
-    } else
+        /* DYNAMIC LIGHTS: where it is in the world, and its normal turned
+         * with it (the game scales its meshes evenly: no inverse
+         * transpose), made unit */
+        o->p[0] = o->s[0]; o->p[1] = o->s[1]; o->p[2] = o->s[2];
+        if (nrm) {
+            float a = h[0] * nrm[0] + h[4] * nrm[1] + h[8] * nrm[2];
+            float b = h[1] * nrm[0] + h[5] * nrm[1] + h[9] * nrm[2];
+            float d = h[2] * nrm[0] + h[6] * nrm[1] + h[10] * nrm[2];
+            float l = a * a + b * b + d * d;
+            l = l > 1e-20f ? 1.0f / sqrtf(l) : 0.0f;
+            o->n[0] = a * l; o->n[1] = b * l; o->n[2] = d * l;
+        } else
+            o->n[0] = o->n[1] = o->n[2] = 0.0f;
+    } else {
         o->s[0] = o->s[1] = o->s[2] = o->s[3] = 0.0f;
+        memset(o->n, 0, sizeof o->n);
+        memset(o->p, 0, sizeof o->p);
+    }
 }
 
 static void from_arrays(rgl_vtx *o, int i)
@@ -1670,7 +1837,15 @@ static void from_arrays(rgl_vtx *o, int i)
         s = comp(e, g_ta.type, 0);
         t = g_ta.size > 1 ? comp(e, g_ta.type, 1) : 0.0f;
     }
-    put(o, p, c, s, t);
+    if (g_na.on && g_na.p) {
+        const unsigned char *e = elem(&g_na, i);
+        float n[3];
+        for (k = 0; k < 3; k++)
+            n[k] = comp(e, g_na.type, k);
+        put(o, p, c, s, t, n);
+        return;
+    }
+    put(o, p, c, s, t, NULL);
 }
 
 static unsigned char bf(GLenum f)
@@ -1734,6 +1909,13 @@ static void submit(int topo, rgl_vtx *v, int n)
         && !(p.blend && p.dst == RGL_BF_ONE) && (p.depth_write || !SH.caster))
         f.bump = (t->bump > 0.0f ? t->bump : 1e-4f)   /* flat: the specular still */
                * (SH.caster ? BUMP_FIGHTER : BUMP_STAGE);
+    /* DYNAMIC LIGHTS: what is lit by them, what gives them */
+    if (g_sh_on && rgl_shadows && topo == RGL_TRIS) {
+        if (p.blend && p.dst == RGL_BF_ONE)
+            emit_note(t, v, n);
+        else
+            f.lit = SH.caster ? 2 : 1;
+    }
 
     memset(&sm, 0, sizeof sm);
     if (t) {
@@ -1918,6 +2100,44 @@ static int tris_indexed(int count, GLenum t, const void *idx)
 #pragma omp parallel for if (nu > 4096)
     for (i = 0; i < nu; i++)
         from_arrays(&cache[used[i]], used[i]);
+    /* DYNAMIC LIGHTS: a mesh that sent no normals (the fighters: their
+     * light is baked per frame, the smoothed ones) is given smooth ones
+     * here, each vertex the sum of its triangles' (area weighted, in the
+     * world). The game's front faces wind counter-clockwise; a mirrored
+     * fighter (yaw 0 and a mirror) winds the other way, which the matrix's
+     * determinant tells */
+    if (g_sh_on && rgl_shadows && !(g_na.on && g_na.p)) {
+        const float *h = g_shm.m;
+        float det = h[0] * (h[5] * h[10] - h[6] * h[9]) - h[4] * (h[1] * h[10] - h[2] * h[9])
+                  + h[8] * (h[1] * h[6] - h[2] * h[5]);
+        float sg = det < 0.0f ? -1.0f : 1.0f;
+        for (i = 0; i < nu; i++)
+            memset(cache[used[i]].n, 0, sizeof cache[0].n);
+        for (i = 0; i + 2 < count; i += 3) {
+            rgl_vtx *a = &cache[elem_index(t, idx, i)], *b = &cache[elem_index(t, idx, i + 1)];
+            rgl_vtx *c = &cache[elem_index(t, idx, i + 2)];
+            float u[3], w[3], fn[3];
+            int k;
+            for (k = 0; k < 3; k++) {
+                u[k] = b->p[k] - a->p[k];
+                w[k] = c->p[k] - a->p[k];
+            }
+            fn[0] = (u[1] * w[2] - u[2] * w[1]) * sg;
+            fn[1] = (u[2] * w[0] - u[0] * w[2]) * sg;
+            fn[2] = (u[0] * w[1] - u[1] * w[0]) * sg;
+            for (k = 0; k < 3; k++) {
+                a->n[k] += fn[k];
+                b->n[k] += fn[k];
+                c->n[k] += fn[k];
+            }
+        }
+        for (i = 0; i < nu; i++) {
+            float *q = cache[used[i]].n;
+            float l = q[0] * q[0] + q[1] * q[1] + q[2] * q[2];
+            l = l > 1e-30f ? 1.0f / sqrtf(l) : 0.0f;
+            q[0] *= l; q[1] *= l; q[2] *= l;
+        }
+    }
     need_out(count + 16);
     n = count / 3 * 3;
 #pragma omp parallel for if (n > 12288)
@@ -1965,7 +2185,7 @@ static void get_imm(rgl_vtx *o, int i, const void *ctx)
 {
     const ff_imm *v = &g_imm[i];
     (void)ctx;
-    put(o, &v->x, v->c, v->s, v->t);
+    put(o, &v->x, v->c, v->s, v->t, NULL);
 }
 
 void ff_glEnd(void)

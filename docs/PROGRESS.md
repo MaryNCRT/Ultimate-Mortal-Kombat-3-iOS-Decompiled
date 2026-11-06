@@ -97,6 +97,41 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+## DYNAMIC LIGHTS, phases 1-2 (2026-11-06, after 0.2.1)
+
+Part of ENHANCED LIGHTING (Vulkan and Direct3D 12). Mary played it: "se ve
+bien".
+
+- **Every glow is a light.** Each additive draw of the scene (a fireball, a
+  glow, sparks, a teleport) becomes a point light of its own colour where it
+  is: the texture's mean colour (`tex_avg`, measured at upload) times the
+  draw's vertex colour. Draws close together are merged, up to 16
+  (`rgl_ff.c` `emit_note`, `lights_build`). Radius 6x the draw's size,
+  2.5-12 units; power 2.5. The log prints a `dynamic lights:` line every
+  600 flushes with the count, the first light's place, radius and colour.
+- **Per pixel, on the stage and the fighters**, added over the game's own
+  light (Blinn-Phong in linear light, a smooth window to 0 at the radius,
+  spot cones by smoothstep); a stage with no glows looks as before. Spot
+  and directional lights are in the shader and the block but nothing places
+  them yet (a stage's lighting file, phase 4).
+- **Normals.** The stage's are the `.meshset`'s own: the 12 bytes the loader
+  skipped after u, v are unit normals matching the faces (checked over the
+  stage and fighter files). Kept outside the engine heap, keyed by the
+  mesh's vertex block (`RenderMesh.c` `pn_keep`), sent with
+  `glNormalPointer` only while ENHANCED LIGHTING is on
+  (`lime_port_dyn_normals`), so the GL-trace tests see the original calls.
+  The fighters' light is baked per frame, so their smooth normals are made
+  from their triangles in `rgl_ff.c` `tris_indexed` (a mirrored fighter's
+  winding flipped by the matrix's determinant).
+- **Renderer**: `rgl_vtx` gained the world normal and position (68 bytes);
+  `rgl_frag` gained `lit`; the light block (`rgl_light_block`, 1088 bytes)
+  is a dynamic uniform buffer in a ring in Vulkan and a root CBV in the
+  upload buffer in Direct3D 12 (`lights` backend call).
+
+Not yet: shadows from these lights (phase 5), each stage's sky colour,
+lighting files per stage and fighter, OpenGL
+([research/DYNAMIC-LIGHTING.md](research/DYNAMIC-LIGHTING.md)).
+
 ## ENHANCED LIGHTING (2026-11-06, after 0.2.1)
 
 REAL-TIME SHADOWS became **ENHANCED LIGHTING** (the same `rt_shadows=1`

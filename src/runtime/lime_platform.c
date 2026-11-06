@@ -55,6 +55,11 @@ extern float (*lime_port_root_y)(const void *bones);
 extern void (*lime_port_bones_freed)(const void *bones);
 extern int  (*lime_port_mesh_parts)(const unsigned short *indices, long nfaces,
                                     unsigned tex_name);
+extern int  (*lime_port_dyn_normals)(void);    /* RenderMesh.c */
+extern int rgl_shadows;                        /* render/rgl.h */
+
+/* DYNAMIC LIGHTS want the stage meshes' normals while ENHANCED LIGHTING is on */
+static int port_dyn_normals(void) { return rgl_shadows; }
 
 
 /* The engine passes paths relative to the bundle ("FLOOR.meshset",
@@ -78,6 +83,7 @@ void lime_platform_set_asset_root(const char *path)
     lime_port_root_y = port_skin_root_y;               /* the proportion trick */
     lime_port_bones_freed = port_skin_bones_forget;
     lime_port_mesh_parts = port_skin_mats_draw;
+    lime_port_dyn_normals = port_dyn_normals;
 }
 
 /* The port reads its own `res` folder and nothing outside it. The engine asks

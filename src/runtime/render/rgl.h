@@ -74,6 +74,10 @@ typedef struct {
     unsigned char rgba[4];
     float u, v;
     float s[4];
+    float n[3];                            /* DYNAMIC LIGHTS: the normal in
+                                            * world space, 0 when the draw
+                                            * had none (glNormalPointer) */
+    float p[3];                            /* and where it is in the world */
 } rgl_vtx;
 
 enum { RGL_TRIS, RGL_LINES };
@@ -104,6 +108,9 @@ typedef struct {
                                             * bits above: the receiver's own
                                             * caster, skipped), or the map's
                                             * texel itself */
+    int   lit;                             /* DYNAMIC LIGHTS: 1 the stage, 2 a
+                                            * fighter, lit by rgl_lights;
+                                            * 0 not */
     float bump;                            /* ENHANCED LIGHTING's relief: how
                                             * steep the texture's own Sobel
                                             * slopes are made (0 none; only
@@ -155,7 +162,31 @@ typedef struct rgl_backend {
     /* the target draws sample as the shadow map from now on (its colour, a
      * depth packed in RGBA8), made readable; 0 none */
     void (*shadow_map)(int target);
+    /* DYNAMIC LIGHTS: the lights the draws from now on are lit by, an
+     * rgl_light_block (copied; the draws before keep theirs) */
+    void (*lights)(const void *block, int bytes);
 } rgl_backend;
+
+/* DYNAMIC LIGHTS (ENHANCED LIGHTING, rgl_ff.c): point, spot and directional
+ * lights in world space, per pixel. 64 bytes each, as the shaders read them
+ * (std140 / HLSL cbuffer alike: four float4). */
+#define RGL_MAX_LIGHTS 16
+enum { RGL_LIGHT_POINT, RGL_LIGHT_SPOT, RGL_LIGHT_DIR };
+typedef struct {
+    float pos[4];                          /* xyz; w the radius it reaches */
+    float col[4];                          /* rgb, linear; w the intensity */
+    float dir[4];                          /* xyz where a spot or a
+                                            * directional light points; w
+                                            * RGL_LIGHT_* */
+    float cone[4];                         /* a spot's cos inner, cos outer */
+} rgl_light;
+typedef struct {
+    float eye[4];                          /* the camera in the world */
+    float sky[4];                          /* ambient from above, rgb linear */
+    float ground[4];                       /* and from below */
+    int   count, pad[3];
+    rgl_light l[RGL_MAX_LIGHTS];
+} rgl_light_block;                         /* 1088 bytes */
 
 extern rgl_backend rgl_vk;
 #ifdef _WIN32
