@@ -165,6 +165,10 @@ typedef struct rgl_backend {
     /* DYNAMIC LIGHTS: the lights the draws from now on are lit by, an
      * rgl_light_block (copied; the draws before keep theirs) */
     void (*lights)(const void *block, int bytes);
+    /* DYNAMIC LIGHTS' shadows: the target the receivers sample as the
+     * point lights' cube faces (rgl_ff.c point_shadows), packed as the
+     * shadow map; 0 none */
+    void (*shadow_map2)(int target);
 } rgl_backend;
 
 /* DYNAMIC LIGHTS (ENHANCED LIGHTING, rgl_ff.c): point, spot and directional

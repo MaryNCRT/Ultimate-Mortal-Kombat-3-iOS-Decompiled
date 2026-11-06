@@ -1428,6 +1428,144 @@ static void emit_note(const ff_tex *t, const rgl_vtx *v, int n)
     g_nemit++;
 }
 
+/* DYNAMIC LIGHTS' shadows (research/DYNAMIC-LIGHTING.md, phase 5): the
+ * strongest point lights (PS_LIGHTS) cast the fighters' shadows, all round,
+ * as a cube map would -- six views of 90 degrees (a little over, so the
+ * faces overlap and a filter does not run off one) from the light, each
+ * into its own tile of one target: three tiles across, two rows a light.
+ * Only the fighters cast (their triangles held for the key light's map,
+ * an id each), on the stage and on the other fighter; a fighter skips his
+ * own (as the key light's map does). The texel is the shadow map's: the
+ * depth packed in RGB and the caster in A, so the same shader writes it.
+ * The shaders (point_shadow) read it with the same faces, tiles, field of
+ * view and near plane: change them together. */
+#define PS_LIGHTS 2
+#define PS_TILE 512
+#define PS_NEAR 0.05f
+#define PS_FOV 1.05f                    /* tan of half a face's view */
+
+static int g_ps_target;
+static float *g_psw;                    /* the fighters' triangles, world xyz and id */
+static int g_cpsw;
+static rgl_vtx *g_psv;
+static int g_cpsv;
+static const float k_face_f[6][3] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 },
+                                      { 0, -1, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
+static const float k_face_u[6][3] = { { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 },
+                                      { 0, 0, 1 }, { 0, 1, 0 }, { 0, 1, 0 } };
+
+static void point_shadows(rgl_light_block *b)
+{
+    static const float white[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    int pick[PS_LIGHTS], np = 0, i, j, k, nv = 0, n = SH.nw / 4;
+    rgl_pipe p;
+    rgl_frag f;
+    rgl_samp sm;
+
+    if (!B || !B->shadow_map2)
+        return;
+    B->shadow_map2(0);
+    /* the strongest point lights, their power times their reach */
+    for (j = 0; j < PS_LIGHTS; j++) {
+        int best = -1;
+        float bv = 0.0f;
+        for (i = 0; i < b->count; i++) {
+            float v = b->l[i].col[3] * b->l[i].pos[3];
+            int taken = 0;
+            for (k = 0; k < np; k++)
+                taken |= pick[k] == i;
+            if (!taken && (int)(b->l[i].dir[3] + 0.5f) == RGL_LIGHT_POINT && v > bv) {
+                bv = v;
+                best = i;
+            }
+        }
+        if (best < 0)
+            break;
+        pick[np++] = best;
+    }
+    if (!np)
+        return;
+    /* the fighters' triangles among the casters held */
+    if (n > g_cpsw) {
+        float *a = (float *)realloc(g_psw, (size_t)n * 2 * 4 * sizeof *a);
+        if (!a)
+            return;
+        g_psw = a;
+        g_cpsw = n * 2;
+    }
+    for (i = 0; i + 2 < n; i += 3)
+        if (SH.w[i * 4 + 3] != 0.0f) {
+            memcpy(g_psw + nv * 4, SH.w + i * 4, 12 * sizeof(float));
+            nv += 3;
+        }
+    if (!nv)
+        return;
+    if (nv > g_cpsv) {
+        rgl_vtx *a = (rgl_vtx *)realloc(g_psv, (size_t)nv * 2 * sizeof *a);
+        if (!a)
+            return;
+        g_psv = a;
+        g_cpsv = nv * 2;
+    }
+    if (!g_ps_target) {
+        g_ps_target = B->target_new(3 * PS_TILE, 2 * PS_LIGHTS * PS_TILE, 1, 1);
+        if (!g_ps_target)
+            return;
+        printf("dynamic lights: point shadows on, %dx%d\n", 3 * PS_TILE, 2 * PS_LIGHTS * PS_TILE);
+    }
+    B->target_use(g_ps_target);
+    B->clear(NULL, 1, white, 1, 1.0f);
+    memset(&p, 0, sizeof p);
+    p.topo = RGL_TRIS;
+    p.depth_test = p.depth_write = 1;
+    p.cull = RGL_CULL_NONE;
+    p.mask = 15;
+    memset(&f, 0, sizeof f);
+    f.tex_mode = RGL_TEX_NONE;
+    f.shadow = RGL_SHADOW_DEPTH;
+    memset(&sm, 0, sizeof sm);
+    sm.aniso = 1;
+    for (j = 0; j < np; j++) {
+        rgl_light *l = &b->l[pick[j]];
+        const float fr = l->pos[3] > PS_NEAR * 2.0f ? l->pos[3] : PS_NEAR * 2.0f;
+        const float A = -(fr + PS_NEAR) / (fr - PS_NEAR), Bc = -2.0f * fr * PS_NEAR / (fr - PS_NEAR);
+        int fc;
+        for (fc = 0; fc < 6; fc++) {
+            const float *F = k_face_f[fc], *U = k_face_u[fc];
+            float R[3];
+            rgl_rect vp;
+            /* R = U x -F: the face's right, so (R, U, -F) is a camera */
+            R[0] = -(U[1] * F[2] - U[2] * F[1]);
+            R[1] = -(U[2] * F[0] - U[0] * F[2]);
+            R[2] = -(U[0] * F[1] - U[1] * F[0]);
+            for (i = 0; i < nv; i++) {
+                const float *w = g_psw + i * 4;
+                float d[3], x, y, z;
+                rgl_vtx *o = &g_psv[i];
+                for (k = 0; k < 3; k++)
+                    d[k] = w[k] - l->pos[k];
+                x = d[0] * R[0] + d[1] * R[1] + d[2] * R[2];
+                y = d[0] * U[0] + d[1] * U[1] + d[2] * U[2];
+                z = d[0] * F[0] + d[1] * F[1] + d[2] * F[2];
+                memset(o, 0, sizeof *o);
+                o->x = x / PS_FOV;
+                o->y = y / PS_FOV;
+                o->z = A * -z + Bc;
+                o->w = z;
+                o->rgba[0] = o->rgba[1] = o->rgba[2] = o->rgba[3] = 255;
+                o->s[0] = w[3];         /* the caster's id, into the texel's A */
+            }
+            vp.x = (fc % 3) * PS_TILE;
+            vp.y = (j * 2 + fc / 3) * PS_TILE;
+            vp.w = vp.h = PS_TILE;
+            B->draw(&p, &f, 0, &sm, &vp, &vp, g_psv, nv);
+        }
+        l->cone[2] = (float)(j + 1);    /* its tiles, for the shaders */
+    }
+    B->shadow_map2(g_ps_target);
+    B->target_use(cur_target(g_draw_fb));
+}
+
 /* the lights for the held draws: the emissive draws merged into point
  * lights, and the camera, into a block for the backend */
 static void lights_build(void)
@@ -1491,6 +1629,7 @@ static void lights_build(void)
                "colour %.2f %.2f %.2f x%.2f\n", b.count, g_nemit, b.l[0].pos[0], b.l[0].pos[1],
                b.l[0].pos[2], b.l[0].pos[3], b.l[0].col[0], b.l[0].col[1], b.l[0].col[2], b.l[0].col[3]);
     g_nemit = 0;
+    point_shadows(&b);
     B->lights(&b, (int)sizeof b);
 }
 
