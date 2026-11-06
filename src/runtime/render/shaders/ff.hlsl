@@ -59,8 +59,8 @@ float light_at(float3 p, float3 dx, float3 dy, int self)
         g = float2(dy.y * dx.z - dx.y * dy.z, dx.x * dy.z - dy.x * dx.z) / det;
     g = clamp(g, -0.05, 0.05);
     bias = 0.0004 + dot(abs(g), px);
-    [unroll] for (y = -2; y <= 2; y++)
-        [unroll] for (x = -2; x <= 2; x++) {
+    [loop] for (y = -2; y <= 2; y++)
+        [loop] for (x = -2; x <= 2; x++) {
             float2 o = float2(x, y) * px * 2.0;
             float4 e = smap.SampleLevel(spt, uv + o, 0);
             float d = unpack_depth(e);
@@ -189,8 +189,8 @@ float point_shadow(int slot, float3 D, float far, int self)
     float n = 0.05, f = max(far, 0.1);
     float bias = 0.03 + 0.02 * z;
     float occ = 0.0;
-    [unroll] for (int y = -1; y <= 1; y++)
-        [unroll] for (int x = -1; x <= 1; x++) {
+    [loop] for (int y = -1; y <= 1; y++)
+        [loop] for (int x = -1; x <= 1; x++) {
             float2 q = clamp(px + float2(float(x), float(y)) * 1.5, o + 1.0, o + T - 1.0);
             float4 e = patlas.SampleLevel(spt, float2(q.x / sz.x, 1.0 - q.y / sz.y), 0);
             float d = unpack_depth(e);
@@ -308,7 +308,7 @@ float4 ao_pass(float2 fc)
             float a = (float(d) + noise) * 6.28318 / float(dirs);
             float2 dir = float2(cos(a), sin(a));
             float hmax = 0.0;
-            for (int s = 1; s <= 4; s++) {
+            [loop] for (int s = 1; s <= 4; s++) {
                 float3 v = view_at(uv + dir * rpx * (float(s) - noise * 0.5) / 4.0 / sz) - P;
                 float l = length(v);
                 if (l < 1e-4 || l > R)
@@ -355,8 +355,8 @@ float4 ao_blur(float2 fc)
     if (lb_aoparm2.z < 0.5)
         return float4(c0.r, c0.g, c0.b, 1.0);
     float s = 0.0, w = 0.0;
-    for (int y = -2; y <= 2; y++)
-        for (int x = -2; x <= 2; x++) {
+    [loop] for (int y = -2; y <= 2; y++)
+        [loop] for (int x = -2; x <= 2; x++) {
             float4 c = scr.SampleLevel(spt, uv + float2(float(x), float(y)) / sz, 0);
             float z = c.g + c.b / 255.0;
             float wt = max(0.0, 1.0 - abs(z - z0) / (0.03 * z0 + 1e-5));

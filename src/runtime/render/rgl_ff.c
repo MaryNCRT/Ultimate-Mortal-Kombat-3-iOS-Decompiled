@@ -2333,7 +2333,7 @@ float rgl_ao_floor = 0.40f, rgl_ao_scale = 0.5f;   /* Mary: a drop in fps, and h
 int   rgl_ao_debug;                     /* the debug views (rgl.h) */
 
 #define AO_FAR 3000.0f                  /* the distance packed, as a fraction of this */
-#define FIGHTER_AO 0.7f                 /* a fighter's share: his light is painted in */
+#define FIGHTER_AO 1.0f                 /* a fighter's share: all of it, as the stage (Mary) */
 
 static struct {
     int target_d, target_r, w, h;       /* AO.depth, AO.raw, their size */
