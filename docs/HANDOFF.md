@@ -163,9 +163,10 @@ press COMPILE.
   column goes in the private repo's `migrations/`, applied before deploying.
 - **Moves list kombos**: the KOMBOS column falls back to the engine's
   kombo trees (`PortKombosRead`, GameCode.c) when `MovesListTab` has no
-  section 3, for Cyrax only so far (`PortKomboFromEngine`). Eleven fighters
-  still show "-": decode the 0x6 / 0xc entries in their `ct_*` trees
-  (mkcombo.c) before switching them on.
+  section 3, for all 12 such fighters. An entry's low byte is the input
+  window (6, 9 or 0xc), not a kind; `+4 == 0x1111` ends a string in a
+  routine. The rows show buttons only (B+ for the roundhouse), not the
+  directions the hand-written section-3 lists print.
 - **Dynamic lighting**: ENHANCED LIGHTING (shadows, texture relief,
   specular, mipmaps) is in, and phases 1-2 of
   [research/DYNAMIC-LIGHTING.md](research/DYNAMIC-LIGHTING.md): every glow

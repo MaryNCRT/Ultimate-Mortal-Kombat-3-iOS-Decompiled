@@ -85,7 +85,6 @@ marked in the log below.
 | Slight slide in a kombo (issue #114) | **the original's rule**, checked instruction by instruction (`t_cc_*_punch` → `t_ccp3` → `t_separate_us`); nothing to fix |
 | Dynamic stage music, Genesis style (Soul Chamber first) | **research only**, nothing built: [research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md); waits for Mary's Genesis recording (WAV + GYM) |
 | Ambient occlusion and screen-space contact shadows (ENHANCED LIGHTING) | **research only**, nothing built: [research/AMBIENT-OCCLUSION.md](research/AMBIENT-OCCLUSION.md), [research/CONTACT-SHADOWS.md](research/CONTACT-SHADOWS.md); after `claude/dynamic-lighting` lands |
-| Kombos in the moves list for the other fighters with no section 3 (Kano, Sindel, Sektor, Kung Lao, Kabal, Shang Tsung, Smoke, Mileena, Reptile, classic Sub-Zero and Smoke) | open: Cyrax's come from the engine's kombo trees (`PortKombosRead`); the others' trees hold entry kinds 0x6 / 0xc not decoded yet |
 | After CANCEL in STAGE SELECT the select screen came back silent once | fixed by never stopping the tune on the way; the log says `stage select: the tune ...` if it happens again |
 
 ### Where to look next
@@ -97,6 +96,28 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## The other 11 fighters' kombos in the moves list (2026-11-06, after 0.2.1)
+
+Mary played it: works.
+
+- **The "entry kinds" 0x6 / 0xc were not kinds.** The low byte of an
+  entry's first word is the input window in frames: `t_comb0` (0x00032c90)
+  reads it with `ldrb` as the length and waits `n * 3 / 2` frames for the
+  next button. Every tree uses 6, 9 or 0xc. With that check dropped, all
+  23 fighters' trees decode.
+- **Two real special cases**, both from the binary: `+4 == 0x1111` means
+  +0x14 is a routine, not a list (`t_comb2`, 0x00032958); the walk ends the
+  string there (only Sonya and Nightwolf have one, and both have their own
+  section 3). A list that leads back to one already on the path (Sub-Zero's
+  `ct_sz_elbow3`) ends the string too.
+- **Duplicates:** a list can hold one button twice (Mileena's U+ kombos;
+  combo_scan_a11 takes the first, the port's UP rule reaches the second).
+  Rows are compared after mapping to the atlas codes and shown once, which
+  also merges HP/LP rows on the 5-button layout.
+- `PortKomboFromEngine` (Cyrax only) is gone: every fighter whose
+  `MovesListTab` entry has `rows3 = 0` uses the trees. At most 8 rows
+  (Kabal), which fits `PORT_KOMBO_ROWS`.
 
 ## Cyrax's kombos in the moves list (2026-11-06, after 0.2.1)
 
