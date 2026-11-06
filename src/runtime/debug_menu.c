@@ -62,6 +62,8 @@
 #include "platform/gl.h"
 #include "debug_menu.h"
 extern int rgl_ao_debug;                /* render/rgl.h: AMBIENT OCCLUSION's debug views */
+static const char *const k_aodbg_es[6];   /* the debug views' names, below */
+static const char *const k_aodbg_en[6];
 #include "rollback.h"
 #include "mp_net.h"
 
@@ -536,13 +538,9 @@ static void build(void)
         head(tx("PELEA", "FIGHT"));
         add(ROW_HITBOX, tx("CAJAS DE GOLPE", "HITBOXES"), "< %s >", on_off(g_hitbox));
         {   /* AMBIENT OCCLUSION's debug views (render/rgl.h rgl_ao_debug) */
-            static const char *const es[6] = { "NO", "AO (TRAS EL DESENFOQUE)", "AO (SIN DESENFOQUE)",
-                                               "PROFUNDIDAD", "NORMALES", "CONTRIBUCION FINAL" };
-            static const char *const en[6] = { "OFF", "AO (AFTER THE BLUR)", "AO (BEFORE THE BLUR)",
-                                               "DEPTH", "NORMALS", "FINAL CONTRIBUTION" };
             int v = rgl_ao_debug < 0 || rgl_ao_debug > 5 ? 0 : rgl_ao_debug;
             add(ROW_AODBG, tx("VISTA DE OCLUSION AMBIENTAL", "AMBIENT OCCLUSION VIEW"), "< %s >",
-                tx(es[v], en[v]));
+                tx(k_aodbg_es[v], k_aodbg_en[v]));
         }
         {
             char bar[24], pc[12];
@@ -611,6 +609,12 @@ static void change(int row, int d)
 
 /* ------------------------------------------------------------ lists */
 
+/* AMBIENT OCCLUSION's debug views, for the row and its list */
+static const char *const k_aodbg_es[6] = { "NO", "AO (TRAS EL DESENFOQUE)", "AO (SIN DESENFOQUE)",
+                                           "PROFUNDIDAD", "NORMALES", "CONTRIBUCION FINAL" };
+static const char *const k_aodbg_en[6] = { "OFF", "AO (AFTER THE BLUR)", "AO (BEFORE THE BLUR)",
+                                           "DEPTH", "NORMALS", "FINAL CONTRIBUTION" };
+
 static void drop_open(int row)
 {
     int n, i, *v = list_var(row, &n);
@@ -641,6 +645,9 @@ static void drop_open(int row)
         case ROW_SLOT:
             snprintf(L, 48, "%d %s", i + 1, dbg_state_has(i)
                      ? tx("GUARDADO", "SAVED") : tx("VACIO", "EMPTY"));
+            break;
+        case ROW_AODBG:                 /* the list had no names (Mary) */
+            snprintf(L, 48, "%s", tx(k_aodbg_es[i], k_aodbg_en[i]));
             break;
         }
     }

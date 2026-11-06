@@ -2305,7 +2305,7 @@ static int hold_clear(const rgl_rect *sc, int color, const float rgba[4], int de
  * The projection's scale and the viewport are taken from the first held
  * 3D draw. Off (ao=0, or without ENHANCED LIGHTING): no pass at all. */
 int   rgl_ao = 2, rgl_ao_samples = 16, rgl_ao_blur = 1;
-float rgl_ao_radius = 1.5f, rgl_ao_intensity = 2.0f, rgl_ao_bias = 0.03f;
+float rgl_ao_radius = 0.6f, rgl_ao_intensity = 1.5f, rgl_ao_bias = 0.03f;   /* radius: world units */
 float rgl_ao_floor = 0.40f, rgl_ao_scale = 0.5f;   /* Mary: a drop in fps, and hardly seen */
 int   rgl_ao_debug;                     /* the debug views (rgl.h) */
 
@@ -2346,7 +2346,16 @@ static void ao_block(rgl_light_block *b)
     b->aoproj[0] = AO.p00;
     b->aoproj[1] = AO.p11;
     b->aoproj[2] = AO_FAR;
-    b->aoproj[3] = rgl_ao_radius;
+    /* the radius in the camera's units: the occlusion works in them (the
+     * depth pass's distance), and the game's view matrix scales the world
+     * about 5 times -- given in world units it came out a fifth of what it
+     * meant, the occlusion hardly showing (Mary's debug views: only an arm
+     * against the torso) */
+    {
+        const float *iv = SH.inv_view.m;
+        float wpe = sqrtf(iv[0] * iv[0] + iv[1] * iv[1] + iv[2] * iv[2]);  /* world per eye unit */
+        b->aoproj[3] = rgl_ao_radius / (wpe > 1e-6f ? wpe : 1.0f);
+    }
     b->aoparm[0] = rgl_ao_intensity;
     b->aoparm[1] = rgl_ao_bias;
     b->aoparm[2] = rgl_ao_floor;
