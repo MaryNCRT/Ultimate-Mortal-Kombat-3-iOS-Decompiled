@@ -167,6 +167,10 @@ def main(argv):
     # puts them beside the game
     shutil.copytree(os.path.join(ROOT, "launcher", "aditional textures"),
                     os.path.join(out, "launcher", "aditional textures"))
+    # ENHANCED LIGHTING's stage files (lighting/README.txt), copied beside
+    # the game the same way
+    shutil.copytree(os.path.join(ROOT, "launcher", "lighting"),
+                    os.path.join(out, "launcher", "lighting"))
     build_stub(os.path.join(out, "UMK3-Launcher.exe"))
     copy_eos(out)
 

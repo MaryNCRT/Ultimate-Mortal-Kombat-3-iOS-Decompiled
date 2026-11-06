@@ -1002,6 +1002,7 @@ static D3D12_BLEND dx_bfa(int f)
 static ID3D12PipelineLibrary *g_lib;
 static void *g_lib_blob;                /* the library reads from it while it lives */
 static int g_lib_dirty, g_preloading;
+static int g_psos_new;                  /* made since the last present (diagnostic) */
 static unsigned g_shader_hash;
 #include "rgl_pipes_d3d12.h"
 
@@ -1142,13 +1143,22 @@ static ID3D12PipelineState *get_pso(const rgl_pipe *k, int samples, int depth)
     d.DSVFormat = depth ? DEPTH_FMT : DXGI_FORMAT_UNKNOWN;
     d.SampleDesc.Count = (UINT)samples;
     pso_name(name, k, samples, depth);
-    if (!g_lib || FAILED(ID3D12PipelineLibrary_LoadGraphicsPipeline(g_lib, name, &d,
-                                                                    &IID_ID3D12PipelineState, (void **)&p))) {
-        p = NULL;
-        if (!ok(ID3D12Device_CreateGraphicsPipelineState(g_dev, &d, &IID_ID3D12PipelineState, (void **)&p), "PSO"))
-            return NULL;
-        if (g_lib && SUCCEEDED(ID3D12PipelineLibrary_StorePipeline(g_lib, name, p)))
-            g_lib_dirty = 1;
+    {
+        double t0 = rgl_now_ms();
+        int hit = 1;
+        if (!g_lib || FAILED(ID3D12PipelineLibrary_LoadGraphicsPipeline(g_lib, name, &d,
+                                                                        &IID_ID3D12PipelineState, (void **)&p))) {
+            hit = 0;
+            p = NULL;
+            if (!ok(ID3D12Device_CreateGraphicsPipelineState(g_dev, &d, &IID_ID3D12PipelineState, (void **)&p), "PSO"))
+                return NULL;
+            if (g_lib && SUCCEEDED(ID3D12PipelineLibrary_StorePipeline(g_lib, name, p)))
+                g_lib_dirty = 1;
+        }
+        g_psos_new++;
+        if (!hit)                       /* diagnostic: the slow presents */
+            printf("d3d12: pipeline %s%s in %.1f ms (%s)\n", hit ? "loaded" : "made",
+                   g_preloading ? " ahead" : " in play", rgl_now_ms() - t0, hit ? "the library" : "compiled");
     }
     if (g_npsos >= g_cpsos) {
         g_cpsos = g_cpsos ? g_cpsos * 2 : 64;
@@ -1510,14 +1520,26 @@ static void dx_read(int t, const rgl_rect *r, unsigned char *out)
 
 static void dx_present(void)
 {
+    /* port diagnostic (Mary: a freeze of seconds as the game starts, in
+     * "presenting"): which part of a present takes the time, printed when
+     * one takes over 300 ms. Stays until the freeze is understood */
+    double t0 = rgl_now_ms(), t1, t2, t3;
     if (!g_list_on)
         check_size();
     frame_begin();
     to_state(&g_back[g_bi], D3D12_RESOURCE_STATE_PRESENT);
+    t1 = rgl_now_ms();
     flush();
+    t2 = rgl_now_ms();
     IDXGISwapChain3_Present(g_swap, !rgl_vsync ? 0 : rgl_swap_interval < 1 ? 1
                                     : rgl_swap_interval > 4 ? 4 : (UINT)rgl_swap_interval, 0);
+    t3 = rgl_now_ms();
     wait_gpu();
+    if (rgl_now_ms() - t0 > 300.0)
+        printf("d3d12 slow present: %.0f ms -- begin %.0f, the frame's commands run %.0f "
+               "(%d pipelines made since the last), Present %.0f, the GPU after %.0f\n",
+               rgl_now_ms() - t0, t1 - t0, t2 - t1, g_psos_new, t3 - t2, rgl_now_ms() - t3);
+    g_psos_new = 0;
     g_bi = IDXGISwapChain3_GetCurrentBackBufferIndex(g_swap);
     g_bound_target = -1;
 }

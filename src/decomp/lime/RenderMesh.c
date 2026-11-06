@@ -103,6 +103,12 @@ static void pn_keep(const void *key, float *n)
 /* set by the runtime (lime_platform.c): 1 while the lights want normals.
  * NULL in the tests, which then see the original's GL calls only */
 int (*lime_port_dyn_normals)(void);
+/* and which meshsets come and go (a stage's _LEVEL_SCENE is the stage
+ * being fought on: render/rgl_ff.c rgl_sky_stage). NULL in the tests */
+void (*lime_port_meshset_event)(const char *name, int loaded);
+/* and the name of the mesh being drawn, NULL after (a stage's lighting
+ * file anchors lights to meshes by name: rgl_ff.c rgl_mesh_name) */
+void (*lime_port_mesh_name)(const char *name);
 
 static const float *pn_get(const void *key)
 {
@@ -118,6 +124,8 @@ void LIME_FreeMeshSet(MESHSETINFO *set)
     if (!set) {
         return;
     }
+    if (lime_port_meshset_event)        /* port: DYNAMIC LIGHTS */
+        lime_port_meshset_event(set->name, 0);
     if (set->meshes) {
         for (int i = 0; i < set->numMeshes; i++) {
             MESHINFO *m = set->meshes[i];
@@ -225,6 +233,8 @@ MESHSETINFO *LIME_LoadMeshSet(const char *filename, int useLighting)
     }
 
     snprintf(set->name, sizeof(set->name), "%s", filename);
+    if (lime_port_meshset_event)        /* port: DYNAMIC LIGHTS */
+        lime_port_meshset_event(set->name, 1);
     set->texturesLoaded = 0;
 
     int32_t count;
@@ -1333,6 +1343,8 @@ void LIME_RenderMeshSingle(MESHINFO *mesh, TEXTURE *t0, TEXTURE *t1,
         const int clamp = t0 ? lime_port_edge_clamp(&mesh->verts[0].u, 4,
                                    mesh->indices, mesh->numFaces * 3) : 0;
         const float *nrm = pn_get(mesh->verts);  /* port: DYNAMIC LIGHTS */
+        if (lime_port_mesh_name)
+            lime_port_mesh_name(mesh->meshName);
         if (nrm) {
             glNormalPointer(GL_FLOAT, 0, nrm);
             glEnableClientState(GL_NORMAL_ARRAY);
@@ -1342,6 +1354,8 @@ void LIME_RenderMeshSingle(MESHINFO *mesh, TEXTURE *t0, TEXTURE *t1,
                            GL_UNSIGNED_SHORT, mesh->indices);   /* +0x1c */
         if (nrm)
             glDisableClientState(GL_NORMAL_ARRAY);
+        if (lime_port_mesh_name)
+            lime_port_mesh_name(NULL);
         lime_port_edge_restore(clamp);
     }
     glPopMatrix();
