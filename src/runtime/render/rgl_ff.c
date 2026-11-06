@@ -264,7 +264,7 @@ void rgl_ff_start(const rgl_backend *b, int width, int height)
 static void scene_flush(void);
 static void SH_end_frame(void);
 static int hold_clear(const rgl_rect *sc, int color, const float rgba[4], int depth);
-static void ao_note(const rgl_rect *vp);
+static void ao_note(const rgl_rect *vp, int fighter);
 static void ao_block(rgl_light_block *b);
 static void shadow_forget(void);
 
@@ -2297,7 +2297,7 @@ static int hold_draw(const rgl_pipe *p, const rgl_frag *f, int tex, const rgl_sa
     memcpy(g_hv + g_nhv, v, (size_t)n * sizeof *v);
     g_nhv += n;
     if ((f->shadow & 15) == RGL_SHADOW_RECEIVE && p->depth_test)
-        ao_note(vp);                    /* AMBIENT OCCLUSION: the 3D camera */
+        ao_note(vp, (f->shadow >> 4) != 0);     /* AMBIENT OCCLUSION: the 3D camera */
     return 1;
 }
 
@@ -2367,12 +2367,32 @@ static struct {
     int cfv;
     int scene_target, scene_h;
     int valid;                          /* the passes ran: the scene reads it */
+    int fighter_own;                    /* a fighter drawn with another camera */
 } AO;
 
 /* the first held 3D draw: its projection and viewport */
-static void ao_note(const rgl_rect *vp)
+static void ao_note(const rgl_rect *vp, int fighter)
 {
     int tw, th;
+    if (AO.have && fighter && !AO.fighter_own
+        && (memcmp(&g_pr.s[g_pr.top], &AO.proj, sizeof AO.proj) != 0
+            || vp->x != AO.vp.x || vp->y != AO.vp.y
+            || vp->w != AO.vp.w || vp->h != AO.vp.h))
+        /* a fighter with a projection or viewport of his own (the intros'
+         * close-ups): his base mesh, put in the depth with the first
+         * draw's camera, would miss where he is drawn, and the stage's
+         * occlusion behind him would darken him (Mary). His own held
+         * draws go into the depth instead (ao_passes). */
+    {
+        static int told;
+        AO.fighter_own = 1;
+        if (!told) {                    /* port diagnostic, once a run */
+            told = 1;
+            printf("ambient occlusion: a fighter with his own camera (viewport %d %d %d %d, "
+                   "the scene's %d %d %d %d): his own draws in the depth\n",
+                   vp->x, vp->y, vp->w, vp->h, AO.vp.x, AO.vp.y, AO.vp.w, AO.vp.h);
+        }
+    }
     if (AO.have || !rgl_ao || !rgl_shadows)
         return;
     AO.have = 1;
@@ -2454,11 +2474,22 @@ static void ao_quad(int mode, int w, int h)
 static void ao_passes(void)
 {
     static const float white[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    unsigned char cast[256];            /* the casters' ids SH.w holds */
     int i, w, h;
 
     AO.valid = 0;
     if (!AO.have || !rgl_ao || !rgl_shadows || !B->screen_map)
         return;
+    /* a fighter's held draw is left out of the depth only when his base
+     * mesh is in SH.w to stand for it: one drawn without being cast (as a
+     * caster id with no triangles kept) goes in from his own draws, or he
+     * would be missing and the stage's occlusion would darken him */
+    memset(cast, 0, sizeof cast);
+    for (i = 0; i < SH.nw / 4; i++) {
+        int id = (int)SH.w[i * 4 + 3];
+        if (id > 0 && id < 256)
+            cast[id] = 1;
+    }
     w = (int)(AO.vp.w * rgl_ao_scale + 0.5f);
     h = (int)(AO.vp.h * rgl_ao_scale + 0.5f);
     if (w < 16 || h < 16)
@@ -2487,9 +2518,24 @@ static void ao_passes(void)
         rgl_frag f;
         rgl_pipe p;
         rgl_rect vp;
+        if (hd->clear && hd->depth) {
+            /* a depth clear between the draws (the intros clear it before
+             * the fighters, so they stand in front of the stage whatever
+             * is nearer): kept here too, or a fighter behind a piece of the
+             * stage is missing from the depth and that piece's occlusion
+             * darkens him (Mary). The distances stay; a draw after it
+             * writes its own. */
+            static int told;
+            if (!told && i > 0) {       /* port diagnostic, once a run */
+                told = 1;
+                printf("ambient occlusion: a depth clear between the scene's draws, kept\n");
+            }
+            B->clear(NULL, 0, white, 1, 1.0f);
+            continue;
+        }
         if (hd->clear || (hd->f.shadow & 15) != RGL_SHADOW_RECEIVE || hd->p.blend || !hd->p.depth_write)
             continue;
-        if ((hd->f.shadow >> 4) != 0 && SH.nw)
+        if ((hd->f.shadow >> 4) != 0 && cast[(hd->f.shadow >> 4) & 255] && !AO.fighter_own)
             continue;                   /* a fighter: his base mesh, below */
         f = hd->f;
         f.shadow = RGL_AO_DEPTH;
@@ -2497,9 +2543,12 @@ static void ao_passes(void)
         f.lit = 0;
         p = hd->p;
         p.mask = 15;
-        vp.x = vp.y = 0;
-        vp.w = w;
-        vp.h = h;
+        /* its own viewport, placed in the depth as it is on the screen
+         * (AO.vp is the first draw's; the intros' fighters have their own) */
+        vp.x = AO.vp.w ? (int)((float)(hd->vp.x - AO.vp.x) * w / AO.vp.w + 0.5f) : 0;
+        vp.y = AO.vp.h ? (int)((float)(hd->vp.y - AO.vp.y) * h / AO.vp.h + 0.5f) : 0;
+        vp.w = AO.vp.w ? (int)((float)hd->vp.w * w / AO.vp.w + 0.5f) : w;
+        vp.h = AO.vp.h ? (int)((float)hd->vp.h * h / AO.vp.h + 0.5f) : h;
         B->draw(&p, &f, hd->tex, &hd->sm, &vp, NULL, g_hv + hd->first, hd->n);
     }
     /* the fighters into the depth from the triangles held for the key
@@ -2509,7 +2558,7 @@ static void ao_passes(void)
     {
         mat4 view, vp_m;
         int nv = 0, n = SH.nw / 4;
-        if (n && invert(&SH.inv_view, &view)) {
+        if (n && !AO.fighter_own && invert(&SH.inv_view, &view)) {
             vp_m = mul(&AO.proj, &view);
             if (n > AO.cfv) {
                 rgl_vtx *a = (rgl_vtx *)realloc(AO.fv, (size_t)n * 2 * sizeof *a);
@@ -2634,7 +2683,7 @@ static void scene_flush(void)
     g_nheld = g_nhv = 0;
     if (AO.valid)                       /* AMBIENT OCCLUSION: done with it */
         B->screen_map(0);
-    AO.valid = AO.have = 0;
+    AO.valid = AO.have = AO.fighter_own = 0;
     rgl_shadow_ms += rgl_now_ms() - t0;
 }
 
