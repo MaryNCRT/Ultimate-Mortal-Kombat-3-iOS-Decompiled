@@ -215,7 +215,7 @@ vec3 dynamic(vec3 P, vec3 N, vec3 albedo, float smap, bool fighter, int self)
                 continue;
             Ld = d / max(dist, 1e-4);
             float w = clamp(1.0 - x * x * x * x, 0.0, 1.0);
-            att = w * w / (1.0 + 16.0 * x * x);
+            att = w * w / (1.0 + 4.0 * x * x);   // softer: reaches the fighters as they near it (Mary)
             if (type == 1)
                 att *= smoothstep(L.cone.y, L.cone.x, dot(-Ld, normalize(L.dir.xyz)));
             if (L.cone.z > 0.5)         // a light with shadows (point_shadows)
@@ -227,7 +227,7 @@ vec3 dynamic(vec3 P, vec3 N, vec3 albedo, float smap, bool fighter, int self)
         vec3 H = normalize(Ld + V);
         spc += c * pow(max(dot(N, H), 0.0), sh) * (sh + 8.0) / 25.13 * ndl;
     }
-    return albedo * dif * (fighter ? 0.6 : 1.0) + spc * smap * (fighter ? 0.15 : 0.5);
+    return albedo * dif * (fighter ? 0.9 : 1.0) + spc * smap * (fighter ? 0.15 : 0.5);
 }
 
 void main()
