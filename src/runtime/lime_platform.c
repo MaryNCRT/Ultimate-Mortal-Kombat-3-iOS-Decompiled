@@ -60,6 +60,8 @@ extern void (*lime_port_meshset_event)(const char *name, int loaded);
 void rgl_sky_stage(const char *name, int loaded);   /* render/rgl_ff.c */
 extern void (*lime_port_mesh_name)(const char *name);
 void rgl_mesh_name(const char *name);               /* render/rgl_ff.c */
+extern void (*lime_port_mesh_fullbright)(int on);
+void rgl_mesh_fullbright(int on);                   /* render/rgl_ff.c */
 extern int rgl_shadows;                        /* render/rgl.h */
 
 /* DYNAMIC LIGHTS want the stage meshes' normals while ENHANCED LIGHTING is on */
@@ -90,6 +92,7 @@ void lime_platform_set_asset_root(const char *path)
     lime_port_dyn_normals = port_dyn_normals;
     lime_port_meshset_event = rgl_sky_stage;
     lime_port_mesh_name = rgl_mesh_name;
+    lime_port_mesh_fullbright = rgl_mesh_fullbright;
 }
 
 /* The port reads its own `res` folder and nothing outside it. The engine asks

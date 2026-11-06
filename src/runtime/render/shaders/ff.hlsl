@@ -482,15 +482,15 @@ float4 ps(PSIn i) : SV_Target
                 float3 tint = lerp(lb_ground.rgb, lb_sky.rgb, up);
                 float tk = lerp(lb_ground.w, lb_sky.w, up);   // the fighters as much as the stage (Mary)
                 lin *= lerp(float3(1.0, 1.0, 1.0), tint, tk);
-                float ao = lerp(1.0, ao_at(i.pos.xy), fighter ? lb_aoparm2.y : 1.0);
-                ao = lerp(ao, 1.0, (1.0 - lt) * 0.5);
-                lin *= max(ao, lb_aoparm.z);
-                if (lb_aodbg.x > 0.5 && lb_aoparm2.w > 0.5)    // a debug view: that, alone
-                    return float4(ao_debug_view(i.pos.xy, max(ao, lb_aoparm.z)), 1.0);
                 // a dark stage's slight light on its fighters (rgl_ff.c FIGHTER_LIFT)
                 if (fighter)
                     lin += al * lb_eye.w;
                 lin += dynamic(i.p, N, al, sm2, fighter, shadow >> 4);
+                // AMBIENT OCCLUSION over everything, last (as ff.frag)
+                float ao = max(lerp(1.0, ao_at(i.pos.xy), fighter ? lb_aoparm2.y : 1.0), lb_aoparm.z);
+                lin *= ao;
+                if (lb_aodbg.x > 0.5 && lb_aoparm2.w > 0.5)    // a debug view: that, alone
+                    return float4(ao_debug_view(i.pos.xy, ao), 1.0);
             }
         }
         c.rgb = pow(lin, 1.0 / 2.2);

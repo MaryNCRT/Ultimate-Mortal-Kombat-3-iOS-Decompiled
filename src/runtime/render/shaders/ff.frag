@@ -471,20 +471,19 @@ void main()
                 vec3 tint = mix(lb.ground.rgb, lb.sky.rgb, up);
                 float tk = mix(lb.ground.w, lb.sky.w, up);   // the fighters as much as the stage (Mary)
                 lin *= mix(vec3(1.0), tint, tk);
-                // AMBIENT OCCLUSION on this colour (not the lights added
-                // after): a fighter's share of it, less where the map's
-                // shadow already darkens, never below the floor
-                float ao = mix(1.0, ao_at(gl_FragCoord.xy), fighter ? lb.aoparm2.y : 1.0);
-                ao = mix(ao, 1.0, (1.0 - lt) * 0.5);
-                lin *= max(ao, lb.aoparm.z);
-                if (lb.aodbg.x > 0.5 && lb.aoparm2.w > 0.5) {   // a debug view: that, alone
-                    o = vec4(ao_debug_view(gl_FragCoord.xy, max(ao, lb.aoparm.z)), 1.0);
-                    return;
-                }
                 // a dark stage's slight light on its fighters (rgl_ff.c FIGHTER_LIFT)
                 if (fighter)
                     lin += al * lb.eye.w;
                 lin += dynamic(v_p, N, al, sm2, fighter, pc.shadow >> 4);
+                // AMBIENT OCCLUSION over everything, last (Mary: under the
+                // other effects it hardly showed): a fighter's share of
+                // it, never below the floor
+                float ao = max(mix(1.0, ao_at(gl_FragCoord.xy), fighter ? lb.aoparm2.y : 1.0), lb.aoparm.z);
+                lin *= ao;
+                if (lb.aodbg.x > 0.5 && lb.aoparm2.w > 0.5) {   // a debug view: that, alone
+                    o = vec4(ao_debug_view(gl_FragCoord.xy, ao), 1.0);
+                    return;
+                }
             }
         }
         c.rgb = pow(lin, vec3(1.0 / 2.2));

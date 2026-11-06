@@ -1578,6 +1578,12 @@ static void point_shadows(rgl_light_block *b)
  *   sky_color=255,40,20    the sky's colour, in place of the measured one
  *   fighter_lift=0.15      the fighters' own light, in place of the guess
  *   glow_power=1.0         the glows' lights (emissive draws), times this
+ *   emissive=Object015     meshes that are light themselves (lava, neon,
+ *                          a lit window), by name, commas between: drawn
+ *                          at their own brightness -- no shadow, no
+ *                          occlusion, no tint -- and each a light of its
+ *                          texture's colour where it is, as the glows are.
+ *                          The game's own fullbright meshes are so already
  *   no_relief=Plane006     meshes drawn without relief and specular, by
  *                          name, commas between (a sky whose texture's
  *                          own lines showed: Mary, The Rooftop)
@@ -1611,11 +1617,18 @@ static struct {
     float sky_strength, sky_col[3], fighter_lift, glow_power;
     int has_sky_col, has_lift;
     char no_relief[256];                /* ",name,name," */
+    char emissive[256];                 /* the same, the self-lit ones */
     cfg_light l[CFG_LIGHTS];
     int n;
 } g_cfg;
 
 static const char *g_mesh_now;          /* the stage mesh being drawn */
+static int g_mesh_fb;                   /* and it is fullbright (the game's own self-lit) */
+
+void rgl_mesh_fullbright(int on)
+{
+    g_mesh_fb = on;
+}
 static struct { char name[64]; float p[3]; int logged; } g_seen[MESH_SEEN];
 static int g_nseen;
 
@@ -1731,10 +1744,10 @@ static void cfg_load(const char *scene)
             if (!strcmp(k, "sky_strength")) g_cfg.sky_strength = strtof(v, NULL);
             else if (!strcmp(k, "glow_power")) g_cfg.glow_power = strtof(v, NULL);
             else if (!strcmp(k, "fighter_lift")) { g_cfg.fighter_lift = strtof(v, NULL); g_cfg.has_lift = 1; }
-            else if (!strcmp(k, "no_relief")) {
-                char *q;
-                snprintf(g_cfg.no_relief, sizeof g_cfg.no_relief, ",%s,", v);
-                for (q = g_cfg.no_relief; *q; q++)  /* "a, b" as "a,b" */
+            else if (!strcmp(k, "no_relief") || !strcmp(k, "emissive")) {
+                char *dst = !strcmp(k, "emissive") ? g_cfg.emissive : g_cfg.no_relief, *q;
+                snprintf(dst, sizeof g_cfg.no_relief, ",%s,", v);
+                for (q = dst; *q; q++)  /* "a, b" as "a,b" */
                     if (*q == ' ' || *q == '\t')
                         memmove(q, q + 1, strlen(q)), q--;
             }
@@ -1765,6 +1778,16 @@ static void cfg_load(const char *scene)
     g_cfg.loaded = 1;
     printf("lighting: lighting/%s.ini, %d lights, sky x%.2f%s, glows x%.2f\n", g_cfg.scene, g_cfg.n,
            g_cfg.sky_strength, g_cfg.has_sky_col ? " (its own colour)" : "", g_cfg.glow_power);
+}
+
+/* a mesh the stage's file names self-lit (emissive) */
+static int cfg_emissive(const char *mesh)
+{
+    char key[70];
+    if (!mesh || !g_cfg.emissive[0])
+        return 0;
+    snprintf(key, sizeof key, ",%s,", mesh);
+    return strstr(g_cfg.emissive, key) != NULL;
 }
 
 /* a mesh the stage's file draws without relief (no_relief) */
@@ -2740,6 +2763,16 @@ static void submit(int topo, rgl_vtx *v, int n)
                 sky_note(t, v, n);      /* the stage's: is it the sky? */
             if (!SH.caster && g_mesh_now)
                 mesh_note(g_mesh_now, v, n);    /* for the lights anchored to it */
+        }
+        /* an emissive material (Mary): the game's fullbright meshes and
+         * the stage file's emissive ones are light themselves -- not
+         * shadowed, occluded or tinted, and a light of their colour */
+        if (!SH.caster && g_sky_stage && (g_mesh_fb || cfg_emissive(g_mesh_now))
+            && !(p.blend && p.dst == RGL_BF_ONE)) {
+            emit_note(t, v, n);
+            f.lit = 0;
+            f.bump = 0.0f;
+            f.shadow = RGL_SHADOW_NONE;
         }
     }
 
