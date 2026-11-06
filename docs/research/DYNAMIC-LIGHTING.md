@@ -1,6 +1,8 @@
 # Real-time dynamic lighting: compatibility report and plan
 
-**Status (2026-11-06):** phases 1 and 2 are in (normals and world
+**Status (2026-11-06):** phases 1, 2 and the point-light half of 5 are in
+(the two strongest point lights cast the fighters' shadows, cube faces in
+an atlas); phases 1 and 2 are (normals and world
 positions to the GPU; point/spot/directional lights in the shaders, with
 emissive draws as point lights). Played by Mary. The rest is still plan.
 Phase 1 found that the fighters' light is baked per animation frame, so

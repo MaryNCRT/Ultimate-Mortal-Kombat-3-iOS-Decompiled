@@ -165,8 +165,9 @@ press COMPILE.
   specular, mipmaps) is in, and phases 1-2 of
   [research/DYNAMIC-LIGHTING.md](research/DYNAMIC-LIGHTING.md): every glow
   is a coloured point light on the stage and the fighters (`rgl_ff.c`
-  `lights_build`). Next: shadows for those lights (phase 5), each stage's
-  sky colour and lighting files (phases 3-4). The shaders
+  `lights_build`). The two strongest also cast the fighters' shadows (phase 5,
+  `point_shadows`). Next: each stage's sky colour and lighting files
+  (phases 3-4). The shaders
   are rebuilt with `render/shaders/build.py` (glslang in
   `WORK/tools/glslang`, fxc from the Windows SDK).
 - **Ambient occlusion and contact shadows**: investigated, not built. The
