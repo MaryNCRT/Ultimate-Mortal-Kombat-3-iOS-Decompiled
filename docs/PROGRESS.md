@@ -143,9 +143,10 @@ by Mary in her test folder (Direct3D 12).
   `PortMvPreloadPortraits` (GameCode.c) loads both fighters' at the end of
   Task_GameInit, before `DeleteLoadingScreenTexture`; the slow-frame line
   showed 42-100 ms on the first open with HD NINJAS' 1080x1080 PNGs.
-- Seen in the same logs, not changed: opening the settings menu takes
-  ~150 ms over two frames; one 931 ms tick in a fight with nothing logged
-  around it.
+- Seen in the same logs, not changed: opening the settings menu took
+  ~150 ms over two frames (Mary reports it gone in 0.3.1b; nothing was
+  changed for it, cause unknown); one 931 ms tick in a fight with nothing
+  logged around it.
 
 ## After 0.3.0: frames back under 16.7 ms (2026-11-06)
 

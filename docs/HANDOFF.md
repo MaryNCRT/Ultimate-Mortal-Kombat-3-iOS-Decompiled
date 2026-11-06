@@ -189,8 +189,9 @@ press COMPILE.
   Vulkan's needs `VK_KHR_present_wait`; without it Vulkan still queues as
   before. Not measured with a camera or a latency tester yet; if a frame
   over 16.7 ms now shows a refresh late, that is the trade (the option
-  turns it off). Opening the settings menu costs ~150 ms (seen, not
-  looked into).
+  turns it off). Opening the settings menu cost ~150 ms in 0.3.1's
+  logs; Mary no longer sees that stall in 0.3.1b (not looked into, so
+  the cause is unknown).
 - **Ambient occlusion and contact shadows**: investigated, not built. The
   designs (a technique selector Crytek SSAO / HBAO / Alchemy AO, and
   ray-marched contact shadows sharing one depth pre-pass in `scene_flush`)
