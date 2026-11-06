@@ -2304,8 +2304,8 @@ static int hold_clear(const rgl_rect *sc, int color, const float rgba[4], int de
  *
  * The projection's scale and the viewport are taken from the first held
  * 3D draw. Off (ao=0, or without ENHANCED LIGHTING): no pass at all. */
-int   rgl_ao = 2, rgl_ao_samples = 8, rgl_ao_blur = 1;
-float rgl_ao_radius = 1.0f, rgl_ao_intensity = 1.8f, rgl_ao_bias = 0.03f;
+int   rgl_ao = 2, rgl_ao_samples = 16, rgl_ao_blur = 1;
+float rgl_ao_radius = 1.5f, rgl_ao_intensity = 2.0f, rgl_ao_bias = 0.03f;
 float rgl_ao_floor = 0.40f, rgl_ao_scale = 0.5f;   /* Mary: a drop in fps, and hardly seen */
 int   rgl_ao_debug;                     /* the debug views (rgl.h) */
 

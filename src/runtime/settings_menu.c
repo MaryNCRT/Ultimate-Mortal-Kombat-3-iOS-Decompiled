@@ -731,15 +731,7 @@ static void build(void)
         add(R_AO, 0, tx("OCLUSION AMBIENTAL", "AMBIENT OCCLUSION"), "< %s >",
             rgl_ao ? tx("ACTIVADA", "ON") : tx("DESACTIVADA", "OFF"));
         g_rows[g_n - 1].en = rgl_shadows != 0;
-        {
-            static const char *const dv_es[6] = { "DESACTIVADA", "AO (TRAS EL DESENFOQUE)", "AO (SIN DESENFOQUE)",
-                                                  "PROFUNDIDAD", "NORMALES", "CONTRIBUCION FINAL" };
-            static const char *const dv_en[6] = { "OFF", "AO (AFTER THE BLUR)", "AO (BEFORE THE BLUR)",
-                                                  "DEPTH", "NORMALS", "FINAL CONTRIBUTION" };
-            add(R_AODBG, 0, tx("VISTA DE DEPURACION DE AO", "AO DEBUG VIEW"), "< %s >",
-                tx(dv_es[rgl_ao_debug], dv_en[rgl_ao_debug]));
-            g_rows[g_n - 1].en = rgl_shadows != 0 && rgl_ao != 0;
-        }
+        /* its debug views are in the debug menu (debug_menu.c ROW_AODBG) */
         add(R_HEAD, 0, rgl_renderer == RGL_OPENGL
                            ? tx("  SOLO CON VULKAN O DIRECT3D 12", "  ONLY WITH VULKAN OR DIRECT3D 12")
                            : tx("  EXPERIMENTALES", "  EXPERIMENTAL"), "");

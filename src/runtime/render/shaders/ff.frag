@@ -291,7 +291,7 @@ vec4 ao_pass(vec2 fc)
         }
         ao = 1.0 - 2.0 * k * R * occ / float(n);
     } else if (tech == 2) {
-        int dirs = max(n / 4, 2);
+        int dirs = clamp(n / 4, 4, 8);  // never under four: two left most pixels blind (Mary saw dots)
         for (int d = 0; d < 8; d++) {
             if (d >= dirs)
                 break;
@@ -327,7 +327,9 @@ vec4 ao_pass(vec2 fc)
         }
         ao = 1.0 - k * occ / float(n);
     }
-    return vec4(clamp(ao, 0.0, 1.0), e, 1.0);
+    ao = clamp(ao, 0.0, 1.0);
+    ao = ao * ao;                       // the occluded darker, the open as they were
+    return vec4(ao, e, 1.0);
 }
 
 // the occlusion blurred 5x5, each texel weighed by how near its distance is

@@ -61,6 +61,7 @@
 #include "platform/platform.h"
 #include "platform/gl.h"
 #include "debug_menu.h"
+extern int rgl_ao_debug;                /* render/rgl.h: AMBIENT OCCLUSION's debug views */
 #include "rollback.h"
 #include "mp_net.h"
 
@@ -299,7 +300,7 @@ enum {
     ROW_MOTARO, ROW_SK,
     ROW_HEALTH, ROW_CLOCK,
     ROW_KEYS, ROW_INFO, ROW_FPS, ROW_NET,
-    ROW_HITBOX, ROW_SPEED, ROW_SLOT, ROW_SAVE, ROW_LOAD,
+    ROW_HITBOX, ROW_AODBG, ROW_SPEED, ROW_SLOT, ROW_SAVE, ROW_LOAD,
     ROW_CLOSE, ROW_HEAD
 };
 
@@ -534,6 +535,15 @@ static void build(void)
             "< %s >", on_off(g_net));
         head(tx("PELEA", "FIGHT"));
         add(ROW_HITBOX, tx("CAJAS DE GOLPE", "HITBOXES"), "< %s >", on_off(g_hitbox));
+        {   /* AMBIENT OCCLUSION's debug views (render/rgl.h rgl_ao_debug) */
+            static const char *const es[6] = { "NO", "AO (TRAS EL DESENFOQUE)", "AO (SIN DESENFOQUE)",
+                                               "PROFUNDIDAD", "NORMALES", "CONTRIBUCION FINAL" };
+            static const char *const en[6] = { "OFF", "AO (AFTER THE BLUR)", "AO (BEFORE THE BLUR)",
+                                               "DEPTH", "NORMALS", "FINAL CONTRIBUTION" };
+            int v = rgl_ao_debug < 0 || rgl_ao_debug > 5 ? 0 : rgl_ao_debug;
+            add(ROW_AODBG, tx("VISTA DE OCLUSION AMBIENTAL", "AMBIENT OCCLUSION VIEW"), "< %s >",
+                tx(es[v], en[v]));
+        }
         {
             char bar[24], pc[12];
             snprintf(pc, sizeof pc, "%d%%", k_speed[g_speed]);
@@ -573,6 +583,7 @@ static int *list_var(int row, int *n)
     case ROW_HEALTH:   *n = 4;               return &g_health;
     case ROW_SPEED:    *n = N_SPEEDS;        return &g_speed;
     case ROW_SLOT:     *n = DBG_STATE_SLOTS; return &g_slot;
+    case ROW_AODBG:    *n = 6;               return &rgl_ao_debug;
     }
     *n = 0;
     return NULL;
