@@ -726,10 +726,10 @@ static void build(void)
         g_rows[g_n - 1].en = 0;
         add(R_RTSHADOW, 0, tx("ILUMINACION MEJORADA", "ENHANCED LIGHTING"), "< %s >",
             rgl_shadows ? tx("ACTIVADAS", "ON") : tx("DESACTIVADAS", "OFF"));
-        /* AMBIENT OCCLUSION, a part of it: off with it */
+        /* AMBIENT OCCLUSION, a part of it: off with it. On or off only
+         * (Mary); on is HBAO, ao= in umk3.ini can still pick another */
         add(R_AO, 0, tx("OCLUSION AMBIENTAL", "AMBIENT OCCLUSION"), "< %s >",
-            rgl_ao == 1 ? "CRYTEK SSAO" : rgl_ao == 2 ? "HBAO" : rgl_ao == 3 ? "ALCHEMY AO"
-                        : tx("DESACTIVADA", "OFF"));
+            rgl_ao ? tx("ACTIVADA", "ON") : tx("DESACTIVADA", "OFF"));
         g_rows[g_n - 1].en = rgl_shadows != 0;
         {
             static const char *const dv_es[6] = { "DESACTIVADA", "AO (TRAS EL DESENFOQUE)", "AO (SIN DESENFOQUE)",
@@ -1207,7 +1207,7 @@ static void change(int kind, int d)
         g_dirty = 1;
         return;
     case R_AO:                          /* at once, from the next frame */
-        rgl_ao = wrap(rgl_ao + d, 4);
+        rgl_ao = rgl_ao ? 0 : 2;        /* on: HBAO */
         g_dirty = 1;
         return;
     case R_AODBG:                       /* at once; not saved: a look, not a setting */
@@ -1429,11 +1429,9 @@ static int drop_fill(int kind)
         break;
     case R_AO:
         snprintf(L[0], 48, "%s", tx("DESACTIVADA", "OFF"));
-        snprintf(L[1], 48, "CRYTEK SSAO");
-        snprintf(L[2], 48, "HBAO");
-        snprintf(L[3], 48, "ALCHEMY AO");
-        n = 4;
-        g_drop_cur = rgl_ao;
+        snprintf(L[1], 48, "%s", tx("ACTIVADA", "ON"));
+        n = 2;
+        g_drop_cur = rgl_ao ? 1 : 0;
         break;
     case R_AODBG:
         snprintf(L[0], 48, "%s", tx("DESACTIVADA", "OFF"));
