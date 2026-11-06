@@ -8180,6 +8180,105 @@ static void PortMvPortrait(long character)
                    0.0f, 0.0f, 1.0f, 1.0f, col);
 }
 
+/* Port, not in the binary: KOMBOS read out of the fight engine's own kombo
+ * trees, for a fighter whose MovesListTab has no section 3 (Mary: Cyrax
+ * showed "-"). The engine starts a kombo when a high punch (t_do_elbow,
+ * ochar_elbow_combos) or a high kick (t_do_knee, ochar_knee_combos) lands,
+ * and combo_scan_a11 (mkcombo.c) walks a list of 0x18-byte entries from
+ * there:
+ *
+ *      +0x00  bit 15 ends the list; 9 in the low bits for these entries
+ *      +0x04  the strike's animation, in bits 8 and up
+ *      +0x08  low byte: the button (last_switch_ram's order, as the pads'
+ *             actions: 0 HP, 1 LP, 2 BL, 3 HK, 4 LK, 5 RUN)
+ *      +0x14  the next list when above 0x100, else the string ends
+ *
+ * Each path from the start to an end is one kombo. The button order was
+ * checked against the kombos the binary's own lists print for Sonya, Jax,
+ * Jade and Scorpion: their trees give the same buttons in the same order.
+ * The scan reads buttons only, so a kombo needs no direction; the one shown
+ * is animation 0x15 on a kick (the roundhouse), B+HK in those lists.
+ *
+ * Only for the fighters in PortKomboFromEngine: other trees hold entries of
+ * other kinds (0x6, 0xc), not decoded here, and those fighters keep "-". */
+extern uint32_t ochar_elbow_combos[];   /* 0x001663fc, one per fighter */
+extern uint32_t ochar_knee_combos[];    /* 0x0016645c */
+
+#define PORT_KOMBO_ROWS 8
+#define PORT_KOMBO_LEN  16
+
+static int  PortKomboSeq[PORT_KOMBO_ROWS][PORT_KOMBO_LEN];
+static long PortKomboCount;
+
+static int PortKomboFromEngine(long character)
+{
+    return character == 8;              /* CYRAX */
+}
+
+/* One button in the moves atlas's codes: 6-button HP LP B HK LK R, and the
+ * 5-button layout's P and K */
+static int PortKomboButton(int k, int six)
+{
+    static const int b6[6] = { 6, 7, 10, 8, 9, 11 };
+    static const int b5[6] = { 14, 14, 10, 13, 13, 11 };
+
+    return six ? b6[k] : b5[k];
+}
+
+/* Walk one list; returns 0 on an entry this does not know (then the
+ * fighter shows "-" rather than a guess). */
+static int PortKomboWalk(const unsigned char *e, int *seq, int n, int six,
+                         int depth)
+{
+    for (;;) {
+        uint32_t w0 = *(const uint32_t *)(const void *)e;
+        uint32_t ani = *(const uint32_t *)(const void *)(e + 4) >> 8;
+        uint32_t k = e[8];
+        uint32_t next = *(const uint32_t *)(const void *)(e + 0x14);
+        int m = n;
+
+        if ((w0 & 0x7fffu) != 9 || k > 5 || depth > 10)
+            return 0;
+        if ((k == 3 || k == 4) && ani == 0x15 && m + 2 < PORT_KOMBO_LEN - 1) {
+            seq[m++] = 1;               /* back */
+            seq[m++] = 15;              /* + */
+        }
+        if (m < PORT_KOMBO_LEN - 1)
+            seq[m++] = PortKomboButton((int)k, six);
+        if (next > 0x100) {
+            if (!PortKomboWalk((const unsigned char *)(uintptr_t)next, seq, m,
+                               six, depth + 1))
+                return 0;
+        } else if (PortKomboCount < PORT_KOMBO_ROWS) {
+            memcpy(PortKomboSeq[PortKomboCount], seq, sizeof(int) * (size_t)m);
+            PortKomboSeq[PortKomboCount][m] = -1;
+            PortKomboCount++;
+        }
+        if (w0 & 0x8000u)
+            return 1;
+        e += 0x18;
+    }
+}
+
+static long PortKombosRead(long character, int six)
+{
+    int seq[PORT_KOMBO_LEN];
+    int ok;
+
+    PortKomboCount = 0;
+    if (!PortKomboFromEngine(character) || character < 0 || character >= 24)
+        return 0;
+    seq[0] = PortKomboButton(0, six);   /* the high punch that landed */
+    ok = PortKomboWalk((const unsigned char *)(uintptr_t)
+                       ochar_elbow_combos[character], seq, 1, six, 0);
+    seq[0] = PortKomboButton(3, six);   /* the high kick */
+    ok = ok && PortKomboWalk((const unsigned char *)(uintptr_t)
+                             ochar_knee_combos[character], seq, 1, six, 0);
+    if (!ok)
+        PortKomboCount = 0;
+    return PortKomboCount;
+}
+
 static void PortMvAllPage(long character, int p2)
 {
     const MOVESLISTENTRY *e = &MovesListTab[character];
@@ -8224,9 +8323,19 @@ static void PortMvAllPage(long character, int p2)
         y = PortMvEntry(w * 2.5f, y, limeUC(name),
                         (const int *)((const char *)table + (base + r) * 0x40), 0, vs);
     }
-    if (e->rows3 == 0)
-        limeDrawFONT(&GameFont, limeUC("-"), w * 2.5f, 60.0f * FE_HeightScale, 1,
-                     0.6f * FE_WidthScale, fontcol);
+    if (e->rows3 == 0) {
+        long n = PortKombosRead(character,
+                                (p2 ? Player2NumButtons : Player1NumButtons) != 5);
+
+        vs = PortMvSpacing(n, 0);
+        for (r = 0; r < n; r++) {
+            usprintf(name, UC("KOMBO %d"), (int)r + 1);
+            y = PortMvEntry(w * 2.5f, y, limeUC(name), PortKomboSeq[r], 0, vs);
+        }
+        if (n == 0)
+            limeDrawFONT(&GameFont, limeUC("-"), w * 2.5f, 60.0f * FE_HeightScale, 1,
+                         0.6f * FE_WidthScale, fontcol);
+    }
 }
 
 void MovesList(void)

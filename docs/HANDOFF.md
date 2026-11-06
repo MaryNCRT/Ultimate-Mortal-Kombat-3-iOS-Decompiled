@@ -161,6 +161,11 @@ press COMPILE.
   ties the profile code and name to the account (names unique); FRIENDS is
   a page of PROFILE (`ProfFriends.svelte`). A server change that needs a new
   column goes in the private repo's `migrations/`, applied before deploying.
+- **Moves list kombos**: the KOMBOS column falls back to the engine's
+  kombo trees (`PortKombosRead`, GameCode.c) when `MovesListTab` has no
+  section 3, for Cyrax only so far (`PortKomboFromEngine`). Eleven fighters
+  still show "-": decode the 0x6 / 0xc entries in their `ct_*` trees
+  (mkcombo.c) before switching them on.
 - **Dynamic lighting**: ENHANCED LIGHTING (shadows, texture relief,
   specular, mipmaps) is in, and phases 1-2 of
   [research/DYNAMIC-LIGHTING.md](research/DYNAMIC-LIGHTING.md): every glow

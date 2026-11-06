@@ -90,6 +90,7 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 - With the on-screen controls hidden, a click on the screen still moves the fighter (Mary); next on the list.
 - Joining online, a pad's X glyph showed over START (Mary); not reproduced yet.
 - Some stages still pause up to ~1.3 s on their first frames (THE STREET), as their events load. A round's start can still show a slow frame or two.
+- The moves list's KOMBOS column shows "-" for 11 fighters (Kano, Sindel, Sektor, Kung Lao, Kabal, Shang Tsung, Smoke, Mileena, Reptile, classic Sub-Zero and Smoke): the binary's moves tables have none for them. Cyrax's now come from the engine's kombo trees.
 - Steam Deck: the fight played the 5-button layout whatever was chosen (#171); 0.2.0 changed how the choice is kept, not yet checked on a Deck.
 
 ## Building from source
