@@ -173,7 +173,8 @@ function defaultConfig() {
         smoothModels: 0,             /* smooth_models=: 0 off, 1 or 2 the subdivision level */
         sharpAngle: SHARP_ANGLE,     /* sharp_edge_angle=: degrees, 0..180 */
         sharpStrength: SHARP_STRENGTH,   /* sharp_edge_strength=: percent, 0..100 */
-        rtShadows: false,            /* rt_shadows=1: real-time shadows (experimental) */
+        rtShadows: false,            /* rt_shadows=1: ENHANCED LIGHTING (experimental) */
+        ao: 2,                       /* ao=: AMBIENT OCCLUSION, 0 off, 1 Crytek SSAO, 2 HBAO, 3 Alchemy AO */
         noobSaibot: false,           /* noob_saibot=1: Noob Saibot on the select grid (offline only) */
         komboSlide: true,            /* kombo_slide=0: no push apart mid-kombo (offline only) */
         language: 0,                 /* "" = follow Windows */
@@ -251,6 +252,7 @@ function load(p) {
         else if (key === 'sharp_edge_angle') cfg.sharpAngle = clampInt(num, 0, 180, SHARP_ANGLE);
         else if (key === 'sharp_edge_strength') cfg.sharpStrength = clampInt(num, 0, 100, SHARP_STRENGTH);
         else if (key === 'rt_shadows') cfg.rtShadows = num === 1;
+        else if (key === 'ao') cfg.ao = num >= 0 && num <= 3 ? num : 2;
         else if (key === 'noob_saibot') cfg.noobSaibot = num === 1;
         else if (key === 'kombo_slide') cfg.komboSlide = num !== 0;
         else if (key === 'language') {
@@ -359,6 +361,7 @@ function save(p, cfg) {
         'sharp_edge_angle=' + clampInt(cfg.sharpAngle, 0, 180, SHARP_ANGLE),
         'sharp_edge_strength=' + clampInt(cfg.sharpStrength, 0, 100, SHARP_STRENGTH),
         'rt_shadows=' + (cfg.rtShadows ? 1 : 0),
+        'ao=' + (cfg.ao >= 0 && cfg.ao <= 3 ? cfg.ao : 2),
         'noob_saibot=' + (cfg.noobSaibot ? 1 : 0),
         'kombo_slide=' + (cfg.komboSlide === false ? 0 : 1),
         'buttons=' + (cfg.buttons === 6 ? 6 : 5),

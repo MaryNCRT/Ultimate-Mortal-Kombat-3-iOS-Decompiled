@@ -118,6 +118,7 @@ enum {
     R_SHARPA, R_SHARPS,                 /* SMOOTH MODELS' sharp edges */
     R_RTSHADOW,                         /* ENHANCED LIGHTING: REAL-TIME SHADOWS and relief (render/rgl.h) */
     R_AO,                               /* AMBIENT OCCLUSION's technique (render/rgl.h rgl_ao) */
+    R_AODBG,                            /* and its debug views (rgl_ao_debug) */
     R_PALT, R_PGRAD,                    /* the outfit; the gradient picker */
     R_NOOB,                             /* NOOB SAIBOT ON THE ROSTER (FrontEnd.c) */
     R_CORNER,                           /* the fight's INFO and PAUSE buttons (GameCode.c) */
@@ -725,11 +726,12 @@ static void build(void)
         g_rows[g_n - 1].en = 0;
         add(R_RTSHADOW, 0, tx("ILUMINACION MEJORADA", "ENHANCED LIGHTING"), "< %s >",
             rgl_shadows ? tx("ACTIVADAS", "ON") : tx("DESACTIVADAS", "OFF"));
-        /* AMBIENT OCCLUSION, a part of it: off with it */
+        /* AMBIENT OCCLUSION, a part of it: off with it. On or off only
+         * (Mary); on is HBAO, ao= in umk3.ini can still pick another */
         add(R_AO, 0, tx("OCLUSION AMBIENTAL", "AMBIENT OCCLUSION"), "< %s >",
-            rgl_ao == 1 ? "CRYTEK SSAO" : rgl_ao == 2 ? "HBAO" : rgl_ao == 3 ? "ALCHEMY AO"
-                        : tx("DESACTIVADA", "OFF"));
+            rgl_ao ? tx("ACTIVADA", "ON") : tx("DESACTIVADA", "OFF"));
         g_rows[g_n - 1].en = rgl_shadows != 0;
+        /* its debug views are in the debug menu (debug_menu.c ROW_AODBG) */
         add(R_HEAD, 0, rgl_renderer == RGL_OPENGL
                            ? tx("  SOLO CON VULKAN O DIRECT3D 12", "  ONLY WITH VULKAN OR DIRECT3D 12")
                            : tx("  EXPERIMENTALES", "  EXPERIMENTAL"), "");
@@ -890,7 +892,7 @@ static int has_value(int kind)
     switch (kind) {
     case R_DISPLAY: case R_MONITOR: case R_RES: case R_RRES: case R_AA: case R_TEXQ:
     case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_SMOOTH: case R_SMODEL: case R_VSYNC: case R_NOOB: case R_CORNER: case R_SLIDE: case R_AUDIODEV: case R_GPU: case R_PLAYER: case R_LAYOUT:
-    case R_RTSHADOW: case R_AO: case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE: case R_PCOLOR2:
+    case R_RTSHADOW: case R_AO: case R_AODBG: case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE: case R_PCOLOR2:
     case R_PICONS:
         return 1;
     }
@@ -1197,8 +1199,11 @@ static void change(int kind, int d)
         g_dirty = 1;
         return;
     case R_AO:                          /* at once, from the next frame */
-        rgl_ao = wrap(rgl_ao + d, 4);
+        rgl_ao = rgl_ao ? 0 : 2;        /* on: HBAO */
         g_dirty = 1;
+        return;
+    case R_AODBG:                       /* at once; not saved: a look, not a setting */
+        rgl_ao_debug = wrap(rgl_ao_debug + d, 6);
         return;
     case R_SHARPA:                      /* at once, at the next frame drawn */
         port_sharp_angle += 5.0f * (float)d;
@@ -1416,11 +1421,19 @@ static int drop_fill(int kind)
         break;
     case R_AO:
         snprintf(L[0], 48, "%s", tx("DESACTIVADA", "OFF"));
-        snprintf(L[1], 48, "CRYTEK SSAO");
-        snprintf(L[2], 48, "HBAO");
-        snprintf(L[3], 48, "ALCHEMY AO");
-        n = 4;
-        g_drop_cur = rgl_ao;
+        snprintf(L[1], 48, "%s", tx("ACTIVADA", "ON"));
+        n = 2;
+        g_drop_cur = rgl_ao ? 1 : 0;
+        break;
+    case R_AODBG:
+        snprintf(L[0], 48, "%s", tx("DESACTIVADA", "OFF"));
+        snprintf(L[1], 48, "%s", tx("AO (TRAS EL DESENFOQUE)", "AO (AFTER THE BLUR)"));
+        snprintf(L[2], 48, "%s", tx("AO (SIN DESENFOQUE)", "AO (BEFORE THE BLUR)"));
+        snprintf(L[3], 48, "%s", tx("PROFUNDIDAD", "DEPTH"));
+        snprintf(L[4], 48, "%s", tx("NORMALES", "NORMALS"));
+        snprintf(L[5], 48, "%s", tx("CONTRIBUCION FINAL", "FINAL CONTRIBUTION"));
+        n = 6;
+        g_drop_cur = rgl_ao_debug;
         break;
     case R_LANG:
         for (n = 0; n < N_LANG; n++)

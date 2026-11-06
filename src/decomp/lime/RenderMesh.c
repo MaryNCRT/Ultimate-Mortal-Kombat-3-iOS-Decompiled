@@ -109,6 +109,9 @@ void (*lime_port_meshset_event)(const char *name, int loaded);
 /* and the name of the mesh being drawn, NULL after (a stage's lighting
  * file anchors lights to meshes by name: rgl_ff.c rgl_mesh_name) */
 void (*lime_port_mesh_name)(const char *name);
+/* and whether it is fullbright (IsTextureFullBright): self-lit, an
+ * emissive surface for the lights (rgl_ff.c rgl_mesh_fullbright) */
+void (*lime_port_mesh_fullbright)(int on);
 
 static const float *pn_get(const void *key)
 {
@@ -1345,6 +1348,8 @@ void LIME_RenderMeshSingle(MESHINFO *mesh, TEXTURE *t0, TEXTURE *t1,
         const float *nrm = pn_get(mesh->verts);  /* port: DYNAMIC LIGHTS */
         if (lime_port_mesh_name)
             lime_port_mesh_name(mesh->meshName);
+        if (lime_port_mesh_fullbright)
+            lime_port_mesh_fullbright(mesh->fullBright != 0);
         if (nrm) {
             glNormalPointer(GL_FLOAT, 0, nrm);
             glEnableClientState(GL_NORMAL_ARRAY);
@@ -1356,6 +1361,8 @@ void LIME_RenderMeshSingle(MESHINFO *mesh, TEXTURE *t0, TEXTURE *t1,
             glDisableClientState(GL_NORMAL_ARRAY);
         if (lime_port_mesh_name)
             lime_port_mesh_name(NULL);
+        if (lime_port_mesh_fullbright)
+            lime_port_mesh_fullbright(0);
         lime_port_edge_restore(clamp);
     }
     glPopMatrix();

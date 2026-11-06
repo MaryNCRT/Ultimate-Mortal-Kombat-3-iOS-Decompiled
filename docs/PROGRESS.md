@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-05 (release 0.2.1 beta: online fixes, the moves list, settings in one order, published as the pre-release `v0.2.1-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-06 (release 0.3.0 beta: ENHANCED LIGHTING -- shadows, relief, dynamic lights, each stage's sky, lighting files, ambient occlusion -- published as the pre-release `v0.3.0-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -96,6 +96,54 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## 0.3.0 beta (2026-11-06) — ENHANCED LIGHTING
+
+Published 2026-11-06 as the GitHub pre-release `v0.3.0-beta`. Played by
+Mary in her test folder through every step below (Direct3D 12); Vulkan
+built and run by the same code, OpenGL without any of it.
+
+**ENHANCED LIGHTING** (Vulkan and DirectX 12; `rt_shadows=1`, the GRAPHICS
+page and the launcher), everything in the entries below since 0.2.1:
+real-time shadows; relief and specular on every texture, the game's and a
+pack's; mipmaps; every glow a coloured light, the two strongest casting
+the fighters' shadows; each stage lit by its sky; per-stage lighting files
+(`lighting/<scene>.ini`); emissive materials; AMBIENT OCCLUSION (on/off).
+Also: PVRTC's block grid smoothed (every renderer); every fighter's
+KOMBOS in the moves list; the launcher no longer drops the game's own
+settings.
+
+Lighting files ship for Kahn's Kave, The Rooftop, The Bridge, The Bell
+Tower, Jade's Desert, The Graveyard, The Balcony and The Temple; the rest
+are lit as measured.
+
+## Since the last entry: AO over everything, emissive materials, The Temple and The Balcony (2026-11-06)
+
+- **AMBIENT OCCLUSION** fixed and made visible. Mary's debug views (the
+  debug menu's AMBIENT OCCLUSION VIEW: the occlusion after and before the
+  blur, the depth, the normals, the final contribution) showed the depth
+  and normals right and the occlusion all but empty: the radius was given
+  in world units, but the occlusion works in the camera's, which the
+  game's view scales about 5x -- it was a fifth of what it meant. Now
+  converted by the view's own scale (`ao_radius` 0.6 world units); HBAO
+  takes at least four directions (two left most pixels blind); the
+  result is squared; it is applied last, over the dynamic lights and the
+  fighters' light, a fighter as much as the stage. One on/off option in
+  the menu and the launcher (`ao=` still picks Crytek/Alchemy by hand).
+- **Emissive materials**: the game's fullbright meshes and a stage file's
+  `emissive=` ones are drawn self-lit (no shadow, occlusion or tint) and
+  each lights its surroundings in its texture's colour (`rgl_ff.c`, the
+  `lime_port_mesh_fullbright` hook). Kahn's Kave's lava and fires.
+- **Specular maps** were already there, made from each texture as the
+  relief is.
+- **The Temple**: `relief=1.6` (a new key), its four braziers warm on the
+  fighters (the middle two with shadows), the openings behind its arches a
+  cool green. **The Balcony**: its torches stronger.
+- **The startup stall** (the GPU seconds on the first frame: the driver
+  finishing the shader): the HLSL loops are no longer unrolled, the DXBC
+  38% smaller. Shorter; may not be gone.
+- Jade's Desert (warm daylight) and The Graveyard (night, moonlight)
+  lighting files; The Bell Tower's windows are the night sky.
 
 ## AMBIENT OCCLUSION; The Bridge's and The Bell Tower's lighting (2026-11-06, after 0.2.1)
 

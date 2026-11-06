@@ -1578,6 +1578,13 @@ static void point_shadows(rgl_light_block *b)
  *   sky_color=255,40,20    the sky's colour, in place of the measured one
  *   fighter_lift=0.15      the fighters' own light, in place of the guess
  *   glow_power=1.0         the glows' lights (emissive draws), times this
+ *   relief=1.6             the stage's relief and specular, times this
+ *   emissive=Object015     meshes that are light themselves (lava, neon,
+ *                          a lit window), by name, commas between: drawn
+ *                          at their own brightness -- no shadow, no
+ *                          occlusion, no tint -- and each a light of its
+ *                          texture's colour where it is, as the glows are.
+ *                          The game's own fullbright meshes are so already
  *   no_relief=Plane006     meshes drawn without relief and specular, by
  *                          name, commas between (a sky whose texture's
  *                          own lines showed: Mary, The Rooftop)
@@ -1608,14 +1615,21 @@ typedef struct {
 static struct {
     int loaded;
     char scene[64];
-    float sky_strength, sky_col[3], fighter_lift, glow_power;
+    float sky_strength, sky_col[3], fighter_lift, glow_power, relief;
     int has_sky_col, has_lift;
     char no_relief[256];                /* ",name,name," */
+    char emissive[256];                 /* the same, the self-lit ones */
     cfg_light l[CFG_LIGHTS];
     int n;
 } g_cfg;
 
 static const char *g_mesh_now;          /* the stage mesh being drawn */
+static int g_mesh_fb;                   /* and it is fullbright (the game's own self-lit) */
+
+void rgl_mesh_fullbright(int on)
+{
+    g_mesh_fb = on;
+}
 static struct { char name[64]; float p[3]; int logged; } g_seen[MESH_SEEN];
 static int g_nseen;
 
@@ -1678,6 +1692,7 @@ static void cfg_load(const char *scene)
     memset(&g_cfg, 0, sizeof g_cfg);
     g_cfg.sky_strength = 1.0f;
     g_cfg.glow_power = 1.0f;
+    g_cfg.relief = 1.0f;
     snprintf(g_cfg.scene, sizeof g_cfg.scene, "%s", scene);
     {
         char *dot = strrchr(g_cfg.scene, '.');
@@ -1730,11 +1745,12 @@ static void cfg_load(const char *scene)
         if (!l) {
             if (!strcmp(k, "sky_strength")) g_cfg.sky_strength = strtof(v, NULL);
             else if (!strcmp(k, "glow_power")) g_cfg.glow_power = strtof(v, NULL);
+            else if (!strcmp(k, "relief")) g_cfg.relief = strtof(v, NULL);
             else if (!strcmp(k, "fighter_lift")) { g_cfg.fighter_lift = strtof(v, NULL); g_cfg.has_lift = 1; }
-            else if (!strcmp(k, "no_relief")) {
-                char *q;
-                snprintf(g_cfg.no_relief, sizeof g_cfg.no_relief, ",%s,", v);
-                for (q = g_cfg.no_relief; *q; q++)  /* "a, b" as "a,b" */
+            else if (!strcmp(k, "no_relief") || !strcmp(k, "emissive")) {
+                char *dst = !strcmp(k, "emissive") ? g_cfg.emissive : g_cfg.no_relief, *q;
+                snprintf(dst, sizeof g_cfg.no_relief, ",%s,", v);
+                for (q = dst; *q; q++)  /* "a, b" as "a,b" */
                     if (*q == ' ' || *q == '\t')
                         memmove(q, q + 1, strlen(q)), q--;
             }
@@ -1765,6 +1781,16 @@ static void cfg_load(const char *scene)
     g_cfg.loaded = 1;
     printf("lighting: lighting/%s.ini, %d lights, sky x%.2f%s, glows x%.2f\n", g_cfg.scene, g_cfg.n,
            g_cfg.sky_strength, g_cfg.has_sky_col ? " (its own colour)" : "", g_cfg.glow_power);
+}
+
+/* a mesh the stage's file names self-lit (emissive) */
+static int cfg_emissive(const char *mesh)
+{
+    char key[70];
+    if (!mesh || !g_cfg.emissive[0])
+        return 0;
+    snprintf(key, sizeof key, ",%s,", mesh);
+    return strstr(g_cfg.emissive, key) != NULL;
 }
 
 /* a mesh the stage's file draws without relief (no_relief) */
@@ -2304,12 +2330,13 @@ static int hold_clear(const rgl_rect *sc, int color, const float rgba[4], int de
  *
  * The projection's scale and the viewport are taken from the first held
  * 3D draw. Off (ao=0, or without ENHANCED LIGHTING): no pass at all. */
-int   rgl_ao = 2, rgl_ao_samples = 8, rgl_ao_blur = 1;
-float rgl_ao_radius = 1.0f, rgl_ao_intensity = 1.8f, rgl_ao_bias = 0.03f;
+int   rgl_ao = 2, rgl_ao_samples = 16, rgl_ao_blur = 1;
+float rgl_ao_radius = 0.6f, rgl_ao_intensity = 1.5f, rgl_ao_bias = 0.03f;   /* radius: world units */
 float rgl_ao_floor = 0.40f, rgl_ao_scale = 0.5f;   /* Mary: a drop in fps, and hardly seen */
+int   rgl_ao_debug;                     /* the debug views (rgl.h) */
 
 #define AO_FAR 3000.0f                  /* the distance packed, as a fraction of this */
-#define FIGHTER_AO 0.7f                 /* a fighter's share: his light is painted in */
+#define FIGHTER_AO 1.0f                 /* a fighter's share: all of it, as the stage (Mary) */
 
 static struct {
     int target_d, target_r, w, h;       /* AO.depth, AO.raw, their size */
@@ -2345,7 +2372,16 @@ static void ao_block(rgl_light_block *b)
     b->aoproj[0] = AO.p00;
     b->aoproj[1] = AO.p11;
     b->aoproj[2] = AO_FAR;
-    b->aoproj[3] = rgl_ao_radius;
+    /* the radius in the camera's units: the occlusion works in them (the
+     * depth pass's distance), and the game's view matrix scales the world
+     * about 5 times -- given in world units it came out a fifth of what it
+     * meant, the occlusion hardly showing (Mary's debug views: only an arm
+     * against the torso) */
+    {
+        const float *iv = SH.inv_view.m;
+        float wpe = sqrtf(iv[0] * iv[0] + iv[1] * iv[1] + iv[2] * iv[2]);  /* world per eye unit */
+        b->aoproj[3] = rgl_ao_radius / (wpe > 1e-6f ? wpe : 1.0f);
+    }
     b->aoparm[0] = rgl_ao_intensity;
     b->aoparm[1] = rgl_ao_bias;
     b->aoparm[2] = rgl_ao_floor;
@@ -2358,6 +2394,7 @@ static void ao_block(rgl_light_block *b)
     b->aoparm2[1] = FIGHTER_AO;
     b->aoparm2[2] = (float)rgl_ao_blur;
     b->aoparm2[3] = AO.have && rgl_ao && rgl_shadows && B && B->screen_map ? 1.0f : 0.0f;
+    b->aodbg[0] = (float)rgl_ao_debug;
 }
 
 /* a full-screen draw into the current target, the fragment mode given */
@@ -2500,10 +2537,22 @@ static void ao_passes(void)
             B->draw(&p, &f, 0, &sm, &vp, NULL, AO.fv, nv);
         }
     }
+    if (rgl_ao_debug == 3 || rgl_ao_debug == 4) {   /* the depth itself, to look at */
+        B->screen_map(AO.target_d);
+        B->target_use(cur_target(g_draw_fb));
+        AO.valid = 1;
+        return;
+    }
     /* 2 the occlusion, from the depth */
     B->target_use(AO.target_r);
     B->screen_map(AO.target_d);
     ao_quad(RGL_AO_PASS, w, h);
+    if (rgl_ao_debug == 2) {            /* the occlusion before the blur */
+        B->screen_map(AO.target_r);
+        B->target_use(cur_target(g_draw_fb));
+        AO.valid = 1;
+        return;
+    }
     /* 3 the blur, back into AO.depth */
     B->target_use(AO.target_d);
     B->screen_map(AO.target_r);
@@ -2707,6 +2756,8 @@ static void submit(int topo, rgl_vtx *v, int n)
                * (SH.caster ? BUMP_FIGHTER : BUMP_STAGE);
     if (f.bump > 0.0f && !SH.caster && g_sky_stage && cfg_no_relief(g_mesh_now))
         f.bump = 0.0f;                  /* the stage's file: this one flat */
+    else if (f.bump > 0.0f && !SH.caster && g_sky_stage)
+        f.bump *= g_cfg.relief;         /* the stage's file: more or less relief */
     /* DYNAMIC LIGHTS: what is lit by them, what gives them */
     if (g_sh_on && rgl_shadows && topo == RGL_TRIS) {
         if (p.blend && p.dst == RGL_BF_ONE)
@@ -2717,6 +2768,16 @@ static void submit(int topo, rgl_vtx *v, int n)
                 sky_note(t, v, n);      /* the stage's: is it the sky? */
             if (!SH.caster && g_mesh_now)
                 mesh_note(g_mesh_now, v, n);    /* for the lights anchored to it */
+        }
+        /* an emissive material (Mary): the game's fullbright meshes and
+         * the stage file's emissive ones are light themselves -- not
+         * shadowed, occluded or tinted, and a light of their colour */
+        if (!SH.caster && g_sky_stage && (g_mesh_fb || cfg_emissive(g_mesh_now))
+            && !(p.blend && p.dst == RGL_BF_ONE)) {
+            emit_note(t, v, n);
+            f.lit = 0;
+            f.bump = 0.0f;
+            f.shadow = RGL_SHADOW_NONE;
         }
     }
 

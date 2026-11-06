@@ -203,9 +203,10 @@ typedef struct {
                                             * x, y from the top, w, h */
     float aoparm2[4];                      /* samples, a fighter's share, the
                                             * blur, 1 when the map is valid */
+    float aodbg[4];                        /* x: rgl_ao_debug */
     int   count, pad[3];
     rgl_light l[RGL_MAX_LIGHTS];
-} rgl_light_block;                         /* 1152 bytes */
+} rgl_light_block;                         /* 1168 bytes */
 
 extern rgl_backend rgl_vk;
 #ifdef _WIN32
@@ -239,6 +240,11 @@ extern int rgl_shadows;
 /* AMBIENT OCCLUSION (umk3.ini, rgl_ff.c; with ENHANCED LIGHTING, Vulkan and
  * Direct3D 12): rgl_ao 0 off, 1 Crytek SSAO, 2 HBAO, 3 Alchemy AO */
 extern int   rgl_ao, rgl_ao_samples, rgl_ao_blur;
+/* AMBIENT OCCLUSION's debug views (umk3.ini ao_debug=, the settings menu):
+ * every lit 3D surface drawn as a grey image of one stage of it -- 1 the
+ * occlusion after the blur, 2 before it, 3 the depth pass, 4 the normals
+ * rebuilt from it, 5 what the occlusion multiplies the colour by; 0 off */
+extern int   rgl_ao_debug;
 extern float rgl_ao_radius, rgl_ao_intensity, rgl_ao_bias, rgl_ao_floor, rgl_ao_scale;
 extern double rgl_shadow_ms;           /* this frame's map and held draws, for the log */
 extern double rgl_game_ms;             /* game_main.c: this frame's ticks (logic and draws), for the log */

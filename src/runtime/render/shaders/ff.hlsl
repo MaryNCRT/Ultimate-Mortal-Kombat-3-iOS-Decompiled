@@ -59,8 +59,8 @@ float light_at(float3 p, float3 dx, float3 dy, int self)
         g = float2(dy.y * dx.z - dx.y * dy.z, dx.x * dy.z - dy.x * dx.z) / det;
     g = clamp(g, -0.05, 0.05);
     bias = 0.0004 + dot(abs(g), px);
-    [unroll] for (y = -2; y <= 2; y++)
-        [unroll] for (x = -2; x <= 2; x++) {
+    [loop] for (y = -2; y <= 2; y++)
+        [loop] for (x = -2; x <= 2; x++) {
             float2 o = float2(x, y) * px * 2.0;
             float4 e = smap.SampleLevel(spt, uv + o, 0);
             float d = unpack_depth(e);
@@ -150,7 +150,7 @@ float specular(float3 col, bool fighter)
 // face's from the screen derivatives, turned to the camera.
 struct Light { float4 pos; float4 col; float4 dir; float4 cone; };
 cbuffer Lights : register(b1) { float4 lb_eye; float4 lb_sky; float4 lb_ground;
-    float4 lb_aoproj; float4 lb_aoparm; float4 lb_aovp; float4 lb_aoparm2; int4 lb_count; Light lb_l[16]; };
+    float4 lb_aoproj; float4 lb_aoparm; float4 lb_aovp; float4 lb_aoparm2; float4 lb_aodbg; int4 lb_count; Light lb_l[16]; };
 
 // DYNAMIC LIGHTS' shadows (rgl_ff.c point_shadows): a point light's six
 // cube faces, each a tile of patlas -- three across, two rows a light --
@@ -189,8 +189,8 @@ float point_shadow(int slot, float3 D, float far, int self)
     float n = 0.05, f = max(far, 0.1);
     float bias = 0.03 + 0.02 * z;
     float occ = 0.0;
-    [unroll] for (int y = -1; y <= 1; y++)
-        [unroll] for (int x = -1; x <= 1; x++) {
+    [loop] for (int y = -1; y <= 1; y++)
+        [loop] for (int x = -1; x <= 1; x++) {
             float2 q = clamp(px + float2(float(x), float(y)) * 1.5, o + 1.0, o + T - 1.0);
             float4 e = patlas.SampleLevel(spt, float2(q.x / sz.x, 1.0 - q.y / sz.y), 0);
             float d = unpack_depth(e);
@@ -301,14 +301,14 @@ float4 ao_pass(float2 fc)
         }
         ao = 1.0 - 2.0 * k * R * occ / float(n);
     } else if (tech == 2) {
-        int dirs = max(n / 4, 2);
+        int dirs = clamp(n / 4, 4, 8);  // never under four: two left most pixels blind (Mary saw dots)
         [loop] for (int d = 0; d < 8; d++) {
             if (d >= dirs)
                 break;
             float a = (float(d) + noise) * 6.28318 / float(dirs);
             float2 dir = float2(cos(a), sin(a));
             float hmax = 0.0;
-            for (int s = 1; s <= 4; s++) {
+            [loop] for (int s = 1; s <= 4; s++) {
                 float3 v = view_at(uv + dir * rpx * (float(s) - noise * 0.5) / 4.0 / sz) - P;
                 float l = length(v);
                 if (l < 1e-4 || l > R)
@@ -337,7 +337,9 @@ float4 ao_pass(float2 fc)
         }
         ao = 1.0 - k * occ / float(n);
     }
-    return float4(clamp(ao, 0.0, 1.0), e, 1.0);
+    ao = clamp(ao, 0.0, 1.0);
+    ao = ao * ao;                       // the occluded darker, the open as they were
+    return float4(ao, e, 1.0);
 }
 
 // the occlusion blurred 5x5, each texel weighed by how near its distance is
@@ -353,8 +355,8 @@ float4 ao_blur(float2 fc)
     if (lb_aoparm2.z < 0.5)
         return float4(c0.r, c0.g, c0.b, 1.0);
     float s = 0.0, w = 0.0;
-    for (int y = -2; y <= 2; y++)
-        for (int x = -2; x <= 2; x++) {
+    [loop] for (int y = -2; y <= 2; y++)
+        [loop] for (int x = -2; x <= 2; x++) {
             float4 c = scr.SampleLevel(spt, uv + float2(float(x), float(y)) / sz, 0);
             float z = c.g + c.b / 255.0;
             float wt = max(0.0, 1.0 - abs(z - z0) / (0.03 * z0 + 1e-5));
@@ -383,6 +385,32 @@ float ao_at(float2 fc)
     float a01 = scr.SampleLevel(spt, b + float2(0.0, 1.0 / sz.y), 0).r;
     float a11 = scr.SampleLevel(spt, b + 1.0 / sz, 0).r;
     return lerp(lerp(a00, a10, f.x), lerp(a01, a11, f.x), f.y);
+}
+
+
+// AMBIENT OCCLUSION's debug views (rgl_ff.c rgl_ao_debug): the screen map
+// at this pixel as grey, or the depth's normals as colour
+float3 ao_debug_view(float2 fc, float contrib)
+{
+    int m = int(lb_aodbg.x + 0.5);
+    float2 uv = (fc - lb_aovp.xy) / lb_aovp.zw;
+    if (m == 5)
+        return contrib.xxx;
+    if (m == 3) {                       // the distance, 0-30 units, near white
+        float d = unpack_depth(scr.SampleLevel(spt, uv, 0)) * lb_aoproj.z;
+        return (1.0 - clamp(d / 30.0, 0.0, 1.0)).xxx;
+    }
+    if (m == 4) {
+        float dw_, dh_, dl_;
+        scr.GetDimensions(0, dw_, dh_, dl_);
+        float2 px = 1.0 / float2(dw_, dh_);
+        float3 P = view_at(uv), Px = view_at(uv + float2(px.x, 0.0)), Py = view_at(uv + float2(0.0, px.y));
+        float3 n = normalize(cross(Px - P, Py - P));
+        if (dot(n, -P) < 0.0)
+            n = -n;
+        return n * 0.5 + 0.5;
+    }
+    return ao_at(fc).xxx;                 // 1 after the blur, 2 before it
 }
 
 float4 ps(PSIn i) : SV_Target
@@ -454,13 +482,15 @@ float4 ps(PSIn i) : SV_Target
                 float3 tint = lerp(lb_ground.rgb, lb_sky.rgb, up);
                 float tk = lerp(lb_ground.w, lb_sky.w, up);   // the fighters as much as the stage (Mary)
                 lin *= lerp(float3(1.0, 1.0, 1.0), tint, tk);
-                float ao = lerp(1.0, ao_at(i.pos.xy), fighter ? lb_aoparm2.y : 1.0);
-                ao = lerp(ao, 1.0, (1.0 - lt) * 0.5);
-                lin *= max(ao, lb_aoparm.z);
                 // a dark stage's slight light on its fighters (rgl_ff.c FIGHTER_LIFT)
                 if (fighter)
                     lin += al * lb_eye.w;
                 lin += dynamic(i.p, N, al, sm2, fighter, shadow >> 4);
+                // AMBIENT OCCLUSION over everything, last (as ff.frag)
+                float ao = max(lerp(1.0, ao_at(i.pos.xy), fighter ? lb_aoparm2.y : 1.0), lb_aoparm.z);
+                lin *= ao;
+                if (lb_aodbg.x > 0.5 && lb_aoparm2.w > 0.5)    // a debug view: that, alone
+                    return float4(ao_debug_view(i.pos.xy, ao), 1.0);
             }
         }
         c.rgb = pow(lin, 1.0 / 2.2);

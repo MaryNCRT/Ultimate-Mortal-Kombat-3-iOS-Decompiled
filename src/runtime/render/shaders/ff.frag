@@ -142,7 +142,7 @@ float specular(vec3 col, bool fighter)
 struct Light { vec4 pos; vec4 col; vec4 dir; vec4 cone; };
 layout(std140, set = 0, binding = 2) uniform Lights {
     vec4 eye; vec4 sky; vec4 ground;
-    vec4 aoproj; vec4 aoparm; vec4 aovp; vec4 aoparm2;
+    vec4 aoproj; vec4 aoparm; vec4 aovp; vec4 aoparm2; vec4 aodbg;
     ivec4 count; Light l[16];
 } lb;
 
@@ -291,7 +291,7 @@ vec4 ao_pass(vec2 fc)
         }
         ao = 1.0 - 2.0 * k * R * occ / float(n);
     } else if (tech == 2) {
-        int dirs = max(n / 4, 2);
+        int dirs = clamp(n / 4, 4, 8);  // never under four: two left most pixels blind (Mary saw dots)
         for (int d = 0; d < 8; d++) {
             if (d >= dirs)
                 break;
@@ -327,7 +327,9 @@ vec4 ao_pass(vec2 fc)
         }
         ao = 1.0 - k * occ / float(n);
     }
-    return vec4(clamp(ao, 0.0, 1.0), e, 1.0);
+    ao = clamp(ao, 0.0, 1.0);
+    ao = ao * ao;                       // the occluded darker, the open as they were
+    return vec4(ao, e, 1.0);
 }
 
 // the occlusion blurred 5x5, each texel weighed by how near its distance is
@@ -369,6 +371,30 @@ float ao_at(vec2 fc)
     float a01 = textureLod(scr, b + vec2(0.0, 1.0 / sz.y), 0.0).r;
     float a11 = textureLod(scr, b + 1.0 / sz, 0.0).r;
     return mix(mix(a00, a10, f.x), mix(a01, a11, f.x), f.y);
+}
+
+
+// AMBIENT OCCLUSION's debug views (rgl_ff.c rgl_ao_debug): the screen map
+// at this pixel as grey, or the depth's normals as colour
+vec3 ao_debug_view(vec2 fc, float contrib)
+{
+    int m = int(lb.aodbg.x + 0.5);
+    vec2 uv = (fc - lb.aovp.xy) / lb.aovp.zw;
+    if (m == 5)
+        return vec3(contrib);
+    if (m == 3) {                       // the distance, 0-30 units, near white
+        float d = unpack_depth(textureLod(scr, uv, 0.0)) * lb.aoproj.z;
+        return vec3(1.0 - clamp(d / 30.0, 0.0, 1.0));
+    }
+    if (m == 4) {
+        vec2 px = 1.0 / vec2(textureSize(scr, 0));
+        vec3 P = view_at(uv), Px = view_at(uv + vec2(px.x, 0.0)), Py = view_at(uv + vec2(0.0, px.y));
+        vec3 n = normalize(cross(Px - P, Py - P));
+        if (dot(n, -P) < 0.0)
+            n = -n;
+        return n * 0.5 + 0.5;
+    }
+    return vec3(ao_at(fc));             // 1 after the blur, 2 before it
 }
 
 void main()
@@ -445,16 +471,19 @@ void main()
                 vec3 tint = mix(lb.ground.rgb, lb.sky.rgb, up);
                 float tk = mix(lb.ground.w, lb.sky.w, up);   // the fighters as much as the stage (Mary)
                 lin *= mix(vec3(1.0), tint, tk);
-                // AMBIENT OCCLUSION on this colour (not the lights added
-                // after): a fighter's share of it, less where the map's
-                // shadow already darkens, never below the floor
-                float ao = mix(1.0, ao_at(gl_FragCoord.xy), fighter ? lb.aoparm2.y : 1.0);
-                ao = mix(ao, 1.0, (1.0 - lt) * 0.5);
-                lin *= max(ao, lb.aoparm.z);
                 // a dark stage's slight light on its fighters (rgl_ff.c FIGHTER_LIFT)
                 if (fighter)
                     lin += al * lb.eye.w;
                 lin += dynamic(v_p, N, al, sm2, fighter, pc.shadow >> 4);
+                // AMBIENT OCCLUSION over everything, last (Mary: under the
+                // other effects it hardly showed): a fighter's share of
+                // it, never below the floor
+                float ao = max(mix(1.0, ao_at(gl_FragCoord.xy), fighter ? lb.aoparm2.y : 1.0), lb.aoparm.z);
+                lin *= ao;
+                if (lb.aodbg.x > 0.5 && lb.aoparm2.w > 0.5) {   // a debug view: that, alone
+                    o = vec4(ao_debug_view(gl_FragCoord.xy, ao), 1.0);
+                    return;
+                }
             }
         }
         c.rgb = pow(lin, vec3(1.0 / 2.2));
