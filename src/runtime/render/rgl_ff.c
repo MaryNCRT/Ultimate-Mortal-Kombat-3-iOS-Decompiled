@@ -1470,7 +1470,7 @@ static void point_shadows(rgl_light_block *b)
         int best = -1;
         float bv = 0.0f;
         for (i = 0; i < b->count; i++) {
-            float v = b->l[i].col[3] * b->l[i].pos[3];
+            float v = b->l[i].col[3] * b->l[i].pos[3] * (b->l[i].cone[3] != 0.0f ? 1000.0f : 1.0f);
             int taken = 0;
             for (k = 0; k < np; k++)
                 taken |= pick[k] == i;
@@ -1566,6 +1566,232 @@ static void point_shadows(rgl_light_block *b)
     B->target_use(cur_target(g_draw_fb));
 }
 
+/* ------------------------------------------- a stage's lighting file
+ *
+ * DYNAMIC LIGHTS, phase 4 (research/DYNAMIC-LIGHTING.md): lighting/<the
+ * stage's scene>.ini in the game's folder (CAVE_LEVEL_SCENE.ini for KAHN'S
+ * KAVE), read when the stage loads. Every key optional:
+ *
+ *   sky_strength=0.45      the measured sky's tint, times this
+ *   sky_color=255,40,20    the sky's colour, in place of the measured one
+ *   fighter_lift=0.15      the fighters' own light, in place of the guess
+ *   glow_power=1.0         the glows' lights (emissive draws), times this
+ *
+ *   [light]                a light of the stage's own, up to CFG_LIGHTS
+ *   type=point             point | spot | directional
+ *   mesh=EVENT_TORCH_1     at the centre of that mesh of the stage, as it
+ *                          is drawn (it follows it); pos is then an offset
+ *   pos=0,0,0              else a place in the world (the log lists the
+ *                          stage's meshes and where they are as it loads)
+ *   color=255,120,40       intensity=2.0   radius=8
+ *   dir=0,0,-1             where a spot or a directional light points
+ *   cone=20,35             a spot's inner and outer angle, degrees
+ *   shadows=1              a point light that casts the fighters' shadows
+ *                          before the glows do (two at most in all)
+ *
+ * Its lights go first in the block, then the glows'. The stage's meshes
+ * are named by RenderMesh.c as each is drawn (rgl_mesh_name). */
+#define CFG_LIGHTS 8
+#define MESH_SEEN 64
+
+typedef struct {
+    int type, shadows;
+    char mesh[64];
+    float pos[3], col[3], power, radius, dir[3], cone[2];
+} cfg_light;
+
+static struct {
+    int loaded;
+    char scene[64];
+    float sky_strength, sky_col[3], fighter_lift, glow_power;
+    int has_sky_col, has_lift;
+    cfg_light l[CFG_LIGHTS];
+    int n;
+} g_cfg;
+
+static const char *g_mesh_now;          /* the stage mesh being drawn */
+static struct { char name[64]; float p[3]; int logged; } g_seen[MESH_SEEN];
+static int g_nseen;
+
+void rgl_mesh_name(const char *name)
+{
+    g_mesh_now = name;
+}
+
+/* a stage mesh drawn: where its centre is, for the lights anchored to it */
+static void mesh_note(const char *name, const rgl_vtx *v, int n)
+{
+    float c[3] = { 0, 0, 0 };
+    int i, k;
+
+    if (!name || !name[0] || n < 1)
+        return;
+    for (i = 0; i < g_nseen; i++)
+        if (strcmp(g_seen[i].name, name) == 0)
+            break;
+    if (i == g_nseen) {
+        if (g_nseen >= MESH_SEEN)
+            return;
+        snprintf(g_seen[i].name, sizeof g_seen[i].name, "%s", name);
+        g_seen[i].logged = 0;
+        g_nseen++;
+    }
+    for (k = 0; k < n; k++) {
+        c[0] += v[k].p[0]; c[1] += v[k].p[1]; c[2] += v[k].p[2];
+    }
+    for (k = 0; k < 3; k++)
+        g_seen[i].p[k] = c[k] / (float)n;
+    if (!g_seen[i].logged) {            /* for whoever writes the file */
+        g_seen[i].logged = 1;
+        printf("lighting: %s mesh %s at %.2f,%.2f,%.2f\n", g_cfg.scene, name,
+               g_seen[i].p[0], g_seen[i].p[1], g_seen[i].p[2]);
+    }
+}
+
+static int cfg_floats(const char *s, float *out, int n)
+{
+    int i;
+    for (i = 0; i < n && s && *s; i++) {
+        char *e;
+        out[i] = strtof(s, &e);
+        if (e == s)
+            break;
+        s = e;
+        while (*s == ',' || *s == ' ' || *s == '\t')
+            s++;
+    }
+    return i;
+}
+
+static void cfg_load(const char *scene)
+{
+    char path[1200], line[256];
+    FILE *f;
+    cfg_light *l = NULL;
+
+    memset(&g_cfg, 0, sizeof g_cfg);
+    g_cfg.sky_strength = 1.0f;
+    g_cfg.glow_power = 1.0f;
+    snprintf(g_cfg.scene, sizeof g_cfg.scene, "%s", scene);
+    {
+        char *dot = strrchr(g_cfg.scene, '.');
+        if (dot)
+            *dot = 0;
+    }
+    g_nseen = 0;
+    snprintf(path, sizeof path, "%slighting/%s.ini", rgl_dir, g_cfg.scene);
+    f = fopen(path, "r");
+    if (!f) {
+        printf("lighting: no lighting/%s.ini, the stage as measured\n", g_cfg.scene);
+        return;
+    }
+    while (fgets(line, sizeof line, f)) {
+        char *p = line, *eq, *k, *v, *c;
+        while (*p == ' ' || *p == '\t')
+            p++;
+        if ((c = strchr(p, ';')) != NULL)
+            *c = 0;
+        if ((c = strchr(p, '#')) != NULL)
+            *c = 0;
+        for (c = p + strlen(p); c > p && (c[-1] == '\n' || c[-1] == '\r' || c[-1] == ' ' || c[-1] == '\t'); c--)
+            c[-1] = 0;
+        if (!*p)
+            continue;
+        if (strncmp(p, "[light]", 7) == 0) {
+            if (g_cfg.n >= CFG_LIGHTS) {
+                l = NULL;
+                continue;
+            }
+            l = &g_cfg.l[g_cfg.n++];
+            memset(l, 0, sizeof *l);
+            l->col[0] = l->col[1] = l->col[2] = 1.0f;
+            l->power = 1.0f;
+            l->radius = 6.0f;
+            l->dir[2] = -1.0f;
+            l->cone[0] = 20.0f;
+            l->cone[1] = 35.0f;
+            continue;
+        }
+        if (!(eq = strchr(p, '=')))
+            continue;
+        *eq = 0;
+        k = p;
+        v = eq + 1;
+        for (c = eq; c > k && (c[-1] == ' ' || c[-1] == '\t'); c--)
+            c[-1] = 0;
+        while (*v == ' ' || *v == '\t')
+            v++;
+        if (!l) {
+            if (!strcmp(k, "sky_strength")) g_cfg.sky_strength = strtof(v, NULL);
+            else if (!strcmp(k, "glow_power")) g_cfg.glow_power = strtof(v, NULL);
+            else if (!strcmp(k, "fighter_lift")) { g_cfg.fighter_lift = strtof(v, NULL); g_cfg.has_lift = 1; }
+            else if (!strcmp(k, "sky_color") && cfg_floats(v, g_cfg.sky_col, 3) == 3) {
+                int i;
+                for (i = 0; i < 3; i++)
+                    g_cfg.sky_col[i] = powf(g_cfg.sky_col[i] / 255.0f, 2.2f);
+                g_cfg.has_sky_col = 1;
+            }
+            continue;
+        }
+        if (!strcmp(k, "type"))
+            l->type = !strcmp(v, "spot") ? RGL_LIGHT_SPOT : !strcmp(v, "directional") ? RGL_LIGHT_DIR : RGL_LIGHT_POINT;
+        else if (!strcmp(k, "mesh")) snprintf(l->mesh, sizeof l->mesh, "%s", v);
+        else if (!strcmp(k, "pos")) cfg_floats(v, l->pos, 3);
+        else if (!strcmp(k, "color") && cfg_floats(v, l->col, 3) == 3) {
+            int i;
+            for (i = 0; i < 3; i++)
+                l->col[i] = powf(l->col[i] / 255.0f, 2.2f);
+        }
+        else if (!strcmp(k, "intensity")) l->power = strtof(v, NULL);
+        else if (!strcmp(k, "radius")) l->radius = strtof(v, NULL);
+        else if (!strcmp(k, "dir")) cfg_floats(v, l->dir, 3);
+        else if (!strcmp(k, "cone")) cfg_floats(v, l->cone, 2);
+        else if (!strcmp(k, "shadows")) l->shadows = atoi(v) != 0;
+    }
+    fclose(f);
+    g_cfg.loaded = 1;
+    printf("lighting: lighting/%s.ini, %d lights, sky x%.2f%s, glows x%.2f\n", g_cfg.scene, g_cfg.n,
+           g_cfg.sky_strength, g_cfg.has_sky_col ? " (its own colour)" : "", g_cfg.glow_power);
+}
+
+/* the file's lights into the block, first */
+static void cfg_lights(rgl_light_block *b)
+{
+    int i, j, k;
+
+    for (i = 0; i < g_cfg.n && b->count < RGL_MAX_LIGHTS; i++) {
+        const cfg_light *c = &g_cfg.l[i];
+        rgl_light *l;
+        float p[3], m;
+        memcpy(p, c->pos, sizeof p);
+        if (c->mesh[0]) {
+            for (j = 0; j < g_nseen; j++)
+                if (strcmp(g_seen[j].name, c->mesh) == 0)
+                    break;
+            if (j == g_nseen)
+                continue;               /* not drawn yet */
+            for (k = 0; k < 3; k++)
+                p[k] += g_seen[j].p[k];
+        }
+        l = &b->l[b->count++];
+        memset(l, 0, sizeof *l);
+        m = c->col[0] > c->col[1] ? c->col[0] : c->col[1];
+        if (c->col[2] > m) m = c->col[2];
+        if (m < 1e-4f) m = 1.0f;
+        for (k = 0; k < 3; k++) {
+            l->pos[k] = p[k];
+            l->col[k] = c->col[k] / m;
+            l->dir[k] = c->dir[k];
+        }
+        l->pos[3] = c->radius;
+        l->col[3] = c->power * m;
+        l->dir[3] = (float)c->type;
+        l->cone[0] = cosf(c->cone[0] * 0.0174533f);
+        l->cone[1] = cosf(c->cone[1] * 0.0174533f);
+        l->cone[3] = c->shadows ? 1.0f : 0.0f;  /* point_shadows: these first */
+    }
+}
+
 /* DYNAMIC LIGHTS: each stage's light from its own sky (Mary: The Rooftop's
  * red sky should make its light reddish, the whole stage -- that stage's,
  * not every one's). It is a tint over everything the lights reach, the
@@ -1596,11 +1822,7 @@ static float g_stage_lum = -1.0f;       /* the stage's mean brightness, eased */
 #define DARK_LUM 0.08f
 static float g_sky_scale = 1.0f;        /* that stage's strength, of SKY_POWER */
 
-/* Each stage's own strength, where the measured sky is too much (Mary:
- * Kahn's Kave came out far too red at the strength The Rooftop wants) */
-static const struct { const char *scene; float scale; } k_sky_stage[] = {
-    { "CAVE_LEVEL_SCENE", 0.45f },      /* KAHN'S KAVE */
-};
+static void cfg_load(const char *scene);
 
 /* the stage's _LEVEL_SCENE meshset loaded (1) or freed (0): RenderMesh.c's
  * lime_port_meshset_event. Off it, no sky tint -- the select screen's
@@ -1616,10 +1838,14 @@ void rgl_sky_stage(const char *name, int loaded)
     g_stage_lum = -1.0f;
     g_sky_stage = loaded;
     g_sky_scale = 1.0f;
-    if (loaded)
-        for (i = 0; i < sizeof k_sky_stage / sizeof *k_sky_stage; i++)
-            if (strstr(name, k_sky_stage[i].scene))
-                g_sky_scale = k_sky_stage[i].scale;
+    (void)i;
+    if (loaded) {                       /* its lighting file, if it has one */
+        cfg_load(name);
+        g_sky_scale = g_cfg.sky_strength;
+    } else {
+        g_cfg.n = 0;
+        g_cfg.loaded = 0;
+    }
     printf("dynamic lights: the sky %s for %s (strength x%.2f)\n",
            loaded ? "measured" : "off", name, g_sky_scale);
 }
@@ -1667,6 +1893,8 @@ static void sky_build(rgl_light_block *b)
         float d = (DARK_LUM - g_stage_lum) / (DARK_LUM * 0.5f);   /* all of it at half DARK_LUM */
         b->eye[3] = FIGHTER_LIFT * (d < 0.0f ? 0.0f : d > 1.0f ? 1.0f : d);
     }
+    if (g_sky_stage && g_cfg.has_lift)  /* the stage's file says */
+        b->eye[3] = g_cfg.fighter_lift;
     for (i = 0; i < g_nsky; i++)
         if (g_sky[i].d >= far * SKY_FAR) {
             /* the dominant hue, not the mean: a draw weighs its size times
@@ -1694,6 +1922,8 @@ static void sky_build(rgl_light_block *b)
             for (k = 0; k < 3; k++)
                 g_sky_now[k] += (acc[k] - g_sky_now[k]) * 0.05f;
     }
+    if (g_cfg.has_sky_col)              /* the stage's file says */
+        memcpy(g_sky_now, g_cfg.sky_col, sizeof g_sky_now);
     if (g_sky_now[0] < 0.0f)
         return;
     mx = g_sky_now[0] > g_sky_now[1] ? g_sky_now[0] : g_sky_now[1];
@@ -1722,19 +1952,22 @@ static void sky_build(rgl_light_block *b)
 static void lights_build(void)
 {
     rgl_light_block b;
-    int i, k, j;
+    int i, k, j, nfile = 0;
 
     if (!B || !B->lights)
         return;
     memset(&b, 0, sizeof b);
     for (k = 0; k < 3; k++)
         b.eye[k] = SH.inv_view.m[12 + k];
+    if (g_sky_stage)
+        cfg_lights(&b);
+    nfile = b.count;                    /* the glows merge among themselves only */
     for (i = 0; i < g_nemit; i++) {
         float r = g_emit[i].ext * EMIT_RADIUS, mx = 0.0f;
         rgl_light *l = NULL;
         if (r < EMIT_RMIN) r = EMIT_RMIN;
         if (r > EMIT_RMAX) r = EMIT_RMAX;
-        for (j = 0; j < b.count; j++) {     /* close to one already: merged */
+        for (j = nfile; j < b.count; j++) { /* close to one already: merged */
             float d = 0.0f;
             for (k = 0; k < 3; k++)
                 d += (b.l[j].pos[k] - g_emit[i].p[k]) * (b.l[j].pos[k] - g_emit[i].p[k]);
@@ -1766,12 +1999,14 @@ static void lights_build(void)
     }
     for (j = 0; j < b.count; j++) {     /* the colour made a hue, its brightness the power */
         rgl_light *l = &b.l[j];
+        if (l->cone[3] != 0.0f || l->dir[3] != 0.0f || l->col[3] != 0.0f)
+            continue;                   /* the file's: already made */
         float m = l->col[0] > l->col[1] ? l->col[0] : l->col[1];
         if (l->col[2] > m) m = l->col[2];
         if (m < 1e-4f) { l->col[3] = 0.0f; continue; }
         for (k = 0; k < 3; k++)
             l->col[k] /= m;
-        l->col[3] = EMIT_POWER * (m > 1.0f ? 1.0f : sqrtf(m));
+        l->col[3] = EMIT_POWER * (m > 1.0f ? 1.0f : sqrtf(m)) * (g_sky_stage ? g_cfg.glow_power : 1.0f);
         l->dir[0] = l->dir[1] = l->dir[2] = 0.0f;
         l->dir[3] = (float)RGL_LIGHT_POINT;
     }
@@ -2216,6 +2451,8 @@ static void submit(int topo, rgl_vtx *v, int n)
             f.lit = SH.caster ? 2 : 1;
             if (!SH.caster && handle)
                 sky_note(t, v, n);      /* the stage's: is it the sky? */
+            if (!SH.caster && g_mesh_now)
+                mesh_note(g_mesh_now, v, n);    /* for the lights anchored to it */
         }
     }
 

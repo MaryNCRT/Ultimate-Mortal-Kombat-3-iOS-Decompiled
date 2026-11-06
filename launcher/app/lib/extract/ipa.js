@@ -238,6 +238,11 @@ async function extractIpaPipeline({
             fs.cpSync(addSrc, addDst, { recursive: true });
         }
 
+        // ENHANCED LIGHTING: each stage's lighting file (render/rgl_ff.c)
+        const litSrc = path.join(rootDir, 'launcher/lighting');
+        if (fs.existsSync(litSrc))
+            fs.cpSync(litSrc, path.join(destDir, 'lighting'), { recursive: true });
+
         // Default umk3.ini
         const iniPath = path.join(destDir, 'umk3.ini');
         if (!fs.existsSync(iniPath)) {
