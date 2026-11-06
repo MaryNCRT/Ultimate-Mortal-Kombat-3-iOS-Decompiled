@@ -916,10 +916,27 @@ static TEXTURE *load_picture(const char *file, const char *dir)
     e = tex_find(key);
     if (e)
         return &e->tex;
-    snprintf(full, sizeof full, "%s/%s%s", lime_platform_asset_root(), dir, file);
     memset(&img, 0, sizeof(img));
-    if (!try_one(full, &img))
-        return NULL;
+    /* one of the game's own sheets: a mod's picture of the same name first,
+     * as limeLoadTexture takes it (load_rgba) -- the moves list's portrait
+     * is the select screen's, texture pack and all (Mary) */
+    {
+        char stem[256];
+        const char *dot = strrchr(file, '.');
+        size_t n = dot ? (size_t)(dot - file) : strlen(file);
+        int got = 0;
+
+        if (strcmp(dir, "Textures/") == 0 && n < sizeof stem) {
+            memcpy(stem, file, n);
+            stem[n] = 0;
+            got = mods_find_texture(stem, full, sizeof full) && try_one(full, &img);
+        }
+        if (!got) {
+            snprintf(full, sizeof full, "%s/%s%s", lime_platform_asset_root(), dir, file);
+            if (!try_one(full, &img))
+                return NULL;
+        }
+    }
     if (strncmp(file, "glyphs/", 7) == 0)
         lime_glyph_shadow(img.rgba, img.width, img.height);
     glGenTextures(1, &name);

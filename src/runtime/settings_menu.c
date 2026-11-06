@@ -112,6 +112,7 @@ enum { PAGE_VIDEO, PAGE_GFX, PAGE_TEX, PAGE_AUDIO, PAGE_GAME, PAGE_CTL, PAGE_PRO
 enum {
     R_DISPLAY, R_MONITOR, R_RES, R_APPLY, R_RRES, R_AA, R_TEXQ, R_ASPECT, R_UI, R_HIDE, R_LANG, R_REND, R_SMOOTH, R_SMODEL,
     R_VSYNC,                            /* VSYNC (render/rgl.h rgl_vsync) */
+    R_LOWLAT,                           /* LOW LATENCY (rgl_low_latency) */
     R_PLAYER, R_LAYOUT, R_KEY, R_KRESET, R_DEVICE, R_PICONS, R_PADB, R_PRESET,
     R_PNAME, R_PICON, R_PCOLOR, R_PSHADE, R_PCOLOR2, R_PID, R_PRESET2,
     R_CLOSE, R_QUIT, R_HEAD, R_CSUB,
@@ -689,6 +690,8 @@ static void build(void)
             port_renderer() != rgl_renderer ? tx("  AL REINICIAR", "  AFTER A RESTART") : "");
         add(R_VSYNC, 0, "VSYNC", "< %s >",
             rgl_vsync ? tx("ACTIVADO", "ON") : tx("DESACTIVADO", "OFF"));
+        add(R_LOWLAT, 0, tx("BAJA LATENCIA", "LOW LATENCY"), "< %s >",
+            rgl_low_latency ? tx("ACTIVADA", "ON") : tx("DESACTIVADA", "OFF"));
         }
         if (all || g_page == PAGE_GFX) {
         head(tx("GRAFICOS", "GRAPHICS"));
@@ -891,7 +894,7 @@ static int has_value(int kind)
 {
     switch (kind) {
     case R_DISPLAY: case R_MONITOR: case R_RES: case R_RRES: case R_AA: case R_TEXQ:
-    case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_SMOOTH: case R_SMODEL: case R_VSYNC: case R_NOOB: case R_CORNER: case R_SLIDE: case R_AUDIODEV: case R_GPU: case R_PLAYER: case R_LAYOUT:
+    case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_SMOOTH: case R_SMODEL: case R_VSYNC: case R_LOWLAT: case R_NOOB: case R_CORNER: case R_SLIDE: case R_AUDIODEV: case R_GPU: case R_PLAYER: case R_LAYOUT:
     case R_RTSHADOW: case R_AO: case R_AODBG: case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE: case R_PCOLOR2:
     case R_PICONS:
         return 1;
@@ -1153,6 +1156,10 @@ static void change(int kind, int d)
         rgl_vsync = !rgl_vsync;
         g_dirty = 1;
         return;
+    case R_LOWLAT:                      /* at once, from the next present */
+        rgl_low_latency = !rgl_low_latency;
+        g_dirty = 1;
+        return;
     case R_SMOOTH:                      /* at once (GameCode.c) */
         port_smooth_anims = !port_smooth_anims;
         g_dirty = 1;
@@ -1369,6 +1376,12 @@ static int drop_fill(int kind)
         snprintf(L[1], 48, "%s", tx("ACTIVADO", "ON"));
         n = 2;
         g_drop_cur = rgl_vsync ? 1 : 0;
+        break;
+    case R_LOWLAT:
+        snprintf(L[0], 48, "%s", tx("DESACTIVADA", "OFF"));
+        snprintf(L[1], 48, "%s", tx("ACTIVADA", "ON"));
+        n = 2;
+        g_drop_cur = rgl_low_latency ? 1 : 0;
         break;
     case R_SMOOTH:
         snprintf(L[0], 48, "%s", tx("DESACTIVADAS", "OFF"));
@@ -2386,6 +2399,7 @@ static void save_ini(void)
     put("gpu", "%s", rgl_gpu[0] ? rgl_gpu : "auto");
     put("audio_device", "%s", plat_audio_device_name()[0] ? plat_audio_device_name() : "auto");
     put("vsync", "%d", rgl_vsync);
+    put("low_latency", "%d", rgl_low_latency);
     put("smooth_models", "%d", port_smooth_models);
     put("sharp_edge_angle", "%d", (int)(port_sharp_angle + 0.5f));
     put("sharp_edge_strength", "%d", (int)(port_sharp_strength * 100.0f + 0.5f));

@@ -337,6 +337,10 @@ bool plat_swap(void)
             SDL_GL_SetSwapInterval((set = rgl_vsync) ? 1 : 0);
     }
     SDL_GL_SwapWindow(g_wnd);
+    /* LOW LATENCY: wait for the frame, as win32_gl.c does, so the driver
+     * queues none ahead (each one queued is a refresh of input lag) */
+    if (rgl_low_latency)
+        glFinish();
     return true;
 }
 

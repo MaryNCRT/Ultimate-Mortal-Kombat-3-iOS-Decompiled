@@ -49,6 +49,10 @@ extern int rgl_swap_interval;
 /* VSYNC (umk3.ini vsync=0/1, the options menu): 0 presents without waiting
  * for the refresh. Read every present, so it changes at once. */
 extern int rgl_vsync;
+/* LOW LATENCY (umk3.ini low_latency=0/1, the options menu): at most one
+ * frame waits between a tick and the screen (docs/research/INPUT-LATENCY.md).
+ * 0 lets the driver queue frames, as before. */
+extern int rgl_low_latency;
 
 /* COMPILE SHADERS (the launcher's PLAY): every pipeline a backend has made is
  * a line in a file in the game's folder, made again when the backend opens --

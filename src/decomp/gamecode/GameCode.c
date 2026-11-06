@@ -3060,8 +3060,9 @@ void LIME_GLAPI glMultMatrixf(const float *m);
  * game blends itself (the select screen, the intro), the frame its blend is
  * mostly on stands for the game's frame. No blend across a frame that is not
  * skinned, a change of second skin, a change of character or model, the
- * 16/35..41 range, or what IsLiaProblem and IsOstrichProblem refuse -- the
- * cases where the game itself cuts. */
+ * 16/35..41 range, or what IsOstrichProblem refuses -- the cases where the
+ * game itself cuts. IsLiaProblem is not asked: see the end of
+ * port_smooth_pose. */
 int port_smooth_anims;
 extern unsigned long port_frame_no;     /* runtime/lime_menu.c, limeBegin */
 
@@ -3166,7 +3167,13 @@ static void port_smooth_pose(long *w)
     w[0x520 / 4] = st[i].prev;
     ((float *)w)[0x524 / 4] = 1.0f - (float)(st[i].held + 1)
                                      / (float)st[i].dur;
-    if (IsLiaProblem((PLAYER *)w) || IsOstrichProblem((PLAYER *)w)) {
+    /* Only IsOstrichProblem cuts here (Shang Tsung's frame 295, a scene of
+     * its own). IsLiaProblem's five frames are Sindel's LIASTANCE1 and 5
+     * (257, 261) and LIWALK1, 8 and 9 (241, 248, 249, sindelframes.txt):
+     * refused, her idle stepped on four of its nine changes (Mary: "only
+     * her idle animation"). In the binary it only ever refuses a blend in a
+     * fight, where AnimSmoothWindowSize 0 blends nothing anyway. */
+    if (IsOstrichProblem((PLAYER *)w)) {
         w[0x520 / 4] = g;
         ((float *)w)[0x524 / 4] = 0.0f;
     }
@@ -6320,6 +6327,10 @@ void Task_GameInit(void)
     }
 
     timeInGame = 0.0f;
+    {   /* port: the moves list's portraits, while the loading screen is up */
+        extern void PortMvPreloadPortraits(void);
+        PortMvPreloadPortraits();
+    }
     DeleteLoadingScreenTexture();
     limeMemoryReport("End of GAME Init Memory report");
 
@@ -8153,7 +8164,11 @@ static void PortMvColumn(int c, const char *title)
  * IPAD...PORTRAIT.PNG sheets, one a character in CharacterNames' order) */
 TEXTURE *lime_load_res_picture(const char *file);
 
-static void PortMvPortrait(long character)
+/* The portrait's texture, loaded once and then kept (draw_gl.c). A mod's
+ * HD portrait is a big PNG -- 1080x1080, 40 to 100 ms to decode -- so
+ * PortMvPreloadPortraits loads the two fighters' while the fight loads,
+ * not when the moves list first opens (Mary: an FPS drop there). */
+static TEXTURE *PortMvPortraitTexture(long character)
 {
     static const char *const file[26] = {
         "KANO", "SONYA", "JAX", "NIGHTWOLF", "SUBZERO", "STRYKER", "SINDEL",
@@ -8163,14 +8178,25 @@ static void PortMvPortrait(long character)
         "MOTARO", "SHAOKAHN",
     };
     char name[64];
-    TEXTURE *t;
+
+    if (character < 0 || character >= 26)
+        return NULL;
+    sprintf(name, "IPAD%sPORTRAIT.PNG", file[character]);   /* 26 at most: fits */
+    return lime_load_res_picture(name);
+}
+
+void PortMvPreloadPortraits(void)
+{
+    (void)PortMvPortraitTexture(PLAYER1MODEL);
+    (void)PortMvPortraitTexture(PLAYER2MODEL);
+}
+
+static void PortMvPortrait(long character)
+{
+    TEXTURE *t = PortMvPortraitTexture(character);
     int w, h;
     float s;
 
-    if (character < 0 || character >= 26)
-        return;
-    sprintf(name, "IPAD%sPORTRAIT.PNG", file[character]);   /* 26 at most: fits */
-    t = lime_load_res_picture(name);
     if (!t)
         return;
     lime_extra_texture_size(t, &w, &h);

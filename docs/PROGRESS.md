@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-06 (release 0.3.0 beta: ENHANCED LIGHTING -- shadows, relief, dynamic lights, each stage's sky, lighting files, ambient occlusion -- published as the pre-release `v0.3.0-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-06 (release 0.3.1 beta: frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -39,7 +39,8 @@ around the decompiled game:
   21:9; the port's own menus (settings, debug, STAGE SELECT, online,
   replays) fit each.
 - **Sound:** a Win32 mixer and an SDL one, MP3 music, the game's 497 WAVs.
-- **Input:** keyboard and pads, remappable for fights and menus.
+- **Input:** keyboard and pads, remappable for fights and menus; LOW
+  LATENCY (one frame at most between a tick and the screen).
 - **Online:** LAN and internet through Epic Online Services, rollback
   netcode, input delay from the ping.
 - **Replays:** every local fight recorded and played back with a player.
@@ -96,6 +97,43 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## 0.3.1 beta (2026-11-06) — frame time and LOW LATENCY
+
+Published 2026-11-06 as the GitHub pre-release `v0.3.1-beta`, the two
+entries below. Played by Mary in her test folder (Direct3D 12).
+
+## LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait (2026-11-06, after 0.3.0)
+
+- **Input latency** (port): the frame loop already polls the window's
+  messages, reads the pads and runs the tick in one go after
+  `pace_frame()`'s sleep, so nothing queues on the input side. What queued
+  was the present: Direct3D 12 let DXGI hold up to three (its default
+  frame latency; `wait_gpu` waits for the GPU, not the display), Vulkan's
+  FIFO up to images - 1. `rgl_low_latency` (`low_latency=1`, settings menu,
+  launcher): `rgl_d3d12.c` makes the swap chain with
+  `DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT` (kept through
+  `ResizeBuffers`), `SetMaximumFrameLatency(1)` (3 when off) and, with
+  VSYNC, waits on the latency object after `Present`; `rgl_vk.c` enables
+  `VK_KHR_present_id` + `VK_KHR_present_wait` when both are listed (falls
+  back to the plain device if creation refuses them) and waits for the
+  last present of a frame; `sdl_gl.c` adds `glFinish` after the swap. The
+  swap now returns at the refresh on all three, which is what
+  `pace_frame()` assumes. Design: `docs/research/INPUT-LATENCY.md`.
+- **SMOOTH ANIMATIONS, Sindel's idle**: `port_smooth_pose` (GameCode.c) no
+  longer applies `IsLiaProblem` (0x0005ba98). Its frames are, from
+  `framelists/sindelframes.txt`, 241 LIWALK1, 248 LIWALK8, 249 LIWALK9,
+  257 LIASTANCE1, 261 LIASTANCE5. A diagnostic run on Mary's replay showed
+  101 of 132 changes blended, none refused, after the change. Mary: the
+  idle and the walk look right.
+- **Moves list portrait**: `load_picture` (draw_gl.c) asks
+  `mods_find_texture` first for `Textures/` pictures, as `load_rgba` does.
+  `PortMvPreloadPortraits` (GameCode.c) loads both fighters' at the end of
+  Task_GameInit, before `DeleteLoadingScreenTexture`; the slow-frame line
+  showed 42-100 ms on the first open with HD NINJAS' 1080x1080 PNGs.
+- Seen in the same logs, not changed: opening the settings menu takes
+  ~150 ms over two frames; one 931 ms tick in a fight with nothing logged
+  around it.
 
 ## After 0.3.0: frames back under 16.7 ms (2026-11-06)
 
