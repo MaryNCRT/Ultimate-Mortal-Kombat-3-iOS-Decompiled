@@ -97,7 +97,10 @@ typedef struct {
 } rgl_pipe;
 
 /* What the fragment shader is told per draw. */
-enum { RGL_SHADOW_NONE, RGL_SHADOW_RECEIVE, RGL_SHADOW_DEPTH };
+enum { RGL_SHADOW_NONE, RGL_SHADOW_RECEIVE, RGL_SHADOW_DEPTH,
+       RGL_AO_DEPTH,                       /* AMBIENT OCCLUSION: the scene's distance, packed */
+       RGL_AO_PASS,                        /* the occlusion from it (a full-screen draw) */
+       RGL_AO_BLUR };                      /* and that blurred, edges kept */
 typedef struct {
     int   tex_mode;                        /* RGL_TEX_* */
     int   alpha_func;                      /* 0 none, else the GL compare enum */
@@ -169,6 +172,10 @@ typedef struct rgl_backend {
      * point lights' cube faces (rgl_ff.c point_shadows), packed as the
      * shadow map; 0 none */
     void (*shadow_map2)(int target);
+    /* AMBIENT OCCLUSION (rgl_ff.c): the target every draw from now on
+     * samples as the screen map (the scene's depth for the occlusion pass,
+     * the occlusion for the scene); 0 none */
+    void (*screen_map)(int target);
 } rgl_backend;
 
 /* DYNAMIC LIGHTS (ENHANCED LIGHTING, rgl_ff.c): point, spot and directional
@@ -188,9 +195,17 @@ typedef struct {
     float eye[4];                          /* the camera in the world */
     float sky[4];                          /* ambient from above, rgb linear */
     float ground[4];                       /* and from below */
+    float aoproj[4];                       /* AMBIENT OCCLUSION: the scene's
+                                            * projection x, y scale, the far
+                                            * distance packed, the radius */
+    float aoparm[4];                       /* intensity, bias, floor, technique */
+    float aovp[4];                         /* the 3D viewport in its target,
+                                            * x, y from the top, w, h */
+    float aoparm2[4];                      /* samples, a fighter's share, the
+                                            * blur, 1 when the map is valid */
     int   count, pad[3];
     rgl_light l[RGL_MAX_LIGHTS];
-} rgl_light_block;                         /* 1088 bytes */
+} rgl_light_block;                         /* 1152 bytes */
 
 extern rgl_backend rgl_vk;
 #ifdef _WIN32
@@ -221,6 +236,10 @@ extern int (*rgl_vk_make_surface)(void *window, void *instance, void *surface);
  *   rgl_shadow_active()   1 while shadows are on and drawn: the flattened
  *                         shadow under a fighter is left out */
 extern int rgl_shadows;
+/* AMBIENT OCCLUSION (umk3.ini, rgl_ff.c; with ENHANCED LIGHTING, Vulkan and
+ * Direct3D 12): rgl_ao 0 off, 1 Crytek SSAO, 2 HBAO, 3 Alchemy AO */
+extern int   rgl_ao, rgl_ao_samples, rgl_ao_blur;
+extern float rgl_ao_radius, rgl_ao_intensity, rgl_ao_bias, rgl_ao_floor, rgl_ao_scale;
 extern double rgl_shadow_ms;           /* this frame's map and held draws, for the log */
 extern double rgl_game_ms;             /* game_main.c: this frame's ticks (logic and draws), for the log */
 extern int    rgl_game_ticks;          /* and how many ran */

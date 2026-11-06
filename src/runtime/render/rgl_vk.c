@@ -216,6 +216,7 @@ static int g_cur_target;
 static int g_white;                     /* a 1x1 white texture for untextured draws */
 static int g_shadow;                    /* the target sampled as the shadow map (binding 1) */
 static int g_shadow2;                   /* and the point lights' (binding 3) */
+static int g_screen;                    /* AMBIENT OCCLUSION's screen map (binding 4) */
 
 static int vk_ok(VkResult r, const char *what)
 {
@@ -1035,7 +1036,7 @@ static int vk_open(void *window, int width, int height)
         VkCommandBufferAllocateInfo ai;
         VkFenceCreateInfo fi;
         VkSemaphoreCreateInfo si;
-        VkDescriptorSetLayoutBinding b[4];
+        VkDescriptorSetLayoutBinding b[5];
         VkDescriptorSetLayoutCreateInfo dl;
         VkPushConstantRange pc;
         VkPipelineLayoutCreateInfo pl;
@@ -1074,9 +1075,11 @@ static int vk_open(void *window, int width, int height)
         b[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         b[3] = b[0];                    /* 3 the point lights' shadows */
         b[3].binding = 3;
+        b[4] = b[0];                    /* 4 the screen map (AMBIENT OCCLUSION) */
+        b[4].binding = 4;
         memset(&dl, 0, sizeof dl);
         dl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        dl.bindingCount = 4;
+        dl.bindingCount = 5;
         dl.pBindings = b;
         vkCreateDescriptorSetLayout(g_dev, &dl, NULL, &g_dsl);
         pc.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -1091,7 +1094,7 @@ static int vk_open(void *window, int width, int height)
         vkCreatePipelineLayout(g_dev, &pl, NULL, &g_layout);
         cache_open();
         ps[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        ps[0].descriptorCount = DPOOL_SETS * 3;
+        ps[0].descriptorCount = DPOOL_SETS * 4;
         ps[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         ps[1].descriptorCount = DPOOL_SETS;
         memset(&dp, 0, sizeof dp);
@@ -1144,7 +1147,7 @@ static void vk_close(void)
 {
     int i;
 
-    g_shadow = g_shadow2 = 0;
+    g_shadow = g_shadow2 = g_screen = 0;
     if (!g_dev)
         return;
     upload_submit();
@@ -1459,6 +1462,8 @@ static void vk_target_free(int i)
         g_shadow = 0;
     if (g_shadow2 == i)
         g_shadow2 = 0;
+    if (g_screen == i)
+        g_screen = 0;
     vkDestroyFramebuffer(g_dev, g_tg[i].fb, NULL);
     free_image(&g_tg[i].color);
     free_image(&g_tg[i].dep);
@@ -1716,23 +1721,24 @@ static VkSampler get_sampler(const rgl_samp *s)
     return out;
 }
 
-static VkDescriptorSet get_set(int tex, const rgl_samp *s, VkImageView shadow, VkImageView shadow2)
+static VkDescriptorSet get_set(int tex, const rgl_samp *s, VkImageView shadow, VkImageView shadow2,
+                               VkImageView screen)
 {
-    static VkImageView last_shadow2;
+    static VkImageView last_shadow2, last_screen;
     static int last_tex = -1;
     static rgl_samp last_s;
     static VkDescriptorSet last;
     static VkImageView last_shadow;
     static unsigned last_serial;
     VkDescriptorSetAllocateInfo ai;
-    VkDescriptorImageInfo ii[3];
+    VkDescriptorImageInfo ii[4];
     VkDescriptorBufferInfo bi;
-    VkWriteDescriptorSet w[4];
+    VkWriteDescriptorSet w[5];
     VkDescriptorSet set = VK_NULL_HANDLE;
     rgl_samp point;
 
     if (tex == last_tex && last_serial == g_serial && g_dpool_used && shadow == last_shadow
-        && shadow2 == last_shadow2 && memcmp(&last_s, s, sizeof *s) == 0)
+        && shadow2 == last_shadow2 && screen == last_screen && memcmp(&last_s, s, sizeof *s) == 0)
         return last;
     if (g_dpool_used >= DPOOL_SETS) {
         flush(0);
@@ -1778,8 +1784,14 @@ static VkDescriptorSet get_set(int tex, const rgl_samp *s, VkImageView shadow, V
     w[3] = w[1];
     w[3].dstBinding = 3;
     w[3].pImageInfo = &ii[2];
-    vkUpdateDescriptorSets(g_dev, 4, w, 0, NULL);
+    ii[3] = ii[1];
+    ii[3].imageView = screen ? screen : g_tex[g_white].im.view;
+    w[4] = w[1];
+    w[4].dstBinding = 4;
+    w[4].pImageInfo = &ii[3];
+    vkUpdateDescriptorSets(g_dev, 5, w, 0, NULL);
     last_shadow2 = shadow2;
+    last_screen = screen;
     last_tex = tex;
     last_s = *s;
     last_shadow = shadow;
@@ -1796,7 +1808,7 @@ static void vk_draw(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_sam
     VkViewport vp;
     VkRect2D sc;
     VkDescriptorSet set;
-    VkImageView shadow, shadow2;
+    VkImageView shadow, shadow2, screen;
     rgl_samp plain;
     int w, h, pass;
 
@@ -1870,7 +1882,18 @@ static void vk_draw(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_sam
         }
         shadow2 = im->view;
     }
-    set = get_set(tex, s, shadow, shadow2);
+    screen = VK_NULL_HANDLE;            /* the screen map, for every draw while one is set */
+    if (g_screen > 0 && g_screen < g_ntg && g_tg[g_screen].used && g_screen != g_cur_target) {
+        vk_image *im = &g_tg[g_screen].color;
+        if (im->layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+            end_pass();
+            to_layout(im, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            if (!begin_pass())
+                return;
+        }
+        screen = im->view;
+    }
+    set = get_set(tex, s, shadow, shadow2, screen);
     if (!set)
         return;
     off = g_voff;
@@ -2022,6 +2045,7 @@ static void vk_present(void) { present(); }
 static void vk_finish(void) { }
 static void vk_shadow_map(int t) { g_shadow = t > 0 && t < g_ntg && g_tg[t].used ? t : 0; }
 static void vk_shadow_map2(int t) { g_shadow2 = t > 0 && t < g_ntg && g_tg[t].used ? t : 0; }
+static void vk_screen_map(int t) { g_screen = t > 0 && t < g_ntg && g_tg[t].used ? t : 0; }
 
 /* DYNAMIC LIGHTS: a block into the next slot; the draws from now on read it */
 static void vk_lights(const void *block, int bytes)
@@ -2043,5 +2067,5 @@ rgl_backend rgl_vk = {
     vk_tex_new, vk_tex_image, vk_tex_sub, vk_tex_free,
     vk_target_new, vk_target_free, vk_target_use, vk_target_size,
     vk_clear, vk_draw, vk_blit, vk_read, vk_present, vk_finish, vk_shadow_map,
-    vk_lights, vk_shadow_map2,
+    vk_lights, vk_shadow_map2, vk_screen_map,
 };

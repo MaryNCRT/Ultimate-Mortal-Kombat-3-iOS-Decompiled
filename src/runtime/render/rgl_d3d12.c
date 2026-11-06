@@ -111,6 +111,7 @@ static int g_nsamps;
 static int g_white;
 static int g_shadow;                    /* the target sampled as the shadow map (t1) */
 static int g_shadow2;                   /* and the point lights' (t2) */
+static int g_screen;                    /* AMBIENT OCCLUSION's screen map (t3) */
 
 #define DEPTH_FMT DXGI_FORMAT_D24_UNORM_S8_UINT
 #define COLOR_FMT DXGI_FORMAT_R8G8B8A8_UNORM
@@ -420,7 +421,7 @@ static int make_root(void)
         return 0;
     memset(&rs, 0, sizeof rs);
     rs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-    rs.NumDescriptors = 3;              /* t0 the texture, t1 the shadow map, t2 the point lights' */
+    rs.NumDescriptors = 4;              /* t0 the texture, t1 the shadow map, t2 the point lights', t3 the screen map */
     rsm = rs;
     rsm.NumDescriptors = 1;
     rsm.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
@@ -626,7 +627,7 @@ static int dx_open(void *window, int width, int height)
 static void dx_close(void)
 {
     int i;
-    g_shadow = g_shadow2 = 0;
+    g_shadow = g_shadow2 = g_screen = 0;
     if (!g_dev)
         return;
     flush();
@@ -914,6 +915,8 @@ static void dx_target_free(int i)
         g_shadow = 0;
     if (g_shadow2 == i)
         g_shadow2 = 0;
+    if (g_screen == i)
+        g_screen = 0;
     release(&g_tg[i].color);
     release(&g_tg[i].dep);
     if (g_tg[i].rtv >= 0) g_rtv_used[g_tg[i].rtv] = 0;
@@ -1250,7 +1253,7 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     ID3D12PipelineState *p;
     D3D12_SHADER_RESOURCE_VIEW_DESC sd;
     D3D12_VERTEX_BUFFER_VIEW vb;
-    ID3D12Resource *shadow_res, *shadow2_res;
+    ID3D12Resource *shadow_res, *shadow2_res, *screen_res;
     int t = g_cur, samples, depth, ss;
 
     if (g_voff + bytes > g_vsize) {
@@ -1284,7 +1287,7 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
                 return;
         }
     }
-    if (g_srv_next + 3 > SRV_RING && g_list_on)
+    if (g_srv_next + 4 > SRV_RING && g_list_on)
         flush();
     bind_target();
     /* t1: the shadow map for a draw that receives, white (nothing nearer
@@ -1301,6 +1304,11 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
         to_state(&g_tg[g_shadow2].color, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         shadow2_res = g_tg[g_shadow2].color.res;
     }
+    screen_res = g_tex[g_white].r.res;
+    if (g_screen > 0 && g_screen < g_ntg && g_tg[g_screen].used && g_screen != t) {
+        to_state(&g_tg[g_screen].color, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        screen_res = g_tg[g_screen].color.res;
+    }
     samples = t > 0 ? g_tg[t].samples : 1;
     depth = t > 0 ? g_tg[t].depth : 1;
     p = get_pso(k, samples, depth);
@@ -1315,6 +1323,7 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     sd.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
     ID3D12Device_CreateShaderResourceView(g_dev, shadow_res, &sd, cpu(g_srv_heap, g_srv_inc, g_srv_next + 1));
     ID3D12Device_CreateShaderResourceView(g_dev, shadow2_res, &sd, cpu(g_srv_heap, g_srv_inc, g_srv_next + 2));
+    ID3D12Device_CreateShaderResourceView(g_dev, screen_res, &sd, cpu(g_srv_heap, g_srv_inc, g_srv_next + 3));
     ss = get_sampler(s);
     if (g_ldirty) {
         memcpy(g_vmap + g_voff, &g_lblock, sizeof g_lblock);
@@ -1340,7 +1349,7 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
                                                                                   : D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     ID3D12GraphicsCommandList_IASetVertexBuffers(g_list, 0, 1, &vb);
     ID3D12GraphicsCommandList_DrawInstanced(g_list, (UINT)n, 1, 0, 0);
-    g_srv_next += 3;
+    g_srv_next += 4;
 }
 
 static void dx_draw(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_samp *s,
@@ -1546,6 +1555,11 @@ static void dx_present(void)
 
 static void dx_finish(void) { }
 
+static void dx_screen_map(int t)
+{
+    g_screen = t > 0 && t < g_ntg && g_tg[t].used ? t : 0;
+}
+
 static void dx_shadow_map2(int t)
 {
     g_shadow2 = t > 0 && t < g_ntg && g_tg[t].used ? t : 0;
@@ -1565,7 +1579,7 @@ rgl_backend rgl_d3d12 = {
     dx_tex_new, dx_tex_image, dx_tex_sub, dx_tex_free,
     dx_target_new, dx_target_free, dx_target_use, dx_target_size,
     dx_clear, dx_draw, dx_blit, dx_read, dx_present, dx_finish, dx_shadow_map,
-    dx_lights, dx_shadow_map2,
+    dx_lights, dx_shadow_map2, dx_screen_map,
 };
 
 #endif

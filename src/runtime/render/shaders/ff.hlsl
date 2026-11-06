@@ -149,7 +149,8 @@ float specular(float3 col, bool fighter)
 // where it sent one (the stage's .meshset, a fighter's skinning), else the
 // face's from the screen derivatives, turned to the camera.
 struct Light { float4 pos; float4 col; float4 dir; float4 cone; };
-cbuffer Lights : register(b1) { float4 lb_eye; float4 lb_sky; float4 lb_ground; int4 lb_count; Light lb_l[16]; };
+cbuffer Lights : register(b1) { float4 lb_eye; float4 lb_sky; float4 lb_ground;
+    float4 lb_aoproj; float4 lb_aoparm; float4 lb_aovp; float4 lb_aoparm2; int4 lb_count; Light lb_l[16]; };
 
 // DYNAMIC LIGHTS' shadows (rgl_ff.c point_shadows): a point light's six
 // cube faces, each a tile of patlas -- three across, two rows a light --
@@ -239,8 +240,157 @@ float3 dynamic(float3 P, float3 N, float3 albedo, float smap, bool fighter, int 
     return albedo * dif * (fighter ? 0.9 : 1.0) + spc * smap * (fighter ? 0.15 : 0.5);
 }
 
+
+// AMBIENT OCCLUSION (rgl_ff.c ao_passes): the screen map is the scene's
+// distance from the camera packed (mode 4 reads it), then the occlusion in
+// R with the distance beside it in G, B (mode 5 reads it), then that
+// blurred (the scene reads R). view_at: a texel back to the camera's space
+// (x right, y up, z the distance ahead), from the projection's scale.
+Texture2D scr : register(t3);
+
+float3 view_at(float2 uv)
+{
+    float d = unpack_depth(scr.SampleLevel(spt, uv, 0)) * lb_aoproj.z;
+    float2 ndc = float2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
+    return float3(ndc.x * d / lb_aoproj.x, ndc.y * d / lb_aoproj.y, d);
+}
+
+// the occlusion of a pixel, by the technique chosen (aoparm.w): 1 Crytek
+// SSAO (a hemisphere of points about the normal, each occluded when the
+// depth there is nearer than it), 2 HBAO (the horizon each way, how far it
+// rises over the surface), 3 Alchemy AO (the obscurance of points on a
+// disc). Written from the papers; the samples turned per pixel by
+// interleaved gradient noise, the blur after takes the noise out.
+float4 ao_pass(float2 fc)
+{
+    float sw_, sh_, sl_;
+    scr.GetDimensions(0, sw_, sh_, sl_);
+    float2 sz = float2(sw_, sh_);
+    float2 uv = fc / sz;
+    float3 P = view_at(uv);
+    float3 N = cross(ddx(P), ddy(P));
+    float far = lb_aoproj.z;
+    float2 e = frac(min(P.z / far, 0.999) * float2(1.0, 255.0));
+    e.x -= e.y / 255.0;
+    if (P.z > far * 0.98 || dot(N, N) < 1e-20)
+        return float4(1.0, e, 1.0);
+    N = normalize(N);
+    if (dot(N, -P) < 0.0)
+        N = -N;
+    float R = lb_aoproj.w;
+    float rpx = R * lb_aoproj.x * 0.5 * sz.x / P.z;
+    if (rpx < 1.0)
+        return float4(1.0, e, 1.0);
+    rpx = min(rpx, sz.x * 0.1);
+    int n = clamp(int(lb_aoparm2.x + 0.5), 4, 32);
+    float noise = frac(52.9829189 * frac(dot(fc, float2(0.06711056, 0.00583715))));
+    float bias = lb_aoparm.y, k = lb_aoparm.x;
+    int tech = int(lb_aoparm.w + 0.5);
+    float ao = 1.0, occ = 0.0;
+    if (tech == 3) {
+        [loop] for (int i = 0; i < 32; i++) {
+            if (i >= n)
+                break;
+            float t = (float(i) + 0.5) / float(n);
+            float a = float(i) * 2.39996 + noise * 6.28318;
+            float3 Q = view_at(uv + float2(cos(a), sin(a)) * rpx * sqrt(t) / sz);
+            float3 v = Q - P;
+            float vv = dot(v, v);
+            if (vv < 4.0 * R * R)
+                occ += max(0.0, dot(v, N) - bias * P.z) / (vv + 0.01 * R * R);
+        }
+        ao = 1.0 - 2.0 * k * R * occ / float(n);
+    } else if (tech == 2) {
+        int dirs = max(n / 4, 2);
+        [loop] for (int d = 0; d < 8; d++) {
+            if (d >= dirs)
+                break;
+            float a = (float(d) + noise) * 6.28318 / float(dirs);
+            float2 dir = float2(cos(a), sin(a));
+            float hmax = 0.0;
+            for (int s = 1; s <= 4; s++) {
+                float3 v = view_at(uv + dir * rpx * (float(s) - noise * 0.5) / 4.0 / sz) - P;
+                float l = length(v);
+                if (l < 1e-4 || l > R)
+                    continue;
+                hmax = max(hmax, (dot(v, N) / l - bias) * (1.0 - l * l / (R * R)));
+            }
+            occ += hmax;
+        }
+        ao = 1.0 - k * occ / float(dirs);
+    } else {
+        float3 T = normalize(abs(N.z) < 0.9 ? cross(N, float3(0.0, 0.0, 1.0)) : cross(N, float3(1.0, 0.0, 0.0)));
+        float3 Bt = cross(N, T);
+        [loop] for (int i = 0; i < 32; i++) {
+            if (i >= n)
+                break;
+            float t = (float(i) + 0.5) / float(n);
+            float a = float(i) * 2.39996 + noise * 6.28318;
+            float rr = sqrt(1.0 - t * t);
+            float3 S = P + (T * (rr * cos(a)) + Bt * (rr * sin(a)) + N * t) * R * lerp(0.1, 1.0, t * t);
+            if (S.z <= 0.01)
+                continue;
+            float2 su = float2(S.x * lb_aoproj.x / S.z * 0.5 + 0.5, 0.5 - S.y * lb_aoproj.y / S.z * 0.5);
+            float dz = view_at(su).z;
+            float range = clamp(R / max(abs(P.z - dz), 1e-4), 0.0, 1.0);
+            occ += (dz < S.z - bias * P.z ? 1.0 : 0.0) * range;
+        }
+        ao = 1.0 - k * occ / float(n);
+    }
+    return float4(clamp(ao, 0.0, 1.0), e, 1.0);
+}
+
+// the occlusion blurred 5x5, each texel weighed by how near its distance is
+// to the centre's, so a fighter's dark edge does not bleed onto the wall
+float4 ao_blur(float2 fc)
+{
+    float sw_, sh_, sl_;
+    scr.GetDimensions(0, sw_, sh_, sl_);
+    float2 sz = float2(sw_, sh_);
+    float2 uv = fc / sz;
+    float4 c0 = scr.SampleLevel(spt, uv, 0);
+    float z0 = c0.g + c0.b / 255.0;
+    if (lb_aoparm2.z < 0.5)
+        return float4(c0.r, c0.g, c0.b, 1.0);
+    float s = 0.0, w = 0.0;
+    for (int y = -2; y <= 2; y++)
+        for (int x = -2; x <= 2; x++) {
+            float4 c = scr.SampleLevel(spt, uv + float2(float(x), float(y)) / sz, 0);
+            float z = c.g + c.b / 255.0;
+            float wt = max(0.0, 1.0 - abs(z - z0) / (0.03 * z0 + 1e-5));
+            s += c.r * wt;
+            w += wt;
+        }
+    return float4(s / max(w, 1e-4), c0.g, c0.b, 1.0);
+}
+
+// the scene's read: the blurred occlusion at this pixel, bilinear by hand
+float ao_at(float2 fc)
+{
+    if (lb_aoparm2.w < 0.5)
+        return 1.0;
+    float2 uv = (fc - lb_aovp.xy) / lb_aovp.zw;
+    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0)
+        return 1.0;
+    float sw_, sh_, sl_;
+    scr.GetDimensions(0, sw_, sh_, sl_);
+    float2 sz = float2(sw_, sh_);
+    float2 t = uv * sz - 0.5;
+    float2 f = frac(t);
+    float2 b = (floor(t) + 0.5) / sz;
+    float a00 = scr.SampleLevel(spt, b, 0).r;
+    float a10 = scr.SampleLevel(spt, b + float2(1.0 / sz.x, 0), 0.0).r;
+    float a01 = scr.SampleLevel(spt, b + float2(0.0, 1.0 / sz.y), 0).r;
+    float a11 = scr.SampleLevel(spt, b + 1.0 / sz, 0).r;
+    return lerp(lerp(a00, a10, f.x), lerp(a01, a11, f.x), f.y);
+}
+
 float4 ps(PSIn i) : SV_Target
 {
+    if ((shadow & 15) == 4)             // AMBIENT OCCLUSION's passes (rgl_ff.c)
+        return ao_pass(i.pos.xy);
+    if ((shadow & 15) == 5)
+        return ao_blur(i.pos.xy);
     float4 c = i.col;
     int sm = shadow & 15;
     // the shadow map's coordinates and their slopes, before any discard
@@ -271,6 +421,8 @@ float4 ps(PSIn i) : SV_Target
     }
     if (sm == 2)
         return pack_depth(i.pos.z, i.sh.x);
+    if (sm == 3)                        // AMBIENT OCCLUSION: the distance, packed
+        return pack_depth(i.pos.w / lb_aoproj.z, 0.0);
     if (sm == 1)
     {
         float lt = light_at(p, qx, qy, shadow >> 4);
@@ -302,6 +454,9 @@ float4 ps(PSIn i) : SV_Target
                 float3 tint = lerp(lb_ground.rgb, lb_sky.rgb, up);
                 float tk = lerp(lb_ground.w, lb_sky.w, up);   // the fighters as much as the stage (Mary)
                 lin *= lerp(float3(1.0, 1.0, 1.0), tint, tk);
+                float ao = lerp(1.0, ao_at(i.pos.xy), fighter ? lb_aoparm2.y : 1.0);
+                ao = lerp(ao, 1.0, (1.0 - lt) * 0.5);
+                lin *= max(ao, lb_aoparm.z);
                 // a dark stage's slight light on its fighters (rgl_ff.c FIGHTER_LIFT)
                 if (fighter)
                     lin += al * lb_eye.w;
