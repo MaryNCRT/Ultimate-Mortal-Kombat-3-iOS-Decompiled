@@ -253,24 +253,33 @@ vec3 view_at(vec2 uv)
 // rises over the surface), 3 Alchemy AO (the obscurance of points on a
 // disc). Written from the papers; the samples turned per pixel by
 // interleaved gradient noise, the blur after takes the noise out.
+// a sample on the other layer: the centre a fighter's, the sample the
+// stage's (A of the depth: a fighter's 1) -- a fighter is a layer of his
+// own on top, darkened by himself and never by the stage (Mary)
+bool off_layer(vec2 uv, float fl)
+{
+    return fl > 0.5 && textureLod(scr, uv, 0.0).a < 0.5;
+}
+
 vec4 ao_pass(vec2 fc)
 {
     vec2 sz = vec2(textureSize(scr, 0));
     vec2 uv = fc / sz;
     vec3 P = view_at(uv);
+    float fl = textureLod(scr, uv, 0.0).a;
     vec3 N = cross(dFdx(P), dFdy(P));
     float far = lb.aoproj.z;
     vec2 e = fract(min(P.z / far, 0.999) * vec2(1.0, 255.0));
     e.x -= e.y / 255.0;
     if (P.z > far * 0.98 || dot(N, N) < 1e-20)
-        return vec4(1.0, e, 1.0);
+        return vec4(1.0, e, fl);
     N = normalize(N);
     if (dot(N, -P) < 0.0)
         N = -N;
     float R = lb.aoproj.w;
     float rpx = R * lb.aoproj.x * 0.5 * sz.x / P.z;
     if (rpx < 1.0)
-        return vec4(1.0, e, 1.0);
+        return vec4(1.0, e, fl);
     rpx = min(rpx, sz.x * 0.1);
     int n = clamp(int(lb.aoparm2.x + 0.5), 4, 32);
     float noise = fract(52.9829189 * fract(dot(fc, vec2(0.06711056, 0.00583715))));
@@ -283,7 +292,10 @@ vec4 ao_pass(vec2 fc)
                 break;
             float t = (float(i) + 0.5) / float(n);
             float a = float(i) * 2.39996 + noise * 6.28318;
-            vec3 Q = view_at(uv + vec2(cos(a), sin(a)) * rpx * sqrt(t) / sz);
+            vec2 qu = uv + vec2(cos(a), sin(a)) * rpx * sqrt(t) / sz;
+            if (off_layer(qu, fl))
+                continue;
+            vec3 Q = view_at(qu);
             vec3 v = Q - P;
             float vv = dot(v, v);
             if (vv < 4.0 * R * R)
@@ -299,7 +311,10 @@ vec4 ao_pass(vec2 fc)
             vec2 dir = vec2(cos(a), sin(a));
             float hmax = 0.0;
             for (int s = 1; s <= 4; s++) {
-                vec3 v = view_at(uv + dir * rpx * (float(s) - noise * 0.5) / 4.0 / sz) - P;
+                vec2 qu = uv + dir * rpx * (float(s) - noise * 0.5) / 4.0 / sz;
+                if (off_layer(qu, fl))
+                    continue;
+                vec3 v = view_at(qu) - P;
                 float l = length(v);
                 if (l < 1e-4 || l > R)
                     continue;
@@ -321,6 +336,8 @@ vec4 ao_pass(vec2 fc)
             if (S.z <= 0.01)
                 continue;
             vec2 su = vec2(S.x * lb.aoproj.x / S.z * 0.5 + 0.5, 0.5 - S.y * lb.aoproj.y / S.z * 0.5);
+            if (off_layer(su, fl))
+                continue;
             float dz = view_at(su).z;
             float range = clamp(R / max(abs(P.z - dz), 1e-4), 0.0, 1.0);
             occ += (dz < S.z - bias * P.z ? 1.0 : 0.0) * range;
@@ -329,7 +346,7 @@ vec4 ao_pass(vec2 fc)
     }
     ao = clamp(ao, 0.0, 1.0);
     ao = ao * ao;                       // the occluded darker, the open as they were
-    return vec4(ao, e, 1.0);
+    return vec4(ao, e, fl);
 }
 
 // the occlusion blurred 5x5, each texel weighed by how near its distance is
@@ -341,21 +358,23 @@ vec4 ao_blur(vec2 fc)
     vec4 c0 = textureLod(scr, uv, 0.0);
     float z0 = c0.g + c0.b / 255.0;
     if (lb.aoparm2.z < 0.5)
-        return vec4(c0.r, c0.g, c0.b, 1.0);
+        return c0;
     float s = 0.0, w = 0.0;
     for (int y = -2; y <= 2; y++)
         for (int x = -2; x <= 2; x++) {
             vec4 c = textureLod(scr, uv + vec2(float(x), float(y)) / sz, 0.0);
             float z = c.g + c.b / 255.0;
-            float wt = max(0.0, 1.0 - abs(z - z0) / (0.03 * z0 + 1e-5));
+            float wt = max(0.0, 1.0 - abs(z - z0) / (0.03 * z0 + 1e-5))
+                     * (abs(c.a - c0.a) < 0.5 ? 1.0 : 0.0);   // each layer its own
             s += c.r * wt;
             w += wt;
         }
-    return vec4(s / max(w, 1e-4), c0.g, c0.b, 1.0);
+    return vec4(s / max(w, 1e-4), c0.g, c0.b, c0.a);
 }
 
-// the scene's read: the blurred occlusion at this pixel, bilinear by hand
-float ao_at(vec2 fc)
+// the scene's read: the blurred occlusion at this pixel, bilinear by hand;
+// a fighter's only from his own layer's texels (none: unoccluded)
+float ao_at(vec2 fc, bool fighter)
 {
     if (lb.aoparm2.w < 0.5)
         return 1.0;
@@ -366,11 +385,16 @@ float ao_at(vec2 fc)
     vec2 t = uv * sz - 0.5;
     vec2 f = fract(t);
     vec2 b = (floor(t) + 0.5) / sz;
-    float a00 = textureLod(scr, b, 0.0).r;
-    float a10 = textureLod(scr, b + vec2(1.0 / sz.x, 0.0), 0.0).r;
-    float a01 = textureLod(scr, b + vec2(0.0, 1.0 / sz.y), 0.0).r;
-    float a11 = textureLod(scr, b + 1.0 / sz, 0.0).r;
-    return mix(mix(a00, a10, f.x), mix(a01, a11, f.x), f.y);
+    vec4 a00 = textureLod(scr, b, 0.0);
+    vec4 a10 = textureLod(scr, b + vec2(1.0 / sz.x, 0.0), 0.0);
+    vec4 a01 = textureLod(scr, b + vec2(0.0, 1.0 / sz.y), 0.0);
+    vec4 a11 = textureLod(scr, b + 1.0 / sz, 0.0);
+    if (!fighter)
+        return mix(mix(a00.r, a10.r, f.x), mix(a01.r, a11.r, f.x), f.y);
+    vec4 wt = vec4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y)
+            * step(0.5, vec4(a00.a, a10.a, a01.a, a11.a));
+    float ws = wt.x + wt.y + wt.z + wt.w;
+    return ws > 1e-4 ? dot(wt, vec4(a00.r, a10.r, a01.r, a11.r)) / ws : 1.0;
 }
 
 
@@ -394,7 +418,7 @@ vec3 ao_debug_view(vec2 fc, float contrib)
             n = -n;
         return n * 0.5 + 0.5;
     }
-    return vec3(ao_at(fc));             // 1 after the blur, 2 before it
+    return vec3(ao_at(fc, false));             // 1 after the blur, 2 before it
 }
 
 void main()
@@ -439,7 +463,7 @@ void main()
     if (sm == 2)
         c = pack_depth(gl_FragCoord.z, v_sh.x);
     else if (sm == 3)                   // AMBIENT OCCLUSION: the distance, packed
-        c = pack_depth((1.0 / gl_FragCoord.w) / lb.aoproj.z, 0.0);
+        c = pack_depth((1.0 / gl_FragCoord.w) / lb.aoproj.z, (pc.shadow >> 4) != 0 ? 255.0 : 0.0);
     else if (sm == 1)
     {
         float lt = light_at(p, qx, qy, pc.shadow >> 4);
@@ -478,7 +502,7 @@ void main()
                 // AMBIENT OCCLUSION over everything, last (Mary: under the
                 // other effects it hardly showed): a fighter's share of
                 // it, never below the floor
-                float ao = max(mix(1.0, ao_at(gl_FragCoord.xy), fighter ? lb.aoparm2.y : 1.0), lb.aoparm.z);
+                float ao = max(mix(1.0, ao_at(gl_FragCoord.xy, fighter), fighter ? lb.aoparm2.y : 1.0), lb.aoparm.z);
                 lin *= ao;
                 if (lb.aodbg.x > 0.5 && lb.aoparm2.w > 0.5) {   // a debug view: that, alone
                     o = vec4(ao_debug_view(gl_FragCoord.xy, ao), 1.0);

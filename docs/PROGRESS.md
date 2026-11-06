@@ -85,7 +85,7 @@ marked in the log below.
 | The stage editor's SCULPT showed "500 Internal Error" once | **closed**: Mary no longer sees it (0.1.18); the guards stay |
 | Slight slide in a kombo (issue #114) | **the original's rule**, checked instruction by instruction (`t_cc_*_punch` → `t_ccp3` → `t_separate_us`); nothing to fix |
 | Dynamic stage music, Genesis style (Soul Chamber first) | **research only**, nothing built: [research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md); waits for Mary's Genesis recording (WAV + GYM) |
-| Ambient occlusion and screen-space contact shadows (ENHANCED LIGHTING) | **research only**, nothing built: [research/AMBIENT-OCCLUSION.md](research/AMBIENT-OCCLUSION.md), [research/CONTACT-SHADOWS.md](research/CONTACT-SHADOWS.md); after `claude/dynamic-lighting` lands |
+| Ambient occlusion and screen-space contact shadows (ENHANCED LIGHTING) | ambient occlusion **built** (0.3.0; the fighters are their own layer since after 0.3.1b); contact shadows research only: [research/CONTACT-SHADOWS.md](research/CONTACT-SHADOWS.md) |
 | After CANCEL in STAGE SELECT the select screen came back silent once | fixed by never stopping the tune on the way; the log says `stage select: the tune ...` if it happens again |
 
 ### Where to look next
@@ -97,6 +97,24 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## Unreleased (after 0.3.1b)
+
+Built in Mary's test folder; she played it on Direct3D 12 and confirmed the fix.
+
+- **AMBIENT OCCLUSION in the intros, again**: the stage's occlusion was
+  still painted over the fighters in some intros (Mary: Motaro on the
+  balcony). In those intros the fighters are drawn blended, and the
+  occlusion's depth pass skips blended draws, so the fighters' pixels read
+  the occlusion of the wall behind them (the diagnostic log said
+  `fighters' draws 1 (blended 1, ...)`). The fighters are now a layer of
+  their own: the depth pass marks them in the alpha channel, the occlusion
+  pass and the blur only mix samples of the same layer, and a fighter's
+  pixel only takes the fighters' occlusion -- none at all when the fighter
+  is not in the depth (`rgl_ff.c` `ao_passes`, `shaders/ff.frag`,
+  `shaders/ff.hlsl`). `tests/rgl_test.c`: OpenGL passes; Vulkan and
+  Direct3D 12 fail the same 5 shadow checks as before this change (checked
+  against a build of main).
 
 ## 0.3.1b beta (2026-11-06) — frame time and LOW LATENCY
 

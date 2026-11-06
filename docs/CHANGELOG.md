@@ -8,6 +8,24 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased (after 0.3.1b)
+
+Built in Mary's test folder; she played it on Direct3D 12 and confirmed the fix.
+
+- **AMBIENT OCCLUSION in the intros, again**: the stage's occlusion was
+  still painted over the fighters in some intros (Mary: Motaro on the
+  balcony). In those intros the fighters are drawn blended, and the
+  occlusion's depth pass skips blended draws, so the fighters' pixels read
+  the occlusion of the wall behind them (the diagnostic log said
+  `fighters' draws 1 (blended 1, ...)`). The fighters are now a layer of
+  their own: the depth pass marks them in the alpha channel, the occlusion
+  pass and the blur only mix samples of the same layer, and a fighter's
+  pixel only takes the fighters' occlusion -- none at all when the fighter
+  is not in the depth (`rgl_ff.c` `ao_passes`, `shaders/ff.frag`,
+  `shaders/ff.hlsl`). `tests/rgl_test.c`: OpenGL passes; Vulkan and
+  Direct3D 12 fail the same 5 shadow checks as before this change (checked
+  against a build of main).
+
 ## 0.3.1b beta (2026-11-06) — frame time and LOW LATENCY
 
 Published 2026-11-06 as the GitHub pre-release `v0.3.1-beta.b`: the fix

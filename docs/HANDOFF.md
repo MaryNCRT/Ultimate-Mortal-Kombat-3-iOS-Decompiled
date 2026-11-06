@@ -178,7 +178,8 @@ press COMPILE.
   the camera's units, the view scales the world ~5x), with debug views in
   the debug menu. Released in 0.3.0; 0.3.1b keeps a depth clear between
   held draws in the AO depth pass (the intros clear it before the
-  fighters). Next: lighting files
+  fighters); after 0.3.1b the fighters are a layer of their own in it
+  (blended intro fighters were not in the depth). Next: lighting files
   for more stages (Mary tunes them one by one), per-fighter files,
   contact shadows, OpenGL (research/). Open: a 3.6 s freeze in the present
   before the main menu; the `d3d12 slow present:` log line splits it. The shaders

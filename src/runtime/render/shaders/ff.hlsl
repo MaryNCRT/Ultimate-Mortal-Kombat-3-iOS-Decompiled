@@ -261,6 +261,14 @@ float3 view_at(float2 uv)
 // rises over the surface), 3 Alchemy AO (the obscurance of points on a
 // disc). Written from the papers; the samples turned per pixel by
 // interleaved gradient noise, the blur after takes the noise out.
+// a sample on the other layer: the centre a fighter's, the sample the
+// stage's (A of the depth: a fighter's 1) -- a fighter is a layer of his
+// own on top, darkened by himself and never by the stage (Mary)
+bool off_layer(float2 uv, float fl)
+{
+    return fl > 0.5 && scr.SampleLevel(spt, uv, 0).a < 0.5;
+}
+
 float4 ao_pass(float2 fc)
 {
     float sw_, sh_, sl_;
@@ -268,19 +276,20 @@ float4 ao_pass(float2 fc)
     float2 sz = float2(sw_, sh_);
     float2 uv = fc / sz;
     float3 P = view_at(uv);
+    float fl = scr.SampleLevel(spt, uv, 0).a;
     float3 N = cross(ddx(P), ddy(P));
     float far = lb_aoproj.z;
     float2 e = frac(min(P.z / far, 0.999) * float2(1.0, 255.0));
     e.x -= e.y / 255.0;
     if (P.z > far * 0.98 || dot(N, N) < 1e-20)
-        return float4(1.0, e, 1.0);
+        return float4(1.0, e, fl);
     N = normalize(N);
     if (dot(N, -P) < 0.0)
         N = -N;
     float R = lb_aoproj.w;
     float rpx = R * lb_aoproj.x * 0.5 * sz.x / P.z;
     if (rpx < 1.0)
-        return float4(1.0, e, 1.0);
+        return float4(1.0, e, fl);
     rpx = min(rpx, sz.x * 0.1);
     int n = clamp(int(lb_aoparm2.x + 0.5), 4, 32);
     float noise = frac(52.9829189 * frac(dot(fc, float2(0.06711056, 0.00583715))));
@@ -293,7 +302,10 @@ float4 ao_pass(float2 fc)
                 break;
             float t = (float(i) + 0.5) / float(n);
             float a = float(i) * 2.39996 + noise * 6.28318;
-            float3 Q = view_at(uv + float2(cos(a), sin(a)) * rpx * sqrt(t) / sz);
+            float2 qu = uv + float2(cos(a), sin(a)) * rpx * sqrt(t) / sz;
+            if (off_layer(qu, fl))
+                continue;
+            float3 Q = view_at(qu);
             float3 v = Q - P;
             float vv = dot(v, v);
             if (vv < 4.0 * R * R)
@@ -309,7 +321,10 @@ float4 ao_pass(float2 fc)
             float2 dir = float2(cos(a), sin(a));
             float hmax = 0.0;
             [loop] for (int s = 1; s <= 4; s++) {
-                float3 v = view_at(uv + dir * rpx * (float(s) - noise * 0.5) / 4.0 / sz) - P;
+                float2 qu = uv + dir * rpx * (float(s) - noise * 0.5) / 4.0 / sz;
+                if (off_layer(qu, fl))
+                    continue;
+                float3 v = view_at(qu) - P;
                 float l = length(v);
                 if (l < 1e-4 || l > R)
                     continue;
@@ -331,6 +346,8 @@ float4 ao_pass(float2 fc)
             if (S.z <= 0.01)
                 continue;
             float2 su = float2(S.x * lb_aoproj.x / S.z * 0.5 + 0.5, 0.5 - S.y * lb_aoproj.y / S.z * 0.5);
+            if (off_layer(su, fl))
+                continue;
             float dz = view_at(su).z;
             float range = clamp(R / max(abs(P.z - dz), 1e-4), 0.0, 1.0);
             occ += (dz < S.z - bias * P.z ? 1.0 : 0.0) * range;
@@ -339,7 +356,7 @@ float4 ao_pass(float2 fc)
     }
     ao = clamp(ao, 0.0, 1.0);
     ao = ao * ao;                       // the occluded darker, the open as they were
-    return float4(ao, e, 1.0);
+    return float4(ao, e, fl);
 }
 
 // the occlusion blurred 5x5, each texel weighed by how near its distance is
@@ -353,21 +370,23 @@ float4 ao_blur(float2 fc)
     float4 c0 = scr.SampleLevel(spt, uv, 0);
     float z0 = c0.g + c0.b / 255.0;
     if (lb_aoparm2.z < 0.5)
-        return float4(c0.r, c0.g, c0.b, 1.0);
+        return c0;
     float s = 0.0, w = 0.0;
     [loop] for (int y = -2; y <= 2; y++)
         [loop] for (int x = -2; x <= 2; x++) {
             float4 c = scr.SampleLevel(spt, uv + float2(float(x), float(y)) / sz, 0);
             float z = c.g + c.b / 255.0;
-            float wt = max(0.0, 1.0 - abs(z - z0) / (0.03 * z0 + 1e-5));
+            float wt = max(0.0, 1.0 - abs(z - z0) / (0.03 * z0 + 1e-5))
+                     * (abs(c.a - c0.a) < 0.5 ? 1.0 : 0.0);   // each layer its own
             s += c.r * wt;
             w += wt;
         }
-    return float4(s / max(w, 1e-4), c0.g, c0.b, 1.0);
+    return float4(s / max(w, 1e-4), c0.g, c0.b, c0.a);
 }
 
-// the scene's read: the blurred occlusion at this pixel, bilinear by hand
-float ao_at(float2 fc)
+// the scene's read: the blurred occlusion at this pixel, bilinear by hand;
+// a fighter's only from his own layer's texels (none: unoccluded)
+float ao_at(float2 fc, bool fighter)
 {
     if (lb_aoparm2.w < 0.5)
         return 1.0;
@@ -380,11 +399,16 @@ float ao_at(float2 fc)
     float2 t = uv * sz - 0.5;
     float2 f = frac(t);
     float2 b = (floor(t) + 0.5) / sz;
-    float a00 = scr.SampleLevel(spt, b, 0).r;
-    float a10 = scr.SampleLevel(spt, b + float2(1.0 / sz.x, 0), 0.0).r;
-    float a01 = scr.SampleLevel(spt, b + float2(0.0, 1.0 / sz.y), 0).r;
-    float a11 = scr.SampleLevel(spt, b + 1.0 / sz, 0).r;
-    return lerp(lerp(a00, a10, f.x), lerp(a01, a11, f.x), f.y);
+    float4 a00 = scr.SampleLevel(spt, b, 0);
+    float4 a10 = scr.SampleLevel(spt, b + float2(1.0 / sz.x, 0), 0.0);
+    float4 a01 = scr.SampleLevel(spt, b + float2(0.0, 1.0 / sz.y), 0);
+    float4 a11 = scr.SampleLevel(spt, b + 1.0 / sz, 0);
+    if (!fighter)
+        return lerp(lerp(a00.r, a10.r, f.x), lerp(a01.r, a11.r, f.x), f.y);
+    float4 wt = float4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y)
+              * step(0.5, float4(a00.a, a10.a, a01.a, a11.a));
+    float ws = wt.x + wt.y + wt.z + wt.w;
+    return ws > 1e-4 ? dot(wt, float4(a00.r, a10.r, a01.r, a11.r)) / ws : 1.0;
 }
 
 
@@ -410,7 +434,7 @@ float3 ao_debug_view(float2 fc, float contrib)
             n = -n;
         return n * 0.5 + 0.5;
     }
-    return ao_at(fc).xxx;                 // 1 after the blur, 2 before it
+    return ao_at(fc, false).xxx;                 // 1 after the blur, 2 before it
 }
 
 float4 ps(PSIn i) : SV_Target
@@ -450,7 +474,7 @@ float4 ps(PSIn i) : SV_Target
     if (sm == 2)
         return pack_depth(i.pos.z, i.sh.x);
     if (sm == 3)                        // AMBIENT OCCLUSION: the distance, packed
-        return pack_depth(i.pos.w / lb_aoproj.z, 0.0);
+        return pack_depth(i.pos.w / lb_aoproj.z, (shadow >> 4) != 0 ? 255.0 : 0.0);
     if (sm == 1)
     {
         float lt = light_at(p, qx, qy, shadow >> 4);
@@ -487,7 +511,7 @@ float4 ps(PSIn i) : SV_Target
                     lin += al * lb_eye.w;
                 lin += dynamic(i.p, N, al, sm2, fighter, shadow >> 4);
                 // AMBIENT OCCLUSION over everything, last (as ff.frag)
-                float ao = max(lerp(1.0, ao_at(i.pos.xy), fighter ? lb_aoparm2.y : 1.0), lb_aoparm.z);
+                float ao = max(lerp(1.0, ao_at(i.pos.xy, fighter), fighter ? lb_aoparm2.y : 1.0), lb_aoparm.z);
                 lin *= ao;
                 if (lb_aodbg.x > 0.5 && lb_aoparm2.w > 0.5)    // a debug view: that, alone
                     return float4(ao_debug_view(i.pos.xy, ao), 1.0);

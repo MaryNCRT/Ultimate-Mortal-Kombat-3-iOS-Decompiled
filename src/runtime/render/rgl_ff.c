@@ -2473,7 +2473,7 @@ static void ao_quad(int mode, int w, int h)
 /* 1-3, before the held draws go; 4 is theirs (the screen map left set) */
 static void ao_passes(void)
 {
-    static const float white[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    static const float white[4] = { 1.0f, 1.0f, 1.0f, 0.0f };  /* far; A 0: not a fighter */
     unsigned char cast[256];            /* the casters' ids SH.w holds */
     int i, w, h;
 
@@ -2524,7 +2524,8 @@ static void ao_passes(void)
              * is nearer): kept here too, or a fighter behind a piece of the
              * stage is missing from the depth and that piece's occlusion
              * darkens him (Mary). The distances stay; a draw after it
-             * writes its own. */
+             * writes its own, and the fighters are a layer of their own
+             * (the shaders' off_layer): the stage's never on them. */
             static int told;
             if (!told && i > 0) {       /* port diagnostic, once a run */
                 told = 1;
@@ -2533,12 +2534,15 @@ static void ao_passes(void)
             B->clear(NULL, 0, white, 1, 1.0f);
             continue;
         }
+        /* a blended fighter (the intros draw them so: Motaro's on the
+         * balcony) is not in the depth; his layer reads none and he gets
+         * no occlusion -- before the layers he got the wall's behind him */
         if (hd->clear || (hd->f.shadow & 15) != RGL_SHADOW_RECEIVE || hd->p.blend || !hd->p.depth_write)
             continue;
         if ((hd->f.shadow >> 4) != 0 && cast[(hd->f.shadow >> 4) & 255] && !AO.fighter_own)
             continue;                   /* a fighter: his base mesh, below */
         f = hd->f;
-        f.shadow = RGL_AO_DEPTH;
+        f.shadow = RGL_AO_DEPTH | (hd->f.shadow & ~15);    /* a fighter's id: his layer (A) */
         f.bump = 0.0f;
         f.lit = 0;
         p = hd->p;
@@ -2591,7 +2595,7 @@ static void ao_passes(void)
             rgl_rect vp;
             memset(&f, 0, sizeof f);
             f.tex_mode = RGL_TEX_NONE;
-            f.shadow = RGL_AO_DEPTH;
+            f.shadow = RGL_AO_DEPTH | 1 << 4;   /* the fighters' layer (A) */
             memset(&p, 0, sizeof p);
             p.topo = RGL_TRIS;
             p.depth_test = p.depth_write = 1;
