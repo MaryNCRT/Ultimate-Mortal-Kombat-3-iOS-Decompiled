@@ -9,10 +9,12 @@
 layout(location = 0) in vec4 v_col;
 layout(location = 1) in vec2 v_uv;
 layout(location = 2) in vec4 v_sh;
+layout(location = 3) in vec3 v_n;
+layout(location = 4) in vec3 v_p;
 layout(location = 0) out vec4 o;
 layout(set = 0, binding = 0) uniform sampler2D tex;
 layout(set = 0, binding = 1) uniform sampler2D smap;
-layout(push_constant) uniform PC { int mode; int afunc; float aref; int shadow; float bump; } pc;
+layout(push_constant) uniform PC { int mode; int afunc; float aref; int shadow; int lit; float bump; } pc;
 
 // the map's texel: the depth nearest the light, 24 bits in RGB, and in A
 // which caster put it there (0 the stage, a fighter from 1; rgl_ff.c)
@@ -127,6 +129,55 @@ float specular(vec3 col, bool fighter)
     return max(spec, 0.0) * map * (fighter ? 0.04 : 0.22);
 }
 
+
+// DYNAMIC LIGHTS (rgl_ff.c, rgl.h rgl_light_block): point, spot and
+// directional lights in world space, per pixel, added over the game's own
+// light (its baked stage colours, the fighters' LightVert) rather than in
+// place of it: a stage with none looks as it did. Blinn-Phong, as the
+// lighting walkthrough's, in linear light; the attenuation smooth to 0 at a
+// light's radius (a window over an inverse square, after Karis), a spot's
+// edge a smoothstep between its two cones. The normal is the mesh's own
+// where it sent one (the stage's .meshset, a fighter's skinning), else the
+// face's from the screen derivatives, turned to the camera.
+struct Light { vec4 pos; vec4 col; vec4 dir; vec4 cone; };
+layout(std140, set = 0, binding = 2) uniform Lights {
+    vec4 eye; vec4 sky; vec4 ground; ivec4 count; Light l[16];
+} lb;
+
+vec3 dynamic(vec3 P, vec3 N, vec3 albedo, float smap, bool fighter)
+{
+    vec3 V = normalize(lb.eye.xyz - P);
+    vec3 dif = mix(lb.ground.rgb, lb.sky.rgb, N.z * 0.5 + 0.5);  // world Z is up
+    vec3 spc = vec3(0.0);
+    float sh = fighter ? 32.0 : 20.0;
+    int n = min(lb.count.x, 16);
+    for (int i = 0; i < n; i++) {
+        Light L = lb.l[i];
+        vec3 Ld;
+        float att = 1.0;
+        int type = int(L.dir.w + 0.5);
+        if (type == 2)
+            Ld = -normalize(L.dir.xyz);
+        else {
+            vec3 d = L.pos.xyz - P;
+            float dist = length(d), x = dist / max(L.pos.w, 1e-4);
+            if (x >= 1.0)
+                continue;
+            Ld = d / max(dist, 1e-4);
+            float w = clamp(1.0 - x * x * x * x, 0.0, 1.0);
+            att = w * w / (1.0 + 16.0 * x * x);
+            if (type == 1)
+                att *= smoothstep(L.cone.y, L.cone.x, dot(-Ld, normalize(L.dir.xyz)));
+        }
+        float ndl = max(dot(N, Ld), 0.0);
+        vec3 c = L.col.rgb * L.col.w * att;
+        dif += c * ndl;
+        vec3 H = normalize(Ld + V);
+        spc += c * pow(max(dot(N, H), 0.0), sh) * (sh + 8.0) / 25.13 * ndl;
+    }
+    return albedo * dif * (fighter ? 0.6 : 1.0) + spc * smap * (fighter ? 0.15 : 0.5);
+}
+
 void main()
 {
     vec4 c = v_col;
@@ -137,10 +188,15 @@ void main()
     vec3 q = vec3(p.x * 0.5, -p.y * 0.5, p.z * 0.5);
     vec3 qx = dFdx(q), qy = dFdy(q);
     float rl = sm == 1 && pc.bump > 0.0 ? relief(v_uv, pc.bump) : 1.0;
-    if (pc.mode == 1)
-        c *= texture(tex, v_uv);
-    else if (pc.mode == 2)
-        c = texture(tex, v_uv);
+    vec3 fn = cross(dFdx(v_p), dFdy(v_p));   // the face's normal, before any discard
+    vec4 tc = vec4(1.0);
+    if (pc.mode == 1) {
+        tc = texture(tex, v_uv);
+        c *= tc;
+    } else if (pc.mode == 2) {
+        tc = texture(tex, v_uv);
+        c = tc;
+    }
     if (pc.afunc != 0) {
         bool pass = true;
         if (pc.afunc == 0x200) pass = false;
@@ -158,17 +214,32 @@ void main()
     else if (sm == 1)
     {
         float lt = light_at(p, qx, qy, pc.shadow >> 4);
+        bool fighter = (pc.shadow >> 4) != 0;
+        // in linear light (gamma 2.2), as the walkthrough's: the relief and
+        // the highlight are light added and taken away, and only there do
+        // they add up as light does; the map's shadow, a shade as it was
+        // tuned (lt in gamma), then the dynamic lights over it all
+        vec3 lin = pow(max(c.rgb, vec3(0.0)), vec3(2.2));
         if (pc.bump > 0.0) {
-            // in linear light (gamma 2.2), as the walkthrough's: the relief
-            // and the highlight are light added and taken away, and only
-            // there do they add up as light does; the shadow, a shade as
-            // it was tuned, after
-            vec3 lin = pow(max(c.rgb, vec3(0.0)), vec3(2.2));
-            float sp = specular(lin, (pc.shadow >> 4) != 0);
+            float sp = specular(lin, fighter);
             lin = lin * rl + sp * smoothstep(0.75, 1.0, lt);
-            c.rgb = pow(lin, vec3(1.0 / 2.2));
         }
-        c.rgb *= lt;
+        lin *= pow(lt, 2.2);
+        if (pc.lit != 0) {
+            vec3 N = dot(v_n, v_n) > 0.25 ? normalize(v_n) : vec3(0.0);
+            if (dot(N, N) < 0.5 && dot(fn, fn) > 1e-20) {
+                N = normalize(fn);
+                if (dot(N, lb.eye.xyz - v_p) < 0.0)
+                    N = -N;
+            }
+            if (dot(N, N) > 0.5) {
+                // the texture's colour, the baked light only half in it
+                vec3 al = pow(tc.rgb, vec3(2.2)) * (pc.mode == 2 ? vec3(1.0) : v_col.rgb * 0.5 + 0.5);
+                float sm2 = smoothstep(0.25, 0.85, dot(al, vec3(0.299, 0.587, 0.114)));
+                lin += dynamic(v_p, N, al, sm2, fighter);
+            }
+        }
+        c.rgb = pow(lin, vec3(1.0 / 2.2));
     }
     o = c;
 }

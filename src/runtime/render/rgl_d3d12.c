@@ -98,6 +98,7 @@ static ID3D12Resource *g_retired[16];   /* outgrown this frame, still read */
 static int g_nretired;
 static unsigned char *g_vmap;
 static UINT64 g_vsize, g_voff;
+static int g_ldirty = 1;                /* DYNAMIC LIGHTS: the block is due again (dx_lights) */
 
 static dx_tex *g_tex;
 static int g_ntex;
@@ -280,6 +281,7 @@ static void flush(void)
         ID3D12Resource_Release(g_retired[--g_nretired]);
     g_srv_next = 0;
     g_voff = 0;
+    g_ldirty = 1;                       /* the lights' copy is gone with it */
     g_serial++;
 }
 
@@ -406,7 +408,7 @@ static D3D12_RECT gl_rect(const rgl_rect *r, int tw, int th)
 static int make_root(void)
 {
     D3D12_DESCRIPTOR_RANGE rs, rsm;
-    D3D12_ROOT_PARAMETER p[3];
+    D3D12_ROOT_PARAMETER p[4];
     D3D12_STATIC_SAMPLER_DESC sp;
     D3D12_ROOT_SIGNATURE_DESC d;
     ID3DBlob *blob = NULL, *err = NULL;
@@ -431,6 +433,9 @@ static int make_root(void)
     p[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     p[2] = p[1];
     p[2].DescriptorTable.pDescriptorRanges = &rsm;
+    p[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;   /* b1 DYNAMIC LIGHTS */
+    p[3].Descriptor.ShaderRegister = 1;
+    p[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     /* s1: the shadow map's, texel by texel, clamped */
     memset(&sp, 0, sizeof sp);
     sp.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
@@ -440,7 +445,7 @@ static int make_root(void)
     sp.ShaderRegister = 1;
     sp.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     memset(&d, 0, sizeof d);
-    d.NumParameters = 3;
+    d.NumParameters = 4;
     d.pParameters = p;
     d.NumStaticSamplers = 1;
     d.pStaticSamplers = &sp;
@@ -1081,7 +1086,7 @@ static ID3D12PipelineState *get_pso(const rgl_pipe *k, int samples, int depth)
 {
     WCHAR name[64];
     D3D12_GRAPHICS_PIPELINE_STATE_DESC d;
-    D3D12_INPUT_ELEMENT_DESC il[4];
+    D3D12_INPUT_ELEMENT_DESC il[6];
     ID3D12PipelineState *p = NULL;
     int i;
 
@@ -1095,7 +1100,11 @@ static ID3D12PipelineState *get_pso(const rgl_pipe *k, int samples, int depth)
     il[2].SemanticName = "TEXCOORD"; il[2].Format = DXGI_FORMAT_R32G32_FLOAT; il[2].AlignedByteOffset = 20;
     il[3].SemanticName = "TEXCOORD"; il[3].SemanticIndex = 1; il[3].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
     il[3].AlignedByteOffset = 28;
-    for (i = 0; i < 4; i++)
+    il[4].SemanticName = "TEXCOORD"; il[4].SemanticIndex = 2; il[4].Format = DXGI_FORMAT_R32G32B32_FLOAT;
+    il[4].AlignedByteOffset = (UINT)offsetof(rgl_vtx, n);
+    il[5].SemanticName = "TEXCOORD"; il[5].SemanticIndex = 3; il[5].Format = DXGI_FORMAT_R32G32B32_FLOAT;
+    il[5].AlignedByteOffset = (UINT)offsetof(rgl_vtx, p);
+    for (i = 0; i < 6; i++)
         il[i].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
     memset(&d, 0, sizeof d);
     d.pRootSignature = g_root;
@@ -1123,7 +1132,7 @@ static ID3D12PipelineState *get_pso(const rgl_pipe *k, int samples, int depth)
     d.DepthStencilState.DepthWriteMask = k->depth_write && depth ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
     d.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
     d.InputLayout.pInputElementDescs = il;
-    d.InputLayout.NumElements = 4;
+    d.InputLayout.NumElements = 6;
     d.PrimitiveTopologyType = k->topo == RGL_LINES ? D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE : D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     d.NumRenderTargets = 1;
     d.RTVFormats[0] = COLOR_FMT;
@@ -1201,11 +1210,30 @@ static int get_sampler(const rgl_samp *s)
 
 /* triangles or lines into the current target: the common path of draws and
  * of the scaled blit */
+/* DYNAMIC LIGHTS: the block the draws read (b1, a root CBV). It is copied
+ * into the vertex upload buffer, 256 bytes aligned, before the first draw
+ * after it changes or after a flush (which starts the buffer again) */
+#define LBYTES ((sizeof(rgl_light_block) + 255) & ~(size_t)255)
+static rgl_light_block g_lblock;
+static D3D12_GPU_VIRTUAL_ADDRESS g_laddr;
+
+static void dx_lights(const void *block, int bytes)
+{
+    if (bytes > (int)sizeof g_lblock)
+        return;
+    memset(&g_lblock, 0, sizeof g_lblock);
+    memcpy(&g_lblock, block, (size_t)bytes);
+    g_ldirty = 1;
+}
+
 static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, int srv_ms,
                 const rgl_samp *s, const D3D12_VIEWPORT *vp, const D3D12_RECT *sc,
                 const rgl_vtx *v, int n)
 {
-    UINT64 bytes = (UINT64)n * sizeof *v;
+    /* room for the lights' block too, whether or not it is written: a
+     * flush below makes it due again */
+    UINT64 bytes = (UINT64)n * sizeof *v + LBYTES;
+    const UINT64 vbytes = (UINT64)n * sizeof *v;
     ID3D12PipelineState *p;
     D3D12_SHADER_RESOURCE_VIEW_DESC sd;
     D3D12_VERTEX_BUFFER_VIEW vb;
@@ -1268,6 +1296,13 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     sd.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
     ID3D12Device_CreateShaderResourceView(g_dev, shadow_res, &sd, cpu(g_srv_heap, g_srv_inc, g_srv_next + 1));
     ss = get_sampler(s);
+    if (g_ldirty) {
+        memcpy(g_vmap + g_voff, &g_lblock, sizeof g_lblock);
+        g_laddr = ID3D12Resource_GetGPUVirtualAddress(g_vbuf) + g_voff;
+        g_voff += LBYTES;
+        g_ldirty = 0;
+    }
+    bytes = vbytes;
     memcpy(g_vmap + g_voff, v, (size_t)bytes);
     vb.BufferLocation = ID3D12Resource_GetGPUVirtualAddress(g_vbuf) + g_voff;
     vb.SizeInBytes = (UINT)bytes;
@@ -1280,6 +1315,7 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     ID3D12GraphicsCommandList_SetGraphicsRoot32BitConstants(g_list, 0, sizeof *f / 4, f, 0);
     ID3D12GraphicsCommandList_SetGraphicsRootDescriptorTable(g_list, 1, gpu(g_srv_heap, g_srv_inc, g_srv_next));
     ID3D12GraphicsCommandList_SetGraphicsRootDescriptorTable(g_list, 2, gpu(g_samp_heap, g_samp_inc, ss));
+    ID3D12GraphicsCommandList_SetGraphicsRootConstantBufferView(g_list, 3, g_laddr);
     ID3D12GraphicsCommandList_IASetPrimitiveTopology(g_list, k->topo == RGL_LINES ? D3D_PRIMITIVE_TOPOLOGY_LINELIST
                                                                                   : D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     ID3D12GraphicsCommandList_IASetVertexBuffers(g_list, 0, 1, &vb);
@@ -1490,6 +1526,7 @@ rgl_backend rgl_d3d12 = {
     dx_tex_new, dx_tex_image, dx_tex_sub, dx_tex_free,
     dx_target_new, dx_target_free, dx_target_use, dx_target_size,
     dx_clear, dx_draw, dx_blit, dx_read, dx_present, dx_finish, dx_shadow_map,
+    dx_lights,
 };
 
 #endif

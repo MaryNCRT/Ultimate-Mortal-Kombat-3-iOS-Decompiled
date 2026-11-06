@@ -66,7 +66,7 @@ Todos se pueden cambiar en el launcher (CONTROLES) o en el juego (`Esc`).
 **El juego, como en el dispositivo.** Todos los modos del juego de iOS (torre arcade, VS, entrenamiento, supervivencia, karnage, tesoros, kodes), sus menús, HUD, remates, sonidos y música, desde el código decompilado. En 4:3 se usa la disposición de la versión de iPad.
 
 **Añadido por el port:**
-- **Renderizadores:** OpenGL, Vulkan y Direct3D 12 (`src/runtime/render/`), texturas HD, antialiasing, ILUMINACIÓN MEJORADA (sombras en tiempo real, relieve y especular en todas las texturas, mipmaps), VSYNC, cachés de pipelines compiladas antes de jugar.
+- **Renderizadores:** OpenGL, Vulkan y Direct3D 12 (`src/runtime/render/`), texturas HD, antialiasing, ILUMINACIÓN MEJORADA (sombras en tiempo real, relieve y especular en todas las texturas, mipmaps, cada brillo una luz de su color), VSYNC, cachés de pipelines compiladas antes de jugar.
 - **Pantallas:** 3:2, 4:3, 16:9 y 21:9; menús y paneles adaptados a cada una.
 - **ANIMACIONES SUAVES** (cuadros entre los cuadros del juego) y **SUAVIZAR MODELOS** (el weld y la subdivisión Catmull-Clark de Blender, con control de bordes afilados).
 - **ELEGIR ESCENARIO** antes de las peleas VS, de entrenamiento y en línea, con imagen de cada escenario; la música de la selección sigue sonando en él.

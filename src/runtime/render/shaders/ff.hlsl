@@ -1,9 +1,9 @@
 // The fixed function, for Direct3D 12 (rgl_d3d12.c): the same as ff.vert and
 // ff.frag. Direct3D's y runs up as OpenGL's; its depth runs from 0 to w.
 // ENHANCED LIGHTING's relief (bump) as ff.frag's.
-struct VSIn { float4 pos : POSITION; float4 col : COLOR; float2 uv : TEXCOORD0; float4 sh : TEXCOORD1; };
-struct PSIn { float4 pos : SV_Position; float4 col : COLOR; float2 uv : TEXCOORD0; float4 sh : TEXCOORD1; };
-cbuffer PC : register(b0) { int mode; int afunc; float aref; int shadow; float bump; };
+struct VSIn { float4 pos : POSITION; float4 col : COLOR; float2 uv : TEXCOORD0; float4 sh : TEXCOORD1; float3 n : TEXCOORD2; float3 p : TEXCOORD3; };
+struct PSIn { float4 pos : SV_Position; float4 col : COLOR; float2 uv : TEXCOORD0; float4 sh : TEXCOORD1; float3 n : TEXCOORD2; float3 p : TEXCOORD3; };
+cbuffer PC : register(b0) { int mode; int afunc; float aref; int shadow; int lit; float bump; };
 Texture2D tex : register(t0);
 Texture2D smap : register(t1);
 SamplerState smp : register(s0);
@@ -16,6 +16,8 @@ PSIn vs(VSIn i)
     o.col = i.col;
     o.uv = i.uv;
     o.sh = i.sh;
+    o.n = i.n;
+    o.p = i.p;
     return o;
 }
 
@@ -136,6 +138,53 @@ float specular(float3 col, bool fighter)
     return max(spec, 0.0) * map * (fighter ? 0.04 : 0.22);
 }
 
+
+// DYNAMIC LIGHTS (rgl_ff.c, rgl.h rgl_light_block): point, spot and
+// directional lights in world space, per pixel, added over the game's own
+// light (its baked stage colours, the fighters' LightVert) rather than in
+// place of it: a stage with none looks as it did. Blinn-Phong, as the
+// lighting walkthrough's, in linear light; the attenuation smooth to 0 at a
+// light's radius (a window over an inverse square, after Karis), a spot's
+// edge a smoothstep between its two cones. The normal is the mesh's own
+// where it sent one (the stage's .meshset, a fighter's skinning), else the
+// face's from the screen derivatives, turned to the camera.
+struct Light { float4 pos; float4 col; float4 dir; float4 cone; };
+cbuffer Lights : register(b1) { float4 lb_eye; float4 lb_sky; float4 lb_ground; int4 lb_count; Light lb_l[16]; };
+
+float3 dynamic(float3 P, float3 N, float3 albedo, float smap, bool fighter)
+{
+    float3 V = normalize(lb_eye.xyz - P);
+    float3 dif = lerp(lb_ground.rgb, lb_sky.rgb, N.z * 0.5 + 0.5);  // world Z is up
+    float3 spc = float3(0.0, 0.0, 0.0);
+    float sh = fighter ? 32.0 : 20.0;
+    int n = min(lb_count.x, 16);
+    [loop] for (int i = 0; i < n; i++) {
+        Light L = lb_l[i];
+        float3 Ld;
+        float att = 1.0;
+        int type = int(L.dir.w + 0.5);
+        if (type == 2)
+            Ld = -normalize(L.dir.xyz);
+        else {
+            float3 d = L.pos.xyz - P;
+            float dist = length(d), x = dist / max(L.pos.w, 1e-4);
+            if (x >= 1.0)
+                continue;
+            Ld = d / max(dist, 1e-4);
+            float w = saturate(1.0 - x * x * x * x);
+            att = w * w / (1.0 + 16.0 * x * x);
+            if (type == 1)
+                att *= smoothstep(L.cone.y, L.cone.x, dot(-Ld, normalize(L.dir.xyz)));
+        }
+        float ndl = max(dot(N, Ld), 0.0);
+        float3 c = L.col.rgb * L.col.w * att;
+        dif += c * ndl;
+        float3 H = normalize(Ld + V);
+        spc += c * pow(max(dot(N, H), 0.0), sh) * (sh + 8.0) / 25.13 * ndl;
+    }
+    return albedo * dif * (fighter ? 0.6 : 1.0) + spc * smap * (fighter ? 0.15 : 0.5);
+}
+
 float4 ps(PSIn i) : SV_Target
 {
     float4 c = i.col;
@@ -145,10 +194,15 @@ float4 ps(PSIn i) : SV_Target
     float3 q = float3(p.x * 0.5, -p.y * 0.5, p.z * 0.5);
     float3 qx = ddx(q), qy = ddy(q);
     float rl = sm == 1 && bump > 0.0 ? relief(i.uv, bump) : 1.0;
-    if (mode == 1)
-        c *= tex.Sample(smp, i.uv);
-    else if (mode == 2)
-        c = tex.Sample(smp, i.uv);
+    float3 fn = cross(ddx(i.p), ddy(i.p));
+    float4 tc = float4(1.0, 1.0, 1.0, 1.0);
+    if (mode == 1) {
+        tc = tex.Sample(smp, i.uv);
+        c *= tc;
+    } else if (mode == 2) {
+        tc = tex.Sample(smp, i.uv);
+        c = tc;
+    }
     if (afunc != 0) {
         bool ok = true;
         if (afunc == 0x200) ok = false;
@@ -166,13 +220,32 @@ float4 ps(PSIn i) : SV_Target
     if (sm == 1)
     {
         float lt = light_at(p, qx, qy, shadow >> 4);
+        bool fighter = (shadow >> 4) != 0;
+        // in linear light (gamma 2.2), as the walkthrough's: the relief and
+        // the highlight are light added and taken away, and only there do
+        // they add up as light does; the map's shadow, a shade as it was
+        // tuned (lt in gamma), then the dynamic lights over it all
+        float3 lin = pow(max(c.rgb, float3(0.0, 0.0, 0.0)), 2.2);
         if (bump > 0.0) {
-            float3 lin = pow(max(c.rgb, 0.0), 2.2);
-            float sp = specular(lin, (shadow >> 4) != 0);
+            float sp = specular(lin, fighter);
             lin = lin * rl + sp * smoothstep(0.75, 1.0, lt);
-            c.rgb = pow(lin, 1.0 / 2.2);
         }
-        c.rgb *= lt;
+        lin *= pow(lt, 2.2);
+        if (lit != 0) {
+            float3 N = dot(i.n, i.n) > 0.25 ? normalize(i.n) : float3(0.0, 0.0, 0.0);
+            if (dot(N, N) < 0.5 && dot(fn, fn) > 1e-20) {
+                N = normalize(fn);
+                if (dot(N, lb_eye.xyz - i.p) < 0.0)
+                    N = -N;
+            }
+            if (dot(N, N) > 0.5) {
+                // the texture's colour, the baked light only half in it
+                float3 al = pow(tc.rgb, 2.2) * (mode == 2 ? float3(1.0, 1.0, 1.0) : i.col.rgb * 0.5 + 0.5);
+                float sm2 = smoothstep(0.25, 0.85, dot(al, float3(0.299, 0.587, 0.114)));
+                lin += dynamic(i.p, N, al, sm2, fighter);
+            }
+        }
+        c.rgb = pow(lin, 1.0 / 2.2);
     }
     return c;
 }

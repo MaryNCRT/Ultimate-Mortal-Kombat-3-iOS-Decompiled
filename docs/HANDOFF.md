@@ -162,9 +162,11 @@ press COMPILE.
   a page of PROFILE (`ProfFriends.svelte`). A server change that needs a new
   column goes in the private repo's `migrations/`, applied before deploying.
 - **Dynamic lighting**: ENHANCED LIGHTING (shadows, texture relief,
-  specular, mipmaps) is in; point and spot lights with their shadows, on
-  the stage and the fighters, come next, in the order and with the costs in
-  [research/DYNAMIC-LIGHTING.md](research/DYNAMIC-LIGHTING.md). The shaders
+  specular, mipmaps) is in, and phases 1-2 of
+  [research/DYNAMIC-LIGHTING.md](research/DYNAMIC-LIGHTING.md): every glow
+  is a coloured point light on the stage and the fighters (`rgl_ff.c`
+  `lights_build`). Next: shadows for those lights (phase 5), each stage's
+  sky colour and lighting files (phases 3-4). The shaders
   are rebuilt with `render/shaders/build.py` (glslang in
   `WORK/tools/glslang`, fxc from the Windows SDK).
 - **Dynamic stage music (Genesis style)**: investigated, not built; the
