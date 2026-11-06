@@ -8,6 +8,11 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## 0.3.1 beta (2026-11-06) — frame time and LOW LATENCY
+
+Published 2026-11-06 as the GitHub pre-release `v0.3.1-beta`, the two
+entries below. Played by Mary in her test folder (Direct3D 12).
+
 ## Since 0.3.0: LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait (2026-11-06)
 
 Played by Mary in her test folder (Direct3D 12): Sindel's idle smooth, the

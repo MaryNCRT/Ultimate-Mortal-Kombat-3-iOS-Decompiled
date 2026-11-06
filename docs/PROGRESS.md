@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-06 (release 0.3.0 beta: ENHANCED LIGHTING -- shadows, relief, dynamic lights, each stage's sky, lighting files, ambient occlusion -- published as the pre-release `v0.3.0-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-06 (release 0.3.1 beta: frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -97,6 +97,11 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## 0.3.1 beta (2026-11-06) — frame time and LOW LATENCY
+
+Published 2026-11-06 as the GitHub pre-release `v0.3.1-beta`, the two
+entries below. Played by Mary in her test folder (Direct3D 12).
 
 ## LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait (2026-11-06, after 0.3.0)
 
