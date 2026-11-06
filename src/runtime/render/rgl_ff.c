@@ -2304,18 +2304,21 @@ static int hold_clear(const rgl_rect *sc, int color, const float rgba[4], int de
  *
  * The projection's scale and the viewport are taken from the first held
  * 3D draw. Off (ao=0, or without ENHANCED LIGHTING): no pass at all. */
-int   rgl_ao = 2, rgl_ao_samples = 16, rgl_ao_blur = 1;
-float rgl_ao_radius = 0.6f, rgl_ao_intensity = 1.0f, rgl_ao_bias = 0.03f;
-float rgl_ao_floor = 0.55f, rgl_ao_scale = 1.0f;
+int   rgl_ao = 2, rgl_ao_samples = 8, rgl_ao_blur = 1;
+float rgl_ao_radius = 1.0f, rgl_ao_intensity = 1.8f, rgl_ao_bias = 0.03f;
+float rgl_ao_floor = 0.40f, rgl_ao_scale = 0.5f;   /* Mary: a drop in fps, and hardly seen */
 
 #define AO_FAR 3000.0f                  /* the distance packed, as a fraction of this */
-#define FIGHTER_AO 0.5f                 /* a fighter's share: his light is painted in */
+#define FIGHTER_AO 0.7f                 /* a fighter's share: his light is painted in */
 
 static struct {
     int target_d, target_r, w, h;       /* AO.depth, AO.raw, their size */
     int have;                           /* this flush: the projection and viewport */
     float p00, p11;
+    mat4 proj;                          /* the scene's projection */
     rgl_rect vp;                        /* the 3D viewport, GL's lower left */
+    rgl_vtx *fv;                        /* the fighters' base meshes, in its clip space */
+    int cfv;
     int scene_target, scene_h;
     int valid;                          /* the passes ran: the scene reads it */
 } AO;
@@ -2329,6 +2332,7 @@ static void ao_note(const rgl_rect *vp)
     AO.have = 1;
     AO.p00 = g_pr.s[g_pr.top].m[0];
     AO.p11 = g_pr.s[g_pr.top].m[5];
+    AO.proj = g_pr.s[g_pr.top];
     AO.vp = *vp;
     AO.scene_target = cur_target(g_draw_fb);
     target_size(AO.scene_target, &tw, &th);
@@ -2429,6 +2433,8 @@ static void ao_passes(void)
         rgl_rect vp;
         if (hd->clear || (hd->f.shadow & 15) != RGL_SHADOW_RECEIVE || hd->p.blend || !hd->p.depth_write)
             continue;
+        if ((hd->f.shadow >> 4) != 0 && SH.nw)
+            continue;                   /* a fighter: his base mesh, below */
         f = hd->f;
         f.shadow = RGL_AO_DEPTH;
         f.bump = 0.0f;
@@ -2439,6 +2445,60 @@ static void ao_passes(void)
         vp.w = w;
         vp.h = h;
         B->draw(&p, &f, hd->tex, &hd->sm, &vp, NULL, g_hv + hd->first, hd->n);
+    }
+    /* the fighters into the depth from the triangles held for the key
+     * light's map (their base meshes, an id each), not their held draws: the
+     * smoothed meshes are ten times the triangles, and sending them all
+     * again cost ~3 ms a frame (Mary: a drop in fps) */
+    {
+        mat4 view, vp_m;
+        int nv = 0, n = SH.nw / 4;
+        if (n && invert(&SH.inv_view, &view)) {
+            vp_m = mul(&AO.proj, &view);
+            if (n > AO.cfv) {
+                rgl_vtx *a = (rgl_vtx *)realloc(AO.fv, (size_t)n * 2 * sizeof *a);
+                if (a) {
+                    AO.fv = a;
+                    AO.cfv = n * 2;
+                }
+            }
+            if (AO.fv && n <= AO.cfv)
+                for (i = 0; i + 2 < n; i += 3) {
+                    int k2;
+                    if (SH.w[i * 4 + 3] == 0.0f)
+                        continue;       /* the stage's: drawn above */
+                    for (k2 = 0; k2 < 3; k2++) {
+                        const float *wp = SH.w + (i + k2) * 4, *m = vp_m.m;
+                        rgl_vtx *o = &AO.fv[nv++];
+                        memset(o, 0, sizeof *o);
+                        o->x = m[0] * wp[0] + m[4] * wp[1] + m[8] * wp[2] + m[12];
+                        o->y = m[1] * wp[0] + m[5] * wp[1] + m[9] * wp[2] + m[13];
+                        o->z = m[2] * wp[0] + m[6] * wp[1] + m[10] * wp[2] + m[14];
+                        o->w = m[3] * wp[0] + m[7] * wp[1] + m[11] * wp[2] + m[15];
+                        o->rgba[0] = o->rgba[1] = o->rgba[2] = o->rgba[3] = 255;
+                    }
+                }
+        }
+        if (nv) {
+            rgl_frag f;
+            rgl_pipe p;
+            rgl_samp sm;
+            rgl_rect vp;
+            memset(&f, 0, sizeof f);
+            f.tex_mode = RGL_TEX_NONE;
+            f.shadow = RGL_AO_DEPTH;
+            memset(&p, 0, sizeof p);
+            p.topo = RGL_TRIS;
+            p.depth_test = p.depth_write = 1;
+            p.cull = RGL_CULL_NONE;
+            p.mask = 15;
+            memset(&sm, 0, sizeof sm);
+            sm.aniso = 1;
+            vp.x = vp.y = 0;
+            vp.w = w;
+            vp.h = h;
+            B->draw(&p, &f, 0, &sm, &vp, NULL, AO.fv, nv);
+        }
     }
     /* 2 the occlusion, from the depth */
     B->target_use(AO.target_r);
@@ -2477,8 +2537,9 @@ static void scene_flush(void)
         shadow_drop();
         SH.nw = 0;
     }
+    ao_passes();                        /* AMBIENT OCCLUSION: before the draws (and
+                                         * while the casters' triangles are held) */
     SH.nw = 0;
-    ao_passes();                        /* AMBIENT OCCLUSION: before the draws */
     for (i = 0; i < g_nheld; i++) {
         held *h = &g_held[i];
         rgl_vtx *v = g_hv + h->first;
