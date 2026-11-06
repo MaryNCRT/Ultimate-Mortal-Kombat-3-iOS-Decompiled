@@ -176,7 +176,9 @@ press COMPILE.
   (`launcher/lighting/README.txt`) tunes a stage and places its own lights
   (phase 4). AMBIENT OCCLUSION is in (`ao_passes`; its radius is converted to
   the camera's units, the view scales the world ~5x), with debug views in
-  the debug menu. Released in 0.3.0. Next: lighting files
+  the debug menu. Released in 0.3.0; 0.3.1b keeps a depth clear between
+  held draws in the AO depth pass (the intros clear it before the
+  fighters). Next: lighting files
   for more stages (Mary tunes them one by one), per-fighter files,
   contact shadows, OpenGL (research/). Open: a 3.6 s freeze in the present
   before the main menu; the `d3d12 slow present:` log line splits it. The shaders

@@ -8,10 +8,22 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## 0.3.1 beta (2026-11-06) — frame time and LOW LATENCY
+## 0.3.1b beta (2026-11-06) — frame time and LOW LATENCY
 
-Published 2026-11-06 as the GitHub pre-release `v0.3.1-beta`, the two
-entries below. Played by Mary in her test folder (Direct3D 12).
+Published 2026-11-06 as the GitHub pre-release `v0.3.1-beta.b`: the fix
+below and the two entries after it (no plain 0.3.1 was published). Played
+by Mary in her test folder (Direct3D 12).
+
+- **AMBIENT OCCLUSION in the intros**: the occlusion of the stage was
+  painted over the fighter (Mary: Ermac in the graveyard). The intros clear
+  the depth before drawing the fighters, so they stand in front of the
+  stage whatever is nearer; the occlusion's depth pass skipped that clear,
+  so where a piece of the stage was nearer than the fighter, the depth was
+  the stage's and so was the occlusion. The pass now keeps the clear
+  (`rgl_ff.c`, `ao_passes`; the log says `ambient occlusion: a depth clear
+  between the scene's draws, kept`, seen in Mary's run). Also guarded, not
+  seen: a fighter with a projection or viewport of his own goes into the
+  depth from his own draws, each placed by its viewport.
 
 ## Since 0.3.0: LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait (2026-11-06)
 

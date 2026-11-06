@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-06 (release 0.3.1 beta: frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -98,10 +98,22 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
-## 0.3.1 beta (2026-11-06) — frame time and LOW LATENCY
+## 0.3.1b beta (2026-11-06) — frame time and LOW LATENCY
 
-Published 2026-11-06 as the GitHub pre-release `v0.3.1-beta`, the two
-entries below. Played by Mary in her test folder (Direct3D 12).
+Published 2026-11-06 as the GitHub pre-release `v0.3.1-beta.b`: the fix
+below and the two entries after it (no plain 0.3.1 was published). Played
+by Mary in her test folder (Direct3D 12).
+
+- **AMBIENT OCCLUSION in the intros**: the occlusion of the stage was
+  painted over the fighter (Mary: Ermac in the graveyard). The intros clear
+  the depth before drawing the fighters, so they stand in front of the
+  stage whatever is nearer; the occlusion's depth pass skipped that clear,
+  so where a piece of the stage was nearer than the fighter, the depth was
+  the stage's and so was the occlusion. The pass now keeps the clear
+  (`rgl_ff.c`, `ao_passes`; the log says `ambient occlusion: a depth clear
+  between the scene's draws, kept`, seen in Mary's run). Also guarded, not
+  seen: a fighter with a projection or viewport of his own goes into the
+  depth from his own draws, each placed by its viewport.
 
 ## LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait (2026-11-06, after 0.3.0)
 
