@@ -1540,27 +1540,46 @@ static void point_shadows(rgl_light_block *b)
             R[0] = -(U[1] * F[2] - U[2] * F[1]);
             R[1] = -(U[2] * F[0] - U[0] * F[2]);
             R[2] = -(U[0] * F[1] - U[1] * F[0]);
-            for (i = 0; i < nv; i++) {
-                const float *w = g_psw + i * 4;
-                float d[3], x, y, z;
-                rgl_vtx *o = &g_psv[i];
-                for (k = 0; k < 3; k++)
-                    d[k] = w[k] - l->pos[k];
-                x = d[0] * R[0] + d[1] * R[1] + d[2] * R[2];
-                y = d[0] * U[0] + d[1] * U[1] + d[2] * U[2];
-                z = d[0] * F[0] + d[1] * F[1] + d[2] * F[2];
-                memset(o, 0, sizeof *o);
-                o->x = x / PS_FOV;
-                o->y = y / PS_FOV;
-                o->z = A * -z + Bc;
-                o->w = z;
-                o->rgba[0] = o->rgba[1] = o->rgba[2] = o->rgba[3] = 255;
-                o->s[0] = w[3];         /* the caster's id, into the texel's A */
+            /* only the triangles this face sees: a fighter falls in one or
+             * two of the six, and sending all of him six times a light
+             * cost the frame its 60 (Mary: stutters with SMOOTH ANIMATIONS) */
+            {
+                int nout = 0, t2;
+                for (i = 0; i + 2 < nv; i += 3) {
+                    rgl_vtx *o = &g_psv[nout];
+                    int out_l = 0, out_r = 0, out_b = 0, out_t = 0, out_n = 0;
+                    for (t2 = 0; t2 < 3; t2++) {
+                        const float *w = g_psw + (i + t2) * 4;
+                        float d[3], x, y, z;
+                        for (k = 0; k < 3; k++)
+                            d[k] = w[k] - l->pos[k];
+                        x = d[0] * R[0] + d[1] * R[1] + d[2] * R[2];
+                        y = d[0] * U[0] + d[1] * U[1] + d[2] * U[2];
+                        z = d[0] * F[0] + d[1] * F[1] + d[2] * F[2];
+                        out_n += z < PS_NEAR;
+                        out_l += x < -z * PS_FOV;
+                        out_r += x > z * PS_FOV;
+                        out_b += y < -z * PS_FOV;
+                        out_t += y > z * PS_FOV;
+                        memset(&o[t2], 0, sizeof *o);
+                        o[t2].x = x / PS_FOV;
+                        o[t2].y = y / PS_FOV;
+                        o[t2].z = A * -z + Bc;
+                        o[t2].w = z;
+                        o[t2].rgba[0] = o[t2].rgba[1] = o[t2].rgba[2] = o[t2].rgba[3] = 255;
+                        o[t2].s[0] = w[3];  /* the caster's id, into the texel's A */
+                    }
+                    if (out_n == 3 || out_l == 3 || out_r == 3 || out_b == 3 || out_t == 3)
+                        continue;       /* wholly outside this face: dropped */
+                    nout += 3;
+                }
+                if (!nout)
+                    continue;
+                vp.x = (fc % 3) * PS_TILE;
+                vp.y = (j * 2 + fc / 3) * PS_TILE;
+                vp.w = vp.h = PS_TILE;
+                B->draw(&p, &f, 0, &sm, &vp, &vp, g_psv, nout);
             }
-            vp.x = (fc % 3) * PS_TILE;
-            vp.y = (j * 2 + fc / 3) * PS_TILE;
-            vp.w = vp.h = PS_TILE;
-            B->draw(&p, &f, 0, &sm, &vp, &vp, g_psv, nv);
         }
         l->cone[2] = (float)(j + 1);    /* its tiles, for the shaders */
     }
@@ -2810,6 +2829,13 @@ static void submit(int topo, rgl_vtx *v, int n)
     B->draw(&p, &f, handle, &sm, &vp, draw_rect(&sc) ? &sc : NULL, v, n);
 }
 
+/* DYNAMIC LIGHTS: a mesh past this many triangles is given no smooth
+ * normals here; the shaders take each face's from the screen derivatives,
+ * which on so dense a mesh (SMOOTH MODELS' level 2: Sindel 60,000) looks the
+ * same. Summing them every frame, one thread, cost the frame its 60
+ * (Mary: Sindel's SMOOTH ANIMATIONS stuttered, 18 ms frames) */
+#define SMOOTH_NORMALS_MAX 20000
+
 /* `get(i)` for vertex i of the call, primitives made of them */
 static void assemble(GLenum mode, int count, void (*get)(rgl_vtx *, int, const void *), const void *ctx)
 {
@@ -2970,7 +2996,7 @@ static int tris_indexed(int count, GLenum t, const void *idx)
      * world). The game's front faces wind counter-clockwise; a mirrored
      * fighter (yaw 0 and a mirror) winds the other way, which the matrix's
      * determinant tells */
-    if (g_sh_on && rgl_shadows && !(g_na.on && g_na.p)) {
+    if (g_sh_on && rgl_shadows && !(g_na.on && g_na.p) && count <= SMOOTH_NORMALS_MAX * 3) {
         const float *h = g_shm.m;
         float det = h[0] * (h[5] * h[10] - h[6] * h[9]) - h[4] * (h[1] * h[10] - h[2] * h[9])
                   + h[8] * (h[1] * h[6] - h[2] * h[5]);
