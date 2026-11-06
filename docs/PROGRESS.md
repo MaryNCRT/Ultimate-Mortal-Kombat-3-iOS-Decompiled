@@ -116,6 +116,27 @@ Built in Mary's test folder; she played it on Direct3D 12 and confirmed the fix.
   Direct3D 12 fail the same 5 shadow checks as before this change (checked
   against a build of main).
 
+## ONLINE menu redesign, stage 1: audit (2026-11-06)
+
+Mary asked for a full redesign of the ONLINE menu (HOME, FRIENDS,
+INVITATIONS, LOBBIES, QUICK MATCH, PARTY; lobby rules; matchmaking). Stage 1
+is a read of what exists, in
+[research/ONLINE-MENU-AUDIT.md](research/ONLINE-MENU-AUDIT.md). No code
+changed. Findings worth knowing without reading it all:
+
+- There are no lobbies or matchmaking today: the EOS lobby is a 2-member
+  directory entry named after the player's code, which nobody joins.
+- Best of 1/3/5 is `WinsNeeded` 1/2/3 (GameCode.c, Task_GameInit); the
+  round banners stop at "ROUND 4", so Best of 5 needs a fifth.
+- Combo Slide is the port's KOMBO SLIDE (issue #114), forced to the
+  original's rule online today (`game_main.c`).
+- The binary's VS kodes (table at 0x00176c04: blocking off, throws off, dark
+  kombat, power handicaps...) are the rules the engine already has.
+- With rollback the host has no frame advantage; it has player 1's side and
+  the stage. The frame advantage exists only with `UMK3_NETCODE=classic`.
+- A version or setup mismatch is only logged (`rollback.c`), never blocks.
+- Two of Mary's reference links return 404 (gamereactor, postimg 1f0w4wn3).
+
 ## 0.3.1b beta (2026-11-06) — frame time and LOW LATENCY
 
 Published 2026-11-06 as the GitHub pre-release `v0.3.1-beta.b`: the fix

@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-11-05 (release 0.2.1 beta: online fixes, the moves list, settings in one order, published as the pre-release `v0.2.1-beta`).
+**Last updated:** 2026-11-06 (ONLINE menu redesign: stage 1 audit, research/ONLINE-MENU-AUDIT.md; before that, release 0.3.1b beta).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
@@ -204,6 +204,13 @@ press COMPILE.
   design and the open questions are in
   [research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md). Paused
   until Mary records a Soul Chamber fight on the Genesis (WAV + GYM).
+- **ONLINE menu redesign**: stage 1 (audit) done, nothing built. The
+  report is [research/ONLINE-MENU-AUDIT.md](research/ONLINE-MENU-AUDIT.md):
+  the online stack as it is, what works and what is missing, where Best of
+  N (`WinsNeeded`), time (`GameTime`), the VS kodes and KOMBO SLIDE live,
+  what host advantage means with rollback, the server work needed, and a
+  nine-stage plan. Waiting for Mary's answers (its section 10) before
+  stage 2; nothing working is replaced until she approves.
 
 The table in [PROGRESS.md → Open problems](PROGRESS.md#open-problems) is the
 list. Each entry says what is known and what is needed next (usually a log
