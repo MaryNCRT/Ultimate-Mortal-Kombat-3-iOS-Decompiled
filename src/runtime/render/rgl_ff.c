@@ -207,6 +207,9 @@ typedef struct {
     GLenum min, mag, ws, wt;
     int gen_mip;
     float aniso;
+    float bump;                         /* ENHANCED LIGHTING: tex_bump's */
+    int subbed;                         /* changed by glTexSubImage2D: its
+                                         * mip levels (if any) are stale */
 } ff_tex;
 static ff_tex *g_tex;
 static int g_ntex, g_tex_next = 1;
@@ -600,6 +603,50 @@ static unsigned char *to_rgba(int w, int h, GLenum f, GLenum type, const void *p
     return o;
 }
 
+/* ENHANCED LIGHTING's relief, the strength a texture's slopes are drawn
+ * with. The shader makes a normal map of every texture as it draws (as
+ * NormalmapGenerator does offline: the texture's brightness taken as a
+ * height, its Sobel slopes the normal's tilt, plus the slopes two mip
+ * levels down for the large shapes) -- the game's own and a pack's alike.
+ * Here, once a texture is loaded: how steep its slopes are on average, so
+ * each is given a strength that brings it to the same depth (a flat iPhone
+ * texture as a busy HD one). A texture with next to no slopes (a flat
+ * colour, a gradient) is given none: it would show noise. The luminance and
+ * the slopes are the shader's: Rec. 601 weights, a Sobel over 8. */
+#define BUMP_DEPTH 0.22f                /* the mean slope every texture is brought to */
+#define BUMP_FLAT 0.002f                /* under this mean, none */
+#define BUMP_MAX 24.0f
+#define BUMP_STAGE 1.5f                 /* the stage's (Mary: 2 was too much) */
+#define BUMP_FIGHTER 0.15f              /* a fighter's: a minimum, softer still (Mary) */
+
+static float tex_bump(const unsigned char *px, int w, int h)
+{
+    int step = (w > h ? w : h) / 128, x, y, n = 0;
+    double sum = 0.0;
+
+    if (w < 8 || h < 8)
+        return 0.0f;
+    if (step < 1)
+        step = 1;
+#define LUM(xx, yy) (0.299f * px[((yy) * w + (xx)) * 4] + 0.587f * px[((yy) * w + (xx)) * 4 + 1]                    + 0.114f * px[((yy) * w + (xx)) * 4 + 2])
+    for (y = 1; y < h - 1; y += step)
+        for (x = 1; x < w - 1; x += step) {
+            float gx = (LUM(x + 1, y - 1) + 2.0f * LUM(x + 1, y) + LUM(x + 1, y + 1))
+                     - (LUM(x - 1, y - 1) + 2.0f * LUM(x - 1, y) + LUM(x - 1, y + 1));
+            float gy = (LUM(x - 1, y + 1) + 2.0f * LUM(x, y + 1) + LUM(x + 1, y + 1))
+                     - (LUM(x - 1, y - 1) + 2.0f * LUM(x, y - 1) + LUM(x + 1, y - 1));
+            if (px[(y * w + x) * 4 + 3] < 128)
+                continue;               /* cut out: its edge is not relief */
+            sum += sqrt((double)gx * gx + (double)gy * gy) * (0.125 / 255.0);
+            n++;
+        }
+#undef LUM
+    if (n < 16 || sum / n < BUMP_FLAT)
+        return 0.0f;
+    sum = BUMP_DEPTH / (sum / n);
+    return (float)(sum > BUMP_MAX ? BUMP_MAX : sum);
+}
+
 static int wants_mips(const ff_tex *x)
 {
     return x->gen_mip || (x->min != E_NEAREST && x->min != E_LINEAR);
@@ -620,7 +667,10 @@ void ff_glTexImage2D(GLenum t, GLint level, GLint internal, GLsizei w, GLsizei h
     lv[0] = to_rgba(w, h, f, type, p, g_unpack);
     if (!lv[0])
         return;
-    if (wants_mips(x)) {
+    /* ENHANCED LIGHTING makes the levels of every texture, asked for or
+     * not: the 3D scene samples them (submit), so a far wall's fine
+     * pattern does not break into moire (Mary) */
+    if (wants_mips(x) || rgl_shadows) {
         /* each level a 2x2 box of the one above; odd sizes keep the edge */
         int cw = w, ch = h;
         while ((cw > 1 || ch > 1) && n < MAX_LEVELS) {
@@ -650,6 +700,8 @@ void ff_glTexImage2D(GLenum t, GLint level, GLint internal, GLsizei w, GLsizei h
     x->w = w;
     x->h = h;
     x->levels = n;
+    x->bump = tex_bump(lv[0], w, h);
+    x->subbed = 0;
     for (i = 0; i < n; i++)
         free(lv[i]);
 }
@@ -664,6 +716,7 @@ void ff_glTexSubImage2D(GLenum t, GLint level, GLint x0, GLint y0, GLsizei w, GL
     if (!x || !x->handle || !B || level != 0 || w <= 0 || h <= 0)
         return;
     px = to_rgba(w, h, f, type, p, g_unpack);
+    x->subbed = 1;
     scene_flush();
     if (px)
         B->tex_sub(x->handle, x0, y0, w, h, px);
@@ -1672,6 +1725,15 @@ static void submit(int topo, rgl_vtx *v, int n)
         return;                         /* a stand-in, cast and not drawn */
     /* a receiver's own caster id above the mode: its texels are skipped */
     f.shadow = g_sh_on ? RGL_SHADOW_RECEIVE | SH.caster << 4 : RGL_SHADOW_NONE;
+    /* ENHANCED LIGHTING's relief (tex_bump): on what is lit by the map's
+     * light -- all of the stage, its blended parts too (Mary), but not what
+     * adds light (the glow, the sparks) or a fighter's see-through draws --
+     * the stage strong, a fighter's skin at a touch of it: his textures
+     * have their light painted in, and more makes them dirty */
+    if (g_sh_on && t && handle && topo == RGL_TRIS
+        && !(p.blend && p.dst == RGL_BF_ONE) && (p.depth_write || !SH.caster))
+        f.bump = (t->bump > 0.0f ? t->bump : 1e-4f)   /* flat: the specular still */
+               * (SH.caster ? BUMP_FIGHTER : BUMP_STAGE);
 
     memset(&sm, 0, sizeof sm);
     if (t) {
@@ -1683,6 +1745,17 @@ static void submit(int topo, rgl_vtx *v, int n)
         sm.wrap_s_clamp = t->ws != E_REPEAT;
         sm.wrap_t_clamp = t->wt != E_REPEAT;
         sm.aniso = (unsigned char)(t->aniso < 1.0f ? 1 : t->aniso > 16.0f ? 16 : t->aniso);
+        /* ENHANCED LIGHTING: the 3D scene's textures sampled through their
+         * mip levels, trilinear and anisotropic, though the game asked for
+         * none -- the iPhone's screen was too small to show the moire a far
+         * wall makes at PC resolutions (Mary). Not a texture changed in
+         * place: its levels are the old picture */
+        if (rgl_shadows && g_sh_on && t->levels > 1 && !t->subbed) {
+            sm.min_linear = 1;
+            sm.mip = 2;
+            if (sm.aniso < 16)
+                sm.aniso = 16;
+        }
     }
     vp.x = S.viewport[0]; vp.y = S.viewport[1]; vp.w = S.viewport[2]; vp.h = S.viewport[3];
     if (hold_draw(&p, &f, handle, &sm, &vp, draw_rect(&sc) ? &sc : NULL, v, n))

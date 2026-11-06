@@ -684,7 +684,7 @@ static int port_report_context(char *out, int n)
                     "GPU: %s\r\n"
                     "Video: %dx%d %s, 3D resolution %s, antialiasing %s, aspect %s, "
                     "interface %s, textures %s\r\n"
-                    "Language %s, smooth animations %s, smooth models %s, real-time shadows %s, "
+                    "Language %s, smooth animations %s, smooth models %s, enhanced lighting %s, "
                     "mods on %d\r\n\r\n",
                     UMK3_VERSION_STR, (int)(sizeof(void *) * 8), __DATE__,
                     sys,

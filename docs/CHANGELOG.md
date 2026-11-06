@@ -8,6 +8,45 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## ENHANCED LIGHTING (2026-11-06, after 0.2.1)
+
+REAL-TIME SHADOWS became **ENHANCED LIGHTING** (the same `rt_shadows=1`
+in umk3.ini, so a setting already on stays on), Vulkan and Direct3D 12.
+Mary saw it in her test folder: the stage relief, the far textures without
+moire, and the backdrop with no seams. Not yet played as a whole.
+
+- **Relief on every texture** (Mary, after NormalmapGenerator and DK's GTA
+  SA normal map plugin): the shader takes each texture as its own normal
+  map as it draws -- its brightness a height, its Sobel slopes the tilt,
+  plus the slopes two mip levels down for the large shapes -- the game's
+  textures and a pack's alike, with nothing to prepare. Each texture's mean
+  slope is measured once at upload (`rgl_ff.c` `tex_bump`) so a flat iPhone
+  texture and a busy HD one come out at the same depth; a flat colour gets
+  none. The stage at 1.5, a fighter's skin at 0.15 (their light is painted
+  in). Not on what adds light (glows, sparks).
+- **Specular** (Blinn-Phong, after the stackgl lighting walkthrough): a
+  glint where a bump turns to the light, its specular map the texture's own
+  (bright and grey shines; dark or strongly coloured does not); and the
+  relief and the glint worked in linear light (gamma 2.2).
+- Both in **the texture's own space**, lit from a light fixed there: a
+  first version took the normal from each triangle's flat face and shaded
+  every face on its own, a seam at each edge (Mary saw them in a backdrop).
+- **Mipmaps on every 3D texture** (Mary: a far building broke into moire):
+  the levels are made for every texture, and the 3D scene samples them
+  trilinear and 16x anisotropic though the game asked for none. Not a
+  texture changed in place (its levels would be stale).
+- **The launcher kept losing the game's own settings** (Mary: "the
+  launcher's settings are not saved"): every change there rewrote
+  umk3.ini from the keys it knows, dropping the ones only the game writes
+  (`p2key_pause`, `p2key_moves`, `p2key_ok`, `replay_scale`). `lib/ini.js`
+  `save` now keeps every line it does not write.
+- `rgl_frag` gained `bump` (20 bytes of push / root constants); the
+  shaders were rebuilt with `shaders/build.py`.
+
+Next: real-time dynamic lighting (point and spot lights, their shadows, on
+the stage and the fighters), planned in
+[research/DYNAMIC-LIGHTING.md](research/DYNAMIC-LIGHTING.md).
+
 ## 0.2.1 beta (2026-11-05) — online fixes, the moves list, settings in one order
 
 Published 2026-11-05 as the GitHub pre-release `v0.2.1-beta`. Checked in

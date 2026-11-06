@@ -423,7 +423,7 @@ static int make_root(void)
     rsm.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
     memset(p, 0, sizeof p);
     p[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-    p[0].Constants.Num32BitValues = 4;
+    p[0].Constants.Num32BitValues = sizeof(rgl_frag) / 4;
     p[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     p[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     p[1].DescriptorTable.NumDescriptorRanges = 1;
@@ -1277,7 +1277,7 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     ID3D12GraphicsCommandList_SetPipelineState(g_list, p);
     ID3D12GraphicsCommandList_RSSetViewports(g_list, 1, vp);
     ID3D12GraphicsCommandList_RSSetScissorRects(g_list, 1, sc);
-    ID3D12GraphicsCommandList_SetGraphicsRoot32BitConstants(g_list, 0, 4, f, 0);
+    ID3D12GraphicsCommandList_SetGraphicsRoot32BitConstants(g_list, 0, sizeof *f / 4, f, 0);
     ID3D12GraphicsCommandList_SetGraphicsRootDescriptorTable(g_list, 1, gpu(g_srv_heap, g_srv_inc, g_srv_next));
     ID3D12GraphicsCommandList_SetGraphicsRootDescriptorTable(g_list, 2, gpu(g_samp_heap, g_samp_inc, ss));
     ID3D12GraphicsCommandList_IASetPrimitiveTopology(g_list, k->topo == RGL_LINES ? D3D_PRIMITIVE_TOPOLOGY_LINELIST
