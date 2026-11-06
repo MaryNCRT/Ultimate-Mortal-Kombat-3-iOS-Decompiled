@@ -1566,6 +1566,157 @@ static void point_shadows(rgl_light_block *b)
     B->target_use(cur_target(g_draw_fb));
 }
 
+/* DYNAMIC LIGHTS: each stage's light from its own sky (Mary: The Rooftop's
+ * red sky should make its light reddish, the whole stage -- that stage's,
+ * not every one's). It is a tint over everything the lights reach, the
+ * hue at white's brightness mixed in by a strength, not light added (that
+ * hardly showed on grey stone).
+ * The stage's textured draws are noted with how far they are from the
+ * camera; the far ones (SKY_FAR of the farthest and beyond: the sky, the
+ * skyline, the backdrop) give the sky's colour, their textures' mean
+ * colours times their vertex colours, weighted by their size. A saturated
+ * sky lights the scene from above in its hue (the shaders' hemisphere: sky
+ * on what faces up, a darker share on what faces down); a grey one adds
+ * nothing. Eased over frames, so it settles as a stage loads. */
+#define SKY_MAX 512
+#define SKY_FAR 0.6f
+#define SKY_POWER 0.80f                 /* how far a saturated sky tints what faces up (Mary: stronger, twice) */
+#define SKY_GROUND 0.85f                /* what faces down, of that: nearly all (Mary: on the floor and the fighters too) */
+
+static struct { float d, col[3], w; } g_sky[SKY_MAX];
+static int g_nsky;
+static float g_sky_now[3] = { -1.0f, 0.0f, 0.0f };
+static int g_sky_stage;                 /* a stage is loaded: it is fought on */
+static float g_stage_lum = -1.0f;       /* the stage's mean brightness, eased */
+
+/* A dark stage gives its fighters a slight light of their own, so they
+ * stay readable (Mary: 0.1 or 0.2 on the dark stages): FIGHTER_LIFT from half
+ * DARK_LUM down, nothing from DARK_LUM up */
+#define FIGHTER_LIFT 0.15f
+#define DARK_LUM 0.08f
+static float g_sky_scale = 1.0f;        /* that stage's strength, of SKY_POWER */
+
+/* Each stage's own strength, where the measured sky is too much (Mary:
+ * Kahn's Kave came out far too red at the strength The Rooftop wants) */
+static const struct { const char *scene; float scale; } k_sky_stage[] = {
+    { "CAVE_LEVEL_SCENE", 0.45f },      /* KAHN'S KAVE */
+};
+
+/* the stage's _LEVEL_SCENE meshset loaded (1) or freed (0): RenderMesh.c's
+ * lime_port_meshset_event. Off it, no sky tint -- the select screen's
+ * fighters came back red from a fight (Mary) -- and a new stage starts its
+ * own measure from nothing */
+void rgl_sky_stage(const char *name, int loaded)
+{
+    size_t i;
+
+    if (!name || !strstr(name, "_LEVEL_SCENE"))
+        return;
+    g_sky_now[0] = -1.0f;
+    g_stage_lum = -1.0f;
+    g_sky_stage = loaded;
+    g_sky_scale = 1.0f;
+    if (loaded)
+        for (i = 0; i < sizeof k_sky_stage / sizeof *k_sky_stage; i++)
+            if (strstr(name, k_sky_stage[i].scene))
+                g_sky_scale = k_sky_stage[i].scale;
+    printf("dynamic lights: the sky %s for %s (strength x%.2f)\n",
+           loaded ? "measured" : "off", name, g_sky_scale);
+}
+
+static void sky_note(const ff_tex *t, const rgl_vtx *v, int n)
+{
+    float c[3] = { 0, 0, 0 }, vc[3] = { 0, 0, 0 }, e[3];
+    int i, k;
+
+    if (n < 3 || g_nsky >= SKY_MAX || !t)
+        return;
+    for (i = 0; i < n; i++)
+        for (k = 0; k < 3; k++) {
+            c[k] += v[i].p[k];
+            vc[k] += v[i].rgba[k] / 255.0f;
+        }
+    for (k = 0; k < 3; k++) {
+        c[k] /= (float)n;
+        e[k] = c[k] - SH.inv_view.m[12 + k];
+        g_sky[g_nsky].col[k] = t->avg[k] * powf(vc[k] / (float)n, 2.2f);
+    }
+    g_sky[g_nsky].d = sqrtf(e[0] * e[0] + e[1] * e[1] + e[2] * e[2]);
+    g_sky[g_nsky].w = (float)n;
+    g_nsky++;
+}
+
+/* the sky's light into the block: b->sky and b->ground */
+static void sky_build(rgl_light_block *b)
+{
+    float far = 0.0f, acc[3] = { 0, 0, 0 }, w = 0.0f, mx, mn, sat, s, la = 0.0f, lw = 0.0f;
+    int i, k;
+
+    for (i = 0; i < g_nsky; i++) {
+        const float *c = g_sky[i].col;
+        if (g_sky[i].d > far)
+            far = g_sky[i].d;
+        la += (0.2126f * c[0] + 0.7152f * c[1] + 0.0722f * c[2]) * g_sky[i].w;
+        lw += g_sky[i].w;
+    }
+    if (g_sky_stage && lw > 0.0f) {     /* how dark the stage is, all of it */
+        la /= lw;
+        g_stage_lum = g_stage_lum < 0.0f ? la : g_stage_lum + (la - g_stage_lum) * 0.05f;
+    }
+    if (g_sky_stage && g_stage_lum >= 0.0f) {
+        float d = (DARK_LUM - g_stage_lum) / (DARK_LUM * 0.5f);   /* all of it at half DARK_LUM */
+        b->eye[3] = FIGHTER_LIFT * (d < 0.0f ? 0.0f : d > 1.0f ? 1.0f : d);
+    }
+    for (i = 0; i < g_nsky; i++)
+        if (g_sky[i].d >= far * SKY_FAR) {
+            /* the dominant hue, not the mean: a draw weighs its size times
+             * its saturation squared, so the red sky outweighs the grey
+             * skyline in front of it (Mary: The Rooftop came out brown) */
+            const float *c = g_sky[i].col;
+            float hi = c[0] > c[1] ? c[0] : c[1], lo = c[0] < c[1] ? c[0] : c[1], st, wt;
+            if (c[2] > hi) hi = c[2];
+            if (c[2] < lo) lo = c[2];
+            st = hi > 1e-4f ? (hi - lo) / hi : 0.0f;
+            wt = g_sky[i].w * st * st;
+            for (k = 0; k < 3; k++)
+                acc[k] += c[k] * wt;
+            w += wt;
+        }
+    g_nsky = 0;
+    if (!g_sky_stage)                   /* no stage: no sky (menus, select) */
+        return;
+    if (w > 0.0f) {
+        for (k = 0; k < 3; k++)
+            acc[k] /= w;
+        if (g_sky_now[0] < 0.0f)        /* the first: as it is */
+            memcpy(g_sky_now, acc, sizeof acc);
+        else
+            for (k = 0; k < 3; k++)
+                g_sky_now[k] += (acc[k] - g_sky_now[k]) * 0.05f;
+    }
+    if (g_sky_now[0] < 0.0f)
+        return;
+    mx = g_sky_now[0] > g_sky_now[1] ? g_sky_now[0] : g_sky_now[1];
+    if (g_sky_now[2] > mx) mx = g_sky_now[2];
+    mn = g_sky_now[0] < g_sky_now[1] ? g_sky_now[0] : g_sky_now[1];
+    if (g_sky_now[2] < mn) mn = g_sky_now[2];
+    if (mx < 1e-4f)
+        return;
+    sat = (mx - mn) / mx;
+    s = (sat - 0.15f) / 0.45f;          /* a grey sky nothing, a strong hue all */
+    s = s < 0.0f ? 0.0f : s > 1.0f ? 1.0f : s;
+    {   /* the hue at the brightness of white, so tinting by it keeps a
+         * surface's brightness; the strength in w */
+        float lum = 0.2126f * g_sky_now[0] + 0.7152f * g_sky_now[1] + 0.0722f * g_sky_now[2];
+        for (k = 0; k < 3; k++) {
+            float h = lum > 1e-5f ? g_sky_now[k] / lum : 1.0f;
+            b->sky[k] = b->ground[k] = h > 4.0f ? 4.0f : h;
+        }
+        b->sky[3] = SKY_POWER * s * g_sky_scale;
+        b->ground[3] = SKY_POWER * s * SKY_GROUND * g_sky_scale;
+    }
+}
+
 /* the lights for the held draws: the emissive draws merged into point
  * lights, and the camera, into a block for the backend */
 static void lights_build(void)
@@ -1624,10 +1775,19 @@ static void lights_build(void)
         l->dir[0] = l->dir[1] = l->dir[2] = 0.0f;
         l->dir[3] = (float)RGL_LIGHT_POINT;
     }
+    sky_build(&b);
     if (b.count && (g_lights_log++ % 600) == 0)
         printf("dynamic lights: %d from %d emissive draws, the first at (%.1f %.1f %.1f) r %.1f "
                "colour %.2f %.2f %.2f x%.2f\n", b.count, g_nemit, b.l[0].pos[0], b.l[0].pos[1],
                b.l[0].pos[2], b.l[0].pos[3], b.l[0].col[0], b.l[0].col[1], b.l[0].col[2], b.l[0].col[3]);
+    {
+        static long sky_log;
+        if ((sky_log++ % 600) == 0)
+            printf("dynamic lights: the sky %.2f %.2f %.2f, its tint %.2f %.2f %.2f x%.2f; "
+                   "the stage's brightness %.3f, the fighters' lift %.2f\n",
+                   g_sky_now[0], g_sky_now[1], g_sky_now[2], b.sky[0], b.sky[1], b.sky[2], b.sky[3],
+                   g_stage_lum, b.eye[3]);
+    }
     g_nemit = 0;
     point_shadows(&b);
     B->lights(&b, (int)sizeof b);
@@ -2052,8 +2212,11 @@ static void submit(int topo, rgl_vtx *v, int n)
     if (g_sh_on && rgl_shadows && topo == RGL_TRIS) {
         if (p.blend && p.dst == RGL_BF_ONE)
             emit_note(t, v, n);
-        else
+        else {
             f.lit = SH.caster ? 2 : 1;
+            if (!SH.caster && handle)
+                sky_note(t, v, n);      /* the stage's: is it the sky? */
+        }
     }
 
     memset(&sm, 0, sizeof sm);

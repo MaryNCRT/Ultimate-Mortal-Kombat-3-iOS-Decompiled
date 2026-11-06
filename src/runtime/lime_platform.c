@@ -56,6 +56,8 @@ extern void (*lime_port_bones_freed)(const void *bones);
 extern int  (*lime_port_mesh_parts)(const unsigned short *indices, long nfaces,
                                     unsigned tex_name);
 extern int  (*lime_port_dyn_normals)(void);    /* RenderMesh.c */
+extern void (*lime_port_meshset_event)(const char *name, int loaded);
+void rgl_sky_stage(const char *name, int loaded);   /* render/rgl_ff.c */
 extern int rgl_shadows;                        /* render/rgl.h */
 
 /* DYNAMIC LIGHTS want the stage meshes' normals while ENHANCED LIGHTING is on */
@@ -84,6 +86,7 @@ void lime_platform_set_asset_root(const char *path)
     lime_port_bones_freed = port_skin_bones_forget;
     lime_port_mesh_parts = port_skin_mats_draw;
     lime_port_dyn_normals = port_dyn_normals;
+    lime_port_meshset_event = rgl_sky_stage;
 }
 
 /* The port reads its own `res` folder and nothing outside it. The engine asks

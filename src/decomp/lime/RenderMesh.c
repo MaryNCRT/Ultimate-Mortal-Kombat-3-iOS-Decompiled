@@ -103,6 +103,9 @@ static void pn_keep(const void *key, float *n)
 /* set by the runtime (lime_platform.c): 1 while the lights want normals.
  * NULL in the tests, which then see the original's GL calls only */
 int (*lime_port_dyn_normals)(void);
+/* and which meshsets come and go (a stage's _LEVEL_SCENE is the stage
+ * being fought on: render/rgl_ff.c rgl_sky_stage). NULL in the tests */
+void (*lime_port_meshset_event)(const char *name, int loaded);
 
 static const float *pn_get(const void *key)
 {
@@ -118,6 +121,8 @@ void LIME_FreeMeshSet(MESHSETINFO *set)
     if (!set) {
         return;
     }
+    if (lime_port_meshset_event)        /* port: DYNAMIC LIGHTS */
+        lime_port_meshset_event(set->name, 0);
     if (set->meshes) {
         for (int i = 0; i < set->numMeshes; i++) {
             MESHINFO *m = set->meshes[i];
@@ -225,6 +230,8 @@ MESHSETINFO *LIME_LoadMeshSet(const char *filename, int useLighting)
     }
 
     snprintf(set->name, sizeof(set->name), "%s", filename);
+    if (lime_port_meshset_event)        /* port: DYNAMIC LIGHTS */
+        lime_port_meshset_event(set->name, 1);
     set->texturesLoaded = 0;
 
     int32_t count;

@@ -197,7 +197,7 @@ float point_shadow(int slot, vec3 D, float far, int self)
 vec3 dynamic(vec3 P, vec3 N, vec3 albedo, float smap, bool fighter, int self)
 {
     vec3 V = normalize(lb.eye.xyz - P);
-    vec3 dif = mix(lb.ground.rgb, lb.sky.rgb, N.z * 0.5 + 0.5);  // world Z is up
+    vec3 dif = vec3(0.0);
     vec3 spc = vec3(0.0);
     float sh = fighter ? 32.0 : 20.0;
     int n = min(lb.count.x, 16);
@@ -288,6 +288,15 @@ void main()
                 // the texture's colour, the baked light only half in it
                 vec3 al = pow(tc.rgb, vec3(2.2)) * (pc.mode == 2 ? vec3(1.0) : v_col.rgb * 0.5 + 0.5);
                 float sm2 = smoothstep(0.25, 0.85, dot(al, vec3(0.299, 0.587, 0.114)));
+                // the stage's sky (rgl_ff.c sky_build): a tint, its hue at
+                // white's brightness, from above and less from below
+                float up = N.z * 0.5 + 0.5;      // world Z is up
+                vec3 tint = mix(lb.ground.rgb, lb.sky.rgb, up);
+                float tk = mix(lb.ground.w, lb.sky.w, up);   // the fighters as much as the stage (Mary)
+                lin *= mix(vec3(1.0), tint, tk);
+                // a dark stage's slight light on its fighters (rgl_ff.c FIGHTER_LIFT)
+                if (fighter)
+                    lin += al * lb.eye.w;
                 lin += dynamic(v_p, N, al, sm2, fighter, pc.shadow >> 4);
             }
         }
