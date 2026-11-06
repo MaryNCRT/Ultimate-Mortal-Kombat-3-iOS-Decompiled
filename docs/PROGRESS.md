@@ -97,6 +97,17 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+## After 0.3.0: frames back under 16.7 ms (2026-11-06)
+
+Mary saw stutters in SMOOTH ANIMATIONS (Sindel) and drops in fps: fights
+ran 17-19 ms a frame, and every frame past 16.7 ms runs two ticks, which
+the frame blending shows. Two costs of ENHANCED LIGHTING cut
+(`rgl_ff.c`): smooth normals are no longer summed every frame for a mesh
+past 20,000 triangles (SMOOTH MODELS' level 2: Sindel 60,000) -- the
+shaders take each face's from the derivatives, the same on so dense a
+mesh; and the point lights' shadows send each cube face only the
+triangles it sees, not the fighters six times a light.
+
 ## 0.3.0 beta (2026-11-06) — ENHANCED LIGHTING
 
 Published 2026-11-06 as the GitHub pre-release `v0.3.0-beta`. Played by
