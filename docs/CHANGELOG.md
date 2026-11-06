@@ -8,6 +8,47 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Each stage's sky, lighting files, smoother PVRTC (2026-11-06, after 0.2.1)
+
+Part of ENHANCED LIGHTING unless said. Mary played each step: The Rooftop
+reddish, Kahn's Kave toned down, the select screen back to normal, the
+sky's grid gone.
+
+- **Each stage's light from its own sky** (Mary: The Rooftop's red sky).
+  The stage's far draws give its sky's colour, each weighed by its size
+  times its saturation squared, so the dominant hue wins over a grey
+  skyline (`rgl_ff.c` `sky_note`, `sky_build`). It tints everything the
+  lights reach (stage and fighters alike), the hue at white's brightness
+  mixed in at 0.80 from above and 85% of that from below; a grey sky adds
+  nothing. Only while a stage's `_LEVEL_SCENE` is loaded
+  (`lime_port_meshset_event`): the select screen's fighters came back red.
+- **A dark stage lights its fighters slightly** (Mary: 0.1-0.2): up to
+  0.15 of their texture's colour as the stage's mean brightness falls
+  from 0.08 to 0.04 (linear).
+- **Lighting files per stage**: `lighting/<scene>.ini` beside the game
+  (shipped in `launcher/lighting/`, copied at extraction and in the
+  release; `README.txt` has the keys): `sky_strength`, `sky_color`,
+  `fighter_lift`, `glow_power`, `no_relief=<meshes>`, and up to 8
+  `[light]`s (point, spot, directional) placed in the world or anchored to
+  a stage mesh by name -- RenderMesh.c names each mesh as it is drawn
+  (`lime_port_mesh_name`), and the log lists them with their places as a
+  stage loads. `shadows=1` gives a file's point light the fighters'
+  shadows ahead of the glows. Kahn's Kave: sky at 0.45, fighters' light
+  0.15, a warm light at the lava, a spot on the throne. The Rooftop: sky
+  at 1.5, its backdrop and swirl without relief.
+- **The fighters react more to the glows' colours** as they near them:
+  their response 90% (was 60%), and the falloff softer (1 + 4x^2).
+- **PVRTC's block grid smoothed** (all renderers, with or without
+  ENHANCED LIGHTING): Mary saw a grid of lines in The Rooftop's sky; it is
+  `ROOFTOP_BACKDROP.pvr`'s own 4x4 compression blocks. At decode,
+  `lime/pvr.c` `pvr_deblock` blurs (binomial 5x5) where a 5x5 window's
+  colour range is under 10/255, fading out by 26: gradients only, never an
+  edge.
+- **The startup freeze** Mary saw (a 2.5-5 s present before the main
+  menu, three runs) did not come back; `rgl_d3d12.c` prints a
+  `d3d12 slow present:` breakdown and any pipeline compiled in play,
+  should it.
+
 ## DYNAMIC LIGHTS' shadows, phase 5 (2026-11-06, after 0.2.1)
 
 Mary played it: everything looks right, though the change is subtle.

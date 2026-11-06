@@ -1,6 +1,7 @@
 # Real-time dynamic lighting: compatibility report and plan
 
-**Status (2026-11-06):** phases 1, 2 and the point-light half of 5 are in
+**Status (2026-11-06):** phases 1, 2, 4 (stage lighting files, each
+stage's sky tint) and the point-light half of 5 are in
 (the two strongest point lights cast the fighters' shadows, cube faces in
 an atlas); phases 1 and 2 are (normals and world
 positions to the GPU; point/spot/directional lights in the shaders, with

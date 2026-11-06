@@ -166,8 +166,10 @@ press COMPILE.
   [research/DYNAMIC-LIGHTING.md](research/DYNAMIC-LIGHTING.md): every glow
   is a coloured point light on the stage and the fighters (`rgl_ff.c`
   `lights_build`). The two strongest also cast the fighters' shadows (phase 5,
-  `point_shadows`). Next: each stage's sky colour and lighting files
-  (phases 3-4). The shaders
+  `point_shadows`). Each stage's sky tints it, and `lighting/<scene>.ini`
+  (`launcher/lighting/README.txt`) tunes a stage and places its own lights
+  (phase 4). Next: lighting files for more stages, per-fighter files,
+  OpenGL, ambient occlusion and contact shadows (research/). The shaders
   are rebuilt with `render/shaders/build.py` (glslang in
   `WORK/tools/glslang`, fxc from the Windows SDK).
 - **Ambient occlusion and contact shadows**: investigated, not built. The
