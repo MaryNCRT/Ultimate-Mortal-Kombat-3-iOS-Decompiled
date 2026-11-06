@@ -156,6 +156,14 @@ static int g_aniso_ok;
 static void *g_window;
 
 static VkSwapchainKHR g_swap;
+/* LOW LATENCY (rgl_low_latency, docs/research/INPUT-LATENCY.md): with
+ * VK_KHR_present_id + VK_KHR_present_wait a present waits until the display
+ * shows it, so no frame queues behind it. The fence after each submit waits
+ * for the GPU only; FIFO can still hold images - 1 presents, each a refresh
+ * of input lag. Without the extensions the present does not wait, as before. */
+static PFN_vkWaitForPresentKHR vkWaitForPresentKHR_;
+static int      g_present_wait;
+static uint64_t g_present_id;
 static VkFormat g_swap_fmt;
 static VkExtent2D g_extent;
 static unsigned g_nimages;
@@ -521,7 +529,25 @@ static void present(void)
         pi.swapchainCount = 1;
         pi.pSwapchains = &g_swap;
         pi.pImageIndices = &g_image;
-        r = vkQueuePresentKHR(g_queue, &pi);
+        {
+            VkPresentIdKHR id;
+            uint64_t want = ++g_present_id;
+            int wait = g_present_wait && rgl_low_latency && rgl_vsync
+                       && k == n - 1;   /* the last of a held frame's */
+            if (g_present_wait) {
+                memset(&id, 0, sizeof id);
+                id.sType = VK_STRUCTURE_TYPE_PRESENT_ID_KHR;
+                id.swapchainCount = 1;
+                id.pPresentIds = &want;
+                pi.pNext = &id;
+            }
+            r = vkQueuePresentKHR(g_queue, &pi);
+            pi.pNext = NULL;
+            /* LOW LATENCY: on to the next frame -- and its keys -- once the
+             * display shows this one, as glFinish after the swap on OpenGL */
+            if (wait && (r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR))
+                vkWaitForPresentKHR_(g_dev, g_swap, want, 100000000ull);
+        }
         if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR)
             g_need_resize = 1;
         g_frame_on = 0;
@@ -876,7 +902,11 @@ static int vk_open(void *window, int width, int height)
     VkDeviceQueueCreateInfo qi;
     VkDeviceCreateInfo di;
     VkPhysicalDeviceFeatures have, want;
-    const char *dexts[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+    const char *dexts[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+                            VK_KHR_PRESENT_ID_EXTENSION_NAME,
+                            VK_KHR_PRESENT_WAIT_EXTENSION_NAME };
+    VkPhysicalDevicePresentIdFeaturesKHR   pid;
+    VkPhysicalDevicePresentWaitFeaturesKHR pwait;
     float prio = 1.0f;
     int best = -1, best_score = -1;
     VkSurfaceFormatKHR fmts[64];
@@ -988,8 +1018,43 @@ static int vk_open(void *window, int width, int height)
     di.enabledExtensionCount = 1;
     di.ppEnabledExtensionNames = dexts;
     di.pEnabledFeatures = &want;
-    if (!vk_ok(vkCreateDevice(g_gpu, &di, NULL, &g_dev), "vkCreateDevice"))
+    {   /* LOW LATENCY: present wait, where the driver has it */
+        VkExtensionProperties ex[512];
+        uint32_t ne = 512, k;
+        int got = 0;
+        if (vkEnumerateDeviceExtensionProperties(g_gpu, NULL, &ne, ex) >= 0)
+            for (k = 0; k < ne; k++)
+                if (strcmp(ex[k].extensionName, VK_KHR_PRESENT_ID_EXTENSION_NAME) == 0
+                    || strcmp(ex[k].extensionName, VK_KHR_PRESENT_WAIT_EXTENSION_NAME) == 0)
+                    got++;
+        g_present_wait = 0;
+        if (got == 2) {
+            memset(&pid, 0, sizeof pid);
+            pid.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR;
+            pid.presentId = VK_TRUE;
+            memset(&pwait, 0, sizeof pwait);
+            pwait.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR;
+            pwait.presentWait = VK_TRUE;
+            pid.pNext = &pwait;
+            di.pNext = &pid;
+            di.enabledExtensionCount = 3;
+            if (vkCreateDevice(g_gpu, &di, NULL, &g_dev) == VK_SUCCESS)
+                g_present_wait = 1;
+            else {                      /* listed but refused: without */
+                di.pNext = NULL;
+                di.enabledExtensionCount = 1;
+            }
+        }
+    }
+    if (!g_present_wait
+        && !vk_ok(vkCreateDevice(g_gpu, &di, NULL, &g_dev), "vkCreateDevice"))
         return 0;
+    if (g_present_wait) {
+        vkWaitForPresentKHR_ = (PFN_vkWaitForPresentKHR)
+            vkGetDeviceProcAddr(g_dev, "vkWaitForPresentKHR");
+        g_present_wait = vkWaitForPresentKHR_ != NULL;
+    }
+    printf("vulkan: present wait %s\n", g_present_wait ? "on" : "not available");
     LOAD_D(vkDestroyDevice); LOAD_D(vkGetDeviceQueue); LOAD_D(vkDeviceWaitIdle);
     LOAD_D(vkCreateSwapchainKHR); LOAD_D(vkDestroySwapchainKHR); LOAD_D(vkGetSwapchainImagesKHR);
     LOAD_D(vkAcquireNextImageKHR); LOAD_D(vkQueuePresentKHR); LOAD_D(vkQueueSubmit); LOAD_D(vkQueueWaitIdle);

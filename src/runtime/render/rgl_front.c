@@ -44,6 +44,7 @@ typedef void          GLvoid;
 int rgl_renderer = RGL_OPENGL;
 int rgl_swap_interval = 1;
 int rgl_vsync = 1;
+int rgl_low_latency = 1;
 char rgl_dir[1024];
 
 void rgl_path(char *out, int n, const char *name)

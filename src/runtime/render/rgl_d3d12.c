@@ -74,6 +74,14 @@ static ID3D12CommandAllocator *g_alloc;
 static ID3D12GraphicsCommandList *g_list;
 static ID3D12Fence *g_fence;
 static HANDLE g_event;
+/* LOW LATENCY (rgl_low_latency, docs/research/INPUT-LATENCY.md): the swap
+ * chain is made waitable, so a present can wait until the display has taken
+ * the frame before the next one reads the keys. Without it DXGI queues up to
+ * three presents and each one is a refresh of input lag the GPU fence does
+ * not see. */
+#define SWAP_FLAGS DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT
+static HANDLE g_latency;
+static int g_latency_set = -1;          /* the frame latency asked for */
 static UINT64 g_fval;
 static ID3D12RootSignature *g_root;
 static ID3D12DescriptorHeap *g_rtv_heap, *g_dsv_heap, *g_srv_heap, *g_samp_heap;
@@ -340,7 +348,7 @@ static void check_size(void)
     flush();
     wait_gpu();
     free_window();
-    if (ok(IDXGISwapChain3_ResizeBuffers(g_swap, NBUF, (UINT)w, (UINT)h, COLOR_FMT, 0), "ResizeBuffers")) {
+    if (ok(IDXGISwapChain3_ResizeBuffers(g_swap, NBUF, (UINT)w, (UINT)h, COLOR_FMT, SWAP_FLAGS), "ResizeBuffers")) {
         g_bw = w;
         g_bh = h;
     }
@@ -555,11 +563,14 @@ static int dx_open(void *window, int width, int height)
     sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     sd.BufferCount = NBUF;
     sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    sd.Flags = SWAP_FLAGS;
     if (!ok(IDXGIFactory4_CreateSwapChainForHwnd(g_factory, (IUnknown *)g_queue, g_hwnd, &sd, NULL, NULL, &sc1),
             "CreateSwapChainForHwnd"))
         return 0;
     IDXGISwapChain1_QueryInterface(sc1, &IID_IDXGISwapChain3, (void **)&g_swap);
     IDXGISwapChain1_Release(sc1);
+    g_latency = IDXGISwapChain3_GetFrameLatencyWaitableObject(g_swap);
+    g_latency_set = -1;
     IDXGIFactory4_MakeWindowAssociation(g_factory, g_hwnd, DXGI_MWA_NO_ALT_ENTER);
 
     g_rtv_heap = heap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, RTV_MAX, 0);
@@ -669,6 +680,8 @@ static void dx_close(void)
     ID3D12Device_Release(g_dev);
     g_dev = NULL;
     if (g_event) CloseHandle(g_event);
+    if (g_latency) CloseHandle(g_latency);
+    g_latency = NULL;
 }
 
 static const char *dx_device(void) { return g_adapter; }
@@ -1558,6 +1571,20 @@ static void dx_present(void)
                                     : rgl_swap_interval > 4 ? 4 : (UINT)rgl_swap_interval, 0);
     t3 = rgl_now_ms();
     wait_gpu();
+    /* LOW LATENCY: one frame in DXGI's queue, and with vsync the present
+     * waits here until the display has taken it -- as glFinish after the
+     * swap does on OpenGL -- so the pacing in game_main.c measures from the
+     * refresh and the next frame's keys are read as late as they can be.
+     * Off: three frames may queue, as before. */
+    if (g_latency) {
+        int want = rgl_low_latency ? 1 : 3;
+        if (want != g_latency_set) {
+            IDXGISwapChain3_SetMaximumFrameLatency(g_swap, (UINT)want);
+            g_latency_set = want;
+        }
+        if (rgl_low_latency && rgl_vsync)
+            WaitForSingleObjectEx(g_latency, 100, FALSE);
+    }
     if (rgl_now_ms() - t0 > 300.0)
         printf("d3d12 slow present: %.0f ms -- begin %.0f, the frame's commands run %.0f "
                "(%d pipelines made since the last), Present %.0f, the GPU after %.0f; "

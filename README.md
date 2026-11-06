@@ -66,7 +66,7 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 **The game, as on the device.** Every mode of the iOS game (arcade tower, VS, training, survival, karnage, treasures, kodes), its menus, HUD, finishers, sounds and music, from the decompiled code. The iPad build's layout is used on 4:3.
 
 **Added by the port:**
-- **Renderers:** OpenGL, Vulkan and Direct3D 12 (`src/runtime/render/`), HD textures, antialiasing, ENHANCED LIGHTING (real-time shadows, relief and specular on every texture, mipmaps, every glow a coloured light, each stage lit by its sky, per-stage lighting files, ambient occlusion), VSYNC, pipeline caches compiled ahead of play.
+- **Renderers:** OpenGL, Vulkan and Direct3D 12 (`src/runtime/render/`), HD textures, antialiasing, ENHANCED LIGHTING (real-time shadows, relief and specular on every texture, mipmaps, every glow a coloured light, each stage lit by its sky, per-stage lighting files, ambient occlusion), VSYNC, LOW LATENCY (at most one frame queued between the keys and the screen), pipeline caches compiled ahead of play.
 - **Screens:** 3:2, 4:3, 16:9 and 21:9; menus and panels laid out for each.
 - **SMOOTH ANIMATIONS** (frames between the game's frames) and **SMOOTH MODELS** (Blender's weld + Catmull-Clark subdivision, with sharp-edge controls).
 - **STAGE SELECT** before VS, training and online fights, with a picture of every stage; the select screen's music plays on through it.

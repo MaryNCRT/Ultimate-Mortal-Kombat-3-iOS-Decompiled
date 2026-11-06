@@ -4,6 +4,7 @@
  *     width=960      height=640      fullscreen=0   borderless=0
  *     hide_controls=1   (no on-screen stick and buttons)
  *     vsync=1           (0: frames presented without waiting for the refresh)
+ *     low_latency=1     (0: the driver may queue frames ahead of the screen)
  *     smooth_anims=1    (fighters' animation frames blended, drawing only)
  *     smooth_models=1   (fighters smoothed: Blender's weld + Catmull-Clark, level 1 or 2)
  *     sharp_edge_angle=80  sharp_edge_strength=100   (the smoothing keeps an edge
@@ -169,6 +170,7 @@ function defaultConfig() {
         hideControls: false,         /* hide_controls=1: no on-screen stick and buttons */
         cornerButtons: true,         /* corner_buttons=0: no INFO / PAUSE buttons in a fight */
         vsync: true,                 /* vsync=0: no waiting for the screen's refresh */
+        lowLatency: true,            /* low_latency=0: frames may queue ahead */
         smoothAnims: false,          /* smooth_anims=1: blend the fighters' frames (drawing only) */
         smoothModels: 0,             /* smooth_models=: 0 off, 1 or 2 the subdivision level */
         sharpAngle: SHARP_ANGLE,     /* sharp_edge_angle=: degrees, 0..180 */
@@ -247,6 +249,7 @@ function load(p) {
         else if (key === 'hide_controls') cfg.hideControls = num === 1;
         else if (key === 'corner_buttons') cfg.cornerButtons = num !== 0;
         else if (key === 'vsync') cfg.vsync = num !== 0;
+        else if (key === 'low_latency') cfg.lowLatency = num !== 0;
         else if (key === 'smooth_anims') cfg.smoothAnims = num === 1;
         else if (key === 'smooth_models') cfg.smoothModels = num >= 1 && num <= 2 ? num : 0;
         else if (key === 'sharp_edge_angle') cfg.sharpAngle = clampInt(num, 0, 180, SHARP_ANGLE);
@@ -356,6 +359,7 @@ function save(p, cfg) {
         'hide_controls=' + (cfg.hideControls ? 1 : 0),
         'corner_buttons=' + (cfg.cornerButtons === false ? 0 : 1),
         'vsync=' + (cfg.vsync === false ? 0 : 1),
+        'low_latency=' + (cfg.lowLatency === false ? 0 : 1),
         'smooth_anims=' + (cfg.smoothAnims ? 1 : 0),
         'smooth_models=' + (cfg.smoothModels === 1 || cfg.smoothModels === 2 ? cfg.smoothModels : 0),
         'sharp_edge_angle=' + clampInt(cfg.sharpAngle, 0, 180, SHARP_ANGLE),

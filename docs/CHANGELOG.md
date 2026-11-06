@@ -8,6 +8,31 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Since 0.3.0: LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait (2026-11-06)
+
+Played by Mary in her test folder (Direct3D 12): Sindel's idle smooth, the
+moves list's portrait from her texture pack with no FPS drop.
+
+- **LOW LATENCY** (on by default; `low_latency=` in `umk3.ini`, the VIDEO
+  page, the launcher): at most one frame waits between a tick and the
+  screen. Direct3D 12 uses a waitable swap chain at frame latency 1 and,
+  with VSYNC, waits for the display after each present; Vulkan waits for
+  each present with `VK_KHR_present_wait` where the driver has it (the log
+  says `vulkan: present wait on`); OpenGL on SDL calls `glFinish` after the
+  swap, as Windows already did. The keys were already read right before
+  each tick; what queued was the present. Off, frames may queue as before.
+  Ticks, rollback and replays are unchanged. The plan and the measurements:
+  [research/INPUT-LATENCY.md](research/INPUT-LATENCY.md).
+- **Sindel's idle was not smoothed** (SMOOTH ANIMATIONS). The game's
+  `IsLiaProblem` refuses blends on five of her frames, two of them her
+  stance (LIASTANCE1 and 5, frames 257 and 261), so the idle stepped on
+  four of its nine changes. SMOOTH ANIMATIONS no longer asks it; in the
+  binary it only refuses blends in a fight, where nothing is blended.
+- **The moves list's portrait** is the select screen's, texture pack
+  included: it now looks in the mods first. A mod's HD portrait (1080x1080)
+  took 40-100 ms to decode when the list first opened, an FPS drop; both
+  fighters' are now loaded while the fight loads.
+
 ## 0.3.0 beta (2026-11-06) — ENHANCED LIGHTING
 
 Published 2026-11-06 as the GitHub pre-release `v0.3.0-beta`. Played by

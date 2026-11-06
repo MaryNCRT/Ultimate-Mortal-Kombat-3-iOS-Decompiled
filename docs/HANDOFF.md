@@ -182,6 +182,13 @@ press COMPILE.
   before the main menu; the `d3d12 slow present:` log line splits it. The shaders
   are rebuilt with `render/shaders/build.py` (glslang in
   `WORK/tools/glslang`, fxc from the Windows SDK).
+- **Input latency**: LOW LATENCY (`rgl_low_latency`) is in for all three
+  renderers ([research/INPUT-LATENCY.md](research/INPUT-LATENCY.md)).
+  Vulkan's needs `VK_KHR_present_wait`; without it Vulkan still queues as
+  before. Not measured with a camera or a latency tester yet; if a frame
+  over 16.7 ms now shows a refresh late, that is the trade (the option
+  turns it off). Opening the settings menu costs ~150 ms (seen, not
+  looked into).
 - **Ambient occlusion and contact shadows**: investigated, not built. The
   designs (a technique selector Crytek SSAO / HBAO / Alchemy AO, and
   ray-marched contact shadows sharing one depth pre-pass in `scene_flush`)
