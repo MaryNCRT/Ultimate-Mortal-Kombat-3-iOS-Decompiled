@@ -8,6 +8,37 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## AMBIENT OCCLUSION; The Bridge's and The Bell Tower's lighting (2026-11-06, after 0.2.1)
+
+Part of ENHANCED LIGHTING (Vulkan, Direct3D 12). Mary played it: no lag
+once made cheaper.
+
+- **AMBIENT OCCLUSION** (`umk3.ini ao=0..3`, the settings menu's AMBIENT
+  OCCLUSION row: off, Crytek SSAO, HBAO, Alchemy AO; HBAO by default),
+  after `research/AMBIENT-OCCLUSION.md`, written from the papers. Each
+  flush (`rgl_ff.c` `ao_passes`): the scene's distance into a target at
+  half the 3D resolution -- the stage's held opaque draws, and the
+  fighters from their base meshes (the triangles held for the key light's
+  map; sending the smoothed ones again cost ~3 ms a frame, Mary saw the
+  drop) -- then a full-screen occlusion pass and a 5x5 blur that keeps to
+  its own depth. Every lit draw darkens its own colour by it (never the
+  dynamic lights'), a fighter by 70%, less where the map's shadow already
+  is, never below 0.40. Keys: `ao_radius` (1.0), `ao_intensity` (1.8),
+  `ao_bias`, `ao_samples` (8), `ao_blur`, `ao_scale` (0.5), `ao_floor`.
+  The backends got a fourth texture, the screen map (`screen_map`: Vulkan
+  binding 4, D3D12 t3); the light block carries the projection, the
+  viewport and the settings.
+- **The Bridge**: its sky (`skyplane`) and far skyline (`4`) without
+  relief: on the painted clouds it looked lumpy.
+- **The Bell Tower**: light the colour of its picture, not its sky (warm
+  amber), the night sky's cool blue through its three windows, and a warm
+  light on the wooden floor from above.
+- **The startup freeze** came back (3.6 s in one present before the main
+  menu, all in running the frame's commands, no pipeline made). The D3D12
+  diagnostic now splits it into the texture uploads since the last
+  present (count, lists, MB, time run and waited for, time releasing).
+  Not fixed yet.
+
 ## Each stage's sky, lighting files, smoother PVRTC (2026-11-06, after 0.2.1)
 
 Part of ENHANCED LIGHTING unless said. Mary played each step: The Rooftop

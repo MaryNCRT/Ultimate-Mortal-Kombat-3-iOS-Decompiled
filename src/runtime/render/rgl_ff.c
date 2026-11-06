@@ -264,6 +264,8 @@ void rgl_ff_start(const rgl_backend *b, int width, int height)
 static void scene_flush(void);
 static void SH_end_frame(void);
 static int hold_clear(const rgl_rect *sc, int color, const float rgba[4], int depth);
+static void ao_note(const rgl_rect *vp);
+static void ao_block(rgl_light_block *b);
 static void shadow_forget(void);
 
 void rgl_ff_stop(void)
@@ -1983,6 +1985,7 @@ static void lights_build(void)
     if (g_sky_stage)
         cfg_lights(&b);
     nfile = b.count;                    /* the glows merge among themselves only */
+    ao_block(&b);                       /* AMBIENT OCCLUSION's numbers */
     for (i = 0; i < g_nemit; i++) {
         float r = g_emit[i].ext * EMIT_RADIUS, mx = 0.0f;
         rgl_light *l = NULL;
@@ -2248,6 +2251,8 @@ static int hold_draw(const rgl_pipe *p, const rgl_frag *f, int tex, const rgl_sa
     h->n = n;
     memcpy(g_hv + g_nhv, v, (size_t)n * sizeof *v);
     g_nhv += n;
+    if ((f->shadow & 15) == RGL_SHADOW_RECEIVE && p->depth_test)
+        ao_note(vp);                    /* AMBIENT OCCLUSION: the 3D camera */
     return 1;
 }
 
@@ -2278,6 +2283,237 @@ static int hold_clear(const rgl_rect *sc, int color, const float rgba[4], int de
     return 1;
 }
 
+/* ---------------------------------------------------- AMBIENT OCCLUSION
+ *
+ * umk3.ini ao=0..3 (research/AMBIENT-OCCLUSION.md): the creases, corners
+ * and feet darkened as an ambient light would not reach them, from the
+ * scene's own depth, in screen space. Each flush, before the held draws go:
+ *
+ *   1  the depth pass   the held opaque 3D draws again, into AO.depth (the
+ *                       3D viewport at ao_scale), each texel the distance
+ *                       from the camera packed as the shadow map's
+ *   2  the occlusion    a full-screen draw into AO.raw, the technique
+ *                       chosen (Crytek SSAO, HBAO, Alchemy AO; the shaders'
+ *                       ao_pass), with the distance again beside it
+ *   3  the blur         another, a 5x5 blur that keeps to its own depth,
+ *                       into AO.depth (its depth no longer needed)
+ *   4  the scene        drawn as before, with that as the screen map: a
+ *                       lit draw darkens its own colour by it -- never the
+ *                       dynamic lights' -- a fighter by FIGHTER_AO of it,
+ *                       and never below ao_floor
+ *
+ * The projection's scale and the viewport are taken from the first held
+ * 3D draw. Off (ao=0, or without ENHANCED LIGHTING): no pass at all. */
+int   rgl_ao = 2, rgl_ao_samples = 8, rgl_ao_blur = 1;
+float rgl_ao_radius = 1.0f, rgl_ao_intensity = 1.8f, rgl_ao_bias = 0.03f;
+float rgl_ao_floor = 0.40f, rgl_ao_scale = 0.5f;   /* Mary: a drop in fps, and hardly seen */
+
+#define AO_FAR 3000.0f                  /* the distance packed, as a fraction of this */
+#define FIGHTER_AO 0.7f                 /* a fighter's share: his light is painted in */
+
+static struct {
+    int target_d, target_r, w, h;       /* AO.depth, AO.raw, their size */
+    int have;                           /* this flush: the projection and viewport */
+    float p00, p11;
+    mat4 proj;                          /* the scene's projection */
+    rgl_rect vp;                        /* the 3D viewport, GL's lower left */
+    rgl_vtx *fv;                        /* the fighters' base meshes, in its clip space */
+    int cfv;
+    int scene_target, scene_h;
+    int valid;                          /* the passes ran: the scene reads it */
+} AO;
+
+/* the first held 3D draw: its projection and viewport */
+static void ao_note(const rgl_rect *vp)
+{
+    int tw, th;
+    if (AO.have || !rgl_ao || !rgl_shadows)
+        return;
+    AO.have = 1;
+    AO.p00 = g_pr.s[g_pr.top].m[0];
+    AO.p11 = g_pr.s[g_pr.top].m[5];
+    AO.proj = g_pr.s[g_pr.top];
+    AO.vp = *vp;
+    AO.scene_target = cur_target(g_draw_fb);
+    target_size(AO.scene_target, &tw, &th);
+    AO.scene_h = th;
+}
+
+/* the block's AMBIENT OCCLUSION part (lights_build) */
+static void ao_block(rgl_light_block *b)
+{
+    b->aoproj[0] = AO.p00;
+    b->aoproj[1] = AO.p11;
+    b->aoproj[2] = AO_FAR;
+    b->aoproj[3] = rgl_ao_radius;
+    b->aoparm[0] = rgl_ao_intensity;
+    b->aoparm[1] = rgl_ao_bias;
+    b->aoparm[2] = rgl_ao_floor;
+    b->aoparm[3] = (float)rgl_ao;
+    b->aovp[0] = (float)AO.vp.x;
+    b->aovp[1] = (float)(AO.scene_h - (AO.vp.y + AO.vp.h));
+    b->aovp[2] = (float)AO.vp.w;
+    b->aovp[3] = (float)AO.vp.h;
+    b->aoparm2[0] = (float)rgl_ao_samples;
+    b->aoparm2[1] = FIGHTER_AO;
+    b->aoparm2[2] = (float)rgl_ao_blur;
+    b->aoparm2[3] = AO.have && rgl_ao && rgl_shadows && B && B->screen_map ? 1.0f : 0.0f;
+}
+
+/* a full-screen draw into the current target, the fragment mode given */
+static void ao_quad(int mode, int w, int h)
+{
+    static const float q[6][2] = { { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, -1 }, { 1, 1 }, { -1, 1 } };
+    rgl_vtx v[6];
+    rgl_pipe p;
+    rgl_frag f;
+    rgl_samp sm;
+    rgl_rect vp;
+    int i;
+
+    memset(v, 0, sizeof v);
+    for (i = 0; i < 6; i++) {
+        v[i].x = q[i][0];
+        v[i].y = q[i][1];
+        v[i].z = 0.0f;
+        v[i].w = 1.0f;
+        v[i].rgba[0] = v[i].rgba[1] = v[i].rgba[2] = v[i].rgba[3] = 255;
+    }
+    memset(&p, 0, sizeof p);
+    p.topo = RGL_TRIS;
+    p.cull = RGL_CULL_NONE;
+    p.mask = 15;
+    memset(&f, 0, sizeof f);
+    f.tex_mode = RGL_TEX_NONE;
+    f.shadow = mode;
+    memset(&sm, 0, sizeof sm);
+    sm.aniso = 1;
+    vp.x = vp.y = 0;
+    vp.w = w;
+    vp.h = h;
+    B->draw(&p, &f, 0, &sm, &vp, NULL, v, 6);
+}
+
+/* 1-3, before the held draws go; 4 is theirs (the screen map left set) */
+static void ao_passes(void)
+{
+    static const float white[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    int i, w, h;
+
+    AO.valid = 0;
+    if (!AO.have || !rgl_ao || !rgl_shadows || !B->screen_map)
+        return;
+    w = (int)(AO.vp.w * rgl_ao_scale + 0.5f);
+    h = (int)(AO.vp.h * rgl_ao_scale + 0.5f);
+    if (w < 16 || h < 16)
+        return;
+    if (w != AO.w || h != AO.h || !AO.target_d) {
+        if (AO.target_d) B->target_free(AO.target_d);
+        if (AO.target_r) B->target_free(AO.target_r);
+        AO.target_d = B->target_new(w, h, 1, 1);
+        AO.target_r = B->target_new(w, h, 1, 1);
+        AO.w = w;
+        AO.h = h;
+        if (!AO.target_d || !AO.target_r) {
+            printf("ambient occlusion: no %dx%d targets, off\n", w, h);
+            rgl_ao = 0;
+            return;
+        }
+        printf("ambient occlusion: on, %dx%d, technique %d\n", w, h, rgl_ao);
+    }
+    B->screen_map(0);
+    /* 1 the depth pass: the held opaque 3D draws, their texture for the
+     * alpha test, the distance packed */
+    B->target_use(AO.target_d);
+    B->clear(NULL, 1, white, 1, 1.0f);
+    for (i = 0; i < g_nheld; i++) {
+        held *hd = &g_held[i];
+        rgl_frag f;
+        rgl_pipe p;
+        rgl_rect vp;
+        if (hd->clear || (hd->f.shadow & 15) != RGL_SHADOW_RECEIVE || hd->p.blend || !hd->p.depth_write)
+            continue;
+        if ((hd->f.shadow >> 4) != 0 && SH.nw)
+            continue;                   /* a fighter: his base mesh, below */
+        f = hd->f;
+        f.shadow = RGL_AO_DEPTH;
+        f.bump = 0.0f;
+        f.lit = 0;
+        p = hd->p;
+        p.mask = 15;
+        vp.x = vp.y = 0;
+        vp.w = w;
+        vp.h = h;
+        B->draw(&p, &f, hd->tex, &hd->sm, &vp, NULL, g_hv + hd->first, hd->n);
+    }
+    /* the fighters into the depth from the triangles held for the key
+     * light's map (their base meshes, an id each), not their held draws: the
+     * smoothed meshes are ten times the triangles, and sending them all
+     * again cost ~3 ms a frame (Mary: a drop in fps) */
+    {
+        mat4 view, vp_m;
+        int nv = 0, n = SH.nw / 4;
+        if (n && invert(&SH.inv_view, &view)) {
+            vp_m = mul(&AO.proj, &view);
+            if (n > AO.cfv) {
+                rgl_vtx *a = (rgl_vtx *)realloc(AO.fv, (size_t)n * 2 * sizeof *a);
+                if (a) {
+                    AO.fv = a;
+                    AO.cfv = n * 2;
+                }
+            }
+            if (AO.fv && n <= AO.cfv)
+                for (i = 0; i + 2 < n; i += 3) {
+                    int k2;
+                    if (SH.w[i * 4 + 3] == 0.0f)
+                        continue;       /* the stage's: drawn above */
+                    for (k2 = 0; k2 < 3; k2++) {
+                        const float *wp = SH.w + (i + k2) * 4, *m = vp_m.m;
+                        rgl_vtx *o = &AO.fv[nv++];
+                        memset(o, 0, sizeof *o);
+                        o->x = m[0] * wp[0] + m[4] * wp[1] + m[8] * wp[2] + m[12];
+                        o->y = m[1] * wp[0] + m[5] * wp[1] + m[9] * wp[2] + m[13];
+                        o->z = m[2] * wp[0] + m[6] * wp[1] + m[10] * wp[2] + m[14];
+                        o->w = m[3] * wp[0] + m[7] * wp[1] + m[11] * wp[2] + m[15];
+                        o->rgba[0] = o->rgba[1] = o->rgba[2] = o->rgba[3] = 255;
+                    }
+                }
+        }
+        if (nv) {
+            rgl_frag f;
+            rgl_pipe p;
+            rgl_samp sm;
+            rgl_rect vp;
+            memset(&f, 0, sizeof f);
+            f.tex_mode = RGL_TEX_NONE;
+            f.shadow = RGL_AO_DEPTH;
+            memset(&p, 0, sizeof p);
+            p.topo = RGL_TRIS;
+            p.depth_test = p.depth_write = 1;
+            p.cull = RGL_CULL_NONE;
+            p.mask = 15;
+            memset(&sm, 0, sizeof sm);
+            sm.aniso = 1;
+            vp.x = vp.y = 0;
+            vp.w = w;
+            vp.h = h;
+            B->draw(&p, &f, 0, &sm, &vp, NULL, AO.fv, nv);
+        }
+    }
+    /* 2 the occlusion, from the depth */
+    B->target_use(AO.target_r);
+    B->screen_map(AO.target_d);
+    ao_quad(RGL_AO_PASS, w, h);
+    /* 3 the blur, back into AO.depth */
+    B->target_use(AO.target_d);
+    B->screen_map(AO.target_r);
+    ao_quad(RGL_AO_BLUR, w, h);
+    /* 4: the scene reads the blurred occlusion */
+    B->screen_map(AO.target_d);
+    B->target_use(cur_target(g_draw_fb));
+    AO.valid = 1;
+}
+
 /* the map from the casters held, then the held draws with it */
 static void scene_flush(void)
 {
@@ -2301,6 +2537,8 @@ static void scene_flush(void)
         shadow_drop();
         SH.nw = 0;
     }
+    ao_passes();                        /* AMBIENT OCCLUSION: before the draws (and
+                                         * while the casters' triangles are held) */
     SH.nw = 0;
     for (i = 0; i < g_nheld; i++) {
         held *h = &g_held[i];
@@ -2326,6 +2564,9 @@ static void scene_flush(void)
         B->draw(&h->p, &h->f, h->tex, &h->sm, &h->vp, h->has_sc ? &h->sc : NULL, v, h->n);
     }
     g_nheld = g_nhv = 0;
+    if (AO.valid)                       /* AMBIENT OCCLUSION: done with it */
+        B->screen_map(0);
+    AO.valid = AO.have = 0;
     rgl_shadow_ms += rgl_now_ms() - t0;
 }
 

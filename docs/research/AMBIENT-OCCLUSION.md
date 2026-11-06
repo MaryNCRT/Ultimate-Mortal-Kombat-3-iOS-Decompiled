@@ -1,5 +1,11 @@
 # Screen-space ambient occlusion: study and plan
 
+**Status (2026-11-06):** phases 1-4 are in (`rgl_ff.c` `ao_passes`, the
+three techniques in the shaders, the menu row and the `ao*` keys), Vulkan
+and Direct3D 12. Normals come from the depth's derivatives; GTAO and
+OpenGL are still plan. The fighters enter the depth pass from their base
+meshes, not their smoothed ones, for speed.
+
 Research only. Nothing here is implemented yet; no game code was changed
 for it. Asked for by Mary on 2026-11-06, as a companion to
 `DYNAMIC-LIGHTING.md` (dynamic point and spot lights, being built on

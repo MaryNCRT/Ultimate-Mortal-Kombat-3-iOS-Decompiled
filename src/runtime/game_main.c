@@ -1160,6 +1160,23 @@ static void read_config(const char *dir)
         }
         else if (strcmp(line, "rt_shadows") == 0)      /* render/rgl.h */
             rgl_shadows = atoi(v) == 1;
+        /* AMBIENT OCCLUSION (render/rgl.h, research/AMBIENT-OCCLUSION.md) */
+        else if (strcmp(line, "ao") == 0)              /* 0 off, 1 Crytek, 2 HBAO, 3 Alchemy */
+            rgl_ao = atoi(v) < 0 ? 0 : atoi(v) > 3 ? 3 : atoi(v);
+        else if (strcmp(line, "ao_radius") == 0)       /* world units */
+            rgl_ao_radius = (float)atof(v) < 0.05f ? 0.05f : (float)atof(v) > 5.0f ? 5.0f : (float)atof(v);
+        else if (strcmp(line, "ao_intensity") == 0)
+            rgl_ao_intensity = (float)atof(v) < 0.0f ? 0.0f : (float)atof(v) > 3.0f ? 3.0f : (float)atof(v);
+        else if (strcmp(line, "ao_bias") == 0)
+            rgl_ao_bias = (float)atof(v) < 0.0f ? 0.0f : (float)atof(v) > 0.5f ? 0.5f : (float)atof(v);
+        else if (strcmp(line, "ao_samples") == 0)      /* 4..32 */
+            rgl_ao_samples = atoi(v) < 4 ? 4 : atoi(v) > 32 ? 32 : atoi(v);
+        else if (strcmp(line, "ao_blur") == 0)         /* 0 off, 1 on */
+            rgl_ao_blur = atoi(v) != 0;
+        else if (strcmp(line, "ao_scale") == 0)        /* of the 3D resolution */
+            rgl_ao_scale = (float)atof(v) < 0.25f ? 0.25f : (float)atof(v) > 1.0f ? 1.0f : (float)atof(v);
+        else if (strcmp(line, "ao_floor") == 0)        /* the darkest it makes anything */
+            rgl_ao_floor = (float)atof(v) < 0.0f ? 0.0f : (float)atof(v) > 1.0f ? 1.0f : (float)atof(v);
         else if (strcmp(line, "smooth_models") == 0) { /* smooth_models.c */
             extern int port_smooth_models;
             port_smooth_models = atoi(v) < 0 ? 0 : atoi(v) > 2 ? 2 : atoi(v);

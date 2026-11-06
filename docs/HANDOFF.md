@@ -174,8 +174,10 @@ press COMPILE.
   `lights_build`). The two strongest also cast the fighters' shadows (phase 5,
   `point_shadows`). Each stage's sky tints it, and `lighting/<scene>.ini`
   (`launcher/lighting/README.txt`) tunes a stage and places its own lights
-  (phase 4). Next: lighting files for more stages, per-fighter files,
-  OpenGL, ambient occlusion and contact shadows (research/). The shaders
+  (phase 4). AMBIENT OCCLUSION is in (`ao_passes`). Next: lighting files
+  for more stages (Mary tunes them one by one), per-fighter files,
+  contact shadows, OpenGL (research/). Open: a 3.6 s freeze in the present
+  before the main menu; the `d3d12 slow present:` log line splits it. The shaders
   are rebuilt with `render/shaders/build.py` (glslang in
   `WORK/tools/glslang`, fxc from the Windows SDK).
 - **Ambient occlusion and contact shadows**: investigated, not built. The
