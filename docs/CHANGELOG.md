@@ -8,6 +8,16 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Every fighter's kombos in the moves list (2026-11-06, after 0.2.1)
+
+Mary played it: works.
+
+- **The KOMBOS column showed "-" for 11 fighters** (Kano, Sindel, Sektor,
+  Kung Lao, Kabal, Shang Tsung, Smoke, Mileena, Reptile, classic Sub-Zero
+  and Smoke). Their kombos now come from the fight engine's kombo trees,
+  as Cyrax's do. Each row is the buttons in order (B+HK for the
+  roundhouse); a row repeated in a tree, such as Mileena's, is shown once.
+
 ## Cyrax's kombos in the moves list (2026-11-06, after 0.2.1)
 
 Mary played it: works.

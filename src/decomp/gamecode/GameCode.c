@@ -8187,11 +8187,14 @@ static void PortMvPortrait(long character)
  * and combo_scan_a11 (mkcombo.c) walks a list of 0x18-byte entries from
  * there:
  *
- *      +0x00  bit 15 ends the list; 9 in the low bits for these entries
+ *      +0x00  bit 15 ends the list; the low byte is the window in frames
+ *             (t_comb0 reads it as the length; 6, 9 or 0xc)
  *      +0x04  the strike's animation, in bits 8 and up
  *      +0x08  low byte: the button (last_switch_ram's order, as the pads'
  *             actions: 0 HP, 1 LP, 2 BL, 3 HK, 4 LK, 5 RUN)
- *      +0x14  the next list when above 0x100, else the string ends
+ *      +0x14  the next list when above 0x100, else the string ends;
+ *             with 0x1111 at +0x04 it is a routine instead (t_comb2), and
+ *             the string ends there too
  *
  * Each path from the start to an end is one kombo. The button order was
  * checked against the kombos the binary's own lists print for Sonya, Jax,
@@ -8199,8 +8202,9 @@ static void PortMvPortrait(long character)
  * The scan reads buttons only, so a kombo needs no direction; the one shown
  * is animation 0x15 on a kick (the roundhouse), B+HK in those lists.
  *
- * Only for the fighters in PortKomboFromEngine: other trees hold entries of
- * other kinds (0x6, 0xc), not decoded here, and those fighters keep "-". */
+ * A list can hold one button twice (Mileena's U+ kombos); the same row is
+ * shown once. A path that comes back to a list it is already in (Sub-Zero's
+ * tree; he has his own section 3) ends there. */
 extern uint32_t ochar_elbow_combos[];   /* 0x001663fc, one per fighter */
 extern uint32_t ochar_knee_combos[];    /* 0x0016645c */
 
@@ -8209,11 +8213,6 @@ extern uint32_t ochar_knee_combos[];    /* 0x0016645c */
 
 static int  PortKomboSeq[PORT_KOMBO_ROWS][PORT_KOMBO_LEN];
 static long PortKomboCount;
-
-static int PortKomboFromEngine(long character)
-{
-    return character == 8;              /* CYRAX */
-}
 
 /* One button in the moves atlas's codes: 6-button HP LP B HK LK R, and the
  * 5-button layout's P and K */
@@ -8225,19 +8224,37 @@ static int PortKomboButton(int k, int six)
     return six ? b6[k] : b5[k];
 }
 
-/* Walk one list; returns 0 on an entry this does not know (then the
- * fighter shows "-" rather than a guess). */
-static int PortKomboWalk(const unsigned char *e, int *seq, int n, int six,
-                         int depth)
+static void PortKomboAdd(const int *seq, int m)
 {
+    long r;
+
+    for (r = 0; r < PortKomboCount; r++)
+        if (memcmp(PortKomboSeq[r], seq, sizeof(int) * (size_t)m) == 0
+            && PortKomboSeq[r][m] == -1)
+            return;
+    if (PortKomboCount < PORT_KOMBO_ROWS) {
+        memcpy(PortKomboSeq[PortKomboCount], seq, sizeof(int) * (size_t)m);
+        PortKomboSeq[PortKomboCount][m] = -1;
+        PortKomboCount++;
+    }
+}
+
+/* Walk one list; returns 0 on an entry this does not know (then the
+ * fighter shows "-" rather than a guess). `path` holds the lists this
+ * string is already in. */
+static int PortKomboWalk(const unsigned char *e, int *seq, int n, int six,
+                         const unsigned char **path, int depth)
+{
+    path[depth] = e;
     for (;;) {
         uint32_t w0 = *(const uint32_t *)(const void *)e;
-        uint32_t ani = *(const uint32_t *)(const void *)(e + 4) >> 8;
+        uint32_t w1 = *(const uint32_t *)(const void *)(e + 4);
+        uint32_t ani = w1 >> 8;
         uint32_t k = e[8];
         uint32_t next = *(const uint32_t *)(const void *)(e + 0x14);
-        int m = n;
+        int m = n, i, seen = 0;
 
-        if ((w0 & 0x7fffu) != 9 || k > 5 || depth > 10)
+        if (k > 5)
             return 0;
         if ((k == 3 || k == 4) && ani == 0x15 && m + 2 < PORT_KOMBO_LEN - 1) {
             seq[m++] = 1;               /* back */
@@ -8245,14 +8262,14 @@ static int PortKomboWalk(const unsigned char *e, int *seq, int n, int six,
         }
         if (m < PORT_KOMBO_LEN - 1)
             seq[m++] = PortKomboButton((int)k, six);
-        if (next > 0x100) {
+        for (i = 0; i <= depth; i++)
+            seen |= path[i] == (const unsigned char *)(uintptr_t)next;
+        if (w1 != 0x1111 && next > 0x100 && !seen && depth < 10) {
             if (!PortKomboWalk((const unsigned char *)(uintptr_t)next, seq, m,
-                               six, depth + 1))
+                               six, path, depth + 1))
                 return 0;
-        } else if (PortKomboCount < PORT_KOMBO_ROWS) {
-            memcpy(PortKomboSeq[PortKomboCount], seq, sizeof(int) * (size_t)m);
-            PortKomboSeq[PortKomboCount][m] = -1;
-            PortKomboCount++;
+        } else {
+            PortKomboAdd(seq, m);
         }
         if (w0 & 0x8000u)
             return 1;
@@ -8263,17 +8280,20 @@ static int PortKomboWalk(const unsigned char *e, int *seq, int n, int six,
 static long PortKombosRead(long character, int six)
 {
     int seq[PORT_KOMBO_LEN];
-    int ok;
+    const unsigned char *path[11];
+    int ok = 1;
 
     PortKomboCount = 0;
-    if (!PortKomboFromEngine(character) || character < 0 || character >= 24)
+    if (character < 0 || character >= 24)
         return 0;
     seq[0] = PortKomboButton(0, six);   /* the high punch that landed */
-    ok = PortKomboWalk((const unsigned char *)(uintptr_t)
-                       ochar_elbow_combos[character], seq, 1, six, 0);
+    if (ochar_elbow_combos[character])
+        ok = PortKomboWalk((const unsigned char *)(uintptr_t)
+                           ochar_elbow_combos[character], seq, 1, six, path, 0);
     seq[0] = PortKomboButton(3, six);   /* the high kick */
-    ok = ok && PortKomboWalk((const unsigned char *)(uintptr_t)
-                             ochar_knee_combos[character], seq, 1, six, 0);
+    if (ok && ochar_knee_combos[character])
+        ok = PortKomboWalk((const unsigned char *)(uintptr_t)
+                           ochar_knee_combos[character], seq, 1, six, path, 0);
     if (!ok)
         PortKomboCount = 0;
     return PortKomboCount;
