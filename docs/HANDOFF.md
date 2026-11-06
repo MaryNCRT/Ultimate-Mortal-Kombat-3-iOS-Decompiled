@@ -174,7 +174,9 @@ press COMPILE.
   `lights_build`). The two strongest also cast the fighters' shadows (phase 5,
   `point_shadows`). Each stage's sky tints it, and `lighting/<scene>.ini`
   (`launcher/lighting/README.txt`) tunes a stage and places its own lights
-  (phase 4). AMBIENT OCCLUSION is in (`ao_passes`). Next: lighting files
+  (phase 4). AMBIENT OCCLUSION is in (`ao_passes`; its radius is converted to
+  the camera's units, the view scales the world ~5x), with debug views in
+  the debug menu. Released in 0.3.0. Next: lighting files
   for more stages (Mary tunes them one by one), per-fighter files,
   contact shadows, OpenGL (research/). Open: a 3.6 s freeze in the present
   before the main menu; the `d3d12 slow present:` log line splits it. The shaders

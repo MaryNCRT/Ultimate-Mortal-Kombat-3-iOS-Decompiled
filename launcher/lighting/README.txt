@@ -18,6 +18,7 @@ Every key is optional; ";" starts a comment.
   fighter_lift=0.15      the fighters' own light (0 none), in place of
                          the guess made on a dark stage
   glow_power=1.0         the glows' lights (fire, projectiles), times this
+  relief=1.6             the stage's relief and specular, times this
   emissive=Object015     meshes that are light themselves (lava, fire,
                          neon, a lit window), by name, commas between:
                          drawn at their own brightness (no shadow, no

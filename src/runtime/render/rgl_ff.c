@@ -1578,6 +1578,7 @@ static void point_shadows(rgl_light_block *b)
  *   sky_color=255,40,20    the sky's colour, in place of the measured one
  *   fighter_lift=0.15      the fighters' own light, in place of the guess
  *   glow_power=1.0         the glows' lights (emissive draws), times this
+ *   relief=1.6             the stage's relief and specular, times this
  *   emissive=Object015     meshes that are light themselves (lava, neon,
  *                          a lit window), by name, commas between: drawn
  *                          at their own brightness -- no shadow, no
@@ -1614,7 +1615,7 @@ typedef struct {
 static struct {
     int loaded;
     char scene[64];
-    float sky_strength, sky_col[3], fighter_lift, glow_power;
+    float sky_strength, sky_col[3], fighter_lift, glow_power, relief;
     int has_sky_col, has_lift;
     char no_relief[256];                /* ",name,name," */
     char emissive[256];                 /* the same, the self-lit ones */
@@ -1691,6 +1692,7 @@ static void cfg_load(const char *scene)
     memset(&g_cfg, 0, sizeof g_cfg);
     g_cfg.sky_strength = 1.0f;
     g_cfg.glow_power = 1.0f;
+    g_cfg.relief = 1.0f;
     snprintf(g_cfg.scene, sizeof g_cfg.scene, "%s", scene);
     {
         char *dot = strrchr(g_cfg.scene, '.');
@@ -1743,6 +1745,7 @@ static void cfg_load(const char *scene)
         if (!l) {
             if (!strcmp(k, "sky_strength")) g_cfg.sky_strength = strtof(v, NULL);
             else if (!strcmp(k, "glow_power")) g_cfg.glow_power = strtof(v, NULL);
+            else if (!strcmp(k, "relief")) g_cfg.relief = strtof(v, NULL);
             else if (!strcmp(k, "fighter_lift")) { g_cfg.fighter_lift = strtof(v, NULL); g_cfg.has_lift = 1; }
             else if (!strcmp(k, "no_relief") || !strcmp(k, "emissive")) {
                 char *dst = !strcmp(k, "emissive") ? g_cfg.emissive : g_cfg.no_relief, *q;
@@ -2753,6 +2756,8 @@ static void submit(int topo, rgl_vtx *v, int n)
                * (SH.caster ? BUMP_FIGHTER : BUMP_STAGE);
     if (f.bump > 0.0f && !SH.caster && g_sky_stage && cfg_no_relief(g_mesh_now))
         f.bump = 0.0f;                  /* the stage's file: this one flat */
+    else if (f.bump > 0.0f && !SH.caster && g_sky_stage)
+        f.bump *= g_cfg.relief;         /* the stage's file: more or less relief */
     /* DYNAMIC LIGHTS: what is lit by them, what gives them */
     if (g_sh_on && rgl_shadows && topo == RGL_TRIS) {
         if (p.blend && p.dst == RGL_BF_ONE)
