@@ -82,7 +82,8 @@ function read(root) {
         return { id: f[0], name: cleanName(f[1]),
                  icon: icon >= 0 && icon < ICONS ? icon : DEFAULTS.icon,
                  color: cleanColor(f[3]), ...readShade(f[4], f[5]),
-                 angle: cleanAngle(f[6]), alt: f[7] === '1' ? 1 : 0, fav: cleanFav(f[8]) };
+                 angle: cleanAngle(f[6]), alt: f[7] === '1' ? 1 : 0,
+                 fav: icon >= 0 && icon < ICONS ? icon : DEFAULTS.icon };   /* the icon is the favourite (0.4.2) */
     }
     return null;
 }
@@ -162,6 +163,7 @@ function update(root, fields) {
         p.color2 = fields.color2.replace('#', '').toUpperCase();
     if (fields.angle !== undefined) p.angle = cleanAngle(fields.angle);
     if (fields.alt !== undefined) p.alt = fields.alt ? 1 : 0;
+    p.fav = p.icon;                 /* one fighter: the icon is the favourite (Mary, 0.4.2) */
     save(root, p);
     return p;
 }

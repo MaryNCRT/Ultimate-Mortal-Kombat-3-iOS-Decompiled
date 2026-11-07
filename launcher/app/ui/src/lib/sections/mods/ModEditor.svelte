@@ -481,8 +481,8 @@
         width: 100%; text-align: left; background: none; border: 0; cursor: pointer; display: flex; gap: calc(var(--u) * .7);
         padding: calc(var(--u) * .4) calc(var(--u) * .9); font-size: calc(var(--t) * 1.4); color: var(--lav);
     }
-    .list button:hover { color: #fff; background: rgba(150, 140, 255, .12); }
-    .list button.on { color: #fff; background: rgba(140, 125, 255, .3); }
+    .list button:hover { color: #fff; background: rgba(120, 140, 170, .12); }
+    .list button.on { color: #fff; background: rgba(163, 32, 26, .5); }
     .num { color: var(--dim); min-width: calc(var(--u) * 2); font-variant-numeric: tabular-nums; }
     .main { display: flex; flex-direction: column; min-height: 0; gap: calc(var(--u) * .5); }
     .top { display: flex; align-items: center; gap: calc(var(--u) * 1); flex-wrap: wrap; }

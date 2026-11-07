@@ -8,6 +8,55 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## 0.4.2 beta (2026-11-07)
+
+- **STAGE SELECT in the ONLINE screen's look and life** (Mary): the chosen
+  stage large behind everything, dimmed; a stone panel in gold and bronze
+  rising in; the heading's steel plate; the picture in a gold frame with
+  gold chevrons, sliding in from the side it was turned to; in the list,
+  the pictures lit under the mouse and the chosen one pulsing red; the
+  buttons the ONLINE plates, SELECT the red one. The ONLINE pieces are lent
+  by FrontEnd.c (`PortSkin*`, `OnButtonLook` split from `OnButton`).
+  `UMK3_STAGE_PREVIEW=<tick>[:list]` opens it for a screenshot.
+- The launcher's player badge is the game's ONLINE top badge -- a small
+  Player Banner, the fighter out of its end, the name and EDIT PROFILE --
+  docked in the command bar's left end, the gradient to its slanted tip.
+- PROFILE: IDENTITY and the background's editor side by side; the banner's
+  steel grain laid in overlay, so the gradient keeps its colour; the ONLINE
+  banner's grain only in shade, with the launcher's slow moving light.
+
+- **The launcher renewed** (Mary's brief): UMK3 Xbox 360's menu kept in
+  its places -- the rings, the menu down the curve, the description box, the
+  command bar -- and re-cast in dark blued steel, slate and smoke, with gold
+  for the details and deep red for what is chosen: the same family as the
+  ONLINE screen. Stone and brushed steel are SVG noise and the corner
+  brackets, separators and sigils SVG shapes (`ui/gen_materials.py` writes
+  `theme/materials.css`; no image files, no dependency). Every page is a
+  stone panel in a steel frame with a gold bar on top; buttons are iron
+  plates, the important one the red plate; headings heavy capitals with a
+  sigil; MODS' seven pages fit one row.
+- **PROFILE rebuilt**: the **Player Banner** on top -- the player's own
+  gradient on brushed steel, a slow sheen, the fighter standing out of it
+  with no box, the name, the account's state, the id and the favourite --
+  stays in sight while the page scrolls. Under it IDENTITY (the name; the
+  fighter, chosen in a window over a darkened screen with every fighter's
+  icon and name; the outfit) and LOOK (the gradient editor, unchanged in
+  how it works).
+- **The icon and the favourite fighter are one**, everywhere: profiles.ini
+  keeps writing its ninth field, now always the icon (launcher
+  `lib/profiles.js`, game `runtime/profiles.c`); the ONLINE editor's
+  favourite row shows the fighter and opens the gallery, which picks both.
+- **ACCOUNT** keeps every function and every call; the page is grouped in
+  boxes -- the session and e-mail, the recovery (gold), deleting (red) -- and
+  a recovery code shown stands in a gold-framed plate. **FRIENDS**, **REPLAYS**
+  and the **MOD MANAGER** (its how-to now a strip above the list) are plates
+  of black steel; the editors' pink and lavender are gold, steel and red.
+- **The game**: Esc's settings menu has no PROFILE page any more (the
+  launcher edits the profile); the player's icon under the categories stays,
+  in a bronze frame with a gold lip. The ONLINE screen's banners are drawn
+  as the launcher's: the gradient whole on steel, a gold bar on top, the red
+  line under, dark steel uprights.
+
 ## 0.4.1 beta (2026-11-07)
 
 - **The ONLINE screen's new skin** (Mary's references: MK Deception's and

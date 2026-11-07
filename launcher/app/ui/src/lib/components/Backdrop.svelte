@@ -72,21 +72,26 @@
             <rect x={HERO.x} y={HERO.y} width={HERO.w} height={HERO.h} fill="url(#heroFade)" />
         </mask>
         <!-- the rims: brushed silver, lighter along the edge that faces up -->
+        <!-- 0.4.2 (Mary): dark blued steel -- the rims burnished, the segments slate -->
         <linearGradient id="rimGrad" x1="0" y1="0" x2="0.3" y2="1">
-            <stop offset="0" stop-color="#ffffff" />
-            <stop offset="0.45" stop-color="#b4b8cc" />
-            <stop offset="0.7" stop-color="#e9ebf6" />
-            <stop offset="1" stop-color="#8f93ab" />
+            <stop offset="0" stop-color="#f2f6ff" />
+            <stop offset="0.4" stop-color="#6f819c" />
+            <stop offset="0.7" stop-color="#b9c6da" />
+            <stop offset="1" stop-color="#2a3442" />
+        </linearGradient>
+        <linearGradient id="stoneTint" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#2c3646" stop-opacity="0.7" />
+            <stop offset="1" stop-color="#05070b" stop-opacity="0.85" />
         </linearGradient>
         <radialGradient id="burstGlow">
-            <stop offset="0" stop-color="#fff" stop-opacity="0.95" />
-            <stop offset="0.25" stop-color="#cfe0ff" stop-opacity="0.6" />
-            <stop offset="1" stop-color="#7fa0ff" stop-opacity="0" />
+            <stop offset="0" stop-color="#f4f8ff" stop-opacity="0.9" />
+            <stop offset="0.25" stop-color="#a9bcd8" stop-opacity="0.45" />
+            <stop offset="1" stop-color="#3a5070" stop-opacity="0" />
         </radialGradient>
         <linearGradient id="burstRay">
-            <stop offset="0" stop-color="#fff" stop-opacity="0.95" />
-            <stop offset="0.6" stop-color="#dfe6f5" stop-opacity="0.75" />
-            <stop offset="1" stop-color="#bcd0ff" stop-opacity="0" />
+            <stop offset="0" stop-color="#f4f8ff" stop-opacity="0.9" />
+            <stop offset="0.6" stop-color="#c3d2e8" stop-opacity="0.6" />
+            <stop offset="1" stop-color="#7d92b3" stop-opacity="0" />
         </linearGradient>
     </defs>
 
@@ -102,6 +107,7 @@
             {#each r.spans as span}
                 {@const d = seg(r, span)}
                 <path {d} class="seg-body" />
+                <path {d} class="seg-stone" />
                 <!-- the rim's glow: wide faint strokes under the sharp one -->
                 <path {d} class="seg-glow2" />
                 <path {d} class="seg-glow" />
@@ -136,10 +142,19 @@
 </svg>
 
 <style>
+    /* the console's cloud of light, dimmed to cold steel smoke with a
+     * little blood in it (0.4.2, Mary: darker, bluish, dark fantasy) */
     .space {
         position: fixed; inset: 0;
         background-color: var(--bg);
         background-size: cover; background-position: center;
+        filter: saturate(.55) brightness(.5) contrast(1.15);
+    }
+    .space::before {
+        content: ""; position: absolute; inset: 0;
+        background: radial-gradient(ellipse 60% 45% at 70% 30%, rgba(90, 120, 170, .18), transparent 70%),
+                    radial-gradient(ellipse 50% 40% at 15% 85%, rgba(150, 14, 8, .22), transparent 70%),
+                    var(--tex-stone);
     }
     /* darker towards the window's edges */
     .space::after {
@@ -149,15 +164,17 @@
     .field { position: fixed; inset: 0; width: 100%; height: 100%; }
 
     /* the traces: dark grooves with a grey edge either side */
-    .trace-edge { fill: none; stroke: rgba(150, 150, 185, .22); stroke-width: 15; stroke-linejoin: miter; }
-    .trace { fill: none; stroke: rgba(6, 4, 18, .85); stroke-width: 11; stroke-linejoin: miter; }
+    /* the traces: grooves cut in the stone, a steel edge either side */
+    .trace-edge { fill: none; stroke: rgba(120, 140, 170, .25); stroke-width: 15; stroke-linejoin: miter; }
+    .trace { fill: none; stroke: rgba(3, 4, 7, .9); stroke-width: 11; stroke-linejoin: miter; }
 
     /* the segments: marble with a sharp white rim that glows */
     .seg-body { fill: url(#marble); }
-    .seg-glow2 { fill: none; stroke: #a493ff; stroke-width: 26; stroke-opacity: .14; stroke-linejoin: round; }
-    .seg-glow { fill: none; stroke: #d2c9ff; stroke-width: 13; stroke-opacity: .3; stroke-linejoin: round; }
+    .seg-stone { fill: url(#stoneTint); }
+    .seg-glow2 { fill: none; stroke: #5a7bb0; stroke-width: 26; stroke-opacity: .12; stroke-linejoin: round; }
+    .seg-glow { fill: none; stroke: #a8bde0; stroke-width: 13; stroke-opacity: .18; stroke-linejoin: round; }
     .seg-rim { fill: none; stroke: url(#rimGrad); stroke-width: 7; stroke-linejoin: round; }
-    .seg-hi { fill: none; stroke: #fff; stroke-width: 1.4; stroke-opacity: .9; stroke-linejoin: round; }
+    .seg-hi { fill: none; stroke: #f2f6ff; stroke-width: 1.4; stroke-opacity: .85; stroke-linejoin: round; }
     .ring-small .seg-rim { stroke-width: 5.5; }
 
     /* the rings turn slowly, the small one the other way */
@@ -166,10 +183,10 @@
     .ring-small { animation: spin 160s linear infinite reverse; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* the picture: tinted blue, a thin circle round it */
-    .hero-tint { fill: rgba(30, 50, 150, .28); }
-    .inner-band { fill: none; stroke: rgba(8, 6, 26, .55); stroke-width: 12; }
-    .inner-edge { fill: none; stroke: rgba(205, 215, 255, .3); stroke-width: 1.6; }
+    /* the picture: cooled, a thin steel circle round it */
+    .hero-tint { fill: rgba(20, 35, 70, .3); }
+    .inner-band { fill: none; stroke: rgba(4, 6, 10, .6); stroke-width: 12; }
+    .inner-edge { fill: none; stroke: rgba(180, 196, 222, .4); stroke-width: 1.6; }
 
     .burst { animation: burst 4s ease-in-out infinite alternate; }
     @keyframes burst { from { opacity: .75; } to { opacity: 1; } }

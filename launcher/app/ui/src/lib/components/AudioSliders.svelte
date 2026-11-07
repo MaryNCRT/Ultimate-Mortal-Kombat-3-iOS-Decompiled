@@ -49,5 +49,5 @@
     }
     input[type=range]:focus-visible { outline: none; }
     input[type=range]:focus-visible::-webkit-slider-thumb,
-    input[type=range]:hover::-webkit-slider-thumb { border-color: var(--blue, #4d8dff); }
+    input[type=range]:hover::-webkit-slider-thumb { border-color: var(--blue, #7d8fab); }
 </style>

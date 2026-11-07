@@ -128,7 +128,8 @@
         {/if}
 
         {#if st.user}
-            <h3>{tx('acSignedAs')} <span class="who">{st.user}</span></h3>
+            <section class="box">
+            <h3 class="first">{tx('acSignedAs')} <span class="who">{st.user}</span></h3>
             <p class="note">{tx('acSyncNote')}</p>
             <div class="row">
                 <button class="btn hot" disabled={busy} onpointerenter={hoverBlip} onclick={syncNow}>{tx('acSync')}</button>
@@ -148,7 +149,10 @@
                 {/if}
             </div>
 
-            <h3>{tx('acRecTitle')}</h3>
+            </section>
+
+            <section class="box rec">
+            <h3 class="first">{tx('acRecTitle')}</h3>
             {#if recPass !== null}
                 <div class="fields">
                     <div class="field wide">
@@ -162,16 +166,21 @@
                         onclick={seeCode}>{tx(recPass !== null ? 'acRecNew' : 'acRecSee')}</button>
             </div>
 
-            <h3>{tx('acDelete')}</h3>
+            </section>
+
+            <section class="box del">
+            <h3 class="first">{tx('acDelete')}</h3>
             <div class="fields">
                 <div class="field wide">
                     <label class="lbl" for="acDelPass">{tx('acPassword')}</label>
                     <input id="acDelPass" class="edt" type="password" maxlength="128" bind:value={f.password}>
                 </div>
             </div>
-            <div class="row"><button class="btn" disabled={busy || !f.password} onpointerenter={hoverBlip} onclick={remove}>{tx(delArmed ? 'acDeleteAsk' : 'acDelete')}</button></div>
+            <div class="row"><button class="btn danger" disabled={busy || !f.password} onpointerenter={hoverBlip} onclick={remove}>{tx(delArmed ? 'acDeleteAsk' : 'acDelete')}</button></div>
+            </section>
         {:else}
-            <p class="note">{tx('acGuest')}</p>
+            <section class="box">
+            <p class="note first">{tx('acGuest')}</p>
             <span class="tabs sub">
                 {#each [['login', 'acLogin'], ['register', 'acRegister'], ['recover', 'acRecover']] as [m, key]}
                     <button class="tab" class:active={mode === m} onpointerenter={hoverBlip}
@@ -213,21 +222,43 @@
                 </div>
             </form>
             <p class="note">{tx(mode === 'register' ? 'acRules' : 'acGuestNote')}</p>
+            </section>
         {/if}
         {#if msg}<p class="msg">{msg}</p>{/if}
     {/if}
 </div>
 
 <style>
+    /* 0.4.2: the same account, in the launcher's frames -- the session and
+     * e-mail, the recovery (its own box, the code in gold), deleting (red) */
+    .pane { display: flex; flex-direction: column; gap: calc(var(--u) * 1.6); }
+    .box {
+        position: relative; padding: calc(var(--u) * 1.4) calc(var(--u) * 1.8);
+        background: var(--plate); border: 1px solid #2e3846; border-top: 2px solid #46546a;
+        border-left: calc(var(--u) * .35) solid #46546a; border-radius: 2px;
+        box-shadow: var(--bevel), 0 calc(var(--u) * .3) calc(var(--u) * .8) rgba(0, 0, 0, .6);
+    }
+    .box.rec { border-left-color: #e6bb63; border-top-color: #e6bb63; }
+    .box.del { border-left-color: var(--blood); border-top-color: var(--blood); }
+    .first { margin-top: 0; padding-top: 0; border: 0; }
     .fields { grid-template-columns: minmax(0, 1fr); max-width: calc(var(--u) * 40); }
     .row { display: flex; gap: calc(var(--u) * 1); flex-wrap: wrap; margin: calc(var(--u) * .8) 0; }
     .who { color: var(--code); }
-    .warn { color: #ffb347; font-weight: bold; }
-    .msg { color: #fff; }
+    .warn { color: #ffcf7a; font-weight: bold; }
+    .msg { color: #fff; padding: calc(var(--u) * .6) calc(var(--u) * 1); background: var(--sunk); border-left: calc(var(--u) * .3) solid var(--red); }
     p { white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
-    .code { border: 2px solid var(--code); padding: calc(var(--u) * 1) calc(var(--u) * 1.6); margin-bottom: calc(var(--u) * 1.4); }
+    /* a recovery code being shown, or a conflict to settle: a gold-framed
+     * plate that stands out from the rest */
+    .code {
+        padding: calc(var(--u) * 1.2) calc(var(--u) * 1.8); margin-bottom: calc(var(--u) * .4);
+        background: linear-gradient(rgba(230, 187, 99, .1), rgba(230, 187, 99, 0) 60%), var(--plate);
+        border: 2px solid #e6bb63; box-shadow: var(--bevel), 0 0 calc(var(--u) * 1.2) rgba(230, 187, 99, .25);
+    }
+    .code h3 { margin-top: 0; padding-top: 0; border: 0; }
     .idcode {
-        font-family: var(--font-mono); font-size: calc(var(--t) * 1.8);
-        letter-spacing: .12em; color: var(--code); user-select: all;
+        display: inline-block; padding: calc(var(--u) * .5) calc(var(--u) * 1.2);
+        font-family: var(--font-mono); font-size: calc(var(--u) * 2.2);
+        letter-spacing: .14em; color: var(--gold1); user-select: all;
+        background: var(--well); border: 1px solid var(--line);
     }
 </style>

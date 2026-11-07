@@ -22,20 +22,37 @@ body {
 button, input, select { font: inherit; color: inherit; }
 .hidden { display: none !important; }
 
-/* ---- headings: a page's name, its sections */
+/* ---- headings: a page's name, its sections -- heavy capitals, engraved
+ * under a gold rule with the sigil before them (materials.css) */
 h2 {
     margin: 0 0 calc(var(--u) * 1.2);
-    font-size: calc(var(--t) * 2.4); letter-spacing: .08em; color: #fff; font-weight: 600;
-    border-bottom: 1px solid transparent; padding-bottom: calc(var(--u) * .8);
+    font-family: var(--font-head); text-transform: uppercase;
+    font-size: calc(var(--t) * 2.3); letter-spacing: .1em; color: #eef3fb; font-weight: 900;
+    border-bottom: 2px solid transparent; padding-bottom: calc(var(--u) * .7);
     border-image: var(--head-rule) 1;
-    text-shadow: 0 0 calc(var(--u) * .8) rgba(150, 160, 255, .5);
+    text-shadow: 0 2px 0 #000, 0 0 calc(var(--u) * .9) rgba(140, 170, 230, .25);
 }
 h3 {
+    display: flex; align-items: center; gap: calc(var(--u) * .8);
     margin: calc(var(--u) * 1.8) 0 calc(var(--u) * .8); padding-top: calc(var(--u) * 1.2);
-    font-size: calc(var(--t) * 1.6); color: var(--head); letter-spacing: .12em;
+    font-family: var(--font-head); text-transform: uppercase; font-weight: 900;
+    font-size: calc(var(--t) * 1.5); color: var(--head); letter-spacing: .14em;
+    text-shadow: 0 1px 0 #000, 0 -1px 0 rgba(0, 0, 0, .6);
     border-top: 1px solid transparent; border-image: var(--sub-rule) 1;
 }
+h3::before {
+    content: ""; flex: none; width: calc(var(--u) * 1.6); height: calc(var(--u) * 1.6);
+    background: var(--orn-sigil) center / contain no-repeat;
+    filter: drop-shadow(0 1px 1px #000);
+}
 h2 + h3, h3.first { margin-top: 0; padding-top: 0; border: 0; }
+
+/* an engraved separator: a groove, a lit lip, the gold blades in the middle */
+.rule {
+    height: calc(var(--u) * 1.4); margin: calc(var(--u) * 1.2) 0;
+    background: var(--orn-rule) center / auto 100% no-repeat,
+                linear-gradient(transparent 45%, rgba(0, 0, 0, .7) 45% 55%, rgba(222, 178, 98, .35) 55% 62%, transparent 62%);
+}
 
 /* ---- layout */
 .row { display: flex; gap: calc(var(--u) * 1); align-items: center; margin: calc(var(--u) * .8) 0; }
@@ -50,55 +67,72 @@ h2 + h3, h3.first { margin-top: 0; padding-top: 0; border: 0; }
 .field .row { margin: 0; }
 
 /* ---- text */
-.lbl { color: var(--dim); font-size: calc(var(--t) * 1.6); letter-spacing: .08em; }
+.lbl { color: var(--dim); font-size: calc(var(--t) * 1.5); letter-spacing: .12em; text-transform: uppercase; font-weight: 700; }
 .note { color: var(--dim); font-size: calc(var(--t) * 1.4); margin: calc(var(--u) * 1.2) 0 0; }
 .hint { color: var(--dim); font-size: calc(var(--t) * 1.4); margin-right: auto; }
 
-/* ---- inputs and lists */
+/* ---- inputs and lists: sunk black steel in a bronze frame, gold when in use */
 .edt, .sel, .btn { height: var(--ctl-h); font-size: calc(var(--t) * 1.5); }
 .edt, .sel {
     flex: 1; min-width: 0;
     background: var(--well); border: 1px solid var(--line);
     border-radius: var(--r-sm); padding: calc(var(--u) * .7) calc(var(--u) * 1);
+    box-shadow: inset 0 calc(var(--u) * .25) calc(var(--u) * .5) rgba(0, 0, 0, .8), 0 1px 0 rgba(190, 210, 255, .08);
+    color: #fff3dc;
 }
-.sel option { background: #120e30; }
+.edt:hover, .sel:hover { border-color: var(--bronze-hi); }
+.edt:focus, .sel:focus {
+    outline: none; border-color: var(--hot-rim);
+    box-shadow: inset 0 calc(var(--u) * .25) calc(var(--u) * .5) rgba(0, 0, 0, .8), 0 0 calc(var(--u) * .8) rgba(150, 180, 235, .35);
+}
+.edt::placeholder { color: rgba(154, 167, 186, .6); }
+.sel option { background: #0e1219; }
 .chk { display: flex; gap: calc(var(--u) * .8); align-items: center; cursor: pointer; }
-.chk input { width: calc(var(--u) * 2); height: calc(var(--u) * 2); accent-color: var(--blue); }
+.chk input { width: calc(var(--u) * 2); height: calc(var(--u) * 2); accent-color: var(--red); }
 .fields .chk { font-size: calc(var(--t) * 1.8); }
 
-/* ---- buttons */
+/* ---- buttons: an iron plate in a bronze frame; hover lights it and gilds
+ * the frame; the important one (hot) is the red plate in gold; pressed
+ * sinks; disabled is dull iron */
 .btn {
     background: var(--grad-btn);
     border: 1px solid var(--line); border-radius: var(--r-sm);
     padding: calc(var(--u) * .5) calc(var(--u) * 1.4);
-    letter-spacing: .08em; cursor: pointer; white-space: nowrap;
+    letter-spacing: .1em; text-transform: uppercase; font-weight: 700;
+    cursor: pointer; white-space: nowrap; color: #e6ebf3;
+    box-shadow: var(--bevel), 0 calc(var(--u) * .2) calc(var(--u) * .4) rgba(0, 0, 0, .55);
+    text-shadow: 0 1px 0 #000;
+    transition: border-color .15s, box-shadow .15s, filter .15s;
 }
-.btn:hover { border-color: #fff; box-shadow: var(--hover-glow); }
-.btn:disabled { opacity: .4; cursor: default; box-shadow: none; }
-.btn.hot { background: var(--grad-hot); border-color: var(--hot-rim); }
-.btn.danger { background: var(--grad-danger); border-color: #ff7f86; }
+.btn:hover { border-color: var(--hot-rim); box-shadow: var(--bevel), var(--hover-glow); color: #ffffff; filter: brightness(1.12); }
+.btn:active:not(:disabled) { filter: brightness(.85); box-shadow: inset 0 calc(var(--u) * .2) calc(var(--u) * .4) rgba(0, 0, 0, .8); transform: translateY(1px); }
+.btn:focus-visible { outline: 1px solid var(--hot-rim); outline-offset: 2px; }
+.btn:disabled { opacity: .42; cursor: default; box-shadow: none; filter: grayscale(.6); }
+.btn.hot { background: var(--grad-hot); border-color: var(--hot-rim); color: #fff; }
+.btn.danger { background: var(--grad-danger); border-color: #b5402e; color: var(--bad-text); }
 .btn.big {
     height: auto; font-size: calc(var(--t) * 2.4); padding: calc(var(--u) * .9) calc(var(--u) * 4.5);
     margin-top: calc(var(--u) * 1.5); align-self: flex-start;
 }
 
-/* ---- tabs: a row of choices, the chosen one lit */
+/* ---- tabs: a row of choices, the chosen one the lit red plate */
 .tabs { display: flex; align-items: center; gap: calc(var(--u) * 1); margin-bottom: calc(var(--u) * 1.4); }
 .tabs.sub { margin-bottom: 0; }
 .tab {
-    font: inherit; font-size: calc(var(--t) * 1.35); letter-spacing: .08em;
-    color: var(--dim); background: rgba(255, 255, 255, .05);
-    border: 1px solid rgba(205, 210, 255, .3); border-radius: var(--r-sm);
+    font: inherit; font-size: calc(var(--t) * 1.35); letter-spacing: .1em; text-transform: uppercase; font-weight: 700;
+    color: var(--dim); background: var(--plate);
+    border: 1px solid rgba(104, 124, 150, .45); border-radius: var(--r-sm);
     padding: calc(var(--u) * .45) calc(var(--u) * 1.2); cursor: pointer; white-space: nowrap;
+    box-shadow: var(--bevel);
 }
-.tab:hover { color: #fff; border-color: rgba(215, 220, 255, .7); }
-.tab.active { color: #fff; border-color: var(--hot-rim); background: var(--grad-hot); }
+.tab:hover { color: #ffffff; border-color: var(--bronze-hi); }
+.tab.active { color: #fff; border-color: var(--hot-rim); background: var(--grad-hot); text-shadow: 0 1px 0 #000; }
 
-/* ---- whether something is done: a coloured edge */
+/* ---- whether something is done: a coloured edge on a steel plate */
 .state {
     border-left: calc(var(--u) * .5) solid var(--dim);
     padding: calc(var(--u) * .8) calc(var(--u) * 1.2); margin-bottom: calc(var(--u) * 1.4);
-    background: rgba(255, 255, 255, .04);
+    background: var(--plate); box-shadow: var(--bevel);
 }
 .state.ok { border-color: var(--ok); }
 .state.need { border-color: var(--red); }
@@ -113,10 +147,10 @@ h2 + h3, h3.first { margin-top: 0; padding-top: 0; border: 0; }
     border-radius: var(--r-md); padding: calc(var(--u) * .45) calc(var(--u) * .9);
     cursor: pointer; font-size: calc(var(--t) * 1.5);
 }
-.keybtn:hover { border-color: var(--blue); }
+.keybtn:hover { border-color: var(--hot-rim); }
 .keybtn.ro { cursor: default; }
 .keybtn.ro:hover { border-color: var(--line); }
-.keybtn.waiting { border-color: var(--red); box-shadow: 0 0 calc(var(--u) * 1) rgba(227, 36, 43, .7); }
+.keybtn.waiting { border-color: var(--red); box-shadow: 0 0 calc(var(--u) * 1) rgba(196, 25, 15, .75); }
 .devfield { margin-bottom: calc(var(--u) * 1.4); }
 .devfield .sel { flex: 0 1 calc(var(--u) * 34); }
 
@@ -128,3 +162,9 @@ h2 + h3, h3.first { margin-top: 0; padding-top: 0; border: 0; }
 .gname { font-weight: 700; font-size: calc(var(--t) * 1.2); }
 .gplus { color: var(--dim); margin: 0 calc(var(--u) * .2); }
 .padsels { display: flex; gap: calc(var(--u) * .4); align-items: center; }
+
+/* ---- scrollbars: a bronze bar in a dark groove, everywhere */
+::-webkit-scrollbar { width: calc(var(--u) * .9); height: calc(var(--u) * .9); }
+::-webkit-scrollbar-track { background: rgba(0, 0, 0, .35); }
+::-webkit-scrollbar-thumb { background: linear-gradient(90deg, #2e3846, #8293ad, #2e3846); border-radius: calc(var(--u) * .45); }
+::-webkit-scrollbar-thumb:hover { background: linear-gradient(90deg, #46546a, #ecc277, #46546a); }

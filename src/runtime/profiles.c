@@ -132,6 +132,7 @@ void prof_save(void)
         else
             snprintf(ang, sizeof ang, "-");
         char fav[8];
+        g_prof.fav = g_prof.icon;       /* one fighter: the icon is the favourite (Mary, 0.4.2) */
         if (g_prof.fav >= 0 && g_prof.fav < PROF_ICONS)
             snprintf(fav, sizeof fav, "%d", g_prof.fav);
         else
@@ -228,6 +229,7 @@ void prof_load(const char *ini_path, const char *default_name)
                 }
             }
         }
+        g_prof.fav = g_prof.icon;       /* one fighter: the icon is the favourite */
         g_have = 1;
     }
     if (f)

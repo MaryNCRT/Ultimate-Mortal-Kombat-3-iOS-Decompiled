@@ -4,13 +4,13 @@
      * rings. A section opened from the menu fills the window, as the
      * console's online pages: its header, its page, the command bar. The
      * backdrop and the bars are shared. */
+    import './theme/materials.css';
     import './theme/tokens.css';
     import './theme/base.css';
     import { onMount } from 'svelte';
     import { app, init } from './app.svelte.js';
     import Backdrop from './components/Backdrop.svelte';
     import TitleBar from './components/TitleBar.svelte';
-    import ProfileBadge from './components/ProfileBadge.svelte';
     import Logo from './components/Logo.svelte';
     import MainMenu from './components/MainMenu.svelte';
     import Desc from './components/Desc.svelte';
@@ -35,7 +35,6 @@
 {#if app.cfg}
     <div class="app">
         <TitleBar />
-        {#if !app.overlay}<ProfileBadge />{/if}
         {#if app.full && Sec}
             <main class="stage" class:wide={app.sec === 'mods'}>
                 <SecHead />

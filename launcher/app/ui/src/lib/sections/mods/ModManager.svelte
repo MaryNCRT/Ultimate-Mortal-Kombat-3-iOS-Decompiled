@@ -71,6 +71,7 @@
     const kinds = m => Object.entries(m.kinds).filter(([k]) => k !== 'other').map(([k, n]) => (tx('cats')[k] || k) + ' ' + n).join(' · ');
 </script>
 
+<p class="how">{tx('mgHow')}</p>
 <div class="bar">
     <button class="btn hot" onpointerenter={hoverBlip} onclick={() => { making = !making; err = ''; }}>{tx('mgNew')}</button>
     <button class="btn" onpointerenter={hoverBlip} onclick={() => api.modsOpen('')}>{tx('mgOpen')}</button>
@@ -162,7 +163,7 @@
     {/each}
 </ol>
 
-<p class="note">{tx('mgHow')}</p>
+
 
 <style>
     .bar { display: flex; align-items: center; gap: calc(var(--u) * 1); margin-bottom: calc(var(--u) * 1.2); }
@@ -170,13 +171,22 @@
     .narrow { flex: 0 0 calc(var(--u) * 18); }
     .empty { color: var(--dim); text-align: center; margin: calc(var(--u) * 3) 0; }
     .mods { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: calc(var(--u) * .6); }
+    /* 0.4.2: the how-to as a strip over the list */
+    .how {
+        margin: 0 0 calc(var(--u) * 1.2); padding: calc(var(--u) * .7) calc(var(--u) * 1.2);
+        color: var(--dim); font-size: calc(var(--u) * 1.25); line-height: 1.35;
+        background: var(--sunk); border-left: calc(var(--u) * .35) solid #e6bb63;
+    }
+    /* each mod a black-steel plate; open, its edge gilded */
     .card {
-        background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-sm);
+        background: var(--plate); border: 1px solid #2e3846; border-left: calc(var(--u) * .35) solid #46546a;
+        border-radius: 2px; box-shadow: var(--bevel), 0 calc(var(--u) * .2) calc(var(--u) * .5) rgba(0, 0, 0, .5);
         padding: calc(var(--u) * .6) calc(var(--u) * 1);
     }
+    .card:hover { border-color: #5d6e88; }
     .card.new { margin-bottom: calc(var(--u) * 1.2); padding: calc(var(--u) * 1.2); }
     .card.off { opacity: .55; }
-    .card.open { border-color: var(--blue); }
+    .card.open { border-color: #e6bb63; }
     .head { display: flex; align-items: center; gap: calc(var(--u) * 1); }
     .prio { width: calc(var(--u) * 2.6); text-align: center; color: var(--dim); font-family: var(--font-mono); }
     .pic { width: calc(var(--u) * 4.4); height: calc(var(--u) * 4.4); flex: none; display: grid; place-items: center; }
@@ -184,11 +194,13 @@
     .cover { float: right; display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * .5); margin: 0 0 calc(var(--u) * .6) calc(var(--u) * 1.2); }
     .cover img { width: calc(var(--u) * 16); height: calc(var(--u) * 10); object-fit: cover; border-radius: var(--r-sm); border: 1px solid var(--line); }
     .cover i { width: calc(var(--u) * 16); height: calc(var(--u) * 10); display: block; }
-    .cat { width: 70%; height: 70%; border-radius: 50%; background: var(--grad-hot); box-shadow: 0 0 calc(var(--u) * .6) rgba(140, 130, 255, .6); }
-    .cat.audio, .tag.audio { background: #1f6f6a; }
-    .cat.music, .tag.music { background: #8a3c8f; }
-    .cat.models, .tag.models { background: #9a6a1c; }
-    .cat.mixed, .tag.mixed { background: #4b4b6b; }
+    .cat { width: 70%; height: 70%; border-radius: 50%; background: var(--grad-hot); box-shadow: 0 0 calc(var(--u) * .6) rgba(196, 25, 15, .55); }
+    /* each kind its own metal: textures blood, audio verdigris, music
+     * oxblood-violet, models bronze, mixed steel */
+    .cat.audio, .tag.audio { background: linear-gradient(#2f7a72, #14403c); }
+    .cat.music, .tag.music { background: linear-gradient(#6e2a55, #341228); }
+    .cat.models, .tag.models { background: linear-gradient(#a8742a, #563810); }
+    .cat.mixed, .tag.mixed { background: linear-gradient(#5d6e88, #283240); }
     .name {
         flex: 1; min-width: 0; text-align: left; background: none; border: 0; cursor: pointer; padding: 0;
         display: flex; flex-direction: column;
@@ -197,7 +209,9 @@
     .name small { color: var(--dim); font-size: calc(var(--t) * 1.3); }
     .tag {
         font-size: calc(var(--t) * 1.2); letter-spacing: .08em; padding: calc(var(--u) * .25) calc(var(--u) * .8);
-        border-radius: calc(var(--u) * 1); background: #4a3fae;
+        border-radius: 2px; background: linear-gradient(#a3201a, #4a0805);
+        border: 1px solid rgba(0, 0, 0, .6); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2);
+        font-weight: 800; text-shadow: 0 1px 0 #000;
     }
     .count { color: var(--dim); font-size: calc(var(--t) * 1.4); white-space: nowrap; }
     .warn { color: var(--gold1); font-style: normal; }
@@ -209,10 +223,12 @@
     .arrow:disabled { opacity: .3; cursor: default; }
     .switch {
         min-width: calc(var(--u) * 12); height: calc(var(--u) * 3); cursor: pointer; letter-spacing: .08em;
-        font-size: calc(var(--t) * 1.3); border-radius: calc(var(--u) * 1.5);
+        font-size: calc(var(--t) * 1.3); border-radius: 2px; font-weight: 800;
         background: var(--well); border: 1px solid var(--line); color: var(--dim);
+        box-shadow: inset 0 calc(var(--u) * .2) calc(var(--u) * .4) rgba(0, 0, 0, .8);
     }
-    .switch.on { background: var(--grad-hot); border-color: var(--hot-rim); color: #fff; }
+    .switch:hover { border-color: var(--hot-rim); }
+    .switch.on { background: var(--grad-hot); border-color: var(--hot-rim); color: #fff; box-shadow: var(--bevel), 0 0 calc(var(--u) * .8) rgba(196, 25, 15, .45); text-shadow: 0 1px 0 #000; }
     .body { padding: calc(var(--u) * 1) 0 calc(var(--u) * .4) calc(var(--u) * 3.6); }
     .files {
         list-style: none; margin: calc(var(--u) * 1) 0; padding: calc(var(--u) * .6); max-height: calc(var(--u) * 18);
@@ -222,5 +238,5 @@
     .files li { display: flex; justify-content: space-between; gap: calc(var(--u) * 2); padding: calc(var(--u) * .15) 0; }
     .files .to { color: var(--dim); }
     .files .miss .to { color: var(--gold1); }
-    .bad { border-color: #ff7f86; }
+    .bad { border-color: var(--red); }
 </style>

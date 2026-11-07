@@ -68,9 +68,9 @@
 </svg>
 
 <style>
-    svg { width: 100%; height: 100%; background: radial-gradient(ellipse at 50% 40%, #241f55, #0a0820 80%); border-radius: var(--r-sm); border: 1px solid var(--line); touch-action: none; }
+    svg { width: 100%; height: 100%; background: radial-gradient(ellipse at 50% 40%, #241f55, #05070b 80%); border-radius: var(--r-sm); border: 1px solid var(--line); touch-action: none; }
     rect, line { vector-effect: non-scaling-stroke; }
-    .body { fill: rgba(150, 140, 255, .22); stroke: rgba(190, 180, 255, .7); stroke-width: 1.5; }
+    .body { fill: rgba(120, 140, 170, .22); stroke: rgba(190, 180, 255, .7); stroke-width: 1.5; }
     .axis { stroke: rgba(255, 255, 255, .3); stroke-dasharray: 4 4; }
     .tag { fill: rgba(255, 255, 255, .5); font-size: 6px; }
     .other { fill: rgba(255, 140, 140, .05); stroke: rgba(255, 150, 150, .45); stroke-width: 1; }

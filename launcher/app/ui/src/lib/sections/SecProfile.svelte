@@ -2,8 +2,12 @@
     /* PROFILE: profiles.ini, which the game's settings menu edits too. The
      * name, the id (one per installation, it never changes), the fighter in
      * his first or second outfit, the background's gradient (the gradient
-     * picker: two colours and an angle) and a reset. The icon stays in sight
-     * while the page scrolls to the colours, so every change shows. Its
+     * picker: two colours and an angle) and a reset. 0.4.2 (Mary): the Player
+     * Banner on top -- the gradient on steel, the fighter, name, state, id and
+     * favourite -- stays in sight while the page scrolls, so every change shows
+     * on it; under it IDENTITY (name; the fighter -- icon and favourite are
+     * one, Mary -- chosen in a window of his own, FighterPicker; the outfit)
+     * and LOOK (the background). Its
      * other pages: the account (ProfAccount) and the friends (ProfFriends). */
     import { app, tx, updateProf, resetProf, PROF_TABS } from '#lib/app.svelte.js';
     import SubNav from '#lib/components/SubNav.svelte';
@@ -14,8 +18,12 @@
     import Page from '#lib/components/Page.svelte';
     import IconCanvas from '#lib/components/IconCanvas.svelte';
     import GradientPicker from '#lib/components/GradientPicker.svelte';
+    import PlayerBanner from '#lib/components/PlayerBanner.svelte';
+    import FighterPicker from '#lib/components/FighterPicker.svelte';
+    import { FIGHTERS } from '#lib/fighters.js';
 
     const p = $derived(app.prof);
+    let picking = $state(false);       /* the fighter's window open */
     let name = $state('');
     let typing = $state(false);
     /* the name follows the profile, except while it is being typed */
@@ -79,11 +87,13 @@
     {:else if app.profTab === 'friends'}
         <ProfFriends />
     {:else if p}
-        <div class="prof">
-            <IconCanvas class="big" size={192} icon={p.icon} color={p.color} shade={p.shade} color2={p.color2}
-                        angle={p.angle} alt={p.alt} />
-            <div class="fields">
-                <div class="field wide">
+        <div class="pin"><PlayerBanner grad={gradCss} /></div>
+
+        <div class="cols">
+            <section>
+                <h3 class="first">{tx('profIdent')}</h3>
+                <div class="fields one">
+                <div class="field">
                     <label class="lbl" for="profName">{tx('profName')}</label>
                     <input id="profName" class="edt" maxlength="24" spellcheck="false" bind:value={name}
                            onfocus={() => typing = true}
@@ -92,54 +102,59 @@
                            onchange={nameDone}>
                     {#if nameMsg}<span class="taken">{nameMsg}</span>{/if}
                 </div>
-                <div class="field wide">
-                    <span class="lbl">{tx('profId')}</span>
-                    <div class="idcode">{p.id}</div>
+                <div class="field">
+                    <span class="lbl">{tx('profFavLbl')}</span>
+                    <button class="fighter" onpointerenter={hoverBlip} onclick={() => { selectBlip(); picking = true; }}>
+                        <IconCanvas size={64} icon={p.icon} color={p.color} shade={p.shade} color2={p.color2} angle={p.angle} alt={p.alt} />
+                        <span class="fname">{FIGHTERS[app.ui === 'ES' ? 'ES' : 'EN'][p.icon]}</span>
+                        <span class="chg">{tx('profPick')}</span>
+                    </button>
                 </div>
-            </div>
+                </div>
+                <span class="tabs sub shades">
+                    {#each [[0, 'profOutfit1'], [1, 'profOutfit2']] as [a, key]}
+                        <button class="tab" class:active={(p.alt ? 1 : 0) === a} onpointerenter={hoverBlip}
+                                onclick={() => pick({ alt: a })}>{tx(key)}</button>
+                    {/each}
+                </span>
+                <div class="row">
+                    <button class="btn" onpointerenter={hoverBlip} onclick={resetProf}>{tx(app.profResetArmed ? 'profResetAsk' : 'profReset')}</button>
+                </div>
+            </section>
+            <section>
+                <h3 class="first">{tx('profLook')} — {tx('profColor')}</h3>
+                <GradientPicker label={tx('gpLabel')} value={gradCss} onchange={setGradient} />
+            </section>
         </div>
-
-        <h3>{tx('profIconLbl')}</h3>
-        <div class="icongrid">
-            {#each { length: 24 } as _, i}
-                <IconCanvas class={i === p.icon ? 'on' : ''} size={64} icon={i} color={p.color} shade={p.shade}
-                            color2={p.color2} angle={p.angle} alt={p.alt} onclick={() => pick({ icon: i })} />
-            {/each}
-        </div>
-        <span class="tabs sub shades">
-            {#each [[0, 'profOutfit1'], [1, 'profOutfit2']] as [a, key]}
-                <button class="tab" class:active={(p.alt ? 1 : 0) === a} onpointerenter={hoverBlip}
-                        onclick={() => pick({ alt: a })}>{tx(key)}</button>
-            {/each}
-        </span>
-
-        <h3>{tx('profColor')}</h3>
-        <GradientPicker label={tx('gpLabel')} value={gradCss} onchange={setGradient} />
-        <div class="row end">
-            <button class="btn" onpointerenter={hoverBlip} onclick={resetProf}>{tx(app.profResetArmed ? 'profResetAsk' : 'profReset')}</button>
-        </div>
+        {#if picking}<FighterPicker {p} pick={pick} close={() => picking = false} />{/if}
     {/if}
 </Page>
 
 <style>
-    /* the icon on the left, the fields beside it; it stays in sight */
-    .prof {
-        display: flex; gap: calc(var(--u) * 2.5); align-items: flex-start;
-        position: sticky; top: calc(var(--u) * -2.2); z-index: 2;
-        margin: 0 calc(var(--u) * -2.6);
-        padding: calc(var(--u) * .8) calc(var(--u) * 2.6) calc(var(--u) * 1.2);
-        background: linear-gradient(rgba(14, 11, 40, .98) 85%, rgba(14, 11, 40, 0));
+    /* the banner stays in sight while the page scrolls */
+    .pin {
+        position: sticky; top: calc(var(--u) * -2.2); z-index: 4;
+        margin: calc(var(--u) * -2.2) calc(var(--u) * -2.6) calc(var(--u) * 1);
+        padding: calc(var(--u) * .4) calc(var(--u) * 2.6) calc(var(--u) * 1.2);
+        background: linear-gradient(rgba(10, 13, 19, .97) 82%, rgba(10, 13, 19, 0));
     }
-    .prof .fields { flex: 1; grid-template-columns: minmax(0, 1fr); }
-    .prof :global(canvas.big) { width: calc(var(--u) * 16); height: calc(var(--u) * 16); flex: none; }
-    .idcode {
-        height: var(--ctl-h); line-height: var(--ctl-h); white-space: nowrap;
-        font-family: var(--font-mono); font-size: calc(var(--t) * 1.8);
-        letter-spacing: .12em; color: var(--code);
+    /* IDENTITY on the left, the background's editor on the right: the
+     * page's width used, nothing left empty (Mary) */
+    .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: calc(var(--u) * 2.6); align-items: start; }
+    .cols > section { min-width: 0; }
+    .cols :global(.bg-picker) { width: 100%; }
+    .fields.one { grid-template-columns: minmax(0, 1fr); }
+    /* the fighter: his icon and name on a steel plate; a click opens the window */
+    .fighter {
+        display: flex; align-items: center; gap: calc(var(--u) * 1); height: calc(var(--u) * 5);
+        padding: calc(var(--u) * .4) calc(var(--u) * 1.2) calc(var(--u) * .4) calc(var(--u) * .4);
+        background: var(--plate); border: 1px solid var(--line); border-left: calc(var(--u) * .4) solid var(--blood);
+        border-radius: var(--r-sm); box-shadow: var(--bevel); cursor: pointer; color: var(--text); text-align: left;
     }
-    .icongrid { display: grid; grid-template-columns: repeat(12, 1fr); gap: calc(var(--u) * .5); }
-    .icongrid :global(canvas) { width: 100%; cursor: pointer; border-radius: 18%; outline: 2px solid transparent; }
-    .icongrid :global(canvas.on) { outline-color: #fff; }
-    .taken { color: #ffb347; font-weight: bold; }
-    .shades { margin: calc(var(--u) * .4) 0 0; }
+    .fighter :global(canvas) { width: calc(var(--u) * 4.2); height: calc(var(--u) * 4.2); border-radius: 10%; box-shadow: 0 0 0 1px #000; flex: none; }
+    .fname { flex: 1; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .chg { color: var(--head); font-size: calc(var(--u) * 1.2); font-weight: 800; letter-spacing: .12em; }
+    .fighter:hover { border-color: var(--hot-rim); box-shadow: var(--bevel), var(--hover-glow); }
+    .taken { color: var(--bad-text); font-weight: bold; }
+    .shades { margin: calc(var(--u) * .8) 0 0; }
 </style>

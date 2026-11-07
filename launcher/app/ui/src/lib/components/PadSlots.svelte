@@ -29,7 +29,7 @@
     .slot {
         display: inline-flex; align-items: center; justify-content: center; gap: calc(var(--u) * .2);
         min-width: calc(var(--u) * 5.5); height: calc(var(--u) * 3); padding: 0 calc(var(--u) * .5);
-        background: rgba(4, 3, 18, .55); border: 1px solid var(--line); border-radius: var(--r-sm);
+        background: rgba(3, 4, 7, .55); border: 1px solid var(--line); border-radius: var(--r-sm);
         cursor: pointer;
     }
     .slot :global(.glyph) { height: calc(var(--u) * 2.4); }

@@ -51,7 +51,7 @@
     .sharp { display: grid; gap: calc(var(--u) * .5); }
     .sharp.off { opacity: .45; }
     .slider { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) calc(var(--u) * 4.5); align-items: center; gap: calc(var(--u) * .8); }
-    .slider input { width: 100%; accent-color: var(--blue, #4d8dff); }
+    .slider input { width: 100%; accent-color: var(--blue, #7d8fab); }
     .val { font-family: var(--font-mono, monospace); text-align: right; }
     .hint { margin: 0; font-size: calc(var(--t) * 1.2); opacity: .75; }
     .btn { justify-self: start; }

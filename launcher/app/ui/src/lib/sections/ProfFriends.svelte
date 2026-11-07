@@ -199,17 +199,27 @@
 <style>
     .row { display: flex; gap: calc(var(--u) * 1); flex-wrap: wrap; margin: calc(var(--u) * .8) 0; align-items: center; }
     .grow { flex: 1; min-width: 0; max-width: calc(var(--u) * 40); }
-    .me { display: flex; gap: calc(var(--u) * 1.4); align-items: baseline; flex-wrap: wrap; }
-    .who { color: #fff; font-weight: bold; }
+    /* you: your name and code on a steel plate */
+    .me {
+        display: flex; gap: calc(var(--u) * 1.4); align-items: baseline; flex-wrap: wrap;
+        padding: calc(var(--u) * .9) calc(var(--u) * 1.4);
+        background: var(--plate); border: 1px solid #2e3846; border-left: calc(var(--u) * .35) solid #e6bb63;
+        box-shadow: var(--bevel);
+    }
+    .who { color: #fff; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
     .idcode { font-family: var(--font-mono); letter-spacing: .12em; color: var(--code); }
-    .me .idcode { font-size: calc(var(--t) * 1.6); user-select: all; }
-    .list { list-style: none; margin: 0; padding: 0; }
+    .me .idcode { font-size: calc(var(--u) * 1.6); user-select: all; }
+    /* each friend, request or invite a plate of its own */
+    .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: calc(var(--u) * .5); }
     .list li {
         display: flex; gap: calc(var(--u) * 1.2); align-items: center; flex-wrap: wrap;
-        padding: calc(var(--u) * .4) 0; border-bottom: 1px solid rgba(255, 255, 255, .08);
+        padding: calc(var(--u) * .5) calc(var(--u) * 1);
+        background: var(--plate); border: 1px solid #2e3846; border-left: calc(var(--u) * .35) solid #46546a;
+        box-shadow: var(--bevel); transition: border-color .12s;
     }
+    .list li:hover { border-color: #5d6e88; border-left-color: #e6bb63; }
     .list .idcode { margin-right: auto; }
-    .tag { color: var(--code); }
-    .msg { color: #fff; }
+    .tag { color: var(--head); font-weight: 800; letter-spacing: .08em; }
+    .msg { color: #fff; padding: calc(var(--u) * .6) calc(var(--u) * 1); background: var(--sunk); border-left: calc(var(--u) * .3) solid var(--red); }
     p { white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
 </style>

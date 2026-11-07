@@ -2666,6 +2666,20 @@ int stage_menu_gate(long *level)
 
 int stage_menu_is_open(void) { return g_st_open; }
 
+/* UMK3_STAGE_PREVIEW=<tick>[:list] (game_main.c): STAGE SELECT opened on
+ * that tick over whatever is on screen, for a script's screenshot of its
+ * look; nothing is chosen from it. */
+void stage_menu_preview(int list)
+{
+    st_build();
+    if (g_st_n < 1)
+        return;
+    g_st_cur = g_st_n > 3 ? 3 : 0;
+    g_st_list = list;
+    g_st_open = 1;
+    g_st_hover = -1;
+}
+
 /* The music: the select screen's tune plays on, unbroken, from the select
  * screen into this window -- its fade to the fight and Task_FEDestroy's
  * stop are skipped when this window comes next (stage_menu_keeps_tune,
@@ -2751,22 +2765,45 @@ static void st_random(void)
     st_close(1);
 }
 
-static void st_button(float x, float y, float w, float h, const char *s,
-                      int hot, int on)
+/* The ONLINE screen's skin (FrontEnd.c, PortSkin*): STAGE SELECT is drawn
+ * in its materials and font, in this space's units (Mary, 0.4.2). */
+void PortSkinBegin(void);
+void PortSkinEnd(void);
+float PortSkinTime(void);
+void PortSkinPanel(float x, float y, float w, float h, float a, int red);
+void PortSkinHeading(const char *title, float x, float y, float w, float a);
+void PortSkinButton(const char *text, float x, float y, float w, float h,
+                    int main, int st, float lit, float a);
+void PortSkinText(const char *s, float x, float y, int align, float size,
+                  float maxw, int kind, float a);
+void PortSkinFrame(float x, float y, float w, float h, float t, int gold, float a);
+void PortSkinShadow(float x, float y, float w, float h, float a);
+void PortSkinGlow(float x, float y, float w, float h, float a);
+void PortSkinRule(float x, float y, float w, float a);
+void PortSkinChevron(float x, float y, float w, float h, int right, float a);
+
+/* the animations: the window rising in, the big picture sliding in from
+ * the side it was turned to, each button's and picture's light */
+static float g_st_in;                   /* 0..1, the window coming in */
+static int   g_st_was = -1, g_st_dir;   /* the stage last drawn, the way it turned */
+static float g_st_slide = 1.0f;         /* 0..1, the new picture coming in */
+static float g_st_lit[8 + 16];          /* hover light, buttons and pictures */
+
+static float st_ease(float t) { t = t < 0 ? 0 : t > 1 ? 1 : t; return 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t); }
+
+static void st_light(int i)
 {
-    static const float b0[4] = { 0.25f, 0.24f, 0.48f, 0.96f };
-    static const float b1[4] = { 0.063f, 0.055f, 0.17f, 0.96f };
-    static const float h0[4] = { 0.58f, 0.53f, 0.97f, 1.0f };
-    static const float h1[4] = { 0.18f, 0.14f, 0.52f, 1.0f };
-    if (on) {
-        glColor4f(0.67f, 0.63f, 1.0f, 0.35f);
-        rect(x - 2, y - 2, w + 4, h + 4);
-    }
-    vgrad(x, y, w, h, hot ? h0 : b0, hot ? h1 : b1);
-    glColor4f(1.0f, 1.0f, 1.0f, on ? 1.0f : 0.5f);
-    frame_rect(x, y, w, h, 0.75f);
-    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-    text(x + (w - (float)strlen(s) * CH_W) / 2, y + (h - 7) / 2, 1.0f, s);
+    float want = g_st_hover == i ? 1.0f : 0.0f;
+    g_st_lit[i] += (want - g_st_lit[i]) * 0.3f;
+}
+
+/* black over a box, `a` strong (raw GL, this space) */
+static void st_shade(float x, float y, float w, float h, float a)
+{
+    glBegin(GL_QUADS);
+    glColor4f(0.0f, 0.0f, 0.0f, a);
+    rect(x, y, w, h);
+    glEnd();
 }
 
 static void st_hit(int i, float x, float y, float w, float h)
@@ -2778,102 +2815,138 @@ static void st_hit(int i, float x, float y, float w, float h)
 
 void stage_menu_draw(void)
 {
-    static const float veil0[4] = { 0.086f, 0.078f, 0.26f, 0.92f };
-    static const float veil1[4] = { 0.031f, 0.027f, 0.12f, 0.95f };
-    float pw, px, py = 14, ph = 292, bx, by, bw;
+    /* Mary (0.4.2): the ONLINE screen's look and life -- the chosen stage
+     * itself large behind everything, dimmed; a stone panel in gold and
+     * bronze rising in; the heading's steel plate; the picture in a gold
+     * frame with gold chevrons, sliding in from the side it was turned to;
+     * the list's pictures lit under the mouse, the chosen one pulsing red;
+     * the buttons the ONLINE screen's plates, SELECT the red one */
+    float pw, px, py = 14, ph = 292, bx, by, bw, a, k, t;
     const char *title = g_st_watch ? st_tx("EL ANFITRION ELIGE ESCENARIO", "THE HOST PICKS THE STAGE")
                                    : st_tx("ELIGE ESCENARIO", "SELECT STAGE");
-    int i;
+    int i, cur;
 
-    if (!g_st_open && !g_st_watch)
+    if (!g_st_open && !g_st_watch) {
+        g_st_in = 0.0f;
+        g_st_was = -1;
         return;
+    }
     begin_2d();
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
     g_st_nhit = 0;
     memset(g_st_hit, 0, sizeof g_st_hit);
-    /* FE_SELECTFIGHTER over the whole screen: its marble is the top 3/4 */
-    st_pic(st_tex("FE_SELECTFIGHTER.PNG"), 0, 0, g_ow, 320, 1.0f, 0.75f);
-
-    pw = g_ow - 24 < 440 ? g_ow - 24 : 440;
-    px = (g_ow - pw) / 2;
-    glBegin(GL_QUADS);
-    vgrad(px, py, pw, ph, veil0, veil1);
-    glColor4f(0.84f, 0.86f, 1.0f, 0.6f);
-    frame_rect(px, py, pw, ph, 1.0f);
-    glColor4f(0.95f, 0.82f, 0.45f, 1.0f);
-    text((g_ow - (float)strlen(title) * CH_W * 2) / 2, py + 8, 2.0f, title);
-    glEnd();
-
-    if (!g_st_list) {                   /* one stage, large */
-        float aw = 18, iw = pw - 2 * aw - 24, ih = iw * 2 / 3, ix = px + 12 + aw, iy = py + 30;
-        if (ih > 196) {
-            ih = 196;
-            iw = ih * 3 / 2;
-            ix = (g_ow - iw) / 2;
+    cur = g_st_ids[g_st_cur];
+    if (g_st_was != g_st_cur) {         /* a new stage: it slides in */
+        if (g_st_was >= 0) {
+            g_st_dir = (g_st_cur > g_st_was) ? 1 : -1;
+            if (g_st_was == g_st_n - 1 && g_st_cur == 0) g_st_dir = 1;
+            if (g_st_was == 0 && g_st_cur == g_st_n - 1) g_st_dir = -1;
+            g_st_slide = 0.0f;
         }
-        st_thumb(g_st_ids[g_st_cur], ix, iy, iw, ih, 3.0f);
+        g_st_was = g_st_cur;
+    }
+    g_st_in += (1.0f - g_st_in) * 0.16f + 0.004f;
+    if (g_st_in > 1.0f) g_st_in = 1.0f;
+    g_st_slide += (1.0f - g_st_slide) * 0.22f + 0.004f;
+    if (g_st_slide > 1.0f) g_st_slide = 1.0f;
+    a = st_ease(g_st_in);
+    k = st_ease(g_st_slide);
+    for (i = 0; i < 8 + 16; i++)
+        st_light(i);
+
+    /* behind: the chosen stage, the whole screen, dimmed, darker at the
+     * edges; dark for a moment when it changes */
+    st_thumb(cur, 0, 0, g_ow, 320, 0.0f);
+    st_shade(0, 0, g_ow, 320, 0.58f + 0.3f * (1.0f - k));
+    {
+        static const float e0[4] = { 0, 0, 0, 0.75f }, e1[4] = { 0, 0, 0, 0 };
         glBegin(GL_QUADS);
-        glColor4f(0.95f, 0.82f, 0.45f, 0.8f);
-        frame_rect(ix, iy, iw, ih, 1.0f);
-        /* the arrows */
-        glColor4f(1.0f, 1.0f, 1.0f, g_st_hover == 0 ? 1.0f : 0.7f);
-        text(ix - aw + 2, iy + ih / 2 - 10, 3.0f, "<");
-        glColor4f(1.0f, 1.0f, 1.0f, g_st_hover == 1 ? 1.0f : 0.7f);
-        text(ix + iw + 4, iy + ih / 2 - 10, 3.0f, ">");
-        st_hit(0, ix - aw - 4, iy, aw + 4, ih);
-        st_hit(1, ix + iw, iy, aw + 4, ih);
-        {
-            const char *n = st_name(g_st_ids[g_st_cur]);
-            char cnt[16];
-            glColor4f(0.95f, 0.82f, 0.45f, 1.0f);
-            text((g_ow - (float)strlen(n) * CH_W * 2) / 2, iy + ih + 8, 2.0f, n);
-            snprintf(cnt, sizeof cnt, "%d / %d", g_st_cur + 1, g_st_n);
-            glColor4f(0.7f, 0.67f, 0.95f, 1.0f);
-            text((g_ow - (float)strlen(cnt) * CH_W) / 2, iy + ih + 26, 1.0f, cnt);
-        }
+        vgrad(0, 0, g_ow, 60, e0, e1);
+        vgrad(0, 260, g_ow, 60, e1, e0);
         glEnd();
+    }
+
+    pw = g_ow - 24 < 460 ? g_ow - 24 : 460;
+    px = (g_ow - pw) / 2;
+    py = 14 + (1.0f - a) * 18.0f;       /* it rises into place */
+    PortSkinBegin();
+    PortSkinPanel(px, py, pw, ph, a, 1);
+    PortSkinHeading(title, px + 10, py + 7, pw - 20, a);
+    PortSkinEnd();
+
+    t = PortSkinTime();
+    if (!g_st_list) {                   /* one stage, large */
+        float aw = 18, iw = pw - 2 * aw - 40, ih = iw * 2 / 3, ix, iy = py + 34, off;
+        if (ih > 180) {
+            ih = 180;
+            iw = ih * 3 / 2;
+        }
+        ix = (g_ow - iw) / 2;
+        off = (1.0f - k) * 26.0f * (float)g_st_dir;
+        PortSkinBegin();
+        PortSkinShadow(ix - 2, iy - 2, iw + 4, ih + 4, a);
+        PortSkinEnd();
+        st_thumb(cur, ix + off, iy, iw, ih, 3.0f);
+        st_shade(ix + off, iy, iw, ih, 0.7f * (1.0f - k));
+        PortSkinBegin();
+        PortSkinFrame(ix - 2, iy - 2, iw + 4, ih + 4, 2.0f, 1, a);
+        /* the chevrons, out from the picture; they swell under the mouse */
+        {
+            float l0 = g_st_lit[0], l1 = g_st_lit[1];
+            float ch0 = 26 + 6 * l0, ch1 = 26 + 6 * l1, nudge = 2.0f * sinf(t * 4.0f);
+            PortSkinChevron(ix - 14 - ch0 * 0.62f - nudge, iy + ih / 2 - ch0 / 2, ch0 * 0.62f, ch0, 1, (0.75f + 0.25f * l0) * a);
+            PortSkinChevron(ix + iw + 14 + nudge, iy + ih / 2 - ch1 / 2, ch1 * 0.62f, ch1, 0, (0.75f + 0.25f * l1) * a);
+        }
+        PortSkinText(st_name(cur), g_ow / 2, iy + ih + 8, 1, 0.80f, iw, 1, a * (0.4f + 0.6f * k));
+        {
+            char cnt[16];
+            snprintf(cnt, sizeof cnt, "%d / %d", g_st_cur + 1, g_st_n);
+            PortSkinText(cnt, g_ow / 2, iy + ih + 30, 1, 0.40f, 80, 2, a);
+        }
+        PortSkinEnd();
+        st_hit(0, ix - aw - 26, iy, aw + 26, ih);
+        st_hit(1, ix + iw, iy, aw + 26, ih);
     } else {                            /* the list: every stage, its picture */
         int cols = 4, rows = 3, vis = cols * rows;
-        float gx = px + 10, gy = py + 30, gw = pw - 20;
-        float tw = (gw - (cols - 1) * 6) / cols, th = tw * 2 / 3;
+        float gx = px + 14, gy = py + 36, gw = pw - 28;
+        float tw = (gw - (cols - 1) * 8) / cols, th = tw * 2 / 3;
         if (g_st_cur < g_st_first)
             g_st_first = g_st_cur / cols * cols;
         if (g_st_cur >= g_st_first + vis)
             g_st_first = (g_st_cur / cols - rows + 1) * cols;
-        /* the rows end above the buttons (ST_BTN_H, at the foot) */
-        if (th > (ph - 30 - ST_BTN_H - 14) / rows - 14) {
-            th = (ph - 30 - ST_BTN_H - 14) / rows - 14;
+        if (th > (ph - 36 - ST_BTN_H - 34) / rows - 15) {
+            th = (ph - 36 - ST_BTN_H - 34) / rows - 15;
             tw = th * 3 / 2;
-            gx = (g_ow - (cols * tw + (cols - 1) * 6)) / 2;
+            gx = (g_ow - (cols * tw + (cols - 1) * 8)) / 2;
         }
         for (i = 0; i < vis && g_st_first + i < g_st_n; i++) {
-            int k = g_st_first + i, lv = g_st_ids[k];
-            float x = gx + (i % cols) * (tw + 6), y = gy + (i / cols) * (th + 14);
-            const char *n = st_name(lv);
-            float s = (float)strlen(n) * CH_W > tw ? tw / ((float)strlen(n) * CH_W) : 1.0f;
+            int kk = g_st_first + i, lv = g_st_ids[kk], on = kk == g_st_cur;
+            float l = g_st_lit[8 + i], lift = 1.5f * l;
+            float x = gx + (i % cols) * (tw + 8), y = gy + (i / cols) * (th + 15) - lift;
+            PortSkinBegin();
+            if (on)
+                PortSkinGlow(x, y, tw, th, a * (0.7f + 0.3f * sinf(t * 5.0f)));
+            PortSkinShadow(x, y, tw, th, a);
+            PortSkinEnd();
             st_thumb(lv, x, y, tw, th, 1.0f);
-            glBegin(GL_QUADS);
-            if (k == g_st_cur) {
-                glColor4f(0.95f, 0.82f, 0.45f, 1.0f);
-                frame_rect(x - 1, y - 1, tw + 2, th + 2, 1.5f);
-            } else {
-                glColor4f(0.8f, 0.82f, 1.0f, g_st_hover == 8 + i ? 0.9f : 0.35f);
-                frame_rect(x, y, tw, th, 0.75f);
-            }
-            glColor4f(1.0f, 1.0f, 1.0f, k == g_st_cur ? 1.0f : 0.75f);
-            text(x + (tw - (float)strlen(n) * CH_W * s) / 2, y + th + 3, s, n);
-            glEnd();
+            if (!on)
+                st_shade(x, y, tw, th, 0.35f * (1.0f - l));
+            PortSkinBegin();
+            PortSkinFrame(x - 1, y - 1, tw + 2, th + 2, on ? 1.4f : 0.9f, on || l > 0.5f, a);
+            PortSkinText(st_name(lv), x + tw / 2, y + th + 2, 1, 0.30f, tw, on ? 1 : 0, a * (on ? 1.0f : 0.8f + 0.2f * l));
+            PortSkinEnd();
             st_hit(8 + i, x, y, tw, th + 12);
         }
         if (g_st_n > vis) {             /* a scroll bar: where the rows shown are */
             int lines = (g_st_n + cols - 1) / cols;
-            float bx = px + pw - 8, h = rows * (th + 14) - 14;
+            float sx = px + pw - 9, h = rows * (th + 15) - 15;
             float y0 = gy + h * (float)(g_st_first / cols) / (float)lines;
             float y1 = gy + h * (float)(g_st_first / cols + rows) / (float)lines;
             glBegin(GL_QUADS);
-            glColor4f(0.0f, 0.0f, 0.0f, 0.55f);
-            rect(bx, gy, 3, h);
-            glColor4f(0.95f, 0.82f, 0.45f, 1.0f);
-            rect(bx, y0, 3, (y1 < gy + h ? y1 : gy + h) - y0);
+            glColor4f(0.0f, 0.0f, 0.0f, 0.6f * a);
+            rect(sx, gy, 3, h);
+            glColor4f(0.95f, 0.72f, 0.36f, a);
+            rect(sx, y0, 3, (y1 < gy + h ? y1 : gy + h) - y0);
             glEnd();
         }
     }
@@ -2882,24 +2955,26 @@ void stage_menu_draw(void)
         end_2d();
         return;
     }
-    /* CANCEL, LIST / LARGE, RANDOM, SELECT: small, centred along the foot */
-    bw = 84;
-    by = py + ph - ST_BTN_H - 8;
-    bx = (g_ow - 4 * bw - 3 * 10) / 2;
-    glBegin(GL_QUADS);
-    st_button(bx, by, bw, ST_BTN_H, st_tx("CANCELAR", "CANCEL"), 0, g_st_hover == 2);
-    st_button(bx + bw + 10, by, bw, ST_BTN_H, g_st_list ? st_tx("GRANDE", "LARGE")
-                                                        : st_tx("LISTA", "LIST"),
-              0, g_st_hover == 3);
-    st_button(bx + 2 * (bw + 10), by, bw, ST_BTN_H, st_tx("ALEATORIO", "RANDOM"), 0,
-              g_st_hover == 5);
-    st_button(bx + 3 * (bw + 10), by, bw, ST_BTN_H, st_tx("ELEGIR", "SELECT"), 1,
-              g_st_hover == 4);
-    glEnd();
-    st_hit(2, bx, by, bw, ST_BTN_H);
-    st_hit(3, bx + bw + 10, by, bw, ST_BTN_H);
-    st_hit(5, bx + 2 * (bw + 10), by, bw, ST_BTN_H);
-    st_hit(4, bx + 3 * (bw + 10), by, bw, ST_BTN_H);
+    /* CANCEL, LIST / LARGE, RANDOM, SELECT: the ONLINE screen's plates,
+     * SELECT the red one, lit under the mouse */
+    bw = 92;
+    by = py + ph - ST_BTN_H - 12;
+    bx = (g_ow - 4 * bw - 3 * 8) / 2;
+    PortSkinBegin();
+    PortSkinRule(px + 14, by - 9, pw - 28, a);
+    PortSkinButton(st_tx("CANCELAR", "CANCEL"), bx, by, bw, ST_BTN_H + 2, 0,
+                   g_st_hover == 2, g_st_lit[2], a);
+    PortSkinButton(g_st_list ? st_tx("GRANDE", "LARGE") : st_tx("LISTA", "LIST"),
+                   bx + bw + 8, by, bw, ST_BTN_H + 2, 0, g_st_hover == 3, g_st_lit[3], a);
+    PortSkinButton(st_tx("ALEATORIO", "RANDOM"), bx + 2 * (bw + 8), by, bw, ST_BTN_H + 2, 0,
+                   g_st_hover == 5, g_st_lit[5], a);
+    PortSkinButton(st_tx("ELEGIR", "SELECT"), bx + 3 * (bw + 8), by, bw, ST_BTN_H + 2, 1,
+                   g_st_hover == 4 ? 1 : 2, g_st_lit[4], a);
+    PortSkinEnd();
+    st_hit(2, bx, by, bw, ST_BTN_H + 2);
+    st_hit(3, bx + bw + 8, by, bw, ST_BTN_H + 2);
+    st_hit(5, bx + 2 * (bw + 8), by, bw, ST_BTN_H + 2);
+    st_hit(4, bx + 3 * (bw + 8), by, bw, ST_BTN_H + 2);
     end_2d();
 }
 
