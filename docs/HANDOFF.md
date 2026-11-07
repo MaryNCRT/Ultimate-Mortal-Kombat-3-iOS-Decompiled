@@ -204,6 +204,11 @@ press COMPILE.
   design and the open questions are in
   [research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md). Paused
   until Mary records a Soul Chamber fight on the Genesis (WAV + GYM).
+- **Updates**: since 2026-11-06 an installed update leaves
+  `update\needs-build` and deletes `build\obj`; the game cannot be started
+  from the launcher until a compile succeeds (`lib/update.js`
+  `needsBuild`, `main.js` `startGame`). apply.ps1 kills what still runs
+  from the folder instead of waiting forever.
 - **ONLINE menu redesign**: stage 1 (audit) done, nothing built. The
   report is [research/ONLINE-MENU-AUDIT.md](research/ONLINE-MENU-AUDIT.md):
   the online stack as it is, what works and what is missing, where Best of

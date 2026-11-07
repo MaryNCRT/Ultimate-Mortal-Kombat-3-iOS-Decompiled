@@ -8,6 +8,17 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased: updates always reach the player
+
+- **An update from the launcher now always gives the new game.** Mary:
+  players who updated from the launcher kept the old game. The update now
+  closes the game and the launcher by force (whatever still runs from the
+  folder is stopped, not waited for), throws away the compiled objects and
+  marks the folder; until the game has been compiled again, PLAY, a replay
+  and a friend's JOIN compile first, also when the launcher is opened by
+  hand. Checked on the test folder: with the mark there, the launcher
+  compiled on opening and the mark went. The forced close in apply.ps1
+  was checked by generating the script (it parses), not by a real update.
 ## Unreleased (after 0.3.1b)
 
 Built in Mary's test folder; she played it on Direct3D 12 and confirmed the fix.

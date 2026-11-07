@@ -98,6 +98,22 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+## Updates always reach the player (2026-11-06)
+
+Mary: players who updated from the launcher did not get the update's
+changes. `lib/update.js` apply.ps1 now stops what still runs from the
+folder after its wait (launcher\bin's processes and `umk3-*` in the root)
+before copying, and on success deletes `build\obj` / `build\obj64` and
+writes `update\needs-build` (apply.sh: the same, `kill -9` after its
+minute). `main.js` exits with `app.exit(0)` after killing the game it
+started. `update.needsBuild` makes `startGame` and `replays:play` answer
+`{ rebuild: true }`; the page (`rebuildAfterUpdate`, app.svelte.js) goes to
+BUILD and compiles; a successful `build:start` deletes the mark.
+`afterUpdate` also compiles when only the mark is there (the launcher opened
+by hand). Checked: launcher tests (21 pass, a new one for the mark); the
+generated apply.ps1 parses with PowerShell's parser; in the test folder,
+with `update\needs-build` written, the new launcher compiled on opening and
+removed it. Not checked: a real update from GitHub with the forced close.
 ## Unreleased (after 0.3.1b)
 
 Built in Mary's test folder; she played it on Direct3D 12 and confirmed the fix.

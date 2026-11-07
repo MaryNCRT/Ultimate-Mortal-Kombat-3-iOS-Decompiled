@@ -7,7 +7,7 @@
      * PROFILE and FRIENDS, and new ones as a Windows notification (main.js,
      * pollFriends). */
     import { onMount, untrack } from 'svelte';
-    import { app, tx } from '#lib/app.svelte.js';
+    import { app, tx, rebuildAfterUpdate } from '#lib/app.svelte.js';
     import { api } from '#lib/platform.js';
     import { selectBlip, hoverBlip } from '#lib/sound.js';
 
@@ -84,6 +84,7 @@
     });
     const join = code => run(async () => {
         const r = await api.account.joinInvite(code);
+        if (r.rebuild) { rebuildAfterUpdate(); return; }    /* an update to compile first */
         if (!r.ok) { msg = err(r.error); return; }
         msg = tx(r.running ? 'frJoinRunning' : 'frJoining');
         await refresh();
