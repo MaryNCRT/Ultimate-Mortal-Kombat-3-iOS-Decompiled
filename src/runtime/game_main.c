@@ -1352,6 +1352,7 @@ static int   g_moves_who;
  * the tap in flight (0 a finger or the mouse), and the right stick's
  * palette turns, one per side. */
 extern int PortNavPick, PortNavHover;
+float PortMouseX = -1.0f, PortMouseY = -1.0f;   /* the ONLINE screen's hover (port) */
 extern int PortPadPalette[2];
 void PortNavDraw(const char *ok, const char *back, int left);
 void PortNavDrawLine(const char *s, int right);    /* FrontEnd.c */
@@ -3272,6 +3273,15 @@ int main(int argc, char **argv)
             static float prev_tx = -1.0f, prev_ty = -1.0f;
             float tx = (float)(mx - vx) * g_virt_w / (vw ? vw : 1);
             float ty = (float)(my - vy) * g_virt_h / (vh ? vh : 1);
+
+            /* port: where the mouse is, pressed or not, in the touch's
+             * units: the ONLINE screen lights the button under it */
+            {
+                extern float PortMouseX, PortMouseY;
+                int in = mx >= vx && my >= vy && mx < vx + vw && my < vy + vh;
+                PortMouseX = in ? tx : -1.0f;
+                PortMouseY = in ? ty : -1.0f;
+            }
 
             if (dbg_menu_is_open())     /* the debug menu takes the mouse, as fractions */
                 dbg_menu_mouse(tx / g_virt_w, ty / g_virt_h,

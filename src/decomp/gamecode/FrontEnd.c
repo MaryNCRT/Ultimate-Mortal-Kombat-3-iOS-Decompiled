@@ -12055,7 +12055,7 @@ const float PortOnlineBox[4] = { 250.0f, 92.0f, 220.0f, 34.0f };   /* x y w h */
 float PortOnlineBoxPx[4];
 
 static char  PortOnlineCode[16];        /* what was typed, dashes included */
-static int   PortOnlineListening = 1;
+static int   PortOnlineListening;
 static long  Touch_OnlineFind, LastTouch_OnlineFind;
 static long  Touch_OnlineCopy, LastTouch_OnlineCopy;
 static float PortOnlineBlink, PortOnlineCopied;
@@ -12177,95 +12177,240 @@ static void PortOnlinePaste(void)
     }
 }
 
-/* Port: the ONLINE screen's FRIENDS (gamecode_stubs.c, the launcher's
- * friends.txt). FRIENDS, under COPY, turns the right side into the list:
- * each friend with INVITE (the launcher sends the invite; this screen
- * already waits for them) and each invite with JOIN (found at once, as FIND
- * MATCH). */
+/* Port: the ONLINE screen's sections (the redesign's stage 2, Mary
+ * 2026-11-06; docs/research/ONLINE-MENU-AUDIT.md). A bar of sections along
+ * the top -- HOME, FRIENDS, INVITATIONS, LOBBIES, QUICK MATCH, PARTY -- over
+ * the select screen's night cemetery, each section in translucent panels
+ * with the MK red along their top. Everything here is the front end's own
+ * drawing (limeFillRect, the game's font), and every button is a touch area
+ * that also tells pad_nav.c where it is, so the mouse, the keyboard and the
+ * pad all reach it as they reach the rest of the front end.
+ *
+ * The layout is in the menu's units (320 high) across the whole screen --
+ * not FE_X, which sends x <= 90 and >= 390 to the screen's edges on wide
+ * screens -- so the bar and the panels keep their spacing at any shape.
+ *
+ * FRIENDS and INVITATIONS show what the launcher writes (friends.txt,
+ * gamecode_stubs.c); LOBBIES, QUICK MATCH and PARTY are the next stages and
+ * say so. online_ui.c draws the badges (icon and name) where these say. */
 int  port_online_friend(int i, char *code, char *name, int *invite);
 int  port_online_friends_known(void);
 void port_online_tell(const char *what, const char *code);
-#define PORT_FR_ROWS 4
-int          PortOnlineFriendsOn;    /* online_ui.c reads it */
-static long  Touch_OnlineFriends, LastTouch_OnlineFriends;
-static long  Touch_OnlineFr[PORT_FR_ROWS], LastTouch_OnlineFr[PORT_FR_ROWS];
-static char  PortOnlineSentTo[16];
-/* the rows drawn this frame, for online_ui.c's badges (name and icon) */
+int  port_online_tell_pending(void);
+void PortNavTarget(float x, float y, float w, float h, int kind);
+extern float PortMouseX, PortMouseY;    /* game_main.c: the mouse, -1 off */
+extern int   limeScreenWidth;
+
+enum { OS_HOME, OS_FRIENDS, OS_INVITES, OS_LOBBIES, OS_QUICK, OS_PARTY, OS_N };
+int   PortOnlineSection;                /* online_ui.c reads it */
+#define PORT_FR_ROWS 6
+int          PortOnlineFriendsOn;       /* kept for online_ui.c: 0 */
+static char  PortOnlineSentTo[16], PortOnlineSentName[32];
+static float PortOnlineSent;
+/* the rows drawn this frame, for online_ui.c's badges: name, icon, where
+ * (screen pixels, the badge's left edge and top) */
 int   PortOnlineFrShown;
 char  PortOnlineFrCode[PORT_FR_ROWS][16];
 char  PortOnlineFrName[PORT_FR_ROWS][32];
-float PortOnlineFrY[PORT_FR_ROWS];
-static float PortOnlineSent;
+float PortOnlineFrPx[PORT_FR_ROWS][2];
+/* this player's badge: x, y (pixels) and its size */
+float PortOnlineMePx[3];
+
+static float PortOnlineT;               /* seconds, for the pulses */
+static float PortOnlineFade = 1.0f;     /* the section's content, 0..1 */
+static float PortOnlineBarX = -1.0f;    /* the red bar under the tabs */
+
+/* buttons' last answers (OnArea), by id */
+enum { OB_TAB0, OB_COPY = OB_TAB0 + OS_N, OB_BOX, OB_FIND, OB_GOFR, OB_GOINV,
+       OB_ROW0, OB_N = OB_ROW0 + PORT_FR_ROWS };
+static long PortOnlineWas[OB_N];
 
 static const char *PortFrTx(const char *es, const char *en)
 {
     return Language[0] == 'E' && Language[1] == 'S' ? es : en;
 }
 
+/* the menu's units to the screen's pixels */
+static float OnX(float v) { return v * FE_WidthScale; }
+static float OnY(float v) { return FE_Y(v); }
+static float OnW(float v) { return v * FE_WidthScale; }
+static float OnH(float v) { return v * FE_HeightScale; }
+/* the screen's width in those units: 480 on 3:2, more on wider */
+static float OnVW(void)
+{
+    return FE_WidthScale > 0.0f ? (float)limeScreenWidth / FE_WidthScale : 480.0f;
+}
+
+/* The touch against a box, as TouchAreaWH does (2 down inside, 1 just let go
+ * inside, 0 neither; the click on the release) but in these units. Returns 1
+ * once, on the release that ends a press inside it. */
+static int OnArea(int id, float x, float y, float w, float h, int *hover)
+{
+    float px = OnX(x), py = OnY(y), pw = OnW(w), ph = OnH(h);
+    float tx = limeTouchScreenX[0], ty = limeTouchScreenY[0];
+    long r = 0, was = PortOnlineWas[id];
+
+    PortNavTarget(px, py, pw, ph, 0);
+    if (tx != -1.0f) {
+        if (tx >= px && tx <= px + pw && ty >= py && ty <= py + ph)
+            r = 2;
+    } else {
+        float lx = limeLastTouchScreenX[0], ly = limeLastTouchScreenY[0];
+        if (lx >= px && lx <= px + pw && ly >= py && ly <= py + ph)
+            r = 1;
+    }
+    PortOnlineWas[id] = r;
+    if (hover)
+        *hover = r == 2 || (!PortNavHover && PortMouseX >= px && PortMouseX <= px + pw
+                            && PortMouseY >= py && PortMouseY <= py + ph);
+    if (r == 1 && was == 2) {
+        if (Settings[3] != 0)
+            limePlaySound(SFXHandle[0x68 / 4], MusicVol[Settings[3]] / 100.0f, 1.0f, 0);
+        return 1;
+    }
+    return 0;
+}
+
+static void OnFill(float x, float y, float w, float h,
+                   float r, float g, float b, float a)
+{
+    limeFillRect(OnX(x), OnY(y), OnW(w), OnH(h), r, g, b, a);
+}
+
+static void OnFrame(float x, float y, float w, float h, float t,
+                    float r, float g, float b, float a)
+{
+    OnFill(x, y, w, t, r, g, b, a);
+    OnFill(x, y + h - t, w, t, r, g, b, a);
+    OnFill(x, y + t, t, h - 2 * t, r, g, b, a);
+    OnFill(x + w - t, y + t, t, h - 2 * t, r, g, b, a);
+}
+
+/* A panel: the night showing through, the red along its top. */
+static void OnPanel(float x, float y, float w, float h, float a)
+{
+    OnFill(x, y, w, h, 0.01f, 0.02f, 0.07f, 0.66f * a);
+    OnFrame(x, y, w, h, 0.75f, 0.35f, 0.55f, 1.0f, 0.22f * a);
+    OnFill(x, y, w, 2.0f, 0.78f, 0.05f, 0.04f, 0.95f * a);
+}
+
+/* Text: align 0 left, 1 centred, 2 right; `size` in the menu's units of the
+ * font's scale (1 the title's); shrunk to `maxw` units when wider. */
+static void OnText(const char *s, float x, float y, int align, float size,
+                   float maxw, const float *rgb, float a)
+{
+    float c[4] = { 1.0f, 1.0f, 1.0f, a }, k = FE_WidthScale * size;
+    char *u = PortUC(s);
+
+    if (rgb) {
+        c[0] = rgb[0];
+        c[1] = rgb[1];
+        c[2] = rgb[2];
+    }
+    if (maxw > 0.0f) {
+        float w = limeGetStringWidth(&GameFont, u) * k;
+        if (w > OnW(maxw) && w > 0.0f)
+            k *= OnW(maxw) / w;
+    }
+    limeDrawFONT(&GameFont, u, OnX(x), OnY(y), align, k, c);
+}
+
+static const float OnWhite[3] = { 1.0f, 1.0f, 1.0f };
+static const float OnDim[3]   = { 0.62f, 0.70f, 0.86f };
+static const float OnGold[3]  = { 1.0f, 0.85f, 0.25f };
+static const float OnRed[3]   = { 1.0f, 0.30f, 0.25f };
+
+/* A button: dark, or red for the screen's main one; lit under the mouse or
+ * the pad's highlight. 1 when it was pressed. */
+static int OnButton(int id, const char *text, float x, float y, float w,
+                    float h, int primary, float a)
+{
+    int hov, hit = OnArea(id, x, y, w, h, &hov);
+    float p = 0.5f + 0.5f * sinf(PortOnlineT * 4.0f);
+
+    if (primary)
+        OnFill(x, y, w, h, hov ? 0.86f : 0.58f, hov ? 0.10f : 0.04f, 0.04f,
+               (hov ? 0.92f : 0.80f) * a);
+    else
+        OnFill(x, y, w, h, hov ? 0.30f : 0.06f, hov ? 0.06f : 0.08f,
+               hov ? 0.06f : 0.16f, (hov ? 0.85f : 0.72f) * a);
+    if (hov)
+        OnFrame(x, y, w, h, 1.0f, 1.0f, 0.35f + 0.3f * p, 0.25f, 0.9f * a);
+    else
+        OnFrame(x, y, w, h, 0.75f, primary ? 1.0f : 0.35f,
+                primary ? 0.3f : 0.55f, primary ? 0.25f : 1.0f, 0.45f * a);
+    OnText(text, x + w * 0.5f, y + (h - 14.0f) * 0.5f, 1, 0.62f, w - 8.0f,
+           OnWhite, a);
+    return hit;
+}
+
 static void PortOnlineFind(void);
 
-static void PortOnlineFriends(int searching)
+/* The friends' and the invites' rows: `invites` 1 for the invites (JOIN),
+ * 0 for the friends (INVITE). How many rows were drawn. */
+static int PortOnlineRows(int invites, float x, float y, float w, int searching,
+                          float a)
 {
     char code[16], name[32];
     int i, n = 0, invite;
 
-    PortOnlineFrShown = 0;
-    limeDrawFONT(&GameFont, PortUC(PortFrTx("AMIGOS", "FRIENDS")), FE_X(360.0f),
-                 FE_Y(64.0f), 1, FE_WidthScale * 0.8f, fontcol);
-    if (!port_online_friend(0, code, name, &invite)) {
-        limeDrawFONT(&GameFont, PortUC(port_online_friends_known()
-                         ? PortFrTx("AUN NO TIENES AMIGOS", "NO FRIENDS YET")
-                         : PortFrTx("INICIA SESION EN EL LAUNCHER", "LOG IN IN THE LAUNCHER")),
-                     FE_X(360.0f), FE_Y(110.0f), 1, FE_WidthScale * 0.55f, fontcol);
-        limeDrawFONT(&GameFont, PortUC(PortFrTx("PERFIL > AMIGOS", "PROFILE > FRIENDS")),
-                     FE_X(360.0f), FE_Y(130.0f), 1, FE_WidthScale * 0.55f, fontcol);
-        return;
-    }
-    /* port: SENT until the invite has gone out -- the launcher has taken
-     * it (port_online_tell_pending) -- and a second after, then INVITE
-     * again, so it can be sent once more (Mary: it stayed SENT) */
-    {
-        int port_online_tell_pending(void);     /* gamecode_stubs.c */
-        if (PortOnlineSent > 60.0f && !port_online_tell_pending())
-            PortOnlineSent = 60.0f;
-    }
-    /* the invites first, then the friends */
-    for (int pass = 1; pass >= 0 && n < PORT_FR_ROWS; pass--)
-        for (i = 0; port_online_friend(i, code, name, &invite) && n < PORT_FR_ROWS; i++) {
-            float y = 92.0f + (float)n * 30.0f;
-            if (invite != pass)
-                continue;
-            snprintf(PortOnlineFrCode[n], sizeof PortOnlineFrCode[n], "%s", code);
-            snprintf(PortOnlineFrName[n], sizeof PortOnlineFrName[n], "%s", name[0] ? name : code);
-            PortOnlineFrY[n] = y;
-            PortOnlineFrShown = n + 1;
-            LastTouch_OnlineFr[n] = Touch_OnlineFr[n];
-            Touch_OnlineFr[n] = DrawOptionAsButton(
-                PortUC(invite ? PortFrTx("UNIRSE", "JOIN")
-                       : PortOnlineSent > 0.0f && !strcmp(PortOnlineSentTo, code)
-                           ? PortFrTx("ENVIADA", "SENT") : PortFrTx("INVITAR", "INVITE")),
-                425.0f, y, 0.8f, &mmfontcol[(LastTouch_OnlineFr[n] + 1) * 4], FE_W(100.0f));
-            if (LastTouch_OnlineFr[n] != 0 && Touch_OnlineFr[n] == 0
-                && limeTouchScreenX[0] == -1.0f && !searching) {
-                if (invite) {
-                    port_online_tell("join", code);
-                    strcpy(PortOnlineCode, code);
-                    PortOnlineFind();
-                    PortOnlineFriendsOn = 0;
-                } else {
-                    port_online_tell("invite", code);
-                    strcpy(PortOnlineSentTo, code);
-                    PortOnlineSent = 600.0f;
-                }
+    for (i = 0; n < PORT_FR_ROWS && port_online_friend(i, code, name, &invite); i++) {
+        float ry = y + (float)n * 30.0f;
+        int k = PortOnlineFrShown;
+        const char *label;
+
+        if (invite != invites || k >= PORT_FR_ROWS)
+            continue;
+        OnFill(x, ry, w, 26.0f, 0.02f, 0.04f, 0.12f, 0.55f * a);
+        snprintf(PortOnlineFrCode[k], sizeof PortOnlineFrCode[k], "%s", code);
+        snprintf(PortOnlineFrName[k], sizeof PortOnlineFrName[k], "%s", name[0] ? name : code);
+        PortOnlineFrPx[k][0] = OnX(x + 6.0f);
+        PortOnlineFrPx[k][1] = OnY(ry + 2.0f);
+        PortOnlineFrShown = k + 1;
+        label = invite ? PortFrTx("UNIRSE", "JOIN")
+              : PortOnlineSent > 0.0f && !strcmp(PortOnlineSentTo, code)
+                  ? PortFrTx("ENVIADA", "SENT") : PortFrTx("INVITAR", "INVITE");
+        if (OnButton(OB_ROW0 + k, label, x + w - 104.0f, ry + 2.0f, 98.0f, 22.0f,
+                     invite, a) && !searching) {
+            if (invite) {
+                port_online_tell("join", code);
+                strcpy(PortOnlineCode, code);
+                PortOnlineFind();
+                PortOnlineSection = OS_HOME;
+            } else {
+                port_online_tell("invite", code);
+                strcpy(PortOnlineSentTo, code);
+                snprintf(PortOnlineSentName, sizeof PortOnlineSentName, "%s",
+                         name[0] ? name : code);
+                PortOnlineSent = 600.0f;
             }
-            n++;
         }
-    if (PortOnlineSent > 0.0f) {
-        PortOnlineSent -= 1.0f / limeFPSScaleFactor;
-        limeDrawFONT(&GameFont, PortUC(PortFrTx("INVITACION ENVIADA: ESPERA AQUI",
-                                                "INVITE SENT: WAIT HERE")),
-                     FE_X(360.0f), FE_Y(270.0f), 1, FE_WidthScale * 0.5f, fontcol);
+        n++;
     }
+    return n;
+}
+
+/* How many friends and invites friends.txt has. */
+static void PortOnlineCount(int *friends, int *invites)
+{
+    char code[16], name[32];
+    int i, invite;
+
+    *friends = *invites = 0;
+    for (i = 0; port_online_friend(i, code, name, &invite); i++)
+        ++*(invite ? invites : friends);
+}
+
+/* A section still to come: its name and what it will be. */
+static void PortOnlineSoon(const char *title, const char *line1,
+                           const char *line2, float x, float w, float a)
+{
+    OnPanel(x, 66.0f, w, 210.0f, a);
+    OnText(title, x + 12.0f, 74.0f, 0, 0.8f, w - 24.0f, OnWhite, a);
+    OnText(PortFrTx("PR\xc3\x93XIMAMENTE", "COMING SOON"), x + w * 0.5f, 130.0f, 1,
+           0.9f, w - 24.0f, OnRed, a);
+    OnText(line1, x + w * 0.5f, 166.0f, 1, 0.5f, w - 24.0f, OnDim, a);
+    OnText(line2, x + w * 0.5f, 184.0f, 1, 0.5f, w - 24.0f, OnDim, a);
 }
 
 static void PortOnlineFind(void)
@@ -12278,11 +12423,17 @@ static void PortOnlineFind(void)
 
 void FE_Task_Online(void)
 {
+    static const char *const tab_en[OS_N] = { "HOME", "FRIENDS", "INVITATIONS",
+                                              "LOBBIES", "QUICK MATCH", "PARTY" };
+    static const char *const tab_es[OS_N] = { "INICIO", "AMIGOS", "INVITACIONES",
+                                              "SALAS", "PARTIDA R\xc3\x81PIDA", "GRUPO" };
     const struct profile *me = prof_get();
     const char *status = NULL;
     char line[64];
     long back;
     int searching = mpnet_status() == MPNET_SEARCHING;
+    int i, nfr, ninv, hov;
+    float vw = OnVW(), cw, cx, a, tw;
 
     if (!mpnet_session_exists())        /* back here after a disconnection */
         startMP();
@@ -12302,8 +12453,20 @@ void FE_Task_Online(void)
         if (mpnet_session_exists() && !searching && port_online_join_code(code, sizeof code)) {
             strcpy(PortOnlineCode, code);
             PortOnlineFind();
+            PortOnlineSection = OS_HOME;
         }
     }
+
+    PortOnlineT += (1.0f / 60.0f) / limeFPSScaleFactor;
+    if (PortOnlineFade < 1.0f)
+        PortOnlineFade += 0.08f / limeFPSScaleFactor;
+    if (PortOnlineFade > 1.0f)
+        PortOnlineFade = 1.0f;
+    a = PortOnlineFade;
+    PortOnlineCount(&nfr, &ninv);
+    PortOnlineFrShown = 0;
+    PortOnlineFriendsOn = 0;
+    PortOnlineMePx[2] = 0.0f;           /* no badge unless HOME draws one */
 
     limeEnableAlphaBlending_Basic();
     limeSet2DDrawing();
@@ -12313,104 +12476,215 @@ void FE_Task_Online(void)
                    0.0f, 0.0f, (float)limeScreenWidth, (float)limeScreenHeight,
                    0.0f, 0.0f, 0.9375f, 0.625f, col);
 
-    limeDrawFONT(&GameFont, PortUC(PortOnlineWord(OT_ONLINE)),
-                 FE_WidthScale * 240.0f + FE_XC, FE_HeightScale * 8.0f, 1,
-                 FE_WidthScale, fontcol);
+    /* ---- the title and the sections' bar ---- */
+    OnText(PortOnlineWord(OT_ONLINE), vw * 0.5f, 6.0f, 1, 1.0f, 0.0f, OnWhite, 1.0f);
+    cw = vw - 24.0f;
+    if (cw > 620.0f)
+        cw = 620.0f;
+    cx = (vw - cw) * 0.5f;
+    tw = cw / (float)OS_N;
+    OnFill(cx, 32.0f, cw, 24.0f, 0.01f, 0.02f, 0.07f, 0.70f);
+    for (i = 0; i < OS_N; i++) {
+        float x = cx + tw * (float)i;
+        int on = i == PortOnlineSection;
+        const char *t = PortFrTx(tab_es[i], tab_en[i]);
 
-    /* ---- the left: this player, and COPY ---- */
-    limeDrawFONT(&GameFont, PortUC(PortOnlineWord(OT_YOURCODE)), FE_X(120.0f),
-                 FE_Y(176.0f), 1, FE_WidthScale, fontcol);
-    limeDrawFONT(&GameFont, PortUC(me ? me->id : ""), FE_X(120.0f),
-                 FE_Y(198.0f), 1, FE_WidthScale * 1.25f, fontcol);
-    LastTouch_OnlineCopy = Touch_OnlineCopy;
-    Touch_OnlineCopy = DrawOptionAsButton(
-        PortUC(PortOnlineWord(PortOnlineCopied > 0.0f ? OT_COPIED : OT_COPY)),
-        120.0f, 236.0f, 1.0f, &mmfontcol[(LastTouch_OnlineCopy + 1) * 4],
-        FE_W(160.0f));
-    if (LastTouch_OnlineCopy != 0 && Touch_OnlineCopy == 0
-        && limeTouchScreenX[0] == -1.0f && me) {
-        plat_clipboard_set(me->id);
-        PortOnlineCopied = 120.0f;
+        if (OnArea(OB_TAB0 + i, x, 32.0f, tw, 24.0f, &hov) && !on) {
+            PortOnlineSection = i;
+            PortOnlineFade = 0.0f;
+            PortOnlineListening = 0;
+        }
+        if (hov && !on)
+            OnFill(x, 32.0f, tw, 24.0f, 0.30f, 0.06f, 0.06f, 0.55f);
+        OnText(t, x + tw * 0.5f, 37.0f, 1, 0.5f, tw - 6.0f,
+               on ? OnWhite : hov ? OnGold : OnDim, 1.0f);
+        if (i == OS_INVITES && ninv > 0) {     /* the invites waiting */
+            float d = x + tw - 11.0f;
+            OnFill(d, 34.0f, 9.0f, 9.0f, 0.86f, 0.08f, 0.05f, 1.0f);
+        }
     }
-    if (PortOnlineCopied > 0.0f)
-        PortOnlineCopied -= 1.0f / limeFPSScaleFactor;
+    {
+        /* the red bar slides to the section */
+        float want = cx + tw * (float)PortOnlineSection;
+        if (PortOnlineBarX < 0.0f)
+            PortOnlineBarX = want;
+        PortOnlineBarX += (want - PortOnlineBarX) * 0.25f / limeFPSScaleFactor;
+        OnFill(PortOnlineBarX + 4.0f, 53.0f, tw - 8.0f, 3.0f, 0.86f, 0.06f, 0.04f, 1.0f);
+    }
 
-    /* port: FRIENDS / the code, the right side's two faces */
-    LastTouch_OnlineFriends = Touch_OnlineFriends;
-    Touch_OnlineFriends = DrawOptionAsButton(
-        PortUC(PortOnlineFriendsOn ? PortFrTx("BUSCAR POR CODIGO", "FIND BY CODE")
-                                   : PortFrTx("AMIGOS", "FRIENDS")),
-        120.0f, 272.0f, 1.0f, &mmfontcol[(LastTouch_OnlineFriends + 1) * 4], FE_W(160.0f));
-    if (LastTouch_OnlineFriends != 0 && Touch_OnlineFriends == 0
-        && limeTouchScreenX[0] == -1.0f)
-        PortOnlineFriendsOn = !PortOnlineFriendsOn;
-    PortOnlineFrShown = 0;
-    if (PortOnlineFriendsOn) {
-        plat_text_clear();
-        PortOnlineFriends(searching);
-    } else {
+    /* ---- the section ---- */
+    if (PortOnlineSent > 0.0f) {
+        /* SENT until the launcher has taken the invite, a second more, then
+         * INVITE again (Mary: it stayed SENT) */
+        if (PortOnlineSent > 60.0f && !port_online_tell_pending())
+            PortOnlineSent = 60.0f;
+        PortOnlineSent -= 1.0f / limeFPSScaleFactor;
+    }
+    if (PortOnlineSection != OS_HOME)
+        PortOnlineListening = 0;
+    PortOnlineBoxActive = 0;
 
-    /* ---- the right: the box and FIND MATCH ---- */
-    limeDrawFONT(&GameFont, PortUC(PortOnlineWord(OT_OTHER)), FE_X(360.0f),
-                 FE_Y(72.0f), 1, FE_WidthScale * 0.7f, fontcol);
+    switch (PortOnlineSection) {
+    case OS_HOME: {
+        float lw = cw * 0.36f, rx = cx + lw + 8.0f, rw = cw - lw - 8.0f;
+        float bx = rx + 12.0f, bw = rw - 24.0f;
 
-    if (TouchAreaWH((int)PortOnlineBox[0], (int)PortOnlineBox[1],
-                    (int)PortOnlineBox[2], (int)PortOnlineBox[3]) & 1) {
-        if (!searching)
+        /* the player */
+        OnPanel(cx, 66.0f, lw, 210.0f, a);
+        OnText(PortFrTx("PERFIL", "PROFILE"), cx + 10.0f, 72.0f, 0, 0.6f, lw - 20.0f, OnDim, a);
+        PortOnlineMePx[0] = OnX(cx + 10.0f);
+        PortOnlineMePx[1] = OnY(92.0f);
+        PortOnlineMePx[2] = 1.15f;
+        OnText(PortOnlineWord(OT_YOURCODE), cx + lw * 0.5f, 150.0f, 1, 0.6f, lw - 20.0f, OnDim, a);
+        OnText(me ? me->id : "", cx + lw * 0.5f, 168.0f, 1, 0.95f, lw - 16.0f, OnGold, a);
+        if (OnButton(OB_COPY, PortOnlineWord(PortOnlineCopied > 0.0f ? OT_COPIED : OT_COPY),
+                     cx + 14.0f, 200.0f, lw - 28.0f, 26.0f, 0, a) && me) {
+            plat_clipboard_set(me->id);
+            PortOnlineCopied = 120.0f;
+        }
+        if (PortOnlineCopied > 0.0f)
+            PortOnlineCopied -= 1.0f / limeFPSScaleFactor;
+        snprintf(line, sizeof line, "%s %d   %s %d", PortFrTx("AMIGOS", "FRIENDS"), nfr,
+                 PortFrTx("INVITACIONES", "INVITES"), ninv);
+        OnText(port_online_friends_known() ? line
+               : PortFrTx("SIN CUENTA: INICIA SESI\xc3\x93N EN EL LAUNCHER", "NO ACCOUNT: LOG IN IN THE LAUNCHER"),
+               cx + lw * 0.5f, 244.0f, 1, 0.45f, lw - 16.0f, OnDim, a);
+
+        /* the code: FIND BY CODE */
+        OnPanel(rx, 66.0f, rw, 124.0f, a);
+        OnText(PortFrTx("BUSCAR POR C\xc3\x93" "DIGO", "FIND BY CODE"), rx + 10.0f, 72.0f, 0, 0.6f,
+               rw - 20.0f, OnDim, a);
+        OnText(PortOnlineWord(OT_OTHER), rx + rw * 0.5f, 88.0f, 1, 0.5f, rw - 20.0f, OnWhite, a);
+        if (OnArea(OB_BOX, bx, 102.0f, bw, 28.0f, &hov) && !searching)
             PortOnlineListening = 1;
-    }
-    PortOnlineBoxActive = PortOnlineListening && !searching;
-    PortOnlineBoxPx[0] = (float)FE_X(PortOnlineBox[0]);
-    PortOnlineBoxPx[1] = (float)FE_Y(PortOnlineBox[1]);
-    PortOnlineBoxPx[2] = (float)FE_W(PortOnlineBox[2]);
-    PortOnlineBoxPx[3] = (float)FE_H(PortOnlineBox[3]);
+        PortOnlineBoxActive = PortOnlineListening && !searching;
+        OnFill(bx, 102.0f, bw, 28.0f, 0.0f, 0.0f, 0.03f, 0.80f * a);
+        if (PortOnlineBoxActive)
+            OnFrame(bx, 102.0f, bw, 28.0f, 1.2f, 1.0f, 0.85f, 0.2f, a);
+        else
+            OnFrame(bx, 102.0f, bw, 28.0f, 1.0f, 1.0f, 1.0f, 1.0f, (hov ? 0.9f : 0.45f) * a);
+        {
+            char ch[8];
+            int n;
 
-    if (PortOnlineBoxActive) {
-        char ch[8];
-        int n;
-
-        while ((n = plat_text_take(ch, sizeof ch)) > 0) {
-            if (ch[0] == 8) {           /* Backspace */
-                size_t k = strlen(PortOnlineCode);
-                if (k > 0)
-                    PortOnlineCode[--k] = 0;
-                if (k > 0 && PortOnlineCode[k - 1] == '-')
-                    PortOnlineCode[--k] = 0;
-            } else if (ch[0] == 13) {   /* Enter */
-                PortOnlineFind();
-            } else if (ch[0] == 22) {   /* Ctrl+V */
-                PortOnlinePaste();
-            } else if (n == 1) {
-                PortOnlineType((unsigned char)ch[0]);
+            while ((n = plat_text_take(ch, sizeof ch)) > 0) {
+                if (ch[0] == 22) {          /* Ctrl+V, listening or not */
+                    PortOnlinePaste();
+                    PortOnlineListening = !searching;
+                } else if (!PortOnlineBoxActive) {
+                    continue;
+                } else if (ch[0] == 8) {    /* Backspace */
+                    size_t k = strlen(PortOnlineCode);
+                    if (k > 0)
+                        PortOnlineCode[--k] = 0;
+                    if (k > 0 && PortOnlineCode[k - 1] == '-')
+                        PortOnlineCode[--k] = 0;
+                } else if (ch[0] == 13) {   /* Enter */
+                    PortOnlineFind();
+                } else if (ch[0] == 27) {   /* Esc: the keys move again */
+                    PortOnlineListening = 0;
+                } else if (n == 1) {
+                    PortOnlineType((unsigned char)ch[0]);
+                }
             }
         }
-    } else {
-        plat_text_clear();
+        PortOnlineBlink += 0.025f / limeFPSScaleFactor;
+        if (PortOnlineBlink > 2.0f)
+            PortOnlineBlink -= 2.0f;
+        snprintf(line, sizeof line, "%s%s", PortOnlineCode,
+                 PortOnlineBoxActive && PortOnlineBlink > 1.0f
+                 && strlen(PortOnlineCode) < 14 ? "_" : "");
+        OnText(line, rx + rw * 0.5f, 107.0f, 1, 0.95f, bw - 8.0f, OnWhite, a);
+        OnText(PortOnlineBoxActive ? PortOnlineWord(OT_HINT)
+               : PortFrTx("HAZ CLIC EN LA CAJA PARA ESCRIBIR, O CTRL+V",
+                          "CLICK THE BOX TO TYPE, OR CTRL+V"),
+               rx + rw * 0.5f, 134.0f, 1, 0.42f, rw - 20.0f, OnDim, a);
+        if (OnButton(OB_FIND, PortOnlineWord(OT_FIND), rx + rw * 0.5f - 90.0f, 152.0f,
+                     180.0f, 28.0f, 1, a) && !searching)
+            PortOnlineFind();
+
+        /* the state of things */
+        OnPanel(rx, 198.0f, rw, 78.0f, a);
+        OnText(PortFrTx("ESTADO", "STATUS"), rx + 10.0f, 204.0f, 0, 0.6f, rw - 20.0f, OnDim, a);
+        {
+            /* internet play (runtime/mp_eos.c): 0 off, 1 starting, 2 ready,
+             * 3 failed, as MPEOS_* */
+            static const int net_text[4] = { OT_NET_OFF, OT_NET_WAIT, OT_NET_ON,
+                                             OT_NET_FAIL };
+            int k = mpnet_internet();
+            if (k >= 0 && k < 4)
+                OnText(PortOnlineWord(net_text[k]), rx + 10.0f, 220.0f, 0, 0.45f,
+                       rw - 20.0f, k == 2 ? OnWhite : OnGold, a);
+        }
+        if (OnButton(OB_GOFR, PortFrTx("AMIGOS", "FRIENDS"), rx + 10.0f, 242.0f,
+                     rw * 0.5f - 15.0f, 24.0f, 0, a)) {
+            PortOnlineSection = OS_FRIENDS;
+            PortOnlineFade = 0.0f;
+        }
+        snprintf(line, sizeof line, "%s%s", PortFrTx("INVITACIONES", "INVITATIONS"),
+                 ninv ? " (!)" : "");
+        if (OnButton(OB_GOINV, line, rx + rw * 0.5f + 5.0f, 242.0f, rw * 0.5f - 15.0f,
+                     24.0f, ninv > 0, a)) {
+            PortOnlineSection = OS_INVITES;
+            PortOnlineFade = 0.0f;
+        }
+        break;
+    }
+    case OS_FRIENDS:
+        OnPanel(cx, 66.0f, cw, 210.0f, a);
+        OnText(PortFrTx("AMIGOS", "FRIENDS"), cx + 12.0f, 72.0f, 0, 0.6f, cw - 24.0f, OnDim, a);
+        if (!nfr) {
+            OnText(port_online_friends_known()
+                   ? PortFrTx("A\xc3\x9aN NO TIENES AMIGOS", "NO FRIENDS YET")
+                   : PortFrTx("INICIA SESI\xc3\x93N EN EL LAUNCHER", "LOG IN IN THE LAUNCHER"),
+                   cx + cw * 0.5f, 140.0f, 1, 0.6f, cw - 24.0f, OnWhite, a);
+            OnText(PortFrTx("LAUNCHER: PERFIL > AMIGOS", "LAUNCHER: PROFILE > FRIENDS"),
+                   cx + cw * 0.5f, 162.0f, 1, 0.45f, cw - 24.0f, OnDim, a);
+        } else
+            PortOnlineRows(0, cx + 10.0f, 92.0f, cw - 20.0f, searching, a);
+        if (PortOnlineSent > 0.0f) {
+            snprintf(line, sizeof line, "%s %s", PortFrTx("INVITACI\xc3\x93N ENVIADA A", "INVITE SENT TO"),
+                     PortOnlineSentName);
+            OnText(line, cx + cw * 0.5f, 258.0f, 1, 0.45f, cw - 24.0f, OnGold, a);
+        }
+        break;
+    case OS_INVITES:
+        OnPanel(cx, 66.0f, cw, 210.0f, a);
+        OnText(PortFrTx("RECIBIDAS", "RECEIVED"), cx + 12.0f, 72.0f, 0, 0.6f, cw - 24.0f, OnDim, a);
+        if (!PortOnlineRows(1, cx + 10.0f, 92.0f, cw - 20.0f, searching, a))
+            OnText(PortFrTx("NINGUNA INVITACI\xc3\x93N", "NO INVITATIONS"), cx + cw * 0.5f, 140.0f,
+                   1, 0.6f, cw - 24.0f, OnWhite, a);
+        OnText(PortOnlineSent > 0.0f
+               ? PortFrTx("ENVIADA: ESPERA AQU\xc3\x8d A QUE ACEPTE", "SENT: WAIT HERE FOR THEM TO ACCEPT")
+               : PortFrTx("LAS INVITACIONES CADUCAN A LOS 3 MINUTOS",
+                          "INVITATIONS EXPIRE AFTER 3 MINUTES"),
+               cx + cw * 0.5f, 258.0f, 1, 0.42f, cw - 24.0f,
+               PortOnlineSent > 0.0f ? OnGold : OnDim, a);
+        break;
+    case OS_LOBBIES:
+        PortOnlineSoon(PortFrTx("SALAS", "LOBBIES"),
+                       PortFrTx("SALAS CON REGLAS: AL MEJOR DE 1/3/5, TIEMPO,",
+                                "ROOMS WITH RULES: BEST OF 1/3/5, TIME,"),
+                       PortFrTx("KOMBO SLIDE Y LOS MODOS ESPECIALES",
+                                "KOMBO SLIDE AND THE SPECIAL MODES"), cx, cw, a);
+        break;
+    case OS_QUICK:
+        PortOnlineSoon(PortFrTx("PARTIDA R\xc3\x81PIDA", "QUICK MATCH"),
+                       PortFrTx("BUSCA UN RIVAL CON TU MISMA VERSI\xc3\x93N",
+                                "FINDS AN OPPONENT ON YOUR VERSION"),
+                       PortFrTx("A TRAV\xc3\x89S DE EPIC ONLINE SERVICES",
+                                "THROUGH EPIC ONLINE SERVICES"), cx, cw, a);
+        break;
+    case OS_PARTY:
+        PortOnlineSoon(PortFrTx("GRUPO", "PARTY"),
+                       PortFrTx("TU GRUPO DE AMIGOS, APARTE DE LAS SALAS",
+                                "YOUR GROUP OF FRIENDS, APART FROM LOBBIES"),
+                       PortFrTx("PARA ENTRAR JUNTOS A UNA SALA",
+                                "TO JOIN A LOBBY TOGETHER"), cx, cw, a);
+        break;
     }
 
-    PortOnlineBlink += 0.025f / limeFPSScaleFactor;
-    if (PortOnlineBlink > 2.0f)
-        PortOnlineBlink -= 2.0f;
-    snprintf(line, sizeof line, "%s%s", PortOnlineCode,
-             PortOnlineBoxActive && PortOnlineBlink > 1.0f
-             && strlen(PortOnlineCode) < 14 ? "_" : "");
-    limeDrawFONT(&GameFont, PortUC(line), FE_X(360.0f), FE_Y(98.0f), 1,
-                 FE_WidthScale * 1.1f, fontcol);
-    limeDrawFONT(&GameFont, PortUC(PortOnlineWord(OT_HINT)), FE_X(360.0f),
-                 FE_Y(132.0f), 1, FE_WidthScale * 0.55f, fontcol);
-
-    LastTouch_OnlineFind = Touch_OnlineFind;
-    Touch_OnlineFind = DrawOptionAsButton(PortUC(PortOnlineWord(OT_FIND)),
-                                          360.0f, 160.0f, 1.25f,
-                                          &mmfontcol[(LastTouch_OnlineFind + 1) * 4],
-                                          FE_W(220.0f));
-    if (LastTouch_OnlineFind != 0 && Touch_OnlineFind == 0
-        && limeTouchScreenX[0] == -1.0f && !searching) {
-        PortOnlineListening = 1;
-        PortOnlineFind();
-    }
-
-    }                                   /* port: the code's face */
+    /* ---- the status line, under everything ---- */
     switch (mpnet_status()) {
     case MPNET_SEARCHING: status = PortOnlineWord(OT_SEARCHING); break;
     case MPNET_NOT_FOUND: status = PortOnlineWord(OT_NOTFOUND); break;
@@ -12418,22 +12692,14 @@ void FE_Task_Online(void)
     case MPNET_LOST:      status = PortOnlineWord(OT_LOST); break;
     case MPNET_CONNECTED: status = PortOnlineWord(OT_CONNECTED); break;
     }
-    if (status)
-        limeDrawFONT(&GameFont, PortUC(status), FE_X(360.0f), FE_Y(206.0f), 1,
-                     FE_WidthScale * 0.55f, fontcol);
-    {
-        /* internet play (runtime/mp_eos.c): 0 off, 1 starting, 2 ready,
-         * 3 failed, as MPEOS_* */
-        static const int net_text[4] = { OT_NET_OFF, OT_NET_WAIT, OT_NET_ON,
-                                         OT_NET_FAIL };
-        int k = mpnet_internet();
-        if (k >= 0 && k < 4)
-            limeDrawFONT(&GameFont, PortUC(PortOnlineWord(net_text[k])),
-                         FE_X(360.0f), FE_Y(240.0f), 1,
-                         FE_WidthScale * 0.45f, fontcol);
+    if (status) {
+        float p = 0.6f + 0.4f * sinf(PortOnlineT * 5.0f);
+        OnFill(cx, 282.0f, cw * 0.62f, 18.0f, 0.01f, 0.02f, 0.07f, 0.70f);
+        OnFill(cx, 282.0f, 3.0f, 18.0f, 0.86f, 0.06f, 0.04f, searching ? p : 1.0f);
+        OnText(status, cx + 8.0f, 284.0f, 0, 0.45f, cw * 0.62f - 12.0f,
+               searching ? OnGold : OnWhite, searching ? p : 1.0f);
     }
-    if (mpnet_status() != MPNET_SEARCHING && !PortOnlineListening)
-        PortOnlineListening = 1;        /* the search ended: listen again */
+    (void)tab_en;
 
     back = DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1);
     limeDrawFONT(&GameFont, GameText(7),

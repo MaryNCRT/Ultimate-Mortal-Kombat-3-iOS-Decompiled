@@ -109,41 +109,33 @@ void online_after_frame(void)
     w = ui_space_width();
 
     if (CurrentTask == 3 && FE_CurrentTask == 51) {
-        /* FrontEnd.c's box where the menu drew it this frame (screen
-         * pixels), into this space as ui_nav_frame takes them: 320 high */
-        extern float PortOnlineBoxPx[4];
-        extern int PortOnlineBoxActive;
+        /* FrontEnd.c says where, in screen pixels; into this space as
+         * ui_nav_frame takes them: 320 high */
         extern int limeScreenHeight;
         float k = limeScreenHeight > 0 ? 320.0f / (float)limeScreenHeight : 1.0f;
-        const float *b = PortOnlineBoxPx;
-
-        extern int   PortOnlineFrShown;     /* FrontEnd.c: FRIENDS' rows */
+        extern float PortOnlineMePx[3];     /* HOME's PROFILE: x, y, size (0 none) */
+        extern int   PortOnlineFrShown;     /* FRIENDS' and INVITATIONS' rows */
         extern char  PortOnlineFrCode[][16];
         extern char  PortOnlineFrName[][32];
-        extern float PortOnlineFrY[];
-        extern int   PortOnlineFriendsOn;
+        extern float PortOnlineFrPx[][2];
         int port_online_friend_look(const char *code, int *icon, unsigned *color, int *dark,
                                     unsigned *color2, int *angle, int *alt);
         int i;
 
-        badge(0, me->name, &ml, w * 0.5f - 120.0f, 64.0f, 1, 1.5f);
-        /* FRIENDS: each friend's name and icon, left of INVITE / JOIN */
-        for (i = 0; i < PortOnlineFrShown && i < 4; i++) {
+        if (PortOnlineMePx[2] > 0.0f)
+            badge(0, me->name, &ml, PortOnlineMePx[0] * k, PortOnlineMePx[1] * k, 0,
+                  PortOnlineMePx[2]);
+        /* each friend's name and icon, left of INVITE / JOIN */
+        for (i = 0; i < PortOnlineFrShown && i < 6; i++) {
             struct look fl;
             memset(&fl, 0, sizeof fl);
             fl.angle = -1;
             port_online_friend_look(PortOnlineFrCode[i], &fl.icon, &fl.color, &fl.dark,
                                     &fl.color2, &fl.angle, &fl.alt);
-            badge(1 + i, PortOnlineFrName[i], &fl, w * 0.5f + 8.0f, PortOnlineFrY[i] - 2.0f, 0, 0.75f);
+            badge(1 + i, PortOnlineFrName[i], &fl, PortOnlineFrPx[i][0] * k,
+                  PortOnlineFrPx[i][1] * k, 0, 0.75f);
         }
-        if (PortOnlineFriendsOn)            /* the code's box is not up */
-            return;
-        if (PortOnlineBoxActive)
-            ui_rect_outline(b[0] * k, b[1] * k, b[2] * k, b[3] * k, 2.0f,
-                            1.0f, 0.85f, 0.2f, 1.0f);
-        else
-            ui_rect_outline(b[0] * k, b[1] * k, b[2] * k, b[3] * k, 1.5f,
-                            1.0f, 1.0f, 1.0f, 0.6f);
+        (void)w;
         return;
     }
     if (GameMode != 1 || !o || mpnet_connection_state() != 2)
