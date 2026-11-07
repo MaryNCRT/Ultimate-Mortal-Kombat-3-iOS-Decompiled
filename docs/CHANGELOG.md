@@ -38,6 +38,11 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
   plate; separators are engraved, with a sigil and a stud; secondary words
   are brighter. COMING SOON lists the new fight modes: TAG TEAM, SIMUL,
   KING OF THE HILL.
+- **Player Banners, worn steel** (Mary's reference, a weathered steel tag):
+  a 512 x 128 steel plate (brushed, grimed, pitted, scratched) under the
+  player's gradient, its grain through the colour, a finer sheen, a bevelled
+  rim, ends in shade. The text boxes (MY PROFILE's name) are wells in black
+  steel framed in bronze, gold while typing; the last navy leftovers are gone.
 
 ## 0.4.0 beta (2026-11-06) — the new ONLINE screen
 

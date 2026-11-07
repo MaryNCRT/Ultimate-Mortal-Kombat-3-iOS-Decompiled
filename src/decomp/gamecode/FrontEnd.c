@@ -12438,7 +12438,7 @@ static void OnGlow(float x, float y, float w, float h, float r, float g, float b
  * no file of the game's is touched. ---- */
 TEXTURE *limeTextureFromRGBA(const char *key, const unsigned char *rgba, int w, int h);
 
-enum { TX_METAL, TX_METALV, TX_STONE, TX_ORN, TX_SHEEN, TX_N };
+enum { TX_METAL, TX_METALV, TX_STONE, TX_ORN, TX_SHEEN, TX_PLATE, TX_N };
 enum { MT_GOLD, MT_BRONZE, MT_STEEL, MT_BLOOD, MT_IRON };
 enum { ORN_CORNER, ORN_SIGIL, ORN_CHEVRON, ORN_STUD };
 
@@ -12659,30 +12659,30 @@ static void OnMakeOrn(unsigned char *out)
 static void OnMakeSheen(unsigned char *out)
 {
     int x, y, k;
-    static float val[64][256];
+    static float val[128][512];
 
-    for (y = 0; y < 64; y++) {
-        float v = ((float)y + 0.5f) / 64.0f, e = (v - 0.28f) / 0.12f;
+    for (y = 0; y < 128; y++) {
+        float v = ((float)y + 0.5f) / 128.0f, e = (v - 0.28f) / 0.12f;
         float spec = 0.9f * expf(-e * e), shade = v > 0.55f ? -(v - 0.55f) / 0.45f * 0.8f : 0.0f;
-        for (x = 0; x < 256; x++) {
-            float br = OnNoise((float)x * 16.0f / 256.0f, (float)y * 0.9f, 16, 64, 61);
+        for (x = 0; x < 512; x++) {
+            float br = OnNoise((float)x * 32.0f / 512.0f, (float)y * 1.8f, 32, 256, 61);
             val[y][x] = (br - 0.5f) * 0.9f + (OnRnd(x, y, 67) - 0.5f) * 0.15f + spec + shade;
         }
     }
-    for (k = 0; k < 40; k++) {
-        int sx = (int)(OnHash(k, 1, 71) % 256), sy = (int)(OnHash(k, 2, 71) % 64);
-        int len = 6 + (int)(OnHash(k, 3, 71) % 22), i;
+    for (k = 0; k < 90; k++) {
+        int sx = (int)(OnHash(k, 1, 71) % 512), sy = (int)(OnHash(k, 2, 71) % 128);
+        int len = 10 + (int)(OnHash(k, 3, 71) % 44), i;
         float slope = (OnRnd(k, 4, 71) - 0.5f) * 0.3f, f = (OnHash(k, 5, 71) & 1) ? 0.6f : -0.6f;
         for (i = 0; i < len; i++) {
-            int xx = (sx + i) % 256, yy = sy + (int)(slope * (float)i);
-            if (yy >= 0 && yy < 64)
+            int xx = (sx + i) % 512, yy = sy + (int)(slope * (float)i);
+            if (yy >= 0 && yy < 128)
                 val[yy][xx] += f;
         }
     }
-    for (y = 0; y < 64; y++)
-        for (x = 0; x < 256; x++) {
+    for (y = 0; y < 128; y++)
+        for (x = 0; x < 512; x++) {
             float q = val[y][x];
-            unsigned char *o = out + ((size_t)y * 256 + x) * 4;
+            unsigned char *o = out + ((size_t)y * 512 + x) * 4;
             if (q > 0.0f)
                 OnPut(o, 1.0f, 1.0f, 1.0f, q * 0.30f > 0.32f ? 0.32f : q * 0.30f);
             else
@@ -12690,10 +12690,46 @@ static void OnMakeSheen(unsigned char *out)
         }
 }
 
+/* Weathered steel, grey, 512 x 128 (Mary's worn tag): brushed in long
+ * fine lines, grime gathered in patches, pitted, scratched; tiling across. */
+static void OnMakePlate(unsigned char *out)
+{
+    static float lum[128][512];
+    int x, y, k;
+
+    for (y = 0; y < 128; y++)
+        for (x = 0; x < 512; x++) {
+            float line = OnNoise((float)x * 64.0f / 512.0f, (float)y * 3.0f, 64, 384, 81);
+            float wide = OnNoise((float)x * 8.0f / 512.0f, (float)y * 0.5f, 8, 64, 83);
+            float grime = OnFbm((float)x * 4.0f / 512.0f, (float)y * 4.0f / 512.0f, 4, 4, 87);
+            float g = grime > 0.45f ? (grime - 0.45f) / 0.55f : 0.0f;
+            float l = 0.62f + 0.16f * (line - 0.5f) + 0.10f * (wide - 0.5f) + 0.05f * (OnRnd(x, y, 89) - 0.5f);
+            l *= 1.0f - 0.55f * g;
+            if (OnRnd(x, y, 91) > 0.996f)   /* pitting */
+                l *= 0.45f;
+            lum[y][x] = l;
+        }
+    for (k = 0; k < 160; k++) {         /* scratches, mostly along, some across */
+        int sx = (int)(OnHash(k, 1, 93) % 512), sy = (int)(OnHash(k, 2, 93) % 128);
+        int len = 8 + (int)(OnHash(k, 3, 93) % 60), i;
+        float slope = (OnHash(k, 6, 93) % 5 == 0) ? (OnRnd(k, 4, 93) - 0.5f) * 3.0f
+                                                  : (OnRnd(k, 4, 93) - 0.5f) * 0.25f;
+        float f = (OnHash(k, 5, 93) & 1) ? 1.35f : 0.70f;
+        for (i = 0; i < len; i++) {
+            int xx = (sx + i) % 512, yy = sy + (int)(slope * (float)i);
+            if (yy >= 0 && yy < 128)
+                lum[yy][xx] *= f;
+        }
+    }
+    for (y = 0; y < 128; y++)
+        for (x = 0; x < 512; x++)
+            OnPut(out + ((size_t)y * 512 + x) * 4, lum[y][x], lum[y][x], lum[y][x], 1.0f);
+}
+
 static TEXTURE *OnTexture(int i)
 {
     if (!OnTexsTried) {
-        static unsigned char buf[256 * 64 * 4];
+        static unsigned char buf[512 * 128 * 4];
         OnTexsTried = 1;
         OnMakeMetal(buf, 0);
         OnTexs[TX_METAL] = limeTextureFromRGBA("port:online-metal", buf, ON_MW, ON_MH);
@@ -12704,7 +12740,9 @@ static TEXTURE *OnTexture(int i)
         OnMakeOrn(buf);
         OnTexs[TX_ORN] = limeTextureFromRGBA("port:online-ornaments", buf, 256, 64);
         OnMakeSheen(buf);
-        OnTexs[TX_SHEEN] = limeTextureFromRGBA("port:online-sheen", buf, 256, 64);
+        OnTexs[TX_SHEEN] = limeTextureFromRGBA("port:online-sheen2", buf, 512, 128);
+        OnMakePlate(buf);
+        OnTexs[TX_PLATE] = limeTextureFromRGBA("port:online-plate", buf, 512, 128);
     }
     return OnTexs[i];
 }
@@ -12748,7 +12786,13 @@ static void OnMetalFrame(float x, float y, float w, float h, float t, int m, flo
 static void OnSheen(float x, float y, float w, float h, float a)
 {
     static const float white[3] = { 1.0f, 1.0f, 1.0f };
-    OnSprite(TX_SHEEN, x, y, w, h, x / 96.0f, 0.02f, w / 96.0f, 0.96f, white, a);
+    OnSprite(TX_SHEEN, x, y, w, h, x / 160.0f, 0.01f, w / 160.0f, 0.98f, white, a);
+}
+
+/* weathered steel, a tile every 160 across, stretched down */
+static void OnPlate(float x, float y, float w, float h, const float *rgb, float a)
+{
+    OnSprite(TX_PLATE, x, y, w, h, x / 160.0f, 0.01f, w / 160.0f, 0.98f, rgb, a);
 }
 
 static void OnStone(float x, float y, float w, float h, const float *rgb, float a)
@@ -13037,7 +13081,7 @@ static int OnButton(int id, const char *text, float x, float y, float w,
  * `code` "" for this player. `glow` 0 none, 1 blue, 2 red. */
 static void OnPortrait(const char *code, float x, float y, float size, int glow, float a)
 {
-    static const float b0[4] = { 0.10f, 0.16f, 0.34f, 1.0f }, b1[4] = { 0.01f, 0.02f, 0.06f, 1.0f };
+    static const float b0[4] = { 0.16f, 0.14f, 0.11f, 1.0f }, b1[4] = { 0.03f, 0.03f, 0.025f, 1.0f };
     int n = PortOnlinePicN;
 
     if (glow)
@@ -13180,9 +13224,23 @@ static void OnBand(const char *code, float x, float y, float w, float h, float a
     static const float rs0[4] = { 0.85f, 0.08f, 0.05f, 0.55f }, rs1[4] = { 0.85f, 0.08f, 0.05f, 0.0f };
     int i;
 
-    OnShadow(x, y, w, h, a);
-    OnProfileSky(code, x, y, w, h, a);
-    OnSheen(x, y, w, h, a);                 /* Mary: metal, the gradient on it */
+    {
+        /* Mary: metal, a worn steel tag, the player's gradient on it */
+        static const float steel[3] = { 0.86f, 0.88f, 0.86f };
+        static const float e0[4] = { 0.0f, 0.0f, 0.0f, 0.55f }, e1[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        float ew = w * 0.12f;
+        OnShadow(x, y, w, h, a);
+        OnPlate(x, y, w, h, steel, a);
+        OnProfileSky(code, x, y, w, h, 0.72f * a);
+        OnPlate(x, y, w, h, steel, 0.22f * a);          /* its grain through the colour */
+        OnSheen(x, y, w, h, 0.85f * a);
+        OnHGrad(x, y, ew, h, e0, e1, a);                /* the ends in shade */
+        OnHGrad(x + w - ew, y, ew, h, e1, e0, a);
+        OnFill(x, y + 0.8f, 0.8f, h - 2.0f, 1.0f, 1.0f, 1.0f, 0.25f * a);   /* the rim: lit left */
+        OnFill(x + w - 0.8f, y + 0.8f, 0.8f, h - 2.0f, 0.0f, 0.0f, 0.0f, 0.55f * a);
+        OnFrame(x + 1.4f, y + 1.4f, w - 2.8f, h - 2.8f, 0.4f, 0.0f, 0.0f, 0.0f, 0.30f * a);
+        OnFrame(x + 1.8f, y + 1.8f, w - 3.6f, h - 3.6f, 0.3f, 1.0f, 1.0f, 1.0f, 0.10f * a);
+    }
     if (sel > 0.01f)
         OnFill(x, y, 3.0f, h, 1.0f, 0.22f, 0.15f, sel * a);
     OnFill(x, y, w, 0.8f, 1.0f, 1.0f, 1.0f, 0.40f * a);
@@ -13452,7 +13510,7 @@ static int OnBoxTakes(int kind, int c)
 static int OnTextBox(int id, char *buf, int max, int code, float x, float y, float w,
                      float h, const char *hint, float a)
 {
-    static const float k0[4] = { 0.0f, 0.0f, 0.02f, 0.92f }, k1[4] = { 0.04f, 0.07f, 0.16f, 0.88f };
+    static const float k0[4] = { 0.0f, 0.0f, 0.0f, 0.95f }, k1[4] = { 0.09f, 0.08f, 0.065f, 0.92f };   /* a well cut in black steel */
     int st, on, r = 0;
     char line[112];
 
@@ -13460,6 +13518,8 @@ static int OnTextBox(int id, char *buf, int max, int code, float x, float y, flo
         PortOnlineEdit = id;
     on = PortOnlineEdit == id;
     OnVGrad(x, y, w, h, k0, k1, a);
+    OnFill(x, y, w, 1.2f, 0.0f, 0.0f, 0.0f, 0.6f * a);              /* sunk: shade under its top */
+    OnFill(x, y + h - 0.6f, w, 0.6f, 1.0f, 0.88f, 0.62f, 0.18f * a);
     if (on) {
         char ch[8];
         int n;
@@ -13506,9 +13566,9 @@ static int OnTextBox(int id, char *buf, int max, int code, float x, float y, flo
             }
         }
     } else if (st)
-        OnFrame(x, y, w, h, 1.2f, 0.55f, 0.72f, 1.0f, a);
+        OnMetalFrame(x, y, w, h, 1.2f, MT_GOLD, a);
     else
-        OnFrame(x, y, w, h, 0.8f, 0.40f, 0.55f, 1.0f, 0.55f * a);
+        OnMetalFrame(x, y, w, h, 0.9f, MT_BRONZE, 0.9f * a);
     PortOnlineBlink += 0.025f / limeFPSScaleFactor;
     if (PortOnlineBlink > 2.0f)
         PortOnlineBlink -= 2.0f;
@@ -14802,7 +14862,7 @@ static void PortOnlineProfile(float cx, float cw, float a, int searching, int ni
         if (st == 2)
             OnFrame(x + 2.0f, 62.0f, sw - 4.0f, 18.0f, 1.0f, 1.0f, 0.30f, 0.22f, 1.0f);
         else if (st)
-            OnFrame(x + 2.0f, 62.0f, sw - 4.0f, 18.0f, 0.8f, 0.55f, 0.72f, 1.0f, 0.9f);
+            OnFrame(x + 2.0f, 62.0f, sw - 4.0f, 18.0f, 0.8f, 0.92f, 0.78f, 0.46f, 0.9f);
         if (i == PS_IN && fin && !on) {        /* a new request: lit red */
             float p = 0.6f + 0.4f * sinf(PortOnlineT * 5.0f);
             OnFrame(x + 2.0f, 62.0f, sw - 4.0f, 18.0f, 1.2f, 1.0f, 0.2f, 0.12f, p);
@@ -15183,7 +15243,7 @@ void FE_Task_Online(void)
     case MPNET_CONNECTED: status = PortOnlineWord(OT_CONNECTED); break;
     }
     if (status) {
-        static const float s0[4] = { 0.06f, 0.10f, 0.22f, 0.85f }, s1[4] = { 0.01f, 0.02f, 0.06f, 0.0f };
+        static const float s0[4] = { 0.10f, 0.09f, 0.07f, 0.85f }, s1[4] = { 0.02f, 0.02f, 0.015f, 0.0f };
         float p = 0.6f + 0.4f * sinf(PortOnlineT * 5.0f);
         OnHGrad(cx, 283.0f, cw * 0.62f, 16.0f, s0, s1, 1.0f);
         OnFill(cx, 283.0f, 2.5f, 16.0f, 1.0f, 0.18f, 0.10f, searching ? p : 1.0f);
