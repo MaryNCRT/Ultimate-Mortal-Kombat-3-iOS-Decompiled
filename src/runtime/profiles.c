@@ -455,3 +455,30 @@ unsigned char *prof_icon_rgba(int icon, int alt, unsigned color, int dark,
     free(art);
     return out;
 }
+
+/* The fighter's VERSUS art alone, straight RGBA with its transparency, 256
+ * square (the second outfit's when `alt`): the ONLINE screen's player
+ * banners stand the fighter out of the banner (online_ui.c). NULL when the
+ * art is not there. */
+unsigned char *prof_art_rgba(int icon, int alt)
+{
+    uint8_t *art = NULL;
+    int aw = 0, ah = 0;
+    char path[1200];
+    const char *root = lime_platform_asset_root();
+
+    if (icon < 0 || icon >= PROF_ICONS)
+        return NULL;
+    if (alt && alt_art(root, icon, &art, &aw, &ah) && aw == 256 && ah == 256)
+        return art;
+    free(art);
+    art = NULL;
+    snprintf(path, sizeof path, "%s/Textures/%s_VERSUS.PNG", root ? root : "res", k_art[icon]);
+    if (!lime_png_load(path, &art, &aw, &ah))
+        return NULL;
+    if (aw != 256 || ah != 256) {
+        free(art);
+        return NULL;
+    }
+    return art;
+}

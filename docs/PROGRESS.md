@@ -98,6 +98,42 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+## ONLINE screen: the visual redesign, Player Banners, the stats load (2026-11-06)
+
+Mary's brief: commercial Xbox 360 / PS3-era look, profiles as console
+player cards, gradients and depth; then Player Banners (the fighter as a
+transparent PNG out of a horizontal banner) with the profile's own gradient
+over the whole banner, and HOME's profile with statistics.
+
+- **Drawing**: `limeFillRectGrad` (draw_gl.c; counted headless in
+  lime_menu.c), a quad with a colour at each corner. FrontEnd.c's
+  `OnPanel`, `OnButton` (BT_NORMAL / BT_MAIN / BT_OFF; state 1 mouse, 2 keys
+  or pad, 3 pressed, from `OnArea`), `OnBand`, `OnCard`, `OnStatus`,
+  `OnHeading`. The profile's gradient (`OnProfileSky`) is the sky of
+  `prof_icon_rgba` (profiles.c): the custom one with an angle along CSS's
+  gradient line corner to corner, the others top -> middle -> bottom; both
+  linear, so corner colours reproduce it exactly.
+- **The fighters**: `prof_art_rgba` (profiles.c) gives the VERSUS art alone,
+  256 square with its alpha (the second outfit's via `alt_art`).
+  FrontEnd.c lists what to draw (`PortOnlinePicCode/Px/Kind`) and
+  online_ui.c draws it over the frame with `ui_picture_at` (debug_menu.c,
+  now any width and height).
+- **Stats**: the binary has one block at 0x00183c84 (`_Stats`); the port had
+  two, `Stats` (counted, saved by Write_Stats) and `Stats_` (filled by
+  Load_Stats, read by nothing), so every start began at zero. Load_Stats
+  and the per-character play counter (GameCode.c) now use `Stats`.
+  Checked: after the fix HOME shows BEST WIN STREAK 7 from Mary's save,
+  0 before.
+- **Invites**: DECLINE writes "drop CODE" to online_invite.txt; main.js
+  drops it on the server as it does a JOIN's.
+- No presence on the server, so no on line / off line for friends; the
+  only states shown are real ones (inviting you, invite sent, this
+  player's connection). No registration date exists anywhere the game can
+  read, so it is not shown. Friends' statistics are not on the server.
+- Checked by running the game (Mary's permission) at 1920x1080: every
+  section, mouse, keys. Not checked: 4:3, 21:9, a pad, two machines. The
+  Xbox Live Dashboard reference (gamereactor.eu) answers 404.
+
 ## ONLINE redesign, stage 2: sections and HOME (2026-11-06)
 
 `FE_Task_Online` (FrontEnd.c) is drawn again, all of it the front end's own

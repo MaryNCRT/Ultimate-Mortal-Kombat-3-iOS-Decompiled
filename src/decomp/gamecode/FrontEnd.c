@@ -934,7 +934,8 @@ void __static_initialization_and_destruction_0(int action, int priority)
 
 extern int syncCharacters;              /* 0x000ff814 */
 extern int syncCharactersOpponent;      /* 0x000ff818 */
-extern char Stats_[];                   /* see Write_Stats; 0x00183c84 */
+/* Stats (above) is 0x00183c84: Load_Stats fills it, as Write_Stats saves
+ * it. A second array, Stats_, took the load and was never read. */
 int   isParentBasedOnSpeed(void);
 int   puts(const char *s);
 void *limeLoadSaveFile(const char *name);
@@ -986,7 +987,7 @@ void processCharacterSelectedPacket(void)
 void Load_Stats(void)
 {
     long *src = (long *)limeLoadSaveFile("statsdata");
-    long *dst = (long *)Stats_;
+    long *dst = (long *)Stats;
     int i;
 
     if (src == 0) {
@@ -12177,53 +12178,71 @@ static void PortOnlinePaste(void)
     }
 }
 
-/* Port: the ONLINE screen's sections (the redesign's stage 2, Mary
- * 2026-11-06; docs/research/ONLINE-MENU-AUDIT.md). A bar of sections along
- * the top -- HOME, FRIENDS, INVITATIONS, LOBBIES, QUICK MATCH, PARTY -- over
- * the select screen's night cemetery, each section in translucent panels
- * with the MK red along their top. Everything here is the front end's own
- * drawing (limeFillRect, the game's font), and every button is a touch area
- * that also tells pad_nav.c where it is, so the mouse, the keyboard and the
- * pad all reach it as they reach the rest of the front end.
+/* Port: the ONLINE screen (the redesign, Mary 2026-11-06;
+ * docs/research/ONLINE-MENU-AUDIT.md). Sections along the top -- HOME,
+ * FRIENDS, INVITATIONS, LOBBIES, QUICK MATCH, PARTY -- over the select
+ * screen's night cemetery and its moon.
  *
- * The layout is in the menu's units (320 high) across the whole screen --
- * not FE_X, which sends x <= 90 and >= 390 to the screen's edges on wide
- * screens -- so the bar and the panels keep their spacing at any shape.
+ * The look, after the consoles' online services of the Xbox 360 / PS3 years
+ * (Mary's references): panels that have depth -- a diagonal gradient from
+ * navy to black that lets the cemetery through, a light along the top edge,
+ * a darker bottom edge, a soft shadow under them -- buttons in gradients
+ * with their states told apart (normal, under the mouse, chosen with the
+ * keys or the pad, pressed, off), and players as cards whose main element
+ * is their own fighter's portrait (the profile's icon, online_ui.c draws
+ * it). Red only for what is chosen and for the main action.
  *
- * FRIENDS and INVITATIONS show what the launcher writes (friends.txt,
- * gamecode_stubs.c); LOBBIES, QUICK MATCH and PARTY are the next stages and
- * say so. online_ui.c draws the badges (icon and name) where these say. */
+ * All of it is the front end's own drawing (limeFillRect, limeFillRectGrad
+ * and the game's font); every button is a touch area that also tells
+ * pad_nav.c where it is, so the mouse, the keyboard and the pad all reach
+ * it. Laid out in the menu's units (320 high) across the whole screen --
+ * not FE_X, which sends x <= 90 and >= 390 to the edges on wide screens.
+ *
+ * Only real data: friends and invites from the launcher (friends.txt,
+ * gamecode_stubs.c), this player's profile, the connection's state. The
+ * server has no presence, so a friend's card says whether they are inviting
+ * you and nothing about being on line. LOBBIES, QUICK MATCH and PARTY have
+ * no system behind them yet (the next stages) and say so. */
 int  port_online_friend(int i, char *code, char *name, int *invite);
 int  port_online_friends_known(void);
 void port_online_tell(const char *what, const char *code);
 int  port_online_tell_pending(void);
 void PortNavTarget(float x, float y, float w, float h, int kind);
+void limeFillRectGrad(float x, float y, float w, float h, const float *c);
 extern float PortMouseX, PortMouseY;    /* game_main.c: the mouse, -1 off */
 extern int   limeScreenWidth;
 
 enum { OS_HOME, OS_FRIENDS, OS_INVITES, OS_LOBBIES, OS_QUICK, OS_PARTY, OS_N };
-int   PortOnlineSection;                /* online_ui.c reads it */
-#define PORT_FR_ROWS 6
-int          PortOnlineFriendsOn;       /* kept for online_ui.c: 0 */
+int   PortOnlineSection;
+int   PortOnlineFriendsOn;              /* kept for older readers: 0 */
 static char  PortOnlineSentTo[16], PortOnlineSentName[32];
 static float PortOnlineSent;
-/* the rows drawn this frame, for online_ui.c's badges: name, icon, where
- * (screen pixels, the badge's left edge and top) */
-int   PortOnlineFrShown;
-char  PortOnlineFrCode[PORT_FR_ROWS][16];
-char  PortOnlineFrName[PORT_FR_ROWS][32];
-float PortOnlineFrPx[PORT_FR_ROWS][2];
-/* this player's badge: x, y (pixels) and its size */
-float PortOnlineMePx[3];
+
+/* the portraits laid out this frame, for online_ui.c: whose ("" this
+ * player) and where (screen pixels: x, y, size; and the opacity) */
+#define PORT_PICS 16
+int   PortOnlinePicN;
+char  PortOnlinePicCode[PORT_PICS][16];
+float PortOnlinePicPx[PORT_PICS][4];
+int   PortOnlinePicKind[PORT_PICS];   /* 0 the icon, 1 the fighter alone */
 
 static float PortOnlineT;               /* seconds, for the pulses */
-static float PortOnlineFade = 1.0f;     /* the section's content, 0..1 */
+static float PortOnlineFade = 1.0f;     /* the section's entrance, 0..1 */
 static float PortOnlineBarX = -1.0f;    /* the red bar under the tabs */
+static char  PortOnlineSel[16];         /* FRIENDS: the friend chosen */
+static int   PortOnlinePage;            /* FRIENDS: the list's page */
+/* invites turned down here, hidden until the launcher's list drops them */
+static char  PortOnlineDropped[4][16];
+static float PortOnlineDroppedT[4];
 
 /* buttons' last answers (OnArea), by id */
+#define PORT_ROWS 6
 enum { OB_TAB0, OB_COPY = OB_TAB0 + OS_N, OB_BOX, OB_FIND, OB_GOFR, OB_GOINV,
-       OB_ROW0, OB_N = OB_ROW0 + PORT_FR_ROWS };
-static long PortOnlineWas[OB_N];
+       OB_UP, OB_DOWN, OB_DINV, OB_SOON,
+       OB_CARD0, OB_ACT0 = OB_CARD0 + PORT_ROWS, OB_ACT2 = OB_ACT0 + PORT_ROWS,
+       OB_N = OB_ACT2 + PORT_ROWS };
+static long  PortOnlineWas[OB_N];
+static float PortOnlineLit[OB_N];       /* each button's light, eased */
 
 static const char *PortFrTx(const char *es, const char *en)
 {
@@ -12235,20 +12254,22 @@ static float OnX(float v) { return v * FE_WidthScale; }
 static float OnY(float v) { return FE_Y(v); }
 static float OnW(float v) { return v * FE_WidthScale; }
 static float OnH(float v) { return v * FE_HeightScale; }
-/* the screen's width in those units: 480 on 3:2, more on wider */
 static float OnVW(void)
 {
     return FE_WidthScale > 0.0f ? (float)limeScreenWidth / FE_WidthScale : 480.0f;
 }
+static float OnClamp(float v) { return v < 0.0f ? 0.0f : v > 1.0f ? 1.0f : v; }
 
-/* The touch against a box, as TouchAreaWH does (2 down inside, 1 just let go
- * inside, 0 neither; the click on the release) but in these units. Returns 1
- * once, on the release that ends a press inside it. */
-static int OnArea(int id, float x, float y, float w, float h, int *hover)
+/* A box against the touch, as TouchAreaWH does but in these units: `state`
+ * gets 0 nothing, 1 under the mouse, 2 chosen with the keys or the pad, 3
+ * pressed. 1 once, on the release that ends a press inside it. */
+static int OnArea(int id, float x, float y, float w, float h, int *state)
 {
     float px = OnX(x), py = OnY(y), pw = OnW(w), ph = OnH(h);
     float tx = limeTouchScreenX[0], ty = limeTouchScreenY[0];
     long r = 0, was = PortOnlineWas[id];
+    int in_mouse = PortMouseX >= px && PortMouseX <= px + pw
+                   && PortMouseY >= py && PortMouseY <= py + ph;
 
     PortNavTarget(px, py, pw, ph, 0);
     if (tx != -1.0f) {
@@ -12260,9 +12281,9 @@ static int OnArea(int id, float x, float y, float w, float h, int *hover)
             r = 1;
     }
     PortOnlineWas[id] = r;
-    if (hover)
-        *hover = r == 2 || (!PortNavHover && PortMouseX >= px && PortMouseX <= px + pw
-                            && PortMouseY >= py && PortMouseY <= py + ph);
+    if (state)
+        *state = r == 2 ? (PortNavHover ? 2 : 3)
+               : !PortNavHover && in_mouse ? 1 : 0;
     if (r == 1 && was == 2) {
         if (Settings[3] != 0)
             limePlaySound(SFXHandle[0x68 / 4], MusicVol[Settings[3]] / 100.0f, 1.0f, 0);
@@ -12271,10 +12292,44 @@ static int OnArea(int id, float x, float y, float w, float h, int *hover)
     return 0;
 }
 
+/* ------------------------------------------------------------- drawing */
+
 static void OnFill(float x, float y, float w, float h,
                    float r, float g, float b, float a)
 {
-    limeFillRect(OnX(x), OnY(y), OnW(w), OnH(h), r, g, b, a);
+    if (w > 0.0f && h > 0.0f && a > 0.0f)
+        limeFillRect(OnX(x), OnY(y), OnW(w), OnH(h), r, g, b, a);
+}
+
+/* four corners: top left, top right, bottom right, bottom left */
+static void OnGrad4(float x, float y, float w, float h, const float *tl,
+                    const float *tr, const float *br, const float *bl, float a)
+{
+    float c[16];
+    int i;
+
+    if (w <= 0.0f || h <= 0.0f || a <= 0.0f)
+        return;
+    for (i = 0; i < 4; i++) {
+        c[i] = tl[i];
+        c[4 + i] = tr[i];
+        c[8 + i] = br[i];
+        c[12 + i] = bl[i];
+    }
+    c[3] *= a; c[7] *= a; c[11] *= a; c[15] *= a;
+    limeFillRectGrad(OnX(x), OnY(y), OnW(w), OnH(h), c);
+}
+
+static void OnVGrad(float x, float y, float w, float h, const float *top,
+                    const float *bot, float a)
+{
+    OnGrad4(x, y, w, h, top, top, bot, bot, a);
+}
+
+static void OnHGrad(float x, float y, float w, float h, const float *left,
+                    const float *right, float a)
+{
+    OnGrad4(x, y, w, h, left, right, right, left, a);
 }
 
 static void OnFrame(float x, float y, float w, float h, float t,
@@ -12286,22 +12341,72 @@ static void OnFrame(float x, float y, float w, float h, float t,
     OnFill(x + w - t, y + t, t, h - 2 * t, r, g, b, a);
 }
 
-/* A panel: the night showing through, the red along its top. */
-static void OnPanel(float x, float y, float w, float h, float a)
+/* a soft shadow below and right of a box */
+static void OnShadow(float x, float y, float w, float h, float a)
 {
-    OnFill(x, y, w, h, 0.01f, 0.02f, 0.07f, 0.66f * a);
-    OnFrame(x, y, w, h, 0.75f, 0.35f, 0.55f, 1.0f, 0.22f * a);
-    OnFill(x, y, w, 2.0f, 0.78f, 0.05f, 0.04f, 0.95f * a);
+    int i;
+    for (i = 1; i <= 4; i++) {
+        float e = (float)i * 1.5f;
+        OnFill(x - e + 2.0f, y - e + 3.0f, w + 2 * e, h + 2 * e, 0.0f, 0.0f, 0.0f, 0.07f * a);
+    }
 }
 
-/* Text: align 0 left, 1 centred, 2 right; `size` in the menu's units of the
- * font's scale (1 the title's); shrunk to `maxw` units when wider. */
+/* a glow round a box: rings fading out */
+static void OnGlow(float x, float y, float w, float h, float r, float g, float b,
+                   float a)
+{
+    int i;
+    for (i = 1; i <= 4; i++) {
+        float e = (float)i * 1.4f;
+        OnFrame(x - e, y - e, w + 2 * e, h + 2 * e, 1.4f, r, g, b, a * (0.30f - 0.06f * (float)i));
+    }
+}
+
+/* A panel: a diagonal gradient from navy to black that lets the cemetery
+ * through, light along the top edge, a darker bottom, a shadow; `red` puts
+ * the MK red along its top. */
+static void OnPanel(float x, float y, float w, float h, float a, int red)
+{
+    static const float tl[4] = { 0.07f, 0.12f, 0.27f, 0.80f };
+    static const float tr[4] = { 0.03f, 0.06f, 0.16f, 0.72f };
+    static const float br[4] = { 0.00f, 0.01f, 0.04f, 0.86f };
+    static const float bl[4] = { 0.01f, 0.03f, 0.10f, 0.82f };
+    static const float hi0[4] = { 0.50f, 0.66f, 1.00f, 0.20f };
+    static const float hi1[4] = { 0.50f, 0.66f, 1.00f, 0.00f };
+    static const float rl[4] = { 0.95f, 0.10f, 0.06f, 1.0f };
+    static const float rr[4] = { 0.45f, 0.02f, 0.02f, 0.0f };
+
+    OnShadow(x, y, w, h, a);
+    OnGrad4(x, y, w, h, tl, tr, br, bl, a);
+    OnVGrad(x, y, w, 14.0f, hi0, hi1, a);               /* the light on top */
+    OnFill(x, y, w, 0.8f, 0.62f, 0.76f, 1.0f, 0.45f * a);
+    OnFill(x, y + h - 1.5f, w, 1.5f, 0.0f, 0.0f, 0.0f, 0.70f * a);
+    OnFill(x, y + 0.8f, 0.8f, h - 2.3f, 0.35f, 0.50f, 0.95f, 0.22f * a);
+    OnFill(x + w - 0.8f, y + 0.8f, 0.8f, h - 2.3f, 0.10f, 0.16f, 0.40f, 0.30f * a);
+    if (red)
+        OnHGrad(x, y, w * 0.6f, 2.0f, rl, rr, a);
+}
+
+/* a discreet line inside a panel, bright at the left */
+static void OnRule(float x, float y, float w, float a)
+{
+    static const float l[4] = { 0.45f, 0.60f, 1.00f, 0.40f };
+    static const float r[4] = { 0.45f, 0.60f, 1.00f, 0.00f };
+    OnHGrad(x, y, w, 0.8f, l, r, a);
+}
+
+/* ---------------------------------------------------------------- text */
+
+/* Text: align 0 left, 1 centred, 2 right; `size` the font's scale (1 the
+ * title's); shrunk to `maxw` units when wider. */
 static void OnText(const char *s, float x, float y, int align, float size,
                    float maxw, const float *rgb, float a)
 {
     float c[4] = { 1.0f, 1.0f, 1.0f, a }, k = FE_WidthScale * size;
     char *u = PortUC(s);
 
+    if (a <= 0.0f)
+        return;
     if (rgb) {
         c[0] = rgb[0];
         c[1] = rgb[1];
@@ -12315,102 +12420,385 @@ static void OnText(const char *s, float x, float y, int align, float size,
     limeDrawFONT(&GameFont, u, OnX(x), OnY(y), align, k, c);
 }
 
-static const float OnWhite[3] = { 1.0f, 1.0f, 1.0f };
-static const float OnDim[3]   = { 0.62f, 0.70f, 0.86f };
-static const float OnGold[3]  = { 1.0f, 0.85f, 0.25f };
-static const float OnRed[3]   = { 1.0f, 0.30f, 0.25f };
-
-/* A button: dark, or red for the screen's main one; lit under the mouse or
- * the pad's highlight. 1 when it was pressed. */
-static int OnButton(int id, const char *text, float x, float y, float w,
-                    float h, int primary, float a)
+/* a player's name as the cards show it: upper case */
+static const char *OnName(const char *s)
 {
-    int hov, hit = OnArea(id, x, y, w, h, &hov);
-    float p = 0.5f + 0.5f * sinf(PortOnlineT * 4.0f);
+    static char b[4][40];
+    static int k;
+    char *o = b[k = (k + 1) & 3];
+    int i;
 
-    if (primary)
-        OnFill(x, y, w, h, hov ? 0.86f : 0.58f, hov ? 0.10f : 0.04f, 0.04f,
-               (hov ? 0.92f : 0.80f) * a);
+    for (i = 0; s[i] && i < 39; i++)
+        o[i] = s[i] >= 'a' && s[i] <= 'z' ? (char)(s[i] - 32) : s[i];
+    o[i] = 0;
+    return o;
+}
+
+static const float OnWhite[3] = { 1.0f, 1.0f, 1.0f };
+static const float OnPale[3]  = { 0.80f, 0.87f, 1.0f };
+static const float OnDim[3]   = { 0.52f, 0.62f, 0.82f };
+static const float OnGold[3]  = { 1.0f, 0.85f, 0.30f };
+static const float OnRed[3]   = { 1.0f, 0.32f, 0.26f };
+static const float OnGreen[3] = { 0.40f, 1.0f, 0.55f };
+
+/* a section's heading: its title, a count after it, the line under it */
+static void OnHeading(const char *title, int count, float x, float y, float w, float a)
+{
+    char line[64];
+
+    if (count >= 0)
+        snprintf(line, sizeof line, "%s  (%d)", title, count);
     else
-        OnFill(x, y, w, h, hov ? 0.30f : 0.06f, hov ? 0.06f : 0.08f,
-               hov ? 0.06f : 0.16f, (hov ? 0.85f : 0.72f) * a);
-    if (hov)
-        OnFrame(x, y, w, h, 1.0f, 1.0f, 0.35f + 0.3f * p, 0.25f, 0.9f * a);
+        snprintf(line, sizeof line, "%s", title);
+    OnText(line, x, y, 0, 0.62f, w, OnPale, a);
+    OnRule(x, y + 17.0f, w, a);
+}
+
+/* a state: a dot and its words */
+static void OnStatus(const char *s, const float *rgb, float x, float y, float maxw,
+                     float a, int pulse)
+{
+    float p = pulse ? 0.55f + 0.45f * sinf(PortOnlineT * 5.0f) : 1.0f;
+
+    OnFill(x - 0.8f, y + 1.2f, 6.6f, 6.6f, rgb[0] * 0.3f, rgb[1] * 0.3f, rgb[2] * 0.3f, 0.6f * a * p);
+    OnFill(x, y + 2.0f, 5.0f, 5.0f, rgb[0], rgb[1], rgb[2], a * p);
+    OnText(s, x + 9.0f, y, 0, 0.40f, maxw - 9.0f, rgb, a);
+}
+
+/* ------------------------------------------------------------- buttons */
+
+enum { BT_NORMAL, BT_MAIN, BT_OFF };
+
+/* A button. Normal: navy; MAIN: red, the screen's main action; OFF: grey,
+ * not pressable. Under the mouse it lights in blue, chosen with the keys or
+ * the pad it is framed in red, pressed it sinks. 1 when it was pressed. */
+static int OnButton(int id, const char *text, float x, float y, float w,
+                    float h, int kind, float a)
+{
+    static const float n0[4] = { 0.13f, 0.20f, 0.40f, 0.88f }, n1[4] = { 0.03f, 0.05f, 0.13f, 0.92f };
+    static const float h0[4] = { 0.22f, 0.34f, 0.66f, 0.92f }, h1[4] = { 0.05f, 0.10f, 0.26f, 0.94f };
+    static const float m0[4] = { 0.80f, 0.12f, 0.08f, 0.92f }, m1[4] = { 0.36f, 0.02f, 0.02f, 0.94f };
+    static const float mh0[4] = { 0.98f, 0.24f, 0.16f, 0.95f }, mh1[4] = { 0.50f, 0.04f, 0.03f, 0.96f };
+    static const float o0[4] = { 0.20f, 0.22f, 0.26f, 0.55f }, o1[4] = { 0.08f, 0.09f, 0.11f, 0.60f };
+    int st = 0, hit = 0;
+    float *lit = &PortOnlineLit[id], want, dy = 0.0f;
+
+    if (kind != BT_OFF)
+        hit = OnArea(id, x, y, w, h, &st);
+    want = st ? 1.0f : 0.0f;
+    *lit += (want - *lit) * 0.35f / limeFPSScaleFactor;
+
+    OnShadow(x, y, w, h, 0.6f * a);
+    if (kind == BT_OFF) {
+        OnVGrad(x, y, w, h, o0, o1, a);
+        OnFrame(x, y, w, h, 0.8f, 0.45f, 0.48f, 0.55f, 0.35f * a);
+        OnText(text, x + w * 0.5f, y + (h - 14.0f) * 0.5f, 1, 0.56f, w - 10.0f, OnDim, 0.55f * a);
+        return 0;
+    }
+    if (st == 3) {                      /* pressed: sunk, the light below */
+        OnVGrad(x, y, w, h, kind == BT_MAIN ? m1 : n1, kind == BT_MAIN ? m0 : n0, a);
+        dy = 0.8f;
+    } else {
+        OnVGrad(x, y, w, h, kind == BT_MAIN ? m0 : n0, kind == BT_MAIN ? m1 : n1, a);
+        if (*lit > 0.01f)
+            OnVGrad(x, y, w, h, kind == BT_MAIN ? mh0 : h0, kind == BT_MAIN ? mh1 : h1, *lit * a);
+    }
+    OnFill(x + 1.0f, y + 0.8f, w - 2.0f, 0.8f, 1.0f, 1.0f, 1.0f, (0.22f + 0.2f * *lit) * a);
+    OnFill(x, y + h - 1.0f, w, 1.0f, 0.0f, 0.0f, 0.0f, 0.5f * a);
+    if (st == 2) {                      /* the pad's or the keys' choice */
+        float p = 0.7f + 0.3f * sinf(PortOnlineT * 6.0f);
+        OnGlow(x, y, w, h, 1.0f, 0.18f, 0.12f, a * p);
+        OnFrame(x, y, w, h, 1.2f, 1.0f, 0.30f, 0.22f, a);
+    } else if (st == 1)
+        OnGlow(x, y, w, h, 0.35f, 0.55f, 1.0f, *lit * a);
     else
-        OnFrame(x, y, w, h, 0.75f, primary ? 1.0f : 0.35f,
-                primary ? 0.3f : 0.55f, primary ? 0.25f : 1.0f, 0.45f * a);
-    OnText(text, x + w * 0.5f, y + (h - 14.0f) * 0.5f, 1, 0.62f, w - 8.0f,
+        OnFrame(x, y, w, h, 0.8f, kind == BT_MAIN ? 1.0f : 0.40f,
+                kind == BT_MAIN ? 0.40f : 0.55f, kind == BT_MAIN ? 0.30f : 1.0f,
+                (0.45f + 0.4f * *lit) * a);
+    OnText(text, x + w * 0.5f, y + (h - 14.0f) * 0.5f + dy, 1, 0.58f, w - 10.0f,
            OnWhite, a);
     return hit;
 }
 
-static void PortOnlineFind(void);
+/* ----------------------------------------------------------- portraits */
 
-/* The friends' and the invites' rows: `invites` 1 for the invites (JOIN),
- * 0 for the friends (INVITE). How many rows were drawn. */
-static int PortOnlineRows(int invites, float x, float y, float w, int searching,
-                          float a)
+/* A portrait, `size` square: its frame here, the picture by online_ui.c.
+ * `code` "" for this player. `glow` 0 none, 1 blue, 2 red. */
+static void OnPortrait(const char *code, float x, float y, float size, int glow, float a)
 {
-    char code[16], name[32];
-    int i, n = 0, invite;
+    static const float b0[4] = { 0.10f, 0.16f, 0.34f, 1.0f }, b1[4] = { 0.01f, 0.02f, 0.06f, 1.0f };
+    int n = PortOnlinePicN;
 
-    for (i = 0; n < PORT_FR_ROWS && port_online_friend(i, code, name, &invite); i++) {
-        float ry = y + (float)n * 30.0f;
-        int k = PortOnlineFrShown;
-        const char *label;
+    if (glow)
+        OnGlow(x, y, size, size, glow == 2 ? 1.0f : 0.35f, glow == 2 ? 0.18f : 0.55f,
+               glow == 2 ? 0.12f : 1.0f, a);
+    OnShadow(x, y, size, size, a);
+    OnVGrad(x - 1.6f, y - 1.6f, size + 3.2f, size + 3.2f, b0, b1, a);
+    OnFrame(x - 1.6f, y - 1.6f, size + 3.2f, size + 3.2f, 0.8f,
+            glow == 2 ? 1.0f : 0.55f, glow == 2 ? 0.35f : 0.68f, glow == 2 ? 0.28f : 1.0f,
+            0.75f * a);
+    if (n >= PORT_PICS)
+        return;
+    snprintf(PortOnlinePicCode[n], sizeof PortOnlinePicCode[n], "%s", code ? code : "");
+    PortOnlinePicPx[n][0] = OnX(x);
+    PortOnlinePicPx[n][1] = OnY(y);
+    PortOnlinePicPx[n][2] = OnW(size);
+    PortOnlinePicPx[n][3] = a;
+    PortOnlinePicKind[n] = 0;
+    PortOnlinePicN = n + 1;
+}
 
-        if (invite != invites || k >= PORT_FR_ROWS)
-            continue;
-        OnFill(x, ry, w, 26.0f, 0.02f, 0.04f, 0.12f, 0.55f * a);
-        snprintf(PortOnlineFrCode[k], sizeof PortOnlineFrCode[k], "%s", code);
-        snprintf(PortOnlineFrName[k], sizeof PortOnlineFrName[k], "%s", name[0] ? name : code);
-        PortOnlineFrPx[k][0] = OnX(x + 6.0f);
-        PortOnlineFrPx[k][1] = OnY(ry + 2.0f);
-        PortOnlineFrShown = k + 1;
-        label = invite ? PortFrTx("UNIRSE", "JOIN")
-              : PortOnlineSent > 0.0f && !strcmp(PortOnlineSentTo, code)
-                  ? PortFrTx("ENVIADA", "SENT") : PortFrTx("INVITAR", "INVITE");
-        if (OnButton(OB_ROW0 + k, label, x + w - 104.0f, ry + 2.0f, 98.0f, 22.0f,
-                     invite, a) && !searching) {
-            if (invite) {
-                port_online_tell("join", code);
-                strcpy(PortOnlineCode, code);
-                PortOnlineFind();
-                PortOnlineSection = OS_HOME;
-            } else {
-                port_online_tell("invite", code);
-                strcpy(PortOnlineSentTo, code);
-                snprintf(PortOnlineSentName, sizeof PortOnlineSentName, "%s",
-                         name[0] ? name : code);
-                PortOnlineSent = 600.0f;
-            }
+/* The fighter alone -- the VERSUS art with its transparency -- `size`
+ * square at (x, y): online_ui.c draws it, over everything. */
+static void OnArt(const char *code, float x, float y, float size, float a)
+{
+    int n = PortOnlinePicN;
+
+    if (n >= PORT_PICS)
+        return;
+    snprintf(PortOnlinePicCode[n], sizeof PortOnlinePicCode[n], "%s", code ? code : "");
+    PortOnlinePicPx[n][0] = OnX(x);
+    PortOnlinePicPx[n][1] = OnY(y);
+    PortOnlinePicPx[n][2] = OnW(size);
+    PortOnlinePicPx[n][3] = a;
+    PortOnlinePicKind[n] = 1;
+    PortOnlinePicN = n + 1;
+}
+
+int port_online_friend_look(const char *code, int *icon, unsigned *color, int *dark,
+                            unsigned *color2, int *angle, int *alt);
+
+/* the player's look: their profile's gradient (struct profile's colour,
+ * dark, color2 and angle), "" this player */
+static void OnLook(const char *code, unsigned *color, int *dark, unsigned *color2, int *angle)
+{
+    *color = 0x203c90;
+    *dark = 1;
+    *color2 = 0;
+    *angle = -1;
+    if (!code || !code[0]) {
+        const struct profile *me = prof_get();
+        if (me) {
+            *color = me->color;
+            *dark = me->dark;
+            *color2 = me->color2;
+            *angle = me->angle;
         }
+    } else {
+        int icon, alt;
+        if (!port_online_friend_look(code, &icon, color, dark, color2, angle, &alt)) {
+            *color = 0x203c90;
+            *dark = 1;
+            *color2 = 0;
+            *angle = -1;
+        }
+    }
+}
+
+/* The profile's gradient over a box, exactly as the profile's icon draws its
+ * sky (profiles.c prof_icon_rgba, the launcher's profileIcon.js): a custom
+ * one with an angle runs from the colour to color2 along CSS's gradient line,
+ * corner to corner; the others go down from a top to a middle to a bottom
+ * colour. Both are linear between those points, so colours at the corners
+ * (two bands for the second) give the very same picture. */
+static void OnProfileSky(const char *code, float x, float y, float w, float h, float a)
+{
+    unsigned color, color2;
+    int dark, angle, i;
+    float c[3], c2[3], top[4], mid[4], bot[4];
+
+    OnLook(code, &color, &dark, &color2, &angle);
+    c[0] = (float)((color >> 16) & 255) / 255.0f;
+    c[1] = (float)((color >> 8) & 255) / 255.0f;
+    c[2] = (float)(color & 255) / 255.0f;
+    c2[0] = (float)((color2 >> 16) & 255) / 255.0f;
+    c2[1] = (float)((color2 >> 8) & 255) / 255.0f;
+    c2[2] = (float)(color2 & 255) / 255.0f;
+    if (dark == 2 && angle >= 0) {
+        float r = (float)(angle % 360) * 3.14159265f / 180.0f;
+        float W = OnW(w), H = OnH(h), ldx = sinf(r), ldy = -cosf(r);
+        float half = (fabsf(W * ldx) + fabsf(H * ldy)) * 0.5f;
+        static const float sx[4] = { -0.5f, 0.5f, 0.5f, -0.5f }, sy[4] = { -0.5f, -0.5f, 0.5f, 0.5f };
+        float k[4][4];
+
+        if (half <= 0.0f)
+            half = 1.0f;
+        for (i = 0; i < 4; i++) {
+            float u = OnClamp((sx[i] * W * ldx + sy[i] * H * ldy) / (2.0f * half) + 0.5f);
+            int j;
+            for (j = 0; j < 3; j++)
+                k[i][j] = c[j] + (c2[j] - c[j]) * u;
+            k[i][3] = 1.0f;
+        }
+        OnGrad4(x, y, w, h, k[0], k[1], k[2], k[3], a);
+        return;
+    }
+    for (i = 0; i < 3; i++) {
+        if (dark == 2) {
+            top[i] = c[i] + (1.0f - c[i]) * 0.2f;
+            mid[i] = c[i] + (c2[i] - c[i]) * 0.5f;
+            bot[i] = c2[i];
+        } else if (dark) {
+            top[i] = c[i] + (1.0f - c[i]) * 0.15f;
+            mid[i] = c[i] + (c2[i] - c[i]) * 0.45f;
+            bot[i] = c[i] + (c2[i] - c[i]) * 0.92f;
+        } else {
+            top[i] = c[i] + (c2[i] - c[i]) * 0.55f;
+            mid[i] = c[i];
+            bot[i] = c[i] * 0.7f;
+        }
+    }
+    top[3] = mid[3] = bot[3] = 1.0f;
+    OnVGrad(x, y, w, h * 0.5f, top, mid, a);
+    OnVGrad(x, y + h * 0.5f, w, h * 0.5f, mid, bot, a);
+}
+
+/* A Player Banner's band: the player's own gradient over all of it, the
+ * thin light of its top edge, the dark bottom edge, three strokes at the
+ * right end; and the fighter, `art` high, standing on the band's bottom and
+ * out of its left end and top. `st` the touch's state over it (OnArea),
+ * `sel` the chosen one's light. */
+static void OnBand(const char *code, float x, float y, float w, float h, float art,
+                   float sel, int st, float a)
+{
+    static const float rs0[4] = { 0.85f, 0.08f, 0.05f, 0.55f }, rs1[4] = { 0.85f, 0.08f, 0.05f, 0.0f };
+    int i;
+
+    OnShadow(x, y, w, h, a);
+    OnProfileSky(code, x, y, w, h, a);
+    if (sel > 0.01f)
+        OnFill(x, y, 3.0f, h, 1.0f, 0.22f, 0.15f, sel * a);
+    OnFill(x, y, w, 0.8f, 1.0f, 1.0f, 1.0f, 0.40f * a);
+    OnFill(x, y + h - 1.2f, w, 1.2f, 0.0f, 0.0f, 0.0f, 0.75f * a);
+    for (i = 0; i < 3; i++) {            /* the strokes, as the arcade's plates */
+        float sx = x + w - 10.0f - (float)i * 5.0f;
+        OnVGrad(sx, y + 4.0f + (float)i * 2.0f, 1.6f, h - 8.0f - (float)i * 4.0f,
+                rs0, rs1, a * (0.9f - 0.25f * (float)i));
+    }
+    if (st == 2) {
+        OnGlow(x, y, w, h, 1.0f, 0.18f, 0.12f, a);
+        OnFrame(x, y, w, h, 1.0f, 1.0f, 0.30f, 0.22f, a);
+    } else if (st == 1)
+        OnFrame(x, y, w, h, 1.0f, 0.80f, 0.88f, 1.0f, 0.9f * a);
+    else if (sel > 0.5f)
+        OnFrame(x, y, w, h, 1.0f, 1.0f, 0.30f, 0.22f, 0.8f * sel * a);
+    else
+        OnFrame(x, y, w, h, 0.6f, 0.0f, 0.0f, 0.0f, 0.5f * a);
+    OnArt(code, x - art * 0.08f, y + h - art, art, a);
+}
+
+/* where a banner's words start: past the fighter */
+static float OnBandText(float art) { return art * 0.80f; }
+
+/* A player's banner in a list, `h` high: the fighter standing out of it,
+ * the name, the state. `sel` the chosen one's light (0..1). 1 when the
+ * banner itself was pressed. */
+static int OnCard(int id, const char *code, const char *name, const char *state,
+                  const float *state_rgb, int pulse, float x, float y, float w,
+                  float h, float sel, float a)
+{
+    int st = 0, hit = OnArea(id, x, y, w, h, &st);
+    float *lit = &PortOnlineLit[id], art = h * 1.30f, tx = x + OnBandText(art);
+
+    *lit += ((st ? 1.0f : 0.0f) - *lit) * 0.35f / limeFPSScaleFactor;
+    OnBand(code, x, y, w, h, art, sel, st, a);
+    OnText(OnName(name), tx, y + (state ? 3.0f : (h - 15.0f) * 0.5f), 0, 0.70f,
+           w - (tx - x) - 100.0f, OnWhite, a);
+    if (state)
+        OnStatus(state, state_rgb, tx, y + h - 13.0f, w - (tx - x) - 100.0f, a, pulse);
+    return hit;
+}
+
+/* A line of the game's own text (GameText id), shrunk to `maxw` units. */
+static void OnTextG(long id, float x, float y, float size, float maxw, const float *rgb, float a)
+{
+    float c[4] = { rgb[0], rgb[1], rgb[2], a }, k = FE_WidthScale * size;
+    const char *u = GameText(id);
+    float w = limeGetStringWidth(&GameFont, u) * k;
+
+    if (maxw > 0.0f && w > OnW(maxw) && w > 0.0f)
+        k *= OnW(maxw) / w;
+    limeDrawFONT(&GameFont, u, OnX(x), OnY(y), 0, k, c);
+}
+
+/* ------------------------------------------------------------- the data */
+
+static int PortOnlineIsDropped(const char *code)
+{
+    int i;
+    for (i = 0; i < 4; i++)
+        if (PortOnlineDroppedT[i] > 0.0f && !strcmp(PortOnlineDropped[i], code))
+            return 1;
+    return 0;
+}
+
+/* friends.txt's friends (invite 0) or invites (1), the dropped ones left out */
+static int PortOnlineList(int invites, char code[][16], char name[][32], int max)
+{
+    char c[16], nm[32];
+    int i, n = 0, inv;
+
+    for (i = 0; n < max && port_online_friend(i, c, nm, &inv); i++) {
+        if (inv != invites || (invites && PortOnlineIsDropped(c)))
+            continue;
+        snprintf(code[n], 16, "%s", c);
+        snprintf(name[n], 32, "%s", nm[0] ? nm : c);
         n++;
     }
     return n;
 }
 
-/* How many friends and invites friends.txt has. */
-static void PortOnlineCount(int *friends, int *invites)
+/* whether this friend is inviting you now */
+static int PortOnlineInviting(const char *code)
 {
-    char code[16], name[32];
-    int i, invite;
-
-    *friends = *invites = 0;
-    for (i = 0; port_online_friend(i, code, name, &invite); i++)
-        ++*(invite ? invites : friends);
+    char c[24][16], nm[24][32];
+    int i, n = PortOnlineList(1, c, nm, 24);
+    for (i = 0; i < n; i++)
+        if (!strcmp(c[i], code))
+            return 1;
+    return 0;
 }
 
-/* A section still to come: its name and what it will be. */
-static void PortOnlineSoon(const char *title, const char *line1,
-                           const char *line2, float x, float w, float a)
+static void PortOnlineFind(void);
+static int  PortOnlineListening;
+
+static void PortOnlineInvite(const char *code, const char *name)
 {
-    OnPanel(x, 66.0f, w, 210.0f, a);
-    OnText(title, x + 12.0f, 74.0f, 0, 0.8f, w - 24.0f, OnWhite, a);
-    OnText(PortFrTx("PR\xc3\x93XIMAMENTE", "COMING SOON"), x + w * 0.5f, 130.0f, 1,
-           0.9f, w - 24.0f, OnRed, a);
-    OnText(line1, x + w * 0.5f, 166.0f, 1, 0.5f, w - 24.0f, OnDim, a);
-    OnText(line2, x + w * 0.5f, 184.0f, 1, 0.5f, w - 24.0f, OnDim, a);
+    port_online_tell("invite", code);
+    snprintf(PortOnlineSentTo, sizeof PortOnlineSentTo, "%s", code);
+    snprintf(PortOnlineSentName, sizeof PortOnlineSentName, "%s", name);
+    PortOnlineSent = 600.0f;
+}
+
+static void PortOnlineJoin(const char *code)
+{
+    port_online_tell("join", code);
+    strcpy(PortOnlineCode, code);
+    PortOnlineFind();
+    PortOnlineSection = OS_HOME;
+    PortOnlineFade = 0.0f;
+}
+
+/* the launcher drops the invite (main.js, "drop CODE"); hidden here now */
+static void PortOnlineDecline(const char *code)
+{
+    int i, k = 0;
+
+    port_online_tell("drop", code);
+    for (i = 1; i < 4; i++)
+        if (PortOnlineDroppedT[i] < PortOnlineDroppedT[k])
+            k = i;
+    snprintf(PortOnlineDropped[k], sizeof PortOnlineDropped[k], "%s", code);
+    PortOnlineDroppedT[k] = 1800.0f;    /* thirty seconds */
+}
+
+/* a card's entrance: in turn, sliding in from the left */
+static float OnEnter(int i, float *dx)
+{
+    float t = OnClamp(PortOnlineFade * 1.8f - (float)i * 0.14f);
+    t = 1.0f - (1.0f - t) * (1.0f - t);
+    *dx = (1.0f - t) * -16.0f;
+    return t;
 }
 
 static void PortOnlineFind(void)
@@ -12421,18 +12809,389 @@ static void PortOnlineFind(void)
     }
 }
 
+/* -------------------------------------------------------------- sections */
+
+/* the game's own statistics (statsdata, the STATS screen's): the long at i */
+static long OnStat(int i)
+{
+    return ((const long *)Stats)[i];
+}
+
+static void PortOnlineHome(float cx, float cw, float a, int searching, int nfr, int ninv)
+{
+    const struct profile *me = prof_get();
+    float art = 108.0f, bx0 = cx, bw0 = cw, by = 64.0f, bh = 98.0f;
+    float tx = bx0 + OnBandText(art), sx = cx + cw * 0.52f, sw = cw - (sx - cx) - 14.0f;
+    float fw = cw * 0.60f, rx = cx + fw + 8.0f, rw = cw - fw - 8.0f;
+    float bx = cx + 14.0f, bw = fw - 28.0f;
+    int st, net = mpnet_internet(), i, fav = -1;
+    long best = 0;
+    char line[64];
+
+    /* ---- the player's banner: the fighter, the name, the statistics ---- */
+    OnBand("", bx0, by, bw0, bh, art, 0.0f, 0, a);
+    OnText(OnName(me ? me->name : ""), tx, by + 7.0f, 0, 1.05f, sx - tx - 10.0f, OnWhite, a);
+    {
+        static const float r0[4] = { 1.0f, 0.18f, 0.10f, 0.95f }, r1[4] = { 1.0f, 0.18f, 0.10f, 0.0f };
+        OnHGrad(tx, by + 29.0f, (sx - tx) * 0.8f, 1.2f, r0, r1, a);
+    }
+    if (net == 2)
+        OnStatus(PortFrTx("EN L\xc3\x8dNEA", "ONLINE"), OnGreen, tx, by + 34.0f, 120.0f, a, 0);
+    else
+        OnStatus(PortFrTx("SOLO RED LOCAL", "LOCAL NETWORK ONLY"), OnDim, tx, by + 34.0f, 140.0f,
+                 a, net == 1);
+    OnText(PortFrTx("ID DE JUGADOR", "PLAYER ID"), tx, by + 52.0f, 0, 0.36f, 120.0f, OnDim, a);
+    OnText(me ? me->id : "", tx, by + 62.0f, 0, 0.62f, sx - tx - 100.0f, OnGold, a);
+    if (OnButton(OB_COPY, PortOnlineWord(PortOnlineCopied > 0.0f ? OT_COPIED : OT_COPY),
+                 tx, by + 76.0f, 84.0f, 17.0f, BT_NORMAL, a) && me) {
+        plat_clipboard_set(me->id);
+        PortOnlineCopied = 120.0f;
+    }
+    if (PortOnlineCopied > 0.0f)
+        PortOnlineCopied -= 1.0f / limeFPSScaleFactor;
+
+    /* the statistics this game keeps (the STATS screen's, its own words);
+     * this computer's save, the account's when logged in */
+    {
+        static const int rows[6] = { 3, 4, 0, 5, 6, 11 };
+        float colw = sw / 3.0f;
+
+        OnFill(sx - 8.0f, by + 8.0f, 0.8f, bh - 16.0f, 0.55f, 0.70f, 1.0f, 0.25f * a);
+        OnText(PortFrTx("ESTAD\xc3\x8dSTICAS", "STATISTICS"), sx, by + 6.0f, 0, 0.42f, sw, OnPale, a);
+        for (i = 15; i < 15 + 23; i++)          /* the favourite, as FE_Task_Stats finds it */
+            if (OnStat(i) > best) {
+                best = OnStat(i);
+                fav = i - 15;
+            }
+        for (i = 0; i < 6; i++) {
+            float x = sx + colw * (float)(i % 3), y = by + 24.0f + (float)(i / 3) * 34.0f;
+            int r = rows[i];
+
+            OnTextG(StatsNames[r], x, y, 0.30f, colw - 6.0f, OnDim, a);
+            if (r == 11)
+                OnText(fav >= 0 ? CharacterNames[fav] : "-", x, y + 11.0f, 0, 0.56f, colw - 6.0f,
+                       OnWhite, a);
+            else {
+                snprintf(line, sizeof line, "%ld", OnStat(r));
+                OnText(line, x, y + 10.0f, 0, 0.72f, colw - 6.0f, OnWhite, a);
+            }
+        }
+    }
+
+    /* ---- FIND BY CODE ---- */
+    OnPanel(cx, 170.0f, fw, 106.0f, a, 1);
+    OnHeading(PortFrTx("BUSCAR POR C\xc3\x93" "DIGO", "FIND BY CODE"), -1, cx + 10.0f, 175.0f,
+              fw - 20.0f, a);
+    OnText(PortOnlineWord(OT_OTHER), cx + fw * 0.5f, 195.0f, 1, 0.40f, fw - 20.0f, OnDim, a);
+    if (OnArea(OB_BOX, bx, 206.0f, bw, 26.0f, &st) && !searching)
+        PortOnlineListening = 1;
+    PortOnlineBoxActive = PortOnlineListening && !searching;
+    {
+        static const float k0[4] = { 0.0f, 0.0f, 0.02f, 0.92f }, k1[4] = { 0.04f, 0.07f, 0.16f, 0.88f };
+        OnVGrad(bx, 206.0f, bw, 26.0f, k0, k1, a);
+    }
+    if (PortOnlineBoxActive) {
+        OnGlow(bx, 206.0f, bw, 26.0f, 1.0f, 0.18f, 0.12f, a);
+        OnFrame(bx, 206.0f, bw, 26.0f, 1.2f, 1.0f, 0.30f, 0.22f, a);
+    } else if (st)
+        OnFrame(bx, 206.0f, bw, 26.0f, 1.2f, 0.55f, 0.72f, 1.0f, a);
+    else
+        OnFrame(bx, 206.0f, bw, 26.0f, 0.8f, 0.40f, 0.55f, 1.0f, 0.55f * a);
+    {
+        char ch[8];
+        int n;
+
+        while ((n = plat_text_take(ch, sizeof ch)) > 0) {
+            if (ch[0] == 22) {              /* Ctrl+V, listening or not */
+                PortOnlinePaste();
+                PortOnlineListening = !searching;
+            } else if (!PortOnlineBoxActive) {
+                continue;
+            } else if (ch[0] == 8) {        /* Backspace */
+                size_t k = strlen(PortOnlineCode);
+                if (k > 0)
+                    PortOnlineCode[--k] = 0;
+                if (k > 0 && PortOnlineCode[k - 1] == '-')
+                    PortOnlineCode[--k] = 0;
+            } else if (ch[0] == 13) {       /* Enter */
+                PortOnlineFind();
+            } else if (ch[0] == 27) {       /* Esc: the keys move again */
+                PortOnlineListening = 0;
+            } else if (n == 1) {
+                PortOnlineType((unsigned char)ch[0]);
+            }
+        }
+    }
+    PortOnlineBlink += 0.025f / limeFPSScaleFactor;
+    if (PortOnlineBlink > 2.0f)
+        PortOnlineBlink -= 2.0f;
+    snprintf(line, sizeof line, "%s%s", PortOnlineCode,
+             PortOnlineBoxActive && PortOnlineBlink > 1.0f && strlen(PortOnlineCode) < 14 ? "_" : "");
+    OnText(line, cx + fw * 0.5f, 210.0f, 1, 0.92f, bw - 8.0f, OnWhite, a);
+    OnText(PortOnlineBoxActive ? PortOnlineWord(OT_HINT)
+           : PortFrTx("HAZ CLIC EN LA CAJA PARA ESCRIBIR, O CTRL+V",
+                      "CLICK THE BOX TO TYPE, OR CTRL+V"),
+           cx + fw * 0.5f, 236.0f, 1, 0.36f, fw - 20.0f, OnDim, a);
+    if (OnButton(OB_FIND, PortOnlineWord(OT_FIND), cx + fw * 0.5f - 85.0f, 248.0f, 170.0f,
+                 23.0f, searching || strlen(PortOnlineCode) != 14 ? BT_OFF : BT_MAIN, a))
+        PortOnlineFind();
+
+    /* ---- the state of things ---- */
+    OnPanel(rx, 170.0f, rw, 106.0f, a, 0);
+    OnHeading(PortFrTx("ESTADO", "STATUS"), -1, rx + 10.0f, 175.0f, rw - 20.0f, a);
+    {
+        static const int net_text[4] = { OT_NET_OFF, OT_NET_WAIT, OT_NET_ON, OT_NET_FAIL };
+        if (net >= 0 && net < 4)
+            OnStatus(PortOnlineWord(net_text[net]), net == 2 ? OnGreen : net == 1 ? OnGold : OnDim,
+                     rx + 12.0f, 196.0f, rw - 24.0f, a, net == 1);
+    }
+    snprintf(line, sizeof line, "%s  %d", PortFrTx("AMIGOS", "FRIENDS"), nfr);
+    if (OnButton(OB_GOFR, line, rx + 12.0f, 216.0f, rw - 24.0f, 22.0f, BT_NORMAL, a)) {
+        PortOnlineSection = OS_FRIENDS;
+        PortOnlineFade = 0.0f;
+    }
+    snprintf(line, sizeof line, "%s  %d", PortFrTx("INVITACIONES", "INVITATIONS"), ninv);
+    if (OnButton(OB_GOINV, line, rx + 12.0f, 246.0f, rw - 24.0f, 22.0f,
+                 ninv > 0 ? BT_MAIN : BT_NORMAL, a)) {
+        PortOnlineSection = OS_INVITES;
+        PortOnlineFade = 0.0f;
+    }
+}
+
+/* no account, or none to show: what to do instead */
+static void PortOnlineEmpty(const char *title, const char *hint, float x, float y, float w,
+                            float a)
+{
+    OnText(title, x + w * 0.5f, y, 1, 0.62f, w - 20.0f, OnPale, a);
+    OnText(hint, x + w * 0.5f, y + 20.0f, 1, 0.42f, w - 20.0f, OnDim, a);
+}
+
+static void PortOnlineFriends(float cx, float cw, float a, int searching)
+{
+    static char code[24][16], name[24][32];
+    static float sel_t[PORT_ROWS];
+    float lw = cw * 0.60f, rx = cx + lw + 8.0f, rw = cw - lw - 8.0f;
+    int n = PortOnlineList(0, code, name, 24), per = 4, i, pages, s = -1;
+
+    OnPanel(cx, 64.0f, lw, 212.0f, a, 1);
+    OnHeading(PortFrTx("AMIGOS", "FRIENDS"), n, cx + 10.0f, 69.0f, lw - 20.0f, a);
+    if (!n) {
+        PortOnlineEmpty(port_online_friends_known() ? PortFrTx("A\xc3\x9aN NO TIENES AMIGOS", "NO FRIENDS YET")
+                        : PortFrTx("SIN CUENTA", "NO ACCOUNT"),
+                        port_online_friends_known()
+                        ? PortFrTx("A\xc3\x91\xc3\x81" "DELOS EN EL LAUNCHER: PERFIL > AMIGOS",
+                                   "ADD THEM IN THE LAUNCHER: PROFILE > FRIENDS")
+                        : PortFrTx("INICIA SESI\xc3\x93N EN EL LAUNCHER: PERFIL > CUENTA",
+                                   "LOG IN IN THE LAUNCHER: PROFILE > ACCOUNT"),
+                        cx, 150.0f, lw, a);
+        OnPanel(rx, 64.0f, rw, 212.0f, a, 0);
+        OnHeading(PortFrTx("PERFIL DEL AMIGO", "FRIEND'S PROFILE"), -1, rx + 10.0f, 69.0f,
+                  rw - 20.0f, a);
+        PortOnlineEmpty(PortFrTx("NADIE ELEGIDO", "NOBODY CHOSEN"), "", rx, 150.0f, rw, a);
+        return;
+    }
+    pages = (n + per - 1) / per;
+    if (PortOnlinePage >= pages)
+        PortOnlinePage = pages - 1;
+    if (pages > 1) {
+        char pg[16];
+        snprintf(pg, sizeof pg, "%d / %d", PortOnlinePage + 1, pages);
+        OnText(pg, cx + lw - 62.0f, 71.0f, 1, 0.40f, 30.0f, OnDim, a);
+        if (OnButton(OB_UP, "<", cx + lw - 98.0f, 68.0f, 20.0f, 15.0f,
+                     PortOnlinePage > 0 ? BT_NORMAL : BT_OFF, a))
+            PortOnlinePage--, PortOnlineFade = 0.4f;
+        if (OnButton(OB_DOWN, ">", cx + lw - 28.0f, 68.0f, 20.0f, 15.0f,
+                     PortOnlinePage < pages - 1 ? BT_NORMAL : BT_OFF, a))
+            PortOnlinePage++, PortOnlineFade = 0.4f;
+    }
+    for (i = 0; i < n; i++)
+        if (!strcmp(code[i], PortOnlineSel))
+            s = i;
+    if (s < 0) {
+        s = PortOnlinePage * per;
+        snprintf(PortOnlineSel, sizeof PortOnlineSel, "%s", code[s]);
+    }
+    for (i = 0; i < per && PortOnlinePage * per + i < n; i++) {
+        int k = PortOnlinePage * per + i, inv = PortOnlineInviting(code[k]);
+        int sent = PortOnlineSent > 0.0f && !strcmp(PortOnlineSentTo, code[k]);
+        float dx, t = OnEnter(i, &dx), y = 100.0f + (float)i * 42.0f, x = cx + 12.0f + dx;
+
+        sel_t[i] += ((k == s ? 1.0f : 0.0f) - sel_t[i]) * 0.3f / limeFPSScaleFactor;
+        if (OnCard(OB_CARD0 + i, code[k], name[k],
+                   inv ? PortFrTx("TE EST\xc3\x81 INVITANDO", "INVITING YOU")
+                       : sent ? PortFrTx("INVITACI\xc3\x93N ENVIADA", "INVITE SENT") : NULL,
+                   inv ? OnGreen : OnGold, inv || sent, x, y, lw - 20.0f, 34.0f, sel_t[i], a * t))
+            snprintf(PortOnlineSel, sizeof PortOnlineSel, "%s", code[k]);
+        if (OnButton(OB_ACT0 + i, inv ? PortFrTx("UNIRSE", "JOIN")
+                     : sent ? PortFrTx("ENVIADA", "SENT") : PortFrTx("INVITAR", "INVITE"),
+                     x + lw - 20.0f - 90.0f, y + 7.0f, 82.0f, 20.0f,
+                     searching || sent ? BT_OFF : inv ? BT_MAIN : BT_NORMAL, a * t)) {
+            if (inv)
+                PortOnlineJoin(code[k]);
+            else
+                PortOnlineInvite(code[k], name[k]);
+        }
+    }
+
+    /* ---- the chosen friend: their banner, big ---- */
+    {
+        int inv = PortOnlineInviting(code[s]);
+        int sent = PortOnlineSent > 0.0f && !strcmp(PortOnlineSentTo, code[s]);
+        float art = 92.0f, dx, t = OnEnter(1, &dx), tx = rx + OnBandText(art);
+
+        OnPanel(rx, 64.0f, rw, 212.0f, a, 0);
+        OnBand(code[s], rx + 6.0f, 84.0f, rw - 12.0f, 66.0f, art, 0.0f, 0, a * t);
+        OnText(PortFrTx("PERFIL", "PROFILE"), rx + rw - 12.0f, 69.0f, 2, 0.40f, 80.0f, OnDim, a);
+        OnText(OnName(name[s]), tx, 92.0f, 0, 0.80f, rx + rw - tx - 12.0f, OnWhite, a * t);
+        if (inv)
+            OnStatus(PortFrTx("TE EST\xc3\x81 INVITANDO", "INVITING YOU"), OnGreen, tx, 114.0f,
+                     rx + rw - tx - 12.0f, a * t, 1);
+        else if (sent)
+            OnStatus(PortFrTx("INVITACI\xc3\x93N ENVIADA", "INVITE SENT"), OnGold, tx, 114.0f,
+                     rx + rw - tx - 12.0f, a * t, 1);
+        OnText(PortFrTx("ID DE JUGADOR", "PLAYER ID"), rx + 12.0f, 160.0f, 0, 0.36f, rw - 24.0f,
+               OnDim, a);
+        OnText(code[s], rx + 12.0f, 170.0f, 0, 0.62f, rw - 24.0f, OnGold, a);
+        OnRule(rx + 10.0f, 188.0f, rw - 20.0f, a);
+        OnText(PortFrTx("EL SERVIDOR NO GUARDA ESTAD\xc3\x8dSTICAS DE OTROS JUGADORES",
+                        "THE SERVER KEEPS NO STATISTICS OF OTHER PLAYERS"),
+               rx + rw * 0.5f, 196.0f, 1, 0.32f, rw - 20.0f, OnDim, a);
+        if (OnButton(OB_DINV, inv ? PortFrTx("UNIRSE AL COMBATE", "JOIN THE FIGHT")
+                     : sent ? PortFrTx("ESPERANDO RESPUESTA", "WAITING FOR AN ANSWER")
+                     : PortFrTx("INVITAR A COMBATE", "INVITE TO FIGHT"),
+                     rx + 12.0f, 246.0f, rw - 24.0f, 24.0f,
+                     searching || sent ? BT_OFF : BT_MAIN, a)) {
+            if (inv)
+                PortOnlineJoin(code[s]);
+            else
+                PortOnlineInvite(code[s], name[s]);
+        }
+    }
+}
+
+
+static void PortOnlineInvites(float cx, float cw, float a, int searching)
+{
+    static char code[24][16], name[24][32];
+    float lw = cw * 0.60f, rx = cx + lw + 8.0f, rw = cw - lw - 8.0f;
+    int n = PortOnlineList(1, code, name, 24), i;
+
+    OnPanel(cx, 64.0f, lw, 212.0f, a, 1);
+    OnHeading(PortFrTx("RECIBIDAS", "RECEIVED"), n, cx + 10.0f, 69.0f, lw - 20.0f, a);
+    if (!n)
+        PortOnlineEmpty(PortFrTx("NINGUNA INVITACI\xc3\x93N", "NO INVITATIONS"),
+                        PortFrTx("CUANDO UN AMIGO TE INVITE APARECER\xc3\x81 AQU\xc3\x8d",
+                                 "WHEN A FRIEND INVITES YOU IT SHOWS HERE"),
+                        cx, 150.0f, lw, a);
+    for (i = 0; i < n && i < 3; i++) {
+        float dx, t = OnEnter(i, &dx), y = 104.0f + (float)i * 50.0f, x = cx + 12.0f + dx;
+        float w = lw - 20.0f;
+
+        OnCard(OB_CARD0 + i, code[i], name[i],
+               PortFrTx("INVITACI\xc3\x93N A COMBATE: PENDIENTE", "INVITATION TO FIGHT: PENDING"),
+               OnGreen, 1, x, y, w, 40.0f, 0.0f, a * t);
+        if (OnButton(OB_ACT0 + i, PortFrTx("ACEPTAR", "ACCEPT"), x + w - 170.0f, y + 10.0f,
+                     78.0f, 20.0f, searching ? BT_OFF : BT_MAIN, a * t))
+            PortOnlineJoin(code[i]);
+        if (OnButton(OB_ACT2 + i, PortFrTx("RECHAZAR", "DECLINE"), x + w - 86.0f, y + 10.0f,
+                     78.0f, 20.0f, BT_NORMAL, a * t))
+            PortOnlineDecline(code[i]);
+    }
+
+    OnPanel(rx, 64.0f, rw, 212.0f, a, 0);
+    OnHeading(PortFrTx("ENVIADAS", "SENT"), PortOnlineSent > 0.0f ? 1 : 0, rx + 10.0f, 69.0f,
+              rw - 20.0f, a);
+    if (PortOnlineSent > 0.0f) {
+        float dx, t = OnEnter(0, &dx);
+        OnCard(OB_CARD0 + PORT_ROWS - 1, PortOnlineSentTo, PortOnlineSentName,
+               PortFrTx("ENVIADA: ESPERANDO", "SENT: WAITING"), OnGold, 1,
+               rx + 12.0f + dx, 104.0f, rw - 20.0f, 40.0f, 0.0f, a * t);
+        OnText(PortFrTx("ESPERA AQU\xc3\x8d A QUE ACEPTE", "WAIT HERE FOR THEM TO ACCEPT"),
+               rx + rw * 0.5f, 154.0f, 1, 0.40f, rw - 20.0f, OnDim, a);
+    } else
+        PortOnlineEmpty(PortFrTx("NINGUNA ENVIADA", "NONE SENT"),
+                        PortFrTx("INVITA DESDE AMIGOS", "INVITE FROM FRIENDS"), rx, 150.0f, rw, a);
+    OnRule(rx + 10.0f, 250.0f, rw - 20.0f, a);
+    OnText(PortFrTx("LAS INVITACIONES CADUCAN A LOS 3 MINUTOS", "INVITATIONS EXPIRE AFTER 3 MINUTES"),
+           rx + rw * 0.5f, 256.0f, 1, 0.36f, rw - 20.0f, OnDim, a);
+}
+
+/* LOBBIES, QUICK MATCH, PARTY: no system yet (stages 4 and 7). What there
+ * is is shown -- you, for the party -- and the actions are off. */
+static void PortOnlineLater(int section, float cx, float cw, float a)
+{
+    const struct profile *me = prof_get();
+    float lw = cw * 0.60f, rx = cx + lw + 8.0f, rw = cw - lw - 8.0f;
+    const char *title, *what, *how, *act;
+
+    switch (section) {
+    case OS_LOBBIES:
+        title = PortFrTx("SALAS", "LOBBIES");
+        what = PortFrTx("TODAV\xc3\x8d" "A NO HAY SALAS", "NO LOBBIES YET");
+        how = PortFrTx("LLEGAN EN LA ETAPA 4: SALAS DE EPIC ONLINE SERVICES",
+                       "THEY COME IN STAGE 4: EPIC ONLINE SERVICES LOBBIES");
+        act = PortFrTx("CREAR SALA", "CREATE LOBBY");
+        break;
+    case OS_QUICK:
+        title = PortFrTx("PARTIDA R\xc3\x81PIDA", "QUICK MATCH");
+        what = PortFrTx("B\xc3\x9aSQUEDA NO DISPONIBLE A\xc3\x9aN", "SEARCH NOT AVAILABLE YET");
+        how = PortFrTx("LLEGA EN LA ETAPA 7: UN RIVAL CON TU MISMA VERSI\xc3\x93N",
+                       "COMES IN STAGE 7: AN OPPONENT ON YOUR VERSION");
+        act = PortFrTx("BUSCAR RIVAL", "FIND OPPONENT");
+        break;
+    default:
+        title = PortFrTx("GRUPO", "PARTY");
+        what = PortFrTx("TU GRUPO: SOLO T\xc3\x9a", "YOUR PARTY: JUST YOU");
+        how = PortFrTx("LLEGA EN LA ETAPA 7: AMIGOS JUNTOS, APARTE DE LAS SALAS",
+                       "COMES IN STAGE 7: FRIENDS TOGETHER, APART FROM LOBBIES");
+        act = PortFrTx("INVITAR AL GRUPO", "INVITE TO PARTY");
+        break;
+    }
+    OnPanel(cx, 64.0f, lw, 212.0f, a, 1);
+    OnHeading(title, -1, cx + 10.0f, 69.0f, lw - 20.0f, a);
+    if (section == OS_PARTY) {
+        float dx, t = OnEnter(0, &dx);
+        OnCard(OB_CARD0, "", me ? me->name : "", PortFrTx("L\xc3\x8d" "DER", "LEADER"), OnGold, 0,
+               cx + 12.0f + dx, 104.0f, lw - 20.0f, 40.0f, 0.0f, a * t);
+        PortOnlineEmpty(what, how, cx, 170.0f, lw, a);
+    } else
+        PortOnlineEmpty(what, how, cx, 150.0f, lw, a);
+    OnButton(OB_SOON, act, cx + lw * 0.5f - 80.0f, 238.0f, 160.0f, 26.0f, BT_OFF, a);
+
+    OnPanel(rx, 64.0f, rw, 212.0f, a, 0);
+    OnHeading(PortFrTx("PR\xc3\x93XIMAMENTE", "COMING SOON"), -1, rx + 10.0f, 69.0f, rw - 20.0f, a);
+    if (section == OS_LOBBIES) {
+        OnText(PortFrTx("REGLAS DE LA SALA", "LOBBY RULES"), rx + 12.0f, 96.0f, 0, 0.48f, rw - 24.0f, OnPale, a);
+        OnText(PortFrTx("AL MEJOR DE 1 / 3 / 5", "BEST OF 1 / 3 / 5"), rx + 12.0f, 116.0f, 0, 0.40f, rw - 24.0f, OnDim, a);
+        OnText(PortFrTx("TIEMPO DEL ASALTO", "ROUND TIME"), rx + 12.0f, 132.0f, 0, 0.40f, rw - 24.0f, OnDim, a);
+        OnText("KOMBO SLIDE", rx + 12.0f, 148.0f, 0, 0.40f, rw - 24.0f, OnDim, a);
+        OnText(PortFrTx("MODOS ESPECIALES (KODES VS)", "SPECIAL MODES (VS KODES)"), rx + 12.0f, 164.0f, 0, 0.40f, rw - 24.0f, OnDim, a);
+        OnText(PortFrTx("VENTAJA DEL ANFITRI\xc3\x93N", "HOST ADVANTAGE"), rx + 12.0f, 180.0f, 0, 0.40f, rw - 24.0f, OnDim, a);
+    } else if (section == OS_QUICK) {
+        OnText(PortFrTx("EMPAREJAMIENTO", "MATCHMAKING"), rx + 12.0f, 96.0f, 0, 0.48f, rw - 24.0f, OnPale, a);
+        OnText(PortFrTx("MISMA VERSI\xc3\x93N DEL JUEGO", "SAME GAME VERSION"), rx + 12.0f, 116.0f, 0, 0.40f, rw - 24.0f, OnDim, a);
+        OnText(PortFrTx("TIEMPO DE B\xc3\x9aSQUEDA", "SEARCH TIME"), rx + 12.0f, 132.0f, 0, 0.40f, rw - 24.0f, OnDim, a);
+        OnText(PortFrTx("CANCELAR EN CUALQUIER MOMENTO", "CANCEL AT ANY TIME"), rx + 12.0f, 148.0f, 0, 0.40f, rw - 24.0f, OnDim, a);
+    } else {
+        OnText(PortFrTx("EL GRUPO", "THE PARTY"), rx + 12.0f, 96.0f, 0, 0.48f, rw - 24.0f, OnPale, a);
+        OnText(PortFrTx("UN L\xc3\x8d" "DER Y SUS AMIGOS", "A LEADER AND THEIR FRIENDS"), rx + 12.0f, 116.0f, 0, 0.40f, rw - 24.0f, OnDim, a);
+        OnText(PortFrTx("ENTRAR JUNTOS A UNA SALA", "JOIN A LOBBY TOGETHER"), rx + 12.0f, 132.0f, 0, 0.40f, rw - 24.0f, OnDim, a);
+    }
+}
+
+/* ---------------------------------------------------------- the screen */
+
 void FE_Task_Online(void)
 {
     static const char *const tab_en[OS_N] = { "HOME", "FRIENDS", "INVITATIONS",
                                               "LOBBIES", "QUICK MATCH", "PARTY" };
-    static const char *const tab_es[OS_N] = { "INICIO", "AMIGOS", "INVITACIONES",
-                                              "SALAS", "PARTIDA R\xc3\x81PIDA", "GRUPO" };
-    const struct profile *me = prof_get();
+    static const char *const tab_es[OS_N] = { "INICIO", "AMIGOS", "INVITACIONES", "SALAS",
+                                              "PARTIDA R\xc3\x81PIDA", "GRUPO" };
+    static float tab_lit[OS_N];
     const char *status = NULL;
-    char line[64];
     long back;
     int searching = mpnet_status() == MPNET_SEARCHING;
-    int i, nfr, ninv, hov;
+    int i, nfr, ninv, st;
     float vw = OnVW(), cw, cx, a, tw;
 
     if (!mpnet_session_exists())        /* back here after a disconnection */
@@ -12459,14 +13218,27 @@ void FE_Task_Online(void)
 
     PortOnlineT += (1.0f / 60.0f) / limeFPSScaleFactor;
     if (PortOnlineFade < 1.0f)
-        PortOnlineFade += 0.08f / limeFPSScaleFactor;
+        PortOnlineFade += 0.06f / limeFPSScaleFactor;
     if (PortOnlineFade > 1.0f)
         PortOnlineFade = 1.0f;
-    a = PortOnlineFade;
-    PortOnlineCount(&nfr, &ninv);
-    PortOnlineFrShown = 0;
+    a = OnClamp(PortOnlineFade * 2.0f);
+    for (i = 0; i < 4; i++)
+        if (PortOnlineDroppedT[i] > 0.0f)
+            PortOnlineDroppedT[i] -= 1.0f / limeFPSScaleFactor;
+    {
+        char c[24][16], nm[24][32];
+        nfr = PortOnlineList(0, c, nm, 24);
+        ninv = PortOnlineList(1, c, nm, 24);
+    }
+    PortOnlinePicN = 0;
     PortOnlineFriendsOn = 0;
-    PortOnlineMePx[2] = 0.0f;           /* no badge unless HOME draws one */
+    if (PortOnlineSent > 0.0f) {
+        /* SENT until the launcher has taken the invite, a second more, then
+         * INVITE again (Mary: it stayed SENT) */
+        if (PortOnlineSent > 60.0f && !port_online_tell_pending())
+            PortOnlineSent = 60.0f;
+        PortOnlineSent -= 1.0f / limeFPSScaleFactor;
+    }
 
     limeEnableAlphaBlending_Basic();
     limeSet2DDrawing();
@@ -12475,213 +13247,77 @@ void FE_Task_Online(void)
                                : *FEBackground),
                    0.0f, 0.0f, (float)limeScreenWidth, (float)limeScreenHeight,
                    0.0f, 0.0f, 0.9375f, 0.625f, col);
+    {
+        /* the night pressed down a little at the bottom, so the panels read */
+        static const float t0[4] = { 0.0f, 0.0f, 0.03f, 0.0f }, t1[4] = { 0.0f, 0.0f, 0.03f, 0.55f };
+        OnVGrad(0.0f, 150.0f, vw, 170.0f, t0, t1, 1.0f);
+    }
 
     /* ---- the title and the sections' bar ---- */
-    OnText(PortOnlineWord(OT_ONLINE), vw * 0.5f, 6.0f, 1, 1.0f, 0.0f, OnWhite, 1.0f);
+    OnText(PortOnlineWord(OT_ONLINE), vw * 0.5f, 4.0f, 1, 0.95f, 0.0f, OnWhite, 1.0f);
     cw = vw - 24.0f;
-    if (cw > 620.0f)
-        cw = 620.0f;
+    if (cw > 640.0f)
+        cw = 640.0f;
     cx = (vw - cw) * 0.5f;
     tw = cw / (float)OS_N;
-    OnFill(cx, 32.0f, cw, 24.0f, 0.01f, 0.02f, 0.07f, 0.70f);
+    {
+        static const float b0[4] = { 0.10f, 0.16f, 0.34f, 0.88f }, b1[4] = { 0.01f, 0.02f, 0.07f, 0.92f };
+        OnShadow(cx, 30.0f, cw, 26.0f, 1.0f);
+        OnVGrad(cx, 30.0f, cw, 26.0f, b0, b1, 1.0f);
+        OnFill(cx, 30.0f, cw, 0.8f, 0.62f, 0.76f, 1.0f, 0.45f);
+        OnFill(cx, 55.0f, cw, 1.0f, 0.0f, 0.0f, 0.0f, 0.8f);
+    }
     for (i = 0; i < OS_N; i++) {
+        static const float r0[4] = { 0.70f, 0.06f, 0.04f, 0.0f }, r1[4] = { 0.80f, 0.08f, 0.05f, 0.65f };
+        static const float h0[4] = { 0.35f, 0.55f, 1.0f, 0.0f }, h1[4] = { 0.35f, 0.55f, 1.0f, 0.30f };
         float x = cx + tw * (float)i;
         int on = i == PortOnlineSection;
         const char *t = PortFrTx(tab_es[i], tab_en[i]);
 
-        if (OnArea(OB_TAB0 + i, x, 32.0f, tw, 24.0f, &hov) && !on) {
+        if (OnArea(OB_TAB0 + i, x, 30.0f, tw, 26.0f, &st) && !on) {
             PortOnlineSection = i;
             PortOnlineFade = 0.0f;
             PortOnlineListening = 0;
+            PortOnlinePage = 0;
         }
-        if (hov && !on)
-            OnFill(x, 32.0f, tw, 24.0f, 0.30f, 0.06f, 0.06f, 0.55f);
-        OnText(t, x + tw * 0.5f, 37.0f, 1, 0.5f, tw - 6.0f,
-               on ? OnWhite : hov ? OnGold : OnDim, 1.0f);
+        tab_lit[i] += ((on ? 1.0f : 0.0f) - tab_lit[i]) * 0.25f / limeFPSScaleFactor;
+        if (i)
+            OnFill(x, 34.0f, 0.8f, 18.0f, 0.45f, 0.60f, 1.0f, 0.22f);
+        OnVGrad(x, 30.0f, tw, 26.0f, r0, r1, tab_lit[i]);
+        if (st && !on)
+            OnVGrad(x, 30.0f, tw, 26.0f, h0, h1, 1.0f);
+        if (st == 2)
+            OnFrame(x + 1.0f, 31.0f, tw - 2.0f, 24.0f, 1.0f, 1.0f, 0.30f, 0.22f, 1.0f);
+        OnText(t, x + tw * 0.5f, 36.0f, 1, 0.48f, tw - 8.0f,
+               on ? OnWhite : st ? OnPale : OnDim, 1.0f);
         if (i == OS_INVITES && ninv > 0) {     /* the invites waiting */
-            float d = x + tw - 11.0f;
-            OnFill(d, 34.0f, 9.0f, 9.0f, 0.86f, 0.08f, 0.05f, 1.0f);
+            char nb[8];
+            float p = 0.75f + 0.25f * sinf(PortOnlineT * 5.0f);
+            snprintf(nb, sizeof nb, "%d", ninv);
+            OnFill(x + tw - 14.0f, 32.0f, 11.0f, 10.0f, 0.95f, 0.12f, 0.08f, p);
+            OnText(nb, x + tw - 8.5f, 32.5f, 1, 0.34f, 10.0f, OnWhite, 1.0f);
         }
     }
     {
-        /* the red bar slides to the section */
+        /* the red bar slides to the section, a glow above it */
+        static const float g0[4] = { 1.0f, 0.15f, 0.08f, 0.0f }, g1[4] = { 1.0f, 0.15f, 0.08f, 0.45f };
         float want = cx + tw * (float)PortOnlineSection;
         if (PortOnlineBarX < 0.0f)
             PortOnlineBarX = want;
         PortOnlineBarX += (want - PortOnlineBarX) * 0.25f / limeFPSScaleFactor;
-        OnFill(PortOnlineBarX + 4.0f, 53.0f, tw - 8.0f, 3.0f, 0.86f, 0.06f, 0.04f, 1.0f);
+        OnVGrad(PortOnlineBarX + 6.0f, 47.0f, tw - 12.0f, 6.0f, g0, g1, 1.0f);
+        OnFill(PortOnlineBarX + 4.0f, 53.0f, tw - 8.0f, 2.5f, 1.0f, 0.18f, 0.10f, 1.0f);
     }
 
-    /* ---- the section ---- */
-    if (PortOnlineSent > 0.0f) {
-        /* SENT until the launcher has taken the invite, a second more, then
-         * INVITE again (Mary: it stayed SENT) */
-        if (PortOnlineSent > 60.0f && !port_online_tell_pending())
-            PortOnlineSent = 60.0f;
-        PortOnlineSent -= 1.0f / limeFPSScaleFactor;
-    }
+    /* ---- the section, sliding up as it fades in ---- */
     if (PortOnlineSection != OS_HOME)
         PortOnlineListening = 0;
     PortOnlineBoxActive = 0;
-
     switch (PortOnlineSection) {
-    case OS_HOME: {
-        float lw = cw * 0.36f, rx = cx + lw + 8.0f, rw = cw - lw - 8.0f;
-        float bx = rx + 12.0f, bw = rw - 24.0f;
-
-        /* the player */
-        OnPanel(cx, 66.0f, lw, 210.0f, a);
-        OnText(PortFrTx("PERFIL", "PROFILE"), cx + 10.0f, 72.0f, 0, 0.6f, lw - 20.0f, OnDim, a);
-        PortOnlineMePx[0] = OnX(cx + 10.0f);
-        PortOnlineMePx[1] = OnY(92.0f);
-        PortOnlineMePx[2] = 1.15f;
-        OnText(PortOnlineWord(OT_YOURCODE), cx + lw * 0.5f, 150.0f, 1, 0.6f, lw - 20.0f, OnDim, a);
-        OnText(me ? me->id : "", cx + lw * 0.5f, 168.0f, 1, 0.95f, lw - 16.0f, OnGold, a);
-        if (OnButton(OB_COPY, PortOnlineWord(PortOnlineCopied > 0.0f ? OT_COPIED : OT_COPY),
-                     cx + 14.0f, 200.0f, lw - 28.0f, 26.0f, 0, a) && me) {
-            plat_clipboard_set(me->id);
-            PortOnlineCopied = 120.0f;
-        }
-        if (PortOnlineCopied > 0.0f)
-            PortOnlineCopied -= 1.0f / limeFPSScaleFactor;
-        snprintf(line, sizeof line, "%s %d   %s %d", PortFrTx("AMIGOS", "FRIENDS"), nfr,
-                 PortFrTx("INVITACIONES", "INVITES"), ninv);
-        OnText(port_online_friends_known() ? line
-               : PortFrTx("SIN CUENTA: INICIA SESI\xc3\x93N EN EL LAUNCHER", "NO ACCOUNT: LOG IN IN THE LAUNCHER"),
-               cx + lw * 0.5f, 244.0f, 1, 0.45f, lw - 16.0f, OnDim, a);
-
-        /* the code: FIND BY CODE */
-        OnPanel(rx, 66.0f, rw, 124.0f, a);
-        OnText(PortFrTx("BUSCAR POR C\xc3\x93" "DIGO", "FIND BY CODE"), rx + 10.0f, 72.0f, 0, 0.6f,
-               rw - 20.0f, OnDim, a);
-        OnText(PortOnlineWord(OT_OTHER), rx + rw * 0.5f, 88.0f, 1, 0.5f, rw - 20.0f, OnWhite, a);
-        if (OnArea(OB_BOX, bx, 102.0f, bw, 28.0f, &hov) && !searching)
-            PortOnlineListening = 1;
-        PortOnlineBoxActive = PortOnlineListening && !searching;
-        OnFill(bx, 102.0f, bw, 28.0f, 0.0f, 0.0f, 0.03f, 0.80f * a);
-        if (PortOnlineBoxActive)
-            OnFrame(bx, 102.0f, bw, 28.0f, 1.2f, 1.0f, 0.85f, 0.2f, a);
-        else
-            OnFrame(bx, 102.0f, bw, 28.0f, 1.0f, 1.0f, 1.0f, 1.0f, (hov ? 0.9f : 0.45f) * a);
-        {
-            char ch[8];
-            int n;
-
-            while ((n = plat_text_take(ch, sizeof ch)) > 0) {
-                if (ch[0] == 22) {          /* Ctrl+V, listening or not */
-                    PortOnlinePaste();
-                    PortOnlineListening = !searching;
-                } else if (!PortOnlineBoxActive) {
-                    continue;
-                } else if (ch[0] == 8) {    /* Backspace */
-                    size_t k = strlen(PortOnlineCode);
-                    if (k > 0)
-                        PortOnlineCode[--k] = 0;
-                    if (k > 0 && PortOnlineCode[k - 1] == '-')
-                        PortOnlineCode[--k] = 0;
-                } else if (ch[0] == 13) {   /* Enter */
-                    PortOnlineFind();
-                } else if (ch[0] == 27) {   /* Esc: the keys move again */
-                    PortOnlineListening = 0;
-                } else if (n == 1) {
-                    PortOnlineType((unsigned char)ch[0]);
-                }
-            }
-        }
-        PortOnlineBlink += 0.025f / limeFPSScaleFactor;
-        if (PortOnlineBlink > 2.0f)
-            PortOnlineBlink -= 2.0f;
-        snprintf(line, sizeof line, "%s%s", PortOnlineCode,
-                 PortOnlineBoxActive && PortOnlineBlink > 1.0f
-                 && strlen(PortOnlineCode) < 14 ? "_" : "");
-        OnText(line, rx + rw * 0.5f, 107.0f, 1, 0.95f, bw - 8.0f, OnWhite, a);
-        OnText(PortOnlineBoxActive ? PortOnlineWord(OT_HINT)
-               : PortFrTx("HAZ CLIC EN LA CAJA PARA ESCRIBIR, O CTRL+V",
-                          "CLICK THE BOX TO TYPE, OR CTRL+V"),
-               rx + rw * 0.5f, 134.0f, 1, 0.42f, rw - 20.0f, OnDim, a);
-        if (OnButton(OB_FIND, PortOnlineWord(OT_FIND), rx + rw * 0.5f - 90.0f, 152.0f,
-                     180.0f, 28.0f, 1, a) && !searching)
-            PortOnlineFind();
-
-        /* the state of things */
-        OnPanel(rx, 198.0f, rw, 78.0f, a);
-        OnText(PortFrTx("ESTADO", "STATUS"), rx + 10.0f, 204.0f, 0, 0.6f, rw - 20.0f, OnDim, a);
-        {
-            /* internet play (runtime/mp_eos.c): 0 off, 1 starting, 2 ready,
-             * 3 failed, as MPEOS_* */
-            static const int net_text[4] = { OT_NET_OFF, OT_NET_WAIT, OT_NET_ON,
-                                             OT_NET_FAIL };
-            int k = mpnet_internet();
-            if (k >= 0 && k < 4)
-                OnText(PortOnlineWord(net_text[k]), rx + 10.0f, 220.0f, 0, 0.45f,
-                       rw - 20.0f, k == 2 ? OnWhite : OnGold, a);
-        }
-        if (OnButton(OB_GOFR, PortFrTx("AMIGOS", "FRIENDS"), rx + 10.0f, 242.0f,
-                     rw * 0.5f - 15.0f, 24.0f, 0, a)) {
-            PortOnlineSection = OS_FRIENDS;
-            PortOnlineFade = 0.0f;
-        }
-        snprintf(line, sizeof line, "%s%s", PortFrTx("INVITACIONES", "INVITATIONS"),
-                 ninv ? " (!)" : "");
-        if (OnButton(OB_GOINV, line, rx + rw * 0.5f + 5.0f, 242.0f, rw * 0.5f - 15.0f,
-                     24.0f, ninv > 0, a)) {
-            PortOnlineSection = OS_INVITES;
-            PortOnlineFade = 0.0f;
-        }
-        break;
-    }
-    case OS_FRIENDS:
-        OnPanel(cx, 66.0f, cw, 210.0f, a);
-        OnText(PortFrTx("AMIGOS", "FRIENDS"), cx + 12.0f, 72.0f, 0, 0.6f, cw - 24.0f, OnDim, a);
-        if (!nfr) {
-            OnText(port_online_friends_known()
-                   ? PortFrTx("A\xc3\x9aN NO TIENES AMIGOS", "NO FRIENDS YET")
-                   : PortFrTx("INICIA SESI\xc3\x93N EN EL LAUNCHER", "LOG IN IN THE LAUNCHER"),
-                   cx + cw * 0.5f, 140.0f, 1, 0.6f, cw - 24.0f, OnWhite, a);
-            OnText(PortFrTx("LAUNCHER: PERFIL > AMIGOS", "LAUNCHER: PROFILE > FRIENDS"),
-                   cx + cw * 0.5f, 162.0f, 1, 0.45f, cw - 24.0f, OnDim, a);
-        } else
-            PortOnlineRows(0, cx + 10.0f, 92.0f, cw - 20.0f, searching, a);
-        if (PortOnlineSent > 0.0f) {
-            snprintf(line, sizeof line, "%s %s", PortFrTx("INVITACI\xc3\x93N ENVIADA A", "INVITE SENT TO"),
-                     PortOnlineSentName);
-            OnText(line, cx + cw * 0.5f, 258.0f, 1, 0.45f, cw - 24.0f, OnGold, a);
-        }
-        break;
-    case OS_INVITES:
-        OnPanel(cx, 66.0f, cw, 210.0f, a);
-        OnText(PortFrTx("RECIBIDAS", "RECEIVED"), cx + 12.0f, 72.0f, 0, 0.6f, cw - 24.0f, OnDim, a);
-        if (!PortOnlineRows(1, cx + 10.0f, 92.0f, cw - 20.0f, searching, a))
-            OnText(PortFrTx("NINGUNA INVITACI\xc3\x93N", "NO INVITATIONS"), cx + cw * 0.5f, 140.0f,
-                   1, 0.6f, cw - 24.0f, OnWhite, a);
-        OnText(PortOnlineSent > 0.0f
-               ? PortFrTx("ENVIADA: ESPERA AQU\xc3\x8d A QUE ACEPTE", "SENT: WAIT HERE FOR THEM TO ACCEPT")
-               : PortFrTx("LAS INVITACIONES CADUCAN A LOS 3 MINUTOS",
-                          "INVITATIONS EXPIRE AFTER 3 MINUTES"),
-               cx + cw * 0.5f, 258.0f, 1, 0.42f, cw - 24.0f,
-               PortOnlineSent > 0.0f ? OnGold : OnDim, a);
-        break;
-    case OS_LOBBIES:
-        PortOnlineSoon(PortFrTx("SALAS", "LOBBIES"),
-                       PortFrTx("SALAS CON REGLAS: AL MEJOR DE 1/3/5, TIEMPO,",
-                                "ROOMS WITH RULES: BEST OF 1/3/5, TIME,"),
-                       PortFrTx("KOMBO SLIDE Y LOS MODOS ESPECIALES",
-                                "KOMBO SLIDE AND THE SPECIAL MODES"), cx, cw, a);
-        break;
-    case OS_QUICK:
-        PortOnlineSoon(PortFrTx("PARTIDA R\xc3\x81PIDA", "QUICK MATCH"),
-                       PortFrTx("BUSCA UN RIVAL CON TU MISMA VERSI\xc3\x93N",
-                                "FINDS AN OPPONENT ON YOUR VERSION"),
-                       PortFrTx("A TRAV\xc3\x89S DE EPIC ONLINE SERVICES",
-                                "THROUGH EPIC ONLINE SERVICES"), cx, cw, a);
-        break;
-    case OS_PARTY:
-        PortOnlineSoon(PortFrTx("GRUPO", "PARTY"),
-                       PortFrTx("TU GRUPO DE AMIGOS, APARTE DE LAS SALAS",
-                                "YOUR GROUP OF FRIENDS, APART FROM LOBBIES"),
-                       PortFrTx("PARA ENTRAR JUNTOS A UNA SALA",
-                                "TO JOIN A LOBBY TOGETHER"), cx, cw, a);
-        break;
+    case OS_HOME:    PortOnlineHome(cx, cw, a, searching, nfr, ninv); break;
+    case OS_FRIENDS: PortOnlineFriends(cx, cw, a, searching); break;
+    case OS_INVITES: PortOnlineInvites(cx, cw, a, searching); break;
+    default:         PortOnlineLater(PortOnlineSection, cx, cw, a); break;
     }
 
     /* ---- the status line, under everything ---- */
@@ -12693,13 +13329,13 @@ void FE_Task_Online(void)
     case MPNET_CONNECTED: status = PortOnlineWord(OT_CONNECTED); break;
     }
     if (status) {
+        static const float s0[4] = { 0.06f, 0.10f, 0.22f, 0.85f }, s1[4] = { 0.01f, 0.02f, 0.06f, 0.0f };
         float p = 0.6f + 0.4f * sinf(PortOnlineT * 5.0f);
-        OnFill(cx, 282.0f, cw * 0.62f, 18.0f, 0.01f, 0.02f, 0.07f, 0.70f);
-        OnFill(cx, 282.0f, 3.0f, 18.0f, 0.86f, 0.06f, 0.04f, searching ? p : 1.0f);
-        OnText(status, cx + 8.0f, 284.0f, 0, 0.45f, cw * 0.62f - 12.0f,
+        OnHGrad(cx, 283.0f, cw * 0.62f, 16.0f, s0, s1, 1.0f);
+        OnFill(cx, 283.0f, 2.5f, 16.0f, 1.0f, 0.18f, 0.10f, searching ? p : 1.0f);
+        OnText(status, cx + 8.0f, 284.5f, 0, 0.42f, cw * 0.62f - 12.0f,
                searching ? OnGold : OnWhite, searching ? p : 1.0f);
     }
-    (void)tab_en;
 
     back = DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1);
     limeDrawFONT(&GameFont, GameText(7),

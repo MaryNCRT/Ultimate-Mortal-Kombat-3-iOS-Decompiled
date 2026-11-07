@@ -557,7 +557,8 @@ async function gameAsked() {
         const [what, code] = line.trim().split(/\s+/);
         if (!/^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(code || '')) continue;
         if (what === 'invite') await account.invite(g_root, code).catch(() => {});
-        else if (what === 'join') await account.dropInvite(g_root, code).catch(() => {});
+        /* join: taken; drop: turned down on the game's INVITATIONS */
+        else if (what === 'join' || what === 'drop') await account.dropInvite(g_root, code).catch(() => {});
     }
     pollFriends();
 }

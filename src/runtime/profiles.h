@@ -45,6 +45,8 @@ unsigned char *prof_icon_rgba(int icon, int alt, unsigned color, int dark,
                               unsigned color2, int angle, int S);
 /* color2's default for a gradient: white, black, blood red. */
 unsigned prof_shade_default(int dark);
+/* the fighter's VERSUS art alone, 256 square straight RGBA, NULL if absent */
+unsigned char *prof_art_rgba(int icon, int alt);
 /* Changes whenever the icon would look different. */
 unsigned prof_look_key(const struct profile *p);
 

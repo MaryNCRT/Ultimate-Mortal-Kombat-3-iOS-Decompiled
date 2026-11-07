@@ -10,6 +10,28 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased: the new ONLINE screen (stage 2 of the redesign)
 
+- **The ONLINE screen's new look** (Mary's visual brief, 2026-11-06): panels
+  with depth (a diagonal gradient from navy to black that lets the cemetery
+  through, a light along the top edge, a darker bottom, a soft shadow),
+  buttons in gradients whose states are told apart (normal, under the
+  mouse, chosen with the keys or the pad in red, pressed, off), tabs with
+  separators, a glow over the red bar and a count of the invites waiting.
+- **Player Banners**: every player is a horizontal banner in their own
+  profile gradient -- exactly the one they chose, over the whole banner --
+  with their fighter (the VERSUS art, transparent) standing out of its left
+  end. HOME's banner carries the name, the state, the player ID with COPY,
+  and the game's own statistics (human wins and losses, best win streak,
+  fatalities, flawless, favourite character). FRIENDS: a list of banners
+  and the chosen friend's banner, big, with INVITE TO FIGHT.
+  INVITATIONS: received (ACCEPT, DECLINE) and sent. LOBBIES, QUICK MATCH
+  and PARTY show what exists (you, as the party's leader) with their
+  actions off until their stages come.
+- **Statistics were lost at every start** (a decomp bug): the save was
+  loaded into a second copy of the stats nobody read, so the STATS screen
+  and now the profile showed only the session's numbers. Fixed: they load
+  into the one block the binary has. Each fighter's play count (the
+  favourite character) only starts counting from this build.
+
 - **ONLINE has sections**: HOME, FRIENDS, INVITATIONS, LOBBIES, QUICK
   MATCH and PARTY along the top, over the same night cemetery and moon,
   in translucent panels with the MK red along their top; a red bar slides

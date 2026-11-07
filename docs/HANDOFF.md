@@ -203,7 +203,8 @@ press COMPILE.
   design and the open questions are in
   [research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md). Paused
   until Mary records a Soul Chamber fight on the Genesis (WAV + GYM).
-- **ONLINE menu redesign**: stages 1 (audit) and 2 (sections, HOME) done
+- **ONLINE menu redesign**: stages 1 (audit) and 2 (sections, HOME) done and the visual redesign
+  (Player Banners, gradients; PROGRESS 2026-11-06)
   (`FE_Task_Online`, FrontEnd.c; see PROGRESS); next is stage 3 (friends,
   profiles, invites). The
   report is [research/ONLINE-MENU-AUDIT.md](research/ONLINE-MENU-AUDIT.md):
