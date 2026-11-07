@@ -65,8 +65,9 @@
     .plate {
         position: absolute; inset: 0; overflow: hidden;
         background-size: 100% 100%, auto, 100% 100%;
+        background-blend-mode: normal, overlay, normal;   /* the grain never lightens the colour (Mary) */
         border: 2px solid #2e3846; border-top: 0; border-bottom: 0;
-        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .7), inset 0 calc(var(--u) * .3) calc(var(--u) * 1) rgba(255, 255, 255, .18),
+        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .7),
                     0 calc(var(--u) * .5) calc(var(--u) * 1.4) rgba(0, 0, 0, .7);
     }
     .banner::before, .banner::after {

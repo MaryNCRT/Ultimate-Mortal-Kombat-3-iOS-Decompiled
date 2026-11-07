@@ -89,39 +89,44 @@
     {:else if p}
         <div class="pin"><PlayerBanner grad={gradCss} /></div>
 
-        <h3 class="first">{tx('profIdent')}</h3>
-        <div class="fields two">
-            <div class="field">
-                <label class="lbl" for="profName">{tx('profName')}</label>
-                <input id="profName" class="edt" maxlength="24" spellcheck="false" bind:value={name}
-                       onfocus={() => typing = true}
-                       onblur={() => typing = false}
-                       oninput={() => updateProf({ name: name.replace(/[|\r\n\t]/g, ' ') })}
-                       onchange={nameDone}>
-                {#if nameMsg}<span class="taken">{nameMsg}</span>{/if}
-            </div>
-            <div class="field">
-                <span class="lbl">{tx('profFavLbl')}</span>
-                <button class="fighter" onpointerenter={hoverBlip} onclick={() => { selectBlip(); picking = true; }}>
-                    <IconCanvas size={64} icon={p.icon} color={p.color} shade={p.shade} color2={p.color2} angle={p.angle} alt={p.alt} />
-                    <span class="fname">{FIGHTERS[app.ui === 'ES' ? 'ES' : 'EN'][p.icon]}</span>
-                    <span class="chg">{tx('profPick')}</span>
-                </button>
-            </div>
+        <div class="cols">
+            <section>
+                <h3 class="first">{tx('profIdent')}</h3>
+                <div class="fields one">
+                <div class="field">
+                    <label class="lbl" for="profName">{tx('profName')}</label>
+                    <input id="profName" class="edt" maxlength="24" spellcheck="false" bind:value={name}
+                           onfocus={() => typing = true}
+                           onblur={() => typing = false}
+                           oninput={() => updateProf({ name: name.replace(/[|\r\n\t]/g, ' ') })}
+                           onchange={nameDone}>
+                    {#if nameMsg}<span class="taken">{nameMsg}</span>{/if}
+                </div>
+                <div class="field">
+                    <span class="lbl">{tx('profFavLbl')}</span>
+                    <button class="fighter" onpointerenter={hoverBlip} onclick={() => { selectBlip(); picking = true; }}>
+                        <IconCanvas size={64} icon={p.icon} color={p.color} shade={p.shade} color2={p.color2} angle={p.angle} alt={p.alt} />
+                        <span class="fname">{FIGHTERS[app.ui === 'ES' ? 'ES' : 'EN'][p.icon]}</span>
+                        <span class="chg">{tx('profPick')}</span>
+                    </button>
+                </div>
+                </div>
+                <span class="tabs sub shades">
+                    {#each [[0, 'profOutfit1'], [1, 'profOutfit2']] as [a, key]}
+                        <button class="tab" class:active={(p.alt ? 1 : 0) === a} onpointerenter={hoverBlip}
+                                onclick={() => pick({ alt: a })}>{tx(key)}</button>
+                    {/each}
+                </span>
+                <div class="row">
+                    <button class="btn" onpointerenter={hoverBlip} onclick={resetProf}>{tx(app.profResetArmed ? 'profResetAsk' : 'profReset')}</button>
+                </div>
+            </section>
+            <section>
+                <h3 class="first">{tx('profLook')} — {tx('profColor')}</h3>
+                <GradientPicker label={tx('gpLabel')} value={gradCss} onchange={setGradient} />
+            </section>
         </div>
-        <span class="tabs sub shades">
-            {#each [[0, 'profOutfit1'], [1, 'profOutfit2']] as [a, key]}
-                <button class="tab" class:active={(p.alt ? 1 : 0) === a} onpointerenter={hoverBlip}
-                        onclick={() => pick({ alt: a })}>{tx(key)}</button>
-            {/each}
-        </span>
         {#if picking}<FighterPicker {p} pick={pick} close={() => picking = false} />{/if}
-
-        <h3>{tx('profLook')} — {tx('profColor')}</h3>
-        <GradientPicker label={tx('gpLabel')} value={gradCss} onchange={setGradient} />
-        <div class="row end">
-            <button class="btn" onpointerenter={hoverBlip} onclick={resetProf}>{tx(app.profResetArmed ? 'profResetAsk' : 'profReset')}</button>
-        </div>
     {/if}
 </Page>
 
@@ -133,7 +138,12 @@
         padding: calc(var(--u) * .4) calc(var(--u) * 2.6) calc(var(--u) * 1.2);
         background: linear-gradient(rgba(10, 13, 19, .97) 82%, rgba(10, 13, 19, 0));
     }
-    .fields.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    /* IDENTITY on the left, the background's editor on the right: the
+     * page's width used, nothing left empty (Mary) */
+    .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: calc(var(--u) * 2.6); align-items: start; }
+    .cols > section { min-width: 0; }
+    .cols :global(.bg-picker) { width: 100%; }
+    .fields.one { grid-template-columns: minmax(0, 1fr); }
     /* the fighter: his icon and name on a steel plate; a click opens the window */
     .fighter {
         display: flex; align-items: center; gap: calc(var(--u) * 1); height: calc(var(--u) * 5);

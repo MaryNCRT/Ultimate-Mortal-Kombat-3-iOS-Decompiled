@@ -13235,7 +13235,7 @@ static void OnBand(const char *code, float x, float y, float w, float h, float a
      * the player's gradient whole on brushed steel, the ends a little in
      * shade, a slow sheen; a gold bar along the top, the red line along the
      * foot, uprights of dark blued steel; the fighter stands out of it */
-    static const float white[3] = { 1.0f, 1.0f, 1.0f };
+    static const float black[3] = { 0.0f, 0.0f, 0.0f };
     static const float e0[4] = { 0.0f, 0.0f, 0.0f, 0.30f }, e1[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
     static const float r0[4] = { 0.88f, 0.25f, 0.18f, 1.0f }, r1[4] = { 0.42f, 0.04f, 0.02f, 1.0f };
     static const float s0[4] = { 0.36f, 0.43f, 0.53f, 1.0f }, s1[4] = { 0.12f, 0.15f, 0.20f, 1.0f };
@@ -13243,11 +13243,28 @@ static void OnBand(const char *code, float x, float y, float w, float h, float a
 
     OnShadow(x, y, w, h, a);
     OnProfileSky(code, x, y, w, h, a);                  /* the colour, whole */
-    OnSprite(TX_GRAIN, x, y, w, h, x / 160.0f, 0.01f, w / 160.0f, 0.98f, white, a);
-    OnSheen(x, y, w, h, 0.50f * a);
+    /* the steel's grain only in shade, so the colour is never lightened
+     * (Mary: "con el color del degradado igual, sin aclarar") */
+    OnSprite(TX_GRAIN, x, y, w, h, x / 160.0f, 0.01f, w / 160.0f, 0.98f, black, 0.45f * a);
     OnHGrad(x, y, ew, h, e0, e1, a);                    /* the ends in shade */
     OnHGrad(x + w - ew, y, ew, h, e1, e0, a);
-    OnFill(x, y + 1.0f, w, 1.2f, 1.0f, 1.0f, 1.0f, 0.16f * a);      /* light under the bar */
+    {
+        /* the launcher's slow light across the metal: every 7 seconds a
+         * soft band crosses, still the rest of the time */
+        float ph = fmodf(PortOnlineT, 7.0f) / 7.0f;
+        if (ph > 0.55f) {
+            float k = (ph - 0.55f) / 0.45f, hw = w * 0.10f;
+            float cx = x - hw + k * (w + 2.0f * hw), sw = hw / 8.0f;
+            int j;
+            for (j = -8; j < 8; j++) {
+                float sx = cx + (float)j * sw, ex = sx + sw, d = fabsf((float)j + 0.5f) / 8.0f;
+                if (sx < x) sx = x;
+                if (ex > x + w) ex = x + w;
+                if (ex > sx)
+                    OnFill(sx, y, ex - sx, h, 1.0f, 1.0f, 1.0f, 0.24f * (1.0f - d) * a);
+            }
+        }
+    }
     OnFrame(x + 1.4f, y + 1.4f, w - 2.8f, h - 2.8f, 0.4f, 0.0f, 0.0f, 0.0f, 0.25f * a);
     /* the uprights: dark blued steel, lit on their inner edge */
     OnHGrad(x - 1.6f, y, 1.6f, h, s0, s1, a);

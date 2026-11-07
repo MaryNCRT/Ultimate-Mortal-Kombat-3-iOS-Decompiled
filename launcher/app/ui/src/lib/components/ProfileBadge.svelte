@@ -20,19 +20,19 @@
 {/if}
 
 <style>
-    /* black steel in a bronze frame with a gold lip, the red line under */
     .badge {
         position: fixed; top: calc(var(--u) * 4.2); right: calc(var(--u) * 1.6); z-index: 9;
         display: flex; align-items: center; gap: calc(var(--u) * .9);
         padding: calc(var(--u) * .5) calc(var(--u) * 1.4) calc(var(--u) * .5) calc(var(--u) * .5);
-        border: 2px solid #46546a; border-top-color: #e6bb63; border-bottom-color: var(--blood);
-        border-radius: calc(var(--u) * .4);
-        background: linear-gradient(rgba(215, 228, 255, .16), rgba(255, 255, 255, 0) 50%), var(--tex-grain), linear-gradient(#1e2530, #050609);
-        box-shadow: var(--bevel), 0 calc(var(--u) * .3) calc(var(--u) * .8) rgba(0, 0, 0, .6);
-        color: #eef3fb; font-weight: 800; font-size: calc(var(--t) * 1.6); text-transform: uppercase;
-        letter-spacing: .06em; cursor: pointer; max-width: calc(var(--u) * 30); text-shadow: 0 1px 0 #000;
+        border: 2px solid rgba(220, 225, 237, .85); border-radius: calc(var(--u) * 1.1);
+        background:
+            radial-gradient(ellipse 75% 60% at 50% -10%, rgba(255, 255, 255, .2) 0 99%, transparent 100%),
+            linear-gradient(#2a2a2e, #000);
+        box-shadow: 0 calc(var(--u) * .3) calc(var(--u) * .8) rgba(0, 0, 0, .5);
+        color: #fff; font-weight: 700; font-size: calc(var(--t) * 1.6);
+        letter-spacing: .04em; cursor: pointer; max-width: calc(var(--u) * 30);
     }
-    .badge :global(canvas) { width: calc(var(--u) * 4.2); height: calc(var(--u) * 4.2); flex: none; border-radius: 2px; box-shadow: 0 0 0 1px #000, 0 0 0 2px #2e3846; }
+    .badge :global(canvas) { width: calc(var(--u) * 4.2); height: calc(var(--u) * 4.2); flex: none; }
     .badge span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .badge:hover { border-color: #e6bb63; box-shadow: var(--bevel), var(--hover-glow); }
+    .badge:hover { border-color: #fff; }
 </style>
