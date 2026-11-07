@@ -12482,8 +12482,9 @@ static void OnGoldBar(float x, float y, float w, float h, float a)
  * oxblood line inside its top. */
 static void OnPanel(float x, float y, float w, float h, float a, int red)
 {
-    static const float t[4] = { 0.04f, 0.035f, 0.03f, 0.88f };
-    static const float b[4] = { 0.01f, 0.01f, 0.01f, 0.92f };
+    /* a little see-through, so the stage behind shows (Mary) */
+    static const float t[4] = { 0.04f, 0.035f, 0.03f, 0.76f };
+    static const float b[4] = { 0.01f, 0.01f, 0.01f, 0.82f };
     static const float rl[4] = { 0.50f, 0.14f, 0.08f, 1.0f };
     static const float rr[4] = { 0.30f, 0.08f, 0.05f, 0.0f };
     static const float s0[4] = { 0.82f, 0.68f, 0.38f, 1.0f }, s1[4] = { 0.42f, 0.30f, 0.12f, 1.0f };
@@ -12494,9 +12495,11 @@ static void OnPanel(float x, float y, float w, float h, float a, int red)
     OnHGrad(x - 2.0f, y, 2.4f, h, s1, s0, a);
     OnHGrad(x + w - 0.4f, y, 2.4f, h, s0, s1, a);
     OnGoldBar(x - 2.0f, y + h - 0.4f, w + 4.0f, 2.0f, a);
-    OnGoldBar(x - 4.0f, y - 2.6f, w + 8.0f, 2.8f, a);                     /* the top */
-    OnGoldBar(x - 6.0f, y - 3.6f, 7.0f, 1.6f, a);                         /* flared ends */
-    OnGoldBar(x + w - 1.0f, y - 3.6f, 7.0f, 1.6f, a);
+    /* the top, and a cap on each corner -- kept within the sides, so two
+     * panels side by side do not run into each other (Mary) */
+    OnGoldBar(x - 2.0f, y - 2.6f, w + 4.0f, 2.8f, a);
+    OnGoldBar(x - 2.0f, y - 3.8f, 8.0f, 1.4f, a);
+    OnGoldBar(x + w - 6.0f, y - 3.8f, 8.0f, 1.4f, a);
     OnFrame(x + 0.4f, y + 0.2f, w - 0.8f, h - 0.6f, 0.6f, 0.0f, 0.0f, 0.0f, 0.9f * a);
     if (red)
         OnHGrad(x + 1.0f, y + 1.0f, w * 0.6f, 1.0f, rl, rr, a);
@@ -14673,7 +14676,7 @@ void FE_Task_Online(void)
         OnStatus(line, OnGreen, cx + 2.0f, 9.0f, 170.0f, 1.0f, 0);
     }
     {
-        static const float b0[4] = { 0.08f, 0.08f, 0.075f, 0.86f }, b1[4] = { 0.03f, 0.03f, 0.028f, 0.90f };
+        static const float b0[4] = { 0.08f, 0.08f, 0.075f, 0.76f }, b1[4] = { 0.03f, 0.03f, 0.028f, 0.82f };
         OnShadow(cx, 30.0f, cw, 26.0f, 1.0f);
         OnVGrad(cx, 30.0f, cw, 26.0f, b0, b1, 1.0f);   /* an iron beam */
         static const float c0[4] = { 0.92f, 0.80f, 0.50f, 1.0f }, c1[4] = { 0.46f, 0.32f, 0.14f, 1.0f };
