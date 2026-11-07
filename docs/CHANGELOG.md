@@ -10,6 +10,20 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased: the new ONLINE screen (stage 2 of the redesign)
 
+- **MY PROFILE's gradient editor, detailed** (Mary): the same panel, with
+  the launcher picker's abilities -- FROM and TO each with the palette's
+  arrows, a swatch and its hex typed (#RRGGBB, applied as it is typed), the
+  direction 0 to 359 degrees (arrows of 5, the number typed, a dial),
+  ten presets of UMK3's colours (Midnight, Ice Storm, Blood, Spectral,
+  Venom, Inferno, Ancient Gold, Silver, Crimson Night, Electric Blue; no
+  pink), and ADVANCED: the gradient as CSS, copied, typed and applied when
+  valid (one colour, or linear-gradient with deg or to top / right /
+  bottom / left and two colours), taken again from the controls, cleared.
+  DEFAULT now puts back only the background. The banner above is the
+  preview; nothing is kept until SAVE. The launcher's editor is untouched.
+- The OPTIONS entries are centred again with EDIT PROFILE among them, and
+  the main menu's banner is smaller (Mary).
+
 - **PROFILE** takes FRIENDS' and INVITATIONS' place (Mary): the sections are
   HOME, PROFILE, LOBBIES, QUICK MATCH and PARTY. PROFILE has MY PROFILE --
   name, avatar, outfit, favourite fighter (a gallery of the 24) and the

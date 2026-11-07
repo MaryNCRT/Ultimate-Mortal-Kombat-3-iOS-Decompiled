@@ -98,6 +98,25 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+## MY PROFILE: the detailed gradient editor (2026-11-06)
+
+Audit: the launcher's GradientPicker.svelte (a dial 0..359, FROM / TO,
+presets, the CSS `linear-gradient(<deg>, #from, #to)` or one colour, COPY,
+CLEAR) is already ported to the game's settings menu (settings_menu.c
+`gp_*`, `plat_ui_gradient`); both write profiles.ini's colour, dark (C),
+color2 and angle, which the launcher syncs with the account. MY PROFILE
+(FrontEnd.c `PortOnlineMe`) now has, in its panel: `OnTextBox` kinds
+TB_HEX / TB_NUM / TB_CSS; FROM / TO hex boxes applied live
+(`OnParseHex`); the angle by 5 and typed, with a dial; `PortGradPresets`
+(Mary's ten); ADVANCED replacing the rows while open: `OnParseCss` takes
+what syncFromValue takes, strictly (anything else is refused and said),
+`OnGradCss` writes the CSS as gp_state does (light and dark as their top
+and bottom colours at 180 degrees). DEFAULT sets only the gradient
+(colour 3A8EE6, light). Persistence is profiles.ini, as before; nothing
+new. Checked: built; the editor and ADVANCED drawn at 1920x1080; Mary
+pressed its buttons in the test window (the log's "online ui: button"
+lines). Not checked by Claude: typing a hex and a CSS, the pad.
+
 ## ONLINE: PROFILE, players online, EDIT PROFILE, the session left open (2026-11-06)
 
 - **Sections**: `OS_HOME, OS_PROFILE, OS_LOBBIES, OS_QUICK, OS_PARTY`;

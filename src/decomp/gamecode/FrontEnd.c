@@ -7720,9 +7720,12 @@ void Task_FEMain(void)
 #define FEOPT_OPTION_X        384.0f
 #define FEOPT_OPTION_SCALE    1.25f
 #define FEOPT_OPTION_WIDTH    186.0f
-#define FEOPT_ROW1            80.0f
-#define FEOPT_ROW2            144.0f
-#define FEOPT_ROW3            208.0f
+/* port (Mary): four entries since EDIT PROFILE, centred on the panel as
+ * the binary's three were (80 / 144 / 208, 64 apart) */
+#define FEOPT_ROW1            70.0f
+#define FEOPT_ROW2            126.0f
+#define FEOPT_ROW3            182.0f
+#define FEOPT_ROW4            238.0f
 #define FEOPT_TASK_SETTINGS   9
 #define FEOPT_TASK_BUTTONS    0xa
 #define FEOPT_TASK_SOCIAL     0xc
@@ -7852,7 +7855,7 @@ void FE_Task_Options(void)
         Touch_Options4 = DrawOptionAsButton(text[0],
                                             FESlideOffset * FEOPT_SLIDE_SPAN
                                                 + FEOPT_OPTION_X,
-                                            FEOPT_ROW3 + (FEOPT_ROW3 - FEOPT_ROW2), FEOPT_OPTION_SCALE,
+                                            FEOPT_ROW4, FEOPT_OPTION_SCALE,
                                             &mmfontcol[(LastTouch_Options4 + 1) * 4],
                                             FE_W(FEOPT_OPTION_WIDTH));
         if (LastTouch_Options4 != 0 && Touch_Options4 == 0
@@ -12285,7 +12288,8 @@ enum { OB_TAB0, OB_SUB0 = OB_TAB0 + OS_N, OB_COPY = OB_SUB0 + PS_N, OB_BOX, OB_F
        OB_ADDFIND, OB_ADDACT, OB_NAMEBOX, OB_AVL, OB_AVR, OB_OUT1, OB_OUT2, OB_FAVPICK,
        OB_FAVCLR, OB_MODE0, OB_MODE1, OB_MODE2, OB_C1L, OB_C1R, OB_C2L, OB_C2R, OB_ANGL,
        OB_ANGR, OB_SAVE, OB_CANCEL, OB_RESET, OB_GAL0, OB_GALCLR = OB_GAL0 + 24,
-       OB_GALCLOSE, OB_SOON, OB_MAINBAN,
+       OB_GALCLOSE, OB_SOON, OB_MAINBAN, OB_ADV, OB_CSSBOX, OB_CSSAPPLY, OB_CSSCOPY,
+       OB_CSSGEN, OB_CSSCLR, OB_ANGBOX, OB_HEX1, OB_HEX2, OB_PRE0, OB_PRE_END = OB_PRE0 + 16,
        OB_CARD0, OB_ACT0 = OB_CARD0 + PORT_ROWS, OB_ACT2 = OB_ACT0 + PORT_ROWS,
        OB_N = OB_ACT2 + PORT_ROWS };
 static long  PortOnlineWas[OB_N];
@@ -12956,16 +12960,39 @@ static void OnTypeCode(char *buf, int c)
     buf[n] = 0;
 }
 
-/* A box to type in. `code` 1: a player ID; 0: a name, `max` characters of
- * what the game's font draws (no '|', the profile's separator). A click
- * gives it the keys, Esc or Enter gives them back. 2 when Enter was
- * pressed in it. */
+/* what a box takes: a name (what the game's font draws, no '|', the
+ * profile's separator), a player ID, a colour's hex (#RRGGBB, upper case),
+ * digits, or a CSS gradient (MY PROFILE's advanced options) */
+enum { TB_NAME, TB_ID, TB_HEX, TB_NUM, TB_CSS };
+
+/* the character a box of this kind stores for c, 0 none */
+static int OnBoxTakes(int kind, int c)
+{
+    switch (kind) {
+    case TB_HEX:
+        if (c >= 'a' && c <= 'f')
+            c -= 32;
+        return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || c == '#' ? c : 0;
+    case TB_NUM:
+        return c >= '0' && c <= '9' ? c : 0;
+    case TB_CSS:
+        if (c >= 'A' && c <= 'Z')
+            c += 32;
+        return c >= 0x20 && c < 0x7f && c != '|' ? c : 0;
+    default:
+        return c >= 0x20 && c < 0x7f && c != '|' ? c : 0;
+    }
+}
+
+/* A box to type in, of kind `code` (TB_*), `max` characters. A click gives
+ * it the keys, Esc or Enter gives them back. 2 when Enter was pressed in
+ * it. */
 static int OnTextBox(int id, char *buf, int max, int code, float x, float y, float w,
                      float h, const char *hint, float a)
 {
     static const float k0[4] = { 0.0f, 0.0f, 0.02f, 0.92f }, k1[4] = { 0.04f, 0.07f, 0.16f, 0.88f };
     int st, on, r = 0;
-    char line[64];
+    char line[112];
 
     if (OnArea(id, x, y, w, h, &st))
         PortOnlineEdit = id;
@@ -12982,7 +13009,7 @@ static int OnTextBox(int id, char *buf, int max, int code, float x, float y, flo
             if (ch[0] == 8) {           /* Backspace */
                 if (k > 0)
                     buf[--k] = 0;
-                if (code && k > 0 && buf[k - 1] == '-')
+                if (code == TB_ID && k > 0 && buf[k - 1] == '-')
                     buf[--k] = 0;
             } else if (ch[0] == 13) {   /* Enter */
                 r = 2;
@@ -12990,26 +13017,28 @@ static int OnTextBox(int id, char *buf, int max, int code, float x, float y, flo
             } else if (ch[0] == 27) {   /* Esc */
                 PortOnlineEdit = 0;
             } else if (ch[0] == 22) {   /* Ctrl+V */
-                char clip[64];
+                char clip[96];
                 int i;
                 if (plat_clipboard_text(clip, sizeof clip) > 0) {
                     if (code)
                         buf[0] = 0;
                     for (i = 0; clip[i]; i++) {
+                        int c = OnBoxTakes(code, (unsigned char)clip[i]);
                         k = strlen(buf);
-                        if (code)
+                        if (code == TB_ID)
                             OnTypeCode(buf, (unsigned char)clip[i]);
-                        else if ((int)k < max && clip[i] >= 0x20 && clip[i] < 0x7f && clip[i] != '|') {
-                            buf[k] = clip[i];
+                        else if ((int)k < max && c) {
+                            buf[k] = (char)c;
                             buf[k + 1] = 0;
                         }
                     }
                 }
             } else if (n == 1) {
-                if (code)
+                int c = OnBoxTakes(code, (unsigned char)ch[0]);
+                if (code == TB_ID)
                     OnTypeCode(buf, (unsigned char)ch[0]);
-                else if ((int)k < max && ch[0] >= 0x20 && ch[0] < 0x7f && ch[0] != '|') {
-                    buf[k] = ch[0];
+                else if ((int)k < max && c) {
+                    buf[k] = (char)c;
                     buf[k + 1] = 0;
                 }
             }
@@ -13024,7 +13053,7 @@ static int OnTextBox(int id, char *buf, int max, int code, float x, float y, flo
     if (!buf[0] && !on)
         OnText(hint, x + w * 0.5f, y + (h - 12.0f) * 0.5f, 1, 0.42f, w - 8.0f, OnDim, a);
     else {
-        snprintf(line, sizeof line, "%s%s", code ? buf : OnName(buf),
+        snprintf(line, sizeof line, "%s%s", code == TB_NAME ? OnName(buf) : buf,
                  on && PortOnlineBlink > 1.0f ? "_" : "");
         OnText(line, x + w * 0.5f, y + (h - (h > 24.0f ? 18.0f : 15.0f)) * 0.5f, 1,
                h > 24.0f ? 0.92f : 0.66f, w - 8.0f, OnWhite, a);
@@ -13205,11 +13234,13 @@ static void PortOnlineHome(float cx, float cw, float a, int searching, int nfr, 
 
 /* ------------------------------------------------------ PROFILE: MY PROFILE */
 
-/* the colours the profile can take here: the arcade's, from blood to bone */
+/* the colours the arrows step through: UMK3's night blues, black, crimson,
+ * spectral purple, venom green, ancient gold, silver (Mary: no pink; a
+ * player can still type any colour) */
 static const unsigned PortProfColours[] = {
-    0x6E0B12, 0xB01010, 0xE03A1E, 0xFF8C00, 0xFFD500, 0x3FA34D, 0x1E7F5C, 0x00A6B4,
-    0x3A8EE6, 0x2E5BDE, 0x1B2A6B, 0x6A1B9A, 0xC2185B, 0x8D6E63, 0xB0BEC5, 0xFFFFFF,
-    0x000000,
+    0x000000, 0x101B35, 0x263D75, 0x183B63, 0x65A9D5, 0x101F49, 0x2679B8, 0x3A8EE6,
+    0x130E1B, 0x310D19, 0x79243F, 0xA3223D, 0xB01010, 0x24143F, 0x7544A8, 0x102C25,
+    0x278C68, 0x3B160F, 0xB34B23, 0x3D3018, 0xA88A42, 0x303944, 0x8999AA, 0xFFFFFF,
 };
 #define PORT_PALETTE ((int)(sizeof PortProfColours / sizeof PortProfColours[0]))
 
@@ -13225,6 +13256,21 @@ static unsigned PortPaletteStep(unsigned c, int d)
     return PortProfColours[k];
 }
 
+/* Mary's presets: a custom gradient each, from, to and an angle */
+static const struct { const char *name; unsigned from, to; int angle; } PortGradPresets[] = {
+    { "MIDNIGHT",      0x101B35, 0x263D75, 180 },
+    { "ICE STORM",     0x183B63, 0x65A9D5, 135 },
+    { "BLOOD",         0x310D19, 0xA3223D, 180 },
+    { "SPECTRAL",      0x24143F, 0x7544A8, 135 },
+    { "VENOM",         0x102C25, 0x278C68, 160 },
+    { "INFERNO",       0x3B160F, 0xB34B23, 200 },
+    { "ANCIENT GOLD",  0x3D3018, 0xA88A42, 135 },
+    { "SILVER",        0x303944, 0x8999AA, 180 },
+    { "CRIMSON NIGHT", 0x130E1B, 0x79243F, 135 },
+    { "ELECTRIC BLUE", 0x101F49, 0x2679B8, 90 },
+};
+#define PORT_GRAD_PRESETS ((int)(sizeof PortGradPresets / sizeof PortGradPresets[0]))
+
 static void OnSwatch(unsigned c, float x, float y, float s, float a)
 {
     OnFill(x - 0.8f, y - 0.8f, s + 1.6f, s + 1.6f, 0.75f, 0.85f, 1.0f, 0.7f * a);
@@ -13236,30 +13282,153 @@ static void OnSwatch(unsigned c, float x, float y, float s, float a)
 static int OnStepper(int idl, int idr, const char *text, float x, float y, float w, float a)
 {
     int d = 0;
-    if (OnButton(idl, "<", x, y, 16.0f, 18.0f, BT_NORMAL, a))
+    if (OnButton(idl, "<", x, y, 16.0f, 17.0f, BT_NORMAL, a))
         d = -1;
-    OnText(text, x + w * 0.5f, y + 2.0f, 1, 0.48f, w - 38.0f, OnWhite, a);
-    if (OnButton(idr, ">", x + w - 16.0f, y, 16.0f, 18.0f, BT_NORMAL, a))
+    if (text)
+        OnText(text, x + w * 0.5f, y + 2.0f, 1, 0.46f, w - 38.0f, OnWhite, a);
+    if (OnButton(idr, ">", x + w - 16.0f, y, 16.0f, 17.0f, BT_NORMAL, a))
         d = 1;
     return d;
 }
+
+/* ---- the gradient as the launcher's picker writes it (GradientPicker.svelte,
+ * settings_menu.c gp_state): two colours and an angle; light and dark are
+ * written as their top and bottom colours at 180 degrees ---- */
+static void OnGradCss(const struct profile *p, char *out, int n)
+{
+    unsigned from, to;
+    int angle = 180;
+
+    if (p->dark == 2 && p->angle >= 0) {
+        from = p->color;
+        to = p->color2;
+        angle = p->angle;
+    } else {
+        from = p->dark == 0 ? p->color2 : p->color;
+        to = p->dark == 0 ? p->color : p->color2;
+    }
+    if ((from & 0xffffff) == (to & 0xffffff))
+        snprintf(out, (size_t)n, "#%06X", from & 0xffffff);
+    else
+        snprintf(out, (size_t)n, "linear-gradient(%ddeg, #%06X, #%06X)", angle, from & 0xffffff,
+                 to & 0xffffff);
+}
+
+/* "#RGB" or "#RRGGBB" (the '#' may be left out) to a colour; 0 when it is
+ * not one */
+static int OnParseHex(const char *s, unsigned *c)
+{
+    char h[8];
+    int i, n;
+
+    if (*s == '#')
+        s++;
+    n = (int)strlen(s);
+    if (n != 3 && n != 6)
+        return 0;
+    for (i = 0; i < n; i++)
+        if (!((s[i] >= '0' && s[i] <= '9') || (s[i] >= 'a' && s[i] <= 'f') || (s[i] >= 'A' && s[i] <= 'F')))
+            return 0;
+    if (n == 3) {
+        h[0] = h[1] = s[0];
+        h[2] = h[3] = s[1];
+        h[4] = h[5] = s[2];
+        h[6] = 0;
+    } else
+        snprintf(h, sizeof h, "%s", s);
+    *c = (unsigned)strtoul(h, NULL, 16) & 0xffffff;
+    return 1;
+}
+
+/* What the launcher's picker accepts (GradientPicker.svelte syncFromValue),
+ * checked strictly so nothing odd reaches the banner: one colour, or
+ * linear-gradient( an angle in deg or to top / right / bottom / left, two
+ * colours ). 1 and the gradient when it is one of those. */
+static int OnParseCss(const char *in, unsigned *from, unsigned *to, int *angle)
+{
+    char s[112], *p, *q, *hex[2];
+    int n = 0, i;
+
+    for (i = 0; in[i] && i < (int)sizeof s - 1; i++)
+        s[i] = (char)(in[i] >= 'A' && in[i] <= 'Z' ? in[i] + 32 : in[i]);
+    s[i] = 0;
+    for (p = s; *p == ' '; p++)
+        ;
+    for (q = p + strlen(p); q > p && (q[-1] == ' ' || q[-1] == ';'); q--)
+        q[-1] = 0;
+    if (*p == '#') {                    /* one colour */
+        if (!OnParseHex(p, from))
+            return 0;
+        *to = *from;
+        *angle = 180;
+        return 1;
+    }
+    if (strncmp(p, "linear-gradient(", 16) || p[strlen(p) - 1] != ')')
+        return 0;
+    p += 16;
+    p[strlen(p) - 1] = 0;
+    /* the parts between commas: [direction,] colour, colour */
+    {
+        char *part[4];
+        int k = 0;
+        part[k++] = p;
+        for (q = p; *q && k < 4; q++)
+            if (*q == ',') {
+                *q = 0;
+                part[k++] = q + 1;
+            }
+        if (k < 2 || k > 3)
+            return 0;
+        for (i = 0; i < k; i++) {
+            while (*part[i] == ' ')
+                part[i]++;
+            for (q = part[i] + strlen(part[i]); q > part[i] && q[-1] == ' '; q--)
+                q[-1] = 0;
+        }
+        *angle = 180;
+        if (k == 3) {
+            char *d = part[0];
+            if (!strcmp(d, "to top")) *angle = 0;
+            else if (!strcmp(d, "to right")) *angle = 90;
+            else if (!strcmp(d, "to bottom")) *angle = 180;
+            else if (!strcmp(d, "to left")) *angle = 270;
+            else {
+                char *e;
+                double v = strtod(d, &e);
+                if (e == d || strcmp(e, "deg"))
+                    return 0;
+                *angle = (((int)(v + 0.5)) % 360 + 360) % 360;
+            }
+        }
+        hex[0] = part[k - 2];
+        hex[1] = part[k - 1];
+        n = OnParseHex(hex[0], from) && OnParseHex(hex[1], to);
+    }
+    return n;
+}
+
+static int  PortAdvOpen;                /* ADVANCED OPTIONS unfolded */
+static char PortAdvCss[96];
+static char PortHexFrom[8], PortHexTo[8], PortAngleTxt[4];
 
 static void PortOnlineMe(float cx, float cw, float y0, float a)
 {
     const struct profile *me = prof_get();
     struct profile *d = &PortDraft;
-    float art = 76.0f, tx = cx + OnBandText(art), lw = cw * 0.5f - 12.0f;
-    float lx = cx + 10.0f, rx = cx + cw * 0.5f + 4.0f, ex = 58.0f;
-    float ry[4], ey = y0 + 74.0f;
-    int i, changed;
-    char line[80];
+    float art = 70.0f, tx = cx + OnBandText(art), lw = cw * 0.5f - 12.0f;
+    float lx = cx + 10.0f, rx = cx + cw * 0.5f + 4.0f, rw = cw * 0.5f - 14.0f, ex = 58.0f;
+    float ry[5], ey = y0 + 62.0f;
+    int i, changed, custom;
+    char line[112];
+    const char *hint = NULL;
 
     if (!me)
         return;
     if (!PortDraftOn)
         PortDraftBegin();
-    for (i = 0; i < 4; i++)
-        ry[i] = ey + 8.0f + (float)i * 22.0f;
+    for (i = 0; i < 5; i++)
+        ry[i] = ey + 6.0f + (float)i * 20.0f;
+    custom = d->dark == 2;
     PortOnlineDraftLook[0] = d->icon;
     PortOnlineDraftLook[1] = d->alt;
     PortOnlineDraftLook[2] = (int)d->color;
@@ -13267,107 +13436,233 @@ static void PortOnlineMe(float cx, float cw, float y0, float a)
     PortOnlineDraftLook[4] = (int)d->color2;
     PortOnlineDraftLook[5] = d->angle;
 
-    /* ---- the banner as others will see it ---- */
-    OnBand("*", cx, y0 + 6.0f, cw, 60.0f, art, 0.0f, 0, a);
-    OnText(OnName(d->name[0] ? d->name : "-"), tx, y0 + 10.0f, 0, 0.92f, cw * 0.45f, OnWhite, a);
+    /* ---- the banner as others will see it: the preview ---- */
+    OnBand("*", cx, y0 + 4.0f, cw, 54.0f, art, 0.0f, 0, a);
+    OnText(OnName(d->name[0] ? d->name : "-"), tx, y0 + 7.0f, 0, 0.90f, cw * 0.45f, OnWhite, a);
     OnStatus(mpnet_internet() == 2 ? PortFrTx("EN L\xc3\x8dNEA", "ONLINE")
                                    : PortFrTx("SOLO RED LOCAL", "LOCAL NETWORK ONLY"),
-             mpnet_internet() == 2 ? OnGreen : OnDim, tx, y0 + 32.0f, 150.0f, a, 0);
-    OnText(d->id, tx, y0 + 47.0f, 0, 0.46f, 120.0f, OnGold, a);
+             mpnet_internet() == 2 ? OnGreen : OnDim, tx, y0 + 28.0f, 150.0f, a, 0);
+    OnText(d->id, tx, y0 + 42.0f, 0, 0.44f, 120.0f, OnGold, a);
     if (d->fav >= 0 && d->fav < PROF_ICONS) {
         snprintf(line, sizeof line, "%s: %s", PortFrTx("FAVORITO", "FAVOURITE"), CharacterNames[d->fav]);
-        OnText(line, cx + cw - 24.0f, y0 + 47.0f, 2, 0.44f, cw * 0.4f, OnPale, a);
+        OnText(line, cx + cw - 24.0f, y0 + 42.0f, 2, 0.42f, cw * 0.4f, OnPale, a);
     }
-    OnText(PortFrTx("VISTA PREVIA", "PREVIEW"), cx + cw - 24.0f, y0 + 10.0f, 2, 0.36f, 100.0f, OnPale, a);
+    OnText(PortFrTx("VISTA PREVIA", "PREVIEW"), cx + cw - 24.0f, y0 + 7.0f, 2, 0.34f, 100.0f, OnPale, a);
 
-    /* ---- the editor ---- */
+    /* ---- the editor: the same panel; ADVANCED OPTIONS unfold in it ---- */
     OnPanel(cx, ey, cw, 276.0f - ey, a, 1);
-    OnFill(cx + cw * 0.5f - 4.0f, ey + 8.0f, 0.8f, 84.0f, 0.55f, 0.70f, 1.0f, 0.22f * a);
+    if (PortAdvOpen) {
+        unsigned f, t;
+        int ang, ok = OnParseCss(PortAdvCss, &f, &t, &ang);
+        float bx = lx, bw = (cw - 20.0f - 4.0f * 6.0f) / 5.0f;
 
-    /* name: what the game's font draws, one name a player on the server */
-    OnText(PortFrTx("NOMBRE", "NAME"), lx, ry[0] + 3.0f, 0, 0.40f, ex - 4.0f, OnPale, a);
-    OnTextBox(OB_NAMEBOX, d->name, PROF_NAME_MAX, 0, lx + ex, ry[0], lw - ex, 18.0f,
-              PortFrTx("TU NOMBRE", "YOUR NAME"), a);
-    /* avatar: the fighter of the banner and the icon */
-    OnText("AVATAR", lx, ry[1] + 3.0f, 0, 0.40f, ex - 4.0f, OnPale, a);
-    i = OnStepper(OB_AVL, OB_AVR, CharacterNames[d->icon >= 0 && d->icon < PROF_ICONS ? d->icon : 0],
-                  lx + ex, ry[1], lw - ex, a);
-    if (i)
-        d->icon = (d->icon + i + PROF_ICONS) % PROF_ICONS;
-    OnText(PortFrTx("TRAJE", "OUTFIT"), lx, ry[2] + 3.0f, 0, 0.40f, ex - 4.0f, OnPale, a);
-    if (OnButton(OB_OUT1, "1", lx + ex, ry[2], (lw - ex) * 0.5f - 2.0f, 18.0f,
-                 d->alt ? BT_NORMAL : BT_MAIN, a))
-        d->alt = 0;
-    if (OnButton(OB_OUT2, PortFrTx("2 (ALTERNATIVO)", "2 (ALTERNATE)"), lx + ex + (lw - ex) * 0.5f + 2.0f,
-                 ry[2], (lw - ex) * 0.5f - 2.0f, 18.0f, d->alt ? BT_MAIN : BT_NORMAL, a))
-        d->alt = 1;
+        OnText(PortFrTx("OPCIONES AVANZADAS: EL DEGRADADO COMO CSS", "ADVANCED OPTIONS: THE GRADIENT AS CSS"),
+               lx, ry[0] - 1.0f, 0, 0.42f, cw - 20.0f, OnPale, a);
+        if (OnTextBox(OB_CSSBOX, PortAdvCss, 90, TB_CSS, lx, ry[1] - 4.0f, cw - 20.0f, 22.0f,
+                      "LINEAR-GRADIENT(135DEG, #101B35, #263D75)", a) == 2 && ok) {
+            d->dark = 2;
+            d->color = f;
+            d->color2 = t;
+            d->angle = ang;
+            OnSay(PortFrTx("DEGRADADO APLICADO", "GRADIENT APPLIED"), 0);
+        }
+        OnText(!PortAdvCss[0] ? PortFrTx("UN COLOR (#RRGGBB) O LINEAR-GRADIENT(GRADOS O TO TOP/RIGHT/BOTTOM/LEFT, #DESDE, #HASTA)",
+                                         "ONE COLOUR (#RRGGBB) OR LINEAR-GRADIENT(DEG OR TO TOP/RIGHT/BOTTOM/LEFT, #FROM, #TO)")
+               : ok ? PortFrTx("FORMATO V\xc3\x81LIDO", "VALID FORMAT")
+                    : PortFrTx("FORMATO NO V\xc3\x81LIDO: NO SE APLICA", "INVALID FORMAT: NOT APPLIED"),
+               lx, ry[2] + 3.0f, 0, 0.36f, cw - 20.0f, !PortAdvCss[0] ? OnDim : ok ? OnGreen : OnRed, a);
+        if (OnButton(OB_CSSAPPLY, PortFrTx("APLICAR", "APPLY"), bx, ry[3], bw, 17.0f,
+                     ok ? BT_MAIN : BT_OFF, a)) {
+            d->dark = 2;
+            d->color = f;
+            d->color2 = t;
+            d->angle = ang;
+            OnSay(PortFrTx("DEGRADADO APLICADO", "GRADIENT APPLIED"), 0);
+        }
+        bx += bw + 6.0f;
+        if (OnButton(OB_CSSCOPY, PortFrTx("COPIAR CSS", "COPY CSS"), bx, ry[3], bw, 17.0f, BT_NORMAL, a)) {
+            OnGradCss(d, line, sizeof line);
+            plat_clipboard_set(line);
+            OnSay(PortFrTx("CSS COPIADO", "CSS COPIED"), 0);
+        }
+        bx += bw + 6.0f;
+        if (OnButton(OB_CSSGEN, PortFrTx("DE LOS CONTROLES", "FROM THE CONTROLS"), bx, ry[3], bw, 17.0f,
+                     BT_NORMAL, a))
+            OnGradCss(d, PortAdvCss, sizeof PortAdvCss);
+        bx += bw + 6.0f;
+        if (OnButton(OB_CSSCLR, PortFrTx("LIMPIAR", "CLEAR"), bx, ry[3], bw, 17.0f,
+                     PortAdvCss[0] ? BT_NORMAL : BT_OFF, a))
+            PortAdvCss[0] = 0;
+        bx += bw + 6.0f;
+        if (OnButton(OB_ADV, PortFrTx("CERRAR", "CLOSE"), bx, ry[3], bw, 17.0f, BT_NORMAL, a)) {
+            PortAdvOpen = 0;
+            PortOnlineEdit = 0;
+        }
+        OnGradCss(d, line, sizeof line);
+        OnText(line, lx, ry[4] + 3.0f, 0, 0.36f, cw - 20.0f, OnDim, a);
+    } else {
+        OnFill(cx + cw * 0.5f - 4.0f, ey + 6.0f, 0.8f, 76.0f, 0.55f, 0.70f, 1.0f, 0.22f * a);
 
-    /* the favourite: a preference of its own */
-    OnText(PortFrTx("FAVORITO", "FAVOURITE"), rx, ry[0] + 3.0f, 0, 0.40f, ex - 4.0f, OnPale, a);
-    OnText(d->fav >= 0 && d->fav < PROF_ICONS ? CharacterNames[d->fav] : PortFrTx("NINGUNO", "NONE"),
-           rx + ex, ry[0] + 3.0f, 0, 0.46f, 70.0f, OnWhite, a);
-    if (OnButton(OB_FAVPICK, PortFrTx("ELEGIR", "CHOOSE"), rx + ex + 74.0f, ry[0], 58.0f, 18.0f,
-                 BT_NORMAL, a))
-        PortGallery = 1;
-    if (OnButton(OB_FAVCLR, PortFrTx("QUITAR", "CLEAR"), rx + ex + 136.0f, ry[0], 50.0f, 18.0f,
-                 d->fav >= 0 ? BT_NORMAL : BT_OFF, a))
-        d->fav = -1;
-    /* the gradient, as the launcher's picker can make it */
-    OnText(PortFrTx("FONDO", "BACKGROUND"), rx, ry[1] + 3.0f, 0, 0.40f, ex - 4.0f, OnPale, a);
-    {
-        static const char *const es[3] = { "CLARO", "OSCURO", "PERSONAL" };
-        static const char *const en[3] = { "LIGHT", "DARK", "CUSTOM" };
-        float bw = (cw - (rx - cx) - ex - 14.0f) / 3.0f;
-        for (i = 0; i < 3; i++)
-            if (OnButton(OB_MODE0 + i, PortFrTx(es[i], en[i]), rx + ex + (float)i * bw, ry[1],
-                         bw - 3.0f, 18.0f, d->dark == i ? BT_MAIN : BT_NORMAL, a) && d->dark != i) {
-                d->dark = i;
-                d->color2 = prof_shade_default(i);
-                if (i == 2 && d->angle < 0)
-                    d->angle = 180;
-            }
-    }
-    OnText(PortFrTx("COLORES", "COLOURS"), rx, ry[2] + 3.0f, 0, 0.40f, ex - 4.0f, OnPale, a);
-    {
-        float x = rx + ex;
-        if (OnButton(OB_C1L, "<", x, ry[2], 16.0f, 18.0f, BT_NORMAL, a))
-            d->color = PortPaletteStep(d->color, -1);
-        OnSwatch(d->color, x + 20.0f, ry[2] + 2.0f, 14.0f, a);
-        if (OnButton(OB_C1R, ">", x + 38.0f, ry[2], 16.0f, 18.0f, BT_NORMAL, a))
-            d->color = PortPaletteStep(d->color, 1);
-        x += 64.0f;
-        if (OnButton(OB_C2L, "<", x, ry[2], 16.0f, 18.0f, BT_NORMAL, a))
-            d->color2 = PortPaletteStep(d->color2, -1);
-        OnSwatch(d->color2, x + 20.0f, ry[2] + 2.0f, 14.0f, a);
-        if (OnButton(OB_C2R, ">", x + 38.0f, ry[2], 16.0f, 18.0f, BT_NORMAL, a))
-            d->color2 = PortPaletteStep(d->color2, 1);
-    }
-    OnText(PortFrTx("DIRECCI\xc3\x93N", "DIRECTION"), rx, ry[3] + 3.0f, 0, 0.40f, ex - 4.0f, OnPale, a);
-    if (d->dark == 2) {
-        snprintf(line, sizeof line, "%d%s", d->angle < 0 ? 180 : d->angle, PortFrTx(" GRADOS", " DEGREES"));
-        i = OnStepper(OB_ANGL, OB_ANGR, line, rx + ex, ry[3], 120.0f, a);
+        /* name: what the game's font draws, one name a player on the server */
+        OnText(PortFrTx("NOMBRE", "NAME"), lx, ry[0] + 3.0f, 0, 0.38f, ex - 4.0f, OnPale, a);
+        OnTextBox(OB_NAMEBOX, d->name, PROF_NAME_MAX, TB_NAME, lx + ex, ry[0], lw - ex, 17.0f,
+                  PortFrTx("TU NOMBRE", "YOUR NAME"), a);
+        /* avatar: the fighter of the banner and the icon */
+        OnText("AVATAR", lx, ry[1] + 3.0f, 0, 0.38f, ex - 4.0f, OnPale, a);
+        i = OnStepper(OB_AVL, OB_AVR, CharacterNames[d->icon >= 0 && d->icon < PROF_ICONS ? d->icon : 0],
+                      lx + ex, ry[1], lw - ex, a);
         if (i)
-            d->angle = ((d->angle < 0 ? 180 : d->angle) + i * 45 + 360) % 360;
-    } else
-        OnText(PortFrTx("DE ARRIBA ABAJO", "TOP TO BOTTOM"), rx + ex, ry[3] + 3.0f, 0, 0.42f, 130.0f,
-               OnDim, a);
+            d->icon = (d->icon + i + PROF_ICONS) % PROF_ICONS;
+        OnText(PortFrTx("TRAJE", "OUTFIT"), lx, ry[2] + 3.0f, 0, 0.38f, ex - 4.0f, OnPale, a);
+        if (OnButton(OB_OUT1, "1", lx + ex, ry[2], (lw - ex) * 0.5f - 2.0f, 17.0f,
+                     d->alt ? BT_NORMAL : BT_MAIN, a))
+            d->alt = 0;
+        if (OnButton(OB_OUT2, PortFrTx("2 (ALTERNATIVO)", "2 (ALTERNATE)"), lx + ex + (lw - ex) * 0.5f + 2.0f,
+                     ry[2], (lw - ex) * 0.5f - 2.0f, 17.0f, d->alt ? BT_MAIN : BT_NORMAL, a))
+            d->alt = 1;
 
-    /* ---- save, cancel, defaults ---- */
+        /* the direction, 0 to 359 degrees: arrows of 5, the number typed,
+         * and the dial showing it */
+        OnText(PortFrTx("DIRECCI\xc3\x93N", "DIRECTION"), lx, ry[3] + 3.0f, 0, 0.38f, ex - 4.0f, OnPale, a);
+        if (custom) {
+            int ang = d->angle < 0 ? 180 : d->angle;
+            float dx0 = lx + ex + 106.0f, dy0 = ry[3] + 8.5f, r;
+            if (PortOnlineEdit != OB_ANGBOX)
+                snprintf(PortAngleTxt, sizeof PortAngleTxt, "%d", ang);
+            i = OnStepper(OB_ANGL, OB_ANGR, NULL, lx + ex, ry[3], 96.0f, a);
+            if (i)
+                d->angle = (ang + i * 5 + 360) % 360;
+            OnTextBox(OB_ANGBOX, PortAngleTxt, 3, TB_NUM, lx + ex + 19.0f, ry[3], 58.0f, 17.0f, "0", a);
+            if (PortOnlineEdit == OB_ANGBOX && PortAngleTxt[0])
+                d->angle = atoi(PortAngleTxt) % 360;
+            /* the dial: 0 up, clockwise, as the launcher's */
+            OnFill(dx0 - 8.0f, dy0 - 8.0f, 16.0f, 16.0f, 0.02f, 0.04f, 0.12f, 0.9f * a);
+            OnFrame(dx0 - 8.0f, dy0 - 8.0f, 16.0f, 16.0f, 0.8f, 0.45f, 0.6f, 1.0f, 0.6f * a);
+            for (r = 1.5f; r <= 6.5f; r += 1.0f) {
+                float rad = (float)ang * 3.14159265f / 180.0f;
+                OnFill(dx0 + sinf(rad) * r - 0.7f, dy0 - cosf(rad) * r - 0.7f, 1.4f, 1.4f,
+                       1.0f, 0.25f, 0.15f, a);
+            }
+            OnText(PortFrTx("GRADOS", "DEGREES"), dx0 + 12.0f, ry[3] + 3.0f, 0, 0.34f, 60.0f, OnDim, a);
+        } else
+            OnText(PortFrTx("DE ARRIBA ABAJO (PERSONAL: CUALQUIER \xc3\x81NGULO)",
+                            "TOP TO BOTTOM (CUSTOM: ANY ANGLE)"),
+                   lx + ex, ry[3] + 3.0f, 0, 0.36f, lw - ex, OnDim, a);
+
+        /* the favourite: a preference of its own */
+        OnText(PortFrTx("FAVORITO", "FAVOURITE"), rx, ry[0] + 3.0f, 0, 0.38f, ex - 4.0f, OnPale, a);
+        OnText(d->fav >= 0 && d->fav < PROF_ICONS ? CharacterNames[d->fav] : PortFrTx("NINGUNO", "NONE"),
+               rx + ex, ry[0] + 3.0f, 0, 0.44f, 70.0f, OnWhite, a);
+        if (OnButton(OB_FAVPICK, PortFrTx("ELEGIR", "CHOOSE"), rx + ex + 74.0f, ry[0], 58.0f, 17.0f,
+                     BT_NORMAL, a))
+            PortGallery = 1;
+        if (OnButton(OB_FAVCLR, PortFrTx("QUITAR", "CLEAR"), rx + ex + 136.0f, ry[0], 50.0f, 17.0f,
+                     d->fav >= 0 ? BT_NORMAL : BT_OFF, a))
+            d->fav = -1;
+        /* the gradient: light, dark or custom, as the launcher's PROFILE */
+        OnText(PortFrTx("FONDO", "BACKGROUND"), rx, ry[1] + 3.0f, 0, 0.38f, ex - 4.0f, OnPale, a);
+        {
+            static const char *const es[3] = { "CLARO", "OSCURO", "PERSONAL" };
+            static const char *const en[3] = { "LIGHT", "DARK", "CUSTOM" };
+            float bw = (rw - ex) / 3.0f;
+            for (i = 0; i < 3; i++)
+                if (OnButton(OB_MODE0 + i, PortFrTx(es[i], en[i]), rx + ex + (float)i * bw, ry[1],
+                             bw - 3.0f, 17.0f, d->dark == i ? BT_MAIN : BT_NORMAL, a) && d->dark != i) {
+                    d->dark = i;
+                    d->color2 = prof_shade_default(i);
+                    if (i == 2 && d->angle < 0)
+                        d->angle = 180;
+                }
+        }
+        /* FROM and TO: the arrows through the palette, the swatch, the hex
+         * typed (applied as soon as it is a colour) */
+        for (i = 0; i < 2; i++) {
+            unsigned *c = i ? &d->color2 : &d->color;
+            char *buf = i ? PortHexTo : PortHexFrom;
+            int idb = i ? OB_HEX2 : OB_HEX1;
+            float y = ry[2 + i], x = rx + ex;
+            unsigned v;
+
+            OnText(i ? (custom ? PortFrTx("HASTA", "TO") : PortFrTx("COLOR 2", "COLOUR 2"))
+                     : (custom ? PortFrTx("DESDE", "FROM") : PortFrTx("COLOR 1", "COLOUR 1")),
+                   rx, y + 3.0f, 0, 0.38f, ex - 4.0f, OnPale, a);
+            if (OnButton(i ? OB_C2L : OB_C1L, "<", x, y, 16.0f, 17.0f, BT_NORMAL, a))
+                *c = PortPaletteStep(*c, -1);
+            OnSwatch(*c, x + 20.0f, y + 1.5f, 14.0f, a);
+            if (OnButton(i ? OB_C2R : OB_C1R, ">", x + 38.0f, y, 16.0f, 17.0f, BT_NORMAL, a))
+                *c = PortPaletteStep(*c, 1);
+            if (PortOnlineEdit != idb)
+                snprintf(buf, 8, "#%06X", *c & 0xffffff);
+            OnTextBox(idb, buf, 7, TB_HEX, x + 60.0f, y, 74.0f, 17.0f, "#RRGGBB", a);
+            if (PortOnlineEdit == idb && OnParseHex(buf, &v) && strlen(buf) >= 6)
+                *c = v;
+            if (PortOnlineEdit == idb)
+                hint = PortFrTx("ESCRIBE EL COLOR EN HEXADECIMAL: #RRGGBB", "TYPE THE COLOUR IN HEX: #RRGGBB");
+        }
+
+        /* the presets, small: the two colours each, the chosen one in red */
+        OnText("PRESETS", lx, ry[4] + 3.0f, 0, 0.38f, ex - 4.0f, OnPale, a);
+        {
+            float pw = (cw - 20.0f - ex) / (float)PORT_GRAD_PRESETS;
+            for (i = 0; i < PORT_GRAD_PRESETS; i++) {
+                float x = lx + ex + (float)i * pw;
+                int st, on = custom && d->color == PortGradPresets[i].from
+                             && d->color2 == PortGradPresets[i].to && d->angle == PortGradPresets[i].angle;
+                float f[4], t[4];
+
+                f[0] = (float)((PortGradPresets[i].from >> 16) & 255) / 255.0f;
+                f[1] = (float)((PortGradPresets[i].from >> 8) & 255) / 255.0f;
+                f[2] = (float)(PortGradPresets[i].from & 255) / 255.0f;
+                t[0] = (float)((PortGradPresets[i].to >> 16) & 255) / 255.0f;
+                t[1] = (float)((PortGradPresets[i].to >> 8) & 255) / 255.0f;
+                t[2] = (float)(PortGradPresets[i].to & 255) / 255.0f;
+                f[3] = t[3] = 1.0f;
+                if (OnArea(OB_PRE0 + i, x + 1.0f, ry[4], pw - 3.0f, 15.0f, &st)) {
+                    d->dark = 2;
+                    d->color = PortGradPresets[i].from;
+                    d->color2 = PortGradPresets[i].to;
+                    d->angle = PortGradPresets[i].angle;
+                }
+                OnHGrad(x + 1.0f, ry[4], pw - 3.0f, 15.0f, f, t, a);
+                if (on || st == 2)
+                    OnFrame(x + 1.0f, ry[4], pw - 3.0f, 15.0f, 1.2f, 1.0f, 0.30f, 0.22f, a);
+                else if (st)
+                    OnFrame(x + 1.0f, ry[4], pw - 3.0f, 15.0f, 1.0f, 0.75f, 0.85f, 1.0f, a);
+                else
+                    OnFrame(x + 1.0f, ry[4], pw - 3.0f, 15.0f, 0.6f, 0.0f, 0.0f, 0.0f, 0.6f * a);
+                if (st || on)
+                    hint = PortGradPresets[i].name;
+            }
+        }
+    }
+
+    /* ---- save, cancel, defaults; ADVANCED ---- */
     changed = strcmp(d->name, me->name) || d->icon != me->icon || d->alt != me->alt
               || d->fav != me->fav || d->color != me->color || d->dark != me->dark
               || d->color2 != me->color2 || d->angle != me->angle;
     if (PortDraftMsgT > 0.0f) {
         PortDraftMsgT -= 1.0f / limeFPSScaleFactor;
-        OnText(PortDraftMsg, lx, ry[3] + 3.0f, 0, 0.40f, lw, PortDraftMsgBad ? OnRed : OnGreen, a);
+        OnText(PortDraftMsg, lx, 258.0f, 0, 0.38f, cw * 0.36f, PortDraftMsgBad ? OnRed : OnGreen, a);
     } else if (PortDraftWaitName)
-        OnText(PortFrTx("COMPROBANDO EL NOMBRE...", "CHECKING THE NAME..."), lx, ry[3] + 3.0f, 0,
-               0.40f, lw, OnGold, a);
+        OnText(PortFrTx("COMPROBANDO EL NOMBRE...", "CHECKING THE NAME..."), lx, 258.0f, 0,
+               0.38f, cw * 0.36f, OnGold, a);
+    else if (hint)
+        OnText(hint, lx, 258.0f, 0, 0.38f, cw * 0.36f, OnPale, a);
     else if (changed)
-        OnText(PortFrTx("CAMBIOS SIN GUARDAR", "UNSAVED CHANGES"), lx, ry[3] + 3.0f, 0, 0.40f, lw,
+        OnText(PortFrTx("CAMBIOS SIN GUARDAR", "UNSAVED CHANGES"), lx, 258.0f, 0, 0.38f, cw * 0.36f,
                OnGold, a);
     {
-        float bw = 96.0f, bx = cx + cw * 0.5f - (bw * 3.0f + 12.0f) * 0.5f, by = 256.0f;
-        if (OnButton(OB_SAVE, PortFrTx("GUARDAR", "SAVE"), bx, by, bw, 18.0f,
+        float bw = 84.0f, by = 254.0f, bx = cx + cw - 10.0f - bw * 4.0f - 18.0f;
+        if (OnButton(OB_ADV, PortAdvOpen ? PortFrTx("AVANZADO \x5e", "ADVANCED \x5e")
+                                         : PortFrTx("AVANZADO", "ADVANCED"),
+                     bx, by, bw, 17.0f, PortAdvOpen ? BT_MAIN : BT_NORMAL, a)) {
+            PortAdvOpen = !PortAdvOpen;
+            PortOnlineEdit = 0;
+            if (PortAdvOpen)
+                OnGradCss(d, PortAdvCss, sizeof PortAdvCss);
+        }
+        bx += bw + 6.0f;
+        if (OnButton(OB_SAVE, PortFrTx("GUARDAR", "SAVE"), bx, by, bw, 17.0f,
                      changed && !PortDraftWaitName ? BT_MAIN : BT_OFF, a)) {
             char nm[PROF_NAME_MAX * 4 + 1];
             size_t k;
@@ -13394,22 +13689,23 @@ static void PortOnlineMe(float cx, float cw, float y0, float a)
                     OnSay(PortFrTx("GUARDADO", "SAVED"), 0);
             }
         }
-        if (OnButton(OB_CANCEL, PortFrTx("CANCELAR", "CANCEL"), bx + bw + 6.0f, by, bw, 18.0f,
+        bx += bw + 6.0f;
+        if (OnButton(OB_CANCEL, PortFrTx("CANCELAR", "CANCEL"), bx, by, bw, 17.0f,
                      changed ? BT_NORMAL : BT_OFF, a)) {
             PortDraftBegin();
             PortOnlineEdit = 0;
             OnSay(PortFrTx("CAMBIOS DESCARTADOS", "CHANGES DROPPED"), 0);
         }
-        if (OnButton(OB_RESET, PortFrTx("PREDETERMINADO", "DEFAULTS"), bx + (bw + 6.0f) * 2.0f, by, bw,
-                     18.0f, BT_NORMAL, a)) {
-            /* the look a new profile has (profiles.c); the name, the ID and
-             * the favourite stay. Saved only with SAVE. */
-            d->icon = 18;
-            d->alt = 0;
+        bx += bw + 6.0f;
+        if (OnButton(OB_RESET, PortFrTx("PREDETERMINADO", "DEFAULT"), bx, by, bw, 17.0f, BT_NORMAL, a)) {
+            /* the game's default background (profiles.c, the launcher's
+             * CLEAR): only the gradient -- the name, the avatar, the outfit,
+             * the favourite and the ID stay. Saved only with SAVE. */
             d->color = 0x3a8ee6;
             d->dark = 0;
             d->color2 = prof_shade_default(0);
             d->angle = -1;
+            OnSay(PortFrTx("DEGRADADO PREDETERMINADO (SIN GUARDAR)", "DEFAULT GRADIENT (NOT SAVED)"), 0);
         }
     }
 }
