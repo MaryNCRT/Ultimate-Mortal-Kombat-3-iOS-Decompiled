@@ -8,6 +8,21 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## 0.4.3 beta (2026-11-07)
+
+- **The replay player in the ONLINE screen's look** (Mary): a stone panel
+  under a gold bar, the steel plates with bone-white pictures, PLAY / PAUSE
+  the red plate, the fight played in blood with a gold knob, the game's
+  font; the top corners, the replay list, the loading screen and the
+  hidden player's hint too. The mouse's boxes are where they were.
+- **STAGE SELECT's list shows every stage, nothing to scroll**: up to five
+  rows, the pictures sized to the rows filled (the game's 16 in four rows
+  of four), each name on a dark band across its picture's foot.
+- **Esc's settings menu**: the black box beside the categories is gone --
+  0.4.2 framed the icon in the engine's pixels instead of the menu's space;
+  under the categories now the player's banner as the game shows it (the
+  gradient on steel, the fighter out of it, the name and id).
+
 ## 0.4.2 beta (2026-11-07)
 
 - **STAGE SELECT in the ONLINE screen's look and life** (Mary): the chosen

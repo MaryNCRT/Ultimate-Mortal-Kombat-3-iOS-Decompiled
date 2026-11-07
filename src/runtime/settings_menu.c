@@ -2094,7 +2094,6 @@ static int framed_columns(int *cs, int max)
 }
 
 void limeFillRect(float x, float y, float w, float h, float r, float g, float b, float a);
-void limeFillRectGrad(float x, float y, float w, float h, const float *c);
 
 void set_menu_draw(void)
 {
@@ -2208,37 +2207,14 @@ void set_menu_draw(void)
             goto drop;
         }
         /* the categories down the side panel, and under them the player's
-         * icon, as wide as the panel */
+         * banner, as the game shows it now (Mary, 0.4.2) */
         ui_menu_cols = 2;
         ui_menu_show(tx("AJUSTES", "SETTINGS"), tabs, -N_PAGES, g_page, lp, vp,
                      en, rows, g_sel - g_first, footer, &g_geo);
         ui_menu_cols = 1;
-        if (prof_get() && g_geo.srow > 0) {
-            const struct profile *p = prof_get();
-            int key = (int)prof_look_key(p);
-            float size = g_geo.sw - 6.0f;
-            float x = g_geo.sx + (g_geo.sw - size) * 0.5f - 2.0f;
-            float y = g_geo.stop + N_PAGES * g_geo.srow + 6.0f;
-
-            if (key != g_icon_key) {
-                unsigned char *px = prof_icon_rgba(p->icon, p->alt, p->color, p->dark, p->color2, p->angle, 256);
-                ui_icon_set(px, 256, 256);
-                free(px);
-                g_icon_key = key;
-            }
-            /* framed as the ONLINE screen's panels: a cast shadow, dark
-             * bronze, a lit gold lip on top, the red line under it */
-            limeFillRect(x - 2.0f, y - 1.0f, size + 5.0f, size + 5.0f, 0.0f, 0.0f, 0.0f, 0.55f);
-            {
-                static const float br[16] = { 0.55f, 0.37f, 0.20f, 1.0f, 0.55f, 0.37f, 0.20f, 1.0f,
-                                              0.24f, 0.15f, 0.08f, 1.0f, 0.24f, 0.15f, 0.08f, 1.0f };
-                limeFillRectGrad(x - 2.0f, y - 2.0f, size + 4.0f, size + 4.0f, br);
-            }
-            limeFillRect(x - 2.0f, y - 2.0f, size + 4.0f, 1.0f, 1.0f, 0.86f, 0.55f, 0.9f);
-            limeFillRect(x - 1.0f, y - 1.0f, size + 2.0f, size + 2.0f, 0.02f, 0.02f, 0.018f, 1.0f);
-            ui_icon_draw(x, y, size);
-            limeFillRect(x, y + size - 1.0f, size, 1.0f, 0.66f, 0.11f, 0.07f, 0.9f);
-        }
+        if (prof_get() && g_geo.srow > 0)
+            ui_profile_banner(g_geo.sx + 4.0f, g_geo.stop + N_PAGES * g_geo.srow + 22.0f,
+                              g_geo.sw - 8.0f, 26.0f);
     }
 drop:
     if (g_gp && g_page == PAGE_PROF) {  /* the gradient picker, over the menu */

@@ -61,6 +61,7 @@
 #include "platform/platform.h"
 #include "platform/gl.h"
 #include "debug_menu.h"
+#include "profiles.h"
 extern int rgl_ao_debug;                /* render/rgl.h: AMBIENT OCCLUSION's debug views */
 static const char *const k_aodbg_es[6];   /* the debug views' names, below */
 static const char *const k_aodbg_en[6];
@@ -1833,6 +1834,33 @@ void dbg_info_draw_at(const char *line, int row)
 
 void dbg_info_draw(const char *line) { dbg_info_draw_at(line, 0); }
 
+/* The ONLINE screen's skin (FrontEnd.c, PortSkin*): STAGE SELECT and the
+ * replay player are drawn
+ * in its materials and font, in this space's units (Mary, 0.4.2). */
+void PortSkinBegin(void);
+void PortSkinEnd(void);
+float PortSkinTime(void);
+void PortSkinPanel(float x, float y, float w, float h, float a, int red);
+void PortSkinHeading(const char *title, float x, float y, float w, float a);
+void PortSkinButton(const char *text, float x, float y, float w, float h,
+                    int main, int st, float lit, float a);
+void PortSkinText(const char *s, float x, float y, int align, float size,
+                  float maxw, int kind, float a);
+void PortSkinFrame(float x, float y, float w, float h, float t, int gold, float a);
+void PortSkinShadow(float x, float y, float w, float h, float a);
+void PortSkinGlow(float x, float y, float w, float h, float a);
+void PortSkinRule(float x, float y, float w, float a);
+void PortSkinChevron(float x, float y, float w, float h, int right, float a);
+
+/* back from the skin's pieces to this file's flat quads: they leave
+ * texturing on */
+static void skin_end(void)
+{
+    PortSkinEnd();
+    glDisable(GL_TEXTURE_2D);
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+}
+
 /* ------------------------------------------------------ the replay player */
 
 /* The player's panel along the bottom (rollback_probe.c plays the fight),
@@ -2118,18 +2146,20 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
                      const char *title, const char *const *labels, int list_n,
                      int n_recent, int current)
 {
-    static const float veil0[4] = { 0.086f, 0.078f, 0.26f, 0.88f };
-    static const float veil1[4] = { 0.031f, 0.027f, 0.12f, 0.93f };
-    static const float btn0[4] = { 0.25f, 0.24f, 0.48f, 0.96f };
-    static const float btn1[4] = { 0.063f, 0.055f, 0.17f, 0.96f };
-    static const float hot0[4] = { 0.58f, 0.53f, 0.97f, 1.0f };
-    static const float hot1[4] = { 0.18f, 0.14f, 0.52f, 1.0f };
+    /* Mary (0.4.2): the ONLINE screen's materials -- a stone panel under a
+     * gold bar, the steel plates (PLAY the red one) lit under the mouse, a
+     * well with the fight played in blood and a gold knob, the game's font.
+     * Where everything is (rp_layout, RPT_*) is as it was: the mouse's
+     * boxes are the same. */
+    static const float pl0[4] = { 0.95f, 0.30f, 0.16f, 1.0f }, pl1[4] = { 0.45f, 0.05f, 0.02f, 1.0f };
+    static float lit[RPB_COUNT + 4];
     float x[RPB_COUNT], bw[RPB_COUNT], w, b0, b1, f;
     const char *what;
     char sp[8];
     int i, paused = (state & (RPS_PAUSED | RPS_END)) != 0;
 
     begin_2d();
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
     w = g_rp_w = g_ow / rp_scale();
     g_rp_h = 320.0f / rp_scale();
     glMatrixMode(GL_PROJECTION);
@@ -2141,86 +2171,77 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
     b1 = w * 0.96f;
     f = at < 0 ? 0 : at > 1 ? 1 : at;
     rp_layout(w, x, bw);
+    for (i = 0; i < RPB_COUNT; i++)
+        lit[i] += ((hover == i ? 1.0f : 0.0f) - lit[i]) * 0.3f;
 
-    glBegin(GL_QUADS);
-    /* the glass and its rules */
-    vgrad(0, RPP_TOP, w, 320.0f - RPP_TOP, veil0, veil1);
-    rule(0, RPP_TOP, w, 0.84f, 0.86f, 1.0f, 0.5f);
+    PortSkinBegin();
+    PortSkinPanel(3, RPP_TOP + 2, w - 6, 320.0f - RPP_TOP - 4, 1.0f, 1);
 
     /* the status line: the replay's name and the clock on the left, what it
      * is doing on the right, a warning before it when it differs */
     if (!title || !*title)
         title = "REPLAY";
-    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-    text(b0, RPP_TEXT, 1.0f, title);
-    glColor4f(0.70f, 0.67f, 0.95f, 1.0f);
-    text(b0 + ((float)strlen(title) + 2) * CH_W, RPP_TEXT, 1.0f, time);
+    PortSkinText(title, b0, RPP_TEXT - 3, 0, 0.42f, (b1 - b0) * 0.45f, 0, 1.0f);
+    PortSkinText(time, b0 + (b1 - b0) * 0.47f, RPP_TEXT - 3, 2, 0.42f, 80, 1, 1.0f);
     what = state & RPS_SEEKING ? "SEEKING" : state & RPS_END ? "END"
          : state & RPS_PAUSED ? "PAUSED" : "PLAYING";
-    glColor4f(0.62f, 0.6f, 0.85f, 1.0f);
-    text(b1 - (float)strlen(what) * CH_W, RPP_TEXT, 1.0f, what);
-    if (state & RPS_DIFFERS) {
-        const char *d = "DIFFERS - SEE THE LOG";
-        glColor4f(1.0f, 0.45f, 0.5f, 1.0f);
-        text(b1 - ((float)strlen(what) + 2 + (float)strlen(d)) * CH_W, RPP_TEXT, 1.0f, d);
-    }
+    PortSkinText(what, b1, RPP_TEXT - 3, 2, 0.42f, 100, 2, 1.0f);
+    if (state & RPS_DIFFERS)
+        PortSkinText("DIFFERS - SEE THE LOG", b1 - 70, RPP_TEXT - 3, 2, 0.40f, 140, 3, 1.0f);
 
-    /* the bar: a well, the part played lit, a knob where the fight is */
-    glColor4f(0.016f, 0.012f, 0.07f, 0.8f);
-    rect(b0, RPP_BAR_Y, b1 - b0, RPP_BAR_H);
-    vgrad(b0, RPP_BAR_Y, (b1 - b0) * f, RPP_BAR_H, hot0, hot1);
-    glColor4f(0.8f, 0.82f, 1.0f, 0.45f);
-    frame_rect(b0, RPP_BAR_Y, b1 - b0, RPP_BAR_H, 0.75f);
-    glColor4f(0.67f, 0.63f, 1.0f, 0.35f);
-    rect(b0 + (b1 - b0) * f - 4, RPP_BAR_Y - 4, 8, RPP_BAR_H + 8);
-    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-    rect(b0 + (b1 - b0) * f - 2, RPP_BAR_Y - 2, 4, RPP_BAR_H + 4);
-
-    /* the buttons */
-    for (i = 0; i < RPB_COUNT; i++) {
-        int hot = i == RPB_PLAY, on = i == hover;
-        float bx = x[i], by = RPP_BTN_Y, h = RPP_BTN_H;
-
-        if (on) {                       /* --hover-glow */
-            glColor4f(0.67f, 0.63f, 1.0f, 0.35f);
-            rect(bx - 2, by - 2, bw[i] + 4, h + 4);
-        }
-        vgrad(bx, by, bw[i], h, hot ? hot0 : btn0, hot ? hot1 : btn1);
-        glColor4f(1.0f, 1.0f, 1.0f, hot ? 0.14f : 0.07f);       /* the sheen */
-        rect(bx, by, bw[i], h / 2);
-        if (on)
-            glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-        else if (hot)
-            glColor4f(0.88f, 0.89f, 1.0f, 0.9f);
-        else
-            glColor4f(0.8f, 0.82f, 1.0f, 0.45f);
-        frame_rect(bx, by, bw[i], h, 0.75f);
-        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-        rp_icon(i, bx + bw[i] / 2, by + h / 2, paused);
-    }
-    /* the speed between its two buttons */
+    /* the buttons: the ONLINE plates; their pictures in bone white */
+    for (i = 0; i < RPB_COUNT; i++)
+        PortSkinButton("", x[i], RPP_BTN_Y, bw[i], RPP_BTN_H, i == RPB_PLAY,
+                       hover == i ? 1 : 0, lit[i], 1.0f);
     snprintf(sp, sizeof sp, "%s", k_rp_speed[(state & RPS_SPEED) % 5]);
-    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-    text(x[RPB_SLOWER] + RPP_SMALL + RPP_SPEED / 2 - (float)strlen(sp) * CH_W / 2,
-         RPP_BTN_Y + RPP_BTN_H / 2 - 3.5f, 1.0f, sp);
+    PortSkinText(sp, x[RPB_SLOWER] + RPP_SMALL + RPP_SPEED / 2, RPP_BTN_Y + RPP_BTN_H / 2 - 6,
+                 1, 0.48f, RPP_SPEED - 4, 1, 1.0f);
+    skin_end();
 
-    /* the hovered button's name, in a box above it */
+    glBegin(GL_QUADS);
+    /* the bar: a sunk well, the fight played in blood, a gold knob */
+    glColor4f(0.0f, 0.0f, 0.0f, 0.85f);
+    rect(b0 - 1, RPP_BAR_Y - 1, b1 - b0 + 2, RPP_BAR_H + 2);
+    vgrad(b0, RPP_BAR_Y, (b1 - b0) * f, RPP_BAR_H, pl0, pl1);
+    glColor4f(1.0f, 0.9f, 0.7f, 0.25f);
+    rect(b0, RPP_BAR_Y, (b1 - b0) * f, 1);
+    glColor4f(0.0f, 0.0f, 0.0f, 0.8f);
+    rect(b0 + (b1 - b0) * f - 4, RPP_BAR_Y - 4, 8, RPP_BAR_H + 8);
+    glColor4f(1.0f, 0.78f, 0.38f, 1.0f);
+    rect(b0 + (b1 - b0) * f - 3, RPP_BAR_Y - 3, 6, RPP_BAR_H + 6);
+    glColor4f(1.0f, 0.95f, 0.8f, 1.0f);
+    rect(b0 + (b1 - b0) * f - 3, RPP_BAR_Y - 3, 6, 1.5f);
+    for (i = 0; i < RPB_COUNT; i++) {
+        glColor4f(0.0f, 0.0f, 0.0f, 0.7f);              /* the pictures, cut in */
+        glEnd();
+        glPushMatrix();
+        glTranslatef(0.6f, 0.8f, 0.0f);
+        glBegin(GL_QUADS);
+        rp_icon(i, x[i] + bw[i] / 2, RPP_BTN_Y + RPP_BTN_H / 2, paused);
+        glEnd();
+        glPopMatrix();
+        glBegin(GL_QUADS);
+        if (hover == i)
+            glColor4f(1.0f, 0.88f, 0.62f, 1.0f);
+        else
+            glColor4f(0.94f, 0.91f, 0.83f, 1.0f);
+        rp_icon(i, x[i] + bw[i] / 2, RPP_BTN_Y + RPP_BTN_H / 2, paused);
+    }
+    glEnd();
+
+    /* the hovered button's name, on a plate above it */
     if (hover >= 0 && hover < RPB_COUNT) {
         const char *tip = k_rp_tip[hover];
-        float tw = (float)strlen(tip) * CH_W + 10, tx = x[hover] + bw[hover] / 2 - tw / 2;
+        float tw = (float)strlen(tip) * 6.4f + 16, tx = x[hover] + bw[hover] / 2 - tw / 2;
 
         if (tx < 2) tx = 2;
         if (tx + tw > w - 2) tx = w - 2 - tw;
-        vgrad(tx, RPP_TOP - 18, tw, 14, btn0, btn1);
-        glColor4f(0.8f, 0.82f, 1.0f, 0.45f);
-        frame_rect(tx, RPP_TOP - 18, tw, 14, 0.75f);
-        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-        text(tx + 5, RPP_TOP - 15, 1.0f, tip);
+        PortSkinBegin();
+        PortSkinButton(tip, tx, RPP_TOP - 21, tw, 15, 0, 0, 0.0f, 1.0f);
+        skin_end();
     }
 
-    glEnd();
     glLoadIdentity();                   /* the top: where it is */
-    glBegin(GL_QUADS);
 
     /* the top corners: REPLAYS (the list) on the left; SIZE, HIDE and the X
      * on the right, with nothing between, so the health bars stay in sight */
@@ -2230,68 +2251,66 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
         float hx = b1 - RPT_X_W - RPT_GAP - RPT_HIDE_W;
         float bx = i == 0 ? b0 : i == 1 ? b1 - RPT_X_W : i == 2 ? hx : hx - RPT_GAP - RPT_SIZE_W;
         float bwid = i == 0 ? RPT_LIST_W : i == 1 ? RPT_X_W : i == 2 ? RPT_HIDE_W : RPT_SIZE_W;
+        float *l = &lit[RPB_COUNT + i];
 
-        if (hover == id) {
-            int red = i == 1;           /* the X glows red */
-
-            glColor4f(red ? 1.0f : 0.67f, red ? 0.4f : 0.63f, red ? 0.45f : 1.0f, 0.35f);
-            rect(bx - 2, RPT_BTN_Y - 2, bwid + 4, RPT_BTN_H + 4);
-        }
-        vgrad(bx, RPT_BTN_Y, bwid, RPT_BTN_H, on && !i ? hot0 : btn0, on && !i ? hot1 : btn1);
-        glColor4f(1.0f, 1.0f, 1.0f, 0.07f);
-        rect(bx, RPT_BTN_Y, bwid, RPT_BTN_H / 2);
-        if (hover == id)
-            glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-        else
-            glColor4f(0.8f, 0.82f, 1.0f, 0.45f);
-        frame_rect(bx, RPT_BTN_Y, bwid, RPT_BTN_H, 0.75f);
-        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+        *l += ((hover == id ? 1.0f : 0.0f) - *l) * 0.3f;
+        PortSkinBegin();
+        /* REPLAYS red while its list is open; the X red under the mouse */
+        PortSkinButton("", bx, RPT_BTN_Y, bwid, RPT_BTN_H, (!i && list_n >= 0) || (i == 1 && hover == id),
+                       hover == id ? 1 : 0, *l, 1.0f);
         if (i == 3) {                   /* SIZE: the scale, as text */
             char pc[8];
 
             snprintf(pc, sizeof pc, "%d%%", dbg_replay_pct);
-            text(bx + bwid / 2 - (float)strlen(pc) * CH_W / 2,
-                 RPT_BTN_Y + RPT_BTN_H / 2 - 3.5f, 1.0f, pc);
+            PortSkinText(pc, bx + bwid / 2, RPT_BTN_Y + RPT_BTN_H / 2 - 5.5f, 1, 0.42f, bwid - 4, on ? 1 : 0, 1.0f);
+        } else if (!i)
+            PortSkinText("REPLAYS", bx + 24, RPT_BTN_Y + RPT_BTN_H / 2 - 5.5f, 0, 0.42f, bwid - 28, on ? 1 : 0, 1.0f);
+        skin_end();
+        if (i == 3)
             continue;
-        }
+        glBegin(GL_QUADS);
+        glColor4f(0.94f, 0.91f, 0.83f, 1.0f);
         rp_icon(id, i ? bx + bwid / 2 : bx + 12, RPT_BTN_Y + RPT_BTN_H / 2, 0);
-        if (!i)
-            text(bx + 24, RPT_BTN_Y + RPT_BTN_H / 2 - 3.5f, 1.0f, "REPLAYS");
+        glEnd();
     }
     /* the list, under its button: the last fights, then the kept ones */
     if (list_n >= 0) {
         float ry[RL_MAX], rh[3];
+        static const float r0[4] = { 0.66f, 0.13f, 0.08f, 0.95f }, r1[4] = { 0.30f, 0.04f, 0.02f, 0.95f };
+        static const float s0[4] = { 0.20f, 0.19f, 0.18f, 0.9f }, s1[4] = { 0.07f, 0.07f, 0.07f, 0.9f };
 
         if (list_n > RL_MAX)
             list_n = RL_MAX;
         rl_layout(list_n, n_recent, ry, rh);
-        glColor4f(0.67f, 0.63f, 1.0f, 0.25f);   /* the glow around it */
-        rect(b0 - 2, RL_TOP - 2, RL_W + 4, rh[2] - RL_TOP + 4);
-        vgrad(b0, RL_TOP, RL_W, rh[2] - RL_TOP, veil0, veil1);
-        glColor4f(0.8f, 0.82f, 1.0f, 0.45f);
-        frame_rect(b0, RL_TOP, RL_W, rh[2] - RL_TOP, 0.75f);
-        glColor4f(0.62f, 0.6f, 0.85f, 1.0f);
-        text(b0 + 6, rh[0] + 2, 1.0f, "LAST FIGHTS");
-        text(b0 + 6, rh[1] + 2, 1.0f, "KEPT");
+        PortSkinBegin();
+        PortSkinPanel(b0, RL_TOP, RL_W, rh[2] - RL_TOP, 1.0f, 1);
+        PortSkinText("LAST FIGHTS", b0 + 6, rh[0] + 1, 0, 0.38f, RL_W - 12, 1, 1.0f);
+        PortSkinText("KEPT", b0 + 6, rh[1] + 1, 0, 0.38f, RL_W - 12, 1, 1.0f);
         if (!n_recent)
-            text(b0 + 12, rh[0] + RL_HEAD + 3, 1.0f, "NONE");
+            PortSkinText("NONE", b0 + 12, rh[0] + RL_HEAD + 2, 0, 0.36f, 60, 2, 1.0f);
         if (list_n == n_recent)
-            text(b0 + 12, rh[1] + RL_HEAD + 3, 1.0f, "NONE");
+            PortSkinText("NONE", b0 + 12, rh[1] + RL_HEAD + 2, 0, 0.36f, 60, 2, 1.0f);
+        skin_end();
+        glBegin(GL_QUADS);
         for (i = 0; i < list_n; i++) {
             int on = hover == RPB_ROW + i, cur = i == current;
 
             if (on || cur)
-                vgrad(b0 + 3, ry[i], RL_W - 6, RL_ROW - 1,
-                      on ? hot0 : btn0, on ? hot1 : btn1);
+                vgrad(b0 + 4, ry[i], RL_W - 8, RL_ROW - 1, on ? r0 : s0, on ? r1 : s1);
             if (cur) {
-                glColor4f(0.88f, 0.89f, 1.0f, 0.9f);
+                glColor4f(1.0f, 0.78f, 0.38f, 1.0f);
                 tri(b0 + 6, ry[i] + 3.5f, b0 + 10, ry[i] + 10.5f, 1);
             }
-            glColor4f(1.0f, 1.0f, 1.0f, on || cur ? 1.0f : 0.85f);
-            text(b0 + 14, ry[i] + 3.5f, 1.0f, labels[i]);
         }
+        glEnd();
+        PortSkinBegin();
+        for (i = 0; i < list_n; i++) {
+            int on = hover == RPB_ROW + i, cur = i == current;
+            PortSkinText(labels[i], b0 + 14, ry[i] + 1.5f, 0, 0.36f, RL_W - 20,
+                         on ? 0 : cur ? 1 : 2, 1.0f);
+        }
+        skin_end();
     }
-    glEnd();
     end_2d();
 }
 
@@ -2305,33 +2324,38 @@ void dbg_replay_hidden(float alpha)
     if (alpha <= 0)
         return;
     begin_2d();
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
     glBegin(GL_QUADS);
-    glColor4f(0.031f, 0.027f, 0.12f, 0.6f * alpha);
-    rect((g_ow - tw) * 0.5f - 6, 302.0f, tw + 12, 14.0f);
-    glColor4f(1.0f, 1.0f, 1.0f, alpha);
-    text((g_ow - tw) * 0.5f, 305.0f, 1.0f, what);
+    glColor4f(0.0f, 0.0f, 0.0f, 0.65f * alpha);
+    rect((g_ow - tw * 1.3f) * 0.5f - 8, 300.0f, tw * 1.3f + 16, 16.0f);
+    glColor4f(0.95f, 0.72f, 0.36f, 0.8f * alpha);
+    rect((g_ow - tw * 1.3f) * 0.5f - 8, 300.0f, tw * 1.3f + 16, 1.0f);
     glEnd();
+    PortSkinBegin();
+    PortSkinText(what, g_ow * 0.5f, 302.0f, 1, 0.42f, g_ow, 0, alpha);
+    skin_end();
     end_2d();
 }
 
 /* Between one replay and the next: the screen dark, the next one's name. */
 void dbg_replay_loading(const char *title)
 {
-    static const float veil0[4] = { 0.086f, 0.078f, 0.26f, 1.0f };
-    static const float veil1[4] = { 0.031f, 0.027f, 0.12f, 1.0f };
+    static const float veil0[4] = { 0.06f, 0.055f, 0.05f, 1.0f };
+    static const float veil1[4] = { 0.01f, 0.01f, 0.01f, 1.0f };
     const char *what = "LOADING";
     float y = 160.0f - CH_H;
 
     begin_2d();
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
     glBegin(GL_QUADS);
     vgrad(0, 0, g_ow, 320.0f, veil0, veil1);
-    glColor4f(0.62f, 0.6f, 0.85f, 1.0f);
-    text((g_ow - (float)strlen(what) * CH_W) * 0.5f, y, 1.0f, what);
-    if (title && *title) {
-        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-        text((g_ow - (float)strlen(title) * CH_W) * 0.5f, y + 2 * CH_H, 1.0f, title);
-    }
     glEnd();
+    PortSkinBegin();
+    PortSkinPanel(g_ow * 0.5f - 130, y - 22, 260, 64, 1.0f, 1);
+    PortSkinText(what, g_ow * 0.5f, y - 12, 1, 0.70f, 240, 1, 1.0f);
+    if (title && *title)
+        PortSkinText(title, g_ow * 0.5f, y + 14, 1, 0.42f, 240, 0, 1.0f);
+    skin_end();
     end_2d();
 }
 
@@ -2765,22 +2789,6 @@ static void st_random(void)
     st_close(1);
 }
 
-/* The ONLINE screen's skin (FrontEnd.c, PortSkin*): STAGE SELECT is drawn
- * in its materials and font, in this space's units (Mary, 0.4.2). */
-void PortSkinBegin(void);
-void PortSkinEnd(void);
-float PortSkinTime(void);
-void PortSkinPanel(float x, float y, float w, float h, float a, int red);
-void PortSkinHeading(const char *title, float x, float y, float w, float a);
-void PortSkinButton(const char *text, float x, float y, float w, float h,
-                    int main, int st, float lit, float a);
-void PortSkinText(const char *s, float x, float y, int align, float size,
-                  float maxw, int kind, float a);
-void PortSkinFrame(float x, float y, float w, float h, float t, int gold, float a);
-void PortSkinShadow(float x, float y, float w, float h, float a);
-void PortSkinGlow(float x, float y, float w, float h, float a);
-void PortSkinRule(float x, float y, float w, float a);
-void PortSkinChevron(float x, float y, float w, float h, int right, float a);
 
 /* the animations: the window rising in, the big picture sliding in from
  * the side it was turned to, each button's and picture's light */
@@ -2872,7 +2880,7 @@ void stage_menu_draw(void)
     PortSkinBegin();
     PortSkinPanel(px, py, pw, ph, a, 1);
     PortSkinHeading(title, px + 10, py + 7, pw - 20, a);
-    PortSkinEnd();
+    skin_end();
 
     t = PortSkinTime();
     if (!g_st_list) {                   /* one stage, large */
@@ -2885,7 +2893,7 @@ void stage_menu_draw(void)
         off = (1.0f - k) * 26.0f * (float)g_st_dir;
         PortSkinBegin();
         PortSkinShadow(ix - 2, iy - 2, iw + 4, ih + 4, a);
-        PortSkinEnd();
+        skin_end();
         st_thumb(cur, ix + off, iy, iw, ih, 3.0f);
         st_shade(ix + off, iy, iw, ih, 0.7f * (1.0f - k));
         PortSkinBegin();
@@ -2903,43 +2911,58 @@ void stage_menu_draw(void)
             snprintf(cnt, sizeof cnt, "%d / %d", g_st_cur + 1, g_st_n);
             PortSkinText(cnt, g_ow / 2, iy + ih + 30, 1, 0.40f, 80, 2, a);
         }
-        PortSkinEnd();
+        skin_end();
         st_hit(0, ix - aw - 26, iy, aw + 26, ih);
         st_hit(1, ix + iw, iy, aw + 26, ih);
     } else {                            /* the list: every stage, its picture */
-        int cols = 4, rows = 3, vis = cols * rows;
-        float gx = px + 14, gy = py + 36, gw = pw - 28;
-        float tw = (gw - (cols - 1) * 8) / cols, th = tw * 2 / 3;
+        /* Mary: five rows, so every stage is in sight and nothing scrolls;
+         * as many columns as that takes (4 for the game's 16), the names on
+         * a dark band across each picture's foot */
+        int rows = 5, cols = (g_st_n + rows - 1) / rows < 4 ? 4 : (g_st_n + rows - 1) / rows, vis;
+        float gx = px + 14, gy = py + 34, gw = pw - 28;
+        float tw, th;
+        if (cols > 7) cols = 7;
+        vis = cols * rows;
+        {   /* sized by the rows filled, up to five: the panel's room used */
+            int used = (g_st_n + cols - 1) / cols;
+            if (used > rows) used = rows;
+            if (used < 1) used = 1;
+            th = (ph - 34 - ST_BTN_H - 30 - (used - 1) * 5) / used;
+        }
+        tw = th * 3 / 2;
+        if (cols * tw + (cols - 1) * 8 > gw) {
+            tw = (gw - (cols - 1) * 8) / cols;
+            th = tw * 2 / 3;
+        }
+        gx = (g_ow - (cols * tw + (cols - 1) * 8)) / 2;
         if (g_st_cur < g_st_first)
             g_st_first = g_st_cur / cols * cols;
         if (g_st_cur >= g_st_first + vis)
             g_st_first = (g_st_cur / cols - rows + 1) * cols;
-        if (th > (ph - 36 - ST_BTN_H - 34) / rows - 15) {
-            th = (ph - 36 - ST_BTN_H - 34) / rows - 15;
-            tw = th * 3 / 2;
-            gx = (g_ow - (cols * tw + (cols - 1) * 8)) / 2;
-        }
         for (i = 0; i < vis && g_st_first + i < g_st_n; i++) {
             int kk = g_st_first + i, lv = g_st_ids[kk], on = kk == g_st_cur;
             float l = g_st_lit[8 + i], lift = 1.5f * l;
-            float x = gx + (i % cols) * (tw + 8), y = gy + (i / cols) * (th + 15) - lift;
+            float x = gx + (i % cols) * (tw + 8), y = gy + (i / cols) * (th + 5) - lift;
             PortSkinBegin();
             if (on)
                 PortSkinGlow(x, y, tw, th, a * (0.7f + 0.3f * sinf(t * 5.0f)));
             PortSkinShadow(x, y, tw, th, a);
-            PortSkinEnd();
+            skin_end();
             st_thumb(lv, x, y, tw, th, 1.0f);
             if (!on)
                 st_shade(x, y, tw, th, 0.35f * (1.0f - l));
             PortSkinBegin();
+            skin_end();
+            st_shade(x, y + th - 10, tw, 10, 0.62f);
+            PortSkinBegin();
             PortSkinFrame(x - 1, y - 1, tw + 2, th + 2, on ? 1.4f : 0.9f, on || l > 0.5f, a);
-            PortSkinText(st_name(lv), x + tw / 2, y + th + 2, 1, 0.30f, tw, on ? 1 : 0, a * (on ? 1.0f : 0.8f + 0.2f * l));
-            PortSkinEnd();
-            st_hit(8 + i, x, y, tw, th + 12);
+            PortSkinText(st_name(lv), x + tw / 2, y + th - 9.5f, 1, 0.30f, tw - 4, on ? 1 : 0, a * (on ? 1.0f : 0.8f + 0.2f * l));
+            skin_end();
+            st_hit(8 + i, x, y, tw, th);
         }
         if (g_st_n > vis) {             /* a scroll bar: where the rows shown are */
             int lines = (g_st_n + cols - 1) / cols;
-            float sx = px + pw - 9, h = rows * (th + 15) - 15;
+            float sx = px + pw - 9, h = rows * (th + 5) - 5;
             float y0 = gy + h * (float)(g_st_first / cols) / (float)lines;
             float y1 = gy + h * (float)(g_st_first / cols + rows) / (float)lines;
             glBegin(GL_QUADS);
@@ -2970,7 +2993,7 @@ void stage_menu_draw(void)
                    g_st_hover == 5, g_st_lit[5], a);
     PortSkinButton(st_tx("ELEGIR", "SELECT"), bx + 3 * (bw + 8), by, bw, ST_BTN_H + 2, 1,
                    g_st_hover == 4 ? 1 : 2, g_st_lit[4], a);
-    PortSkinEnd();
+    skin_end();
     st_hit(2, bx, by, bw, ST_BTN_H + 2);
     st_hit(3, bx + bw + 8, by, bw, ST_BTN_H + 2);
     st_hit(5, bx + 2 * (bw + 8), by, bw, ST_BTN_H + 2);
@@ -3048,4 +3071,38 @@ void stage_menu_keys(int left, int right, int up, int down, int ok, int back,
     if (e[6]) g_st_list = !g_st_list;
     if (e[4]) st_close(1);
     else if (e[5]) st_close(-1);
+}
+
+/* The player's banner, as the game shows it now (FrontEnd.c PortSkinBand,
+ * the ONLINE screen's): the gradient on steel, the name and id, the fighter
+ * standing out of its left end. Esc's settings menu draws it under its
+ * categories (settings_menu.c), in this space. */
+void PortSkinBegin(void);
+void PortSkinEnd(void);
+void PortSkinBand(float x, float y, float w, float h, float art, float a);
+
+void ui_profile_banner(float x, float y, float w, float h)
+{
+    static unsigned char *art;
+    static unsigned have;
+    const struct profile *me = prof_get();
+    float sz = h * 1.45f;
+    unsigned key;
+
+    if (!me)
+        return;
+    begin_2d();
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+    PortSkinBegin();
+    PortSkinBand(x, y, w, h, sz, 1.0f);
+    skin_end();
+    end_2d();
+    key = ((unsigned)me->icon * 2654435761u) ^ (me->alt ? 0x5bd1e995u : 0u) ^ 0x7f4a7c15u;
+    if (key != have || !art) {
+        free(art);
+        art = prof_art_rgba(me->icon, me->alt);
+        have = key;
+    }
+    if (art)
+        ui_picture_at(UI_PICTURES - 1, art, 256, 256, key, x - sz * 0.08f, y + h - sz, sz, sz, 1.0f);
 }
