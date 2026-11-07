@@ -203,7 +203,11 @@ static void mayhem_name(char *out, size_t size, const char *in)
  * the player pressed ("invite CODE", "join CODE"), for the launcher to send
  * on. No file: no account, no list. */
 #define OF_MAX 24
+/* kind: 0 a friend, 1 their invite to a fight, 2 their friend request,
+ * 3 this player's request to them, still pending */
 static struct { char code[16], name[32]; int invite; char look[48]; } g_of[OF_MAX];
+/* the last FIND's player (online_find.txt), for its look */
+static struct { char code[16], name[32]; char look[48]; } g_found;
 static int g_of_n = -1;
 static struct stat g_of_st;
 
@@ -228,7 +232,9 @@ int port_online_friend(int i, char *code, char *name, int *invite)
                     char *a = strchr(line, '|'), *b = a ? strchr(a + 1, '|') : NULL;
                     if (!a || !b || b - a - 1 != 14)
                         continue;
-                    g_of[g_of_n].invite = strncmp(line, "invite", 6) == 0;
+                    g_of[g_of_n].invite = !strncmp(line, "invite", 6) ? 1
+                                        : !strncmp(line, "incoming", 8) ? 2
+                                        : !strncmp(line, "outgoing", 8) ? 3 : 0;
                     memcpy(g_of[g_of_n].code, a + 1, 14);
                     g_of[g_of_n].code[14] = 0;
                     b[strcspn(b, "\r\n")] = 0;
@@ -266,9 +272,12 @@ int port_online_friend_look(const char *code, int *icon, unsigned *color, int *d
     for (i = 0; i < g_of_n; i++)
         if (strcmp(g_of[i].code, code) == 0)
             break;
-    if (i >= g_of_n || !g_of[i].look[0])
+    if (i < g_of_n && g_of[i].look[0])
+        snprintf(f, sizeof f, "%s", g_of[i].look);
+    else if (g_found.look[0] && !strcmp(g_found.code, code))
+        snprintf(f, sizeof f, "%s", g_found.look);
+    else
         return 0;
-    snprintf(f, sizeof f, "%s", g_of[i].look);
     for (p = f; k < 6; k++) {
         fld[k] = p;
         if (!(p = strchr(p, '|')))
@@ -283,12 +292,118 @@ int port_online_friend_look(const char *code, int *icon, unsigned *color, int *d
           : fld[2] && (*fld[2] == 'C' || *fld[2] == 'c') ? 2 : 0;
     *color2 = fld[3] && fld[3][0] ? (unsigned)strtoul(fld[3], NULL, 16) & 0xffffff
             : *dark == 1 ? 0x000000 : *dark == 2 ? 0x6e0b12 : 0xffffff;
-    *angle = fld[4] && fld[4][0] ? atoi(fld[4]) : -1;
+    *angle = fld[4] && fld[4][0] >= '0' && fld[4][0] <= '9' ? atoi(fld[4]) : -1;   /* "-": none */
     *alt = fld[5] ? atoi(fld[5]) != 0 : 0;
     return 1;
 }
 
 /* 1 when the launcher wrote friends.txt: an account is logged in */
+/* A line the launcher left for the game in `file` (beside umk3.ini): read
+ * once, then removed. 1 and the line, 0 none. */
+static int online_take(const char *file, char *out, int n)
+{
+    char path[600];
+    FILE *f;
+
+    mayhem_path(path, sizeof path, file);
+    if (!(f = fopen(path, "r")))
+        return 0;
+    out[0] = 0;
+    if (!fgets(out, n, f))
+        out[0] = 0;
+    fclose(f);
+    remove(path);
+    out[strcspn(out, "\r\n")] = 0;
+    return out[0] != 0;
+}
+
+/* FIND's answer (main.js gameFind): the player and what they are to this
+ * one -- "friend", "incoming", "outgoing", "self", "none"; or with no player
+ * "notfound", "guest", "error". 1 when an answer came. */
+int port_online_find_take(char *code, char *name, char *state)
+{
+    char line[200], *a, *b, *s;
+
+    if (!online_take("online_find.txt", line, sizeof line))
+        return 0;
+    code[0] = name[0] = 0;
+    snprintf(state, 16, "error");
+    if (!(a = strchr(line, '|')) || !(b = strchr(a + 1, '|')) || !(s = strrchr(b, '|')))
+        return 1;
+    *a = *b = 0;
+    snprintf(state, 16, "%s", s + 1);
+    *s = 0;                             /* b + 1 .. s: the look, its fields */
+    snprintf(code, 16, "%s", line);
+    mayhem_name(name, 32, a + 1);
+    snprintf(g_found.code, sizeof g_found.code, "%s", code);
+    snprintf(g_found.name, sizeof g_found.name, "%s", name);
+    snprintf(g_found.look, sizeof g_found.look, "%s", s > b ? b + 1 : "");
+    return 1;
+}
+
+/* RENAME's answer (main.js gameRename): "rename|ok|NAME", "rename|taken|NAME"
+ * or "rename|error|WHY". 1 when one came. */
+int port_online_result_take(char *line, int n)
+{
+    return online_take("online_result.txt", line, n);
+}
+
+/* The ONLINE screen's notices (FrontEnd.c): the requests and invites the
+ * player has already seen, by key ("R" or "I" and the code), kept in
+ * online_seen.txt so a seen one is not new again after a restart. */
+#define SEEN_MAX 64
+static char g_seen[SEEN_MAX][16];
+static int  g_seen_n = -1;
+
+static void seen_load(void)
+{
+    char path[600], line[32];
+    FILE *f;
+
+    g_seen_n = 0;
+    mayhem_path(path, sizeof path, "online_seen.txt");
+    if (!(f = fopen(path, "r")))
+        return;
+    while (g_seen_n < SEEN_MAX && fgets(line, sizeof line, f)) {
+        line[strcspn(line, "\r\n")] = 0;
+        if (line[0])
+            snprintf(g_seen[g_seen_n++], sizeof g_seen[0], "%s", line);
+    }
+    fclose(f);
+}
+
+int port_online_seen_has(const char *key)
+{
+    int i;
+    if (g_seen_n < 0)
+        seen_load();
+    for (i = 0; i < g_seen_n; i++)
+        if (!strcmp(g_seen[i], key))
+            return 1;
+    return 0;
+}
+
+void port_online_seen_add(const char *key)
+{
+    char path[600];
+    FILE *f;
+    int i;
+
+    if (port_online_seen_has(key))
+        return;
+    if (g_seen_n == SEEN_MAX) {         /* the oldest goes */
+        memmove(g_seen[0], g_seen[1], sizeof g_seen[0] * (SEEN_MAX - 1));
+        g_seen_n--;
+    }
+    snprintf(g_seen[g_seen_n++], sizeof g_seen[0], "%s", key);
+    mayhem_path(path, sizeof path, "online_seen.txt");
+    if ((f = fopen(path, "w")) != NULL) {
+        for (i = 0; i < g_seen_n; i++)
+            fprintf(f, "%s\n", g_seen[i]);
+        fclose(f);
+    }
+}
+
 int port_online_friends_known(void) { return g_of_st.st_size > 0 || g_of_n > 0; }
 
 void port_online_tell(const char *what, const char *code)

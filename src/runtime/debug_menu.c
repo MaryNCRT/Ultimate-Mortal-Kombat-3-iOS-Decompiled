@@ -1616,6 +1616,48 @@ void ui_badge_at(int slot, const char *name, const unsigned char *icon,
     end_2d();
 }
 
+/* A picture (straight RGBA, pw x ph) at (x, y), w x h points, in
+ * the 320-high menu space; uploaded again only when `key` changes. `a` its
+ * opacity. Port: the ONLINE screen's portraits (online_ui.c). */
+void ui_picture_at(int slot, const unsigned char *rgba, int pw, int ph, unsigned key,
+                   float x, float y, float w, float h, float a)
+{
+    static GLuint tex[UI_PICTURES];
+    static unsigned last[UI_PICTURES];
+
+    if (slot < 0 || slot >= UI_PICTURES || w <= 0 || h <= 0 || a <= 0)
+        return;
+    if (!tex[slot] || key != last[slot]) {
+        if (!rgba)
+            return;
+        if (!tex[slot])
+            glGenTextures(1, &tex[slot]);
+        glBindTexture(GL_TEXTURE_2D, tex[slot]);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, pw, ph, 0, GL_RGBA,
+                     GL_UNSIGNED_BYTE, rgba);
+        last[slot] = key;
+    }
+    begin_2d();
+    glEnable(GL_TEXTURE_2D);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBindTexture(GL_TEXTURE_2D, tex[slot]);
+    glColor4f(1, 1, 1, a);
+    glBegin(GL_QUADS);
+    glTexCoord2f(0, 0); glVertex2f(x, y);
+    glTexCoord2f(1, 0); glVertex2f(x + w, y);
+    glTexCoord2f(1, 1); glVertex2f(x + w, y + h);
+    glTexCoord2f(0, 1); glVertex2f(x, y + h);
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+    end_2d();
+}
+
 /* A rectangle's outline, `t` thick, in the 320-high menu space (port: the
  * ONLINE screen's code box). */
 void ui_rect_outline(float x, float y, float w, float h, float t,

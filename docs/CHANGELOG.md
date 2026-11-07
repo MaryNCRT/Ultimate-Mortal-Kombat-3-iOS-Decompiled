@@ -8,6 +8,77 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased: the new ONLINE screen (stage 2 of the redesign)
+
+- **MY PROFILE's gradient editor, detailed** (Mary): the same panel, with
+  the launcher picker's abilities -- FROM and TO each with the palette's
+  arrows, a swatch and its hex typed (#RRGGBB, applied as it is typed), the
+  direction 0 to 359 degrees (arrows of 5, the number typed, a dial),
+  ten presets of UMK3's colours (Midnight, Ice Storm, Blood, Spectral,
+  Venom, Inferno, Ancient Gold, Silver, Crimson Night, Electric Blue; no
+  pink), and ADVANCED: the gradient as CSS, copied, typed and applied when
+  valid (one colour, or linear-gradient with deg or to top / right /
+  bottom / left and two colours), taken again from the controls, cleared.
+  DEFAULT now puts back only the background. The banner above is the
+  preview; nothing is kept until SAVE. The launcher's editor is untouched.
+- The OPTIONS entries are centred again with EDIT PROFILE among them, and
+  the main menu's banner is smaller (Mary).
+
+- **PROFILE** takes FRIENDS' and INVITATIONS' place (Mary): the sections are
+  HOME, PROFILE, LOBBIES, QUICK MATCH and PARTY. PROFILE has MY PROFILE --
+  name, avatar, outfit, favourite fighter (a gallery of the 24) and the
+  gradient (light, dark or custom, two colours, the direction), with the
+  banner previewed as it changes and SAVE, CANCEL and DEFAULTS; a new name
+  is checked by the account's server and refused when another player has
+  it -- FRIENDS (challenge, join or decline a fight, remove a friend, add
+  one by player ID), REQUESTS RECEIVED (accept, decline) and REQUESTS SENT
+  (cancel). A count on PROFILE says what waits, red while some of it is
+  new; a new request or invite shows a notice once.
+- **Players online**: HOME and the top of the screen say how many players
+  have the ONLINE screen open (games from this version on).
+- **The main menu's badge** is a small player banner; a click opens MY
+  PROFILE, and OPTIONS has EDIT PROFILE.
+- **Esc, AUDIO and VIDEO SETTINGS stopped working after visiting ONLINE**
+  (Mary): leaving the screen left the network session open. Fixed. The
+  debug menu (F2) is now off on the ONLINE screen too, like the settings
+  menu.
+- HOME's statistics say WINS and LOSSES (Mary).
+
+- **The ONLINE screen's new look** (Mary's visual brief, 2026-11-06): panels
+  with depth (a diagonal gradient from navy to black that lets the cemetery
+  through, a light along the top edge, a darker bottom, a soft shadow),
+  buttons in gradients whose states are told apart (normal, under the
+  mouse, chosen with the keys or the pad in red, pressed, off), tabs with
+  separators, a glow over the red bar and a count of the invites waiting.
+- **Player Banners**: every player is a horizontal banner in their own
+  profile gradient -- exactly the one they chose, over the whole banner --
+  with their fighter (the VERSUS art, transparent) standing out of its left
+  end. HOME's banner carries the name, the state, the player ID with COPY,
+  and the game's own statistics (human wins and losses, best win streak,
+  fatalities, flawless, favourite character). FRIENDS: a list of banners
+  and the chosen friend's banner, big, with INVITE TO FIGHT.
+  INVITATIONS: received (ACCEPT, DECLINE) and sent. LOBBIES, QUICK MATCH
+  and PARTY show what exists (you, as the party's leader) with their
+  actions off until their stages come.
+- **Statistics were lost at every start** (a decomp bug): the save was
+  loaded into a second copy of the stats nobody read, so the STATS screen
+  and now the profile showed only the session's numbers. Fixed: they load
+  into the one block the binary has. Each fighter's play count (the
+  favourite character) only starts counting from this build.
+
+- **ONLINE has sections**: HOME, FRIENDS, INVITATIONS, LOBBIES, QUICK
+  MATCH and PARTY along the top, over the same night cemetery and moon,
+  in translucent panels with the MK red along their top; a red bar slides
+  to the section and each one fades in. HOME has the profile, your code and
+  COPY, FIND BY CODE and the state of the connection; FRIENDS and
+  INVITATIONS have what the launcher's account gives (up to six rows).
+  LOBBIES, QUICK MATCH and PARTY say they are coming (the next stages).
+  The mouse lights the button under it; the keyboard and the pad move
+  between every button. The code box takes the keys only once it is
+  clicked (Esc gives them back); Ctrl+V pastes anywhere on HOME. Checked by
+  Claude in the test folder (with Mary's permission to open the game):
+  clicks, the sections, typing a code, the keyboard; not yet played online
+  between two machines.
 ## Unreleased: updates always reach the player
 
 - **An update from the launcher now always gives the new game.** Mary:

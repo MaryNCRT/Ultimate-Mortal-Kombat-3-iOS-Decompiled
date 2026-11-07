@@ -40,6 +40,7 @@ int  mpeos_lookup_result(char *who, int n) { (void)who; (void)n; return -1; }
 void mpeos_send(const char *who, const void *p, int n) { (void)who; (void)p; (void)n; }
 int  mpeos_recv(char *who, int wn, void *buf, int max)
 { (void)who; (void)wn; (void)buf; (void)max; return 0; }
+int  mpeos_players(void) { return -1; }
 
 #else
 
@@ -281,16 +282,144 @@ static void lobby_step(void)
     }
 }
 
+/* ------------------------------------------------------ PLAYERS ONLINE
+ *
+ * Every game with the ONLINE screen open owns, beside the lobby named after
+ * its code, one in the bucket HERE_BUCKET; the lobbies there are the
+ * players on line (Mary: "how many players are active"). Nobody joins it
+ * either. Games older than this one do not make it, so they are not
+ * counted. */
+#define HERE_BUCKET "umk3-online"
+static char g_here_id[128];
+static int  g_here_want, g_here_busy;
+static int  g_players = -1, g_count_busy;
+static unsigned g_count_at;
+
+static void here_step(void);
+
+static void EOS_CALL on_here_destroyed(const EOS_Lobby_DestroyLobbyCallbackInfo *d)
+{
+    (void)d;
+    g_here_busy = 0;
+    here_step();
+}
+
+static void EOS_CALL on_here_created(const EOS_Lobby_CreateLobbyCallbackInfo *d)
+{
+    g_here_busy = 0;
+    if (d->ResultCode != EOS_Success) {
+        printf("online: EOS presence lobby not created: %s\n", res(d->ResultCode));
+        g_here_want = 0;                /* not again every frame */
+        return;
+    }
+    snprintf(g_here_id, sizeof g_here_id, "%s", d->LobbyId);
+    g_count_at = 0;                     /* count again, with this one */
+    here_step();
+}
+
+static void here_step(void)
+{
+    if (g_state != MPEOS_READY || g_here_busy)
+        return;
+    if (g_here_id[0] && !g_here_want) {
+        EOS_Lobby_DestroyLobbyOptions o;
+        memset(&o, 0, sizeof o);
+        o.ApiVersion = EOS_LOBBY_DESTROYLOBBY_API_LATEST;
+        o.LocalUserId = g_me;
+        o.LobbyId = g_here_id;
+        g_here_busy = 1;
+        p_EOS_Lobby_DestroyLobby(g_lobby, &o, NULL, on_here_destroyed);
+        g_here_id[0] = 0;
+    } else if (!g_here_id[0] && g_here_want) {
+        EOS_Lobby_CreateLobbyOptions o;
+        memset(&o, 0, sizeof o);
+        o.ApiVersion = EOS_LOBBY_CREATELOBBY_API_LATEST;
+        o.LocalUserId = g_me;
+        o.MaxLobbyMembers = 2;
+        o.PermissionLevel = EOS_LPL_PUBLICADVERTISED;
+        o.bPresenceEnabled = EOS_FALSE;
+        o.bAllowInvites = EOS_FALSE;
+        o.BucketId = HERE_BUCKET;
+        o.bDisableHostMigration = EOS_TRUE;
+        g_here_busy = 1;
+        p_EOS_Lobby_CreateLobby(g_lobby, &o, NULL, on_here_created);
+    }
+}
+
+static void EOS_CALL on_counted(const EOS_LobbySearch_FindCallbackInfo *d)
+{
+    EOS_HLobbySearch s = (EOS_HLobbySearch)d->ClientData;
+
+    g_count_busy = 0;
+    if (d->ResultCode == EOS_Success) {
+        EOS_LobbySearch_GetSearchResultCountOptions c;
+        memset(&c, 0, sizeof c);
+        c.ApiVersion = EOS_LOBBYSEARCH_GETSEARCHRESULTCOUNT_API_LATEST;
+        g_players = (int)p_EOS_LobbySearch_GetSearchResultCount(s, &c);
+    } else if (d->ResultCode == EOS_NotFound)
+        g_players = 0;
+    p_EOS_LobbySearch_Release(s);
+}
+
+static void count_now(void)
+{
+    EOS_Lobby_CreateLobbySearchOptions o;
+    EOS_LobbySearch_SetParameterOptions sp;
+    EOS_LobbySearch_FindOptions fo;
+    EOS_Lobby_AttributeData a;
+    EOS_HLobbySearch s = NULL;
+
+    memset(&o, 0, sizeof o);
+    o.ApiVersion = EOS_LOBBY_CREATELOBBYSEARCH_API_LATEST;
+    o.MaxResults = 200;
+    if (p_EOS_Lobby_CreateLobbySearch(g_lobby, &o, &s) != EOS_Success) {
+        g_count_busy = 0;
+        return;
+    }
+    memset(&a, 0, sizeof a);
+    a.ApiVersion = EOS_LOBBY_ATTRIBUTEDATA_API_LATEST;
+    a.Key = EOS_LOBBY_SEARCH_BUCKET_ID;
+    a.Value.AsUtf8 = HERE_BUCKET;
+    a.ValueType = EOS_AT_STRING;
+    memset(&sp, 0, sizeof sp);
+    sp.ApiVersion = EOS_LOBBYSEARCH_SETPARAMETER_API_LATEST;
+    sp.Parameter = &a;
+    sp.ComparisonOp = EOS_CO_EQUAL;
+    p_EOS_LobbySearch_SetParameter(s, &sp);
+    memset(&fo, 0, sizeof fo);
+    fo.ApiVersion = EOS_LOBBYSEARCH_FIND_API_LATEST;
+    fo.LocalUserId = g_me;
+    p_EOS_LobbySearch_Find(s, &fo, s, on_counted);
+}
+
+/* The players on line, -1 while not known; asked again every 15 seconds
+ * while someone asks (the ONLINE screen, every frame). */
+int mpeos_players(void)
+{
+    if (g_state != MPEOS_READY)
+        return -1;
+    if (!g_count_busy && (!g_count_at || ticks() - g_count_at > 15000)) {
+        g_count_at = ticks();
+        g_count_busy = 1;
+        count_now();
+    }
+    return g_players;
+}
+
 void mpeos_advertise(const char *code)
 {
     bucket_of(code, g_adv_want, sizeof g_adv_want);
     lobby_step();
+    g_here_want = 1;
+    here_step();
 }
 
 void mpeos_unadvertise(void)
 {
     g_adv_want[0] = 0;
     lobby_step();
+    g_here_want = 0;
+    here_step();
 }
 
 /* -------------------------------------------------------------- lookup */
@@ -486,6 +615,7 @@ static void logged_in(EOS_ProductUserId u)
     n.SocketId = &g_socket;
     p_EOS_P2P_AddNotifyPeerConnectionRequest(g_p2p, &n, NULL, on_request);
     lobby_step();
+    here_step();
     if (g_look_pending)
         look_now();
 }

@@ -28,6 +28,7 @@ extern int  FE_CurrentTask;
 extern long GameMode;
 
 #define ICON_PX 96
+#define PIC_PX  192                     /* the ONLINE screen's portraits */
 
 struct look { int icon; unsigned color, color2; int dark, angle, alt; };
 
@@ -108,42 +109,66 @@ void online_after_frame(void)
     my_look(&ml);
     w = ui_space_width();
 
-    if (CurrentTask == 3 && FE_CurrentTask == 51) {
-        /* FrontEnd.c's box where the menu drew it this frame (screen
-         * pixels), into this space as ui_nav_frame takes them: 320 high */
-        extern float PortOnlineBoxPx[4];
-        extern int PortOnlineBoxActive;
+    /* the ONLINE screen, and the main menu's player banner (FrontEnd.c
+     * PortMainBanner) */
+    if (CurrentTask == 3 && (FE_CurrentTask == 51 || FE_CurrentTask == 0)) {
+        /* FrontEnd.c lists the pictures it laid out this frame, in screen
+         * pixels; into this space as ui_nav_frame takes them: 320 high.
+         * Kind 1 is the fighter's VERSUS art alone, with its transparency,
+         * standing out of a player banner; kind 0 the profile's icon (the
+         * art on the profile's gradient, as the launcher draws it). */
         extern int limeScreenHeight;
         float k = limeScreenHeight > 0 ? 320.0f / (float)limeScreenHeight : 1.0f;
-        const float *b = PortOnlineBoxPx;
-
-        extern int   PortOnlineFrShown;     /* FrontEnd.c: FRIENDS' rows */
-        extern char  PortOnlineFrCode[][16];
-        extern char  PortOnlineFrName[][32];
-        extern float PortOnlineFrY[];
-        extern int   PortOnlineFriendsOn;
+        extern int   PortOnlinePicN;
+        extern char  PortOnlinePicCode[][16];   /* "" this player */
+        extern float PortOnlinePicPx[][4];      /* x, y, size, opacity */
+        extern int   PortOnlinePicKind[];
+        extern int   PortOnlineDraftLook[6];    /* MY PROFILE's draft: code "*" */
         int port_online_friend_look(const char *code, int *icon, unsigned *color, int *dark,
                                     unsigned *color2, int *angle, int *alt);
+        static unsigned char *px[UI_PICTURES];
+        static unsigned have[UI_PICTURES];
         int i;
 
-        badge(0, me->name, &ml, w * 0.5f - 120.0f, 64.0f, 1, 1.5f);
-        /* FRIENDS: each friend's name and icon, left of INVITE / JOIN */
-        for (i = 0; i < PortOnlineFrShown && i < 4; i++) {
+        for (i = 0; i < PortOnlinePicN && i < UI_PICTURES; i++) {
             struct look fl;
-            memset(&fl, 0, sizeof fl);
-            fl.angle = -1;
-            port_online_friend_look(PortOnlineFrCode[i], &fl.icon, &fl.color, &fl.dark,
-                                    &fl.color2, &fl.angle, &fl.alt);
-            badge(1 + i, PortOnlineFrName[i], &fl, w * 0.5f + 8.0f, PortOnlineFrY[i] - 2.0f, 0, 0.75f);
+            unsigned key;
+            const float *p = PortOnlinePicPx[i];
+            int art = PortOnlinePicKind[i] == 1;
+
+            if (!PortOnlinePicCode[i][0])
+                fl = ml;
+            else if (PortOnlinePicCode[i][0] == '*') {
+                memset(&fl, 0, sizeof fl);
+                fl.icon = PortOnlineDraftLook[0];
+                fl.alt = PortOnlineDraftLook[1];
+                fl.color = (unsigned)PortOnlineDraftLook[2];
+                fl.dark = PortOnlineDraftLook[3];
+                fl.color2 = (unsigned)PortOnlineDraftLook[4];
+                fl.angle = PortOnlineDraftLook[5];
+            } else if (PortOnlinePicCode[i][0] == '#') {    /* a fighter by number */
+                memset(&fl, 0, sizeof fl);
+                fl.icon = atoi(PortOnlinePicCode[i] + 1);
+                fl.angle = -1;
+            } else {
+                memset(&fl, 0, sizeof fl);
+                fl.angle = -1;
+                port_online_friend_look(PortOnlinePicCode[i], &fl.icon, &fl.color, &fl.dark,
+                                        &fl.color2, &fl.angle, &fl.alt);
+            }
+            key = (key_of(PortOnlinePicCode[i], &fl) ^ (art ? 0x9e3779b9u : 0u)) | 1u;
+            if (key != have[i] || !px[i]) {
+                free(px[i]);
+                px[i] = art ? prof_art_rgba(fl.icon, fl.alt)
+                            : prof_icon_rgba(fl.icon, fl.alt, fl.color, fl.dark, fl.color2,
+                                             fl.angle, PIC_PX);
+                have[i] = key;
+            }
+            if (px[i])
+                ui_picture_at(i, px[i], art ? 256 : PIC_PX, art ? 256 : PIC_PX, key,
+                              p[0] * k, p[1] * k, p[2] * k, p[2] * k, p[3]);
         }
-        if (PortOnlineFriendsOn)            /* the code's box is not up */
-            return;
-        if (PortOnlineBoxActive)
-            ui_rect_outline(b[0] * k, b[1] * k, b[2] * k, b[3] * k, 2.0f,
-                            1.0f, 0.85f, 0.2f, 1.0f);
-        else
-            ui_rect_outline(b[0] * k, b[1] * k, b[2] * k, b[3] * k, 1.5f,
-                            1.0f, 1.0f, 1.0f, 0.6f);
+        (void)w;
         return;
     }
     if (GameMode != 1 || !o || mpnet_connection_state() != 2)

@@ -1352,6 +1352,7 @@ static int   g_moves_who;
  * the tap in flight (0 a finger or the mouse), and the right stick's
  * palette turns, one per side. */
 extern int PortNavPick, PortNavHover;
+float PortMouseX = -1.0f, PortMouseY = -1.0f;   /* the ONLINE screen's hover (port) */
 extern int PortPadPalette[2];
 void PortNavDraw(const char *ok, const char *back, int left);
 void PortNavDrawLine(const char *s, int right);    /* FrontEnd.c */
@@ -3273,6 +3274,19 @@ int main(int argc, char **argv)
             float tx = (float)(mx - vx) * g_virt_w / (vw ? vw : 1);
             float ty = (float)(my - vy) * g_virt_h / (vh ? vh : 1);
 
+            /* port: where the mouse is, pressed or not, in the touch's
+             * units: the ONLINE screen lights the button under it */
+            {
+                extern float PortMouseX, PortMouseY;
+                int in = mx >= vx && my >= vy && mx < vx + vw && my < vy + vh;
+                PortMouseX = in ? tx : -1.0f;
+                PortMouseY = in ? ty : -1.0f;
+                {
+                    extern unsigned PortTick;  /* FrontEnd.c: frames, for the ONLINE screen */
+                    PortTick++;
+                }
+            }
+
             if (dbg_menu_is_open())     /* the debug menu takes the mouse, as fractions */
                 dbg_menu_mouse(tx / g_virt_w, ty / g_virt_h,
                                plat_mouse(&mx, &my) && g_ntaps == 0);
@@ -3532,10 +3546,12 @@ int main(int argc, char **argv)
             }
             /* port: no debug menu or debug keys in an online fight (Mary):
              * the other player's game would not see what they change */
-            if (GameMode == 1 && (CurrentTask == 6 || CurrentTask == 9)
-                && dbg_menu_is_open())
+            /* nor on the ONLINE screens (Mary): from the moment the network
+             * session opens, as the settings menu */
+            if (((GameMode == 1 && (CurrentTask == 6 || CurrentTask == 9))
+                 || mpnet_session_exists()) && dbg_menu_is_open())
                 dbg_menu_toggle();
-            if (g_cfg_debug_keys && !set_menu_is_open()
+            if (g_cfg_debug_keys && !set_menu_is_open() && !mpnet_session_exists()
                 && !(GameMode == 1 && (CurrentTask == 6 || CurrentTask == 9))) {
                 static int was_f2, was_f3;
                 /* the pad's combination (pad_dbg_menu=, L3+R3 unless the
@@ -3719,9 +3735,9 @@ int main(int argc, char **argv)
             if (g_cfg_skip_intro && CurrentTask == 0 && SplashCount > 0
                 && SplashCount < 491)
                 SplashCount = 491;
-            /* the player's badge on the main menu (port) */
-            if (CurrentTask == 3 && FE_CurrentTask == 0)
-                set_menu_badge();
+            /* the player's badge on the main menu (port) is now a banner
+             * the front end draws and takes clicks on (FrontEnd.c
+             * PortMainBanner, Mary): online_after_frame draws its fighter */
             if (CurrentTask == 3) {     /* the boot is over: the list kept */
                 void lime_tex_prefetch_end(void);
                 lime_tex_prefetch_end();
