@@ -96,33 +96,33 @@
 <style>
     .tl { display: flex; flex-direction: column; background: var(--well); border-radius: var(--r-sm); user-select: none; border: 1px solid var(--line); }
     .bar { display: flex; align-items: center; gap: calc(var(--u) * .3); padding: calc(var(--u) * .3) calc(var(--u) * .5); border-bottom: 1px solid var(--line); }
-    .tb { background: rgba(150, 140, 255, .1); border: 1px solid var(--line); color: var(--lav); border-radius: 3px; cursor: pointer;
+    .tb { background: rgba(120, 140, 170, .1); border: 1px solid var(--line); color: var(--lav); border-radius: 3px; cursor: pointer;
         min-width: calc(var(--u) * 2.6); height: calc(var(--u) * 2.2); font-size: calc(var(--t) * 1.05); padding: 0 calc(var(--u) * .3); }
-    .tb:hover { color: #fff; background: rgba(150, 140, 255, .25); }
+    .tb:hover { color: #fff; background: rgba(120, 140, 170, .25); }
     .tb.hot { background: rgba(255, 160, 64, .35); color: #fff; }
-    .cur { width: calc(var(--u) * 6); background: #1a1640; color: #ffc890; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; margin-left: calc(var(--u) * .5); text-align: center; }
+    .cur { width: calc(var(--u) * 6); background: #151b25; color: #ffc890; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; margin-left: calc(var(--u) * .5); text-align: center; }
     .range, .count { color: var(--dim); font-size: calc(var(--t) * 1); }
     .count { margin-left: auto; }
     .sheet { display: flex; padding: 0 calc(var(--u) * .9) calc(var(--u) * .3) 0; }
     .names { display: flex; flex-direction: column; flex: 0 0 calc(var(--u) * 12); min-width: 0; border-right: 1px solid var(--line); }
     .nm { height: calc(var(--u) * 1.9); line-height: calc(var(--u) * 1.9); padding-left: calc(var(--u) * .6); font-size: calc(var(--t) * 1.05); color: var(--lav); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .nm.sub { padding-left: calc(var(--u) * 1.6); color: var(--dim); }
-    .nm.sum { color: #fff; background: rgba(150, 140, 255, .1); }
+    .nm.sum { color: #fff; background: rgba(120, 140, 170, .1); }
     .area { position: relative; flex: 1; min-width: 0; cursor: ew-resize; touch-action: none; margin-left: calc(var(--u) * .9); }
     .ruler, .row { position: relative; height: calc(var(--u) * 1.9); }
     .ruler { border-bottom: 1px solid var(--line); }
-    .row { border-bottom: 1px solid rgba(150, 140, 255, .08); }
+    .row { border-bottom: 1px solid rgba(120, 140, 170, .08); }
     .row.odd { background: rgba(255, 255, 255, .02); }
-    .row.sum { background: rgba(150, 140, 255, .1); }
+    .row.sum { background: rgba(120, 140, 170, .1); }
     .tick { position: absolute; bottom: 0; width: 1px; height: 25%; background: rgba(200, 195, 255, .25); }
     .tick.big { height: 45%; background: rgba(200, 195, 255, .55); }
     .lab { position: absolute; top: 0; transform: translateX(-50%); font-size: calc(var(--t) * .95); color: var(--dim); }
     .key { position: absolute; top: 50%; width: calc(var(--u) * .95); height: calc(var(--u) * .95); transform: translate(-50%, -50%) rotate(45deg);
-        background: #e8e4ff; border: 1px solid #000; box-sizing: border-box; z-index: 1; }
-    .key.lin { background: #1a1640; border: 2px solid #e8e4ff; }
+        background: #e6ebf3; border: 1px solid #000; box-sizing: border-box; z-index: 1; }
+    .key.lin { background: #151b25; border: 2px solid #e6ebf3; }
     .key.hot { background: #ffa040; border-color: #fff; }
-    .key.lin.hot { background: #1a1640; border-color: #ffa040; }
-    .head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #4a9cff; pointer-events: none; z-index: 2; }
-    .badge { position: absolute; top: 0; left: 50%; transform: translateX(-50%); background: #4a9cff; color: #fff; border-radius: 3px;
+    .key.lin.hot { background: #151b25; border-color: #ffa040; }
+    .head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #8293ad; pointer-events: none; z-index: 2; }
+    .badge { position: absolute; top: 0; left: 50%; transform: translateX(-50%); background: #8293ad; color: #fff; border-radius: 3px;
         padding: 0 4px; font-size: calc(var(--t) * .95); line-height: calc(var(--u) * 1.7); white-space: nowrap; }
 </style>

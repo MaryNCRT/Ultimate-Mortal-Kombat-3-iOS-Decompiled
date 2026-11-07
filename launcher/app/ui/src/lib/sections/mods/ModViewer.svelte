@@ -1460,19 +1460,19 @@
         padding: calc(var(--u) * .45) calc(var(--u) * .9); font-size: calc(var(--t) * 1.4); color: var(--lav);
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .list button:hover { color: #fff; background: rgba(150, 140, 255, .12); }
-    .list button.on { color: #fff; background: rgba(140, 125, 255, .3); }
+    .list button:hover { color: #fff; background: rgba(120, 140, 170, .12); }
+    .list button.on { color: #fff; background: rgba(163, 32, 26, .5); }
     .main { position: relative; display: flex; flex-direction: column; min-height: 0; }
     .view, .texview {
         flex: 1; min-height: 0; border-radius: var(--r-sm); overflow: hidden;
-        background: radial-gradient(ellipse at 50% 35%, #2a2560, #0a0820 75%);
+        background: radial-gradient(ellipse at 50% 35%, #1c2430, #05070b 75%);
         border: 1px solid var(--line);
     }
     .view :global(canvas) { width: 100%; height: 100%; display: block; }
     .view :global(canvas.navgizmo) { width: 96px; height: 96px; }
     .vname { position: absolute; left: calc(var(--u) * 1); bottom: calc(var(--u) * 1); font-size: calc(var(--t) * 1.1); color: var(--dim); pointer-events: none; letter-spacing: .06em; z-index: 2; }
     .texview { position: relative;
-        background: repeating-conic-gradient(#1b1840 0 25%, #14112f 0 50%) 0 0 / 24px 24px; }
+        background: repeating-conic-gradient(#161c26 0 25%, #0b0e14 0 50%) 0 0 / 24px 24px; }
     .texview canvas { position: absolute; inset: 0; margin: auto; max-width: 100%; max-height: 100%; }
     .hide { display: none; }
     .over { position: absolute; inset: 0 0 auto 0; height: 60%; display: grid; place-items: center; pointer-events: none; }
@@ -1494,10 +1494,10 @@
     .layers li { padding: calc(var(--u) * .2) 0; }
     .layers .chk span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(var(--t) * 1.15); }
     .texlist button { display: flex; align-items: center; gap: calc(var(--u) * .6); width: 100%; background: none; border: 0; cursor: pointer; padding: calc(var(--u) * .3); border-radius: var(--r-sm); color: var(--lav); text-align: left; }
-    .texlist button:hover { background: rgba(150, 140, 255, .12); color: #fff; }
-    .texlist button.on { background: rgba(140, 125, 255, .3); color: #fff; }
+    .texlist button:hover { background: rgba(120, 140, 170, .12); color: #fff; }
+    .texlist button.on { background: rgba(163, 32, 26, .5); color: #fff; }
     .texlist .pic { flex: 0 0 calc(var(--u) * 5); height: calc(var(--u) * 5); display: grid; place-items: center; border-radius: 3px;
-        background: repeating-conic-gradient(#1b1840 0 25%, #14112f 0 50%) 0 0 / 10px 10px; }
+        background: repeating-conic-gradient(#161c26 0 25%, #0b0e14 0 50%) 0 0 / 10px 10px; }
     .texlist .pic img { max-width: 100%; max-height: 100%; }
     .texlist .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(var(--t) * 1.15); }
     .list .subhead { padding: calc(var(--u) * .4) calc(var(--u) * 1.6) calc(var(--u) * .1); font-size: calc(var(--t) * 1.1); color: var(--dim); letter-spacing: .08em; }

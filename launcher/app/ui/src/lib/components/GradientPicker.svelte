@@ -164,15 +164,15 @@
         gap: 10px;
         width: min(440px, 100%);
         padding: 16px;
-        border: 1px solid #542637;
-        background: #0f080c;
-        color: #f5e6ef;
+        border: 1px solid #2e3846;
+        background: #0b0e13;
+        color: #e6ebf3;
         font-family: 'Consolas', 'Courier New', monospace;
         box-sizing: border-box;
     }
 
     .bg-label {
-        color: #a98796;
+        color: #9aa7ba;
         font-size: 0.66rem;
         letter-spacing: 0.08em;
         text-transform: uppercase;
@@ -182,12 +182,12 @@
         display: grid;
         height: 52px;
         place-items: center;
-        border: 1px solid #542637;
+        border: 1px solid #2e3846;
         transition: background 0.15s ease;
     }
 
     .bg-preview-empty {
-        color: #a98796;
+        color: #9aa7ba;
         font-size: 0.66rem;
     }
 
@@ -207,16 +207,16 @@
     }
 
     .dial:focus-visible {
-        outline: 1px solid #ff5fa8;
+        outline: 1px solid #e6bb63;
         outline-offset: 2px;
     }
 
     .dial-ring {
         position: absolute;
         inset: 0;
-        border: 1px solid #542637;
+        border: 1px solid #2e3846;
         border-radius: 50%;
-        background: radial-gradient(circle, #1d0c17 0%, #0a0509 100%);
+        background: radial-gradient(circle, #151b24 0%, #05070b 100%);
         box-shadow: inset 0 0 8px #000;
     }
 
@@ -227,7 +227,7 @@
         width: 2px;
         height: 20px;
         transform-origin: 50% 100%;
-        background: linear-gradient(to top, transparent, #ff5fa8);
+        background: linear-gradient(to top, transparent, #e6bb63);
     }
 
     .dial-handle {
@@ -236,10 +236,10 @@
         left: 50%;
         width: 10px;
         height: 10px;
-        border: 1px solid #ff5fa8;
+        border: 1px solid #e6bb63;
         border-radius: 50%;
-        background: #ff2f8f;
-        box-shadow: 0 0 6px rgba(255, 47, 143, 0.7);
+        background: #c4190f;
+        box-shadow: 0 0 6px rgba(196, 25, 15, 0.7);
     }
 
     .dial-center {
@@ -249,7 +249,7 @@
         width: 4px;
         height: 4px;
         border-radius: 50%;
-        background: #ff5fa8;
+        background: #e6bb63;
         transform: translate(-50%, -50%);
     }
 
@@ -265,7 +265,7 @@
         display: grid;
         justify-items: center;
         gap: 3px;
-        color: #a98796;
+        color: #9aa7ba;
         font-size: 0.6rem;
         cursor: pointer;
     }
@@ -274,14 +274,14 @@
         width: 36px;
         height: 30px;
         padding: 1px;
-        border: 1px solid #542637;
+        border: 1px solid #2e3846;
         background: #0a0a0a;
         cursor: pointer;
     }
 
     .angle-value {
         margin-left: auto;
-        color: #ff5fa8;
+        color: #e6bb63;
         font-size: 0.75rem;
     }
 
@@ -294,20 +294,20 @@
     .bg-swatch {
         height: 26px;
         padding: 0;
-        border: 1px solid #3a1a28;
+        border: 1px solid #283240;
         cursor: pointer;
     }
 
     .bg-swatch:hover,
     .bg-swatch:focus-visible {
-        border-color: #ff5fa8;
-        box-shadow: 0 0 6px rgba(255, 47, 143, 0.45);
+        border-color: #e6bb63;
+        box-shadow: 0 0 6px rgba(196, 25, 15, 0.45);
     }
 
     .bg-swatch.active {
-        border-color: #ff2f8f;
-        outline: 1px solid #ff2f8f;
-        box-shadow: 0 0 8px rgba(255, 47, 143, 0.6);
+        border-color: #c4190f;
+        outline: 1px solid #c4190f;
+        box-shadow: 0 0 8px rgba(196, 25, 15, 0.6);
     }
 
     .bg-output {
@@ -320,25 +320,25 @@
         flex: 1;
         min-width: 0;
         padding: 6px 8px;
-        border: 1px solid #542637;
+        border: 1px solid #2e3846;
         background: #050505;
-        color: #f5e6ef;
+        color: #e6ebf3;
         font-family: inherit;
         font-size: 0.7rem;
     }
 
     .bg-output button {
         padding: 6px 12px;
-        border: 1px solid #ff5fa8;
+        border: 1px solid #e6bb63;
         background: transparent;
-        color: #ff5fa8;
+        color: #e6bb63;
         font-family: inherit;
         font-size: 0.7rem;
         cursor: pointer;
     }
 
     .bg-output button:hover {
-        background: rgba(255, 95, 168, 0.12);
-        box-shadow: 0 0 6px rgba(255, 47, 143, 0.4);
+        background: rgba(230, 187, 99, 0.12);
+        box-shadow: 0 0 6px rgba(196, 25, 15, 0.4);
     }
 </style>

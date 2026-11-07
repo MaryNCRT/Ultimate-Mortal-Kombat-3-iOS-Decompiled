@@ -244,8 +244,8 @@
         width: 100%; text-align: left; background: none; border: 0; cursor: pointer;
         padding: calc(var(--u) * .4) calc(var(--u) * .9); font-size: calc(var(--t) * 1.4); color: var(--lav);
     }
-    .list button:hover { color: #fff; background: rgba(150, 140, 255, .12); }
-    .list button.on { color: #fff; background: rgba(140, 125, 255, .3); }
+    .list button:hover { color: #fff; background: rgba(120, 140, 170, .12); }
+    .list button.on { color: #fff; background: rgba(163, 32, 26, .5); }
     .main { display: flex; flex-direction: column; min-height: 0; gap: calc(var(--u) * .5); }
     .top { display: flex; align-items: center; gap: calc(var(--u) * 1); flex-wrap: wrap; }
     .top h3 { margin: 0; }
@@ -257,18 +257,18 @@
     .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--u) * 11), 1fr)); gap: calc(var(--u) * .6); }
     .card { display: flex; flex-direction: column; gap: calc(var(--u) * .25); background: var(--well); border: 1px solid transparent; border-radius: var(--r-sm);
         padding: calc(var(--u) * .4); cursor: pointer; color: var(--lav); text-align: left; min-width: 0; }
-    .card:hover { border-color: rgba(150, 140, 255, .5); color: #fff; }
+    .card:hover { border-color: rgba(120, 140, 170, .5); color: #fff; }
     .card.on { border-color: var(--blue); background: rgba(140, 125, 255, .25); color: #fff; }
     .card.mod { box-shadow: inset 0 0 0 1px rgba(120, 220, 160, .45); }
     .card .pic { aspect-ratio: 1; display: grid; place-items: center; border-radius: 3px;
-        background: repeating-conic-gradient(#1b1840 0 25%, #14112f 0 50%) 0 0 / 12px 12px; overflow: hidden; }
+        background: repeating-conic-gradient(#161c26 0 25%, #0b0e14 0 50%) 0 0 / 12px 12px; overflow: hidden; }
     .card .pic img { max-width: 100%; max-height: 100%; image-rendering: auto; }
     .card .nm { font-size: calc(var(--t) * 1.1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .card .sz { font-size: calc(var(--t) * 1); color: var(--dim); }
     .look { display: flex; flex-direction: column; gap: calc(var(--u) * .6); min-height: 0; overflow-y: auto; }
     .look .btn { width: 100%; }
     .big { aspect-ratio: 1; display: grid; place-items: center; border-radius: var(--r-sm); border: 1px solid var(--line);
-        background: repeating-conic-gradient(#1b1840 0 25%, #14112f 0 50%) 0 0 / 16px 16px; overflow: hidden; }
+        background: repeating-conic-gradient(#161c26 0 25%, #0b0e14 0 50%) 0 0 / 16px 16px; overflow: hidden; }
     .big img { max-width: 100%; max-height: 100%; }
     .ok { color: var(--ok-text); word-break: break-all; }
 </style>

@@ -30,21 +30,22 @@
         height: calc(var(--u) * 5.6);
         display: flex; align-items: center; justify-content: center;
         padding: 0 calc(var(--u) * 4);
-        font-size: calc(var(--t) * 1.8); letter-spacing: .06em; z-index: 6; color: #fff;
+        font-size: calc(var(--t) * 1.8); letter-spacing: .08em; z-index: 6; color: #e6ebf3;
+        text-transform: uppercase; font-weight: 700;
         text-shadow: 0 1px 2px #000;
     }
-    /* the bar, as the console's: its ends cut on a slant, a light outline,
-     * dark glass with fine lines along it */
+    /* the bar, as the console's: its ends cut on a slant -- a gilded rim
+     * round brushed black steel, a lit lip along the top */
     .cmdbar::before, .cmdbar::after {
         content: ""; position: absolute; inset: 0; z-index: -1;
         clip-path: polygon(calc(var(--u) * 3.5) 0, calc(100% - calc(var(--u) * 3.5)) 0, 100% 100%, 0 100%);
     }
-    .cmdbar::before { background: linear-gradient(90deg, rgba(215, 220, 255, .25), rgba(215, 220, 255, .75) 50%, rgba(215, 220, 255, .25)); }
+    .cmdbar::before { background: linear-gradient(#fff0c0, #d9a650 25%, #46546a 60%, #151b24); }
     .cmdbar::after {
         inset: 2px;
-        background: repeating-linear-gradient(rgba(200, 205, 255, .1) 0 1px, transparent 1px calc(var(--u) * .7)),
-                    linear-gradient(rgba(255, 255, 255, .1), rgba(255, 255, 255, 0) 45%),
-                    linear-gradient(rgba(33, 29, 76, .85), rgba(8, 6, 26, .92));
+        background: linear-gradient(rgba(215, 228, 255, .14), rgba(255, 255, 255, 0) 45%),
+                    var(--tex-grain),
+                    linear-gradient(#1e2530, #06080c);
     }
     .cmdbar.gone { visibility: hidden; }
     .cmds { display: flex; align-items: center; gap: calc(var(--u) * .8); }

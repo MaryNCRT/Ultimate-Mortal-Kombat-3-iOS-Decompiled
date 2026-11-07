@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-11-07 (release 0.4.1 beta: the ONLINE screen's Deception / Armageddon finish, a UMK3 stage per section, steel Player Banners, the menus' click can be muted).
+**Last updated:** 2026-11-07 (after 0.4.1: the launcher renewed in dark blued steel, PROFILE rebuilt around the Player Banner, icon and favourite fighter one, Esc's PROFILE page removed).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
@@ -136,6 +136,11 @@ press COMPILE.
 
 ## 7. Open work
 
+- **The launcher's look (Mary, 2026-11-07)**: dark blued steel, slate and
+  smoke, gold details, deep red for the chosen; the UMK3 Xbox 360 layout
+  kept. The Player Banner (gradient on steel, fighter out of it) is the
+  same in the launcher and the ONLINE screen. The icon is the favourite
+  fighter -- one field for the player.
 - **ONLINE's look (Mary's rule)**: every section keeps its own UMK3 stage
   (`PortOnlineBGLoad`); the Deception / Armageddon finish works over them,
   never replaces them. This version is the visual base: refine materials,

@@ -400,11 +400,11 @@
 </div>
 
 <style>
-    .veil { position: fixed; inset: 0; z-index: 1000; background: rgba(5, 4, 20, .72); display: grid; place-items: center; }
+    .veil { position: fixed; inset: 0; z-index: 1000; background: rgba(4, 5, 8, .72); display: grid; place-items: center; }
     .win {
         width: min(96vw, calc(var(--u) * 150)); height: min(92vh, calc(var(--u) * 90));
         display: flex; flex-direction: column; background: var(--bg); border: 1px solid var(--line);
-        border-radius: var(--r-sm); box-shadow: 0 0 calc(var(--u) * 4) rgba(120, 100, 255, .35); padding: calc(var(--u) * 1);
+        border-radius: var(--r-sm); box-shadow: 0 0 calc(var(--u) * 4) rgba(163, 32, 26, .35); padding: calc(var(--u) * 1);
     }
     header { display: flex; align-items: center; gap: calc(var(--u) * 1); margin-bottom: calc(var(--u) * .8); }
     .ttl { flex: 1; letter-spacing: .08em; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -412,13 +412,13 @@
     .body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) calc(var(--u) * 30); gap: calc(var(--u) * 1.2); }
     .main { position: relative; display: flex; flex-direction: column; min-height: 0; }
     .view { position: relative; flex: 1; min-height: 0; border-radius: var(--r-sm); overflow: hidden; border: 1px solid var(--line);
-        background: radial-gradient(ellipse at 50% 35%, #2a2560, #0a0820 75%); }
+        background: radial-gradient(ellipse at 50% 35%, #1c2430, #05070b 75%); }
     .view :global(canvas) { width: 100%; height: 100%; display: block; }
     .view :global(canvas.navgizmo) { width: 96px; height: 96px; }
     .vname { position: absolute; left: calc(var(--u) * 1); bottom: calc(var(--u) * .6); font-size: calc(var(--t) * 1.1); color: var(--dim); pointer-events: none; letter-spacing: .06em; }
     .ring { position: absolute; transform: translate(-50%, -50%); border: 1px solid #ffa040; border-radius: 50%; pointer-events: none; }
     .edit { position: absolute; left: 50%; top: calc(var(--u) * .6); transform: translateX(-50%); padding: 2px 10px; border-radius: var(--r-sm);
-        background: rgba(10, 8, 32, .8); color: #fff; font-size: calc(var(--t) * 1.2); letter-spacing: .06em; pointer-events: none; white-space: nowrap; }
+        background: rgba(5, 7, 11, .8); color: #fff; font-size: calc(var(--t) * 1.2); letter-spacing: .06em; pointer-events: none; white-space: nowrap; }
     .topbtns { position: absolute; right: calc(var(--u) * .8); top: calc(var(--u) * .6); display: flex; gap: calc(var(--u) * .5); }
     .topbtns .btn { height: auto; padding: calc(var(--u) * .35) calc(var(--u) * .9); font-size: calc(var(--t) * 1.2); }
     .play { display: flex; align-items: center; gap: calc(var(--u) * .7); margin-top: calc(var(--u) * .6); }
@@ -433,7 +433,7 @@
     .props dt { color: var(--dim); }
     .props dd { margin: 0; color: var(--lav); word-break: break-all; }
     .uv { flex: none; width: 100%; aspect-ratio: 1; border-radius: var(--r-sm); border: 1px solid var(--line);
-        background: repeating-conic-gradient(#1b1840 0 25%, #14112f 0 50%) 0 0 / 12px 12px; }
+        background: repeating-conic-gradient(#161c26 0 25%, #0b0e14 0 50%) 0 0 / 12px 12px; }
     .trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(var(--u) * .4); }
     .trio .btn { font-size: calc(var(--t) * 1.05); }
     .xyz { display: grid; grid-template-columns: calc(var(--u) * 8) repeat(3, minmax(0, 1fr)); gap: calc(var(--u) * .3); align-items: center; }

@@ -13231,48 +13231,42 @@ static void OnProfileSky(const char *code, float x, float y, float w, float h, f
 static void OnBand(const char *code, float x, float y, float w, float h, float art,
                    float sel, int st, float a)
 {
-    static const float rs0[4] = { 0.85f, 0.08f, 0.05f, 0.55f }, rs1[4] = { 0.85f, 0.08f, 0.05f, 0.0f };
-    int i;
+    /* Mary (0.4.2): the launcher's Player Banner (PlayerBanner.svelte) --
+     * the player's gradient whole on brushed steel, the ends a little in
+     * shade, a slow sheen; a gold bar along the top, the red line along the
+     * foot, uprights of dark blued steel; the fighter stands out of it */
+    static const float white[3] = { 1.0f, 1.0f, 1.0f };
+    static const float e0[4] = { 0.0f, 0.0f, 0.0f, 0.30f }, e1[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    static const float r0[4] = { 0.88f, 0.25f, 0.18f, 1.0f }, r1[4] = { 0.42f, 0.04f, 0.02f, 1.0f };
+    static const float s0[4] = { 0.36f, 0.43f, 0.53f, 1.0f }, s1[4] = { 0.12f, 0.15f, 0.20f, 1.0f };
+    float ew = w * 0.14f;
 
-    {
-        /* Mary: metal, a worn steel tag, the player's gradient on it */
-        static const float steel[3] = { 0.86f, 0.88f, 0.86f };
-        static const float e0[4] = { 0.0f, 0.0f, 0.0f, 0.55f }, e1[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-        float ew = w * 0.12f;
-        OnShadow(x, y, w, h, a);
-        static const float white[3] = { 1.0f, 1.0f, 1.0f };
-        (void)steel;
-        OnProfileSky(code, x, y, w, h, a);              /* the colour, whole */
-        OnSprite(TX_GRAIN, x, y, w, h, x / 160.0f, 0.01f, w / 160.0f, 0.98f, white, a);
-        OnSheen(x, y, w, h, 0.60f * a);
-        OnHGrad(x, y, ew, h, e0, e1, a);                /* the ends in shade */
-        OnHGrad(x + w - ew, y, ew, h, e1, e0, a);
-        OnFill(x, y + 0.8f, 0.8f, h - 2.0f, 1.0f, 1.0f, 1.0f, 0.25f * a);   /* the rim: lit left */
-        OnFill(x + w - 0.8f, y + 0.8f, 0.8f, h - 2.0f, 0.0f, 0.0f, 0.0f, 0.55f * a);
-        OnFrame(x + 1.4f, y + 1.4f, w - 2.8f, h - 2.8f, 0.4f, 0.0f, 0.0f, 0.0f, 0.30f * a);
-        OnFrame(x + 1.8f, y + 1.8f, w - 3.6f, h - 3.6f, 0.3f, 1.0f, 1.0f, 1.0f, 0.10f * a);
-    }
-    if (sel > 0.01f)
-        OnFill(x, y, 3.0f, h, 1.0f, 0.22f, 0.15f, sel * a);
-    OnFill(x, y, w, 0.8f, 1.0f, 1.0f, 1.0f, 0.40f * a);
-    OnFill(x, y + h - 1.2f, w, 1.2f, 0.0f, 0.0f, 0.0f, 0.75f * a);
-    for (i = 0; i < 3; i++) {            /* the strokes, as the arcade's plates */
-        float sx = x + w - 10.0f - (float)i * 5.0f;
-        OnVGrad(sx, y + 4.0f + (float)i * 2.0f, 1.6f, h - 8.0f - (float)i * 4.0f,
-                rs0, rs1, a * (0.9f - 0.25f * (float)i));
-    }
+    OnShadow(x, y, w, h, a);
+    OnProfileSky(code, x, y, w, h, a);                  /* the colour, whole */
+    OnSprite(TX_GRAIN, x, y, w, h, x / 160.0f, 0.01f, w / 160.0f, 0.98f, white, a);
+    OnSheen(x, y, w, h, 0.50f * a);
+    OnHGrad(x, y, ew, h, e0, e1, a);                    /* the ends in shade */
+    OnHGrad(x + w - ew, y, ew, h, e1, e0, a);
+    OnFill(x, y + 1.0f, w, 1.2f, 1.0f, 1.0f, 1.0f, 0.16f * a);      /* light under the bar */
+    OnFrame(x + 1.4f, y + 1.4f, w - 2.8f, h - 2.8f, 0.4f, 0.0f, 0.0f, 0.0f, 0.25f * a);
+    /* the uprights: dark blued steel, lit on their inner edge */
+    OnHGrad(x - 1.6f, y, 1.6f, h, s0, s1, a);
+    OnHGrad(x + w, y, 1.6f, h, s1, s0, a);
+    OnFill(x - 1.6f, y, 0.4f, h, 0.0f, 0.0f, 0.0f, 0.8f * a);
+    OnFill(x + w + 1.2f, y, 0.4f, h, 0.0f, 0.0f, 0.0f, 0.8f * a);
+    /* the red line under, the gold bar on top, past the uprights */
+    OnVGrad(x - 1.6f, y + h - 0.4f, w + 3.2f, 1.6f, r0, r1, a);
+    OnFill(x - 1.6f, y + h + 1.2f, w + 3.2f, 0.8f, 0.0f, 0.0f, 0.0f, 0.5f * a);
+    OnGoldBar(x - 2.4f, y - 2.0f, w + 4.8f, 2.4f, a);
     if (st == 2) {
         OnGlow(x, y, w, h, 1.0f, 0.18f, 0.12f, a);
         OnFrame(x, y, w, h, 1.0f, 1.0f, 0.30f, 0.22f, a);
     } else if (st == 1)
-        OnFrame(x, y, w, h, 1.0f, 1.0f, 0.55f, 0.18f, 0.9f * a);
+        OnFrame(x, y, w, h, 1.0f, 1.0f, 0.75f, 0.35f, 0.9f * a);
     else if (sel > 0.5f)
         OnFrame(x, y, w, h, 1.2f, 0.95f, 0.18f, 0.10f, 0.9f * sel * a);
-    else {
-        /* an iron mount round the player's own colours */
-        OnMetalFrame(x - 1.6f, y - 1.6f, w + 3.2f, h + 3.2f, 1.6f, MT_BRONZE, a);
-        OnFrame(x - 1.6f, y - 1.6f, w + 3.2f, h + 3.2f, 0.4f, 0.0f, 0.0f, 0.0f, 0.7f * a);
-    }
+    if (sel > 0.01f)
+        OnFill(x, y, 3.0f, h, 1.0f, 0.22f, 0.15f, sel * a);
     OnArt(code, x - art * 0.08f, y + h - art, art, a);
 }
 
@@ -14360,8 +14354,8 @@ static void PortOnlineMe(float cx, float cw, float y0, float a)
                                    : PortFrTx("SOLO RED LOCAL", "LOCAL NETWORK ONLY"),
              mpnet_internet() == 2 ? OnGreen : OnDim, tx, y0 + 32.0f, 150.0f, a, 0);
     OnText(d->id, tx, y0 + 47.0f, 0, 0.46f, 120.0f, OnGold, a);
-    if (d->fav >= 0 && d->fav < PROF_ICONS) {
-        snprintf(line, sizeof line, "%s: %s", PortFrTx("FAVORITO", "FAVOURITE"), CharacterNames[d->fav]);
+    if (d->icon >= 0 && d->icon < PROF_ICONS) {     /* the icon is the favourite (Mary, 0.4.2) */
+        snprintf(line, sizeof line, "%s: %s", PortFrTx("FAVORITO", "FAVOURITE"), CharacterNames[d->icon]);
         OnText(line, cx + cw - 24.0f, y0 + 47.0f, 2, 0.44f, cw * 0.4f, OnPale, a);
     }
     OnText(PortFrTx("VISTA PREVIA", "PREVIEW"), cx + cw - 24.0f, y0 + 10.0f, 2, 0.36f, 100.0f, OnPale, a);
@@ -14373,12 +14367,14 @@ static void PortOnlineMe(float cx, float cw, float y0, float a)
     OnText(PortFrTx("NOMBRE", "NAME"), lx, ry[0] + 3.0f, 0, 0.36f, ex - 4.0f, OnPale, a);
     OnTextBox(OB_NAMEBOX, d->name, PROF_NAME_MAX, 0, lx + ex, ry[0], lw - ex - 8.0f, 15.0f,
               PortFrTx("TU NOMBRE", "YOUR NAME"), a);
-    /* avatar: the fighter of the banner and the icon */
-    OnText("AVATAR", lx, ry[1] + 3.0f, 0, 0.36f, ex - 4.0f, OnPale, a);
+    /* the fighter: the banner's, the icon's and the favourite -- one
+     * (Mary, 0.4.2) */
+    OnText(PortFrTx("LUCHADOR", "FIGHTER"), lx, ry[1] + 3.0f, 0, 0.36f, ex - 4.0f, OnPale, a);
     i = OnStepper(OB_AVL, OB_AVR, CharacterNames[d->icon >= 0 && d->icon < PROF_ICONS ? d->icon : 0],
                   lx + ex, ry[1], lw - ex, a);
     if (i)
         d->icon = (d->icon + i + PROF_ICONS) % PROF_ICONS;
+    d->fav = d->icon;
     OnText(PortFrTx("TRAJE", "OUTFIT"), lx, ry[2] + 3.0f, 0, 0.36f, ex - 4.0f, OnPale, a);
     if (OnButton(OB_OUT1, "1", lx + ex, ry[2], (lw - ex) * 0.5f - 2.0f, 15.0f,
                  d->alt ? BT_NORMAL : BT_MAIN, a))
@@ -14387,16 +14383,14 @@ static void PortOnlineMe(float cx, float cw, float y0, float a)
                  ry[2], (lw - ex) * 0.5f - 2.0f, 15.0f, d->alt ? BT_MAIN : BT_NORMAL, a))
         d->alt = 1;
 
-    /* the favourite: a preference of its own */
+    /* the favourite is the fighter on the left; the gallery chooses it
+     * with every fighter in sight */
     OnText(PortFrTx("FAVORITO", "FAVOURITE"), rx, ry[0] + 3.0f, 0, 0.36f, ex - 4.0f, OnPale, a);
-    OnText(d->fav >= 0 && d->fav < PROF_ICONS ? CharacterNames[d->fav] : PortFrTx("NINGUNO", "NONE"),
-           rx + ex, ry[0] + 3.0f, 0, 0.46f, 70.0f, OnWhite, a);
-    if (OnButton(OB_FAVPICK, PortFrTx("ELEGIR", "CHOOSE"), rx + ex + 74.0f, ry[0], 58.0f, 15.0f,
+    OnText(CharacterNames[d->icon >= 0 && d->icon < PROF_ICONS ? d->icon : 0],
+           rx + ex, ry[0] + 3.0f, 0, 0.46f, 110.0f, OnWhite, a);
+    if (OnButton(OB_FAVPICK, PortFrTx("GALER\xc3\x8d" "A", "GALLERY"), rx + ex + 114.0f, ry[0], 72.0f, 15.0f,
                  BT_NORMAL, a))
         PortGallery = 1;
-    if (OnButton(OB_FAVCLR, PortFrTx("QUITAR", "CLEAR"), rx + ex + 136.0f, ry[0], 50.0f, 15.0f,
-                 d->fav >= 0 ? BT_NORMAL : BT_OFF, a))
-        d->fav = -1;
     /* the gradient, as the launcher's picker can make it */
     OnText(PortFrTx("FONDO", "BACKGROUND"), rx, ry[1] + 3.0f, 0, 0.36f, ex - 4.0f, OnPale, a);
     {
@@ -14542,7 +14536,8 @@ static void PortOnlineRenameAnswer(void)
     }
 }
 
-/* The favourite's gallery: every fighter, the chosen one framed in red. */
+/* The fighter's gallery -- the icon and the favourite, one (Mary, 0.4.2):
+ * every fighter, the chosen one framed in red. */
 static void PortOnlineGallery(float cx, float cw, float a)
 {
     float gx = cx + 10.0f, gw = cw - 20.0f, cwid = gw / 8.0f, ch = 58.0f, y0 = 92.0f;
@@ -14550,14 +14545,15 @@ static void PortOnlineGallery(float cx, float cw, float a)
 
     OnFill(0.0f, 0.0f, OnVW(), 320.0f, 0.0f, 0.0f, 0.02f, 0.55f);
     OnPanel(cx, 62.0f, cw, 216.0f, 1.0f, 1);
-    OnHeading(PortFrTx("ELIGE TU PERSONAJE FAVORITO", "CHOOSE YOUR FAVOURITE FIGHTER"), -1,
+    OnHeading(PortFrTx("ELIGE TU LUCHADOR FAVORITO", "CHOOSE YOUR FAVOURITE FIGHTER"), -1,
               cx + 10.0f, 67.0f, cw - 20.0f, 1.0f);
     for (i = 0; i < PROF_ICONS; i++) {
         float x = gx + cwid * (float)(i % 8), y = y0 + ch * (float)(i / 8);
         char key[8];
-        int on = PortDraft.fav == i;
+        int on = PortDraft.icon == i;
 
         if (OnArea(OB_GAL0 + i, x + 1.0f, y, cwid - 2.0f, ch - 4.0f, &st)) {
+            PortDraft.icon = i;
             PortDraft.fav = i;
             PortGallery = 0;
         }
@@ -14573,12 +14569,7 @@ static void PortOnlineGallery(float cx, float cw, float a)
         OnArt(key, x + (cwid - 42.0f) * 0.5f, y + 1.0f, 42.0f, 1.0f);
         OnText(CharacterNames[i], x + cwid * 0.5f, y + ch - 15.0f, 1, 0.30f, cwid - 6.0f, OnWhite, 1.0f);
     }
-    if (OnButton(OB_GALCLR, PortFrTx("SIN FAVORITO", "NO FAVOURITE"), cx + cw * 0.5f - 130.0f,
-                 y0 + ch * 3.0f + 6.0f, 124.0f, 18.0f, BT_NORMAL, 1.0f)) {
-        PortDraft.fav = -1;
-        PortGallery = 0;
-    }
-    if (OnButton(OB_GALCLOSE, PortFrTx("CERRAR", "CLOSE"), cx + cw * 0.5f + 6.0f,
+    if (OnButton(OB_GALCLOSE, PortFrTx("CERRAR", "CLOSE"), cx + cw * 0.5f - 62.0f,
                  y0 + ch * 3.0f + 6.0f, 124.0f, 18.0f, BT_NORMAL, 1.0f))
         PortGallery = 0;
 }

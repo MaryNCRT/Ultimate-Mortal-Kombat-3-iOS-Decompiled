@@ -30,13 +30,14 @@
         flex: 1; -webkit-app-region: drag;
         display: flex; align-items: center; padding-left: calc(var(--u) * 1.6);
     }
-    .ver { color: var(--dim); font-size: calc(var(--t) * 1.3); letter-spacing: .15em; }
+    .ver { color: var(--head); font-size: calc(var(--t) * 1.3); letter-spacing: .18em; text-transform: uppercase; text-shadow: 0 1px 0 #000; }
     .btns { display: flex; -webkit-app-region: no-drag; }
     .tb {
         min-width: calc(var(--u) * 5); height: 100%;
         background: transparent; border: 0; color: var(--dim);
         font-size: calc(var(--t) * 1.7); cursor: pointer; padding: 0 calc(var(--u) * 1.2);
+        text-shadow: 0 1px 0 #000;
     }
-    .tb:hover { color: #fff; background: rgba(255, 255, 255, .08); }
-    .tb.x:hover { background: var(--red); }
+    .tb:hover { color: #ffffff; background: rgba(120, 140, 170, .18); }
+    .tb.x:hover { background: var(--blood); color: #fff; }
 </style>

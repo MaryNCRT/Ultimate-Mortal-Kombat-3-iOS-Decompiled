@@ -107,7 +107,10 @@ static const char *const k_pb[PB_COUNT] = {
  * interface and what changes the game), CONTROLS (the KEYBOARD and the
  * GAMEPAD) and PROFILE. The game's own video panel (g_framed) shows the
  * first three and the interface on one page, as before. */
-enum { PAGE_VIDEO, PAGE_GFX, PAGE_TEX, PAGE_AUDIO, PAGE_GAME, PAGE_CTL, PAGE_PROF, N_PAGES };
+/* Mary (0.4.2): PROFILE is no longer a page of this menu -- the launcher's
+ * PROFILE edits it; the player's icon stays under the categories. Its page
+ * is kept past N_PAGES, out of reach, for the code that names it. */
+enum { PAGE_VIDEO, PAGE_GFX, PAGE_TEX, PAGE_AUDIO, PAGE_GAME, PAGE_CTL, N_PAGES, PAGE_PROF = N_PAGES };
 
 enum {
     R_DISPLAY, R_MONITOR, R_RES, R_APPLY, R_RRES, R_AA, R_TEXQ, R_ASPECT, R_UI, R_HIDE, R_LANG, R_REND, R_SMOOTH, R_SMODEL,
@@ -2091,6 +2094,7 @@ static int framed_columns(int *cs, int max)
 }
 
 void limeFillRect(float x, float y, float w, float h, float r, float g, float b, float a);
+void limeFillRectGrad(float x, float y, float w, float h, const float *c);
 
 void set_menu_draw(void)
 {
@@ -2111,7 +2115,6 @@ void set_menu_draw(void)
     tabs[PAGE_AUDIO] = "AUDIO";
     tabs[PAGE_GAME] = tx("INTERFAZ", "INTERFACE");     /* the launcher's name; GAME is its second part */
     tabs[PAGE_CTL] = tx("CONTROLES", "CONTROLS");
-    tabs[PAGE_PROF] = tx("PERFIL", "PROFILE");
     if (g_first > 0 && g_first == g_sel && g_rows[g_sel - 1].kind == R_HEAD)
         g_first--;                      /* a row's heading stays in sight */
     for (i = 0; i < rows; i++) {
@@ -2223,7 +2226,18 @@ void set_menu_draw(void)
                 free(px);
                 g_icon_key = key;
             }
+            /* framed as the ONLINE screen's panels: a cast shadow, dark
+             * bronze, a lit gold lip on top, the red line under it */
+            limeFillRect(x - 2.0f, y - 1.0f, size + 5.0f, size + 5.0f, 0.0f, 0.0f, 0.0f, 0.55f);
+            {
+                static const float br[16] = { 0.55f, 0.37f, 0.20f, 1.0f, 0.55f, 0.37f, 0.20f, 1.0f,
+                                              0.24f, 0.15f, 0.08f, 1.0f, 0.24f, 0.15f, 0.08f, 1.0f };
+                limeFillRectGrad(x - 2.0f, y - 2.0f, size + 4.0f, size + 4.0f, br);
+            }
+            limeFillRect(x - 2.0f, y - 2.0f, size + 4.0f, 1.0f, 1.0f, 0.86f, 0.55f, 0.9f);
+            limeFillRect(x - 1.0f, y - 1.0f, size + 2.0f, size + 2.0f, 0.02f, 0.02f, 0.018f, 1.0f);
             ui_icon_draw(x, y, size);
+            limeFillRect(x, y + size - 1.0f, size, 1.0f, 0.66f, 0.11f, 0.07f, 0.9f);
         }
     }
 drop:

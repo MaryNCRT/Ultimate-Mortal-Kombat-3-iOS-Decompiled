@@ -62,12 +62,13 @@
         height: calc(var(--u) * 3.1);
         background: none; border: 0; border-top: 1px solid transparent; border-bottom: 1px solid transparent;
         cursor: pointer; text-align: left;
-        font-size: calc(var(--u) * 1.65); font-weight: 600; letter-spacing: .01em;
-        color: var(--lav); text-shadow: var(--shadow-text), 0 0 calc(var(--u) * .8) rgba(0, 0, 0, .8);
+        font-size: calc(var(--u) * 1.65); font-weight: 700; letter-spacing: .02em;
+        color: var(--lav); text-shadow: 0 2px 0 #000, 0 0 calc(var(--u) * .8) rgba(0, 0, 0, .9);
         padding: 0 calc(var(--u) * 5.5) 0 0; white-space: nowrap;
         transition: color .25s;
     }
-    .mi:hover, .mi.active { color: #fff; }
+    .mi:hover { color: #fff; }
+    .mi.active { color: #fff; text-shadow: 0 2px 0 #000, 0 0 calc(var(--u) * 1) rgba(150, 180, 240, .55); }
     .mi:focus { outline: none; }
     /* the menu follows the ring's curve, as the console's: deepest at the
      * middle line, the first and last the furthest out, the same either side */
@@ -97,26 +98,27 @@
         position: absolute; left: 0; top: 50%;
         width: calc(var(--u) * 4.9); height: calc(var(--u) * 4.9); margin-top: calc(var(--u) * -2.45);
         visibility: visible;
-        background: radial-gradient(circle at 36% 30%, #fff 0, #e4e2ff 5%, #9a90d8 16%, #4a3f8a 38%, #1c1640 66%, #0b0820);
-        box-shadow: 0 0 0 calc(var(--u) * .1) rgba(225, 220, 255, .55),
-                    inset calc(var(--u) * -.45) calc(var(--u) * -.15) calc(var(--u) * .9) rgba(185, 170, 255, .65),
-                    0 0 calc(var(--u) * 1.4) rgba(170, 160, 255, .7);
+        background: radial-gradient(circle at 36% 30%, #ffffff 0, #d6e0ee 6%, #7f91ac 20%, #34425a 42%, #121824 68%, #05070b);
+        box-shadow: 0 0 0 calc(var(--u) * .14) #e6bb63, 0 0 0 calc(var(--u) * .3) #151b24,
+                    inset calc(var(--u) * -.45) calc(var(--u) * -.15) calc(var(--u) * .9) rgba(170, 195, 235, .45),
+                    0 0 calc(var(--u) * 1.4) rgba(120, 150, 210, .5);
         perspective: calc(var(--u) * 12);
     }
     .sel .orb::after {
         content: "M"; position: absolute; inset: 0;
         display: flex; align-items: center; justify-content: center;
         font-family: var(--font-impact); font-size: calc(var(--u) * 3);
-        color: #d8141c; text-shadow: 0 calc(var(--u) * .12) 0 #4a0306, 0 0 calc(var(--u) * .5) rgba(255, 40, 40, .55);
+        color: #d8141c; text-shadow: 0 calc(var(--u) * .12) 0 #2a0302, 0 0 calc(var(--u) * .5) rgba(255, 60, 30, .6);
         animation: m-turn 2.4s linear infinite;
     }
     @keyframes m-turn { to { transform: rotateY(360deg); } }
     .sel {
         position: absolute; left: 0; top: 0; height: 0; width: 0; z-index: -1;
         pointer-events: none; opacity: 0;
-        background: linear-gradient(90deg, transparent, rgba(6, 5, 20, .85) calc(var(--u) * 2), rgba(6, 5, 20, .7) 75%, transparent);
-        border-top: 1px solid transparent; border-bottom: 1px solid transparent;
-        border-image: linear-gradient(90deg, transparent, rgba(215, 220, 255, .75) 15%, rgba(215, 220, 255, .6) 70%, transparent) 1;
+        background: linear-gradient(90deg, rgba(160, 24, 14, .55), rgba(60, 8, 4, .25) 30%, transparent 70%),
+                    linear-gradient(90deg, transparent, rgba(8, 6, 5, .9) calc(var(--u) * 2), rgba(8, 6, 5, .78) 75%, transparent);
+        border-top: 2px solid transparent; border-bottom: 2px solid transparent;
+        border-image: linear-gradient(90deg, transparent, #e6bb63 12%, #5d6e88 60%, transparent) 1;
         transition: transform .3s cubic-bezier(.3, .7, .25, 1), width .3s, height .3s, opacity .2s;
     }
     .sel.on { opacity: 1; }

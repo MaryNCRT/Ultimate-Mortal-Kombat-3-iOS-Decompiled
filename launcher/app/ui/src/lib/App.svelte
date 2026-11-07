@@ -4,6 +4,7 @@
      * rings. A section opened from the menu fills the window, as the
      * console's online pages: its header, its page, the command bar. The
      * backdrop and the bars are shared. */
+    import './theme/materials.css';
     import './theme/tokens.css';
     import './theme/base.css';
     import { onMount } from 'svelte';

@@ -92,14 +92,30 @@
 </Page>
 
 <style>
+    /* 0.4.2: each fight a black-steel plate -- the red edge on the left,
+     * the two fighters' names in heavy capitals, WATCH the red plate */
     .rp {
         display: flex; align-items: center; gap: calc(var(--u) * .8);
-        padding: calc(var(--u) * .6) 0; border-bottom: 1px solid var(--line);
+        margin-bottom: calc(var(--u) * .5); padding: calc(var(--u) * .6) calc(var(--u) * 1);
+        background: var(--plate); border: 1px solid #2e3846; border-left: calc(var(--u) * .35) solid var(--blood);
+        box-shadow: var(--bevel), 0 calc(var(--u) * .2) calc(var(--u) * .5) rgba(0, 0, 0, .5);
+        transition: border-color .12s;
     }
+    .rp:hover { border-color: #5d6e88; border-left-color: #e6bb63; }
     .who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-    .name { color: #fff; font-size: calc(var(--t) * 1.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .meta { color: var(--dim); font-size: calc(var(--t) * 1.3); }
-    .tools { display: flex; gap: calc(var(--u) * .8); margin-bottom: calc(var(--u) * .6); }
-    .none { color: var(--dim); font-size: calc(var(--t) * 1.4); padding: calc(var(--u) * .4) 0; }
-    .how { color: var(--dim); font-size: calc(var(--t) * 1.3); margin-top: calc(var(--u) * 1.4); }
+    .name {
+        color: #fff; font-family: var(--font-head); font-weight: 900; letter-spacing: .06em;
+        font-size: calc(var(--u) * 1.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        text-shadow: 0 1px 0 #000;
+    }
+    .meta { color: var(--dim); font-size: calc(var(--u) * 1.25); letter-spacing: .04em; }
+    .tools { display: flex; gap: calc(var(--u) * .8); margin-bottom: calc(var(--u) * .8); }
+    .none {
+        color: var(--dim); font-size: calc(var(--u) * 1.35); padding: calc(var(--u) * .8) calc(var(--u) * 1.2);
+        background: var(--sunk); border-left: calc(var(--u) * .35) solid #2e3846; margin-bottom: calc(var(--u) * .5);
+    }
+    .how {
+        color: var(--dim); font-size: calc(var(--u) * 1.25); margin-top: calc(var(--u) * 1.4);
+        padding: calc(var(--u) * .7) calc(var(--u) * 1.2); background: var(--sunk); border-left: calc(var(--u) * .35) solid #e6bb63;
+    }
 </style>
