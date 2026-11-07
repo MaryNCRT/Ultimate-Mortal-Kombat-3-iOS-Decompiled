@@ -31,6 +31,13 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
   the pad, sunk when pressed; the chosen section is deep red with a gold
   bar; every word has a shadow; each section has a faint air of its own
   over its stage. Positions and sizes unchanged.
+- **Player Banners are metal**: the player's own gradient stays, a
+  brushed metal sheen over it (light, shade, scratches), in a bronze mount.
+  The editor's windows are stone, not flat navy; the gold has more relief
+  (a lit lip, a cast shadow); a button chosen with the pad is a lit metal
+  plate; separators are engraved, with a sigil and a stud; secondary words
+  are brighter. COMING SOON lists the new fight modes: TAG TEAM, SIMUL,
+  KING OF THE HILL.
 
 ## 0.4.0 beta (2026-11-06) — the new ONLINE screen
 

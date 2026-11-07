@@ -12438,7 +12438,7 @@ static void OnGlow(float x, float y, float w, float h, float r, float g, float b
  * no file of the game's is touched. ---- */
 TEXTURE *limeTextureFromRGBA(const char *key, const unsigned char *rgba, int w, int h);
 
-enum { TX_METAL, TX_METALV, TX_STONE, TX_ORN, TX_N };
+enum { TX_METAL, TX_METALV, TX_STONE, TX_ORN, TX_SHEEN, TX_N };
 enum { MT_GOLD, MT_BRONZE, MT_STEEL, MT_BLOOD, MT_IRON };
 enum { ORN_CORNER, ORN_SIGIL, ORN_CHEVRON, ORN_STUD };
 
@@ -12652,6 +12652,44 @@ static void OnMakeOrn(unsigned char *out)
             }
 }
 
+/* A sheen for any colour to become metal under: each pixel white (light
+ * caught) or black (shade) with its strength as alpha -- brushed along its
+ * length, a band of light high up, darker low down, a few scratches. Laid
+ * over the player's own gradient it keeps the gradient's colours. */
+static void OnMakeSheen(unsigned char *out)
+{
+    int x, y, k;
+    static float val[64][256];
+
+    for (y = 0; y < 64; y++) {
+        float v = ((float)y + 0.5f) / 64.0f, e = (v - 0.28f) / 0.12f;
+        float spec = 0.9f * expf(-e * e), shade = v > 0.55f ? -(v - 0.55f) / 0.45f * 0.8f : 0.0f;
+        for (x = 0; x < 256; x++) {
+            float br = OnNoise((float)x * 16.0f / 256.0f, (float)y * 0.9f, 16, 64, 61);
+            val[y][x] = (br - 0.5f) * 0.9f + (OnRnd(x, y, 67) - 0.5f) * 0.15f + spec + shade;
+        }
+    }
+    for (k = 0; k < 40; k++) {
+        int sx = (int)(OnHash(k, 1, 71) % 256), sy = (int)(OnHash(k, 2, 71) % 64);
+        int len = 6 + (int)(OnHash(k, 3, 71) % 22), i;
+        float slope = (OnRnd(k, 4, 71) - 0.5f) * 0.3f, f = (OnHash(k, 5, 71) & 1) ? 0.6f : -0.6f;
+        for (i = 0; i < len; i++) {
+            int xx = (sx + i) % 256, yy = sy + (int)(slope * (float)i);
+            if (yy >= 0 && yy < 64)
+                val[yy][xx] += f;
+        }
+    }
+    for (y = 0; y < 64; y++)
+        for (x = 0; x < 256; x++) {
+            float q = val[y][x];
+            unsigned char *o = out + ((size_t)y * 256 + x) * 4;
+            if (q > 0.0f)
+                OnPut(o, 1.0f, 1.0f, 1.0f, q * 0.30f > 0.32f ? 0.32f : q * 0.30f);
+            else
+                OnPut(o, 0.0f, 0.0f, 0.0f, -q * 0.35f > 0.40f ? 0.40f : -q * 0.35f);
+        }
+}
+
 static TEXTURE *OnTexture(int i)
 {
     if (!OnTexsTried) {
@@ -12665,6 +12703,8 @@ static TEXTURE *OnTexture(int i)
         OnTexs[TX_STONE] = limeTextureFromRGBA("port:online-stone", buf, ON_ST, ON_ST);
         OnMakeOrn(buf);
         OnTexs[TX_ORN] = limeTextureFromRGBA("port:online-ornaments", buf, 256, 64);
+        OnMakeSheen(buf);
+        OnTexs[TX_SHEEN] = limeTextureFromRGBA("port:online-sheen", buf, 256, 64);
     }
     return OnTexs[i];
 }
@@ -12702,6 +12742,13 @@ static void OnMetalFrame(float x, float y, float w, float h, float t, int m, flo
     OnMetal(x, y + h - t, w, t, m, a);
     OnMetalV(x, y + t, t, h - 2.0f * t, m, a);
     OnMetalV(x + w - t, y + t, t, h - 2.0f * t, m, a);
+}
+
+/* any surface made metal: the sheen over it, a tile every 96 across */
+static void OnSheen(float x, float y, float w, float h, float a)
+{
+    static const float white[3] = { 1.0f, 1.0f, 1.0f };
+    OnSprite(TX_SHEEN, x, y, w, h, x / 96.0f, 0.02f, w / 96.0f, 0.96f, white, a);
 }
 
 static void OnStone(float x, float y, float w, float h, const float *rgb, float a)
@@ -12770,9 +12817,13 @@ static void OnBevel(float x, float y, float w, float h, float a)
 /* antique gold: a bar of it, lit on top, brown underneath */
 static void OnGoldBar(float x, float y, float w, float h, float a)
 {
+    OnFill(x, y + h, w, 1.0f, 0.0f, 0.0f, 0.0f, 0.45f * a);              /* its shadow below */
     OnMetal(x, y, w, h, MT_GOLD, a);
+    OnFill(x + 0.4f, y + 0.3f, w - 0.8f, h * 0.22f, 1.0f, 0.95f, 0.75f, 0.45f * a);   /* the lit lip */
+    OnFill(x + 0.4f, y + h * 0.62f, w - 0.8f, h * 0.14f, 0.20f, 0.12f, 0.04f, 0.45f * a);
     OnFrame(x, y, w, h, 0.4f, 0.14f, 0.08f, 0.03f, 0.75f * a);
 }
+
 /* A panel: black, in a frame of antique gold whose top flares out at the
  * corners (MK Armageddon's ONLINE KOMBAT, Mary's reference); `red` an
  * oxblood line inside its top. */
@@ -12780,7 +12831,7 @@ static void OnPanel(float x, float y, float w, float h, float a, int red)
 {
     /* dark stone, a little see-through so the stage shows (Mary), lit from
      * above and deeper at the bottom, shadowed inside its frame */
-    static const float stone[3] = { 0.085f, 0.078f, 0.066f };
+    static const float stone[3] = { 0.125f, 0.112f, 0.094f };
     static const float l0[4] = { 0.55f, 0.42f, 0.22f, 0.07f }, l1[4] = { 0.55f, 0.42f, 0.22f, 0.0f };
     static const float d0[4] = { 0.0f, 0.0f, 0.0f, 0.0f }, d1[4] = { 0.0f, 0.0f, 0.0f, 0.35f };
     static const float rl[4] = { 0.62f, 0.12f, 0.07f, 1.0f };
@@ -12801,6 +12852,8 @@ static void OnPanel(float x, float y, float w, float h, float a, int red)
     OnMetalV(x + w - 0.4f, y, 2.4f, h, MT_BRONZE, a);
     OnFill(x - 2.0f, y, 0.4f, h, 0.06f, 0.04f, 0.02f, 0.8f * a);
     OnFill(x + w + 1.6f, y, 0.4f, h, 0.06f, 0.04f, 0.02f, 0.8f * a);
+    OnFill(x - 1.6f, y, 0.5f, h, 1.0f, 0.88f, 0.62f, 0.30f * a);          /* light on the edges */
+    OnFill(x + w - 0.4f, y, 0.5f, h, 1.0f, 0.88f, 0.62f, 0.22f * a);
     OnMetal(x - 2.0f, y + h - 0.4f, w + 4.0f, 2.0f, MT_BRONZE, a);
     OnFrame(x - 2.0f, y + h - 0.4f, w + 4.0f, 2.0f, 0.4f, 0.06f, 0.04f, 0.02f, 0.7f * a);
     OnGoldBar(x - 2.0f, y - 2.6f, w + 4.0f, 2.8f, a);
@@ -12818,10 +12871,16 @@ static void OnRule(float x, float y, float w, float a)
 {
     static const float l0[4] = { 0.66f, 0.47f, 0.24f, 0.70f }, l1[4] = { 0.66f, 0.47f, 0.24f, 0.0f };
     static const float d0[4] = { 0.0f, 0.0f, 0.0f, 0.7f }, d1[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    static const float g0[4] = { 1.0f, 0.90f, 0.66f, 0.30f }, g1[4] = { 1.0f, 0.90f, 0.66f, 0.0f };
+    OnHGrad(x, y - 0.6f, w, 0.6f, d0, d1, a);                             /* the groove cut */
     OnHGrad(x, y, w, 0.7f, l0, l1, a);
     OnHGrad(x, y + 0.7f, w, 0.6f, d0, d1, a);
+    OnHGrad(x, y + 1.3f, w * 0.7f, 0.4f, g0, g1, a);                      /* its lit lower lip */
     OnOrn(ORN_SIGIL, x - 1.0f, y - 2.0f, 9.0f, 4.6f, 0, 0, MT_GOLD, a);
-}/* Text: align 0 left, 1 centred, 2 right; `size` the font's scale (1 the
+    if (w > 60.0f)
+        OnOrn(ORN_STUD, x + w * 0.45f, y - 0.9f, 2.6f, 2.6f, 0, 0, MT_BRONZE, 0.7f * a);
+}
+/* Text: align 0 left, 1 centred, 2 right; `size` the font's scale (1 the
  * title's); shrunk to `maxw` units when wider. */
 static void OnText(const char *s, float x, float y, int align, float size,
                    float maxw, const float *rgb, float a)
@@ -12845,6 +12904,10 @@ static void OnText(const char *s, float x, float y, int align, float size,
         float sh[4] = { 0.0f, 0.0f, 0.0f, 0.70f * a };
         limeDrawFONT(&GameFont, u, OnX(x) + OnW(0.7f), OnY(y) + OnH(0.9f), align, k, sh);
     }
+    {
+        float sh[4] = { 0.0f, 0.0f, 0.0f, 0.70f * a };
+        limeDrawFONT(&GameFont, u, OnX(x) + OnW(0.7f), OnY(y) + OnH(0.9f), align, k, sh);
+    }
     limeDrawFONT(&GameFont, u, OnX(x), OnY(y), align, k, c);
 }
 
@@ -12863,8 +12926,8 @@ static const char *OnName(const char *s)
 }
 
 static const float OnWhite[3] = { 0.94f, 0.91f, 0.83f };   /* bone */
-static const float OnPale[3]  = { 0.80f, 0.80f, 0.76f };   /* silver */
-static const float OnDim[3]   = { 0.54f, 0.55f, 0.52f };   /* stone */
+static const float OnPale[3]  = { 0.86f, 0.85f, 0.80f };   /* silver */
+static const float OnDim[3]   = { 0.66f, 0.66f, 0.62f };   /* stone */
 static const float OnGold[3]  = { 1.0f, 0.60f, 0.20f };    /* industrial lamp */
 static const float OnAmber[3] = { 0.84f, 0.66f, 0.34f };   /* aged gold: headings */
 static const float OnRed[3]   = { 0.92f, 0.16f, 0.12f };   /* blood */
@@ -12938,6 +13001,7 @@ static int OnButton(int id, const char *text, float x, float y, float w,
     }
     red = kind == BT_MAIN || st == 2;
     OnMetal(x, y, w, h, red ? MT_BLOOD : MT_IRON, a);
+    OnSheen(x, y, w, h, (st == 3 ? 0.3f : 0.6f) * a);
     if (st == 3) {                      /* pressed: the plate sinks */
         OnVGrad(x, y, w, h, sk0, sk1, a);
         OnFrame(x + 1.0f, y + 1.0f, w - 2.0f, h - 2.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.5f * a);
@@ -12949,7 +13013,10 @@ static int OnButton(int id, const char *text, float x, float y, float w,
         OnFill(x + 1.0f, y + 0.8f, w - 2.0f, 0.5f, 1.0f, 0.95f, 0.85f, 0.16f * a);
     }
     if (st == 2) {                      /* the pad's or the keys' choice */
+        static const float s0[4] = { 1.0f, 0.82f, 0.56f, 0.34f }, s1[4] = { 1.0f, 0.50f, 0.30f, 0.0f };
         float p = 0.7f + 0.3f * sinf(PortOnlineT * 6.0f), ch = h * 0.40f, cw = ch * 0.62f;
+        OnVGrad(x + 1.0f, y + 1.0f, w - 2.0f, h * 0.5f, s0, s1, p * a);      /* lit from above */
+        OnFill(x + 1.0f, y + 1.1f, w - 2.0f, 0.6f, 1.0f, 0.92f, 0.72f, 0.70f * a);
         OnGlow(x, y, w, h, 1.0f, 0.12f, 0.06f, a * p);
         OnMetalFrame(x, y, w, h, 1.1f, MT_GOLD, a);
         OnOrn(ORN_CHEVRON, x + 1.6f, y + (h - ch) * 0.5f, cw, ch, 0, 0, MT_GOLD, a);
@@ -12962,7 +13029,9 @@ static int OnButton(int id, const char *text, float x, float y, float w,
     OnText(text, x + w * 0.5f, y + (h - sz * 24.0f) * 0.5f + dy, 1, sz, w - 10.0f,
            st == 1 ? hot : OnWhite, a);
     return hit;
-}/* ----------------------------------------------------------- portraits */
+}
+
+/* ----------------------------------------------------------- portraits */
 
 /* A portrait, `size` square: its frame here, the picture by online_ui.c.
  * `code` "" for this player. `glow` 0 none, 1 blue, 2 red. */
@@ -13113,6 +13182,7 @@ static void OnBand(const char *code, float x, float y, float w, float h, float a
 
     OnShadow(x, y, w, h, a);
     OnProfileSky(code, x, y, w, h, a);
+    OnSheen(x, y, w, h, a);                 /* Mary: metal, the gradient on it */
     if (sel > 0.01f)
         OnFill(x, y, 3.0f, h, 1.0f, 0.22f, 0.15f, sel * a);
     OnFill(x, y, w, 0.8f, 1.0f, 1.0f, 1.0f, 0.40f * a);
@@ -13131,8 +13201,8 @@ static void OnBand(const char *code, float x, float y, float w, float h, float a
         OnFrame(x, y, w, h, 1.2f, 0.95f, 0.18f, 0.10f, 0.9f * sel * a);
     else {
         /* an iron mount round the player's own colours */
-        OnFrame(x - 1.6f, y - 1.6f, w + 3.2f, h + 3.2f, 1.6f, 0.11f, 0.115f, 0.12f, 0.95f * a);
-        OnFrame(x - 1.6f, y - 1.6f, w + 3.2f, h + 3.2f, 0.5f, 0.55f, 0.56f, 0.55f, 0.35f * a);
+        OnMetalFrame(x - 1.6f, y - 1.6f, w + 3.2f, h + 3.2f, 1.6f, MT_BRONZE, a);
+        OnFrame(x - 1.6f, y - 1.6f, w + 3.2f, h + 3.2f, 0.4f, 0.0f, 0.0f, 0.0f, 0.7f * a);
     }
     OnArt(code, x - art * 0.08f, y + h - art, art, a);
 }
@@ -13868,7 +13938,7 @@ static void PortColourPicker(float vw, int which, unsigned *c)
     int i, j, st;
 
     OnFill(0.0f, 0.0f, vw, 320.0f, 0.0f, 0.0f, 0.02f, 0.45f);
-    OnFill(px0, py0, pw, ph, 0.01f, 0.02f, 0.06f, 1.0f);
+    OnFill(px0, py0, pw, ph, 0.02f, 0.02f, 0.018f, 1.0f);
     OnPanel(px0, py0, pw, ph, 1.0f, 1);
     OnText(which ? PortFrTx("COLOR: HASTA", "COLOUR: TO") : PortFrTx("COLOR: DESDE", "COLOUR: FROM"),
            px0 + 10.0f, py0 + 5.0f, 0, 0.42f, pw - 20.0f, OnPale, 1.0f);
@@ -13893,7 +13963,7 @@ static void PortColourPicker(float vw, int which, unsigned *c)
             OnGrad4(sx + sw * (float)i / 8.0f, sy + sh * (float)j / 6.0f, sw / 8.0f + 0.3f,
                     sh / 6.0f + 0.3f, k[0], k[1], k[2], k[3], 1.0f);
         }
-    OnFrame(sx - 1.0f, sy - 1.0f, sw + 2.0f, sh + 2.0f, 0.8f, 0.55f, 0.70f, 1.0f, st ? 1.0f : 0.6f);
+    OnFrame(sx - 1.0f, sy - 1.0f, sw + 2.0f, sh + 2.0f, 0.8f, 0.74f, 0.58f, 0.30f, st ? 1.0f : 0.6f);
     {
         float mx = sx + PortPickS * sw, my = sy + (1.0f - PortPickV) * sh;
         OnFrame(mx - 3.0f, my - 3.0f, 6.0f, 6.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f);
@@ -13915,7 +13985,7 @@ static void PortColourPicker(float vw, int which, unsigned *c)
         OnColourRgb(OnHsv((float)(i + 1) / 6.0f - 0.0001f, 1.0f, 1.0f), r);
         OnHGrad(hx + hw * (float)i / 6.0f, hy, hw / 6.0f + 0.3f, hh, l, r, 1.0f);
     }
-    OnFrame(hx - 1.0f, hy - 1.0f, hw + 2.0f, hh + 2.0f, 0.8f, 0.55f, 0.70f, 1.0f, st ? 1.0f : 0.6f);
+    OnFrame(hx - 1.0f, hy - 1.0f, hw + 2.0f, hh + 2.0f, 0.8f, 0.74f, 0.58f, 0.30f, st ? 1.0f : 0.6f);
     OnFrame(hx + PortPickH * hw - 2.0f, hy - 2.0f, 4.0f, hh + 4.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f);
 
     /* the colour, and R G B typed (applied as typed) */
@@ -13923,7 +13993,7 @@ static void PortColourPicker(float vw, int which, unsigned *c)
         float k[4];
         OnColourRgb(*c, k);
         OnFill(hx, hy + 16.0f, 22.0f, 22.0f, k[0], k[1], k[2], 1.0f);
-        OnFrame(hx - 1.0f, hy + 15.0f, 24.0f, 24.0f, 0.8f, 0.55f, 0.70f, 1.0f, 0.8f);
+        OnFrame(hx - 1.0f, hy + 15.0f, 24.0f, 24.0f, 0.8f, 0.74f, 0.58f, 0.30f, 0.8f);
     }
     for (i = 0; i < 3; i++) {
         static const char *const lab[3] = { "R", "G", "B" };
@@ -13971,7 +14041,7 @@ static void PortGradWindow(float vw, float a)
 
     OnFill(0.0f, 0.0f, vw, 320.0f, 0.0f, 0.0f, 0.02f, 0.55f);     /* the rest, darkened */
     PortNoInput = under;
-    OnFill(x0, y0, w, h, 0.01f, 0.02f, 0.06f, 1.0f);               /* nothing through it */
+    OnFill(x0, y0, w, h, 0.02f, 0.02f, 0.018f, 1.0f);              /* nothing through it */
     OnPanel(x0, y0, w, h, 1.0f, 1);
     OnText(PortFrTx("FONDO DEL PERFIL", "PROFILE BACKGROUND"), x0 + 10.0f, y0 + 5.0f, 0, 0.46f, 200.0f,
            OnPale, 1.0f);
@@ -14041,7 +14111,7 @@ static void PortGradWindow(float vw, float a)
         if (PortGradWhich == i || st == 2)
             OnFrame(sx - 2.0f, sy - 2.0f, 40.0f, 28.0f, 1.2f, 1.0f, 0.30f, 0.22f, 1.0f);
         else
-            OnFrame(sx - 2.0f, sy - 2.0f, 40.0f, 28.0f, 0.8f, 0.55f, 0.70f, 1.0f, st ? 1.0f : 0.6f);
+            OnFrame(sx - 2.0f, sy - 2.0f, 40.0f, 28.0f, 0.8f, 0.74f, 0.58f, 0.30f, st ? 1.0f : 0.6f);
         OnText(i ? PortFrTx("HASTA", "TO") : PortFrTx("DESDE", "FROM"), sx + 18.0f, sy + 28.0f, 1,
                0.36f, 40.0f, PortGradWhich == i ? OnWhite : OnDim, 1.0f);
     }
@@ -14083,7 +14153,7 @@ static void PortGradWindow(float vw, float a)
             if (on || st == 2)
                 OnFrame(x, y, gw, 16.0f, 1.2f, 1.0f, 0.30f, 0.22f, 1.0f);
             else if (st)
-                OnFrame(x, y, gw, 16.0f, 1.0f, 0.75f, 0.85f, 1.0f, 1.0f);
+                OnFrame(x, y, gw, 16.0f, 1.0f, 0.92f, 0.78f, 0.46f, 1.0f);
             else
                 OnFrame(x, y, gw, 16.0f, 0.6f, 0.0f, 0.0f, 0.0f, 0.6f);
             if (st)
@@ -14171,7 +14241,7 @@ static unsigned PortPaletteStep(unsigned c, int d)
 
 static void OnSwatch(unsigned c, float x, float y, float s, float a)
 {
-    OnFill(x - 0.8f, y - 0.8f, s + 1.6f, s + 1.6f, 0.75f, 0.85f, 1.0f, 0.7f * a);
+    OnFill(x - 0.8f, y - 0.8f, s + 1.6f, s + 1.6f, 0.80f, 0.64f, 0.34f, 0.7f * a);
     OnFill(x, y, s, s, (float)((c >> 16) & 255) / 255.0f, (float)((c >> 8) & 255) / 255.0f,
            (float)(c & 255) / 255.0f, a);
 }
@@ -14423,11 +14493,11 @@ static void PortOnlineGallery(float cx, float cw, float a)
         if (on)
             OnFill(x + 1.0f, y, cwid - 2.0f, ch - 4.0f, 0.55f, 0.06f, 0.05f, 0.75f);
         else
-            OnFill(x + 1.0f, y, cwid - 2.0f, ch - 4.0f, 0.04f, 0.07f, 0.18f, st ? 0.9f : 0.6f);
+            OnFill(x + 1.0f, y, cwid - 2.0f, ch - 4.0f, 0.07f, 0.065f, 0.06f, st ? 0.9f : 0.6f);
         if (st == 2 || on)
             OnFrame(x + 1.0f, y, cwid - 2.0f, ch - 4.0f, 1.0f, 1.0f, 0.30f, 0.22f, 1.0f);
         else if (st)
-            OnFrame(x + 1.0f, y, cwid - 2.0f, ch - 4.0f, 1.0f, 0.55f, 0.72f, 1.0f, 1.0f);
+            OnFrame(x + 1.0f, y, cwid - 2.0f, ch - 4.0f, 1.0f, 0.92f, 0.78f, 0.46f, 1.0f);
         snprintf(key, sizeof key, "#%d", i);
         OnArt(key, x + (cwid - 42.0f) * 0.5f, y + 1.0f, 42.0f, 1.0f);
         OnText(CharacterNames[i], x + cwid * 0.5f, y + ch - 15.0f, 1, 0.30f, cwid - 6.0f, OnWhite, 1.0f);
@@ -14809,6 +14879,12 @@ static void PortOnlineLater(int section, float cx, float cw, float a)
         OnText(PortFrTx("UN L\xc3\x8d" "DER Y SUS AMIGOS", "A LEADER AND THEIR FRIENDS"), rx + 12.0f, 116.0f, 0, 0.40f, rw - 24.0f, OnDim, a);
         OnText(PortFrTx("ENTRAR JUNTOS A UNA SALA", "JOIN A LOBBY TOGETHER"), rx + 12.0f, 132.0f, 0, 0.40f, rw - 24.0f, OnDim, a);
     }
+    /* the fight modes on Mary's roadmap, under every section */
+    OnRule(rx + 12.0f, 199.0f, rw - 24.0f, a);
+    OnText(PortFrTx("MODOS NUEVOS", "NEW FIGHT MODES"), rx + 12.0f, 205.0f, 0, 0.48f, rw - 24.0f, OnPale, a);
+    OnText("TAG TEAM", rx + 12.0f, 223.0f, 0, 0.40f, rw - 24.0f, OnDim, a);
+    OnText("SIMUL", rx + 12.0f, 239.0f, 0, 0.40f, rw - 24.0f, OnDim, a);
+    OnText("KING OF THE HILL", rx + 12.0f, 255.0f, 0, 0.40f, rw - 24.0f, OnDim, a);
 }
 
 

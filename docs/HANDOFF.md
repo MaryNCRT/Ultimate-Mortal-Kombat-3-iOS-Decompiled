@@ -136,6 +136,10 @@ press COMPILE.
 
 ## 7. Open work
 
+- **ONLINE's look (Mary's rule)**: every section keeps its own UMK3 stage
+  (`PortOnlineBGLoad`); the Deception / Armageddon finish works over them,
+  never replaces them. This version is the visual base: refine materials,
+  buttons and panels, do not change the concept.
 - **Mary's roadmap (2026-11-07)**, in order: (1) finish the ONLINE menu's
   Deception / Armageddon finish (PR #196); (2) a full renewal of the
   launcher: UMK3 Xbox 360's identity with dark fantasy, rustic materials,

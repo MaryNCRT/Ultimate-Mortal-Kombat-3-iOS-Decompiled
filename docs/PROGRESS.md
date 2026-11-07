@@ -98,6 +98,19 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+## ONLINE: metal banners, last polish (2026-11-07)
+
+- A fifth texture, the sheen (`OnMakeSheen`, `OnSheen`): each pixel white
+  or black with its strength as alpha, so over any colour it reads as metal
+  and keeps the colour -- the Player Banner's gradient (`OnBand`), the
+  buttons. `OnGoldBar` relief, lit chosen buttons, engraved `OnRule`,
+  `OnPale`/`OnDim` brighter, the editor windows' fills black and their old
+  blue frames bronze/gold. COMING SOON (`PortOnlineLater`) lists TAG TEAM,
+  SIMUL and KING OF THE HILL.
+- Mary's rule: every section keeps its UMK3 stage; the finish is laid over
+  the stages, never replacing them.
+- Built into the test folder; not seen on screen by Claude.
+
 ## ONLINE: materials (2026-11-07)
 
 - Mary's brief "PULIDO VISUAL FINAL DEL MENU EN LINEA" (Deception /
