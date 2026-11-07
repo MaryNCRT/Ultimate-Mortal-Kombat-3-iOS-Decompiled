@@ -10,6 +10,26 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased: the new ONLINE screen (stage 2 of the redesign)
 
+- **PROFILE** takes FRIENDS' and INVITATIONS' place (Mary): the sections are
+  HOME, PROFILE, LOBBIES, QUICK MATCH and PARTY. PROFILE has MY PROFILE --
+  name, avatar, outfit, favourite fighter (a gallery of the 24) and the
+  gradient (light, dark or custom, two colours, the direction), with the
+  banner previewed as it changes and SAVE, CANCEL and DEFAULTS; a new name
+  is checked by the account's server and refused when another player has
+  it -- FRIENDS (challenge, join or decline a fight, remove a friend, add
+  one by player ID), REQUESTS RECEIVED (accept, decline) and REQUESTS SENT
+  (cancel). A count on PROFILE says what waits, red while some of it is
+  new; a new request or invite shows a notice once.
+- **Players online**: HOME and the top of the screen say how many players
+  have the ONLINE screen open (games from this version on).
+- **The main menu's badge** is a small player banner; a click opens MY
+  PROFILE, and OPTIONS has EDIT PROFILE.
+- **Esc, AUDIO and VIDEO SETTINGS stopped working after visiting ONLINE**
+  (Mary): leaving the screen left the network session open. Fixed. The
+  debug menu (F2) is now off on the ONLINE screen too, like the settings
+  menu.
+- HOME's statistics say WINS and LOSSES (Mary).
+
 - **The ONLINE screen's new look** (Mary's visual brief, 2026-11-06): panels
   with depth (a diagonal gradient from navy to black that lets the cemetery
   through, a light along the top edge, a darker bottom, a soft shadow),

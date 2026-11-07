@@ -98,6 +98,45 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+## ONLINE: PROFILE, players online, EDIT PROFILE, the session left open (2026-11-06)
+
+- **Sections**: `OS_HOME, OS_PROFILE, OS_LOBBIES, OS_QUICK, OS_PARTY`;
+  PROFILE's pages `PS_ME, PS_FRIENDS, PS_IN, PS_OUT` (FrontEnd.c).
+- **friends.txt** (main.js `writeGameFriends`) now also has
+  `incoming|...` and `outgoing|...` lines; gamecode_stubs.c gives each entry
+  a kind (0 friend, 1 fight invite, 2 request received, 3 request sent).
+  An older game reads the new lines as friends: update both together.
+- **Orders from the game** (online_invite.txt, main.js `gameAsked`): `add`,
+  `accept` (POST /v1/friends), `reject`, `cancel`, `remove` (DELETE
+  /v1/friends), `find CODE` (GET /v1/users, answered in online_find.txt as
+  `CODE|name|look|state`), `rename NAME` (account.rename, answered in
+  online_result.txt). Nothing new on the server.
+- **MY PROFILE** edits a copy of struct profile (`PortDraft`); SAVE writes
+  profiles.ini and, for a new name, waits for the server's answer (the old
+  name back if taken). The draft's banner is the picture code "*" for
+  online_ui.c (`PortOnlineDraftLook`); the gallery's fighters are "#n".
+  The favourite is profiles.ini's ninth field (`fav`, "-" none) in
+  profiles.c and lib/profiles.js; it never touches the icon.
+- **Notices**: requests and invites seen are kept by key in
+  online_seen.txt (gamecode_stubs.c `port_online_seen_*`).
+- **Players online**: mp_eos.c makes a second lobby per game in the bucket
+  `umk3-online` while the ONLINE screen is open and counts that bucket's
+  lobbies every 15 s (`mpeos_players`, max 200). Checked on one PC: the
+  count showed 0 right after the login (before the lobby was made); not
+  yet checked with two machines.
+- **Esc / AUDIO / VIDEO refused after ONLINE**: BACK pops the screen
+  deferred, so it ran a few frames more and `startMP()` opened the session
+  again; settings_menu.c's `online_now()` then refused. FE_Task_Online now
+  keeps `PortOnlineLeaving` (reset when a frame is missed, PortTick from
+  game_main.c) and ends the session on the way out. The debug menu is
+  refused and closed while `mpnet_session_exists()`.
+- **Main menu**: `PortMainBanner` (FrontEnd.c, after FE_Task_Main_Menu in
+  the dispatcher) replaces set_menu_badge's badge; OPTIONS' fourth entry
+  EDIT PROFILE calls `PortOnlineOpenProfile`.
+- Each press of the screen's buttons is logged ("online ui: button N").
+- Not checked yet: the requests with a second account, the rename's
+  answer, the gallery and the editor with the pad.
+
 ## ONLINE screen: the visual redesign, Player Banners, the stats load (2026-11-06)
 
 Mary's brief: commercial Xbox 360 / PS3-era look, profiles as console
