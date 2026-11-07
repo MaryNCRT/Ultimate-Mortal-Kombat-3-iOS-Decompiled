@@ -154,6 +154,13 @@ traced to the binary's own mechanism before anything is changed.
   clicked in Mary's browser once (the game's window did not come to the
   front): scripted clicks are not used while she is at the computer.
 
+## 0.4.1 beta (2026-11-07) — the ONLINE screen's finish
+
+Released as `v0.4.1-beta` (PRs 196 and 197): the skin after MK Deception /
+Armageddon, a UMK3 stage per section, steel Player Banners under the
+player's gradient, AUDIO > MENU CLICK SOUND. Mary approved the look in her
+test folder; she has not played fights on it.
+
 ## 0.4.0 beta (2026-11-06) — the new ONLINE screen
 
 Released as `v0.4.0-beta` (PRs 192, 193 and 194 merged): the ONLINE

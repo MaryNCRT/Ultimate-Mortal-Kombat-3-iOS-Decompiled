@@ -8,7 +8,7 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased (after 0.4.0)
+## 0.4.1 beta (2026-11-07)
 
 - **The ONLINE screen's new skin** (Mary's references: MK Deception's and
   MK Armageddon's ONLINE KOMBAT, MK9's Gearworks, MK11's menus, MK3's

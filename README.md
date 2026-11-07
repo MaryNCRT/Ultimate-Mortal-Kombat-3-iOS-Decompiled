@@ -32,7 +32,7 @@ The only source of truth is the binary. Nothing enters the tree that is not deri
 |---|---|---|
 | **Decompilation** (`src/decomp/`) | **2,572 / 2,572 (100%)** | LIME 3D engine (109), front end & scenes (291), arcade fight engine (2,172). |
 | **Verification** (`tools/decomp/`) | **100%** | Differential tests against the `armrecomp` ARM→C oracle; 229 data tables checked at build time (`ctest`). |
-| **PC port** (`src/runtime/`) | **Playable — v0.4.0 beta** | OpenGL, Vulkan, Direct3D 12; Windows and Linux; 3:2 / 4:3 / 16:9 / 21:9; keyboard and pads; local 2 players, LAN (MULTIPLAYER, Radmin VPN too) and online with rollback; replays; mods. |
+| **PC port** (`src/runtime/`) | **Playable — v0.4.1 beta** | OpenGL, Vulkan, Direct3D 12; Windows and Linux; 3:2 / 4:3 / 16:9 / 21:9; keyboard and pads; local 2 players, LAN (MULTIPLAYER, Radmin VPN too) and online with rollback; replays; mods. |
 | **Launcher** (`launcher/`) | Windows and Linux | Compiles the game with a bundled `zig cc` (nothing to install), updates itself, MODS tools, PROFILE with ACCOUNT (optional; progress in the cloud, the game's leaderboards live) and FRIENDS. |
 
 Every release is tested by the project's tester, Mary, before the next one builds on it; the [Changelog](docs/CHANGELOG.md) says for each change whether she has played it yet.
@@ -71,7 +71,7 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 - **SMOOTH ANIMATIONS** (frames between the game's frames) and **SMOOTH MODELS** (Blender's weld + Catmull-Clark subdivision, with sharp-edge controls).
 - **STAGE SELECT** before VS, training and online fights, with a picture of every stage; the select screen's music plays on through it.
 - **Online** over LAN or the internet (Epic Online Services), rollback netcode with an input delay that follows the ping; online fights always use the game's own data (only models and textures from mods).
-- **The ONLINE screen** (0.4.0): HOME, PROFILE, LOBBIES, QUICK MATCH and PARTY; PROFILE edits the player's banner (name, fighter, favourite, gradient) and holds the friends and friend requests; players online counted; the main menu's banner and OPTIONS > EDIT PROFILE open it. LOBBIES, QUICK MATCH and PARTY are still to come.
+- **The ONLINE screen** (0.4.0): HOME, PROFILE, LOBBIES, QUICK MATCH and PARTY; PROFILE edits the player's banner (name, fighter, favourite, gradient) and holds the friends and friend requests; players online counted; the main menu's banner and OPTIONS > EDIT PROFILE open it. LOBBIES, QUICK MATCH and PARTY are still to come. 0.4.1 gives it the MK Deception / Armageddon finish (aged gold, bronze, stone, ornaments) over each section's own UMK3 stage, steel Player Banners, and AUDIO > MENU CLICK SOUND.
 - **REPLAYS:** every local fight recorded and played back in the game with a full player (pause, frame step, seek, speed).
 - **Mods:** a folder per mod in `mods\`, files named like the game's replace them; data overrides for the fight tables (`data.ini`).
 - **Debug menu** (`F2`): any fighter including the bosses, stage, round, hitboxes, save states.
@@ -85,7 +85,7 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 - **TEXTURES:** every texture of the game by where it belongs, replaced into a mod.
 - **EXPORT:** fighters, stages, models and textures as FBX, GLB, USD (USDA/USDC/USDZ) or OBJ with PNG textures.
 
-## Known problems (0.4.0 beta)
+## Known problems (0.4.1 beta)
 
 - Online: 0.2.1's fixes (the rollback off one boot in two, fights drifting apart) were checked with two games on one PC, not yet between two machines. Both players need 0.2.1, built fresh.
 - With the on-screen controls hidden, a click on the screen still moves the fighter (Mary); next on the list.

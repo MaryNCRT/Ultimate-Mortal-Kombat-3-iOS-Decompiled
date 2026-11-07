@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-11-06 (release 0.4.0 beta: the new ONLINE screen -- PROFILE, Player Banners, the gradient window; updates always recompile; the intros' AO).
+**Last updated:** 2026-11-07 (release 0.4.1 beta: the ONLINE screen's Deception / Armageddon finish, a UMK3 stage per section, steel Player Banners, the menus' click can be muted).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
