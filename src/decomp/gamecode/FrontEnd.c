@@ -12666,10 +12666,10 @@ static void OnMakeSheen(unsigned char *out)
         float spec = 0.9f * expf(-e * e), shade = v > 0.55f ? -(v - 0.55f) / 0.45f * 0.8f : 0.0f;
         for (x = 0; x < 512; x++) {
             float br = OnNoise((float)x * 32.0f / 512.0f, (float)y * 1.8f, 32, 256, 61);
-            val[y][x] = (br - 0.5f) * 0.9f + (OnRnd(x, y, 67) - 0.5f) * 0.15f + spec + shade;
+            val[y][x] = (br - 0.5f) * 0.45f + (OnRnd(x, y, 67) - 0.5f) * 0.05f + spec + shade;
         }
     }
-    for (k = 0; k < 90; k++) {
+    for (k = 0; k < 0; k++) {          /* none: Mary, cleaner */
         int sx = (int)(OnHash(k, 1, 71) % 512), sy = (int)(OnHash(k, 2, 71) % 128);
         int len = 10 + (int)(OnHash(k, 3, 71) % 44), i;
         float slope = (OnRnd(k, 4, 71) - 0.5f) * 0.3f, f = (OnHash(k, 5, 71) & 1) ? 0.6f : -0.6f;
@@ -12706,18 +12706,18 @@ static void OnMakePlate(unsigned char *out, int grain)
             float wide = OnNoise((float)x * 8.0f / 512.0f, (float)y * 0.5f, 8, 64, 83);
             float grime = OnFbm((float)x * 4.0f / 512.0f, (float)y * 4.0f / 512.0f, 4, 4, 87);
             float g = grime > 0.45f ? (grime - 0.45f) / 0.55f : 0.0f;
-            float l = 0.62f + 0.16f * (line - 0.5f) + 0.10f * (wide - 0.5f) + 0.05f * (OnRnd(x, y, 89) - 0.5f);
-            l *= 1.0f - 0.55f * g;
-            if (OnRnd(x, y, 91) > 0.996f)   /* pitting */
+            float l = 0.62f + 0.08f * (line - 0.5f) + 0.08f * (wide - 0.5f) + 0.02f * (OnRnd(x, y, 89) - 0.5f);
+            l *= 1.0f - 0.30f * g;
+            if (OnRnd(x, y, 91) > 0.9992f)   /* pitting */
                 l *= 0.45f;
             lum[y][x] = l;
         }
-    for (k = 0; k < 160; k++) {         /* scratches, mostly along, some across */
+    for (k = 0; k < 24; k++) {          /* a few faint scratches (Mary: cleaner) */
         int sx = (int)(OnHash(k, 1, 93) % 512), sy = (int)(OnHash(k, 2, 93) % 128);
         int len = 8 + (int)(OnHash(k, 3, 93) % 60), i;
         float slope = (OnHash(k, 6, 93) % 5 == 0) ? (OnRnd(k, 4, 93) - 0.5f) * 3.0f
                                                   : (OnRnd(k, 4, 93) - 0.5f) * 0.25f;
-        float f = (OnHash(k, 5, 93) & 1) ? 1.35f : 0.70f;
+        float f = (OnHash(k, 5, 93) & 1) ? 1.12f : 0.90f;
         for (i = 0; i < len; i++) {
             int xx = (sx + i) % 512, yy = sy + (int)(slope * (float)i);
             if (yy >= 0 && yy < 128)
