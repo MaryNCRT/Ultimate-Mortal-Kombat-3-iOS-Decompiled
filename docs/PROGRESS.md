@@ -96,6 +96,17 @@ traced to the binary's own mechanism before anything is changed.
 
 ---
 
+## Detailed log (newest first)
+
+## 0.4.3 beta (2026-11-07)
+
+- The replay player drawn with the ONLINE skin (`dbg_replay_draw`,
+  loading, hint), STAGE SELECT's list up to five rows with no scrolling,
+  and the Esc settings menu's black box (0.4.2's icon frame drawn in
+  engine pixels) replaced by the player banner (`ui_profile_banner`).
+  Claude checked all three by screenshot; Mary tried them in the test
+  folder and asked for the release.
+
 ## 0.4.2 beta (2026-11-07)
 
 - Released: the launcher renewal and PROFILE rebuild (below), the shared
