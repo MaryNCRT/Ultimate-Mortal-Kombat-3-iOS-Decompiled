@@ -10,6 +10,7 @@
  */
 
 #include <stdint.h>
+#include <math.h>     /* port: the ONLINE screen (sinf, atan2f...) */
 #include "lime_glapi.h"   /* the GL calls' calling convention */
 #include <string.h>
 #include <stdlib.h>
