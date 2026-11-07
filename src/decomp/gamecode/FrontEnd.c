@@ -18582,11 +18582,13 @@ void PortSkinButton(const char *text, float x, float y, float w, float h,
     OnButtonLook(text, x, y, w, h, main ? BT_MAIN : BT_NORMAL, st, lit, a);
 }
 
-/* `kind` 0 bone white, 1 lamp gold, 2 pale */
+/* `kind` 0 bone white, 1 lamp gold, 2 pale, 3 alarm red */
 void PortSkinText(const char *s, float x, float y, int align, float size,
                   float maxw, int kind, float a)
 {
-    OnText(s, x, y, align, size, maxw, kind == 1 ? OnGold : kind == 2 ? OnPale : OnWhite, a);
+    static const float red[3] = { 1.0f, 0.36f, 0.28f };
+    OnText(s, x, y, align, size, maxw,
+           kind == 1 ? OnGold : kind == 2 ? OnPale : kind == 3 ? red : OnWhite, a);
 }
 
 /* a metal frame `t` thick: gold, or bronze */
@@ -18608,4 +18610,22 @@ void PortSkinRule(float x, float y, float w, float a) { OnRule(x, y, w, a); }
 void PortSkinChevron(float x, float y, float w, float h, int right, float a)
 {
     OnOrn(ORN_CHEVRON, x, y, w, h, right, 0, MT_GOLD, a);
+}
+
+/* the player's banner without its fighter (the caller draws him, in its own
+ * space): the gradient on steel, the name, the id -- Esc's settings menu
+ * shows it under its categories (debug_menu.c, ui_profile_banner) */
+void PortSkinBand(float x, float y, float w, float h, float art, float a)
+{
+    const struct profile *me = prof_get();
+    int n = PortOnlinePicN;
+    float tx = x + OnBandText(art);
+
+    OnBand("", x, y, w, h, art, 0.0f, 0, a);
+    PortOnlinePicN = n;                 /* no fighter from here */
+    if (!me)
+        return;
+    OnText(OnName(me->name[0] ? me->name : "-"), tx, y + h * 0.14f, 0, h * 0.020f, x + w - tx - 6.0f,
+           OnWhite, a);
+    OnText(me->id, tx, y + h * 0.60f, 0, h * 0.012f, x + w - tx - 6.0f, OnGold, a);
 }
