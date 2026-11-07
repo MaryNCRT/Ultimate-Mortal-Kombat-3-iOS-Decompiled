@@ -8,6 +8,22 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased: the new ONLINE screen (stage 2 of the redesign)
+
+- **ONLINE has sections**: HOME, FRIENDS, INVITATIONS, LOBBIES, QUICK
+  MATCH and PARTY along the top, over the same night cemetery and moon,
+  in translucent panels with the MK red along their top; a red bar slides
+  to the section and each one fades in. HOME has the profile, your code and
+  COPY, FIND BY CODE and the state of the connection; FRIENDS and
+  INVITATIONS have what the launcher's account gives (up to six rows).
+  LOBBIES, QUICK MATCH and PARTY say they are coming (the next stages).
+  The mouse lights the button under it; the keyboard and the pad move
+  between every button. The code box takes the keys only once it is
+  clicked (Esc gives them back); Ctrl+V pastes anywhere on HOME. Checked by
+  Claude in the test folder (with Mary's permission to open the game):
+  clicks, the sections, typing a code, the keyboard; not yet played online
+  between two machines.
+
 ## 0.3.1b beta (2026-11-06) — frame time and LOW LATENCY
 
 Published 2026-11-06 as the GitHub pre-release `v0.3.1-beta.b`: the fix

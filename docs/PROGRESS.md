@@ -98,6 +98,32 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+## ONLINE redesign, stage 2: sections and HOME (2026-11-06)
+
+`FE_Task_Online` (FrontEnd.c) is drawn again, all of it the front end's own
+drawing: `limeFillRect` panels and the game's font, laid out in the menu's
+units across the whole screen (`OnX`/`OnY`, not `FE_X`, which sends x <= 90
+and >= 390 to the screen's edges on wide screens). Each button is
+`OnArea`: TouchAreaWH's test in those units plus `PortNavTarget`, so
+pad_nav.c drives it; a click is a release after a press inside. The mouse's
+place, pressed or not, is `PortMouseX/Y` (game_main.c) for the hover, ignored
+while the pad's highlight shows (`PortNavHover`). The code box listens only
+after a click (`PortOnlineListening` starts at 0: while it listens
+game_main.c gives the keys to it, so it could not stay on by default with
+the keys moving between sections). online_ui.c draws this player's badge at
+`PortOnlineMePx` and the friends' at `PortOnlineFrPx`; the old box outline is
+gone. Rows: six (badge slots 1..6). Mary confirmed the plan's questions:
+Combo Slide is KOMBO SLIDE, EOS Lobbies for lobbies/Quick Match/party, and
+the special modes' rules (the VS kodes) go in the lobby rules.
+
+Checked by running the game in the test folder (`--screen 51`, Mary's
+permission) with clicks and keys sent from PowerShell and screenshots at
+1920x1080: the six sections, the hover, the sliding bar, typing
+AB12-CD34-EF56, Esc, the arrows and Enter. A first build lost the Spanish
+accents (escapes written through a shell heredoc came out as raw bytes);
+fixed and checked (CÓDIGO, RÁPIDA). Not checked: 4:3 and 21:9, a pad, a
+real search between two machines.
+
 ## ONLINE menu redesign, stage 1: audit (2026-11-06)
 
 Mary asked for a full redesign of the ONLINE menu (HOME, FRIENDS,
