@@ -8,7 +8,7 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased (after 0.4.2)
+## 0.4.3 beta (2026-11-07)
 
 - **The replay player in the ONLINE screen's look** (Mary): a stone panel
   under a gold bar, the steel plates with bone-white pictures, PLAY / PAUSE
