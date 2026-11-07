@@ -109,7 +109,9 @@ void online_after_frame(void)
     my_look(&ml);
     w = ui_space_width();
 
-    if (CurrentTask == 3 && FE_CurrentTask == 51) {
+    /* the ONLINE screen, and the main menu's player banner (FrontEnd.c
+     * PortMainBanner) */
+    if (CurrentTask == 3 && (FE_CurrentTask == 51 || FE_CurrentTask == 0)) {
         /* FrontEnd.c lists the pictures it laid out this frame, in screen
          * pixels; into this space as ui_nav_frame takes them: 320 high.
          * Kind 1 is the fighter's VERSUS art alone, with its transparency,
@@ -121,6 +123,7 @@ void online_after_frame(void)
         extern char  PortOnlinePicCode[][16];   /* "" this player */
         extern float PortOnlinePicPx[][4];      /* x, y, size, opacity */
         extern int   PortOnlinePicKind[];
+        extern int   PortOnlineDraftLook[6];    /* MY PROFILE's draft: code "*" */
         int port_online_friend_look(const char *code, int *icon, unsigned *color, int *dark,
                                     unsigned *color2, int *angle, int *alt);
         static unsigned char *px[UI_PICTURES];
@@ -135,7 +138,19 @@ void online_after_frame(void)
 
             if (!PortOnlinePicCode[i][0])
                 fl = ml;
-            else {
+            else if (PortOnlinePicCode[i][0] == '*') {
+                memset(&fl, 0, sizeof fl);
+                fl.icon = PortOnlineDraftLook[0];
+                fl.alt = PortOnlineDraftLook[1];
+                fl.color = (unsigned)PortOnlineDraftLook[2];
+                fl.dark = PortOnlineDraftLook[3];
+                fl.color2 = (unsigned)PortOnlineDraftLook[4];
+                fl.angle = PortOnlineDraftLook[5];
+            } else if (PortOnlinePicCode[i][0] == '#') {    /* a fighter by number */
+                memset(&fl, 0, sizeof fl);
+                fl.icon = atoi(PortOnlinePicCode[i] + 1);
+                fl.angle = -1;
+            } else {
                 memset(&fl, 0, sizeof fl);
                 fl.angle = -1;
                 port_online_friend_look(PortOnlinePicCode[i], &fl.icon, &fl.color, &fl.dark,

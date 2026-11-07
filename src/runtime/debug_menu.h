@@ -75,7 +75,7 @@ void ui_badge_at(int slot, const char *name, const unsigned char *icon,
                  int icon_px, unsigned key, float x, float y, int align,
                  float size);
 float ui_space_width(void);
-#define UI_PICTURES 16
+#define UI_PICTURES 40
 void ui_picture_at(int slot, const unsigned char *rgba, int pw, int ph, unsigned key,
                    float x, float y, float w, float h, float a);
 void ui_rect_outline(float x, float y, float w, float h, float t,

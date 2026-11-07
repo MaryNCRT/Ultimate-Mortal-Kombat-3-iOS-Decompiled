@@ -24,6 +24,10 @@ struct profile {
                                            picker); -1 the older custom look */
     int      alt;                       /* 1: the fighter in his second outfit
                                            (<NAME>_VERSUS2.pvr) */
+    int      fav;                       /* the favourite fighter, 0..23 as the
+                                           icon, -1 none: a preference of its
+                                           own, not the icon (the ONLINE
+                                           screen's PROFILE, Mary) */
 };
 
 /* profiles.ini in the folder of `ini_path` (umk3.ini's path); with none,
