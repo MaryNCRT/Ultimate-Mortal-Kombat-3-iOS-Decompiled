@@ -98,6 +98,30 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+## ONLINE skin, a stage per section, the menus' click (2026-11-07)
+
+- **Skin** (FrontEnd.c): only the drawing helpers changed -- `OnPanel`
+  (black, gold frame, flared top: `OnGoldBar`), `OnRule` (a fine gold
+  line), `OnHeading` (a dark pill edged in gold), `OnButton` (black edged
+  in gold, MAIN oxblood, gold words under the mouse), the title bar (gold
+  bars, end caps, gold arrows), the palette (`OnWhite` bone, `OnPale`
+  silver, `OnDim` stone, `OnAmber` aged gold). Layout untouched. The
+  references Claude could open: MK9 Gearworks (fightersgeneration), MK11
+  (daanishsyed.com), MKA's Armory (mortalkombatwarehouse), MK3's stages
+  (fightersgeneration); Sprung Studios' page did not load; then Mary's
+  screenshots of MK Deception / Armageddon's online screens, which the
+  skin follows. Unused now: `OnBrushed`, `OnBevel`, `OnRivet` (kept for the
+  pieces that still call them).
+- **Stages**: `PortOnlineBackdrop` draws the section's CS_BG sheet
+  (CS_BG2, CS_BG, CS_BG1, CS_BG4; HOME the select screen's own), loaded
+  on entering ONLINE and freed when leaving it or when a fight starts.
+- **Menu clicks**: `port_menu_clicks` (game_main.c, umk3.ini
+  `menu_clicks=`, the settings menu's AUDIO); `limePlaySound` skips
+  `SFXHandle[26]`, the one sound every menu press plays.
+- Built into the test folder; not yet seen by Mary. A test run of Claude's
+  clicked in Mary's browser once (the game's window did not come to the
+  front): scripted clicks are not used while she is at the computer.
+
 ## 0.4.0 beta (2026-11-06) — the new ONLINE screen
 
 Released as `v0.4.0-beta` (PRs 192, 193 and 194 merged): the ONLINE

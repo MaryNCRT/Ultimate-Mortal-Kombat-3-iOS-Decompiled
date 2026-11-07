@@ -8,6 +8,21 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased (after 0.4.0)
+
+- **The ONLINE screen's new skin** (Mary's references: MK Deception's and
+  MK Armageddon's ONLINE KOMBAT, MK9's Gearworks, MK11's menus, MK3's
+  stages): black panels in a frame of antique gold with flared corners,
+  dark header pills edged in gold, buttons edged in gold (the main one
+  oxblood), a gold-framed title bar with end caps, gold, bone and silver
+  words, a grey-green mist. Nothing moved: every position and size is the
+  same.
+- **A stage behind each section**, darkened: HOME the Graveyard, PROFILE
+  the Soul Chamber, LOBBIES the Subway, QUICK MATCH the Bell Tower, PARTY
+  the Temple; crossfaded when the section changes.
+- **AUDIO > MENU CLICK SOUND**: the menus' press sound can be muted
+  (umk3.ini `menu_clicks=`), asked by players.
+
 ## 0.4.0 beta (2026-11-06) — the new ONLINE screen
 
 Published 2026-11-06 as the GitHub pre-release `v0.4.0-beta`. Tried by
