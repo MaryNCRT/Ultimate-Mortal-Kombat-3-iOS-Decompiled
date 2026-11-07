@@ -98,6 +98,25 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+## ONLINE: materials (2026-11-07)
+
+- Mary's brief "PULIDO VISUAL FINAL DEL MENU EN LINEA" (Deception /
+  Armageddon: aged gold, bronze, black steel, stone, deep red; layout
+  approved, untouched).
+- `limeTextureFromRGBA` (draw_gl.c; a stub in lime_platform.c's headless
+  half): a texture made in memory, cached by key like a file's.
+- FrontEnd.c makes four textures on the first ONLINE frame (`OnTexture`):
+  a metal bar (`OnMakeMetal`: lip, groove, engraved line, brushing,
+  tarnish, scratches; also turned on its side for uprights), stone
+  (`OnMakeStone`, tiling), and an ornament sheet (`OnMakeOrn`: a corner
+  bracket, a sigil, a chevron, a stud -- original shapes, not the series'
+  dragon). Tinted by `OnMat` into gold, bronze, steel, red, black steel.
+  Used by `OnPanel`, `OnGoldBar`, `OnRule`, `OnHeading`, `OnButton`,
+  `OnStatus`, the title bar and the backdrop. `OnText` draws a shadow.
+- Built into the test folder; Claude has not seen it on screen (Mary uses
+  the computer; no scripted clicks). The brief arrived cut at its point 8
+  (the Player Banner: keep it as it is), which is untouched.
+
 ## ONLINE skin, a stage per section, the menus' click (2026-11-07)
 
 - **Skin** (FrontEnd.c): only the drawing helpers changed -- `OnPanel`

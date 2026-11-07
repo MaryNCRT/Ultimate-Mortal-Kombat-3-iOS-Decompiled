@@ -136,6 +136,16 @@ press COMPILE.
 
 ## 7. Open work
 
+- **Mary's roadmap (2026-11-07)**, in order: (1) finish the ONLINE menu's
+  Deception / Armageddon finish (PR #196); (2) a full renewal of the
+  launcher: UMK3 Xbox 360's identity with dark fantasy, rustic materials,
+  aged metal and stone, ornament, ambient light -- it and the ONLINE menu
+  must complement each other; the gradient editor and the customisation
+  keep working; (3) ONLINE infrastructure: real EOS lobbies, matchmaking
+  and quick match, parties and invites, friends' online state, into the
+  fights; (4) new fight modes: Tag Team, Simul, King of the Hill; (5)
+  reusable online systems with engine adapters, ready to carry to MK Gold,
+  stability tests and docs.
 - **Accounts server.** It lives in Mary's private repository
   (MaryNCRT-Universal-Game-Services, `umk3-accounts/`, a Cloudflare Worker;
   its README has deploying and testing). Never put server code or secrets

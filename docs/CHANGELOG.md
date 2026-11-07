@@ -22,6 +22,15 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
   the Temple; crossfaded when the section changes.
 - **AUDIO > MENU CLICK SOUND**: the menus' press sound can be muted
   (umk3.ini `menu_clicks=`), asked by players.
+- **The ONLINE screen's materials** (Mary's "final visual polish" brief):
+  the panels are dark stone, a little see-through, with an inner shadow,
+  dark bronze uprights, a beam of aged gold and gold corner brackets; the
+  metals are textured (brushed, tarnished, scratched, bevelled); headings
+  are black steel plates with a red edge; buttons are black steel framed in
+  bronze, gold under the mouse, deep red with gold chevrons when chosen with
+  the pad, sunk when pressed; the chosen section is deep red with a gold
+  bar; every word has a shadow; each section has a faint air of its own
+  over its stage. Positions and sizes unchanged.
 
 ## 0.4.0 beta (2026-11-06) — the new ONLINE screen
 

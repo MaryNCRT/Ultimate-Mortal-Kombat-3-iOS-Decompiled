@@ -823,6 +823,42 @@ static TEXTURE *load_texture(const char *path, int a, int b)
     return &e->tex;
 }
 
+/* Port, not in the binary: a texture made in memory (the ONLINE screen's
+ * metals, stone and ornaments, FrontEnd.c), kept under `key` as a file's
+ * would be. `rgba` is copied; a second call with the same key returns the
+ * first. A requality (below) finds no file by that name and leaves it. */
+TEXTURE *limeTextureFromRGBA(const char *key, const unsigned char *rgba, int w, int h)
+{
+    TexEntry *e;
+    LimeImage img;
+    GLuint name = 0;
+
+    if (key == NULL || rgba == NULL || w <= 0 || h <= 0)
+        return NULL;
+    e = tex_find(key);
+    if (e)
+        return &e->tex;
+    img.width = w;
+    img.height = h;
+    img.rgba = (uint8_t *)malloc((size_t)w * h * 4);
+    if (img.rgba == NULL)
+        return NULL;
+    memcpy(img.rgba, rgba, (size_t)w * h * 4);
+    glGenTextures(1, &name);
+    tex_upload(name, &img);
+    free(img.rgba);
+    e = (TexEntry *)tex_entry_alloc(sizeof(*e));
+    if (e == NULL)
+        return NULL;
+    memset(e, 0, sizeof(*e));
+    e->path = _strdup(key);
+    e->tex.name = name;
+    e->w = w;
+    e->h = h;
+    tex_add(e);
+    return &e->tex;
+}
+
 /* Port, not in the binary: a soft shadow under a key or button picture
  * (glyphs/), so it does not melt into the background. In its own canvas:
  * the picture a little smaller and up, the shadow below and right of it,

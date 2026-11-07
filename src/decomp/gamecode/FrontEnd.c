@@ -12432,6 +12432,304 @@ static void OnGlow(float x, float y, float w, float h, float r, float g, float b
  * fortress -- MK9's Gearworks, Armageddon's Armory, MK3's stone: aged steel,
  * dark iron, concrete, rivets, blood red, industrial orange) ---- */
 
+/* ---- the materials (Mary 2026-11-07: MK Deception's and Armageddon's
+ * menus -- aged gold, dark bronze, black steel, stone, deep red). Port, not
+ * in the binary: drawn once into memory the first time a frame needs them;
+ * no file of the game's is touched. ---- */
+TEXTURE *limeTextureFromRGBA(const char *key, const unsigned char *rgba, int w, int h);
+
+enum { TX_METAL, TX_METALV, TX_STONE, TX_ORN, TX_N };
+enum { MT_GOLD, MT_BRONZE, MT_STEEL, MT_BLOOD, MT_IRON };
+enum { ORN_CORNER, ORN_SIGIL, ORN_CHEVRON, ORN_STUD };
+
+#define ON_MW 256                       /* the metal: a bar, lit on top */
+#define ON_MH 32
+#define ON_ST 128                       /* the stone, tiling */
+
+static TEXTURE *OnTexs[TX_N];
+static int OnTexsTried;
+
+static const float OnMat[5][3] = {
+    { 1.00f, 0.80f, 0.47f },            /* aged gold */
+    { 0.66f, 0.45f, 0.25f },            /* dark bronze */
+    { 0.52f, 0.53f, 0.54f },            /* steel */
+    { 0.66f, 0.11f, 0.07f },            /* deep red */
+    { 0.17f, 0.17f, 0.18f },            /* black steel */
+};
+
+static unsigned OnHash(int x, int y, int s)
+{
+    unsigned h = (unsigned)x * 374761393u + (unsigned)y * 668265263u + (unsigned)s * 1442695041u;
+    h = (h ^ (h >> 13)) * 1274126177u;
+    return h ^ (h >> 16);
+}
+
+static float OnRnd(int x, int y, int s)
+{
+    return (float)(OnHash(x, y, s) & 0xffffu) / 65535.0f;
+}
+
+/* value noise wrapping every px by py cells, so what is made of it tiles */
+static float OnNoise(float x, float y, int px, int py, int s)
+{
+    int x0 = (int)floorf(x), y0 = (int)floorf(y);
+    int xa = ((x0 % px) + px) % px, xb = (xa + 1) % px;
+    int ya = ((y0 % py) + py) % py, yb = (ya + 1) % py;
+    float fx = x - (float)x0, fy = y - (float)y0, a, b, c, d;
+
+    fx = fx * fx * (3.0f - 2.0f * fx);
+    fy = fy * fy * (3.0f - 2.0f * fy);
+    a = OnRnd(xa, ya, s);
+    b = OnRnd(xb, ya, s);
+    c = OnRnd(xa, yb, s);
+    d = OnRnd(xb, yb, s);
+    return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+}
+
+static float OnFbm(float x, float y, int px, int py, int s)
+{
+    float v = 0.0f, amp = 0.5f;
+    int o;
+    for (o = 0; o < 4; o++) {
+        v += amp * OnNoise(x, y, px, py, s + o);
+        x *= 2.0f;
+        y *= 2.0f;
+        px *= 2;
+        py *= 2;
+        amp *= 0.5f;
+    }
+    return v / 0.9375f;
+}
+
+static void OnPut(unsigned char *o, float r, float g, float b, float a)
+{
+    o[0] = (unsigned char)(OnClamp(r) * 255.0f + 0.5f);
+    o[1] = (unsigned char)(OnClamp(g) * 255.0f + 0.5f);
+    o[2] = (unsigned char)(OnClamp(b) * 255.0f + 0.5f);
+    o[3] = (unsigned char)(OnClamp(a) * 255.0f + 0.5f);
+}
+
+/* The metal, grey, for a tint to make gold, bronze, steel or red of: a bar
+ * lit along its top lip, a groove under it, an engraved line along its
+ * middle, darker towards the bottom; brushed along its length, tarnished
+ * in patches (the tarnish pulls it off its tint, to olive and brown), and
+ * scratched. `turn` lays it on its side, for the uprights. */
+static void OnMakeMetal(unsigned char *out, int turn)
+{
+    static float lum[ON_MH][ON_MW], tar[ON_MH][ON_MW];
+    int x, y, k;
+
+    for (y = 0; y < ON_MH; y++) {
+        float v = ((float)y + 0.5f) / (float)ON_MH, prof;
+        if (v < 0.10f)
+            prof = 1.0f;
+        else if (v < 0.17f)
+            prof = 0.50f;
+        else
+            prof = 0.90f - 0.42f * (v - 0.17f) / 0.83f;
+        if (v >= 0.47f && v < 0.53f)
+            prof *= 0.55f;
+        else if (v >= 0.53f && v < 0.58f)
+            prof *= 1.18f;
+        if (v > 0.90f)
+            prof *= 0.45f;
+        for (x = 0; x < ON_MW; x++) {
+            float br = OnNoise((float)x * 16.0f / ON_MW, (float)y * 0.9f, 16, ON_MH, 11);
+            float pat = OnFbm((float)x * 6.0f / ON_MW, (float)y * 6.0f / ON_MW, 6, 6, 17);
+            float t = pat > 0.52f ? (pat - 0.52f) / 0.48f : 0.0f;
+            lum[y][x] = prof * (0.84f + 0.22f * br + 0.06f * OnRnd(x, y, 13)) * (1.0f - 0.55f * t);
+            tar[y][x] = t;
+        }
+    }
+    for (k = 0; k < 70; k++) {          /* scratches, bright or dark */
+        int sx = (int)(OnHash(k, 1, 21) % ON_MW), sy = (int)(OnHash(k, 2, 21) % ON_MH);
+        int len = 5 + (int)(OnHash(k, 3, 21) % 18), i;
+        float slope = (OnRnd(k, 4, 21) - 0.5f) * 0.4f;
+        float f = (OnHash(k, 5, 21) & 1) ? 1.30f : 0.70f;
+        for (i = 0; i < len; i++) {
+            int xx = (sx + i) % ON_MW, yy = sy + (int)(slope * (float)i);
+            if (yy >= 0 && yy < ON_MH)
+                lum[yy][xx] *= f;
+        }
+    }
+    for (y = 0; y < ON_MH; y++)
+        for (x = 0; x < ON_MW; x++) {
+            float l = lum[y][x], t = tar[y][x];
+            unsigned char *o = turn ? out + ((size_t)x * ON_MH + y) * 4 : out + ((size_t)y * ON_MW + x) * 4;
+            OnPut(o, l * (1.0f - 0.45f * t), l * (1.0f - 0.40f * t), l * (1.0f - 0.25f * t), 1.0f);
+        }
+}
+
+/* stone: worn, grained, cracked, tiling */
+static void OnMakeStone(unsigned char *out)
+{
+    int x, y;
+    for (y = 0; y < ON_ST; y++)
+        for (x = 0; x < ON_ST; x++) {
+            float f = OnFbm((float)x / 32.0f, (float)y / 32.0f, 4, 4, 31);
+            float r = OnNoise((float)x / 16.0f, (float)y / 16.0f, 8, 8, 37);
+            float ridge = 1.0f - fabsf(2.0f * r - 1.0f);
+            float crack = ridge > 0.94f ? (ridge - 0.94f) / 0.06f : 0.0f;
+            float l = (0.45f + 0.45f * f + 0.10f * OnRnd(x, y, 41)) * (1.0f - 0.6f * crack);
+            OnPut(out + ((size_t)y * ON_ST + x) * 4, l, l, l, 1.0f);
+        }
+}
+
+/* The ornaments, each in a 64 square of a 256 x 64 sheet: a corner bracket
+ * (two arms cut at an angle, a step inside them, a diamond stud), a sigil
+ * (a diamond ring round a diamond), a chevron pointing right, a round stud.
+ * Original shapes, none of the series' marks. */
+static int OnOrnIn(int cell, float x, float y)
+{
+    float dx, dy;
+
+    switch (cell) {
+    case ORN_CORNER:
+        x -= 2.0f;
+        y -= 2.0f;
+        if (x < 0.0f || y < 0.0f)
+            return 0;
+        if (y < 9.0f && x < 58.0f - y)
+            return 1;
+        if (x < 9.0f && y < 58.0f - x)
+            return 1;
+        if (y < 14.0f && x < 34.0f - (y - 9.0f))
+            return 1;
+        if (x < 14.0f && y < 34.0f - (x - 9.0f))
+            return 1;
+        return fabsf(x - 22.0f) + fabsf(y - 22.0f) <= 7.0f;
+    case ORN_SIGIL:
+        dx = fabsf(x - 32.0f);
+        dy = fabsf(y - 32.0f);
+        if (dx / 29.0f + dy / 14.0f <= 1.0f && dx / 21.0f + dy / 9.0f > 1.0f)
+            return 1;
+        return dx / 12.0f + dy / 6.0f <= 1.0f;
+    case ORN_CHEVRON:
+        dy = fabsf(y - 32.0f);
+        return dy <= 24.0f && x >= 36.0f - dy * 0.75f && x <= 50.0f - dy * 0.75f;
+    default:
+        dx = x - 32.0f;
+        dy = y - 32.0f;
+        return dx * dx + dy * dy <= 26.0f * 26.0f;
+    }
+}
+
+static void OnMakeOrn(unsigned char *out)
+{
+    int cell, x, y, i;
+
+    for (cell = 0; cell < 4; cell++)
+        for (y = 0; y < 64; y++)
+            for (x = 0; x < 64; x++) {
+                float cx = (float)x + 0.5f, cy = (float)y + 0.5f, l = 0.80f;
+                int n = 0;
+                for (i = 0; i < 16; i++)
+                    n += OnOrnIn(cell, (float)x + ((float)(i & 3) + 0.5f) * 0.25f,
+                                 (float)y + ((float)(i >> 2) + 0.5f) * 0.25f);
+                if (cell == ORN_STUD) {     /* a dome, lit from the top left */
+                    float nx = (cx - 32.0f) / 26.0f + 0.45f, ny = (cy - 32.0f) / 26.0f + 0.45f;
+                    l = 0.40f + 0.60f * OnClamp(1.0f - (nx * nx + ny * ny));
+                    if ((cx - 32.0f) * (cx - 32.0f) + (cy - 32.0f) * (cy - 32.0f) > 22.0f * 22.0f)
+                        l *= 0.55f;
+                } else {
+                    if (cell == ORN_SIGIL && fabsf(cx - 32.0f) / 12.0f + fabsf(cy - 32.0f) / 6.0f <= 1.0f)
+                        l = 0.95f;
+                    if (cell == ORN_CORNER && fabsf(cx - 24.0f) + fabsf(cy - 24.0f) <= 7.0f)
+                        l = 0.95f;
+                    if (!OnOrnIn(cell, cx - 1.6f, cy - 1.6f))
+                        l = 1.0f;           /* the lit edge */
+                    else if (!OnOrnIn(cell, cx + 1.6f, cy + 1.6f))
+                        l = 0.32f;          /* the shadowed one */
+                    if (cell == ORN_CORNER) {   /* an engraved line along the arms */
+                        float ax = cx - 2.0f, ay = cy - 2.0f;
+                        if ((ay >= 4.0f && ay < 5.5f && ax >= 4.0f && ax < 50.0f - ay)
+                            || (ax >= 4.0f && ax < 5.5f && ay >= 4.0f && ay < 50.0f - ax))
+                            l *= 0.45f;
+                    }
+                    l *= 0.88f + 0.20f * OnNoise(cx / 6.0f, cy / 6.0f, 11, 11, 53 + cell);
+                }
+                OnPut(out + ((size_t)y * 256 + (size_t)(cell * 64 + x)) * 4, l, l, l, (float)n / 16.0f);
+            }
+}
+
+static TEXTURE *OnTexture(int i)
+{
+    if (!OnTexsTried) {
+        static unsigned char buf[256 * 64 * 4];
+        OnTexsTried = 1;
+        OnMakeMetal(buf, 0);
+        OnTexs[TX_METAL] = limeTextureFromRGBA("port:online-metal", buf, ON_MW, ON_MH);
+        OnMakeMetal(buf, 1);
+        OnTexs[TX_METALV] = limeTextureFromRGBA("port:online-metal-v", buf, ON_MH, ON_MW);
+        OnMakeStone(buf);
+        OnTexs[TX_STONE] = limeTextureFromRGBA("port:online-stone", buf, ON_ST, ON_ST);
+        OnMakeOrn(buf);
+        OnTexs[TX_ORN] = limeTextureFromRGBA("port:online-ornaments", buf, 256, 64);
+    }
+    return OnTexs[i];
+}
+
+static void OnSprite(int tx, float x, float y, float w, float h, float u, float v,
+                     float du, float dv, const float *rgb, float a)
+{
+    TEXTURE *t;
+    float c[4];
+
+    if (w <= 0.0f || h <= 0.0f || a <= 0.0f || (t = OnTexture(tx)) == NULL)
+        return;
+    c[0] = rgb[0];
+    c[1] = rgb[1];
+    c[2] = rgb[2];
+    c[3] = a;
+    limeDrawSprite(t, OnX(x), OnY(y), OnW(w), OnH(h), u, v, du, dv, c);
+}
+
+/* a bar of metal, lying (OnMetal) or standing (OnMetalV); a tile every 64 */
+static void OnMetal(float x, float y, float w, float h, int m, float a)
+{
+    OnSprite(TX_METAL, x, y, w, h, x / 64.0f, 0.02f, w / 64.0f, 0.96f, OnMat[m], a);
+}
+
+static void OnMetalV(float x, float y, float w, float h, int m, float a)
+{
+    OnSprite(TX_METALV, x, y, w, h, 0.02f, y / 64.0f, 0.96f, h / 64.0f, OnMat[m], a);
+}
+
+/* a frame `t` thick, of metal */
+static void OnMetalFrame(float x, float y, float w, float h, float t, int m, float a)
+{
+    OnMetal(x, y, w, t, m, a);
+    OnMetal(x, y + h - t, w, t, m, a);
+    OnMetalV(x, y + t, t, h - 2.0f * t, m, a);
+    OnMetalV(x + w - t, y + t, t, h - 2.0f * t, m, a);
+}
+
+static void OnStone(float x, float y, float w, float h, const float *rgb, float a)
+{
+    OnSprite(TX_STONE, x, y, w, h, x / 96.0f, y / 96.0f, w / 96.0f, h / 96.0f, rgb, a);
+}
+
+/* an ornament, mirrored across (fx) or down (fy), in a material or a colour */
+static void OnOrnC(int cell, float x, float y, float w, float h, int fx, int fy,
+                   const float *rgb, float a)
+{
+    float u = (float)cell * 0.25f, v = 0.0f, du = 0.25f, dv = 1.0f;
+    if (fx) {
+        u += 0.25f;
+        du = -0.25f;
+    }
+    if (fy) {
+        v = 1.0f;
+        dv = -1.0f;
+    }
+    OnSprite(TX_ORN, x, y, w, h, u, v, du, dv, rgb, a);
+}
+
+static void OnOrn(int cell, float x, float y, float w, float h, int fx, int fy, int m, float a)
+{
+    OnOrnC(cell, x, y, w, h, fx, fy, OnMat[m], a);
+}
+
 /* a rivet: a dome of steel, lit from above */
 static void OnRivet(float x, float y, float a)
 {
@@ -12472,48 +12770,58 @@ static void OnBevel(float x, float y, float w, float h, float a)
 /* antique gold: a bar of it, lit on top, brown underneath */
 static void OnGoldBar(float x, float y, float w, float h, float a)
 {
-    static const float g0[4] = { 0.92f, 0.80f, 0.50f, 1.0f }, g1[4] = { 0.50f, 0.36f, 0.16f, 1.0f };
-    OnVGrad(x, y, w, h, g0, g1, a);
-    OnFrame(x, y, w, h, 0.5f, 0.16f, 0.10f, 0.04f, 0.8f * a);
+    OnMetal(x, y, w, h, MT_GOLD, a);
+    OnFrame(x, y, w, h, 0.4f, 0.14f, 0.08f, 0.03f, 0.75f * a);
 }
-
 /* A panel: black, in a frame of antique gold whose top flares out at the
  * corners (MK Armageddon's ONLINE KOMBAT, Mary's reference); `red` an
  * oxblood line inside its top. */
 static void OnPanel(float x, float y, float w, float h, float a, int red)
 {
-    /* a little see-through, so the stage behind shows (Mary) */
-    static const float t[4] = { 0.04f, 0.035f, 0.03f, 0.76f };
-    static const float b[4] = { 0.01f, 0.01f, 0.01f, 0.82f };
-    static const float rl[4] = { 0.50f, 0.14f, 0.08f, 1.0f };
-    static const float rr[4] = { 0.30f, 0.08f, 0.05f, 0.0f };
-    static const float s0[4] = { 0.82f, 0.68f, 0.38f, 1.0f }, s1[4] = { 0.42f, 0.30f, 0.12f, 1.0f };
+    /* dark stone, a little see-through so the stage shows (Mary), lit from
+     * above and deeper at the bottom, shadowed inside its frame */
+    static const float stone[3] = { 0.085f, 0.078f, 0.066f };
+    static const float l0[4] = { 0.55f, 0.42f, 0.22f, 0.07f }, l1[4] = { 0.55f, 0.42f, 0.22f, 0.0f };
+    static const float d0[4] = { 0.0f, 0.0f, 0.0f, 0.0f }, d1[4] = { 0.0f, 0.0f, 0.0f, 0.35f };
+    static const float rl[4] = { 0.62f, 0.12f, 0.07f, 1.0f };
+    static const float rr[4] = { 0.36f, 0.06f, 0.04f, 0.0f };
+    int i;
 
     OnShadow(x, y, w, h, a);
-    OnVGrad(x, y, w, h, t, b, a);
-    /* the frame: two gold sides, gold top and bottom, a dark line inside */
-    OnHGrad(x - 2.0f, y, 2.4f, h, s1, s0, a);
-    OnHGrad(x + w - 0.4f, y, 2.4f, h, s0, s1, a);
-    OnGoldBar(x - 2.0f, y + h - 0.4f, w + 4.0f, 2.0f, a);
-    /* the top, and a cap on each corner -- kept within the sides, so two
-     * panels side by side do not run into each other (Mary) */
+    OnStone(x, y, w, h, stone, 0.80f * a);
+    OnVGrad(x, y, w, h * 0.35f, l0, l1, a);
+    OnVGrad(x, y + h * 0.6f, w, h * 0.4f, d0, d1, a);
+    for (i = 0; i < 3; i++)
+        OnFrame(x + (float)i, y + (float)i, w - 2.0f * (float)i, h - 2.0f * (float)i, 1.0f,
+                0.0f, 0.0f, 0.0f, (0.30f - 0.09f * (float)i) * a);
+    /* the frame: dark bronze uprights and foot, a beam of aged gold on top,
+     * a fine gold line inside -- all within the sides, so two panels side by
+     * side do not run into each other (Mary) */
+    OnMetalV(x - 2.0f, y, 2.4f, h, MT_BRONZE, a);
+    OnMetalV(x + w - 0.4f, y, 2.4f, h, MT_BRONZE, a);
+    OnFill(x - 2.0f, y, 0.4f, h, 0.06f, 0.04f, 0.02f, 0.8f * a);
+    OnFill(x + w + 1.6f, y, 0.4f, h, 0.06f, 0.04f, 0.02f, 0.8f * a);
+    OnMetal(x - 2.0f, y + h - 0.4f, w + 4.0f, 2.0f, MT_BRONZE, a);
+    OnFrame(x - 2.0f, y + h - 0.4f, w + 4.0f, 2.0f, 0.4f, 0.06f, 0.04f, 0.02f, 0.7f * a);
     OnGoldBar(x - 2.0f, y - 2.6f, w + 4.0f, 2.8f, a);
-    OnGoldBar(x - 2.0f, y - 3.8f, 8.0f, 1.4f, a);
-    OnGoldBar(x + w - 6.0f, y - 3.8f, 8.0f, 1.4f, a);
-    OnFrame(x + 0.4f, y + 0.2f, w - 0.8f, h - 0.6f, 0.6f, 0.0f, 0.0f, 0.0f, 0.9f * a);
+    OnFrame(x + 2.4f, y + 2.2f, w - 4.8f, h - 4.6f, 0.35f, 0.72f, 0.56f, 0.28f, 0.30f * a);
+    /* the corners: gold brackets on top, bronze below */
+    OnOrn(ORN_CORNER, x - 2.0f, y - 3.6f, 10.0f, 10.0f, 0, 0, MT_GOLD, a);
+    OnOrn(ORN_CORNER, x + w - 8.0f, y - 3.6f, 10.0f, 10.0f, 1, 0, MT_GOLD, a);
+    OnOrn(ORN_CORNER, x - 2.0f, y + h - 5.6f, 7.5f, 7.5f, 0, 1, MT_BRONZE, a);
+    OnOrn(ORN_CORNER, x + w - 5.5f, y + h - 5.6f, 7.5f, 7.5f, 1, 1, MT_BRONZE, a);
     if (red)
-        OnHGrad(x + 1.0f, y + 1.0f, w * 0.6f, 1.0f, rl, rr, a);
+        OnHGrad(x + 3.0f, y + 1.0f, w * 0.6f, 1.0f, rl, rr, a);
 }
-
 /* a separator: a fine gold line, fading out */
 static void OnRule(float x, float y, float w, float a)
 {
-    static const float l0[4] = { 0.80f, 0.64f, 0.34f, 0.55f }, l1[4] = { 0.80f, 0.64f, 0.34f, 0.0f };
+    static const float l0[4] = { 0.66f, 0.47f, 0.24f, 0.70f }, l1[4] = { 0.66f, 0.47f, 0.24f, 0.0f };
     static const float d0[4] = { 0.0f, 0.0f, 0.0f, 0.7f }, d1[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
     OnHGrad(x, y, w, 0.7f, l0, l1, a);
     OnHGrad(x, y + 0.7f, w, 0.6f, d0, d1, a);
-}
-/* Text: align 0 left, 1 centred, 2 right; `size` the font's scale (1 the
+    OnOrn(ORN_SIGIL, x - 1.0f, y - 2.0f, 9.0f, 4.6f, 0, 0, MT_GOLD, a);
+}/* Text: align 0 left, 1 centred, 2 right; `size` the font's scale (1 the
  * title's); shrunk to `maxw` units when wider. */
 static void OnText(const char *s, float x, float y, int align, float size,
                    float maxw, const float *rgb, float a)
@@ -12532,6 +12840,10 @@ static void OnText(const char *s, float x, float y, int align, float size,
         float w = limeGetStringWidth(&GameFont, u) * k;
         if (w > OnW(maxw) && w > 0.0f)
             k *= OnW(maxw) / w;
+    }
+    {
+        float sh[4] = { 0.0f, 0.0f, 0.0f, 0.70f * a };
+        limeDrawFONT(&GameFont, u, OnX(x) + OnW(0.7f), OnY(y) + OnH(0.9f), align, k, sh);
     }
     limeDrawFONT(&GameFont, u, OnX(x), OnY(y), align, k, c);
 }
@@ -12568,9 +12880,12 @@ static void OnHeading(const char *title, int count, float x, float y, float w, f
     else
         snprintf(line, sizeof line, "%s", title);
     {
-        static const float o0[4] = { 0.10f, 0.09f, 0.07f, 0.95f }, o1[4] = { 0.03f, 0.03f, 0.025f, 0.95f };
-        OnVGrad(x - 6.0f, y - 2.0f, w + 6.0f, 16.0f, o0, o1, a);
-        OnFrame(x - 6.0f, y - 2.0f, w + 6.0f, 16.0f, 0.7f, 0.78f, 0.62f, 0.32f, 0.85f * a);
+        static const float d0[4] = { 0.0f, 0.0f, 0.0f, 0.0f }, d1[4] = { 0.0f, 0.0f, 0.0f, 0.50f };
+        OnMetal(x - 6.0f, y - 2.0f, w + 6.0f, 16.0f, MT_IRON, 0.95f * a);
+        OnVGrad(x - 6.0f, y - 2.0f, w + 6.0f, 16.0f, d0, d1, a);
+        OnFrame(x - 6.0f, y - 2.0f, w + 6.0f, 16.0f, 0.6f, 0.0f, 0.0f, 0.0f, 0.8f * a);
+        OnFrame(x - 5.4f, y - 1.4f, w + 4.8f, 14.8f, 0.5f, 0.62f, 0.43f, 0.22f, 0.85f * a);
+        OnMetalV(x - 5.4f, y - 1.4f, 1.8f, 14.8f, MT_BLOOD, a);
     }
     OnText(line, x, y, 0, 0.62f, w, OnAmber, a);
 }
@@ -12582,7 +12897,7 @@ static void OnStatus(const char *s, const float *rgb, float x, float y, float ma
     float p = pulse ? 0.55f + 0.45f * sinf(PortOnlineT * 5.0f) : 1.0f;
 
     OnFill(x - 0.8f, y + 1.2f, 6.6f, 6.6f, rgb[0] * 0.3f, rgb[1] * 0.3f, rgb[2] * 0.3f, 0.6f * a * p);
-    OnFill(x, y + 2.0f, 5.0f, 5.0f, rgb[0], rgb[1], rgb[2], a * p);
+    OnOrnC(ORN_STUD, x - 0.6f, y + 1.4f, 6.2f, 6.2f, 0, 0, rgb, a * p);
     OnText(s, x + 9.0f, y, 0, 0.40f, maxw - 9.0f, rgb, a);
 }
 
@@ -12596,14 +12911,15 @@ enum { BT_NORMAL, BT_MAIN, BT_OFF };
 static int OnButton(int id, const char *text, float x, float y, float w,
                     float h, int kind, float a)
 {
-    /* steel plates; MAIN a plate painted blood red; OFF bare dark iron */
-    static const float n0[4] = { 0.10f, 0.09f, 0.08f, 0.92f }, n1[4] = { 0.02f, 0.02f, 0.02f, 0.94f };
-    static const float h0[4] = { 0.26f, 0.21f, 0.12f, 0.80f }, h1[4] = { 0.08f, 0.06f, 0.03f, 0.80f };
-    static const float m0[4] = { 0.48f, 0.13f, 0.08f, 0.95f }, m1[4] = { 0.24f, 0.05f, 0.03f, 0.96f };
-    static const float mh0[4] = { 0.62f, 0.18f, 0.10f, 0.97f }, mh1[4] = { 0.34f, 0.08f, 0.04f, 0.97f };
-    static const float o0[4] = { 0.12f, 0.12f, 0.13f, 0.80f }, o1[4] = { 0.06f, 0.06f, 0.065f, 0.82f };
-    int st = 0, hit = 0;
-    float *lit = &PortOnlineLit[id], want, dy = 0.0f;
+    /* plates of black steel; MAIN, and the pad's choice, deep red; framed in
+     * bronze, in gold under the mouse, for MAIN and when chosen */
+    static const float h0[4] = { 0.80f, 0.58f, 0.28f, 0.26f }, h1[4] = { 0.40f, 0.26f, 0.10f, 0.08f };
+    static const float mh0[4] = { 1.0f, 0.36f, 0.20f, 0.28f }, mh1[4] = { 0.50f, 0.10f, 0.05f, 0.08f };
+    static const float dk0[4] = { 0.0f, 0.0f, 0.0f, 0.0f }, dk1[4] = { 0.0f, 0.0f, 0.0f, 0.50f };
+    static const float sk0[4] = { 0.0f, 0.0f, 0.0f, 0.55f }, sk1[4] = { 0.0f, 0.0f, 0.0f, 0.15f };
+    static const float hot[3] = { 1.0f, 0.88f, 0.62f };
+    int st = 0, hit = 0, red;
+    float *lit = &PortOnlineLit[id], want, dy = 0.0f, sz = h < 17.0f ? 0.44f : 0.58f;
 
     if (kind != BT_OFF)
         hit = OnArea(id, x, y, w, h, &st);
@@ -12611,43 +12927,42 @@ static int OnButton(int id, const char *text, float x, float y, float w,
     *lit += (want - *lit) * 0.35f / limeFPSScaleFactor;
 
     OnShadow(x, y, w, h, 0.6f * a);
-    if (kind == BT_OFF) {
-        OnVGrad(x, y, w, h, o0, o1, a);
-        OnFrame(x, y, w, h, 0.8f, 0.0f, 0.0f, 0.0f, 0.7f * a);
-        OnFill(x + 1.0f, y + 0.8f, w - 2.0f, 0.6f, 0.5f, 0.5f, 0.5f, 0.12f * a);
+    if (kind == BT_OFF) {               /* bare dark iron, its words faint */
+        OnMetal(x, y, w, h, MT_IRON, 0.85f * a);
+        OnVGrad(x, y, w, h, dk0, dk1, a);
+        OnFrame(x, y, w, h, 0.8f, 0.0f, 0.0f, 0.0f, 0.8f * a);
+        OnFrame(x + 0.8f, y + 0.8f, w - 1.6f, h - 1.6f, 0.4f, 0.40f, 0.40f, 0.40f, 0.30f * a);
         OnText(text, x + w * 0.5f, y + (h - (h < 17.0f ? 0.44f : 0.56f) * 24.0f) * 0.5f, 1,
                h < 17.0f ? 0.44f : 0.56f, w - 10.0f, OnDim, 0.55f * a);
         return 0;
     }
-    if (st == 3) {                      /* pressed: the plate sinks, the light below */
-        OnVGrad(x, y, w, h, kind == BT_MAIN ? m1 : n1, kind == BT_MAIN ? m0 : n0, a);
+    red = kind == BT_MAIN || st == 2;
+    OnMetal(x, y, w, h, red ? MT_BLOOD : MT_IRON, a);
+    if (st == 3) {                      /* pressed: the plate sinks */
+        OnVGrad(x, y, w, h, sk0, sk1, a);
+        OnFrame(x + 1.0f, y + 1.0f, w - 2.0f, h - 2.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.5f * a);
         dy = 0.8f;
     } else {
-        OnVGrad(x, y, w, h, kind == BT_MAIN ? m0 : n0, kind == BT_MAIN ? m1 : n1, a);
+        OnVGrad(x, y, w, h, dk0, dk1, a);
         if (*lit > 0.01f)
-            OnVGrad(x, y, w, h, kind == BT_MAIN ? mh0 : h0, kind == BT_MAIN ? mh1 : h1, *lit * a);
+            OnVGrad(x, y, w, h, red ? mh0 : h0, red ? mh1 : h1, *lit * a);
+        OnFill(x + 1.0f, y + 0.8f, w - 2.0f, 0.5f, 1.0f, 0.95f, 0.85f, 0.16f * a);
     }
-    if (st != 3)
-        OnFill(x + 1.0f, y + 0.8f, w - 2.0f, 0.6f, 1.0f, 1.0f, 0.95f, 0.18f * a);
-    else
-        OnFrame(x, y, w, h, 1.0f, 0.0f, 0.0f, 0.0f, 0.8f * a);
-    if (st == 2) {                      /* the pad's or the keys' choice: lit red */
-        float p = 0.7f + 0.3f * sinf(PortOnlineT * 6.0f);
+    if (st == 2) {                      /* the pad's or the keys' choice */
+        float p = 0.7f + 0.3f * sinf(PortOnlineT * 6.0f), ch = h * 0.40f, cw = ch * 0.62f;
         OnGlow(x, y, w, h, 1.0f, 0.12f, 0.06f, a * p);
-        OnFrame(x, y, w, h, 1.2f, 1.0f, 0.22f, 0.12f, a);
-    } else if (st == 1) {               /* under the mouse: brighter gold */
-        OnFrame(x, y, w, h, 1.0f, 0.98f, 0.84f, 0.50f, a);
-    } else
-        OnFrame(x, y, w, h, 0.8f, 0.74f, 0.58f, 0.30f, 0.80f * a);
-    {
-        /* low buttons (MY PROFILE's) take smaller words */
-        float sz = h < 17.0f ? 0.44f : 0.58f;
-        OnText(text, x + w * 0.5f, y + (h - sz * 24.0f) * 0.5f + dy, 1, sz, w - 10.0f,
-               st == 1 ? OnAmber : OnWhite, a);
-    }
+        OnMetalFrame(x, y, w, h, 1.1f, MT_GOLD, a);
+        OnOrn(ORN_CHEVRON, x + 1.6f, y + (h - ch) * 0.5f, cw, ch, 0, 0, MT_GOLD, a);
+        OnOrn(ORN_CHEVRON, x + w - 1.6f - cw, y + (h - ch) * 0.5f, cw, ch, 1, 0, MT_GOLD, a);
+    } else if (st == 1 || st == 3 || kind == BT_MAIN)
+        OnMetalFrame(x, y, w, h, 1.0f, MT_GOLD, st ? a : 0.85f * a);
+    else
+        OnMetalFrame(x, y, w, h, 0.9f, MT_BRONZE, 0.9f * a);
+    OnFrame(x - 0.4f, y - 0.4f, w + 0.8f, h + 0.8f, 0.4f, 0.0f, 0.0f, 0.0f, 0.7f * a);
+    OnText(text, x + w * 0.5f, y + (h - sz * 24.0f) * 0.5f + dy, 1, sz, w - 10.0f,
+           st == 1 ? hot : OnWhite, a);
     return hit;
-}
-/* ----------------------------------------------------------- portraits */
+}/* ----------------------------------------------------------- portraits */
 
 /* A portrait, `size` square: its frame here, the picture by online_ui.c.
  * `code` "" for this player. `glow` 0 none, 1 blue, 2 red. */
@@ -14661,6 +14976,20 @@ void FE_Task_Online(void)
         OnHGrad(vw * 0.82f, 0.0f, vw * 0.18f, 320.0f, e1, e0, 1.0f);
         OnVGrad(0.0f, 260.0f, vw, 60.0f, g0, g1, 1.0f);
     }
+    {
+        /* one world, each section its own air (Mary's brief): HOME warm
+         * stone, PROFILE amber, LOBBIES cold iron, QUICK MATCH ember, PARTY
+         * moss; lamplight from above, the top pressed down */
+        static const float air[OS_N][3] = { { 0.30f, 0.26f, 0.20f }, { 0.36f, 0.24f, 0.14f },
+                                            { 0.20f, 0.24f, 0.28f }, { 0.34f, 0.12f, 0.08f },
+                                            { 0.20f, 0.26f, 0.20f } };
+        static const float l0[4] = { 0.50f, 0.36f, 0.16f, 0.12f }, l1[4] = { 0.50f, 0.36f, 0.16f, 0.0f };
+        static const float k0[4] = { 0.0f, 0.0f, 0.0f, 0.50f }, k1[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const float *c = air[PortOnlineSection >= 0 && PortOnlineSection < OS_N ? PortOnlineSection : 0];
+        OnFill(0.0f, 0.0f, vw, 320.0f, c[0], c[1], c[2], 0.10f);
+        OnVGrad(0.0f, 0.0f, vw, 100.0f, l0, l1, 1.0f);
+        OnVGrad(0.0f, 0.0f, vw, 28.0f, k0, k1, 1.0f);
+    }
 
     /* ---- the title, the players on line, the sections' bar ---- */
     OnText(PortOnlineWord(OT_ONLINE), vw * 0.5f, 4.0f, 1, 0.95f, 0.0f, OnWhite, 1.0f);
@@ -14676,27 +15005,28 @@ void FE_Task_Online(void)
         OnStatus(line, OnGreen, cx + 2.0f, 9.0f, 170.0f, 1.0f, 0);
     }
     {
-        static const float b0[4] = { 0.08f, 0.08f, 0.075f, 0.76f }, b1[4] = { 0.03f, 0.03f, 0.028f, 0.82f };
-        OnShadow(cx, 30.0f, cw, 26.0f, 1.0f);
-        OnVGrad(cx, 30.0f, cw, 26.0f, b0, b1, 1.0f);   /* an iron beam */
-        static const float c0[4] = { 0.92f, 0.80f, 0.50f, 1.0f }, c1[4] = { 0.46f, 0.32f, 0.14f, 1.0f };
+        static const float stone[3] = { 0.085f, 0.078f, 0.066f };
+        static const float b0[4] = { 0.0f, 0.0f, 0.0f, 0.0f }, b1[4] = { 0.0f, 0.0f, 0.0f, 0.40f };
         int k;
+        OnShadow(cx, 30.0f, cw, 26.0f, 1.0f);
+        OnStone(cx, 30.0f, cw, 26.0f, stone, 0.80f);
+        OnVGrad(cx, 30.0f, cw, 26.0f, b0, b1, 1.0f);
         OnGoldBar(cx - 4.0f, 28.0f, cw + 8.0f, 2.4f, 1.0f);
-        OnGoldBar(cx - 4.0f, 55.4f, cw + 8.0f, 2.0f, 1.0f);
+        OnMetal(cx - 4.0f, 55.4f, cw + 8.0f, 2.0f, MT_BRONZE, 1.0f);
+        OnFrame(cx - 4.0f, 55.4f, cw + 8.0f, 2.0f, 0.4f, 0.06f, 0.04f, 0.02f, 0.7f);
         OnFrame(cx, 30.4f, cw, 25.0f, 0.6f, 0.0f, 0.0f, 0.0f, 0.9f);
-        for (k = 0; k < 2; k++) {       /* the end caps, and a gold arrow out of each */
-            float ex = k ? cx + cw - 2.0f : cx - 4.0f, ax = k ? cx + cw + 4.0f : cx - 7.0f;
-            int j;
-            OnHGrad(ex, 27.0f, 6.0f, 32.0f, k ? c1 : c0, k ? c0 : c1, 1.0f);
+        for (k = 0; k < 2; k++) {       /* the end caps, studded, a gold chevron out of each */
+            float ex = k ? cx + cw - 2.0f : cx - 4.0f;
+            OnMetalV(ex, 27.0f, 6.0f, 32.0f, MT_GOLD, 1.0f);
             OnFrame(ex, 27.0f, 6.0f, 32.0f, 0.5f, 0.0f, 0.0f, 0.0f, 0.8f);
-            for (j = 0; j < 5; j++)     /* a small triangle, in strips */
-                OnFill(k ? ax + (float)j * 0.8f : ax - (float)j * 0.8f, 39.0f + (float)j * 0.8f, 0.8f,
-                       8.0f - (float)j * 1.6f, 0.82f, 0.64f, 0.30f, 1.0f);
+            OnOrn(ORN_STUD, ex + 1.0f, 30.0f, 4.0f, 4.0f, 0, 0, MT_BRONZE, 1.0f);
+            OnOrn(ORN_STUD, ex + 1.0f, 52.0f, 4.0f, 4.0f, 0, 0, MT_BRONZE, 1.0f);
+            OnOrn(ORN_CHEVRON, k ? cx + cw + 4.0f : cx - 11.0f, 38.5f, 6.0f, 9.0f, !k, 0, MT_GOLD, 1.0f);
         }
     }
     for (i = 0; i < OS_N; i++) {
-        static const float r0[4] = { 0.62f, 0.52f, 0.34f, 0.32f }, r1[4] = { 0.46f, 0.34f, 0.18f, 0.22f };
-        static const float h0[4] = { 0.62f, 0.62f, 0.58f, 0.0f }, h1[4] = { 0.62f, 0.62f, 0.58f, 0.16f };
+        static const float r0[4] = { 0.55f, 0.11f, 0.06f, 0.55f }, r1[4] = { 0.28f, 0.04f, 0.03f, 0.75f };
+        static const float h0[4] = { 0.80f, 0.60f, 0.30f, 0.0f }, h1[4] = { 0.80f, 0.60f, 0.30f, 0.14f };
         float x = cx + tw * (float)i;
         int on = i == PortOnlineSection;
         const char *t = PortFrTx(tab_es[i], tab_en[i]);
@@ -14710,15 +15040,17 @@ void FE_Task_Online(void)
                 PortOnlineSub = PS_IN;
         }
         tab_lit[i] += ((on ? 1.0f : 0.0f) - tab_lit[i]) * 0.25f / limeFPSScaleFactor;
-        if (i)                          /* a fine gold line between sections */
-            OnFill(x, 33.0f, 0.6f, 20.0f, 0.78f, 0.62f, 0.32f, 0.45f);
+        if (i) {                        /* a bronze upright between sections, studded */
+            OnMetalV(x - 0.4f, 32.0f, 0.8f, 22.0f, MT_BRONZE, 0.8f);
+            OnOrn(ORN_STUD, x - 1.4f, 41.6f, 2.8f, 2.8f, 0, 0, MT_GOLD, 1.0f);
+        }
         OnVGrad(x, 30.0f, tw, 26.0f, r0, r1, tab_lit[i]);
         if (st && !on)
             OnVGrad(x, 30.0f, tw, 26.0f, h0, h1, 1.0f);
         if (st == 2)
             OnFrame(x + 1.0f, 31.0f, tw - 2.0f, 24.0f, 1.0f, 1.0f, 0.30f, 0.22f, 1.0f);
         OnText(t, x + tw * 0.5f, 36.0f, 1, 0.48f, tw - 8.0f,
-               on ? OnAmber : st ? OnWhite : OnPale, 1.0f);
+               on ? OnWhite : st ? OnAmber : OnPale, 1.0f);
         if (i == OS_PROFILE && nin + ninv > 0) {
             /* what waits: red and beating while some of it is new, quiet
              * once it has been seen */
@@ -14739,7 +15071,7 @@ void FE_Task_Online(void)
             PortOnlineBarX = want;
         PortOnlineBarX += (want - PortOnlineBarX) * 0.25f / limeFPSScaleFactor;
         OnVGrad(PortOnlineBarX + 6.0f, 47.0f, tw - 12.0f, 6.0f, g0, g1, 1.0f);
-        OnFill(PortOnlineBarX + 4.0f, 53.0f, tw - 8.0f, 2.5f, 1.0f, 0.18f, 0.10f, 1.0f);
+        OnMetal(PortOnlineBarX + 4.0f, 53.0f, tw - 8.0f, 2.5f, MT_GOLD, 1.0f);
     }
 
     /* ---- the section ---- */
