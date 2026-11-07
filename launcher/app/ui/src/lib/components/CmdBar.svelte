@@ -5,11 +5,13 @@
     import { app, tx, padKindOf } from '#lib/app.svelte.js';
     import KeyFace from './KeyFace.svelte';
     import PadFace from './PadFace.svelte';
+    import ProfileBadge from './ProfileBadge.svelte';
 
     const kind = $derived(padKindOf(1));
 </script>
 
 <footer class="cmdbar" class:gone={app.overlay > 0}>
+    <ProfileBadge docked />
     <span class="cmds">
         <span class="cg">{#if app.usingPad}<PadFace {kind} b="SOUTH" />{:else}<KeyFace vk={13} />{/if}</span>
         <span>{tx('cSelect')}</span>

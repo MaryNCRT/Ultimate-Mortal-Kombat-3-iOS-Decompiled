@@ -1,11 +1,14 @@
 <script>
     /* The player's badge, top right -- as the game's ONLINE screen draws it
-     * at its top (Mary, 0.4.2): a small Player Banner, the profile's own
+     * at its top (Mary, 0.4.2), docked in the command bar's left end: a small Player Banner, the profile's own
      * gradient on brushed steel, a gold bar on top and the red line under,
      * the fighter standing out of its left end, the name and EDIT PROFILE.
      * A click chooses PROFILE. */
     import { app, tx, setSection, profArt, profArtAlt } from '#lib/app.svelte.js';
     import { selectBlip } from '#lib/sound.js';
+
+    /* docked: at the left end of the command bar (Mary: so it covers nothing) */
+    let { docked = false } = $props();
 
     function open() {
         selectBlip();
@@ -39,7 +42,7 @@
 </script>
 
 {#if p}
-    <button class="badge" onclick={open}>
+    <button class="badge" class:docked onclick={open}>
         <span class="plate" style:background-image="linear-gradient(90deg, rgba(0,0,0,.3), rgba(0,0,0,0) 30%), var(--tex-grain), {grad}"><i class="sheen"></i></span>
         <canvas bind:this={cv} width="160" height="160"></canvas>
         <span class="txt">
@@ -55,6 +58,7 @@
         width: calc(var(--u) * 18.5); height: calc(var(--u) * 5);
         padding: 0; border: 0; background: none; cursor: pointer; text-align: left;
     }
+    .badge.docked { position: absolute; top: 50%; right: auto; left: calc(var(--u) * 4.4); transform: translateY(-50%); }
     .plate {
         position: absolute; inset: 0; overflow: hidden; display: block;
         background-size: 100% 100%, auto, 100% 100%;
