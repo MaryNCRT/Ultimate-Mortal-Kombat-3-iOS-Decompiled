@@ -14,8 +14,9 @@
  * custom gradient's angle in degrees as CSS has it (0 up, 90 right, 180
  * down; "-" or absent: the older custom look, top to bottom with a lighter
  * top), and 1 for the fighter in his second outfit (<NAME>_VERSUS2.pvr),
- * else 0. An older game or launcher reads the first six fields and keeps
- * going. UTF-8.
+ * else 0; then the favourite fighter, 0..23 as the icon or "-" for none
+ * (the game's ONLINE PROFILE sets it; it is not the icon). An older game or
+ * launcher reads the first six fields and keeps going. UTF-8.
  *
  *     profile=7KQ2-9XMD-4TPA|MARY|18|7A1F45|C|1D0C17|135|1
  *
@@ -34,7 +35,7 @@ const crypto = require('crypto');
 const ALPHA = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const NAME_MAX = 24;
 const ICONS = 24;
-const DEFAULTS = { name: 'PLAYER', icon: 18, color: '3A8EE6', shade: 'L', angle: -1, alt: 0 };
+const DEFAULTS = { name: 'PLAYER', icon: 18, color: '3A8EE6', shade: 'L', angle: -1, alt: 0, fav: -1 };
 const SHADE_COLOR2 = { L: 'FFFFFF', D: '000000', C: '6E0B12' };
 
 /* The bio art, in CharacterNames order (Versus_Names, 0x000ffbf4). */
@@ -81,9 +82,15 @@ function read(root) {
         return { id: f[0], name: cleanName(f[1]),
                  icon: icon >= 0 && icon < ICONS ? icon : DEFAULTS.icon,
                  color: cleanColor(f[3]), ...readShade(f[4], f[5]),
-                 angle: cleanAngle(f[6]), alt: f[7] === '1' ? 1 : 0 };
+                 angle: cleanAngle(f[6]), alt: f[7] === '1' ? 1 : 0, fav: cleanFav(f[8]) };
     }
     return null;
+}
+
+/* the favourite fighter: 0..23, or -1 for none */
+function cleanFav(v) {
+    const n = v === undefined || v === null || v === '' || v === '-' ? -1 : Number(v);
+    return Number.isInteger(n) && n >= 0 && n < ICONS ? n : -1;
 }
 
 /* 0..359, or -1: no angle (the older custom look) */
@@ -110,7 +117,8 @@ function save(root, p) {
                                  /^[0-9A-F]{6}$/i.test(p.color2 || '') ? p.color2.toUpperCase()
                                      : SHADE_COLOR2[p.shade] || 'FFFFFF',
                                  cleanAngle(p.angle) < 0 ? '-' : cleanAngle(p.angle),
-                                 p.alt ? 1 : 0].join('|')];
+                                 p.alt ? 1 : 0,
+                                 cleanFav(p.fav) < 0 ? '-' : cleanFav(p.fav)].join('|')];
     fs.writeFileSync(path.join(root, 'profiles.ini'), lines.join('\n') + '\n', 'utf8');
 }
 

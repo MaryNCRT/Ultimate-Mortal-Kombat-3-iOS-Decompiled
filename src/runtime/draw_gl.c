@@ -1300,6 +1300,23 @@ void limeFillRect(float x, float y, float w, float h,
     g_fills++;
 }
 
+/* Port, not in the binary: limeFillRect with a colour at each corner -- top
+ * left, top right, bottom right, bottom left, four floats each -- for the
+ * ONLINE screen's gradients (FrontEnd.c). The same state as limeFillRect. */
+void limeFillRectGrad(float x, float y, float w, float h, const float *c)
+{
+    glDepthMask(GL_FALSE);
+    glDisable(GL_TEXTURE_2D);
+    glBegin(GL_QUADS);
+        glColor4f(c[0], c[1], c[2], c[3]);     glVertex2f(x,     y);
+        glColor4f(c[4], c[5], c[6], c[7]);     glVertex2f(x + w, y);
+        glColor4f(c[8], c[9], c[10], c[11]);   glVertex2f(x + w, y + h);
+        glColor4f(c[12], c[13], c[14], c[15]); glVertex2f(x,     y + h);
+    glEnd();
+    glDepthMask(GL_TRUE);
+    g_fills++;
+}
+
 
 /* The character models on the select screen go through the array pointers and
  * `glDrawElements`, all of which opengl32 provides unchanged. Nothing to add

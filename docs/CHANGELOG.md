@@ -8,6 +8,120 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## 0.4.0 beta (2026-11-06) — the new ONLINE screen
+
+Published 2026-11-06 as the GitHub pre-release `v0.4.0-beta`. Tried by
+Mary in her test folder while it was made (the ONLINE screen, MY PROFILE,
+the gradient window); not yet played online between two machines.
+
+- **MY PROFILE's background, PERSONAL**: a window over the editor, the
+  rest darkened -- the banner previewed on top, a dial (dragged, or by 5
+  degrees), FROM and TO with the chosen one's hex, presets in UMK3's
+  colours, the CSS (typed, copied, cleared), SAVE and CANCEL. A click on
+  FROM or TO opens a small colour window: saturation and brightness, the
+  hue, R G B typed, DONE and BACK. The editor's controls are smaller and
+  no longer overlap.
+
+### The ONLINE screen
+
+- **MY PROFILE's gradient editor, detailed** (Mary): the same panel, with
+  the launcher picker's abilities -- FROM and TO each with the palette's
+  arrows, a swatch and its hex typed (#RRGGBB, applied as it is typed), the
+  direction 0 to 359 degrees (arrows of 5, the number typed, a dial),
+  ten presets of UMK3's colours (Midnight, Ice Storm, Blood, Spectral,
+  Venom, Inferno, Ancient Gold, Silver, Crimson Night, Electric Blue; no
+  pink), and ADVANCED: the gradient as CSS, copied, typed and applied when
+  valid (one colour, or linear-gradient with deg or to top / right /
+  bottom / left and two colours), taken again from the controls, cleared.
+  DEFAULT now puts back only the background. The banner above is the
+  preview; nothing is kept until SAVE. The launcher's editor is untouched.
+- The OPTIONS entries are centred again with EDIT PROFILE among them, and
+  the main menu's banner is smaller (Mary).
+
+- **PROFILE** takes FRIENDS' and INVITATIONS' place (Mary): the sections are
+  HOME, PROFILE, LOBBIES, QUICK MATCH and PARTY. PROFILE has MY PROFILE --
+  name, avatar, outfit, favourite fighter (a gallery of the 24) and the
+  gradient (light, dark or custom, two colours, the direction), with the
+  banner previewed as it changes and SAVE, CANCEL and DEFAULTS; a new name
+  is checked by the account's server and refused when another player has
+  it -- FRIENDS (challenge, join or decline a fight, remove a friend, add
+  one by player ID), REQUESTS RECEIVED (accept, decline) and REQUESTS SENT
+  (cancel). A count on PROFILE says what waits, red while some of it is
+  new; a new request or invite shows a notice once.
+- **Players online**: HOME and the top of the screen say how many players
+  have the ONLINE screen open (games from this version on).
+- **The main menu's badge** is a small player banner; a click opens MY
+  PROFILE, and OPTIONS has EDIT PROFILE.
+- **Esc, AUDIO and VIDEO SETTINGS stopped working after visiting ONLINE**
+  (Mary): leaving the screen left the network session open. Fixed. The
+  debug menu (F2) is now off on the ONLINE screen too, like the settings
+  menu.
+- HOME's statistics say WINS and LOSSES (Mary).
+
+- **The ONLINE screen's new look** (Mary's visual brief, 2026-11-06): panels
+  with depth (a diagonal gradient from navy to black that lets the cemetery
+  through, a light along the top edge, a darker bottom, a soft shadow),
+  buttons in gradients whose states are told apart (normal, under the
+  mouse, chosen with the keys or the pad in red, pressed, off), tabs with
+  separators, a glow over the red bar and a count of the invites waiting.
+- **Player Banners**: every player is a horizontal banner in their own
+  profile gradient -- exactly the one they chose, over the whole banner --
+  with their fighter (the VERSUS art, transparent) standing out of its left
+  end. HOME's banner carries the name, the state, the player ID with COPY,
+  and the game's own statistics (human wins and losses, best win streak,
+  fatalities, flawless, favourite character). FRIENDS: a list of banners
+  and the chosen friend's banner, big, with INVITE TO FIGHT.
+  INVITATIONS: received (ACCEPT, DECLINE) and sent. LOBBIES, QUICK MATCH
+  and PARTY show what exists (you, as the party's leader) with their
+  actions off until their stages come.
+- **Statistics were lost at every start** (a decomp bug): the save was
+  loaded into a second copy of the stats nobody read, so the STATS screen
+  and now the profile showed only the session's numbers. Fixed: they load
+  into the one block the binary has. Each fighter's play count (the
+  favourite character) only starts counting from this build.
+
+- **ONLINE has sections**: HOME, FRIENDS, INVITATIONS, LOBBIES, QUICK
+  MATCH and PARTY along the top, over the same night cemetery and moon,
+  in translucent panels with the MK red along their top; a red bar slides
+  to the section and each one fades in. HOME has the profile, your code and
+  COPY, FIND BY CODE and the state of the connection; FRIENDS and
+  INVITATIONS have what the launcher's account gives (up to six rows).
+  LOBBIES, QUICK MATCH and PARTY say they are coming (the next stages).
+  The mouse lights the button under it; the keyboard and the pad move
+  between every button. The code box takes the keys only once it is
+  clicked (Esc gives them back); Ctrl+V pastes anywhere on HOME. Checked by
+  Claude in the test folder (with Mary's permission to open the game):
+  clicks, the sections, typing a code, the keyboard; not yet played online
+  between two machines.
+### Updates always reach the player
+
+- **An update from the launcher now always gives the new game.** Mary:
+  players who updated from the launcher kept the old game. The update now
+  closes the game and the launcher by force (whatever still runs from the
+  folder is stopped, not waited for), throws away the compiled objects and
+  marks the folder; until the game has been compiled again, PLAY, a replay
+  and a friend's JOIN compile first, also when the launcher is opened by
+  hand. Checked on the test folder: with the mark there, the launcher
+  compiled on opening and the mark went. The forced close in apply.ps1
+  was checked by generating the script (it parses), not by a real update.
+### The intros' ambient occlusion
+
+Built in Mary's test folder; she played it on Direct3D 12 and confirmed the fix.
+
+- **AMBIENT OCCLUSION in the intros, again**: the stage's occlusion was
+  still painted over the fighters in some intros (Mary: Motaro on the
+  balcony). In those intros the fighters are drawn blended, and the
+  occlusion's depth pass skips blended draws, so the fighters' pixels read
+  the occlusion of the wall behind them (the diagnostic log said
+  `fighters' draws 1 (blended 1, ...)`). The fighters are now a layer of
+  their own: the depth pass marks them in the alpha channel, the occlusion
+  pass and the blur only mix samples of the same layer, and a fighter's
+  pixel only takes the fighters' occlusion -- none at all when the fighter
+  is not in the depth (`rgl_ff.c` `ao_passes`, `shaders/ff.frag`,
+  `shaders/ff.hlsl`). `tests/rgl_test.c`: OpenGL passes; Vulkan and
+  Direct3D 12 fail the same 5 shadow checks as before this change (checked
+  against a build of main).
+
 ## 0.3.1b beta (2026-11-06) — frame time and LOW LATENCY
 
 Published 2026-11-06 as the GitHub pre-release `v0.3.1-beta.b`: the fix

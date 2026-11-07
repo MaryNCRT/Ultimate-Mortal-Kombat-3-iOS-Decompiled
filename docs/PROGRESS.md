@@ -85,7 +85,7 @@ marked in the log below.
 | The stage editor's SCULPT showed "500 Internal Error" once | **closed**: Mary no longer sees it (0.1.18); the guards stay |
 | Slight slide in a kombo (issue #114) | **the original's rule**, checked instruction by instruction (`t_cc_*_punch` → `t_ccp3` → `t_separate_us`); nothing to fix |
 | Dynamic stage music, Genesis style (Soul Chamber first) | **research only**, nothing built: [research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md); waits for Mary's Genesis recording (WAV + GYM) |
-| Ambient occlusion and screen-space contact shadows (ENHANCED LIGHTING) | **research only**, nothing built: [research/AMBIENT-OCCLUSION.md](research/AMBIENT-OCCLUSION.md), [research/CONTACT-SHADOWS.md](research/CONTACT-SHADOWS.md); after `claude/dynamic-lighting` lands |
+| Ambient occlusion and screen-space contact shadows (ENHANCED LIGHTING) | ambient occlusion **built** (0.3.0; the fighters are their own layer since after 0.3.1b); contact shadows research only: [research/CONTACT-SHADOWS.md](research/CONTACT-SHADOWS.md) |
 | After CANCEL in STAGE SELECT the select screen came back silent once | fixed by never stopping the tune on the way; the log says `stage select: the tune ...` if it happens again |
 
 ### Where to look next
@@ -97,6 +97,171 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## 0.4.0 beta (2026-11-06) — the new ONLINE screen
+
+Released as `v0.4.0-beta` (PRs 192, 193 and 194 merged): the ONLINE
+redesign's stages 1-2 with PROFILE (MY PROFILE, friends, requests), Player
+Banners and the gradient window; updates that always recompile; the
+intros' ambient occlusion. The gradient window (FrontEnd.c
+`PortGradWindow`, `PortColourPicker`) replaced the detailed in-panel editor
+Mary asked for and then turned down; its CSS is read by `OnParseCss`
+(what the launcher's picker takes, strictly). Mary heard two tunes once on
+entering ONLINE from the banner; the log shows one (MainMenu.mp3), and two
+games were open then -- not reproduced.
+
+## MY PROFILE: the detailed gradient editor (2026-11-06)
+
+Audit: the launcher's GradientPicker.svelte (a dial 0..359, FROM / TO,
+presets, the CSS `linear-gradient(<deg>, #from, #to)` or one colour, COPY,
+CLEAR) is already ported to the game's settings menu (settings_menu.c
+`gp_*`, `plat_ui_gradient`); both write profiles.ini's colour, dark (C),
+color2 and angle, which the launcher syncs with the account. MY PROFILE
+(FrontEnd.c `PortOnlineMe`) now has, in its panel: `OnTextBox` kinds
+TB_HEX / TB_NUM / TB_CSS; FROM / TO hex boxes applied live
+(`OnParseHex`); the angle by 5 and typed, with a dial; `PortGradPresets`
+(Mary's ten); ADVANCED replacing the rows while open: `OnParseCss` takes
+what syncFromValue takes, strictly (anything else is refused and said),
+`OnGradCss` writes the CSS as gp_state does (light and dark as their top
+and bottom colours at 180 degrees). DEFAULT sets only the gradient
+(colour 3A8EE6, light). Persistence is profiles.ini, as before; nothing
+new. Checked: built; the editor and ADVANCED drawn at 1920x1080; Mary
+pressed its buttons in the test window (the log's "online ui: button"
+lines). Not checked by Claude: typing a hex and a CSS, the pad.
+
+## ONLINE: PROFILE, players online, EDIT PROFILE, the session left open (2026-11-06)
+
+- **Sections**: `OS_HOME, OS_PROFILE, OS_LOBBIES, OS_QUICK, OS_PARTY`;
+  PROFILE's pages `PS_ME, PS_FRIENDS, PS_IN, PS_OUT` (FrontEnd.c).
+- **friends.txt** (main.js `writeGameFriends`) now also has
+  `incoming|...` and `outgoing|...` lines; gamecode_stubs.c gives each entry
+  a kind (0 friend, 1 fight invite, 2 request received, 3 request sent).
+  An older game reads the new lines as friends: update both together.
+- **Orders from the game** (online_invite.txt, main.js `gameAsked`): `add`,
+  `accept` (POST /v1/friends), `reject`, `cancel`, `remove` (DELETE
+  /v1/friends), `find CODE` (GET /v1/users, answered in online_find.txt as
+  `CODE|name|look|state`), `rename NAME` (account.rename, answered in
+  online_result.txt). Nothing new on the server.
+- **MY PROFILE** edits a copy of struct profile (`PortDraft`); SAVE writes
+  profiles.ini and, for a new name, waits for the server's answer (the old
+  name back if taken). The draft's banner is the picture code "*" for
+  online_ui.c (`PortOnlineDraftLook`); the gallery's fighters are "#n".
+  The favourite is profiles.ini's ninth field (`fav`, "-" none) in
+  profiles.c and lib/profiles.js; it never touches the icon.
+- **Notices**: requests and invites seen are kept by key in
+  online_seen.txt (gamecode_stubs.c `port_online_seen_*`).
+- **Players online**: mp_eos.c makes a second lobby per game in the bucket
+  `umk3-online` while the ONLINE screen is open and counts that bucket's
+  lobbies every 15 s (`mpeos_players`, max 200). Checked on one PC: the
+  count showed 0 right after the login (before the lobby was made); not
+  yet checked with two machines.
+- **Esc / AUDIO / VIDEO refused after ONLINE**: BACK pops the screen
+  deferred, so it ran a few frames more and `startMP()` opened the session
+  again; settings_menu.c's `online_now()` then refused. FE_Task_Online now
+  keeps `PortOnlineLeaving` (reset when a frame is missed, PortTick from
+  game_main.c) and ends the session on the way out. The debug menu is
+  refused and closed while `mpnet_session_exists()`.
+- **Main menu**: `PortMainBanner` (FrontEnd.c, after FE_Task_Main_Menu in
+  the dispatcher) replaces set_menu_badge's badge; OPTIONS' fourth entry
+  EDIT PROFILE calls `PortOnlineOpenProfile`.
+- Each press of the screen's buttons is logged ("online ui: button N").
+- Not checked yet: the requests with a second account, the rename's
+  answer, the gallery and the editor with the pad.
+
+## ONLINE screen: the visual redesign, Player Banners, the stats load (2026-11-06)
+
+Mary's brief: commercial Xbox 360 / PS3-era look, profiles as console
+player cards, gradients and depth; then Player Banners (the fighter as a
+transparent PNG out of a horizontal banner) with the profile's own gradient
+over the whole banner, and HOME's profile with statistics.
+
+- **Drawing**: `limeFillRectGrad` (draw_gl.c; counted headless in
+  lime_menu.c), a quad with a colour at each corner. FrontEnd.c's
+  `OnPanel`, `OnButton` (BT_NORMAL / BT_MAIN / BT_OFF; state 1 mouse, 2 keys
+  or pad, 3 pressed, from `OnArea`), `OnBand`, `OnCard`, `OnStatus`,
+  `OnHeading`. The profile's gradient (`OnProfileSky`) is the sky of
+  `prof_icon_rgba` (profiles.c): the custom one with an angle along CSS's
+  gradient line corner to corner, the others top -> middle -> bottom; both
+  linear, so corner colours reproduce it exactly.
+- **The fighters**: `prof_art_rgba` (profiles.c) gives the VERSUS art alone,
+  256 square with its alpha (the second outfit's via `alt_art`).
+  FrontEnd.c lists what to draw (`PortOnlinePicCode/Px/Kind`) and
+  online_ui.c draws it over the frame with `ui_picture_at` (debug_menu.c,
+  now any width and height).
+- **Stats**: the binary has one block at 0x00183c84 (`_Stats`); the port had
+  two, `Stats` (counted, saved by Write_Stats) and `Stats_` (filled by
+  Load_Stats, read by nothing), so every start began at zero. Load_Stats
+  and the per-character play counter (GameCode.c) now use `Stats`.
+  Checked: after the fix HOME shows BEST WIN STREAK 7 from Mary's save,
+  0 before.
+- **Invites**: DECLINE writes "drop CODE" to online_invite.txt; main.js
+  drops it on the server as it does a JOIN's.
+- No presence on the server, so no on line / off line for friends; the
+  only states shown are real ones (inviting you, invite sent, this
+  player's connection). No registration date exists anywhere the game can
+  read, so it is not shown. Friends' statistics are not on the server.
+- Checked by running the game (Mary's permission) at 1920x1080: every
+  section, mouse, keys. Not checked: 4:3, 21:9, a pad, two machines. The
+  Xbox Live Dashboard reference (gamereactor.eu) answers 404.
+
+## ONLINE redesign, stage 2: sections and HOME (2026-11-06)
+
+`FE_Task_Online` (FrontEnd.c) is drawn again, all of it the front end's own
+drawing: `limeFillRect` panels and the game's font, laid out in the menu's
+units across the whole screen (`OnX`/`OnY`, not `FE_X`, which sends x <= 90
+and >= 390 to the screen's edges on wide screens). Each button is
+`OnArea`: TouchAreaWH's test in those units plus `PortNavTarget`, so
+pad_nav.c drives it; a click is a release after a press inside. The mouse's
+place, pressed or not, is `PortMouseX/Y` (game_main.c) for the hover, ignored
+while the pad's highlight shows (`PortNavHover`). The code box listens only
+after a click (`PortOnlineListening` starts at 0: while it listens
+game_main.c gives the keys to it, so it could not stay on by default with
+the keys moving between sections). online_ui.c draws this player's badge at
+`PortOnlineMePx` and the friends' at `PortOnlineFrPx`; the old box outline is
+gone. Rows: six (badge slots 1..6). Mary confirmed the plan's questions:
+Combo Slide is KOMBO SLIDE, EOS Lobbies for lobbies/Quick Match/party, and
+the special modes' rules (the VS kodes) go in the lobby rules.
+
+Checked by running the game in the test folder (`--screen 51`, Mary's
+permission) with clicks and keys sent from PowerShell and screenshots at
+1920x1080: the six sections, the hover, the sliding bar, typing
+AB12-CD34-EF56, Esc, the arrows and Enter. A first build lost the Spanish
+accents (escapes written through a shell heredoc came out as raw bytes);
+fixed and checked (CÓDIGO, RÁPIDA). Not checked: 4:3 and 21:9, a pad, a
+real search between two machines.
+## Updates always reach the player (2026-11-06)
+
+Mary: players who updated from the launcher did not get the update's
+changes. `lib/update.js` apply.ps1 now stops what still runs from the
+folder after its wait (launcher\bin's processes and `umk3-*` in the root)
+before copying, and on success deletes `build\obj` / `build\obj64` and
+writes `update\needs-build` (apply.sh: the same, `kill -9` after its
+minute). `main.js` exits with `app.exit(0)` after killing the game it
+started. `update.needsBuild` makes `startGame` and `replays:play` answer
+`{ rebuild: true }`; the page (`rebuildAfterUpdate`, app.svelte.js) goes to
+BUILD and compiles; a successful `build:start` deletes the mark.
+`afterUpdate` also compiles when only the mark is there (the launcher opened
+by hand). Checked: launcher tests (21 pass, a new one for the mark); the
+generated apply.ps1 parses with PowerShell's parser; in the test folder,
+with `update\needs-build` written, the new launcher compiled on opening and
+removed it. Not checked: a real update from GitHub with the forced close.
+## Unreleased (after 0.3.1b)
+
+Built in Mary's test folder; she played it on Direct3D 12 and confirmed the fix.
+
+- **AMBIENT OCCLUSION in the intros, again**: the stage's occlusion was
+  still painted over the fighters in some intros (Mary: Motaro on the
+  balcony). In those intros the fighters are drawn blended, and the
+  occlusion's depth pass skips blended draws, so the fighters' pixels read
+  the occlusion of the wall behind them (the diagnostic log said
+  `fighters' draws 1 (blended 1, ...)`). The fighters are now a layer of
+  their own: the depth pass marks them in the alpha channel, the occlusion
+  pass and the blur only mix samples of the same layer, and a fighter's
+  pixel only takes the fighters' occlusion -- none at all when the fighter
+  is not in the depth (`rgl_ff.c` `ao_passes`, `shaders/ff.frag`,
+  `shaders/ff.hlsl`). `tests/rgl_test.c`: OpenGL passes; Vulkan and
+  Direct3D 12 fail the same 5 shadow checks as before this change (checked
+  against a build of main).
 
 ## ONLINE menu redesign, stage 1: audit (2026-11-06)
 

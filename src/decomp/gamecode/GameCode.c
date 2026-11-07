@@ -7371,7 +7371,9 @@ extern float  Player1Pos[3];            /* 0x00150564 */
 extern float  Player2Pos[3];            /* 0x00150570 */
 extern long   towerFinishedAndLogged;   /* 0x0010de60 */
 extern long   Character2Override;       /* 0x00101798 */
-extern char   Stats_[];                 /* 0x00183c84, see FrontEnd.c */
+extern long   Stats[];                  /* 0x00183c84: the one stats block (was a second
+                                         * array, Stats_, that Load_Stats filled and
+                                         * nothing read) */
 extern const char **kodeNames;          /* pointer slot -> 0x001770b0 */
 extern void **FEBits1;                  /* pointer slot */
 extern void **SmokeTexture;             /* pointer slot */
@@ -7604,7 +7606,7 @@ long GameInit_LoadABit(long step)
         /* The per-character play counter -- and in a network game only the
          * host counts it, so the two ends do not both credit the same fight. */
         if (GameMode != 1 || isParent())
-            ((long *)Stats_)[PLAYER1MODEL + 15]++;
+            Stats[PLAYER1MODEL + 15]++;
 
         if (GameMode == 0) {
             long who = ((const long *)OpponentTowerList)[Destiny * 11 + Stage];

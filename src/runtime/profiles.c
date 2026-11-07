@@ -131,9 +131,14 @@ void prof_save(void)
             snprintf(ang, sizeof ang, "%d", g_prof.angle % 360);
         else
             snprintf(ang, sizeof ang, "-");
-        fprintf(f, "profile=%s|%s|%d|%06X|%c|%06X|%s|%d\n", g_prof.id, g_prof.name, g_prof.icon,
+        char fav[8];
+        if (g_prof.fav >= 0 && g_prof.fav < PROF_ICONS)
+            snprintf(fav, sizeof fav, "%d", g_prof.fav);
+        else
+            snprintf(fav, sizeof fav, "-");
+        fprintf(f, "profile=%s|%s|%d|%06X|%c|%06X|%s|%d|%s\n", g_prof.id, g_prof.name, g_prof.icon,
                 g_prof.color & 0xffffff, "LDC"[g_prof.dark >= 0 && g_prof.dark <= 2 ? g_prof.dark : 0],
-                g_prof.color2 & 0xffffff, ang, g_prof.alt ? 1 : 0);
+                g_prof.color2 & 0xffffff, ang, g_prof.alt ? 1 : 0, fav);
     }
     fclose(f);
 }
@@ -206,14 +211,22 @@ void prof_load(const char *ini_path, const char *default_name)
          * "|" before it, or on it in an older file's lone RRGGBB) */
         g_prof.angle = -1;
         g_prof.alt = 0;
+        g_prof.fav = -1;
         if (v && *v != '|')
             v = strchr(v, '|');
         if (v && (v = strchr(v + 1, '|')) != NULL) {
             v++;
             if (*v >= '0' && *v <= '9')
                 g_prof.angle = atoi(v) % 360;
-            if ((v = strchr(v, '|')) != NULL)
+            if ((v = strchr(v, '|')) != NULL) {
                 g_prof.alt = v[1] == '1';
+                /* the favourite fighter, after the outfit: "-" none */
+                if ((v = strchr(v + 1, '|')) != NULL && v[1] >= '0' && v[1] <= '9') {
+                    g_prof.fav = atoi(v + 1);
+                    if (g_prof.fav >= PROF_ICONS)
+                        g_prof.fav = -1;
+                }
+            }
         }
         g_have = 1;
     }
@@ -229,6 +242,7 @@ void prof_load(const char *ini_path, const char *default_name)
         g_prof.color2 = prof_shade_default(0);
         g_prof.angle = -1;
         g_prof.alt = 0;
+        g_prof.fav = -1;
         g_have = 1;
         prof_save();
         printf("profiles: new profile %s\n", g_prof.id);
@@ -246,6 +260,7 @@ void prof_reset(const char *default_name)
     g_prof.color2 = prof_shade_default(0);
     g_prof.angle = -1;
     g_prof.alt = 0;
+    g_prof.fav = -1;
     prof_save();
 }
 
@@ -454,4 +469,31 @@ unsigned char *prof_icon_rgba(int icon, int alt, unsigned color, int dark,
         }
     free(art);
     return out;
+}
+
+/* The fighter's VERSUS art alone, straight RGBA with its transparency, 256
+ * square (the second outfit's when `alt`): the ONLINE screen's player
+ * banners stand the fighter out of the banner (online_ui.c). NULL when the
+ * art is not there. */
+unsigned char *prof_art_rgba(int icon, int alt)
+{
+    uint8_t *art = NULL;
+    int aw = 0, ah = 0;
+    char path[1200];
+    const char *root = lime_platform_asset_root();
+
+    if (icon < 0 || icon >= PROF_ICONS)
+        return NULL;
+    if (alt && alt_art(root, icon, &art, &aw, &ah) && aw == 256 && ah == 256)
+        return art;
+    free(art);
+    art = NULL;
+    snprintf(path, sizeof path, "%s/Textures/%s_VERSUS.PNG", root ? root : "res", k_art[icon]);
+    if (!lime_png_load(path, &art, &aw, &ah))
+        return NULL;
+    if (aw != 256 || ah != 256) {
+        free(art);
+        return NULL;
+    }
+    return art;
 }

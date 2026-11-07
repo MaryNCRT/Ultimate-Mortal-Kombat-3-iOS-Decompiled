@@ -24,6 +24,10 @@ struct profile {
                                            picker); -1 the older custom look */
     int      alt;                       /* 1: the fighter in his second outfit
                                            (<NAME>_VERSUS2.pvr) */
+    int      fav;                       /* the favourite fighter, 0..23 as the
+                                           icon, -1 none: a preference of its
+                                           own, not the icon (the ONLINE
+                                           screen's PROFILE, Mary) */
 };
 
 /* profiles.ini in the folder of `ini_path` (umk3.ini's path); with none,
@@ -45,6 +49,8 @@ unsigned char *prof_icon_rgba(int icon, int alt, unsigned color, int dark,
                               unsigned color2, int angle, int S);
 /* color2's default for a gradient: white, black, blood red. */
 unsigned prof_shade_default(int dark);
+/* the fighter's VERSUS art alone, 256 square straight RGBA, NULL if absent */
+unsigned char *prof_art_rgba(int icon, int alt);
 /* Changes whenever the icon would look different. */
 unsigned prof_look_key(const struct profile *p);
 

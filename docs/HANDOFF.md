@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-11-06 (ONLINE menu redesign: stage 1 audit, research/ONLINE-MENU-AUDIT.md; before that, release 0.3.1b beta).
+**Last updated:** 2026-11-06 (release 0.4.0 beta: the new ONLINE screen -- PROFILE, Player Banners, the gradient window; updates always recompile; the intros' AO).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
@@ -178,7 +178,8 @@ press COMPILE.
   the camera's units, the view scales the world ~5x), with debug views in
   the debug menu. Released in 0.3.0; 0.3.1b keeps a depth clear between
   held draws in the AO depth pass (the intros clear it before the
-  fighters). Next: lighting files
+  fighters); after 0.3.1b the fighters are a layer of their own in it
+  (blended intro fighters were not in the depth). Next: lighting files
   for more stages (Mary tunes them one by one), per-fighter files,
   contact shadows, OpenGL (research/). Open: a 3.6 s freeze in the present
   before the main menu; the `d3d12 slow present:` log line splits it. The shaders
@@ -203,6 +204,16 @@ press COMPILE.
   design and the open questions are in
   [research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md). Paused
   until Mary records a Soul Chamber fight on the Genesis (WAV + GYM).
+- **ONLINE menu redesign**: stages 1 (audit) and 2 (sections, HOME) done, PROFILE
+  (my profile, friends, requests; 2026-11-06) and the visual redesign
+  (Player Banners, gradients; PROGRESS 2026-11-06)
+  (`FE_Task_Online`, FrontEnd.c; see PROGRESS); next is stage 3 (friends,
+  profiles, invites). The
+- **Updates**: since 2026-11-06 an installed update leaves
+  `update\needs-build` and deletes `build\obj`; the game cannot be started
+  from the launcher until a compile succeeds (`lib/update.js`
+  `needsBuild`, `main.js` `startGame`). apply.ps1 kills what still runs
+  from the folder instead of waiting forever.
 - **ONLINE menu redesign**: stage 1 (audit) done, nothing built. The
   report is [research/ONLINE-MENU-AUDIT.md](research/ONLINE-MENU-AUDIT.md):
   the online stack as it is, what works and what is missing, where Best of

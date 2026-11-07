@@ -520,10 +520,30 @@ export function handleUpdateProgress(p) {
     app.upd.label = tx('updDl') + ' ' + (p.got / 1048576).toFixed(1) + ' / ' + (p.total / 1048576).toFixed(1) + ' MB';
 }
 
-/* Opened again by the updater: say so and compile the new sources. */
+/* An update installed and not compiled yet (main.js refuses to start the
+ * old game, rebuild: true): to BUILD, and compile it now when the .ipa is
+ * known. */
+export function rebuildAfterUpdate() {
+    setSection('build', false);
+    app.upd.cls = 'ok';
+    if (app.cfg.ipa && app.cfg.ipa.trim()) {
+        setStatus('building', tx('updRebuild'));
+        startBuild();
+    } else
+        setStatus('need', tx('needIpa'));
+}
+
+/* Opened again by the updater: say so and compile the new sources. Opened
+ * by hand after an update whose restart went wrong, the same compile. */
 async function afterUpdate() {
     const r = await api.updateResult();
-    if (!r) return false;
+    if (!r) {
+        if (api.updateNeedsBuild && await api.updateNeedsBuild()) {
+            rebuildAfterUpdate();
+            return true;
+        }
+        return false;
+    }
     setSection('build', false);
     if (!r.ok) {
         app.upd.cls = 'need';
@@ -547,6 +567,10 @@ export async function doPlay() {
     if (app.build.on || !app.ready) return;
     selectBlip();
     const r = await api.play();
+    if (r.rebuild) {                    /* an update to compile first */
+        rebuildAfterUpdate();
+        return;
+    }
     if (r.conflict) {                   /* lib/account.js: the player chooses */
         app.accConflict = true;
         app.profTab = 'account';

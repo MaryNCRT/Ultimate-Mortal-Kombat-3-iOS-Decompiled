@@ -345,6 +345,8 @@ ipcMain.handle('build:start', async (_ev, ipa) => {
         return { ok: false, code: -3 };
     const code = await bld.build(g_root, ipa, arch(), msg => send('build:data', msg));
     const ok = code === 0 && ini.gameReady(g_root, arch());
+    if (ok)
+        upd.builtAfterUpdate(g_root);   /* the update's game is the one now */
     return { ok, code };
 });
 
@@ -386,9 +388,17 @@ ipcMain.handle('update:install', async () => {
     } catch (err) {
         return { ok: false, error: err.message };
     }
-    setTimeout(() => app.quit(), 400);
+    /* Mary: the update must land, so nothing may hold a file -- the game
+     * is closed and the launcher exits (app.quit can be held up) */
+    if (g_child) {
+        try { g_child.kill(); } catch (_) { /* gone already */ }
+    }
+    setTimeout(() => app.exit(0), 400);
     return { ok: true };
 });
+
+/* An update installed and not yet compiled (lib/update.js needsBuild). */
+ipcMain.handle('update:needsBuild', () => upd.needsBuild(g_root));
 
 /* After apply.ps1 restarted us: what it installed, once. */
 let g_updResult;
@@ -521,10 +531,18 @@ function recoveryWindow(code, t) {
  * the page, the red dot on PROFILE and FRIENDS. */
 const g_frSeen = new Set(), g_invSeen = new Set();
 
-/* The game's ONLINE screen has FRIENDS too (FrontEnd.c, gamecode_stubs.c):
- * friends.txt is the account's friends and invites, written with every
- * answer, removed for a guest; online_invite.txt is what the player pressed
- * there ("invite CODE", "join CODE"), sent on and removed. */
+/* The game's ONLINE screen has PROFILE too (FrontEnd.c, gamecode_stubs.c):
+ * friends.txt is the account's friends, fight invites and friend requests
+ * (received, sent), written with every answer, removed for a guest;
+ * online_invite.txt is what the player pressed there, one order a line,
+ * sent on and removed:
+ *   invite CODE / join CODE / drop CODE    an online fight
+ *   add CODE / accept CODE                 a friend request (sent, taken)
+ *   reject CODE / cancel CODE / remove CODE   turned down, withdrawn, unfriended
+ *   find CODE                              who has this player ID: online_find.txt
+ *   rename NAME                            the profile's new name, checked:
+ *                                          online_result.txt "rename|ok|NAME",
+ *                                          "rename|taken|NAME" or "rename|error|WHY" */
 function writeGameFriends(r) {
     const f = g_root && path.join(g_root, 'friends.txt');
     if (!f) return;
@@ -536,7 +554,9 @@ function writeGameFriends(r) {
         const clean = s => String(s || '').replace(/[|\r\n]/g, ' ');
         const look = p => String(p.look || '').replace(/[^0-9A-Za-z|-]/g, '');
         const lines = (r.invites || []).map(p => `invite|${p.code}|${clean(p.name)}|${look(p)}`)
-            .concat(r.friends.map(p => `friend|${p.code}|${clean(p.name)}|${look(p)}`));
+            .concat(r.friends.map(p => `friend|${p.code}|${clean(p.name)}|${look(p)}`))
+            .concat((r.incoming || []).map(p => `incoming|${p.code}|${clean(p.name)}|${look(p)}`))
+            .concat((r.outgoing || []).map(p => `outgoing|${p.code}|${clean(p.name)}|${look(p)}`));
         const text = lines.join('\n') + '\n';
         if (!fs.existsSync(f) || fs.readFileSync(f, 'utf8') !== text) {
             fs.writeFileSync(f + '.tmp', text);
@@ -554,12 +574,69 @@ async function gameAsked() {
         fs.unlinkSync(f);
     } catch (_) { return; }
     for (const line of text.split(/\r?\n/)) {
-        const [what, code] = line.trim().split(/\s+/);
-        if (!/^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(code || '')) continue;
+        const t = line.trim(), sp = t.indexOf(' ');
+        if (sp < 0) continue;
+        const what = t.slice(0, sp), arg = t.slice(sp + 1).trim();
+        if (what === 'rename') {
+            await gameRename(arg);
+            continue;
+        }
+        const code = arg;
+        if (!/^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(code)) continue;
         if (what === 'invite') await account.invite(g_root, code).catch(() => {});
-        else if (what === 'join') await account.dropInvite(g_root, code).catch(() => {});
+        /* join: taken; drop: turned down on the game's PROFILE */
+        else if (what === 'join' || what === 'drop') await account.dropInvite(g_root, code).catch(() => {});
+        else if (what === 'add' || what === 'accept') await account.addFriend(g_root, code).catch(() => {});
+        else if (what === 'reject' || what === 'cancel' || what === 'remove')
+            await account.removeFriend(g_root, code).catch(() => {});
+        else if (what === 'find') await gameFind(code);
     }
     pollFriends();
+}
+
+/* the game's results, one line a file, for it to read and remove */
+function gameResult(file, line) {
+    try {
+        const f = path.join(g_root, file);
+        fs.writeFileSync(f + '.tmp', line + '\n');
+        fs.renameSync(f + '.tmp', f);
+    } catch (_) { /* the game asks again */ }
+}
+
+/* FIND on the game's PROFILE: the player with this ID, and what they are to
+ * this one -- "CODE|name|look|state", state friend, incoming, outgoing, self
+ * or none; "-|||notfound", "-|||guest" or "-|||error" */
+async function gameFind(code) {
+    if (!account.status(g_root).user)
+        return gameResult('online_find.txt', '-|||guest');
+    const r = await account.findPlayers(g_root, code).catch(() => null);
+    if (!r || !r.ok)
+        return gameResult('online_find.txt', '-|||error');
+    const p = (r.rows || []).find(x => x.code === code);
+    if (!p)
+        return gameResult('online_find.txt', '-|||notfound');
+    const f = await account.friends(g_root).catch(() => null);
+    const has = list => !!(f && f.ok && (f[list] || []).some(x => x.code === code));
+    const me = prof.load(g_root);
+    const state = me && me.id === code ? 'self' : has('friends') ? 'friend'
+        : has('incoming') ? 'incoming' : has('outgoing') ? 'outgoing' : 'none';
+    const clean = s => String(s || '').replace(/[|\r\n]/g, ' ');
+    const look = String(p.look || '').replace(/[^0-9A-Za-z|-]/g, '');
+    gameResult('online_find.txt', `${p.code}|${clean(p.name)}|${look}|${state}`);
+}
+
+/* RENAME on the game's PROFILE: the game saved the name in profiles.ini;
+ * with an account the server must take it (one name per player) */
+async function gameRename(name) {
+    if (!account.status(g_root).user)
+        return gameResult('online_result.txt', 'rename|ok|' + name);
+    const r = await account.rename(g_root, name).catch(e => ({ ok: false, error: String(e && e.message || e) }));
+    if (r.ok)
+        gameResult('online_result.txt', 'rename|ok|' + (r.name || name));
+    else if (r.error === 'name_taken')
+        gameResult('online_result.txt', 'rename|taken|' + (r.name || ''));
+    else
+        gameResult('online_result.txt', 'rename|error|' + String(r.error || 'error').replace(/[|\r\n]/g, ' '));
 }
 
 async function pollFriends() {
@@ -694,6 +771,8 @@ let g_child = null;
 async function startGame(online) {
     if (!ini.gameReady(g_root, arch()))
         return { ok: false };
+    if (upd.needsBuild(g_root))         /* an update not yet compiled: that first */
+        return { ok: false, rebuild: true };
     if (g_child && online) {
         if (online.join)
             fs.writeFileSync(path.join(g_root, 'online_join.txt'), online.join + '\n');
@@ -767,6 +846,8 @@ ipcMain.handle('replays:open', () => {
 ipcMain.handle('replays:play', (_ev, folder, name) => {
     if (!ini.gameReady(g_root, arch()) || !replays.filePath(g_root, folder, name))
         return { ok: false };
+    if (upd.needsBuild(g_root))
+        return { ok: false, rebuild: true };
     stepAside(bld.play(g_root, ini.gameExe(arch()), ['--replay', `replays/${folder}/${name}`]));
     return { ok: true };
 });

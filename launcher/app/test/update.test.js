@@ -69,3 +69,19 @@ test('unpack gets past an update/new that cannot be removed', { skip: process.pl
     assert.deepStrictEqual(fs.readdirSync(path.join(root, 'update')), ['new']);
     fs.rmSync(root, { recursive: true, force: true });
 });
+
+test('needs-build: set by an installed update, cleared by a compile', () => {
+    const fs = require('fs'), os = require('os'), path = require('path');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'umk3-nb-'));
+    try {
+        assert.equal(upd.needsBuild(root), false);
+        fs.mkdirSync(path.join(root, 'update'));
+        fs.writeFileSync(path.join(root, 'update', 'needs-build'), 'x');
+        assert.equal(upd.needsBuild(root), true);
+        upd.builtAfterUpdate(root);
+        assert.equal(upd.needsBuild(root), false);
+        upd.builtAfterUpdate(root);     /* twice is fine */
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});

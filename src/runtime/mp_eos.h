@@ -30,4 +30,8 @@ int  mpeos_lookup_result(char *who, int n);
 void mpeos_send(const char *who, const void *p, int n);
 int  mpeos_recv(char *who, int wn, void *buf, int max);
 
+/* The players with the ONLINE screen open, -1 while not known (internet
+ * play off, or not counted yet); counted every 15 seconds. */
+int  mpeos_players(void);
+
 #endif
