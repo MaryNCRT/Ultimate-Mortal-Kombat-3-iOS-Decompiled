@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-11-06 (ONLINE menu redesign: stage 2, the sections and HOME; before that, release 0.3.1b beta).
+**Last updated:** 2026-11-06 (release 0.4.0 beta: the new ONLINE screen -- PROFILE, Player Banners, the gradient window; updates always recompile; the intros' AO).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,

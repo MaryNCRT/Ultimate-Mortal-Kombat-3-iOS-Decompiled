@@ -8,7 +8,21 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased: the new ONLINE screen (stage 2 of the redesign)
+## 0.4.0 beta (2026-11-06) — the new ONLINE screen
+
+Published 2026-11-06 as the GitHub pre-release `v0.4.0-beta`. Tried by
+Mary in her test folder while it was made (the ONLINE screen, MY PROFILE,
+the gradient window); not yet played online between two machines.
+
+- **MY PROFILE's background, PERSONAL**: a window over the editor, the
+  rest darkened -- the banner previewed on top, a dial (dragged, or by 5
+  degrees), FROM and TO with the chosen one's hex, presets in UMK3's
+  colours, the CSS (typed, copied, cleared), SAVE and CANCEL. A click on
+  FROM or TO opens a small colour window: saturation and brightness, the
+  hue, R G B typed, DONE and BACK. The editor's controls are smaller and
+  no longer overlap.
+
+### The ONLINE screen
 
 - **MY PROFILE's gradient editor, detailed** (Mary): the same panel, with
   the launcher picker's abilities -- FROM and TO each with the palette's
@@ -79,7 +93,7 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
   Claude in the test folder (with Mary's permission to open the game):
   clicks, the sections, typing a code, the keyboard; not yet played online
   between two machines.
-## Unreleased: updates always reach the player
+### Updates always reach the player
 
 - **An update from the launcher now always gives the new game.** Mary:
   players who updated from the launcher kept the old game. The update now
@@ -90,7 +104,7 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
   hand. Checked on the test folder: with the mark there, the launcher
   compiled on opening and the mark went. The forced close in apply.ps1
   was checked by generating the script (it parses), not by a real update.
-## Unreleased (after 0.3.1b)
+### The intros' ambient occlusion
 
 Built in Mary's test folder; she played it on Direct3D 12 and confirmed the fix.
 

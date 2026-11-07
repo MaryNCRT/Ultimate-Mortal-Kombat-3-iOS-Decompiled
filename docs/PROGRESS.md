@@ -98,6 +98,18 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+## 0.4.0 beta (2026-11-06) — the new ONLINE screen
+
+Released as `v0.4.0-beta` (PRs 192, 193 and 194 merged): the ONLINE
+redesign's stages 1-2 with PROFILE (MY PROFILE, friends, requests), Player
+Banners and the gradient window; updates that always recompile; the
+intros' ambient occlusion. The gradient window (FrontEnd.c
+`PortGradWindow`, `PortColourPicker`) replaced the detailed in-panel editor
+Mary asked for and then turned down; its CSS is read by `OnParseCss`
+(what the launcher's picker takes, strictly). Mary heard two tunes once on
+entering ONLINE from the banner; the log shows one (MainMenu.mp3), and two
+games were open then -- not reproduced.
+
 ## MY PROFILE: the detailed gradient editor (2026-11-06)
 
 Audit: the launcher's GradientPicker.svelte (a dial 0..359, FROM / TO,
