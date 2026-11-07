@@ -557,6 +557,12 @@ TEXTURE *limeLoadTexture(const char *path, int a, int b)
     return &g_texture_sentinel;
 }
 
+TEXTURE *limeTextureFromRGBA(const char *key, const unsigned char *rgba, int w, int h)
+{
+    (void)key; (void)rgba; (void)w; (void)h;
+    return &g_texture_sentinel;
+}
+
 void limeDeleteTexture(TEXTURE *tex)
 {
     (void)tex;

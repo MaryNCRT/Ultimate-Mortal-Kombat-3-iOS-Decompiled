@@ -8,7 +8,7 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased (after 0.4.0)
+## 0.4.1 beta (2026-11-07)
 
 - **The ONLINE screen's new skin** (Mary's references: MK Deception's and
   MK Armageddon's ONLINE KOMBAT, MK9's Gearworks, MK11's menus, MK3's
@@ -22,6 +22,27 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
   the Temple; crossfaded when the section changes.
 - **AUDIO > MENU CLICK SOUND**: the menus' press sound can be muted
   (umk3.ini `menu_clicks=`), asked by players.
+- **The ONLINE screen's materials** (Mary's "final visual polish" brief):
+  the panels are dark stone, a little see-through, with an inner shadow,
+  dark bronze uprights, a beam of aged gold and gold corner brackets; the
+  metals are textured (brushed, tarnished, scratched, bevelled); headings
+  are black steel plates with a red edge; buttons are black steel framed in
+  bronze, gold under the mouse, deep red with gold chevrons when chosen with
+  the pad, sunk when pressed; the chosen section is deep red with a gold
+  bar; every word has a shadow; each section has a faint air of its own
+  over its stage. Positions and sizes unchanged.
+- **Player Banners are metal**: the player's own gradient stays, a
+  brushed metal sheen over it (light, shade, scratches), in a bronze mount.
+  The editor's windows are stone, not flat navy; the gold has more relief
+  (a lit lip, a cast shadow); a button chosen with the pad is a lit metal
+  plate; separators are engraved, with a sigil and a stud; secondary words
+  are brighter. COMING SOON lists the new fight modes: TAG TEAM, SIMUL,
+  KING OF THE HILL.
+- **Player Banners, worn steel** (Mary's reference, a weathered steel tag):
+  a 512 x 128 steel plate (brushed, grimed, pitted, scratched) under the
+  player's gradient, its grain through the colour, a finer sheen, a bevelled
+  rim, ends in shade. The text boxes (MY PROFILE's name) are wells in black
+  steel framed in bronze, gold while typing; the last navy leftovers are gone.
 
 ## 0.4.0 beta (2026-11-06) — the new ONLINE screen
 

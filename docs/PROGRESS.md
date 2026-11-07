@@ -98,6 +98,38 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+## ONLINE: metal banners, last polish (2026-11-07)
+
+- A fifth texture, the sheen (`OnMakeSheen`, `OnSheen`): each pixel white
+  or black with its strength as alpha, so over any colour it reads as metal
+  and keeps the colour -- the Player Banner's gradient (`OnBand`), the
+  buttons. `OnGoldBar` relief, lit chosen buttons, engraved `OnRule`,
+  `OnPale`/`OnDim` brighter, the editor windows' fills black and their old
+  blue frames bronze/gold. COMING SOON (`PortOnlineLater`) lists TAG TEAM,
+  SIMUL and KING OF THE HILL.
+- Mary's rule: every section keeps its UMK3 stage; the finish is laid over
+  the stages, never replacing them.
+- Built into the test folder; not seen on screen by Claude.
+
+## ONLINE: materials (2026-11-07)
+
+- Mary's brief "PULIDO VISUAL FINAL DEL MENU EN LINEA" (Deception /
+  Armageddon: aged gold, bronze, black steel, stone, deep red; layout
+  approved, untouched).
+- `limeTextureFromRGBA` (draw_gl.c; a stub in lime_platform.c's headless
+  half): a texture made in memory, cached by key like a file's.
+- FrontEnd.c makes four textures on the first ONLINE frame (`OnTexture`):
+  a metal bar (`OnMakeMetal`: lip, groove, engraved line, brushing,
+  tarnish, scratches; also turned on its side for uprights), stone
+  (`OnMakeStone`, tiling), and an ornament sheet (`OnMakeOrn`: a corner
+  bracket, a sigil, a chevron, a stud -- original shapes, not the series'
+  dragon). Tinted by `OnMat` into gold, bronze, steel, red, black steel.
+  Used by `OnPanel`, `OnGoldBar`, `OnRule`, `OnHeading`, `OnButton`,
+  `OnStatus`, the title bar and the backdrop. `OnText` draws a shadow.
+- Built into the test folder; Claude has not seen it on screen (Mary uses
+  the computer; no scripted clicks). The brief arrived cut at its point 8
+  (the Player Banner: keep it as it is), which is untouched.
+
 ## ONLINE skin, a stage per section, the menus' click (2026-11-07)
 
 - **Skin** (FrontEnd.c): only the drawing helpers changed -- `OnPanel`
@@ -121,6 +153,13 @@ traced to the binary's own mechanism before anything is changed.
 - Built into the test folder; not yet seen by Mary. A test run of Claude's
   clicked in Mary's browser once (the game's window did not come to the
   front): scripted clicks are not used while she is at the computer.
+
+## 0.4.1 beta (2026-11-07) — the ONLINE screen's finish
+
+Released as `v0.4.1-beta` (PRs 196 and 197): the skin after MK Deception /
+Armageddon, a UMK3 stage per section, steel Player Banners under the
+player's gradient, AUDIO > MENU CLICK SOUND. Mary approved the look in her
+test folder; she has not played fights on it.
 
 ## 0.4.0 beta (2026-11-06) — the new ONLINE screen
 

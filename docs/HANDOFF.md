@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-11-06 (release 0.4.0 beta: the new ONLINE screen -- PROFILE, Player Banners, the gradient window; updates always recompile; the intros' AO).
+**Last updated:** 2026-11-07 (release 0.4.1 beta: the ONLINE screen's Deception / Armageddon finish, a UMK3 stage per section, steel Player Banners, the menus' click can be muted).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
@@ -136,6 +136,20 @@ press COMPILE.
 
 ## 7. Open work
 
+- **ONLINE's look (Mary's rule)**: every section keeps its own UMK3 stage
+  (`PortOnlineBGLoad`); the Deception / Armageddon finish works over them,
+  never replaces them. This version is the visual base: refine materials,
+  buttons and panels, do not change the concept.
+- **Mary's roadmap (2026-11-07)**, in order: (1) finish the ONLINE menu's
+  Deception / Armageddon finish (PR #196); (2) a full renewal of the
+  launcher: UMK3 Xbox 360's identity with dark fantasy, rustic materials,
+  aged metal and stone, ornament, ambient light -- it and the ONLINE menu
+  must complement each other; the gradient editor and the customisation
+  keep working; (3) ONLINE infrastructure: real EOS lobbies, matchmaking
+  and quick match, parties and invites, friends' online state, into the
+  fights; (4) new fight modes: Tag Team, Simul, King of the Hill; (5)
+  reusable online systems with engine adapters, ready to carry to MK Gold,
+  stability tests and docs.
 - **Accounts server.** It lives in Mary's private repository
   (MaryNCRT-Universal-Game-Services, `umk3-accounts/`, a Cloudflare Worker;
   its README has deploying and testing). Never put server code or secrets
