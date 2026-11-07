@@ -12438,7 +12438,7 @@ static void OnGlow(float x, float y, float w, float h, float r, float g, float b
  * no file of the game's is touched. ---- */
 TEXTURE *limeTextureFromRGBA(const char *key, const unsigned char *rgba, int w, int h);
 
-enum { TX_METAL, TX_METALV, TX_STONE, TX_ORN, TX_SHEEN, TX_PLATE, TX_N };
+enum { TX_METAL, TX_METALV, TX_STONE, TX_ORN, TX_SHEEN, TX_PLATE, TX_GRAIN, TX_N };
 enum { MT_GOLD, MT_BRONZE, MT_STEEL, MT_BLOOD, MT_IRON };
 enum { ORN_CORNER, ORN_SIGIL, ORN_CHEVRON, ORN_STUD };
 
@@ -12692,7 +12692,10 @@ static void OnMakeSheen(unsigned char *out)
 
 /* Weathered steel, grey, 512 x 128 (Mary's worn tag): brushed in long
  * fine lines, grime gathered in patches, pitted, scratched; tiling across. */
-static void OnMakePlate(unsigned char *out)
+/* `grain` 1: the same steel as light and shade only -- white or black, its
+ * strength as alpha -- for laying over a colour without paling it (Mary:
+ * keep the colour, keep the texture) */
+static void OnMakePlate(unsigned char *out, int grain)
 {
     static float lum[128][512];
     int x, y, k;
@@ -12723,7 +12726,12 @@ static void OnMakePlate(unsigned char *out)
     }
     for (y = 0; y < 128; y++)
         for (x = 0; x < 512; x++)
-            OnPut(out + ((size_t)y * 512 + x) * 4, lum[y][x], lum[y][x], lum[y][x], 1.0f);
+            if (!grain)
+                OnPut(out + ((size_t)y * 512 + x) * 4, lum[y][x], lum[y][x], lum[y][x], 1.0f);
+            else if (lum[y][x] > 0.62f)
+                OnPut(out + ((size_t)y * 512 + x) * 4, 1.0f, 1.0f, 1.0f, (lum[y][x] - 0.62f) * 1.2f > 0.35f ? 0.35f : (lum[y][x] - 0.62f) * 1.2f);
+            else
+                OnPut(out + ((size_t)y * 512 + x) * 4, 0.0f, 0.0f, 0.0f, (0.62f - lum[y][x]) * 1.5f > 0.60f ? 0.60f : (0.62f - lum[y][x]) * 1.5f);
 }
 
 static TEXTURE *OnTexture(int i)
@@ -12741,8 +12749,10 @@ static TEXTURE *OnTexture(int i)
         OnTexs[TX_ORN] = limeTextureFromRGBA("port:online-ornaments", buf, 256, 64);
         OnMakeSheen(buf);
         OnTexs[TX_SHEEN] = limeTextureFromRGBA("port:online-sheen2", buf, 512, 128);
-        OnMakePlate(buf);
+        OnMakePlate(buf, 0);
         OnTexs[TX_PLATE] = limeTextureFromRGBA("port:online-plate", buf, 512, 128);
+        OnMakePlate(buf, 1);
+        OnTexs[TX_GRAIN] = limeTextureFromRGBA("port:online-grain", buf, 512, 128);
     }
     return OnTexs[i];
 }
@@ -13230,10 +13240,11 @@ static void OnBand(const char *code, float x, float y, float w, float h, float a
         static const float e0[4] = { 0.0f, 0.0f, 0.0f, 0.55f }, e1[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
         float ew = w * 0.12f;
         OnShadow(x, y, w, h, a);
-        OnPlate(x, y, w, h, steel, a);
-        OnProfileSky(code, x, y, w, h, 0.72f * a);
-        OnPlate(x, y, w, h, steel, 0.22f * a);          /* its grain through the colour */
-        OnSheen(x, y, w, h, 0.85f * a);
+        static const float white[3] = { 1.0f, 1.0f, 1.0f };
+        (void)steel;
+        OnProfileSky(code, x, y, w, h, a);              /* the colour, whole */
+        OnSprite(TX_GRAIN, x, y, w, h, x / 160.0f, 0.01f, w / 160.0f, 0.98f, white, a);
+        OnSheen(x, y, w, h, 0.60f * a);
         OnHGrad(x, y, ew, h, e0, e1, a);                /* the ends in shade */
         OnHGrad(x + w - ew, y, ew, h, e1, e0, a);
         OnFill(x, y + 0.8f, 0.8f, h - 2.0f, 1.0f, 1.0f, 1.0f, 0.25f * a);   /* the rim: lit left */
