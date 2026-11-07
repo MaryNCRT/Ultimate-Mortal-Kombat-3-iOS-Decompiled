@@ -12428,38 +12428,91 @@ static void OnGlow(float x, float y, float w, float h, float r, float g, float b
 /* A panel: a diagonal gradient from navy to black that lets the cemetery
  * through, light along the top edge, a darker bottom, a shadow; `red` puts
  * the MK red along its top. */
+/* ---- the materials (the skin, Mary 2026-11-07: an underground fighting
+ * fortress -- MK9's Gearworks, Armageddon's Armory, MK3's stone: aged steel,
+ * dark iron, concrete, rivets, blood red, industrial orange) ---- */
+
+/* a rivet: a dome of steel, lit from above */
+static void OnRivet(float x, float y, float a)
+{
+    OnFill(x - 1.6f, y - 1.6f, 3.2f, 3.2f, 0.0f, 0.0f, 0.0f, 0.55f * a);
+    OnFill(x - 1.2f, y - 1.2f, 2.4f, 2.4f, 0.42f, 0.43f, 0.44f, a);
+    OnFill(x - 1.2f, y - 1.2f, 1.2f, 1.0f, 0.78f, 0.78f, 0.74f, 0.8f * a);
+}
+
+/* brushed steel: fine horizontal scratches over a surface */
+static void OnBrushed(float x, float y, float w, float h, float a)
+{
+    float yy;
+    int k = 0;
+    for (yy = y + 2.0f; yy < y + h - 2.0f; yy += 2.6f, k++)
+        OnFill(x + 1.0f + (float)((k * 37) % 11), yy, w - 2.0f - (float)((k * 53) % 17), 0.5f,
+               k & 1 ? 0.0f : 1.0f, k & 1 ? 0.0f : 1.0f, k & 1 ? 0.0f : 0.96f,
+               (k & 1 ? 0.06f : 0.025f) * a);
+}
+
+/* a plate's bevel: light on top and left, dark under and right */
+static void OnBevel(float x, float y, float w, float h, float a)
+{
+    OnFill(x, y, w, 1.0f, 0.70f, 0.71f, 0.70f, 0.40f * a);
+    OnFill(x, y + 1.0f, 0.8f, h - 2.0f, 0.60f, 0.61f, 0.60f, 0.25f * a);
+    OnFill(x, y + h - 1.4f, w, 1.4f, 0.0f, 0.0f, 0.0f, 0.80f * a);
+    OnFill(x + w - 1.0f, y + 1.0f, 1.0f, h - 2.0f, 0.0f, 0.0f, 0.0f, 0.55f * a);
+}
+
+/* A panel: a plate of aged steel, the petrol blue of old paint under it,
+ * brushed, bevelled, framed in dark iron and riveted at the corners; `red`
+ * puts a blood-red warning strip along its top. */
+/* A panel: dark stone you can half see through, a thin double frame of
+ * worn metal (MK Deception's ONLINE KOMBAT, Mary's reference), small
+ * studs at its corners; `red` a blood-red line along its top. */
+/* A panel: black glass over the mist, a fine silver frame and a dark line
+ * inside it, small metal caps on its top corners (MK Deception's ONLINE
+ * KOMBAT, Mary's references); `red` an oxblood line along its top. */
+/* antique gold: a bar of it, lit on top, brown underneath */
+static void OnGoldBar(float x, float y, float w, float h, float a)
+{
+    static const float g0[4] = { 0.92f, 0.80f, 0.50f, 1.0f }, g1[4] = { 0.50f, 0.36f, 0.16f, 1.0f };
+    OnVGrad(x, y, w, h, g0, g1, a);
+    OnFrame(x, y, w, h, 0.5f, 0.16f, 0.10f, 0.04f, 0.8f * a);
+}
+
+/* A panel: black, in a frame of antique gold whose top flares out at the
+ * corners (MK Armageddon's ONLINE KOMBAT, Mary's reference); `red` an
+ * oxblood line inside its top. */
 static void OnPanel(float x, float y, float w, float h, float a, int red)
 {
-    static const float tl[4] = { 0.07f, 0.12f, 0.27f, 0.80f };
-    static const float tr[4] = { 0.03f, 0.06f, 0.16f, 0.72f };
-    static const float br[4] = { 0.00f, 0.01f, 0.04f, 0.86f };
-    static const float bl[4] = { 0.01f, 0.03f, 0.10f, 0.82f };
-    static const float hi0[4] = { 0.50f, 0.66f, 1.00f, 0.20f };
-    static const float hi1[4] = { 0.50f, 0.66f, 1.00f, 0.00f };
-    static const float rl[4] = { 0.95f, 0.10f, 0.06f, 1.0f };
-    static const float rr[4] = { 0.45f, 0.02f, 0.02f, 0.0f };
+    /* a little see-through, so the stage behind shows (Mary) */
+    static const float t[4] = { 0.04f, 0.035f, 0.03f, 0.76f };
+    static const float b[4] = { 0.01f, 0.01f, 0.01f, 0.82f };
+    static const float rl[4] = { 0.50f, 0.14f, 0.08f, 1.0f };
+    static const float rr[4] = { 0.30f, 0.08f, 0.05f, 0.0f };
+    static const float s0[4] = { 0.82f, 0.68f, 0.38f, 1.0f }, s1[4] = { 0.42f, 0.30f, 0.12f, 1.0f };
 
     OnShadow(x, y, w, h, a);
-    OnGrad4(x, y, w, h, tl, tr, br, bl, a);
-    OnVGrad(x, y, w, 14.0f, hi0, hi1, a);               /* the light on top */
-    OnFill(x, y, w, 0.8f, 0.62f, 0.76f, 1.0f, 0.45f * a);
-    OnFill(x, y + h - 1.5f, w, 1.5f, 0.0f, 0.0f, 0.0f, 0.70f * a);
-    OnFill(x, y + 0.8f, 0.8f, h - 2.3f, 0.35f, 0.50f, 0.95f, 0.22f * a);
-    OnFill(x + w - 0.8f, y + 0.8f, 0.8f, h - 2.3f, 0.10f, 0.16f, 0.40f, 0.30f * a);
+    OnVGrad(x, y, w, h, t, b, a);
+    /* the frame: two gold sides, gold top and bottom, a dark line inside */
+    OnHGrad(x - 2.0f, y, 2.4f, h, s1, s0, a);
+    OnHGrad(x + w - 0.4f, y, 2.4f, h, s0, s1, a);
+    OnGoldBar(x - 2.0f, y + h - 0.4f, w + 4.0f, 2.0f, a);
+    /* the top, and a cap on each corner -- kept within the sides, so two
+     * panels side by side do not run into each other (Mary) */
+    OnGoldBar(x - 2.0f, y - 2.6f, w + 4.0f, 2.8f, a);
+    OnGoldBar(x - 2.0f, y - 3.8f, 8.0f, 1.4f, a);
+    OnGoldBar(x + w - 6.0f, y - 3.8f, 8.0f, 1.4f, a);
+    OnFrame(x + 0.4f, y + 0.2f, w - 0.8f, h - 0.6f, 0.6f, 0.0f, 0.0f, 0.0f, 0.9f * a);
     if (red)
-        OnHGrad(x, y, w * 0.6f, 2.0f, rl, rr, a);
+        OnHGrad(x + 1.0f, y + 1.0f, w * 0.6f, 1.0f, rl, rr, a);
 }
 
-/* a discreet line inside a panel, bright at the left */
+/* a separator: a fine gold line, fading out */
 static void OnRule(float x, float y, float w, float a)
 {
-    static const float l[4] = { 0.45f, 0.60f, 1.00f, 0.40f };
-    static const float r[4] = { 0.45f, 0.60f, 1.00f, 0.00f };
-    OnHGrad(x, y, w, 0.8f, l, r, a);
+    static const float l0[4] = { 0.80f, 0.64f, 0.34f, 0.55f }, l1[4] = { 0.80f, 0.64f, 0.34f, 0.0f };
+    static const float d0[4] = { 0.0f, 0.0f, 0.0f, 0.7f }, d1[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    OnHGrad(x, y, w, 0.7f, l0, l1, a);
+    OnHGrad(x, y + 0.7f, w, 0.6f, d0, d1, a);
 }
-
-/* ---------------------------------------------------------------- text */
-
 /* Text: align 0 left, 1 centred, 2 right; `size` the font's scale (1 the
  * title's); shrunk to `maxw` units when wider. */
 static void OnText(const char *s, float x, float y, int align, float size,
@@ -12497,12 +12550,13 @@ static const char *OnName(const char *s)
     return o;
 }
 
-static const float OnWhite[3] = { 1.0f, 1.0f, 1.0f };
-static const float OnPale[3]  = { 0.80f, 0.87f, 1.0f };
-static const float OnDim[3]   = { 0.52f, 0.62f, 0.82f };
-static const float OnGold[3]  = { 1.0f, 0.85f, 0.30f };
-static const float OnRed[3]   = { 1.0f, 0.32f, 0.26f };
-static const float OnGreen[3] = { 0.40f, 1.0f, 0.55f };
+static const float OnWhite[3] = { 0.94f, 0.91f, 0.83f };   /* bone */
+static const float OnPale[3]  = { 0.80f, 0.80f, 0.76f };   /* silver */
+static const float OnDim[3]   = { 0.54f, 0.55f, 0.52f };   /* stone */
+static const float OnGold[3]  = { 1.0f, 0.60f, 0.20f };    /* industrial lamp */
+static const float OnAmber[3] = { 0.84f, 0.66f, 0.34f };   /* aged gold: headings */
+static const float OnRed[3]   = { 0.92f, 0.16f, 0.12f };   /* blood */
+static const float OnGreen[3] = { 0.55f, 0.82f, 0.42f };   /* a signal lamp */
 
 /* a section's heading: its title, a count after it, the line under it */
 static void OnHeading(const char *title, int count, float x, float y, float w, float a)
@@ -12513,8 +12567,12 @@ static void OnHeading(const char *title, int count, float x, float y, float w, f
         snprintf(line, sizeof line, "%s  (%d)", title, count);
     else
         snprintf(line, sizeof line, "%s", title);
-    OnText(line, x, y, 0, 0.62f, w, OnPale, a);
-    OnRule(x, y + 17.0f, w, a);
+    {
+        static const float o0[4] = { 0.10f, 0.09f, 0.07f, 0.95f }, o1[4] = { 0.03f, 0.03f, 0.025f, 0.95f };
+        OnVGrad(x - 6.0f, y - 2.0f, w + 6.0f, 16.0f, o0, o1, a);
+        OnFrame(x - 6.0f, y - 2.0f, w + 6.0f, 16.0f, 0.7f, 0.78f, 0.62f, 0.32f, 0.85f * a);
+    }
+    OnText(line, x, y, 0, 0.62f, w, OnAmber, a);
 }
 
 /* a state: a dot and its words */
@@ -12538,11 +12596,12 @@ enum { BT_NORMAL, BT_MAIN, BT_OFF };
 static int OnButton(int id, const char *text, float x, float y, float w,
                     float h, int kind, float a)
 {
-    static const float n0[4] = { 0.13f, 0.20f, 0.40f, 0.88f }, n1[4] = { 0.03f, 0.05f, 0.13f, 0.92f };
-    static const float h0[4] = { 0.22f, 0.34f, 0.66f, 0.92f }, h1[4] = { 0.05f, 0.10f, 0.26f, 0.94f };
-    static const float m0[4] = { 0.80f, 0.12f, 0.08f, 0.92f }, m1[4] = { 0.36f, 0.02f, 0.02f, 0.94f };
-    static const float mh0[4] = { 0.98f, 0.24f, 0.16f, 0.95f }, mh1[4] = { 0.50f, 0.04f, 0.03f, 0.96f };
-    static const float o0[4] = { 0.20f, 0.22f, 0.26f, 0.55f }, o1[4] = { 0.08f, 0.09f, 0.11f, 0.60f };
+    /* steel plates; MAIN a plate painted blood red; OFF bare dark iron */
+    static const float n0[4] = { 0.10f, 0.09f, 0.08f, 0.92f }, n1[4] = { 0.02f, 0.02f, 0.02f, 0.94f };
+    static const float h0[4] = { 0.26f, 0.21f, 0.12f, 0.80f }, h1[4] = { 0.08f, 0.06f, 0.03f, 0.80f };
+    static const float m0[4] = { 0.48f, 0.13f, 0.08f, 0.95f }, m1[4] = { 0.24f, 0.05f, 0.03f, 0.96f };
+    static const float mh0[4] = { 0.62f, 0.18f, 0.10f, 0.97f }, mh1[4] = { 0.34f, 0.08f, 0.04f, 0.97f };
+    static const float o0[4] = { 0.12f, 0.12f, 0.13f, 0.80f }, o1[4] = { 0.06f, 0.06f, 0.065f, 0.82f };
     int st = 0, hit = 0;
     float *lit = &PortOnlineLit[id], want, dy = 0.0f;
 
@@ -12554,12 +12613,13 @@ static int OnButton(int id, const char *text, float x, float y, float w,
     OnShadow(x, y, w, h, 0.6f * a);
     if (kind == BT_OFF) {
         OnVGrad(x, y, w, h, o0, o1, a);
-        OnFrame(x, y, w, h, 0.8f, 0.45f, 0.48f, 0.55f, 0.35f * a);
+        OnFrame(x, y, w, h, 0.8f, 0.0f, 0.0f, 0.0f, 0.7f * a);
+        OnFill(x + 1.0f, y + 0.8f, w - 2.0f, 0.6f, 0.5f, 0.5f, 0.5f, 0.12f * a);
         OnText(text, x + w * 0.5f, y + (h - (h < 17.0f ? 0.44f : 0.56f) * 24.0f) * 0.5f, 1,
                h < 17.0f ? 0.44f : 0.56f, w - 10.0f, OnDim, 0.55f * a);
         return 0;
     }
-    if (st == 3) {                      /* pressed: sunk, the light below */
+    if (st == 3) {                      /* pressed: the plate sinks, the light below */
         OnVGrad(x, y, w, h, kind == BT_MAIN ? m1 : n1, kind == BT_MAIN ? m0 : n0, a);
         dy = 0.8f;
     } else {
@@ -12567,27 +12627,26 @@ static int OnButton(int id, const char *text, float x, float y, float w,
         if (*lit > 0.01f)
             OnVGrad(x, y, w, h, kind == BT_MAIN ? mh0 : h0, kind == BT_MAIN ? mh1 : h1, *lit * a);
     }
-    OnFill(x + 1.0f, y + 0.8f, w - 2.0f, 0.8f, 1.0f, 1.0f, 1.0f, (0.22f + 0.2f * *lit) * a);
-    OnFill(x, y + h - 1.0f, w, 1.0f, 0.0f, 0.0f, 0.0f, 0.5f * a);
-    if (st == 2) {                      /* the pad's or the keys' choice */
-        float p = 0.7f + 0.3f * sinf(PortOnlineT * 6.0f);
-        OnGlow(x, y, w, h, 1.0f, 0.18f, 0.12f, a * p);
-        OnFrame(x, y, w, h, 1.2f, 1.0f, 0.30f, 0.22f, a);
-    } else if (st == 1)
-        OnGlow(x, y, w, h, 0.35f, 0.55f, 1.0f, *lit * a);
+    if (st != 3)
+        OnFill(x + 1.0f, y + 0.8f, w - 2.0f, 0.6f, 1.0f, 1.0f, 0.95f, 0.18f * a);
     else
-        OnFrame(x, y, w, h, 0.8f, kind == BT_MAIN ? 1.0f : 0.40f,
-                kind == BT_MAIN ? 0.40f : 0.55f, kind == BT_MAIN ? 0.30f : 1.0f,
-                (0.45f + 0.4f * *lit) * a);
+        OnFrame(x, y, w, h, 1.0f, 0.0f, 0.0f, 0.0f, 0.8f * a);
+    if (st == 2) {                      /* the pad's or the keys' choice: lit red */
+        float p = 0.7f + 0.3f * sinf(PortOnlineT * 6.0f);
+        OnGlow(x, y, w, h, 1.0f, 0.12f, 0.06f, a * p);
+        OnFrame(x, y, w, h, 1.2f, 1.0f, 0.22f, 0.12f, a);
+    } else if (st == 1) {               /* under the mouse: brighter gold */
+        OnFrame(x, y, w, h, 1.0f, 0.98f, 0.84f, 0.50f, a);
+    } else
+        OnFrame(x, y, w, h, 0.8f, 0.74f, 0.58f, 0.30f, 0.80f * a);
     {
         /* low buttons (MY PROFILE's) take smaller words */
         float sz = h < 17.0f ? 0.44f : 0.58f;
         OnText(text, x + w * 0.5f, y + (h - sz * 24.0f) * 0.5f + dy, 1, sz, w - 10.0f,
-               OnWhite, a);
+               st == 1 ? OnAmber : OnWhite, a);
     }
     return hit;
 }
-
 /* ----------------------------------------------------------- portraits */
 
 /* A portrait, `size` square: its frame here, the picture by online_ui.c.
@@ -12752,11 +12811,14 @@ static void OnBand(const char *code, float x, float y, float w, float h, float a
         OnGlow(x, y, w, h, 1.0f, 0.18f, 0.12f, a);
         OnFrame(x, y, w, h, 1.0f, 1.0f, 0.30f, 0.22f, a);
     } else if (st == 1)
-        OnFrame(x, y, w, h, 1.0f, 0.80f, 0.88f, 1.0f, 0.9f * a);
+        OnFrame(x, y, w, h, 1.0f, 1.0f, 0.55f, 0.18f, 0.9f * a);
     else if (sel > 0.5f)
-        OnFrame(x, y, w, h, 1.0f, 1.0f, 0.30f, 0.22f, 0.8f * sel * a);
-    else
-        OnFrame(x, y, w, h, 0.6f, 0.0f, 0.0f, 0.0f, 0.5f * a);
+        OnFrame(x, y, w, h, 1.2f, 0.95f, 0.18f, 0.10f, 0.9f * sel * a);
+    else {
+        /* an iron mount round the player's own colours */
+        OnFrame(x - 1.6f, y - 1.6f, w + 3.2f, h + 3.2f, 1.6f, 0.11f, 0.115f, 0.12f, 0.95f * a);
+        OnFrame(x - 1.6f, y - 1.6f, w + 3.2f, h + 3.2f, 0.5f, 0.55f, 0.56f, 0.55f, 0.35f * a);
+    }
     OnArt(code, x - art * 0.08f, y + h - art, art, a);
 }
 
@@ -14346,8 +14408,12 @@ static void PortOnlineProfile(float cx, float cw, float a, int searching, int ni
             snprintf(t, sizeof t, "%s (%d)", PortFrTx(es[i], en[i]), nin);
         else
             snprintf(t, sizeof t, "%s", PortFrTx(es[i], en[i]));
-        OnFill(x + 2.0f, 62.0f, sw - 4.0f, 18.0f, on ? 0.45f : 0.03f, on ? 0.05f : 0.06f,
-               on ? 0.04f : 0.15f, on ? 0.85f : st ? 0.85f : 0.65f);
+        {
+            static const float p0[4] = { 0.10f, 0.10f, 0.095f, 0.82f }, p1[4] = { 0.04f, 0.04f, 0.038f, 0.86f };
+            static const float q0[4] = { 0.44f, 0.11f, 0.07f, 0.95f }, q1[4] = { 0.22f, 0.05f, 0.03f, 0.96f };
+            OnVGrad(x + 2.0f, 62.0f, sw - 4.0f, 18.0f, on ? q0 : p0, on ? q1 : p1, 1.0f);
+            OnFrame(x + 2.0f, 62.0f, sw - 4.0f, 18.0f, 0.7f, 0.74f, 0.58f, 0.30f, 0.75f);
+        }
         if (st == 2)
             OnFrame(x + 2.0f, 62.0f, sw - 4.0f, 18.0f, 1.0f, 1.0f, 0.30f, 0.22f, 1.0f);
         else if (st)
@@ -14357,7 +14423,7 @@ static void PortOnlineProfile(float cx, float cw, float a, int searching, int ni
             OnFrame(x + 2.0f, 62.0f, sw - 4.0f, 18.0f, 1.2f, 1.0f, 0.2f, 0.12f, p);
         }
         OnText(t, x + sw * 0.5f, 65.0f, 1, 0.40f, sw - 10.0f,
-               on ? OnWhite : i == PS_IN && nin ? OnRed : OnPale, 1.0f);
+               on ? OnAmber : i == PS_IN && nin ? OnRed : OnPale, 1.0f);
     }
     switch (PortOnlineSub) {
     case PS_ME:      PortOnlineMe(cx, cw, y0, a); break;
@@ -14433,6 +14499,62 @@ static void PortOnlineLater(int section, float cx, float cw, float a)
 
 /* ---------------------------------------------------------- the screen */
 
+/* The stage behind each section (Mary: more than the one picture, darkened):
+ * the game's own select-screen sheets, CS_BG..CS_BG4 (960x640 on a 1024
+ * sheet). HOME keeps the Graveyard the screen always had; changing section
+ * crossfades. Loaded on entering the screen, freed on leaving it. */
+static void *PortOnlineBG[OS_N];
+static int   PortOnlineBGWas = -1;      /* the section shown before, fading out */
+static float PortOnlineBGFade = 1.0f;
+
+static void PortOnlineBGLoad(void)
+{
+    static const char *const file[OS_N] = { NULL, "CS_BG2.PNG", "CS_BG.PNG", "CS_BG1.PNG", "CS_BG4.PNG" };
+    int i;
+    for (i = 0; i < OS_N; i++)
+        if (file[i] && !PortOnlineBG[i])
+            PortOnlineBG[i] = limeLoadTexture(file[i], 0, 0);
+}
+
+static void PortOnlineBGFree(void)
+{
+    int i;
+    for (i = 0; i < OS_N; i++)
+        if (PortOnlineBG[i]) {
+            limeDeleteTexture(PortOnlineBG[i]);
+            PortOnlineBG[i] = NULL;
+        }
+}
+
+static void *PortOnlineBGTex(int section)
+{
+    void *t = section >= 0 && section < OS_N ? PortOnlineBG[section] : NULL;
+    if (!t)                             /* HOME, or a sheet that did not load */
+        t = (&SelectBGTexture)[BGRandomised] ? (&SelectBGTexture)[BGRandomised] : *FEBackground;
+    return t;
+}
+
+static void PortOnlineBackdrop(void)
+{
+    float c[4] = { col[0], col[1], col[2], 1.0f };
+
+    if (PortOnlineBGWas != PortOnlineSection) {
+        if (PortOnlineBGFade >= 1.0f || PortOnlineBGWas < 0)
+            PortOnlineBGFade = PortOnlineBGWas < 0 ? 1.0f : 0.0f;
+    }
+    PortOnlineBGFade += 0.06f / limeFPSScaleFactor;
+    if (PortOnlineBGFade >= 1.0f) {
+        PortOnlineBGFade = 1.0f;
+        PortOnlineBGWas = PortOnlineSection;
+    }
+    if (PortOnlineBGFade < 1.0f && PortOnlineBGWas >= 0)
+        limeDrawSprite((TEXTURE *)PortOnlineBGTex(PortOnlineBGWas), 0.0f, 0.0f,
+                       (float)limeScreenWidth, (float)limeScreenHeight, 0.0f, 0.0f, 0.9375f, 0.625f, col);
+    c[3] = PortOnlineBGWas < 0 ? 1.0f : PortOnlineBGFade;
+    limeDrawSprite((TEXTURE *)PortOnlineBGTex(PortOnlineSection), 0.0f, 0.0f,
+                   (float)limeScreenWidth, (float)limeScreenHeight, 0.0f, 0.0f, 0.9375f, 0.625f, c);
+}
+
 void FE_Task_Online(void)
 {
     static const char *const tab_en[OS_N] = { "HOME", "PROFILE", "LOBBIES", "QUICK MATCH", "PARTY" };
@@ -14456,6 +14578,8 @@ void FE_Task_Online(void)
         if (PortTick - last_tick > 3) {
             PortOnlineLeaving = 0;
             PortDraftOn = 0;            /* a new visit edits a new draft */
+            PortOnlineBGLoad();
+            PortOnlineBGWas = -1;
             PortGradOpen = 0;
             PortGallery = 0;
             PortOnlineEdit = 0;
@@ -14522,15 +14646,20 @@ void FE_Task_Online(void)
     PortNoInput = PortGradOpen;
     limeEnableAlphaBlending_Basic();
     limeSet2DDrawing();
-    limeDrawSprite((TEXTURE *)((&SelectBGTexture)[BGRandomised]
-                               ? (&SelectBGTexture)[BGRandomised]
-                               : *FEBackground),
-                   0.0f, 0.0f, (float)limeScreenWidth, (float)limeScreenHeight,
-                   0.0f, 0.0f, 0.9375f, 0.625f, col);
+    PortOnlineBackdrop();
     {
         /* the night pressed down a little at the bottom, so the panels read */
-        static const float t0[4] = { 0.0f, 0.0f, 0.03f, 0.0f }, t1[4] = { 0.0f, 0.0f, 0.03f, 0.55f };
-        OnVGrad(0.0f, 150.0f, vw, 170.0f, t0, t1, 1.0f);
+        /* the night pressed down, darker at the edges, warmed by a lamp:
+         * the cemetery seen from inside the fortress */
+        static const float t0[4] = { 0.02f, 0.02f, 0.02f, 0.0f }, t1[4] = { 0.02f, 0.02f, 0.02f, 0.70f };
+        static const float e0[4] = { 0.0f, 0.0f, 0.0f, 0.65f }, e1[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        static const float g0[4] = { 0.55f, 0.22f, 0.05f, 0.0f }, g1[4] = { 0.55f, 0.22f, 0.05f, 0.10f };
+        OnFill(0.0f, 0.0f, vw, 320.0f, 0.20f, 0.23f, 0.21f, 0.42f);   /* the mist */
+        OnFill(0.0f, 0.0f, vw, 320.0f, 0.02f, 0.03f, 0.025f, 0.30f);
+        OnVGrad(0.0f, 140.0f, vw, 180.0f, t0, t1, 1.0f);
+        OnHGrad(0.0f, 0.0f, vw * 0.18f, 320.0f, e0, e1, 1.0f);
+        OnHGrad(vw * 0.82f, 0.0f, vw * 0.18f, 320.0f, e1, e0, 1.0f);
+        OnVGrad(0.0f, 260.0f, vw, 60.0f, g0, g1, 1.0f);
     }
 
     /* ---- the title, the players on line, the sections' bar ---- */
@@ -14547,15 +14676,27 @@ void FE_Task_Online(void)
         OnStatus(line, OnGreen, cx + 2.0f, 9.0f, 170.0f, 1.0f, 0);
     }
     {
-        static const float b0[4] = { 0.10f, 0.16f, 0.34f, 0.88f }, b1[4] = { 0.01f, 0.02f, 0.07f, 0.92f };
+        static const float b0[4] = { 0.08f, 0.08f, 0.075f, 0.76f }, b1[4] = { 0.03f, 0.03f, 0.028f, 0.82f };
         OnShadow(cx, 30.0f, cw, 26.0f, 1.0f);
-        OnVGrad(cx, 30.0f, cw, 26.0f, b0, b1, 1.0f);
-        OnFill(cx, 30.0f, cw, 0.8f, 0.62f, 0.76f, 1.0f, 0.45f);
-        OnFill(cx, 55.0f, cw, 1.0f, 0.0f, 0.0f, 0.0f, 0.8f);
+        OnVGrad(cx, 30.0f, cw, 26.0f, b0, b1, 1.0f);   /* an iron beam */
+        static const float c0[4] = { 0.92f, 0.80f, 0.50f, 1.0f }, c1[4] = { 0.46f, 0.32f, 0.14f, 1.0f };
+        int k;
+        OnGoldBar(cx - 4.0f, 28.0f, cw + 8.0f, 2.4f, 1.0f);
+        OnGoldBar(cx - 4.0f, 55.4f, cw + 8.0f, 2.0f, 1.0f);
+        OnFrame(cx, 30.4f, cw, 25.0f, 0.6f, 0.0f, 0.0f, 0.0f, 0.9f);
+        for (k = 0; k < 2; k++) {       /* the end caps, and a gold arrow out of each */
+            float ex = k ? cx + cw - 2.0f : cx - 4.0f, ax = k ? cx + cw + 4.0f : cx - 7.0f;
+            int j;
+            OnHGrad(ex, 27.0f, 6.0f, 32.0f, k ? c1 : c0, k ? c0 : c1, 1.0f);
+            OnFrame(ex, 27.0f, 6.0f, 32.0f, 0.5f, 0.0f, 0.0f, 0.0f, 0.8f);
+            for (j = 0; j < 5; j++)     /* a small triangle, in strips */
+                OnFill(k ? ax + (float)j * 0.8f : ax - (float)j * 0.8f, 39.0f + (float)j * 0.8f, 0.8f,
+                       8.0f - (float)j * 1.6f, 0.82f, 0.64f, 0.30f, 1.0f);
+        }
     }
     for (i = 0; i < OS_N; i++) {
-        static const float r0[4] = { 0.70f, 0.06f, 0.04f, 0.0f }, r1[4] = { 0.80f, 0.08f, 0.05f, 0.65f };
-        static const float h0[4] = { 0.35f, 0.55f, 1.0f, 0.0f }, h1[4] = { 0.35f, 0.55f, 1.0f, 0.30f };
+        static const float r0[4] = { 0.62f, 0.52f, 0.34f, 0.32f }, r1[4] = { 0.46f, 0.34f, 0.18f, 0.22f };
+        static const float h0[4] = { 0.62f, 0.62f, 0.58f, 0.0f }, h1[4] = { 0.62f, 0.62f, 0.58f, 0.16f };
         float x = cx + tw * (float)i;
         int on = i == PortOnlineSection;
         const char *t = PortFrTx(tab_es[i], tab_en[i]);
@@ -14569,15 +14710,15 @@ void FE_Task_Online(void)
                 PortOnlineSub = PS_IN;
         }
         tab_lit[i] += ((on ? 1.0f : 0.0f) - tab_lit[i]) * 0.25f / limeFPSScaleFactor;
-        if (i)
-            OnFill(x, 34.0f, 0.8f, 18.0f, 0.45f, 0.60f, 1.0f, 0.22f);
+        if (i)                          /* a fine gold line between sections */
+            OnFill(x, 33.0f, 0.6f, 20.0f, 0.78f, 0.62f, 0.32f, 0.45f);
         OnVGrad(x, 30.0f, tw, 26.0f, r0, r1, tab_lit[i]);
         if (st && !on)
             OnVGrad(x, 30.0f, tw, 26.0f, h0, h1, 1.0f);
         if (st == 2)
             OnFrame(x + 1.0f, 31.0f, tw - 2.0f, 24.0f, 1.0f, 1.0f, 0.30f, 0.22f, 1.0f);
         OnText(t, x + tw * 0.5f, 36.0f, 1, 0.48f, tw - 8.0f,
-               on ? OnWhite : st ? OnPale : OnDim, 1.0f);
+               on ? OnAmber : st ? OnWhite : OnPale, 1.0f);
         if (i == OS_PROFILE && nin + ninv > 0) {
             /* what waits: red and beating while some of it is new, quiet
              * once it has been seen */
@@ -14650,6 +14791,7 @@ void FE_Task_Online(void)
         endMP();
         PopFETaskDeferred();
         PortOnlineLeaving = 1;
+        PortOnlineBGFree();
     } else if (PortOnlineLeaving && mpnet_session_exists())
         endMP();
 
@@ -14664,6 +14806,7 @@ void FE_Task_Online(void)
     if (GameMode != 1 && isMPConnected()) {
         GameMode = 1;
         PushFETask(0x2a);
+        PortOnlineBGFree();
     }
 }
 

@@ -1152,6 +1152,10 @@ static void read_config(const char *dir)
         }
         else if (strcmp(line, "kombo_slide") == 0)     /* mkreact.c, offline only */
             port_kombo_slide = atoi(v) != 0;
+        else if (strcmp(line, "menu_clicks") == 0) {       /* lime_menu.c limePlaySound */
+            extern int port_menu_clicks;
+            port_menu_clicks = atoi(v) != 0;
+        }
         else if (strcmp(line, "corner_buttons") == 0) {    /* GameCode.c */
             extern int port_corner_buttons;
             port_corner_buttons = atoi(v) != 0;
@@ -1474,6 +1478,7 @@ void PortBackLine(char *line, int n)
 /* corner_buttons= and the pad's taps (GameCode.c TogglePauseMenu); here,
  * outside the save states, so a rollback never turns the setting back */
 int port_corner_buttons = 1;
+int port_menu_clicks = 1;           /* AUDIO: the menus' click, on (umk3.ini menu_clicks=) */
 int PortKeyTap;
 
 static void hud_keys(void)

@@ -123,6 +123,7 @@ enum {
     R_PALT, R_PGRAD,                    /* the outfit; the gradient picker */
     R_NOOB,                             /* NOOB SAIBOT ON THE ROSTER (FrontEnd.c) */
     R_CORNER,                           /* the fight's INFO and PAUSE buttons (GameCode.c) */
+    R_CLICKS,                           /* AUDIO: the menus' click sound (lime_menu.c) */
     R_SLIDE,                            /* KOMBO SLIDE (mkreact.c t_ccp3) */
     R_MUSIC, R_SFX,                     /* AUDIO's bars (lime_menu.c) */
     R_AUDIODEV, R_GPU                   /* SOUND OUTPUT, GRAPHICS CARD: at the next start */
@@ -755,6 +756,9 @@ static void build(void)
         snprintf(pc, sizeof pc, "%d%%", port_sfx_pct);
         add(R_SFX, 0, tx("EFECTOS Y VOCES", "EFFECTS AND VOICES"), "%s",
             ui_bar_value(v, sizeof v, port_sfx_pct / 100.0f, pc));
+        /* Mary: a press in the menus can be silenced */
+        add(R_CLICKS, 0, tx("SONIDO AL PULSAR EN MENUS", "MENU CLICK SOUND"), "< %s >",
+            port_menu_clicks ? tx("ACTIVADO", "ON") : tx("SILENCIADO", "MUTED"));
         add(R_AUDIODEV, 0, tx("SALIDA DE SONIDO", "SOUND OUTPUT"), "< %s >",
             aud_index() ? g_auds[aud_index() - 1] : tx("LA DEL SISTEMA", "THE SYSTEM'S"));
         add(R_HEAD, 0, tx("  SALIDA: AL REINICIAR EL JUEGO", "  OUTPUT: AT THE NEXT START"), "");
@@ -894,7 +898,7 @@ static int has_value(int kind)
 {
     switch (kind) {
     case R_DISPLAY: case R_MONITOR: case R_RES: case R_RRES: case R_AA: case R_TEXQ:
-    case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_SMOOTH: case R_SMODEL: case R_VSYNC: case R_LOWLAT: case R_NOOB: case R_CORNER: case R_SLIDE: case R_AUDIODEV: case R_GPU: case R_PLAYER: case R_LAYOUT:
+    case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_SMOOTH: case R_SMODEL: case R_VSYNC: case R_LOWLAT: case R_NOOB: case R_CORNER: case R_CLICKS: case R_SLIDE: case R_AUDIODEV: case R_GPU: case R_PLAYER: case R_LAYOUT:
     case R_RTSHADOW: case R_AO: case R_AODBG: case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE: case R_PCOLOR2:
     case R_PICONS:
         return 1;
@@ -1172,6 +1176,10 @@ static void change(int kind, int d)
         port_corner_buttons = !port_corner_buttons;
         g_dirty = 1;
         return;
+    case R_CLICKS:                      /* at once (lime_menu.c limePlaySound) */
+        port_menu_clicks = !port_menu_clicks;
+        g_dirty = 1;
+        return;
     case R_SLIDE:                       /* at once (mkreact.c) */
         port_kombo_slide = !port_kombo_slide;
         g_dirty = 1;
@@ -1400,6 +1408,12 @@ static int drop_fill(int kind)
         snprintf(L[1], 48, "%s", tx("VISIBLES", "SHOWN"));
         n = 2;
         g_drop_cur = port_corner_buttons ? 1 : 0;
+        break;
+    case R_CLICKS:
+        snprintf(L[0], 48, "%s", tx("SILENCIADO", "MUTED"));
+        snprintf(L[1], 48, "%s", tx("ACTIVADO", "ON"));
+        n = 2;
+        g_drop_cur = port_menu_clicks ? 1 : 0;
         break;
     case R_AUDIODEV:
         snprintf(L[0], 48, "%s", tx("LA DEL SISTEMA", "THE SYSTEM'S"));
@@ -2393,6 +2407,7 @@ static void save_ini(void)
     put("smooth_anims", "%d", port_smooth_anims);
     put("noob_saibot", "%d", port_noob_saibot);
     put("corner_buttons", "%d", port_corner_buttons);
+    put("menu_clicks", "%d", port_menu_clicks);
     put("kombo_slide", "%d", port_kombo_slide);
     put("music_volume", "%d", port_music_pct);
     put("sfx_volume", "%d", port_sfx_pct);

@@ -1036,8 +1036,16 @@ void limeInit(void)
 void limePlaySound(long h, float v, float p, long f)
 {
     extern double port_prof_ms[5];
+    extern long SFXHandle[];
+    extern int port_menu_clicks;        /* AUDIO: the menus' clicks (Mary) */
     double plat_time(void);
-    double t0 = plat_time();
+    double t0;
+
+    /* every menu's press is SFXHandle[26] (FrontEnd.c TouchAreaWH,
+     * DrawButtonNew, the OPTIONS panel; GameCode.c's INFO and PAUSE) */
+    if (!port_menu_clicks && h == SFXHandle[26])
+        return;
+    t0 = plat_time();
     play_sound(h, v, p, f);
     port_prof_ms[1] += (plat_time() - t0) * 1000.0;
 }
