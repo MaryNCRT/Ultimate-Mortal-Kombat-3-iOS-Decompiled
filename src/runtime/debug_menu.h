@@ -159,6 +159,7 @@ int  dbg_clock_frozen(void);
  * it the frame while it is open, as the settings menu. */
 int  stage_menu_gate(long *level);
 int  stage_menu_is_open(void);
+void stage_menu_preview(int list);   /* UMK3_STAGE_PREVIEW, the capture aid */
 /* Online, the guest sees the host's STAGE SELECT: the host's stage as it
  * moves (the packet), each frame the guest waits (1 while the host's window
  * is up), the end of the wait, and the window drawn over the guest's frame. */

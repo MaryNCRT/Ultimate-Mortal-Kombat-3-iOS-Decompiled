@@ -8,7 +8,22 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased (after 0.4.1)
+## 0.4.2 beta (2026-11-07)
+
+- **STAGE SELECT in the ONLINE screen's look and life** (Mary): the chosen
+  stage large behind everything, dimmed; a stone panel in gold and bronze
+  rising in; the heading's steel plate; the picture in a gold frame with
+  gold chevrons, sliding in from the side it was turned to; in the list,
+  the pictures lit under the mouse and the chosen one pulsing red; the
+  buttons the ONLINE plates, SELECT the red one. The ONLINE pieces are lent
+  by FrontEnd.c (`PortSkin*`, `OnButtonLook` split from `OnButton`).
+  `UMK3_STAGE_PREVIEW=<tick>[:list]` opens it for a screenshot.
+- The launcher's player badge is the game's ONLINE top badge -- a small
+  Player Banner, the fighter out of its end, the name and EDIT PROFILE --
+  docked in the command bar's left end, the gradient to its slanted tip.
+- PROFILE: IDENTITY and the background's editor side by side; the banner's
+  steel grain laid in overlay, so the gradient keeps its colour; the ONLINE
+  banner's grain only in shade, with the launcher's slow moving light.
 
 - **The launcher renewed** (Mary's brief): UMK3 Xbox 360's menu kept in
   its places -- the rings, the menu down the curve, the description box, the

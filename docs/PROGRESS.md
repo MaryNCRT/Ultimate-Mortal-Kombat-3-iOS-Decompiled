@@ -96,7 +96,15 @@ traced to the binary's own mechanism before anything is changed.
 
 ---
 
-## Detailed log (newest first)
+## 0.4.2 beta (2026-11-07)
+
+- Released: the launcher renewal and PROFILE rebuild (below), the shared
+  Player Banner, the icon as the favourite, Esc's PROFILE page gone, and
+  STAGE SELECT drawn in the ONLINE skin (`debug_menu.c` stage_menu_draw +
+  FrontEnd.c `PortSkin*`), with animations. Claude captured both STAGE
+  SELECT views (`UMK3_STAGE_PREVIEW`) and every launcher section; Mary
+  approved the launcher. STAGE SELECT has not been played through by Mary
+  in a real VS / online pick before release.
 
 ## Launcher renewal, PROFILE rebuilt, one fighter (2026-11-07)
 

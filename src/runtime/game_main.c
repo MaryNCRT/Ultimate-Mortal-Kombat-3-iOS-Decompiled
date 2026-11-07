@@ -4005,6 +4005,13 @@ int main(int argc, char **argv)
                     q++;
             }
         }
+        {   /* UMK3_STAGE_PREVIEW=<tick>[:list]: STAGE SELECT for a screenshot */
+            static const char *sp;
+            static int sp_read;
+            if (!sp_read) { sp = getenv("UMK3_STAGE_PREVIEW"); sp_read = 1; }
+            if (sp && ticks == atol(sp))
+                stage_menu_preview(strstr(sp, "list") != NULL);
+        }
         if (shot_at > 0 && ticks >= shot_at) {
             save_shot(ww, wh);
             break;
