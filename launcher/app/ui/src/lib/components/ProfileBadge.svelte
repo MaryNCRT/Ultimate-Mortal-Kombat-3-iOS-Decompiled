@@ -43,7 +43,7 @@
 
 {#if p}
     <button class="badge" class:docked onclick={open}>
-        <span class="plate" style:background-image="linear-gradient(90deg, rgba(0,0,0,.3), rgba(0,0,0,0) 30%), var(--tex-grain), {grad}"><i class="sheen"></i></span>
+        <span class="plate" style:--g={grad} style:background-image="linear-gradient(90deg, rgba(0,0,0,.3), rgba(0,0,0,0) 30%), var(--tex-grain), {grad}"><i class="sheen"></i></span>
         <canvas bind:this={cv} width="160" height="160"></canvas>
         <span class="txt">
             <b>{p.name || tx('profDefault')}</b>
@@ -58,7 +58,18 @@
         width: calc(var(--u) * 18.5); height: calc(var(--u) * 5);
         padding: 0; border: 0; background: none; cursor: pointer; text-align: left;
     }
-    .badge.docked { position: absolute; top: 50%; right: auto; left: calc(var(--u) * 4.4); transform: translateY(-50%); }
+    /* docked: filling the bar's left end, cut on its slant, the gradient
+     * right to the tip (Mary) */
+    .badge.docked { position: absolute; top: 2px; bottom: 2px; left: 2px; right: auto; height: auto; width: calc(var(--u) * 22); }
+    .badge.docked .plate {
+        clip-path: polygon(calc(var(--u) * 3.4) 0, 100% 0, 100% 100%, 0 100%);
+        border-left: 0; background-image: var(--tex-grain), var(--g) !important;
+        background-size: auto, 100% 100%; background-blend-mode: overlay, normal;
+    }
+    .badge.docked::before { left: calc(var(--u) * 3.4); right: 0; top: 0; height: 3px; }
+    .badge.docked::after { left: 0; right: 0; bottom: 0; height: 3px; }
+    .badge.docked canvas { left: calc(var(--u) * 2.6); }
+    .badge.docked .txt { left: calc(var(--u) * 9); }
     .plate {
         position: absolute; inset: 0; overflow: hidden; display: block;
         background-size: 100% 100%, auto, 100% 100%;
