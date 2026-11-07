@@ -4,7 +4,7 @@
      * a recent one can be kept for good; any can be exported for someone
      * else, and theirs imported. */
     import { onMount } from 'svelte';
-    import { app, tx, save, setStatus } from '#lib/app.svelte.js';
+    import { app, tx, save, setStatus, rebuildAfterUpdate } from '#lib/app.svelte.js';
     import { api } from '#lib/platform.js';
     import { selectBlip, hoverBlip } from '#lib/sound.js';
     import Page from '#lib/components/Page.svelte';
@@ -31,7 +31,9 @@
     async function watch(r) {
         selectBlip();
         const res = await api.replaysPlay(r.folder, r.name);
-        if (!res.ok)
+        if (res.rebuild)                /* an update to compile first */
+            rebuildAfterUpdate();
+        else if (!res.ok)
             setStatus('need', tx('rpPlayFail'));
         else
             setStatus('playing', tx('statusPlaying'));

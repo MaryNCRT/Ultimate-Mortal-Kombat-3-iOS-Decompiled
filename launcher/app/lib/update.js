@@ -201,6 +201,8 @@ function installLinux(root, src, dest, upd) {
         'root=' + shq(root), 'src=' + shq(src), 'log="$root/update/apply.log"',
         'echo "update $(date)" > "$log"',
         'i=0; while kill -0 ' + process.pid + ' 2>/dev/null && [ $i -lt 120 ]; do sleep 0.5; i=$((i+1)); done',
+        /* still there after a minute: stopped, and the game with it */
+        'kill -9 ' + process.pid + ' 2>/dev/null; pkill -9 -f "$root/umk3-game" 2>/dev/null; sleep 1',
         'fail=0',
         'for d in "$src"/*/; do',
         '  n=$(basename "$d")',
@@ -211,7 +213,7 @@ function installLinux(root, src, dest, upd) {
         'for f in "$src"/*; do [ -f "$f" ] && { cp -af "$f" "$root/" >>"$log" 2>&1 || fail=1; }; done',
         'chmod +x "$root/UMK3-Launcher" "$root/chrome_crashpad_handler" 2>/dev/null',
         'if [ $fail -ne 0 ]; then mv "$root/update/pending.json" "$root/update/failed.json"',
-        'else mv "$root/update/pending.json" "$root/update/installed.json"; fi',
+        'else mv "$root/update/pending.json" "$root/update/installed.json"; rm -rf "$root/build/obj" "$root/build/obj64"; date > "$root/update/needs-build"; fi',
         'rm -rf ' + shq(dest) + ' "$root"/update/*.tar.gz',
         'cd "$root" && nohup "$root/UMK3-Launcher" >/dev/null 2>&1 &',
     ].join('\n') + '\n';
@@ -245,6 +247,11 @@ function install(root, zip, rel) {
         '  if (-not $left) { break }',
         '  Start-Sleep -Milliseconds 500',
         '}',
+        /* Mary: an update must reach the player whatever was left open, so
+         * what still runs from this folder -- a launcher that did not close,
+         * its helpers, the game itself -- is stopped, not waited for */
+        '$left = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and ($_.Path.StartsWith($bin, "OrdinalIgnoreCase") -or ($_.Path.StartsWith($root, "OrdinalIgnoreCase") -and $_.ProcessName -like "umk3-*")) }',
+        'if ($left) { "stopping " + (($left | ForEach-Object { $_.ProcessName }) -join ", ") | Out-File $log -Append -Encoding utf8; $left | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1 }',
         '$fail = $false',
         '$mirrored = @()',
         'foreach ($d in @(' + MIRROR.map(psq).join(', ') + ')) {',
@@ -260,7 +267,12 @@ function install(root, zip, rel) {
         '& robocopy @rc | Out-File $log -Append -Encoding utf8',
         'if ($LASTEXITCODE -ge 8) { $fail = $true; "robocopy rest -> $LASTEXITCODE" | Out-File $log -Append -Encoding utf8 }',
         'if ($fail) { Rename-Item (Join-Path $root "update\\pending.json") "failed.json" -Force }',
-        'else { Rename-Item (Join-Path $root "update\\pending.json") "installed.json" -Force }',
+        'else { Rename-Item (Join-Path $root "update\\pending.json") "installed.json" -Force',
+        /* the game is compiled again from nothing before it can be played:
+         * the objects go, and needs-build stays until a compile succeeds
+         * (main.js), even when the launcher is opened by hand */
+        '  foreach ($o in @("build\\obj", "build\\obj64")) { Remove-Item -LiteralPath (Join-Path $root $o) -Recurse -Force -ErrorAction SilentlyContinue }',
+        '  Set-Content -LiteralPath (Join-Path $root "update\\needs-build") -Value (Get-Date) -Encoding utf8 }',
         /* the unpacked copy and every archive go either way: a retry downloads again */
         'Remove-Item -LiteralPath ' + psq(dest) + ' -Recurse -Force -ErrorAction SilentlyContinue',
         'Get-ChildItem (Join-Path $root "update") -Filter "*.zip" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue',
@@ -298,4 +310,11 @@ function takeResult(root) {
     return null;
 }
 
-module.exports = { parseVersion, compareVersions, check, download, install, takeResult, unpack, REPO };
+/* An update was installed and the game not yet compiled from it: PLAY
+ * compiles first (Mary: the players who updated kept the old game). */
+const needsBuildPath = root => path.join(root, 'update', 'needs-build');
+const needsBuild = root => fs.existsSync(needsBuildPath(root));
+const builtAfterUpdate = root => fs.rmSync(needsBuildPath(root), { force: true });
+
+module.exports = { parseVersion, compareVersions, check, download, install, takeResult, unpack,
+                   needsBuild, builtAfterUpdate, REPO };

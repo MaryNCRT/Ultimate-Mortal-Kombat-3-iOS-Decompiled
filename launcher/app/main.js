@@ -345,6 +345,8 @@ ipcMain.handle('build:start', async (_ev, ipa) => {
         return { ok: false, code: -3 };
     const code = await bld.build(g_root, ipa, arch(), msg => send('build:data', msg));
     const ok = code === 0 && ini.gameReady(g_root, arch());
+    if (ok)
+        upd.builtAfterUpdate(g_root);   /* the update's game is the one now */
     return { ok, code };
 });
 
@@ -386,9 +388,17 @@ ipcMain.handle('update:install', async () => {
     } catch (err) {
         return { ok: false, error: err.message };
     }
-    setTimeout(() => app.quit(), 400);
+    /* Mary: the update must land, so nothing may hold a file -- the game
+     * is closed and the launcher exits (app.quit can be held up) */
+    if (g_child) {
+        try { g_child.kill(); } catch (_) { /* gone already */ }
+    }
+    setTimeout(() => app.exit(0), 400);
     return { ok: true };
 });
+
+/* An update installed and not yet compiled (lib/update.js needsBuild). */
+ipcMain.handle('update:needsBuild', () => upd.needsBuild(g_root));
 
 /* After apply.ps1 restarted us: what it installed, once. */
 let g_updResult;
@@ -694,6 +704,8 @@ let g_child = null;
 async function startGame(online) {
     if (!ini.gameReady(g_root, arch()))
         return { ok: false };
+    if (upd.needsBuild(g_root))         /* an update not yet compiled: that first */
+        return { ok: false, rebuild: true };
     if (g_child && online) {
         if (online.join)
             fs.writeFileSync(path.join(g_root, 'online_join.txt'), online.join + '\n');
@@ -767,6 +779,8 @@ ipcMain.handle('replays:open', () => {
 ipcMain.handle('replays:play', (_ev, folder, name) => {
     if (!ini.gameReady(g_root, arch()) || !replays.filePath(g_root, folder, name))
         return { ok: false };
+    if (upd.needsBuild(g_root))
+        return { ok: false, rebuild: true };
     stepAside(bld.play(g_root, ini.gameExe(arch()), ['--replay', `replays/${folder}/${name}`]));
     return { ok: true };
 });

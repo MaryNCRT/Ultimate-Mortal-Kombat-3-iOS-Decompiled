@@ -60,6 +60,7 @@ contextBridge.exposeInMainWorld('umk3', {
     checkUpdate: () => ipcRenderer.invoke('update:check'),
     installUpdate: () => ipcRenderer.invoke('update:install'),
     updateResult: () => ipcRenderer.invoke('update:result'),
+    updateNeedsBuild: () => ipcRenderer.invoke('update:needsBuild'),
     onUpdateProgress: cb => ipcRenderer.on('update:progress', (_e, d) => cb(d)),
     onGameClosed: cb => ipcRenderer.on('game:closed', () => cb()),
     modsList: () => ipcRenderer.invoke('mods:list'),
