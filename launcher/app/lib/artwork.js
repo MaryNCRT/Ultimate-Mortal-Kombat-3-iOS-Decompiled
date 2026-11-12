@@ -65,7 +65,7 @@ function readJson(file, d) {
 /* ------------------------------------------------------- selections ---- */
 function emptySelections() {
     return {
-        game: { name: 'Ultimate Mortal Kombat 3 IOs Decomp', steamgriddb: GAME_ID,
+        game: { name: 'Ultimate Mortal Kombat 3 IOS Decomp', steamgriddb: GAME_ID,
                 source: `https://www.steamgriddb.com/game/${GAME_ID}` },
         downloaded: {},
         selected: { grid: null, wide: null, hero: null, logo: null, icon: null },

@@ -10,6 +10,15 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
+- **STEAM** in the launcher: ADD TO STEAM puts the launcher in the Steam
+  library as "Ultimate Mortal Kombat 3 IOS Decomp" (a non-Steam game, like
+  any other you add by hand). It comes with its portrait and wide covers,
+  hero banner, logo and icon from SteamGridDB's page for the game, chosen
+  by itself, and no key is needed. Steam is closed and reopened by itself
+  for it. Other images can be chosen in STEAMGRIDDB and DOWNLOADED. Only
+  your Steam name is shown, never ids. *Mary confirmed the game added to
+  her Steam library.*
+
 - **LOBBIES in the ONLINE screen** (Mary): the open lobbies, refreshed
   every 5 seconds and with REFRESH, ALL or only those with MY RULES, a box
   that finds a lobby by its name as you type or joins one by its key;

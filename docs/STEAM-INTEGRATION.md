@@ -2,11 +2,11 @@
 
 The launcher's **STEAM** section (the menu's line before QUIT) puts the
 launcher into the player's Steam library as a non-Steam game named
-**Ultimate Mortal Kombat 3 IOs Decomp**. It also downloads that game's
+**Ultimate Mortal Kombat 3 IOS Decomp**. It also downloads that game's
 artwork from SteamGridDB into the game folder and copies the chosen pictures
 into Steam.
 
-Status (2026-11-12): **built and tested against a fake Steam folder and a
+Status (2026-11-12): **Mary confirmed the game added to her Steam library.** Built and tested against a fake Steam folder and a
 fake SteamGridDB** (`launcher/app/test/steam.test.js`, 10 tests). It was also
 tested in the launcher's page through the harness, against a copy of the
 project machine's own `shortcuts.vdf`. **Not yet tested** against the

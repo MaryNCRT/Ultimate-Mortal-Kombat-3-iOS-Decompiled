@@ -41,7 +41,7 @@ const crypto = require('crypto');
 const { execFile } = require('child_process');
 const vdf = require('./vdf');
 
-const NAME = 'Ultimate Mortal Kombat 3 IOs Decomp';
+const NAME = 'Ultimate Mortal Kombat 3 IOS Decomp';
 const STEAMID64_BASE = 76561197960265728n;
 const KEEP_BACKUPS = 5;
 

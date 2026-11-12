@@ -138,6 +138,7 @@ press COMPILE.
 | Audio | `src/runtime/lime_menu.c` (the game's calls), `platform/win32_audio.c`, `platform/sdl_audio.c` |
 | Renderers | `src/runtime/render/` |
 | Replays, rollback | `src/runtime/rollback*.c` |
+| Launcher STEAM section | `launcher/app/lib/steam.js`, `vdf.js`, `artwork.js`, `steamsync.js`, `ui/src/lib/sections/SecSteam.svelte` ([STEAM-INTEGRATION.md](STEAM-INTEGRATION.md)) |
 | Mods in the game | `src/runtime/mods.c`, `skin_mats.c` |
 | Launcher main process | `launcher/app/main.js`, `preload.js`, `lib/` (compile, update, mods, replays, `hub.js` the MOD HUB) |
 | MOD HUB storage | the separate repository MaryNCRT/UMK3-IOS-Mod-Hub: `index.json`, covers in `mods/<id>/`, each mod a release zip; publish with its `publish.js` |
