@@ -6805,6 +6805,25 @@ long t_clock3(MK3THREAD *thread)
     if (*mk3_frame(thread, thread->frame + 1) != 0)
         return -3;
 
+    /* Port, not in the binary: an online fight's TIME rule of 30 or 60
+     * (runtime/online_rules.h). The binary starts every round (and mercy)
+     * at 99; a clock above the rule's time can only be a fresh one, so it
+     * is moved down by the difference. Read from the clock's own digits,
+     * which the rollback snapshots carry, so a resimulated frame does the
+     * same. */
+    {
+        extern int PortRoundTime;
+        long left = obj->field48 * 10 + obj->a10;
+
+        if (PortRoundTime > 0 && left > PortRoundTime) {
+            left -= 99 - PortRoundTime;
+            if (left < 0)
+                left = 0;
+            obj->field48 = (uint32_t)(left / 10);
+            obj->a10 = (uint32_t)(left % 10);
+        }
+    }
+
     *(int16_t *)(G_BYTES + 0x45e) = (int16_t)obj->a10;
     *(int16_t *)(G_BYTES + 0x460) = (int16_t)obj->field48;
 
@@ -9069,6 +9088,7 @@ extern int PortPractice;                /* FrontEnd.c, port: training */
 /* Port, not in the binary: the debug menu's FREEZE CLOCK and INFINITE HEALTH
  * (runtime/debug_menu.c sets them; bit 0 player one, bit 1 player two). */
 int PortDbgClock;
+extern int PortRoundTime;               /* port: runtime/online_rules.c, -1 infinite */
 int PortDbgHealth;
 
 long t_clock4(MK3THREAD *thread)
@@ -9093,7 +9113,8 @@ long t_clock4(MK3THREAD *thread)
         next = (MK3THREADFUNC)t_round_is_over;
     } else if ((((const uint32_t *)RoundParam)[0x2c / 4] & 1) != 0
                || PortPractice          /* port: training stops it too */
-               || PortDbgClock) {       /* port: and the debug menu */
+               || PortDbgClock          /* port: and the debug menu */
+               || PortRoundTime < 0) {  /* port: and an online TIME INFINITE */
         next = (MK3THREADFUNC)t_clock4;         /* the clock is frozen */
     } else {
         obj->field3c = obj->field3c - 1;

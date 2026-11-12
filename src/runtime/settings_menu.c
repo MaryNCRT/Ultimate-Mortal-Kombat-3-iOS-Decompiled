@@ -2358,6 +2358,19 @@ static void put_pad(const char *pre, int player)
 
 static void write_kv(const char *path);
 
+/* One key of umk3.ini, the others kept (the local versus's rules window,
+ * debug_menu.c: vs_rules=). */
+void set_menu_put_key(const char *k, const char *v)
+{
+    const char *path = port_ini_path();
+
+    if (!path || !path[0])
+        return;
+    g_nkv = 0;
+    put(k, "%s", v);
+    write_kv(path);
+}
+
 static void save_ini(void)
 {
     static const char *const kn[10] = {

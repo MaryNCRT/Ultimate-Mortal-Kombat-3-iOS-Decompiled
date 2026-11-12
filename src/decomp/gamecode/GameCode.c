@@ -4969,9 +4969,12 @@ void EASDK_LogEventEnumEnumStringNum(long id, long a, const char *s,
  * Ends with `Write_AchievementsData()` and, if `Settings[2]` is set,
  * `FadeMusicOut = 1`.
  */
+static void port_series_count(int side);    /* port: below, by QuitAsWin */
+
 void QuitAsLose(void)
 {
     JustWon = 0;
+    port_series_count(1);               /* port: player two took it */
 
     if (GameMode == 0) {
         EASDK_LogEventEnumEnumString(0x754e, 15,
@@ -5561,9 +5564,20 @@ extern int    achievementTracker[24];   /* 0x00379c60, see achievements.c */
 
 const char *getLayoutName(int buttons, int custom);
 
+/* Port, not in the binary: a series of fights (runtime/online_rules.h)
+ * counts each one as it ends -- once, before the fade out this starts. */
+static void port_series_count(int side)
+{
+    extern void rules_series_won(int side);
+
+    if ((GameMode == 1 || GameMode == 6) && *FE_FadeAddP == 0.0f)
+        rules_series_won(side);
+}
+
 void QuitAsWin(void)
 {
     JustWon = 1;
+    port_series_count(0);               /* port: player one took the fight */
 
     if (GameMode == 0) {
         EASDK_LogEventEnumEnumString(0x7554, 15,
@@ -6117,6 +6131,7 @@ extern long   DoIntro;                  /* 0x0014e1c0 */
 extern long   WinsNeeded;               /* 0x0014e234 */
 extern long   KarnageScore;             /* 0x0014df88 */
 extern long  *theKode;                  /* pointer slot -> 0x0010ded0 */
+int rules_kode_on(int kode);            /* runtime/online_rules.c, port */
 extern long  *H;                        /* pointer slot */
 extern long  *TrainingCatagoryP;        /* pointer slot -> 0x0017809c */
 
@@ -6331,6 +6346,25 @@ void Task_GameInit(void)
         }
     }
 
+    /* Port, not in the binary: an online (or local versus) fight's rules
+     * (runtime/online_rules.h) -- Best of 1/3/5 is WinsNeeded 1/2/3, and the
+     * round's TIME for the clock (other.c t_clock3 / t_clock4). Both
+     * machines set them here, before frame 0. */
+    {
+        extern int  rules_wins_needed(int binary_value);
+        extern void rules_fight_begin(void);
+        extern void rules_use_mode(int game_mode);
+        extern int  PortRoundTime;
+
+        rules_use_mode((int)GameMode);  /* the online block, or the local versus's */
+        if (GameMode == 1 || GameMode == 6) {
+            WinsNeeded = rules_wins_needed(WinsNeeded);
+            rules_fight_begin();
+        } else {
+            PortRoundTime = 0;
+        }
+    }
+
     timeInGame = 0.0f;
     {   /* port: the moves list's portraits, while the loading screen is up */
         extern void PortMvPreloadPortraits(void);
@@ -6347,7 +6381,26 @@ void Task_GameInit(void)
     for (i = 1; i < 25; i++)
         AnimateIntroCharacterPlayers1Frame(1);
 
+    /* Port, not in the binary: the rules' VS kodes (runtime/online_rules.h)
+     * in place of the one typed on the versus screen, on both machines,
+     * before the binary applies it -- the lowest in theKode, the binary's
+     * one; the others by rules_kode_on where the binary reads theKode */
+    if (GameMode == 1 || GameMode == 6) {
+        extern int rules_kode(void);
+        int k = rules_kode();
+        if (k >= 0)
+            *theKode = k;
+    }
+
     preprocessPostloadKode();
+    /* Port: preprocessPostloadKode's three flags for each of the rules'
+     * kodes, not the one in theKode alone */
+    if (rules_kode_on(2))
+        H[0x18 / 2] = 1;
+    if (rules_kode_on(0x12))
+        H[0x1a / 2] = 1;
+    if (rules_kode_on(0))
+        H[0x1c / 2] = 1;
     puts("########## TASK_GAME_INIT: 10");
 
     if (GameMode == 1 && *theKode == 0x13) {
@@ -6538,6 +6591,18 @@ void ResetFightData(void)
         /* The one whose side rule is inverted -- see the header. */
         SetKodeHandicap(100, 0xa6, 25, 0x29,
                         rb_active() || isParent() == isParentBasedOnSpeed());
+    }
+    /* Port, not in the binary: the rules' kodes can weaken both players at
+     * once (one of 0x0d/0x0e for player one, 0x0f/0x10 for player two):
+     * each side's health as its kode's, the bars 1.66 times it */
+    if (*theKode != 0x13
+        && (rules_kode_on(0x0d) || rules_kode_on(0x0e))
+        && (rules_kode_on(0x0f) || rules_kode_on(0x10))) {
+        long h1 = rules_kode_on(0x0e) ? 25 : 50, h2 = rules_kode_on(0x10) ? 25 : 50;
+        Health[0] = (int)h1;
+        G->healthBar1 = h1 == 25 ? 0x29 : 0x53;
+        Health[1] = (int)h2;
+        G->healthBar2 = h2 == 25 ? 0x29 : 0x53;
     }
 
     FlawlessCounter  = 0;
@@ -8788,6 +8853,17 @@ static void DrawRoundWinCoins(long p)
         limeDrawSprite(CoinTPage, edge + dir * (p ? 82.0f : 50.0f) * s,
                        54.0f * s, HUD_COIN * s, HUD_COIN * s,
                        0.0f, 0.0f, 1.0f, 1.0f, col);
+    /* Port, not in the binary: a Best of 5 (runtime/online_rules.h) wins
+     * more than two rounds -- the third coin and on, 32 apart as the first
+     * two, up to five */
+    {
+        long k;
+        for (k = 2; k < wins && k < 5; k++)
+            limeDrawSprite(CoinTPage,
+                           edge + dir * ((p ? 50.0f : 18.0f) + 32.0f * (float)k) * s,
+                           54.0f * s, HUD_COIN * s, HUD_COIN * s,
+                           0.0f, 0.0f, 1.0f, 1.0f, col);
+    }
 }
 
 /* The hit count and damage lines for one player, and the slider that carries
@@ -9034,7 +9110,7 @@ void DrawHUD(void)
 
     /* Blackout. IsInFinishing suspends it, which is what makes the kode
      * playable at all -- the fatality stays lit. */
-    if (*theKode == 1) {
+    if (*theKode == 1 || rules_kode_on(1)) {       /* port: or the rules' */
         if (lightsOn == 0.0f && !IsInFinishing) {
             limeFillRect(0.0f, 0.0f, (float)limeScreenWidth,
                          (float)limeScreenHeight, 0.0f, 0.0f, 0.0f, 1.0f);
@@ -9103,7 +9179,7 @@ void DrawHUD(void)
      * the whole plate block to the streak line); drawn here, it covered
      * the score at (8, 32). */
     if (GameMode != 3) {
-        if (*theKode != 0x11)
+        if (*theKode != 0x11 && !rules_kode_on(0x11))  /* port: or the rules' */
             DrawPlayerPlate(0);
         DrawRoundWinCoins(0);
     }
@@ -9123,9 +9199,38 @@ void DrawHUD(void)
                        0.0f, 0.0f, 1.0f, 1.0f, col);
 
     /* Karnage is the one mode that never shows player 2's plate. */
-    if (*theKode != 0x11 && GameMode != 3) {
+    if (*theKode != 0x11 && !rules_kode_on(0x11) && GameMode != 3) {   /* port: the rules' */
         DrawPlayerPlate(1);
         DrawRoundWinCoins(1);
+    }
+
+    /* Port, not in the binary: a series of fights' score under the clock
+     * (runtime/online_rules.h), and who has it once it is won */
+    {
+        extern int rules_series_needed(void);
+        extern int rules_series_score(int *p1, int *p2);
+        int need = (GameMode == 1 || GameMode == 6) ? rules_series_needed() : 0;
+
+        if (need) {
+            int a, b, who = rules_series_score(&a, &b);
+            int es = Language[0] == 'E' && Language[1] == 'S';
+            char line[64];
+            int i = 0, k;
+            const char *head = es ? "SERIE " : "SERIES ";
+            const char *tail = who < 0 ? (es ? "  A " : "  FIRST TO ")
+                                       : who == 0 ? (es ? "  GANA J1" : "  P1 WINS")
+                                                  : (es ? "  GANA J2" : "  P2 WINS");
+            for (k = 0; head[k]; k++) line[i++] = head[k];
+            line[i++] = (char)('0' + a % 10);
+            line[i++] = ' '; line[i++] = '-'; line[i++] = ' ';
+            line[i++] = (char)('0' + b % 10);
+            for (k = 0; tail[k]; k++) line[i++] = tail[k];
+            if (who < 0)
+                line[i++] = (char)('0' + need % 10);
+            line[i] = 0;
+            limeDrawFONT(&GameFont, line, (float)(limeScreenWidth / 2),
+                         s * 64.0f, 1, s * 0.7f, fontcol);
+        }
     }
 
     if (DangerMessage[1])
@@ -9269,10 +9374,22 @@ void DrawHUD(void)
             }
         } else {
             /* the round banner, and the only untranslated strings in the file */
+            static char port_banner[16];    /* port: ROUND 5 and on (Best of 5) */
             const char *banner = (Round == 0) ? "ROUND 1"
                                : (Round == 1) ? "ROUND 2"
                                : (Round == 2) ? "ROUND 3"
                                : (Round == 3) ? "ROUND 4" : (const char *)0;
+            if (!banner && Round >= 4 && Round < 99) {
+                int n = (int)Round + 1, i = 6;
+                static const char head[] = "ROUND ";
+                for (i = 0; i < 6; i++)
+                    port_banner[i] = head[i];
+                if (n >= 10)
+                    port_banner[i++] = (char)('0' + n / 10);
+                port_banner[i++] = (char)('0' + n % 10);
+                port_banner[i] = 0;
+                banner = port_banner;
+            }
             if (banner)
                 limeDrawFONT(&GameFont, banner, (float)(limeScreenWidth / 2),
                              FE_HeightScale * 80.0f, 1, FE_WidthScale, fontcol);

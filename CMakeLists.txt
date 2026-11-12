@@ -207,6 +207,10 @@ if(UMK3_BINARY)
                 add_test(NAME logic_headless_runs COMMAND umk3-fight-headless)
                 set_tests_properties(logic_headless_runs PROPERTIES
                     FAIL_REGULAR_EXPRESSION "abort|ABORT|FAIL")
+                # the online rules block (port): text, checks, the clock rule
+                add_executable(test-online-rules tests/online_rules_test.c src/runtime/online_rules.c)
+                target_include_directories(test-online-rules PRIVATE src/runtime)
+                add_test(NAME online_rules COMMAND test-online-rules)
             endif()
         endif()
 
@@ -233,6 +237,7 @@ if(UMK3_BINARY)
                 src/runtime/gamecode_stubs.c
                 src/runtime/mp_net.c
                 src/runtime/online_ui.c
+                src/runtime/online_rules.c
                 src/runtime/lime_menu.c
                 src/runtime/lime_platform.c
                 src/runtime/lime_app.c

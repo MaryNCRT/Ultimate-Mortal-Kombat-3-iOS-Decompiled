@@ -57,6 +57,10 @@
  *   UMK3_SHOTS=<t,t,...>       write umk3-shot-<t>.ppm at each tick, go on
  *   UMK3_ARCADE=<destiny,stage> with --fight: that rung of an Arcade ladder
  *   UMK3_PRACTICE=1            with --fight: as TRAINING, player two stands still
+ *   UMK3_TWOUP=1               with --fight: two players on one PC, the clock running
+ *   UMK3_VSRULES_PREVIEW=<tick>[:hint]  the local versus's VS RULES window at that tick
+ *   UMK3_RULES=<block>         an online fight's rules for every versus fight
+ *                              ("r1;b5;t30;k-1;s1;h1", online_rules.h)
  *   UMK3_PADS=<tick:buttons:hold;...>  player one's pad by script (scripted_pad)
  *   UMK3_SCREENS=<tick:n;...>  open front-end screen n at that tick, so one
  *                              session can walk the whole menu
@@ -94,6 +98,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rollback.h"
+#include "online_rules.h"
 
 #include "platform/platform.h"
 #include "platform/gl.h"
@@ -1274,6 +1279,11 @@ static void read_config(const char *dir)
         }
         else if (strcmp(line, "hide_controls") == 0)
             PortHideControls = atoi(v) != 0;
+        else if (strcmp(line, "vs_rules") == 0) {  /* the local versus's rules */
+            online_rules r;
+            if (v[0] && rules_decode(v, &r))
+                rules_set_local(&r);
+        }
         else if (strncmp(line, "key_", 4) == 0) {
             /* key_<name>=<virtual-key code>, from the launcher's key setup */
             static const char *const names[] = {
@@ -3301,6 +3311,9 @@ int main(int argc, char **argv)
             else if (stage_menu_is_open())      /* STAGE SELECT */
                 stage_menu_mouse(tx / g_virt_w, ty / g_virt_h,
                                  plat_mouse(&mx, &my) && g_ntaps == 0);
+            else if (vs_rules_is_open())        /* VS RULES */
+                vs_rules_mouse(tx / g_virt_w, ty / g_virt_h,
+                               plat_mouse(&mx, &my) && g_ntaps == 0);
             else if (rp_playing() && !dbg_menu_is_open() && g_rp_hidden) {
                 /* HIDE: a click anywhere has the player back -- a new one:
                  * the click that hid it is let go first (a toggle, not a
@@ -3383,6 +3396,10 @@ int main(int argc, char **argv)
                 extern int PortNoKomboSlide;            /* mkreact.c */
                 PortNoKomboSlide = !port_kombo_slide && !rb_active()
                                    && !rp_playing() && GameMode != 1;
+                /* an online fight's KOMBO SLIDE rule (online_rules.h),
+                 * the same on both machines */
+                if ((GameMode == 1 || GameMode == 6) && rules_active())
+                    PortNoKomboSlide = !rules_kombo_slide(1);
             }
             /* another tick follows in this frame: this one's picture is
              * cleared unseen, so its models are drawn as made, not smoothed
@@ -3529,6 +3546,42 @@ int main(int argc, char **argv)
             }
             /* STAGE SELECT (debug_menu.c): the frame is its own while it is
              * up, as the settings menu's; Task_GameInit waits for it */
+            /* VS RULES (port): SELECT -- the pad's, or the moves key -- on
+             * the local versus's select screen opens the fight's rules; the
+             * game stands still under it, as under STAGE SELECT */
+            {
+                static int sel_was;
+                const unsigned pb = (g_pad.connected ? g_pad.buttons : 0)
+                                    | (g_pad2.connected ? g_pad2.buttons : 0);
+                int sel = (pb & (1u << PB_SELECT)) || plat_key(PK_MOVES);
+                extern int FE_CurrentTask;
+
+                if (sel && !sel_was && !vs_rules_is_open() && !set_menu_is_open()
+                    && !dbg_menu_is_open() && CurrentTask == 3
+                    && FE_CurrentTask == 0x1b && GameMode == 6)
+                    vs_rules_open();
+                sel_was = sel;
+            }
+            if (vs_rules_is_open() && !set_menu_is_open()) {
+                const unsigned pb = g_pad.buttons | g_pad2.buttons;
+                vs_rules_keys(plat_key(PK_LEFT) || g_pad.left || g_pad2.left,
+                              plat_key(PK_RIGHT) || g_pad.right || g_pad2.right,
+                              plat_key(PK_UP) || g_pad.up || g_pad2.up,
+                              plat_key(PK_DOWN) || g_pad.down || g_pad2.down,
+                              plat_key(PK_OK) || (pb & (1u << PB_SOUTH))
+                                  || (pb & (1u << PB_START)),
+                              plat_key(PK_BACK) || (pb & (1u << PB_EAST))
+                                  || (pb & (1u << PB_SELECT)) || plat_key(PK_MOVES));
+                clear_frame(ww, wh, vx, vy, vw, vh);
+                if (vs_rules_is_open()) {
+                    use_surface(0);
+                    vs_rules_draw();
+                }
+                render_resolve();
+                acc -= 1.0 / 60.0;
+                g_tick = ++ticks;
+                continue;
+            }
             if (stage_menu_is_open() && !set_menu_is_open()) {
                 const unsigned pb = g_pad.buttons | g_pad2.buttons;
                 stage_menu_keys(plat_key(PK_LEFT) || g_pad.left || g_pad2.left,
@@ -3748,6 +3801,8 @@ int main(int argc, char **argv)
                 lime_tex_prefetch_end();
             }
             stage_menu_watch_draw();    /* the host's STAGE SELECT, online's guest */
+            if (CurrentTask == 3 && FE_CurrentTask == 0x1b && GameMode == 6)
+                vs_rules_hint();        /* SELECT: RULES, the local versus (port) */
             online_after_frame();   /* the ONLINE screens' badges (port) */
             render_resolve();
             if (rp_playing() && g_rp_hidden) {          /* HIDE: the fight alone */
@@ -3865,6 +3920,10 @@ int main(int argc, char **argv)
                     GameMode = 6;               /* PLAY_MODE_TWOUP */
                     PortPractice = 1;
                 }
+                /* UMK3_TWOUP=1: two players on one PC, the clock running --
+                 * for testing an online fight's rules (UMK3_RULES) alone */
+                else if (getenv("UMK3_TWOUP"))
+                    GameMode = 6;
                 CurrentTask = 4;                /* Task_FEDestroy */
                 g_fight_p1 = -1;
                 g_fight_override = 1;
@@ -4011,6 +4070,18 @@ int main(int argc, char **argv)
             if (!sp_read) { sp = getenv("UMK3_STAGE_PREVIEW"); sp_read = 1; }
             if (sp && ticks == atol(sp))
                 stage_menu_preview(strstr(sp, "list") != NULL);
+        }
+        {   /* UMK3_VSRULES_PREVIEW=<tick>[:hint]: the local versus (GameMode
+             * 6) and its VS RULES window, for a screenshot; with UMK3_SCREEN=27
+             * the select screen under it. :hint leaves the window shut. */
+            static const char *vp;
+            static int vp_read;
+            if (!vp_read) { vp = getenv("UMK3_VSRULES_PREVIEW"); vp_read = 1; }
+            if (vp && ticks == atol(vp)) {
+                GameMode = 6;
+                if (!strstr(vp, "hint"))
+                    vs_rules_open();
+            }
         }
         if (shot_at > 0 && ticks >= shot_at) {
             save_shot(ww, wh);

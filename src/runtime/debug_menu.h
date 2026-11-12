@@ -172,5 +172,13 @@ void stage_menu_draw(void);
 void stage_menu_mouse(float fx, float fy, int down);
 void stage_menu_keys(int left, int right, int up, int down, int ok, int back,
                      int tab);
+/* VS RULES (port, 0.4.5): the local versus's rules window, SELECT on its
+ * select screen; the game frozen under it, as under STAGE SELECT. */
+int  vs_rules_is_open(void);
+void vs_rules_open(void);
+void vs_rules_draw(void);
+void vs_rules_mouse(float fx, float fy, int down);
+void vs_rules_keys(int left, int right, int up, int down, int ok, int back);
+void vs_rules_hint(void);
 
 #endif

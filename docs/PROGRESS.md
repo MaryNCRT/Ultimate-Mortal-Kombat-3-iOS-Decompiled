@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-12 (0.4.4 beta in the test folder: the Lost Treasures fixed from the binary, hidden controls ignore clicks, the first start's preset, WHAT'S NEW) · earlier: 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-12 (the ONLINE phase's rules block and the local versus's VS RULES window with its kodes checklist, Mary confirmed) · before: 2026-11-12 (0.4.4 beta in the test folder: the Lost Treasures fixed from the binary, hidden controls ignore clicks, the first start's preset, WHAT'S NEW) · earlier: 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -97,6 +97,45 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## ONLINE phase: the rules block; VS RULES in the local versus (2026-11-12)
+
+The plan and Mary's decisions: [research/ONLINE-PHASE-PLAN.md](research/ONLINE-PHASE-PLAN.md).
+
+- **Rules** (`online_rules.c`, port): ROUNDS a fight 1/3/5 (`WinsNeeded`),
+  a SERIES of separate fights (one, best of 3, best of 5), TIME 30/60/99/
+  infinite, a VS kode, KOMBO SLIDE, HOST ADVANTAGE (stored; applied with
+  the lobbies). Hooks marked in GameCode.c (WinsNeeded, ROUND 5+, coins
+  past two, the kode before `preprocessPostloadKode`, the series counted in
+  QuitAsWin / QuitAsLose and shown under the clock), logic/other.c
+  (`t_clock3` moves a fresh 99 down to the rule's time, from the clock's
+  own digits so a rollback does the same; `t_clock4` frozen for infinite)
+  and game_main.c (KOMBO SLIDE).
+- **VS RULES** (Mary): on the local versus's select screen SELECT (the
+  pad's, or the moves key M) opens the rules in the ONLINE look
+  (`debug_menu.c` `vs_rules_*`, PortSkin pieces): five rows and ORIGINAL /
+  ACCEPT; kept in umk3.ini `vs_rules=`. A line at the bottom left of that
+  screen says SELECT: RULES and what they are.
+- Checked: `tests/online_rules_test.c` passes (ctest `online_rules`); the
+  game builds into the test folder; a scripted versus (`UMK3_TWOUP=1
+  UMK3_RULES=r1;b5;m1;t30;k-1;s1;h1 --fight 15 3 0`) showed the clock from
+  30 and the fight going on at 2-1 and 2-2. **Not seen**: ROUND 5, the third
+  coin, the series line, and the VS RULES window and its hint. A scripted
+  capture of the window jumped to screen 27 outside versus and went into
+  Arcade's tower in Mary's test folder (she saw it); her saves were not
+  written (their times are older). Scripted runs of the menus are not used
+  there again; Mary tries the window.
+- **Kodes as a checklist** (Mary): the KODES row opens a second window
+  where any number are ticked (P1 HALF / QUARTER and P2 HALF / QUARTER
+  exclude each other); the text is `r2`, a bit a kode (`k-1` of version 1
+  still read). The lowest goes to `*theKode`, the others act where the
+  binary reads the kode (`rules_kode_on`): preprocessPostloadKode's three
+  flags, the blackout, the plates, both players' handicaps at once.
+- **Mary's first try** found the select screen's frame rate falling
+  (`begin_2d` without `end_2d` in the window and its hint: the GL matrices
+  were never popped) and the hint over player one's COLOR box (moved up).
+  Both fixed; **Mary played it again and it works** (2026-11-12): the frame
+  rate, the hint, the kodes window.
 
 ## 0.4.4 beta (2026-11-12)
 
