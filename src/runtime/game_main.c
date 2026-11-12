@@ -2655,24 +2655,40 @@ static double g_pace_start;
  * due, and the next refresh is close. */
 static void pace_frame(void)
 {
-    static int off = -1, hz;
+    static int off = -1, hz, screen_hz = -1, forced;
+    static double next_look;
     double now = plat_time(), period;
 
     if (off < 0) {
         off = getenv("UMK3_FRAME_DELAY") && atoi(getenv("UMK3_FRAME_DELAY")) == 0;
-        hz = getenv("UMK3_PACE_HZ") ? atoi(getenv("UMK3_PACE_HZ"))
-                                    : plat_refresh_hz();   /* for tests */
-        /* Vulkan and Direct3D 12 on a 120/180/240 Hz screen: each frame
-         * stays up 2/3/4 refreshes (rgl_swap_interval), and the screen is
-         * paced as one of 60 Hz. Presented once per tick at one refresh, a
-         * frame that ended near a refresh now and then waited one more:
-         * 22 ms, then 11, several times a second (Mary, 180 Hz). */
-        if (rgl_renderer != RGL_OPENGL && hz >= 100) {
-            int n = (hz + 30) / 60;
-            if (n <= 4 && hz >= n * 60 - 3 * n && hz <= n * 60 + 3 * n) {
-                rgl_swap_interval = n;
-                hz /= n;
+        forced = getenv("UMK3_PACE_HZ") ? atoi(getenv("UMK3_PACE_HZ")) : 0;   /* for tests */
+    }
+    /* The screen's refresh, looked at twice a second: the window can be
+     * moved to another monitor (a 60 Hz one beside a 180 Hz main ran at 20
+     * frames a second with the main's interval, Mary). */
+    if (now >= next_look) {
+        int s = forced ? forced : plat_refresh_hz();
+        next_look = now + 0.5;
+        if (s != screen_hz) {
+            screen_hz = s;
+            hz = s;
+            rgl_swap_interval = 1;
+            /* Vulkan and Direct3D 12 on a 120/180/240 Hz screen: each frame
+             * stays up 2/3/4 refreshes (rgl_swap_interval), and the screen is
+             * paced as one of 60 Hz. Presented once per tick at one refresh, a
+             * frame that ended near a refresh now and then waited one more:
+             * 22 ms, then 11, several times a second (Mary, 180 Hz). */
+            if (rgl_renderer != RGL_OPENGL && hz >= 100) {
+                int n = (hz + 30) / 60;
+                if (n <= 4 && hz >= n * 60 - 3 * n && hz <= n * 60 + 3 * n) {
+                    rgl_swap_interval = n;
+                    hz /= n;
+                }
             }
+            g_pace_vbl = -1.0;          /* the gap measured anew */
+            if (getenv("UMK3_LOG_PACE"))
+                printf("pace: screen now %d Hz, each frame %d refresh(es)\n", s,
+                       rgl_swap_interval);
         }
     }
     period = (hz >= 50 && hz <= 65) ? 1.0 / hz : 0.0;

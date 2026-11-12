@@ -809,10 +809,36 @@ int plat_key(int code)
     return (g_key[g_vk[code]] || g_tap[g_vk[code]]) ? 1 : 0;
 }
 
+/* The refresh of the monitor the window is on now. GetDeviceCaps(VREFRESH)
+ * on the window's DC gave the main monitor's: moved to a 60 Hz one from a
+ * 180 Hz main, each frame stayed up three refreshes, 20 frames a second
+ * (Mary). Asked again only when the window changes monitor. */
 int plat_refresh_hz(void)
 {
-    int hz = g_dc ? GetDeviceCaps(g_dc, VREFRESH) : 0;
-    return hz > 1 ? hz : 0;            /* 0 and 1 mean the default */
+    static HMONITOR last;
+    static int last_hz;
+    HMONITOR mon = g_wnd ? MonitorFromWindow(g_wnd, MONITOR_DEFAULTTONEAREST) : NULL;
+    int hz = 0;
+
+    if (mon && mon == last)
+        return last_hz;
+    if (mon) {
+        MONITORINFOEXA mi;
+        DEVMODEA dm;
+        memset(&mi, 0, sizeof mi);
+        mi.cbSize = sizeof mi;
+        memset(&dm, 0, sizeof dm);
+        dm.dmSize = sizeof dm;
+        if (GetMonitorInfoA(mon, (MONITORINFO *)&mi)
+            && EnumDisplaySettingsA(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm))
+            hz = (int)dm.dmDisplayFrequency;
+    }
+    if (hz <= 1)
+        hz = g_dc ? GetDeviceCaps(g_dc, VREFRESH) : 0;
+    hz = hz > 1 ? hz : 0;               /* 0 and 1 mean the default */
+    last = mon;
+    last_hz = hz;
+    return hz;
 }
 
 void plat_input_used(void)
