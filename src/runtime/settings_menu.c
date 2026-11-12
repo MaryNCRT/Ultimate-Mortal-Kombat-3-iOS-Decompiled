@@ -495,6 +495,7 @@ static void reset_keys(int player)
     if (!player) {
         plat_bind_key(PK_PAUSE, 'P');
         plat_bind_key(PK_MOVES, 'M');
+        plat_bind_key(PK_RULES, 'R');
     } else {
         plat_bind_key(PK_P2_PAUSE, 0x6f);   /* the keypad's / * 1 */
         plat_bind_key(PK_P2_MOVES, 0x6a);
@@ -505,17 +506,17 @@ static void reset_keys(int player)
 /* ----------------------------------------------------------------- pad */
 
 #define B(x) (1u << PB_##x)
-static const unsigned k_pad_def[17] = {
+static const unsigned k_pad_def[18] = {
     B(WEST), B(SOUTH), B(R1), B(NORTH), B(EAST), B(L1) | B(L2), B(R2),
     B(WEST) | B(NORTH), 0, B(R1), B(SOUTH) | B(EAST), 0, B(L1) | B(L2), B(R2),
-    B(START), B(SELECT), B(HOME),
+    B(START), B(SELECT), B(HOME), B(SELECT),
 };
 
 static void reset_pad(int player)
 {
     int i;
 
-    for (i = 0; i < 17; i++)
+    for (i = 0; i < 18; i++)
         *port_pad_action(player, i) = k_pad_def[i];
 }
 
@@ -565,20 +566,22 @@ static void mask_text(unsigned m, char *out, size_t n)
 }
 
 /* The pad rows: the action's index for port_pad_action, with the labels. */
-static const struct kdef k_pad6[10] = {
+static const struct kdef k_pad6[11] = {
     { 0, "PUNO ALTO", "HIGH PUNCH" }, { 1, "PUNO BAJO", "LOW PUNCH" },
     { 2, "BLOQUEO", "BLOCK" }, { 3, "PATADA ALTA", "HIGH KICK" },
     { 4, "PATADA BAJA", "LOW KICK" }, { 5, "CORRER", "RUN" },
     { 6, "ESPECIAL", "SPECIAL" }, { 14, "PAUSA", "PAUSE" },
     { 15, "LISTA DE MOVIMIENTOS", "MOVES LIST" },
     { 16, "ABRIR AJUSTES", "OPEN SETTINGS" },
+    { 17, "REGLAS DEL VERSUS", "VERSUS RULES" },
 };
-static const struct kdef k_pad5[8] = {
+static const struct kdef k_pad5[9] = {
     { 7, "PUNO", "PUNCH" }, { 9, "BLOQUEO", "BLOCK" },
     { 10, "PATADA", "KICK" }, { 12, "CORRER", "RUN" },
     { 6, "ESPECIAL", "SPECIAL" }, { 14, "PAUSA", "PAUSE" },
     { 15, "LISTA DE MOVIMIENTOS", "MOVES LIST" },
     { 16, "ABRIR AJUSTES", "OPEN SETTINGS" },
+    { 17, "REGLAS DEL VERSUS", "VERSUS RULES" },
 };
 
 static const char *const k_dev[3] = { "auto", "off", "xinput" };
@@ -648,6 +651,8 @@ static void key_row(int code)
         add(R_KEY, code, tx("PAUSA", "PAUSE"), "%s", k);
     else if (code == PK_P2_OK)
         add(R_KEY, code, tx("ACEPTAR", "ACCEPT"), "%s", k);
+    else if (code == PK_RULES)
+        add(R_KEY, code, tx("REGLAS DEL VERSUS", "VERSUS RULES"), "%s", k);
     else
         add(R_KEY, code, tx("LISTA DE MOVIMIENTOS", "MOVES LIST"), "%s", k);
 }
@@ -796,7 +801,7 @@ static void build(void)
     case PAGE_CTL: {
         int five = port_buttons() == 5;
         const struct kdef *d = five ? k_pad5 : k_pad6;
-        int nd = five ? 8 : 10;
+        int nd = five ? 9 : 11;
         const char *dev = port_pad_device(g_player);
         const PLAT_PAD *p = &g_pad[g_player];
 
@@ -825,6 +830,8 @@ static void build(void)
         key_row(PK_MOVES);
         if (g_player)
             key_row(PK_OK);             /* player one's is Enter */
+        else
+            key_row(PK_RULES);          /* one for both: the select screen's */
         add(R_KRESET, 0, tx("RESTABLECER TECLAS", "RESET KEYS"), "");
         break;                          /* the keys' page ends here */
 pad:
@@ -2332,11 +2339,11 @@ static void put(const char *k, const char *fmt, ...)
 
 static void put_pad(const char *pre, int player)
 {
-    static const char *const n6[10] = {
+    static const char *const n6[11] = {
         "hp", "lp", "block", "hk", "lk", "run", "special", "pause", "moves",
-        "settings"
+        "settings", "rules"
     };
-    static const int a6[10] = { 0, 1, 2, 3, 4, 5, 6, 14, 15, 16 };
+    static const int a6[11] = { 0, 1, 2, 3, 4, 5, 6, 14, 15, 16, 17 };
     static const char *const n5[4] = { "p", "b", "k", "r" };
     static const int a5[4] = { 7, 9, 10, 12 };
     char k[24], v[48];
@@ -2344,7 +2351,7 @@ static void put_pad(const char *pre, int player)
 
     snprintf(k, sizeof k, "%s", pre);
     put(k, "%s", port_pad_device(player));
-    for (i = 0; i < 10; i++) {
+    for (i = 0; i < 11; i++) {
         snprintf(k, sizeof k, "%s_%s", pre, n6[i]);
         mask_names(*port_pad_action(player, a6[i]), v, sizeof v);
         put(k, "%s", v);
@@ -2439,6 +2446,7 @@ static void save_ini(void)
     put("key_special", "%d", plat_key_bound(PK_SPECIAL));
     put("key_pause", "%d", plat_key_bound(PK_PAUSE));
     put("key_moves", "%d", plat_key_bound(PK_MOVES));
+    put("key_rules", "%d", plat_key_bound(PK_RULES));
     put("p2key_special", "%d", plat_key_bound(PK_P2_SPECIAL));
     put("p2key_pause", "%d", plat_key_bound(PK_P2_PAUSE));
     put("p2key_moves", "%d", plat_key_bound(PK_P2_MOVES));

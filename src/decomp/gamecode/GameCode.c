@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include "lime_glapi.h"   /* the GL calls' calling convention */
 #include <string.h>   /* memset, for clearSpriteListsAndEvents */
+int snprintf(char *buf, size_t n, const char *fmt, ...);  /* port: training */
 #include "../../runtime/smooth_models.h"   /* port: SMOOTH MODELS, what covers a skin */
 void rgl_shadow_caster(int on);         /* port: REAL-TIME SHADOWS, render/rgl.h */
 
@@ -4516,6 +4517,16 @@ int PortKeyDial;
  * one device, the iPad's DUELO), applied as the P2 touches are. */
 int PortKeyButtonsP2[7];
 int PortKeyDialP2;
+/* Port, not in the binary: DUELO against the CPU (FrontEnd.c p2_slot);
+ * umk3.ini vs_p2=cpu, vs_cpu_level=1..10 */
+int PortVsCpu;
+int PortVsCpuLevel = 5;
+/* Port: training's window and input column, below MovesList */
+void PortTrainReset(void);
+void PortTrainInput(long bits);
+void PortTrainDraw(void);
+void PortTrainSave(void);
+extern int PortTrainMoves, PortTrainInputs;
 extern int PortPractice;                /* FrontEnd.c, port: training */
 extern int PortHideControls;            /* port: hide_controls=1, defined below */
 
@@ -4584,6 +4595,9 @@ void ReadControls(void)
     P2Controls = 0;
     if (GameMode == 6)
         P2Controls = GameMode - 5;
+    if (PortVsCpu || PortPractice)
+        P2Controls = 0;                 /* port: the CPU, or training's still
+                                         * dummy: one player's controls */
 
     /* Port, not in the binary: with the on-screen controls hidden
      * (hide_controls=1, DrawControls draws nothing) a touch or a click must
@@ -6178,13 +6192,18 @@ static void rb_setup(void)
     v[6] = GameMode;
     for (i = 0; i < 10; i++)
         v[7 + i] = Settings[i];
-    v[17] = PortPractice;
+    /* training in bit 0; DUELO against the CPU, its level in bits 8.. (port,
+     * so the word count and older replays stay as they were) */
+    v[17] = PortPractice | (PortVsCpu ? PortVsCpuLevel << 8 : 0);
     if (!rb_fight_setup(v, 18))
         return;
     if (GameMode != 1 && v[6] != 1) {
         for (i = 0; i < 10; i++)
             Settings[i] = v[7 + i];
-        PortPractice = v[17];
+        PortPractice = v[17] & 1;
+        PortVsCpu = (v[17] >> 8) != 0;
+        if (PortVsCpu)
+            PortVsCpuLevel = v[17] >> 8;
     }
     Character1         = v[0];
     Character2         = v[1];
@@ -6209,6 +6228,7 @@ void Task_GameInit(void)
         if (stage_menu_gate(LevelSelectP))
             return;
         rb_setup();                     /* Port, not in the binary */
+        PortTrainReset();               /* Port: training's input column */
         if (GameMode == 1)              /* Port: rollback netcode */
             rb_online_begin((int)Character1, (int)Character2, (int)*LevelSelectP);
     }
@@ -6356,7 +6376,8 @@ void Task_GameInit(void)
         extern void rules_use_mode(int game_mode);
         extern int  PortRoundTime;
 
-        rules_use_mode((int)GameMode);  /* the online block, or the local versus's */
+        /* the online block, or the local versus's -- not in training */
+        rules_use_mode(GameMode == 6 && PortPractice ? 0 : (int)GameMode);
         if (GameMode == 1 || GameMode == 6) {
             WinsNeeded = rules_wins_needed(WinsNeeded);
             rules_fight_begin();
@@ -7712,6 +7733,14 @@ long GameInit_LoadABit(long step)
             P2Controls  = 1;
             AIOn        = 0;
             IsEndurance = 0;
+            /* Port, not in the binary: DUELO against the CPU (FrontEnd.c
+             * p2_slot) -- player two is the drone, as in Arcade */
+            if (PortVsCpu && !PortPractice) {
+                P2Controls = 0;
+                AIOn       = 1;
+            }
+            if (PortPractice)           /* port: training is one player's */
+                P2Controls = 0;
         } else if (GameMode == 2) {             /* training */
             AIOn        = 0;
             IsEndurance = 0;
@@ -7910,6 +7939,9 @@ long GameInit_LoadABit(long step)
             RoundParam[0x0c / 4] = GameMode - 3;
             RoundParam[0x14 / 4] = GameMode - 3;
         }
+        /* Port, not in the binary: DUELO against the CPU, its level 1..10 */
+        if (GameMode == 6 && PortVsCpu && !PortPractice)
+            RoundParam[0x0c / 4] = PortVsCpuLevel - 1;
         /* Port, not in the binary: the debug menu's CPU DIFFICULTY (or
          * UMK3_CPU_DIFF) over the ladder's, 0..9 */
         {
@@ -8594,6 +8626,309 @@ void MovesList(void)
     }
     PortNavAsOk = 0;
     PortFERightEdgeSet(0);
+}
+
+
+/* Port, not in the binary: TRAINING's own screen (Mary). In training
+ * (2 PLAYER with PortPractice) the fight shows, on the right, a window of
+ * player one's fighter (left corner) -- the portrait, the name, and one
+ * section of the moves list: SPECIAL MOVES, FINISHING MOVES or KOMBOS, from the same
+ * tables and icons as the moves list above -- and beside it a column of
+ * what player one presses, newest on top, with how many ticks each was
+ * held. The pause menu turns both (PortTrainMoves 0 off, 1 specials,
+ * 2 finishers, 3 kombos; PortTrainInputs); umk3.ini train_moves= and
+ * train_inputs=. The input is the word GetReal6ButtonJoyBits builds for
+ * the engine: up 0x01, down 0x02, the buttons 0x10..0x200 (HP LP BL HK LK
+ * RUN), the special 0x400, toward 0x800, away 0x1000 -- so the arrows are
+ * the fighter's forward and back, as the moves list writes them. */
+int PortTrainMoves = 1;
+int PortTrainInputs = 1;
+void set_menu_put_key(const char *k, const char *v);   /* settings_menu.c */
+
+#define TRAIN_LOG 16
+static long TrainLogBits[TRAIN_LOG];
+static int  TrainLogTicks[TRAIN_LOG];
+static int  TrainLogN;
+static long TrainPrev;
+
+void PortTrainReset(void)
+{
+    TrainLogN = 0;
+    TrainPrev = 0;
+}
+
+/* One tick of player one's input: a new line when something is pressed
+ * that was not down the tick before, else the top line's count goes on. */
+void PortTrainInput(long bits)
+{
+    long k = bits & (0x01 | 0x02 | 0x3f0 | 0x400 | 0x800 | 0x1000);
+    int i;
+
+    if (k & ~TrainPrev) {
+        for (i = TRAIN_LOG - 1; i > 0; i--) {
+            TrainLogBits[i] = TrainLogBits[i - 1];
+            TrainLogTicks[i] = TrainLogTicks[i - 1];
+        }
+        TrainLogBits[0] = k;
+        TrainLogTicks[0] = 1;
+        if (TrainLogN < TRAIN_LOG)
+            TrainLogN++;
+    } else if (k && TrainLogN && TrainLogTicks[0] < 99)
+        TrainLogTicks[0]++;
+    TrainPrev = k;
+}
+
+void PortTrainSave(void)
+{
+    char v[8];
+
+    snprintf(v, sizeof v, "%d", PortTrainMoves);
+    set_menu_put_key("train_moves", v);
+    snprintf(v, sizeof v, "%d", PortTrainInputs);
+    set_menu_put_key("train_inputs", v);
+}
+
+/* ASCII text at (x, y), left aligned, smaller when wider than `room` */
+static void train_text(const char *ascii, float x, float y, float scale, float room)
+{
+    char buf[256];
+    float w;
+
+    usprintf(buf, UC(ascii));
+    w = (float)limeGetStringWidth(&GameFont, limeUC(buf)) * scale * FE_WidthScale;
+    if (w > room && w > 0.0f)
+        scale *= room / w;
+    limeDrawFONT(&GameFont, limeUC(buf), x, y, 0, scale * FE_WidthScale, fontcol);
+}
+
+/* The same for a game text (already UTF-16) */
+static void train_gtext(const char *ucs, float x, float y, float scale, float room)
+{
+    char buf[256];
+    float w;
+
+    usprintf(buf, UC("%s"), ucs);
+    w = (float)limeGetStringWidth(&GameFont, limeUC(buf)) * scale * FE_WidthScale;
+    if (w > room && w > 0.0f)
+        scale *= room / w;
+    limeDrawFONT(&GameFont, limeUC(buf), x, y, 0, scale * FE_WidthScale, fontcol);
+}
+
+/* A sequence of move icons from x, at most `room` wide */
+static void train_icons(const int *seq, float x, float y, float scale, float room)
+{
+    char buf[128];
+    long cursor = 0, n = 0, i;
+
+    while (n < 15 && seq[n] != -1)
+        n++;
+    PortMvScale = scale;
+    PortMvMeasure = 1;
+    for (i = 0; i < n; i++)
+        cursor = DrawMoveListEntry(seq[i], cursor, 0, y, buf);
+    if ((float)cursor > room && cursor > 0)
+        PortMvScale *= room / (float)cursor;
+    PortMvMeasure = 0;
+    cursor = (long)x;
+    for (i = 0; i < n; i++)
+        cursor = DrawMoveListEntry(seq[i], cursor, 0, y, buf);
+    PortMvScale = 1.0f;
+}
+
+static void train_colour(float r, float g, float b, float save[4])
+{
+    int k;
+
+    for (k = 0; k < 4; k++)
+        save[k] = fontcol[k];
+    fontcol[0] = r;
+    fontcol[1] = g;
+    fontcol[2] = b;
+}
+
+static void train_colour_back(const float save[4])
+{
+    int k;
+
+    for (k = 0; k < 4; k++)
+        fontcol[k] = save[k];
+}
+
+static void train_moves_panel(float px, float py, float pw, float ph)
+{
+    long ch = PLAYER1MODEL;
+    const MOVESLISTENTRY *e;
+    const long *table;
+    char title[128], cap[160];
+    float s = FE_HeightScale, y, room = pw - 10.0f * s, save[4], vs, need, h;
+    long r, n = 0, base = 0, caps = 0;
+    int six = Player1NumButtons != 5, sec = PortTrainMoves;
+    const int *seq[24];
+    const char *nm[24], *cp[24];
+    static char kname[24][32];
+
+    if (ch < 0 || ch >= 26)
+        return;
+    e = &MovesListTab[ch];
+    table = six ? e->section[0].moves6 : e->section[0].moves5;
+
+    /* the section's rows */
+    if (sec == 1 || sec == 2) {
+        int si = sec - 1;
+
+        base = si ? e->section[0].rows : 0;
+        for (r = 0; r < e->section[si].rows && n < 24; r++, n++) {
+            nm[n] = GameTextNoHeader(e->section[si].nameId + r);
+            cp[n] = GameTextNoHeader(e->section[si].captionId + r);
+            seq[n] = (const int *)((const char *)table + (base + r) * 0x40);
+        }
+    } else if (e->rows3) {
+        base = e->section[0].rows + e->section[1].rows;
+        for (r = 0; r < e->rows3 && n < 24; r++, n++) {
+            snprintf(kname[n], sizeof kname[n], "KOMBO %d", (int)r + 1);
+            nm[n] = NULL;
+            cp[n] = NULL;
+            seq[n] = (const int *)((const char *)table + (base + r) * 0x40);
+        }
+    } else {
+        long k = PortKombosRead(ch, six);
+        for (r = 0; r < k && n < 24; r++, n++) {
+            snprintf(kname[n], sizeof kname[n], "KOMBO %d", (int)r + 1);
+            nm[n] = NULL;
+            cp[n] = NULL;
+            seq[n] = PortKomboSeq[r];
+        }
+    }
+    for (r = 0; r < n; r++)
+        if (cp[r]) {
+            usprintf(cap, UC("%s"), cp[r]);
+            caps += PortMvHasCaption(cap);
+        }
+
+    /* rows of 20 units (name 8, icons 10, gap 2), captions 7 more */
+    need = (float)(n ? n : 1) * 22.0f + (float)caps * 7.0f;
+    vs = need > ph / s - 28.0f ? (ph / s - 28.0f) / need : 1.0f;
+    h = (24.0f + need * vs + 4.0f) * s;
+    if (h > ph)
+        h = ph;
+    limeFillRect(px, py, pw, h, 0.0f, 0.0f, 0.0f, 0.6f);
+    limeFillRect(px, py, pw, 1.0f * s, 1.0f, 0.78f, 0.2f, 0.85f);
+
+    {                                   /* the header: portrait, name, section */
+        TEXTURE *t = PortMvPortraitTexture(ch);
+        float sz = 18.0f * s;
+        int w, hh;
+
+        if (t) {
+            lime_extra_texture_size(t, &w, &hh);
+            limeDrawSprite(t, px + 4.0f * s, py + 3.0f * s, hh > 0 ? sz * (float)w / (float)hh : sz,
+                           sz, 0.0f, 0.0f, 1.0f, 1.0f, col);
+        }
+        asciiToUnicode(CharacterNames[ch], title, 0x80);
+        train_colour(1.0f, 0.78f, 0.2f, save);
+        train_gtext(limeUC(title), px + 26.0f * s, py + 3.0f * s, 0.48f, pw - 30.0f * s);
+        train_colour_back(save);
+        train_colour(0.95f, 0.8f, 0.45f, save);
+        if (sec == 1)
+            train_gtext(GameTextNoHeader(0xef), px + 26.0f * s, py + 13.0f * s, 0.3f,
+                        pw - 30.0f * s);
+        else
+            train_text(sec == 2 ? PortMvTx("REMATES", "FINISHING MOVES") : "KOMBOS",
+                       px + 26.0f * s, py + 13.0f * s, 0.3f, pw - 30.0f * s);
+        train_colour_back(save);
+    }
+
+    y = py + 25.0f * s;
+    if (n == 0)
+        train_text("-", px + 6.0f * s, y, 0.4f, room);
+    for (r = 0; r < n; r++) {
+        if (nm[r])
+            train_gtext(nm[r], px + 6.0f * s, y, 0.38f, room);
+        else
+            train_text(kname[r], px + 6.0f * s, y, 0.38f, room);
+        y += 8.5f * s * vs;
+        train_icons(seq[r], px + 6.0f * s, y + 2.0f * s, 0.7f * (vs < 0.8f ? 0.8f : vs), room);
+        y += 12.0f * s * vs;
+        if (cp[r]) {
+            usprintf(cap, UC("%s"), cp[r]);
+            if (PortMvHasCaption(cap)) {
+                train_colour(0.72f, 0.72f, 0.72f, save);
+                train_gtext(cap, px + 6.0f * s, y, 0.28f, room);
+                train_colour_back(save);
+                y += 7.0f * s * vs;
+            }
+        }
+        y += 1.5f * s * vs;
+    }
+}
+
+/* One line's icons: the direction (forward / back as the moves list has
+ * them), then the buttons */
+static int train_line_icons(long k, int *v)
+{
+    static const long bit[7] = { 0x10, 0x20, 0x40, 0x80, 0x100, 0x200, 0x400 };
+    static const int ico[7] = { 6, 7, 10, 8, 9, 11, 12 };
+    int n = 0, i, up = (k & 1) != 0, dn = (k & 2) != 0;
+    int fw = (k & 0x800) != 0, bk = (k & 0x1000) != 0;
+
+    if (dn && fw)       v[n++] = 4;
+    else if (dn && bk)  v[n++] = 5;
+    else if (dn)        v[n++] = 3;
+    else if (up) {
+        v[n++] = 2;
+        if (fw)         v[n++] = 0;
+        else if (bk)    v[n++] = 1;
+    } else if (fw)      v[n++] = 0;
+    else if (bk)        v[n++] = 1;
+    for (i = 0; i < 7; i++)
+        if (k & bit[i])
+            v[n++] = ico[i];
+    v[n] = -1;
+    return n;
+}
+
+static void train_inputs(float x, float y, float w, float h)
+{
+    float s = FE_HeightScale, line = 13.0f * s, save[4];
+    int i, n = TrainLogN, max = (int)(h / line);
+    char t[8];
+
+    if (n > max)
+        n = max;
+    if (n <= 0)
+        return;
+    limeFillRect(x, y, w, (float)n * line + 4.0f * s, 0.0f, 0.0f, 0.0f, 0.5f);
+    for (i = 0; i < n; i++) {
+        int v[12];
+        float yy = y + 3.0f * s + (float)i * line;
+
+        snprintf(t, sizeof t, "%d", TrainLogTicks[i]);
+        train_colour(0.7f, 0.7f, 0.7f, save);
+        train_text(t, x + 3.0f * s, yy + 1.0f * s, 0.3f, 12.0f * s);
+        train_colour_back(save);
+        train_line_icons(TrainLogBits[i], v);
+        train_icons(v, x + 15.0f * s, yy + 1.0f * s, 0.65f, w - 17.0f * s);
+    }
+}
+
+/* Called after DrawHUD in a training fight, not while paused */
+void PortTrainDraw(void)
+{
+    /* Mary: the moves in the left corner, small; what is pressed in the
+     * right one */
+    float s = FE_HeightScale, W = (float)limeScreenWidth;
+    /* under the health bars (to about 52) */
+    float pw = 92.0f * s, px = 4.0f * s, py = 56.0f * s, ph = 200.0f * s;
+    float iw = 64.0f * s;
+
+    if (!PortTrainMoves && !PortTrainInputs)
+        return;
+    limeEnableAlphaBlending_Basic();
+    limeSet2DDrawing();
+    if (PortTrainMoves)
+        train_moves_panel(px, py, pw, ph);
+    if (PortTrainInputs)
+        train_inputs(W - iw - 4.0f * s, py, iw, ph);
 }
 
 
@@ -11325,6 +11660,10 @@ static void Task_GameMain_frame(void)
 
     GetReal6ButtonJoyBits((int)JoystickState, (const int *)ButtonStates,
                           (Mk3Obj_t *)GameObjects, &joy[0], 0);
+    /* Port, not in the binary: training's input column */
+    if (GameMode == 6 && PortPractice && GamePaused == 0 && LIME_Paused == 0
+        && RoundSummary != 1)
+        PortTrainInput(joy[0]);
 
     if (P2Controls != 0)
         GetReal6ButtonJoyBits((int)JoystickStateP2,
@@ -11348,6 +11687,8 @@ static void Task_GameMain_frame(void)
         SmokeEarthFatalCutaway();
 
     DrawHUD();
+    if (GameMode == 6 && PortPractice && GamePaused == 0)
+        PortTrainDraw();                /* Port: training's window */
 
     /* ---- karnage: top the bars up and bank what was taken off them ---- */
     if (GameMode == 3) {
@@ -12249,7 +12590,9 @@ void RenderLevelPlayers(void)
 #define PAUSE_SCALE          1.25f
 #define PAUSE_WIDTH          186.0f
 #define PAUSE_ROW0           6.0f
-#define PAUSE_ROW_PITCH      56.0f
+/* port: training has two rows more (its window and its input column),
+ * so its eight are 40 apart */
+#define PAUSE_ROW_PITCH      ((GameMode == 6 && PortPractice) ? 40.0f : 56.0f)
 #define PAUSE_CONFIRM_LABEL  48.0f
 #define PAUSE_CONFIRM_YES    176.0f
 #define PAUSE_CONFIRM_NO     240.0f
@@ -12513,7 +12856,7 @@ static void UpdateInGamePauseMenu_(void)
     /* ---- the two option strings the rows share ---- */
     usprintf(Menu_GamePaused_Options + 0xc0, UC("%d"), Settings[4]);
 
-    if (GameMode == 6)
+    if (GameMode == 6 && !PortPractice)
         usprintf(Menu_GamePaused_Options + 0x100, UC("%d"), Player2NumButtons);
     else if (Settings[5] == 0)
         usprintf(Menu_GamePaused_Options + 0x100, UC("%s"),
@@ -12579,7 +12922,7 @@ static void UpdateInGamePauseMenu_(void)
         if (PortHideControls)
             usprintf(text, Language[0] == 'E' && Language[1] == 'S'
                            ? UC("LISTA DE MOVIMIENTOS") : UC("MOVES LIST"));
-        else if (GameMode == 6)
+        else if (GameMode == 6 && !PortPractice)
             usprintf(text, UC("%s - %s : %s"),
                      GameTextNoHeader(TXT_BUTTONS_P1),
                      GameTextNoHeader(TXT_LAYOUT_A),
@@ -12610,7 +12953,7 @@ static void UpdateInGamePauseMenu_(void)
              * way to the keys and pads' setup */
             usprintf(text, Language[0] == 'E' && Language[1] == 'S'
                            ? UC("CONFIG. BOTONES") : UC("BUTTON SETUP"));
-        else if (GameMode == 6)
+        else if (GameMode == 6 && !PortPractice)
             usprintf(text, UC("%s - %s : %s"),
                      GameTextNoHeader(TXT_BUTTONS_P2),
                      GameTextNoHeader(TXT_LAYOUT_A),
@@ -12709,6 +13052,50 @@ static void UpdateInGamePauseMenu_(void)
                                          "INGAME PAUSE MENU", 15, "SFX");
             return;
         }
+
+        /* ---- port, not in the binary: training's rows 7 and 8, its
+         * window of moves (off / specials / finishers / kombos) and its
+         * column of what is pressed ---- */
+        if (GameMode == 6 && PortPractice) {
+            static long Touch_Pause7, LastTouch_Pause7, Touch_Pause8, LastTouch_Pause8;
+            static const char *const mv_es[4] = { "NO", "ESPECIALES", "REMATES", "KOMBOS" };
+            static const char *const mv_en[4] = { "OFF", "SPECIALS", "FINISHERS", "KOMBOS" };
+            const int es = Language[0] == 'E' && Language[1] == 'S';
+            char a[96];
+
+            if (PortTrainMoves < 0 || PortTrainMoves > 3)
+                PortTrainMoves = 1;
+            snprintf(a, sizeof a, es ? "MOVIMIENTOS : %s" : "MOVES : %s",
+                     es ? mv_es[PortTrainMoves] : mv_en[PortTrainMoves]);
+            usprintf(text, UC(a));
+            LastTouch_Pause7 = Touch_Pause7;
+            Touch_Pause7 = DrawOptionAsButton(limeUC(text), PAUSE_X,
+                                              PAUSE_ROW0 + 6 * PAUSE_ROW_PITCH,
+                                              PAUSE_SCALE,
+                                              PAUSE_COL(LastTouch_Pause7),
+                                              FE_W(PAUSE_WIDTH));
+            if (PAUSE_RELEASED(LastTouch_Pause7, Touch_Pause7)) {
+                PauseClick();
+                PortTrainMoves = (PortTrainMoves + 1) & 3;
+                PortTrainSave();
+                return;
+            }
+            snprintf(a, sizeof a, es ? "BOTONES EN PANTALLA : %s" : "INPUTS ON SCREEN : %s",
+                     PortTrainInputs ? (es ? "SI" : "ON") : (es ? "NO" : "OFF"));
+            usprintf(text, UC(a));
+            LastTouch_Pause8 = Touch_Pause8;
+            Touch_Pause8 = DrawOptionAsButton(limeUC(text), PAUSE_X,
+                                              PAUSE_ROW0 + 7 * PAUSE_ROW_PITCH,
+                                              PAUSE_SCALE,
+                                              PAUSE_COL(LastTouch_Pause8),
+                                              FE_W(PAUSE_WIDTH));
+            if (PAUSE_RELEASED(LastTouch_Pause8, Touch_Pause8)) {
+                PauseClick();
+                PortTrainInputs ^= 1;
+                PortTrainSave();
+                return;
+            }
+        }
     }
 
     /* ---- act on the selection ---- */
@@ -12768,7 +13155,7 @@ static void UpdateInGamePauseMenu_(void)
     }
 
     if (sel == 4) {                             /* LAYOUT */
-        if (GameMode == 6) {
+        if (GameMode == 6 && !PortPractice) {
             Player2NumButtons++;
             if (Player2NumButtons == PAUSE_BUTTONS_WRAP)
                 Player2NumButtons = PAUSE_BUTTONS_LOW;

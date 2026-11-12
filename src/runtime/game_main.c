@@ -309,6 +309,7 @@ extern int  CurrentTask;
 extern long SplashCount;                /* Task_LoadSplashScreen's frame */
 extern float StaticMeshAmbient[3];      /* CreateFadedRGBS's offset */
 extern int  FE_CurrentTask;
+extern int  PortPractice;             /* FrontEnd.c: training */
 extern long PLAYER1MODEL, PLAYER2MODEL, Character1, Character2, LevelSelect,
             Character2Override;
 extern const char *CharacterNames[26];
@@ -387,6 +388,9 @@ static unsigned g_pad_pause = 1u << PB_START;
 static unsigned g_pad_settings = 1u << PB_HOME;
 static unsigned g_p2pad_settings = 1u << PB_HOME;
 static unsigned g_pad_moves = 1u << PB_SELECT;
+/* port: the pad's VERSUS RULES (pad_rules=, SELECT unless bound) */
+static unsigned g_pad_rules = 1u << PB_SELECT;
+static unsigned g_p2pad_rules = 1u << PB_SELECT;
 
 /* Player two's pad, the same actions and defaults: the launcher's GAMEPAD
  * tab for player two writes p2pad_<action>= and p2pad5_<p|b|k|r>= (port). */
@@ -1081,6 +1085,8 @@ static void read_config_p2(const char *n, const char *v)
             g_p2pad_moves = pad_combo(v);
         else if (strcmp(n + 4, "settings") == 0)
             g_p2pad_settings = pad_combo(v);
+        else if (strcmp(n + 4, "rules") == 0)
+            g_p2pad_rules = pad_combo(v);
     } else if (strncmp(n, "key5_", 5) == 0) {
         for (i = 0; i < 4; i++)
             if (strcmp(n + 5, names5[i]) == 0)
@@ -1272,6 +1278,8 @@ static void read_config(const char *dir)
                 g_pad_moves = pad_combo(v);
             else if (strcmp(line + 4, "settings") == 0)
                 g_pad_settings = pad_combo(v);
+            else if (strcmp(line + 4, "rules") == 0)
+                g_pad_rules = pad_combo(v);
         }
         else if (strcmp(line, "pad") == 0) {  /* auto, off, xinput, vvvv:pppp */
             plat_pad_select(v);
@@ -1279,6 +1287,24 @@ static void read_config(const char *dir)
         }
         else if (strcmp(line, "hide_controls") == 0)
             PortHideControls = atoi(v) != 0;
+        else if (strcmp(line, "train_moves") == 0) {   /* training's window */
+            extern int PortTrainMoves;
+            int n = atoi(v);
+            PortTrainMoves = n >= 0 && n <= 3 ? n : 1;
+        }
+        else if (strcmp(line, "train_inputs") == 0) {
+            extern int PortTrainInputs;
+            PortTrainInputs = atoi(v) != 0;
+        }
+        else if (strcmp(line, "vs_p2") == 0) {     /* DUELO: a person or the CPU */
+            extern int PortVsCpu;
+            PortVsCpu = strcmp(v, "cpu") == 0;
+        }
+        else if (strcmp(line, "vs_cpu_level") == 0) {
+            extern int PortVsCpuLevel;
+            int n = atoi(v);
+            PortVsCpuLevel = n >= 1 && n <= 10 ? n : 5;
+        }
         else if (strcmp(line, "vs_rules") == 0) {  /* the local versus's rules */
             online_rules r;
             if (v[0] && rules_decode(v, &r))
@@ -1299,6 +1325,8 @@ static void read_config(const char *dir)
                 plat_bind_key(PK_PAUSE, atoi(v));
             else if (strcmp(line + 4, "moves") == 0)
                 plat_bind_key(PK_MOVES, atoi(v));
+            else if (strcmp(line + 4, "rules") == 0)
+                plat_bind_key(PK_RULES, atoi(v));
             else if (strcmp(line + 4, "special") == 0)
                 plat_bind_key(PK_SPECIAL, atoi(v));
             else {
@@ -1595,8 +1623,8 @@ int PortMovePlayers(void)
 {
     if (!PortHideControls)
         return 0;
-    if (GameMode != 6)
-        return 1;
+    if (GameMode != 6 || PortPractice)
+        return 1;                       /* training: player one's alone */
     return g_moves_who == 1 ? 1 : g_moves_who == 2 ? 2 : 3;
 }
 
@@ -1642,15 +1670,42 @@ int PortPagesExit(void)
 
 /* Port, not in the binary: START of either pad or the pause keys, once a
  * press -- the select screen's PLAY. */
+/* Player two's START: the second pad's, or the keypad's pause key. */
+static int p2_start_down(void)
+{
+    return (g_pad2.connected && (g_pad2.buttons & (1u << PB_START)))
+           || plat_key(PK_P2_PAUSE);
+}
+
+static int g_start_was2;                /* player two's START, last frame */
+
 int PortStartPress(void)
 {
+    static int was1;
+    extern int PortVsCpu;               /* GameCode.c: DUELO against the CPU */
+    int now1 = (g_pad.connected && (g_pad.buttons & (1u << PB_START)))
+               || plat_key(PK_PAUSE);
+    int now2 = p2_start_down();
+    /* against the CPU, player two's START joins (PortP2Join), it is not OK */
+    int hit = (now1 && !was1) || (now2 && !g_start_was2 && !(PortVsCpu && GameMode == 6));
+
+    was1 = now1;
+    g_start_was2 = now2;
+    return hit;
+}
+
+/* DUELO against the CPU (FrontEnd.c p2_slot, port): player two's START,
+ * pressed this frame -- they join. */
+int PortP2Join(void)
+{
+    extern int PortVsCpu;               /* GameCode.c */
     static int was;
-    int now = (g_pad.connected && (g_pad.buttons & (1u << PB_START)))
-              || (g_pad2.connected && (g_pad2.buttons & (1u << PB_START)))
-              || plat_key(PK_PAUSE) || plat_key(PK_P2_PAUSE);
+    int now = p2_start_down();
     int hit = now && !was;
 
     was = now;
+    if (hit && PortVsCpu)
+        g_start_was2 = 1;               /* the press that joins is not OK too */
     return hit;
 }
 
@@ -2872,6 +2927,8 @@ unsigned *port_pad_action(int player, int i)
         return player ? &g_p2pad_moves : &g_pad_moves;
     if (i == 16)
         return player ? &g_p2pad_settings : &g_pad_settings;
+    if (i == 17)
+        return player ? &g_p2pad_rules : &g_pad_rules;
     none = 0;
     return &none;
 }
@@ -3314,6 +3371,11 @@ int main(int argc, char **argv)
             else if (vs_rules_is_open())        /* VS RULES */
                 vs_rules_mouse(tx / g_virt_w, ty / g_virt_h,
                                plat_mouse(&mx, &my) && g_ntaps == 0);
+            else if (CurrentTask == 3 && FE_CurrentTask == 0x1b && GameMode == 6
+                     && !PortPractice && !dbg_menu_is_open()
+                     && vs_rules_button_mouse(tx / g_virt_w, ty / g_virt_h,
+                                              plat_mouse(&mx, &my) && g_ntaps == 0))
+                down = 0;               /* the RULES button's, not the game's */
             else if (rp_playing() && !dbg_menu_is_open() && g_rp_hidden) {
                 /* HIDE: a click anywhere has the player back -- a new one:
                  * the click that hid it is let go first (a toggle, not a
@@ -3546,19 +3608,23 @@ int main(int argc, char **argv)
             }
             /* STAGE SELECT (debug_menu.c): the frame is its own while it is
              * up, as the settings menu's; Task_GameInit waits for it */
-            /* VS RULES (port): SELECT -- the pad's, or the moves key -- on
-             * the local versus's select screen opens the fight's rules; the
-             * game stands still under it, as under STAGE SELECT */
+            /* VS RULES (port): the RULES key (CONTROLS, R unless bound),
+             * the pad's VERSUS RULES button (SELECT unless bound) or the
+             * RULES button in the top left corner on the local versus's
+             * select screen opens the fight's rules; the game stands still
+             * under it, as under STAGE SELECT */
             {
                 static int sel_was;
-                const unsigned pb = (g_pad.connected ? g_pad.buttons : 0)
-                                    | (g_pad2.connected ? g_pad2.buttons : 0);
-                int sel = (pb & (1u << PB_SELECT)) || plat_key(PK_MOVES);
+                int sel = plat_key(PK_RULES)
+                          || (g_pad.connected && g_pad_rules
+                              && (g_pad.buttons & g_pad_rules) == g_pad_rules)
+                          || (g_pad2.connected && g_p2pad_rules
+                              && (g_pad2.buttons & g_p2pad_rules) == g_p2pad_rules);
                 extern int FE_CurrentTask;
 
                 if (sel && !sel_was && !vs_rules_is_open() && !set_menu_is_open()
                     && !dbg_menu_is_open() && CurrentTask == 3
-                    && FE_CurrentTask == 0x1b && GameMode == 6)
+                    && FE_CurrentTask == 0x1b && GameMode == 6 && !PortPractice)
                     vs_rules_open();
                 sel_was = sel;
             }
@@ -3571,7 +3637,9 @@ int main(int argc, char **argv)
                               plat_key(PK_OK) || (pb & (1u << PB_SOUTH))
                                   || (pb & (1u << PB_START)),
                               plat_key(PK_BACK) || (pb & (1u << PB_EAST))
-                                  || (pb & (1u << PB_SELECT)) || plat_key(PK_MOVES));
+                                  || (g_pad_rules && (g_pad.buttons & g_pad_rules) == g_pad_rules)
+                                  || (g_p2pad_rules && (g_pad2.buttons & g_p2pad_rules) == g_p2pad_rules)
+                                  || plat_key(PK_RULES));
                 clear_frame(ww, wh, vx, vy, vw, vh);
                 if (vs_rules_is_open()) {
                     use_surface(0);
@@ -3801,8 +3869,9 @@ int main(int argc, char **argv)
                 lime_tex_prefetch_end();
             }
             stage_menu_watch_draw();    /* the host's STAGE SELECT, online's guest */
-            if (CurrentTask == 3 && FE_CurrentTask == 0x1b && GameMode == 6)
-                vs_rules_hint();        /* SELECT: RULES, the local versus (port) */
+            if (CurrentTask == 3 && FE_CurrentTask == 0x1b && GameMode == 6
+                && !PortPractice)
+                vs_rules_hint();        /* the RULES button, the local versus (port) */
             online_after_frame();   /* the ONLINE screens' badges (port) */
             render_resolve();
             if (rp_playing() && g_rp_hidden) {          /* HIDE: the fight alone */

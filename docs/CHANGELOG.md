@@ -8,7 +8,16 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased
+## 0.4.5 beta (2026-11-12)
+
+- **TRAINING has its own screen** (Mary): player one's fighter's moves
+  in a small window in the left corner (SPECIAL MOVES, FINISHING MOVES or
+  KOMBOS, the moves list's own tables), and in the right corner every
+  input pressed, newest on top, with the ticks it was held. With the touch
+  controls hidden the buttons are the player's pad's (or keys'). The pause
+  menu has two rows more: MOVES (OFF / SPECIALS / FINISHERS / KOMBOS) and
+  INPUTS ON SCREEN. Training uses one player's touch controls, and the VS
+  RULES are not applied to it. **Mary played it.**
 
 - **VS RULES in the local versus** (Mary): SELECT on the select screen
   opens the rules in the ONLINE look -- ROUNDS (1/3/5), a SERIES of fights
@@ -17,6 +26,14 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
   each past two round wins. The same rules block will travel with the
   online lobbies. **Mary played it** (the window, the kodes, the frame
   rate).
+- **A RULES button in the select screen's top left corner** (Mary), with
+  the rules under it; a click opens them. Its own key in CONTROLS
+  (VERSUS RULES, R unless changed) and its own pad button (SELECT unless
+  changed); the moves list's key no longer opens them. **Mary played it.**
+- **DUELO against the CPU** (Mary): a box beside OK says who player two
+  is -- PLAYER 2, or CPU and its level (1 to 10). A click changes it, the
+  arrows change the level, and player two's START joins. Against the CPU,
+  player one picks both fighters. **Mary played it.**
 
 ## 0.4.4 beta (2026-11-12)
 
