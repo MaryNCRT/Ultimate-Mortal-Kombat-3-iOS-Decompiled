@@ -71,6 +71,7 @@ Todos se pueden cambiar en el launcher (CONTROLES) o en el juego (`Esc`).
 - **ANIMACIONES SUAVES** (cuadros entre los cuadros del juego) y **SUAVIZAR MODELOS** (el weld y la subdivisión Catmull-Clark de Blender, con control de bordes afilados).
 - **ELEGIR ESCENARIO** antes de las peleas VS, de entrenamiento y en línea, con imagen de cada escenario; la música de la selección sigue sonando en él.
 - **En línea** por LAN o internet (Epic Online Services), netcode con rollback y un retardo de entrada que sigue al ping; las peleas en línea usan siempre los datos del juego (de los mods solo modelos y texturas).
+- **REGLAS DEL VERSUS** (sin publicar): en la selección del versus local, SELECT abre las reglas -- rondas (1/3/5), una serie de peleas (una, al mejor de 3, al mejor de 5), tiempo (30/60/99/infinito), kodes marcados en una lista, kombo slide. Son las mismas que usarán los lobbies en línea.
 - **REPETICIONES:** cada pelea local se graba y se reproduce en el juego con un reproductor completo (pausa, cuadro a cuadro, salto, velocidad).
 - **Mods:** una carpeta por mod en `mods\`; los archivos con el nombre de uno del juego lo reemplazan; datos de las tablas de combate (`data.ini`).
 - **Menú de depuración** (`F2`): cualquier luchador incluidos los jefes, escenario, ronda, hitboxes, estados guardados.

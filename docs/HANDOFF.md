@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-11-12 (0.4.4 beta built into the test folder, not released: the Lost Treasures' opponents from the binary, a click no longer reaching hidden controls, the first start's ORIGINAL / ENHANCED choice, WHAT'S NEW, new folders at the screen's largest resolution with the controls hidden. Before it, release 0.4.3 beta: the replay player in the ONLINE skin, STAGE SELECT without scrolling, the Esc menu's black box fixed; 0.4.2: STAGE SELECT in the ONLINE skin; the launcher renewed in dark blued steel, PROFILE rebuilt around the Player Banner, icon and favourite fighter one, Esc's PROFILE page removed).
+**Last updated:** 2026-11-12 (the ONLINE phase began: the rules block, `online_rules.c`, and the local versus's VS RULES window opened by SELECT, kodes ticked in a checklist; Mary played it. Next: the EOS lobby core, [research/ONLINE-PHASE-PLAN.md](research/ONLINE-PHASE-PLAN.md) stage 2. Before it, 0.4.4 beta: the Lost Treasures' opponents from the binary, a click no longer reaching hidden controls, the first start's ORIGINAL / ENHANCED choice, WHAT'S NEW, new folders at the screen's largest resolution with the controls hidden. Before it, release 0.4.3 beta: the replay player in the ONLINE skin, STAGE SELECT without scrolling, the Esc menu's black box fixed; 0.4.2: STAGE SELECT in the ONLINE skin; the launcher renewed in dark blued steel, PROFILE rebuilt around the Player Banner, icon and favourite fighter one, Esc's PROFILE page removed).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
@@ -146,6 +146,12 @@ press COMPILE.
 
 ## 7. Open work
 
+- **The ONLINE phase** ([research/ONLINE-PHASE-PLAN.md](research/ONLINE-PHASE-PLAN.md)):
+  stage 1, the rules block, is done and in the local versus (SELECT on its
+  select screen); Mary played it. Next, stage 2: the EOS lobby core in
+  `mp_eos.c`. Not seen yet on screen: ROUND 5, the coins past two, the
+  series line under the clock. Scripted runs of the menus are not used in
+  Mary's test folder (one went into Arcade's tower).
 - **0.4.4 released** (2026-11-12): Mary confirmed the Lost Treasures,
   ENHANCED and WHAT'S NEW. The first start's account window and the
   launcher's new FRIENDS went out without her trying them in the launcher.

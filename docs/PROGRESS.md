@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-12 (0.4.4 beta in the test folder: the Lost Treasures fixed from the binary, hidden controls ignore clicks, the first start's preset, WHAT'S NEW) · earlier: 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-12 (the ONLINE phase's rules block and the local versus's VS RULES window with its kodes checklist, Mary confirmed) · before: 2026-11-12 (0.4.4 beta in the test folder: the Lost Treasures fixed from the binary, hidden controls ignore clicks, the first start's preset, WHAT'S NEW) · earlier: 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -125,6 +125,17 @@ The plan and Mary's decisions: [research/ONLINE-PHASE-PLAN.md](research/ONLINE-P
   Arcade's tower in Mary's test folder (she saw it); her saves were not
   written (their times are older). Scripted runs of the menus are not used
   there again; Mary tries the window.
+- **Kodes as a checklist** (Mary): the KODES row opens a second window
+  where any number are ticked (P1 HALF / QUARTER and P2 HALF / QUARTER
+  exclude each other); the text is `r2`, a bit a kode (`k-1` of version 1
+  still read). The lowest goes to `*theKode`, the others act where the
+  binary reads the kode (`rules_kode_on`): preprocessPostloadKode's three
+  flags, the blackout, the plates, both players' handicaps at once.
+- **Mary's first try** found the select screen's frame rate falling
+  (`begin_2d` without `end_2d` in the window and its hint: the GL matrices
+  were never popped) and the hint over player one's COLOR box (moved up).
+  Both fixed; **Mary played it again and it works** (2026-11-12): the frame
+  rate, the hint, the kodes window.
 
 ## 0.4.4 beta (2026-11-12)
 

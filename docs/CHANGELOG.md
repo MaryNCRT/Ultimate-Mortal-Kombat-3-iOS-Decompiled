@@ -8,6 +8,16 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased
+
+- **VS RULES in the local versus** (Mary): SELECT on the select screen
+  opens the rules in the ONLINE look -- ROUNDS (1/3/5), a SERIES of fights
+  (one, best of 3, best of 5), TIME (30/60/99/infinite), KODES, KOMBO
+  SLIDE. Kodes are ticked in their own window, as many as wanted. A coin
+  each past two round wins. The same rules block will travel with the
+  online lobbies. **Mary played it** (the window, the kodes, the frame
+  rate).
+
 ## 0.4.4 beta (2026-11-12)
 
 - **Shao Kahn's Lost Treasures fight their own opponents again** (a GitHub
