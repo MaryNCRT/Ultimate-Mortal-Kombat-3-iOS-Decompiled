@@ -22,7 +22,10 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
   the list with JOIN. FIGHT connects both and goes to the select screen.
   Tested with two copies of the game on one PC: create, join, invite,
   ready, the call, the select screen, the online fight. **Mary has not
-  played it yet.**
+  played it yet.** Mary tried the key (2026-11-12): it works. Then (Mary)
+  the key is the host's to choose, 4 to 12 letters or digits, in CREATE
+  LOBBY (empty: one made up) or changed in the room; checked: a private
+  lobby keyed MARY2026, joined by typing that key.
 - **The players' banners online** (Mary): the online select screen and the
   versus screen show both players in the banner of the ONLINE screen, not
   the old badge. Seen on the select screen. (The fight's names are PR #209's

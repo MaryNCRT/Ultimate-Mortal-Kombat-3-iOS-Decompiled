@@ -60,6 +60,19 @@ void mplobby_set_ready(int ready) { (void)ready; }
 void mplobby_set_rules(const char *rules) { (void)rules; }
 void mplobby_set_name(const char *name) { (void)name; }
 void mplobby_set_priv(int priv) { (void)priv; }
+void mplobby_set_key(const char *key) { (void)key; }
+void mplobby_key_clean(const char *in, char *out, int n)
+{
+    int i, j = 0;
+    for (i = 0; in && in[i] && j < MPLOBBY_KEY_MAX && j < n - 1; i++) {
+        int c = (unsigned char)in[i];
+        if (c >= 'a' && c <= 'z')
+            c -= 32;
+        if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'))
+            out[j++] = (char)c;
+    }
+    out[j] = 0;
+}
 void mplobby_invite(const char *code) { (void)code; }
 int  mplobby_invite_status(void) { return 0; }
 int  mplobby_invites(struct mplobby_invite *out, int max) { (void)out; (void)max; return 0; }
@@ -661,7 +674,8 @@ static unsigned L_retry_at;             /* after a failed update */
 /* what this game wants the lobby to say */
 static char L_me_code[16], L_me_name[64], L_me_look[48];
 static int  L_me_ready, L_me_dirty;
-static char L_w_name[48], L_w_rules[64], L_w_key[8], L_w_go[64];
+static char L_w_name[48], L_w_rules[64], L_w_key[MPLOBBY_KEY_MAX + 4], L_w_go[64];
+static char L_next_key[MPLOBBY_KEY_MAX + 4];  /* the host's own key for the next lobby */
 static int  L_w_priv, L_w_max, L_attr_dirty, L_go_n;
 
 /* the fight call this game was given */
@@ -1099,7 +1113,11 @@ int mplobby_create(const char *name, const char *rules, int priv, int max_member
     L_w_max = max_members;
     L_w_go[0] = 0;
     L_go_n = 0;
-    make_key(L_w_key);
+    if (L_next_key[0]) {                /* the host's own (mplobby_set_key) */
+        copy_str(L_w_key, sizeof L_w_key, L_next_key);
+        L_next_key[0] = 0;
+    } else
+        make_key(L_w_key);
     memset(&o, 0, sizeof o);
     o.ApiVersion = EOS_LOBBY_CREATELOBBY_API_LATEST;
     o.LocalUserId = g_me;
@@ -1254,8 +1272,7 @@ void mplobby_search(const char *rules, const char *key)
     EOS_Lobby_CreateLobbySearchOptions o;
     EOS_LobbySearch_FindOptions fo;
     EOS_HLobbySearch s = NULL;
-    char k[8];
-    int i, j;
+    char k[MPLOBBY_KEY_MAX + 4];
 
     L_nres = 0;
     L_search = 0;
@@ -1271,14 +1288,7 @@ void mplobby_search(const char *rules, const char *key)
     search_param(s, EOS_LOBBY_SEARCH_BUCKET_ID, LOBBY_BUCKET, 0, EOS_CO_EQUAL);
     search_param(s, "ver", MPLOBBY_PROTO, 0, EOS_CO_EQUAL);
     if (key && key[0]) {
-        for (i = j = 0; key[i] && j < 6; i++) {
-            int c = (unsigned char)key[i];
-            if (c >= 'a' && c <= 'z')
-                c -= 32;
-            if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'))
-                k[j++] = (char)c;
-        }
-        k[j] = 0;
+        mplobby_key_clean(key, k, sizeof k);
         search_param(s, "key", k, 0, EOS_CO_EQUAL);
     } else {
         search_param(s, "priv", "0", 0, EOS_CO_EQUAL);
@@ -1440,6 +1450,39 @@ int mplobby_take_call(char *code, int cn, char *who, int wn)
 }
 
 /* ---- public / private, invites (port; stage 3, Mary 2026-11-12) */
+
+/* The key as the host types it: letters and digits, upper case,
+ * MPLOBBY_KEY_MAX at most (Mary: a key of their own). */
+void mplobby_key_clean(const char *in, char *out, int n)
+{
+    int i, j = 0;
+
+    for (i = 0; in && in[i] && j < MPLOBBY_KEY_MAX && j < n - 1; i++) {
+        int c = (unsigned char)in[i];
+        if (c >= 'a' && c <= 'z')
+            c -= 32;
+        if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'))
+            out[j++] = (char)c;
+    }
+    out[j] = 0;
+}
+
+void mplobby_set_key(const char *key)
+{
+    char k[MPLOBBY_KEY_MAX + 4];
+
+    mplobby_key_clean(key, k, sizeof k);
+    if ((int)strlen(k) < MPLOBBY_KEY_MIN)
+        k[0] = 0;                       /* too short: one made up */
+    if (L_state == MPLOBBY_NONE || L_state == MPLOBBY_CREATING) {
+        copy_str(L_next_key, sizeof L_next_key, k);
+        return;
+    }
+    if (L_state != MPLOBBY_IN || !mplobby_am_owner() || !k[0] || !strcmp(k, L_w_key))
+        return;
+    copy_str(L_w_key, sizeof L_w_key, k);
+    L_attr_dirty = 1;
+}
 
 void mplobby_set_priv(int priv)
 {

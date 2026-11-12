@@ -123,7 +123,12 @@ private lobby kept out of a public search, the rules filter.
   when they change); leaving clears it. BACK out of the screen leaves the
   lobby. The rules window keeps EOS ticking (`game_main.c`).
 
-Test aid: `UMK3_LOBBY_TEST=host | join | invite:<code> | accept` drives the
+The key is the host's to choose (Mary): 4..12 letters and digits, in CREATE
+LOBBY (empty: six made up) or changed in the room (`mplobby_set_key`). Two
+lobbies may end up with one key; a key search joins the first found.
+
+Test aid: `UMK3_LOBBY_TEST=host | join | invite:<code> | accept | key:<KEY>`
+(the host's `UMK3_LOBBY_KEY` and `UMK3_LOBBY_PRIV=1`) drives the
 section by itself (two games on one PC: the second with
 `UMK3_EOS_NEW_DEVICE=1`, its own `UMK3_SAVE_DIR` and `UMK3_PROFILES`; start
 the host first, so the two are different EOS users). Seen: create, join

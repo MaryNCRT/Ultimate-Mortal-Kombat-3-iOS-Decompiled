@@ -12302,7 +12302,7 @@ enum { OB_TAB0, OB_SUB0 = OB_TAB0 + OS_N, OB_COPY = OB_SUB0 + PS_N, OB_BOX, OB_F
        OB_LALL, OB_LMINE, OB_LREF, OB_LKEY, OB_LKJOIN, OB_LNAME, OB_LVIS, OB_LPL, OB_LPR,
        OB_LRULES, OB_LCREATE, OB_LCOPY, OB_LREADY, OB_LLEAVE, OB_LFIGHT, OB_LKICK, OB_LPROMO,
        OB_LROW0, OB_LROW_END = OB_LROW0 + 5, OB_LINVOK0 = OB_LROW_END, OB_LINVNO0 = OB_LINVOK0 + 2,
-       OB_LINVBOX = OB_LINVNO0 + 2, OB_LINVFR, OB_LINV,
+       OB_LINVBOX = OB_LINVNO0 + 2, OB_LINVFR, OB_LINV, OB_LMYKEY,
        OB_CARD0, OB_ACT0 = OB_CARD0 + PORT_ROWS, OB_ACT2 = OB_ACT0 + PORT_ROWS,
        OB_N = OB_ACT2 + PORT_ROWS };
 static long  PortOnlineWas[OB_N];
@@ -15121,6 +15121,23 @@ static void PortLobbyTick(void)
                     again = PortOnlineT + 4.0f;
                 }
             }
+            if (!strncmp(e, "key:", 4)) {   /* key:<KEY> joins by that key, then is ready */
+                if (st == MPLOBBY_NONE && !joined && !PortLobbyKeyWait) {
+                    joined = 1;
+                    snprintf(PortLobbyKey, sizeof PortLobbyKey, "%s", e + 4);
+                    mplobby_search(NULL, PortLobbyKey);
+                    PortLobbyKeyWait = 1;
+                    PortLobbyNext = PortOnlineT + 5.0f;
+                    printf("lobby test: searching key %s\n", e + 4);
+                }
+                if (st == MPLOBBY_NONE && joined && !PortLobbyKeyWait && PortOnlineT > PortLobbyNext)
+                    joined = 0;                 /* not there yet: again */
+                if (st == MPLOBBY_IN && !PortLobbyReady) {
+                    PortLobbyReady = 1;
+                    mplobby_set_ready(1);
+                    printf("lobby test: in by key, ready\n");
+                }
+            }
             if (!strcmp(e, "accept")) {
                 struct mplobby_invite iv[1];
                 if (st == MPLOBBY_NONE && !joined && mplobby_invites(iv, 1) > 0) {
@@ -15141,7 +15158,8 @@ static void PortLobbyTick(void)
                     made = 1;
                     rules_encode(&PortLobbyDraft, t, sizeof t);
                     PortLobbyMe();
-                    printf("lobby test: create %d\n", mplobby_create("LOBBY TEST", t, 0, 2));
+                    mplobby_set_key(getenv("UMK3_LOBBY_KEY"));   /* the host's own key */
+                    printf("lobby test: create %d\n", mplobby_create("LOBBY TEST", t, getenv("UMK3_LOBBY_PRIV") != NULL, 2));
                 }
                 if (st == MPLOBBY_IN && !called) {
                     struct mplobby_member m[MPLOBBY_MAX_MEMBERS];
@@ -15194,7 +15212,8 @@ static int PortLobbyHas(const char *name, const char *part)
     return 0;
 }
 
-/* the text is a key: six of the keys' letters and digits */
+/* the text can be a key: letters and digits, MPLOBBY_KEY_MIN..MAX (the
+ * host may choose it, Mary) */
 static int PortLobbyIsKey(const char *s)
 {
     int i;
@@ -15202,7 +15221,18 @@ static int PortLobbyIsKey(const char *s)
     for (i = 0; s[i]; i++)
         if (!((s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= '0' && s[i] <= '9')))
             return 0;
-    return i == 6;
+    return i >= MPLOBBY_KEY_MIN && i <= MPLOBBY_KEY_MAX;
+}
+
+static char PortLobbyMyKey[MPLOBBY_KEY_MAX + 4];     /* CREATE LOBBY's key, empty: made up */
+static char PortLobbyKeyEdit[MPLOBBY_KEY_MAX + 4];   /* the room's key, as the host types it */
+
+/* a key box's text kept to what a key takes */
+static void PortLobbyKeyText(char *s, int n)
+{
+    char k[MPLOBBY_KEY_MAX + 4];
+    mplobby_key_clean(s, k, sizeof k);
+    snprintf(s, (size_t)n, "%s", k);
 }
 
 /* the list and CREATE LOBBY */
@@ -15356,32 +15386,37 @@ static void PortLobbyBrowser(float cx, float cw, float a)
     }
     if (PortOnlineEdit == OB_LNAME)
         PortLobbyNameMine = 1;
-    OnTextBox(OB_LNAME, PortLobbyName, 24, TB_NAME, rx + 10.0f, 89.0f, rw - 20.0f, 20.0f,
+    OnTextBox(OB_LNAME, PortLobbyName, 24, TB_NAME, rx + 10.0f, 88.0f, rw - 20.0f, 19.0f,
               PortFrTx("NOMBRE DE LA SALA", "LOBBY NAME"), a);
     if (!PortLobbyName[0] && PortOnlineEdit != OB_LNAME)
         PortLobbyNameMine = 0;
-    OnText(PortFrTx("VISIBLE", "VISIBILITY"), rx + 12.0f, 118.0f, 0, 0.40f, rw * 0.45f, OnPale, a);
+    OnText(PortFrTx("VISIBLE", "VISIBILITY"), rx + 12.0f, 113.0f, 0, 0.40f, rw * 0.45f, OnPale, a);
     if (OnButton(OB_LVIS, PortLobbyPriv ? PortFrTx("PRIVADA", "PRIVATE") : PortFrTx("P\xc3\x9a" "BLICA", "PUBLIC"),
-                 rx + rw - 92.0f, 115.0f, 82.0f, 17.0f, BT_NORMAL, a))
+                 rx + rw - 92.0f, 111.0f, 82.0f, 16.0f, BT_NORMAL, a))
         PortLobbyPriv = !PortLobbyPriv;
-    OnText(PortFrTx("JUGADORES", "PLAYERS"), rx + 12.0f, 140.0f, 0, 0.40f, rw * 0.45f, OnPale, a);
-    if (OnButton(OB_LPL, "<", rx + rw - 92.0f, 137.0f, 18.0f, 17.0f,
+    OnText(PortFrTx("JUGADORES", "PLAYERS"), rx + 12.0f, 133.0f, 0, 0.40f, rw * 0.45f, OnPale, a);
+    if (OnButton(OB_LPL, "<", rx + rw - 92.0f, 131.0f, 18.0f, 16.0f,
                  PortLobbyMax > 2 ? BT_NORMAL : BT_OFF, a))
         PortLobbyMax--;
     snprintf(line, sizeof line, "%d", PortLobbyMax);
-    OnText(line, rx + rw - 51.0f, 138.0f, 1, 0.50f, 30.0f, OnWhite, a);
-    if (OnButton(OB_LPR, ">", rx + rw - 28.0f, 137.0f, 18.0f, 17.0f,
+    OnText(line, rx + rw - 51.0f, 132.0f, 1, 0.50f, 30.0f, OnWhite, a);
+    if (OnButton(OB_LPR, ">", rx + rw - 28.0f, 131.0f, 18.0f, 16.0f,
                  PortLobbyMax < MPLOBBY_MAX_MEMBERS ? BT_NORMAL : BT_OFF, a))
         PortLobbyMax++;
-    OnText(PortFrTx("REGLAS", "RULES"), rx + 12.0f, 162.0f, 0, 0.40f, rw - 24.0f, OnPale, a);
+    /* the key: the host's own (Mary), or one made up when left empty */
+    OnText(PortFrTx("CLAVE", "KEY"), rx + 12.0f, 153.0f, 0, 0.40f, rw * 0.30f, OnPale, a);
+    OnTextBox(OB_LMYKEY, PortLobbyMyKey, MPLOBBY_KEY_MAX, TB_NAME, rx + rw * 0.36f, 151.0f,
+              rw * 0.64f - 10.0f, 16.0f, PortFrTx("AL AZAR", "MADE UP"), a);
+    PortLobbyKeyText(PortLobbyMyKey, sizeof PortLobbyMyKey);
+    OnText(PortFrTx("REGLAS", "RULES"), rx + 12.0f, 172.0f, 0, 0.40f, rw - 24.0f, OnPale, a);
     {
         char t[ONLINE_RULES_TEXT];
         rules_encode(&PortLobbyDraft, t, sizeof t);
         PortLobbyRulesText(t, l1, sizeof l1, l2, sizeof l2);
     }
-    OnText(l1, rx + 12.0f, 176.0f, 0, 0.34f, rw - 24.0f, OnDim, a);
-    OnText(l2, rx + 12.0f, 187.0f, 0, 0.34f, rw - 24.0f, OnDim, a);
-    if (OnButton(OB_LRULES, PortFrTx("EDITAR REGLAS", "EDIT RULES"), rx + 10.0f, 202.0f, rw - 20.0f, 18.0f,
+    OnText(l1, rx + 12.0f, 185.0f, 0, 0.34f, rw - 24.0f, OnDim, a);
+    OnText(l2, rx + 12.0f, 195.0f, 0, 0.34f, rw - 24.0f, OnDim, a);
+    if (OnButton(OB_LRULES, PortFrTx("EDITAR REGLAS", "EDIT RULES"), rx + 10.0f, 210.0f, rw - 20.0f, 17.0f,
                  BT_NORMAL, a))
         lobby_rules_open(&PortLobbyDraft, PortLobbyDraftDone);
     if (OnButton(OB_LCREATE, mplobby_state() == MPLOBBY_CREATING ? PortFrTx("CREANDO...", "CREATING...")
@@ -15392,6 +15427,9 @@ static void PortLobbyBrowser(float cx, float cw, float a)
         rules_encode(&PortLobbyDraft, t, sizeof t);
         PortLobbyReady = 0;
         PortLobbyMe();
+        if (PortLobbyMyKey[0] && !PortLobbyIsKey(PortLobbyMyKey))
+            PortLobbySay(PortFrTx("CLAVE CORTA: SE USA UNA AL AZAR", "KEY TOO SHORT: ONE IS MADE UP"));
+        mplobby_set_key(PortLobbyMyKey);
         if (!mplobby_create(PortLobbyName[0] ? PortLobbyName : "LOBBY", t, PortLobbyPriv, PortLobbyMax))
             PortLobbySay(PortFrTx("NO SE PUDO CREAR LA SALA", "THE LOBBY COULD NOT BE MADE"));
     }
@@ -15473,9 +15511,28 @@ static void PortLobbyRoom(float cx, float cw, float a)
                                             : PortFrTx("HACER PRIVADA", "MAKE PRIVATE"),
                           rx + rw - 96.0f, 87.0f, 86.0f, 14.0f, BT_NORMAL, a))
         mplobby_set_priv(!in->priv);
-    /* the key: anyone with it finds the lobby, public or private */
-    snprintf(line, sizeof line, PortFrTx("CLAVE %s", "KEY %s"), in->key[0] ? in->key : "-");
-    OnText(line, rx + 12.0f, 105.0f, 0, 0.42f, rw - 80.0f, OnWhite, a);
+    /* the key: anyone with it finds the lobby, public or private; the host
+     * changes it (Enter) */
+    if (owner) {
+        int r;
+        if (PortOnlineEdit != OB_LMYKEY)
+            snprintf(PortLobbyKeyEdit, sizeof PortLobbyKeyEdit, "%s", in->key);
+        OnText(PortFrTx("CLAVE", "KEY"), rx + 12.0f, 105.0f, 0, 0.42f, 40.0f, OnWhite, a);
+        r = OnTextBox(OB_LMYKEY, PortLobbyKeyEdit, MPLOBBY_KEY_MAX, TB_NAME, rx + 50.0f, 102.0f,
+                      rw - 120.0f, 16.0f, PortFrTx("ESCRIBE UNA", "TYPE ONE"), a);
+        PortLobbyKeyText(PortLobbyKeyEdit, sizeof PortLobbyKeyEdit);
+        if (r == 2) {
+            if (PortLobbyIsKey(PortLobbyKeyEdit)) {
+                mplobby_set_key(PortLobbyKeyEdit);
+                PortLobbySay(PortFrTx("CLAVE CAMBIADA", "KEY CHANGED"));
+            } else
+                PortLobbySay(PortFrTx("LA CLAVE LLEVA DE 4 A 12 LETRAS O N\xc3\x9aMEROS",
+                                      "A KEY IS 4 TO 12 LETTERS OR DIGITS"));
+        }
+    } else {
+        snprintf(line, sizeof line, PortFrTx("CLAVE %s", "KEY %s"), in->key[0] ? in->key : "-");
+        OnText(line, rx + 12.0f, 105.0f, 0, 0.42f, rw - 80.0f, OnWhite, a);
+    }
     if (OnButton(OB_LCOPY, PortOnlineWord(PortOnlineCopied > 0.0f ? OT_COPIED : OT_COPY),
                  rx + rw - 64.0f, 103.0f, 54.0f, 14.0f, in->key[0] ? BT_NORMAL : BT_OFF, a)) {
         plat_clipboard_set(in->key);
