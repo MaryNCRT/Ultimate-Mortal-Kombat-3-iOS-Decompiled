@@ -156,8 +156,8 @@ The plan and Mary's decisions: [research/ONLINE-PHASE-PLAN.md](research/ONLINE-P
   pad's, the keypad's pause key) joins and is kept from pressing OK that
   frame. With the CPU player one picks both, as in training. A replay
   keeps it in setup word 17's bits 8.. (training stays bit 0, so the
-  format and older replays are unchanged). Built into the test folder;
-  not played yet.
+  format and older replays are unchanged). **Mary played it, it works**
+  (2026-11-12).
 
 ## 0.4.4 beta (2026-11-12)
 
