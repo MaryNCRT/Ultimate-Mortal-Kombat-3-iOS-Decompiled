@@ -925,8 +925,9 @@ async function artChanged(r) {
 
 ipcMain.handle('steam:status', () => steamsync.status(g_root));
 ipcMain.handle('steam:account', (_ev, ref) => steamsync.chooseAccount(g_root, ref));
-ipcMain.handle('steam:add', (_ev, ref) => steamsync.add(g_root, ref));
-ipcMain.handle('steam:remove', (_ev, ref) => steamsync.remove(g_root, ref));
+/* the button closes Steam itself when it is open, and opens it again after */
+ipcMain.handle('steam:add', (_ev, ref) => steamsync.add(g_root, ref, { closeSteam: true }));
+ipcMain.handle('steam:remove', (_ev, ref) => steamsync.remove(g_root, ref, { closeSteam: true }));
 ipcMain.handle('steam:apply', (_ev, ref) => steamsync.apply(g_root, ref));
 ipcMain.handle('steam:auto', () => steamsync.autoAll(g_root));
 ipcMain.handle('art:setKey', (_ev, key) => artwork.setApiKey(g_root, key));

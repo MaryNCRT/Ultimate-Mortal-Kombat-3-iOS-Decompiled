@@ -270,3 +270,26 @@ test('artwork: with no key at all, ADD TO STEAM puts the game page’s own set i
     for (const sfx of ['p.png', '.png', '_hero.png', '_logo.png', '_icon.png'])
         assert.ok(fs.existsSync(path.join(grid, r.appid + sfx)), sfx);
 });
+
+test('steam: with Steam open, ADD closes it, adds, and opens it again', async () => {
+    const w = fakeWorld();
+    let running = true, closed = 0, started = 0;
+    const st = await sync.status(w.root, w.opts);
+    const o = Object.assign({}, w.opts, { closeSteam: true });
+    delete o.running;
+    /* isSteamRunning reads opts.running: a getter follows the fake Steam */
+    Object.defineProperty(o, 'running', { get: () => running, enumerable: true });
+    o.shutdown = async () => { closed++; running = false; return true; };
+    o.start = () => { started++; running = true; return true; };
+    const r = await sync.add(w.root, st.account, o);
+    assert.ok(r.ok && r.added, JSON.stringify(r));
+    assert.strictEqual(closed, 1);
+    assert.strictEqual(started, 1);
+    /* Steam that will not close: nothing written */
+    const w2 = fakeWorld();
+    const before = fs.readFileSync(w2.vdfFile);
+    const st2 = await sync.status(w2.root, w2.opts);
+    const r2 = await sync.add(w2.root, st2.account, Object.assign({}, w2.opts, { running: true, closeSteam: true, shutdown: async () => false }));
+    assert.strictEqual(r2.error, 'noclose');
+    assert.ok(fs.readFileSync(w2.vdfFile).equals(before));
+});

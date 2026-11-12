@@ -81,19 +81,34 @@ async function apply(root, ref, opts = {}) {
     return { ok: applied.verified, appid, applied, iconPending, inSteam: steam.artworkInSteam(a, appid) };
 }
 
-/* adds (or brings up to date) the shortcut, then the artwork; Steam closed */
+/* Steam open: closed by itself when the player asked (closeSteam), else refused.
+ * Returns { ok, reopen } -- reopen: Steam was closed here, so it is opened again after */
+async function steamClosed(r, opts) {
+    if (!await steam.isSteamRunning(opts)) return { ok: true, reopen: false };
+    if (!opts.closeSteam) return { ok: false, error: 'running' };
+    const install = { path: r.a.install, kind: r.a.kind };
+    if (!await steam.shutdownSteam(install, opts)) return { ok: false, error: 'noclose' };
+    return { ok: true, reopen: true, install };
+}
+
+/* adds (or brings up to date) the shortcut, then the artwork; Steam closed
+ * (by itself with opts.closeSteam, and opened again after) */
 async function add(root, ref, opts = {}) {
-    if (await steam.isSteamRunning(opts)) return { ok: false, error: 'running' };
     const r = await resolve(root, ref, opts);
     if (r.error) return { ok: false, error: r.error };
     if (!r.target) return { ok: false, error: 'noexe' };
-    /* the artwork first, chosen by itself for any slot still empty: the game
-     * arrives in Steam with it (with no key, the game page's own set; no
-     * network: added without) */
+    /* the artwork downloaded before Steam is closed: Steam is shut the least time */
     let auto = null;
     if (opts.autoArt !== false) {
         try { auto = await art.autoPick(root, false, opts.fetch); } catch (e) { auto = { ok: false, error: String(e.message || e) }; }
     }
+    const c = await steamClosed(r, opts);
+    if (!c.ok) return Object.assign({ auto }, c);
+    try { return await addClosed(root, ref, r, auto, opts); }
+    finally { if (c.reopen) steam.startSteam(c.install, opts); }
+}
+
+async function addClosed(root, ref, r, auto, opts) {
     let res;
     try {
         res = steam.upsertShortcut(r.a, r.target, null, opts);
@@ -105,15 +120,16 @@ async function add(root, ref, opts = {}) {
 }
 
 async function remove(root, ref, opts = {}) {
-    if (await steam.isSteamRunning(opts)) return { ok: false, error: 'running' };
     const r = await resolve(root, ref, opts);
     if (r.error) return { ok: false, error: r.error };
+    const c = await steamClosed(r, opts);
+    if (!c.ok) return c;
     try {
         const res = steam.removeShortcut(r.a, r.target, opts);
         return Object.assign({ ok: true }, res);
     } catch (e) {
         return { ok: false, error: 'vdf', detail: String(e.message || e) };
-    }
+    } finally { if (c.reopen) steam.startSteam(c.install, opts); }
 }
 
 /* after a choice changes: copy it to Steam if the shortcut is there */

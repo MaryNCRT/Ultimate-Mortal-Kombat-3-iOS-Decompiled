@@ -49,9 +49,9 @@
         if (app.steamTab === 'browse' && st && st.hasKey && !res && !loading) load();
     });
 
-    async function run(fn) {
+    async function run(fn, what = true) {
         if (busy) return;
-        busy = true;
+        busy = what;
         try { await fn(); } finally { busy = false; await refresh(); }
     }
 
@@ -68,12 +68,12 @@
         else if (r.auto && r.auto.error) t += ' ' + err(r.auto);
         if (r.artwork && r.artwork.iconPending) t += ' ' + tx('stIconPending');
         say(t);
-    });
+    }, 'add');
     const remove = () => run(async () => {
         selectBlip();
         const r = await api.steam.remove(st.account);
         say(r.ok ? tx('stRemovedOk') : err(r), !r.ok);
-    });
+    }, 'remove');
     const auto = () => run(async () => {
         selectBlip();
         const r = await api.steam.auto();
@@ -169,19 +169,18 @@
                 <div class="who">
                     <span class="name">{st.name}</span>
                     <span class="meta">
-                        {#if acc && acc.shortcut}{tx('stIn')} · {tx('stAppId')} {acc.shortcut.appid} · {acc.shortcut.exe}
-                        {:else}{tx('stOut')}{#if acc && acc.appidIfAdded} · {tx('stAppId')} {acc.appidIfAdded}{/if}{/if}
+                        {acc && acc.shortcut ? tx('stIn') : tx('stOut')}
                     </span>
                     {#if acc && acc.error}<span class="meta bad">{acc.error}</span>{/if}
                     {#if acc && acc.shortcut && acc.shortcut.stale}<span class="meta bad">{tx('stStale')}</span>{/if}
                     {#if acc && acc.shortcut && acc.shortcut.copies > 1}<span class="meta bad">{tx('stCopies')}</span>{/if}
                 </div>
                 <div class="tools">
-                    <button class="btn hot" disabled={busy || st.running || !st.target} onpointerenter={hoverBlip} onclick={add}>
-                        {acc && acc.shortcut ? tx('stUpdate') : tx('stAddSteam')}</button>
+                    <button class="btn hot" disabled={busy || !st.target} onpointerenter={hoverBlip} onclick={add}>
+                        {busy === 'add' ? (st.running ? tx('stClosing') : tx('stWorking')) : acc && acc.shortcut ? tx('stUpdate') : tx('stAddSteam')}</button>
                     <button class="btn" disabled={busy} onpointerenter={hoverBlip} onclick={auto}>{tx('stAuto')}</button>
                     <button class="btn" disabled={busy || !(acc && acc.shortcut)} onpointerenter={hoverBlip} onclick={apply}>{tx('stApply')}</button>
-                    <button class="btn danger" disabled={busy || st.running || !(acc && acc.shortcut)} onpointerenter={hoverBlip} onclick={remove}>{tx('stRemove')}</button>
+                    <button class="btn danger" disabled={busy || !(acc && acc.shortcut)} onpointerenter={hoverBlip} onclick={remove}>{tx('stRemove')}</button>
                     <button class="btn" disabled={busy} onpointerenter={hoverBlip} onclick={() => { selectBlip(); refresh(); }}>{tx('stRecheck')}</button>
                 </div>
             </div>
@@ -193,7 +192,7 @@
                     <div class="slot s-{slot}">
                         <span class="lbl">{tx(label)}</span>
                         {#if it}{@render thumb(it.src, tx(label))}{:else}<div class="pic empty">{tx('stNone')}</div>{/if}
-                        <span class="meta">{tx('stInSteam')}: {acc && acc.inSteam && acc.inSteam[slot] ? acc.inSteam[slot] : '—'}</span>
+                        <span class="meta">{tx('stInSteam')}: {acc && acc.inSteam && acc.inSteam[slot] ? tx('stYes') : '—'}</span>
                     </div>
                 {/each}
             </div>

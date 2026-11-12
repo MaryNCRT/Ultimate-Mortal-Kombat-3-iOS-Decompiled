@@ -56,6 +56,13 @@ read only:
 
 ## Safety
 
+- ADD / REMOVE with Steam open: the launcher closes Steam itself (`steam.exe
+  -shutdown`, or `steam` / `flatpak run com.valvesoftware.Steam` /
+  `snap run steam` with `-shutdown` on Linux), waits up to 45 s for its
+  process to go, writes, and starts Steam again. Mary's first try showed why:
+  closing Steam's window leaves it in the tray, and the button stayed
+  disabled with nothing obvious to say why. If Steam does not close, nothing
+  is written and the page says so.
 - `shortcuts.vdf` is only written while Steam is closed. Steam keeps the
   list in memory and writes it on exit, which would undo the change. To
   check whether Steam is running, the launcher uses `tasklist` on Windows
@@ -118,8 +125,8 @@ confirmation first.
 
 ## Privacy
 
-The account list shows only the Steam name (PersonaName), never the account
-id or SteamID. The id is used internally to find the folder.
+The page shows only the Steam name (PersonaName): never the account id, the
+SteamID or the shortcut's app id (Mary asked for this). The id is used internally to find the folder.
 
 ## Linux
 

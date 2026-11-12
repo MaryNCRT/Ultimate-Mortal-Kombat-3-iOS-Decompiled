@@ -117,7 +117,12 @@ Steam client, Linux. Mary asked for it to be automatic: ADD TO STEAM now
 picks SteamGridDB's best-scored image of each kind by itself, with the
 project's key shipped in the release (`TOOLS/steamgriddb.key`, never
 committed). The account list shows the Steam name only, never the id.
-Discord Rich Presence, the third part of the request,
+With no key at all, ADD TO STEAM uses the game page's own set (the first of
+each kind in its Top order, downloaded from SteamGridDB's CDN). Mary's first
+try in the test folder: the images downloaded, but the game was not added,
+because Steam was still running in the tray and the button stayed disabled.
+ADD / REMOVE now close Steam themselves (`-shutdown`), write, and reopen
+it, and the page no longer shows the app id. Discord Rich Presence, the third part of the request,
 is not started.
 
 ### 2026-11-12 -- ONLINE stage 3: LOBBIES; a second monitor's refresh

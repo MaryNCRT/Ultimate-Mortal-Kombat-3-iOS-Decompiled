@@ -182,6 +182,50 @@ function isSteamRunning(opts = {}) {
     }
 }
 
+/* Steam closed and opened again by the launcher, for ADD / REMOVE: Steam's
+ * own -shutdown (it saves and exits as from its menu), then a wait until
+ * its process is gone; afterwards Steam started again as the player has it.
+ * Closing its window is not enough -- it stays in the tray. */
+function steamCommand(install, platform) {
+    if (platform === 'win32')
+        return { cmd: path.join(install.path, 'steam.exe'), pre: [] };
+    if (install.kind === 'flatpak') return { cmd: 'flatpak', pre: ['run', 'com.valvesoftware.Steam'] };
+    if (install.kind === 'snap') return { cmd: 'snap', pre: ['run', 'steam'] };
+    return { cmd: 'steam', pre: [] };
+}
+
+function spawnSteam(install, args, opts = {}) {
+    const { spawn } = require('child_process');
+    const c = steamCommand(install, opts.platform || process.platform);
+    try {
+        const p = spawn(c.cmd, c.pre.concat(args), { detached: true, stdio: 'ignore', windowsHide: true });
+        p.on('error', () => { });
+        p.unref();
+        return true;
+    } catch { return false; }
+}
+
+async function shutdownSteam(install, opts = {}) {
+    if (opts.shutdown) return opts.shutdown();          /* the tests' own */
+    if (!await isSteamRunning(opts)) return true;
+    spawnSteam(install, ['-shutdown'], opts);
+    const until = Date.now() + (opts.shutdownWait || 45000);
+    while (Date.now() < until) {
+        await new Promise(r => setTimeout(r, 1000));
+        if (!await isSteamRunning(opts)) {
+            /* the process gone, its files written: a moment more to be sure */
+            await new Promise(r => setTimeout(r, 1500));
+            return true;
+        }
+    }
+    return false;
+}
+
+function startSteam(install, opts = {}) {
+    if (opts.start) return opts.start();
+    return spawnSteam(install, [], opts);
+}
+
 /* ------------------------------------------------------ the launcher ---- */
 /* What Steam starts: the launcher's own executable in the game folder (the
  * small UMK3-Launcher.exe / UMK3-Launcher that starts launcher\bin), or the
@@ -427,6 +471,7 @@ function artworkInSteam(account, appid) {
 
 module.exports = {
     NAME, SLOTS, crc32, shortcutAppId, findInstalls, accounts, isSteamRunning, launcherTarget,
+    shutdownSteam, startSteam,
     readShortcuts, writeShortcuts, findOurs, upsertShortcut, removeShortcut, shortcutOf,
     applyArtwork, clearArtwork, artworkInSteam, appIdOf,
 };
