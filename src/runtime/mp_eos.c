@@ -657,6 +657,7 @@ static int  L_w_priv, L_w_max, L_attr_dirty, L_go_n;
 
 /* the fight call this game was given */
 static char L_go_seen[64];
+static int  L_go_primed;               /* the call there on joining is not ours */
 static int  L_call;
 static char L_call_code[16], L_call_who[40];
 
@@ -756,6 +757,7 @@ static void lobby_reset(int ev)
     L_busy = 0;
     L_me_dirty = L_attr_dirty = 0;
     L_go_seen[0] = 0;
+    L_go_primed = 0;
     L_call = 0;
     memset(&L_info, 0, sizeof L_info);
     L_serial++;
@@ -806,7 +808,10 @@ static void lobby_refresh(void)
     }
     /* the owner's fight call: "<n>:<EOS user>", taken once */
     attr_text(d, "go", NULL, go, sizeof go);
-    if (go[0] && strcmp(go, L_go_seen) != 0) {
+    if (!L_go_primed) {                 /* an older call, from before this game came in */
+        L_go_primed = 1;
+        copy_str(L_go_seen, sizeof L_go_seen, go);
+    } else if (go[0] && strcmp(go, L_go_seen) != 0) {
         const char *c = strchr(go, ':');
         copy_str(L_go_seen, sizeof L_go_seen, go);
         if (c && !strcmp(c + 1, mine) && strcmp(L_info.owner, mine) != 0) {
@@ -1392,7 +1397,8 @@ void mplobby_call(const char *who)
 {
     if (!mplobby_am_owner() || !who || !who[0])
         return;
-    snprintf(L_w_go, sizeof L_w_go, "%d:%s", ++L_go_n, who);
+    /* the clock in it: a promoted owner's first call differs from the old one's */
+    snprintf(L_w_go, sizeof L_w_go, "%u.%d:%s", ticks() & 0xffffu, ++L_go_n, who);
     L_attr_dirty = 1;
 }
 
