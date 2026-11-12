@@ -3127,8 +3127,9 @@ void stage_menu_keys(int left, int right, int up, int down, int ok, int back,
 /* ------------------------------------------------------------ VS RULES ----
  *
  * Port, not in the binary (Mary, 2026-11-12): on the local versus's select
- * screen (FE_Task_Character_Select in GameMode 6) SELECT -- the pad's, or
- * the moves key -- opens the fight's rules in the ONLINE screen's look:
+ * screen (FE_Task_Character_Select in GameMode 6) the RULES button in the
+ * top left corner, the RULES key or the pad's VERSUS RULES button (SELECT)
+ * opens the fight's rules in the ONLINE screen's look:
  * ROUNDS a fight (best of 1/3/5), FIGHTS in a series (one, best of 3/5),
  * TIME (30/60/99/infinite), KOMBO SLIDE and the VS kodes (the binary's,
  * runtime/online_rules.h), as many as wanted, ticked in a checklist that
@@ -3559,10 +3560,44 @@ void vs_rules_keys(int left, int right, int up, int down, int ok, int back)
 /* On the local versus's select screen, a line over player one's COLOR box:
  * SELECT opens the rules, and what they are now (the game's own, or a
  * summary). */
+/* The RULES button, the select screen's top left corner (Mary): a click
+ * opens the window, as the RULES key (PK_RULES, CONTROLS) and the pad's
+ * VERSUS RULES button do; under it what the rules are. */
+#define VB_X 8.0f
+#define VB_Y 6.0f
+#define VB_W 118.0f
+#define VB_H 22.0f
+static int g_vb_hover, g_vb_press;
+static float g_vb_lit;
+
+int vs_rules_button_mouse(float fx, float fy, int down)
+{
+    static int was;
+    float x = fx * g_ow, y = fy * 320.0f;
+    int over = x >= VB_X && x < VB_X + VB_W && y >= VB_Y && y < VB_Y + VB_H;
+    int mine;
+
+    if (g_vr_open) {
+        g_vb_press = 0;
+        was = down;
+        return 0;
+    }
+    g_vb_hover = over;
+    if (down && !was && over)
+        g_vb_press = 1;                 /* a press that began on it */
+    mine = over || g_vb_press;
+    if (!down && was && g_vb_press && over)
+        vs_rules_open();                /* a click, on release */
+    if (!down)
+        g_vb_press = 0;
+    was = down;
+    return mine;                        /* the select screen does not get it */
+}
+
 void vs_rules_hint(void)
 {
     const online_rules *r = rules_local();
-    char line[96], what[48];
+    char line[96], what[48], key[32];
 
     if (g_vr_open)
         return;
@@ -3575,12 +3610,15 @@ void vs_rules_hint(void)
         snprintf(what, sizeof what, st_tx("MEJOR DE %d, %s", "BEST OF %d, %s"), r->best_of, b);
     } else
         snprintf(what, sizeof what, "%s", st_tx("ORIGINALES", "ORIGINAL"));
-    snprintf(line, sizeof line, st_tx("SELECT: REGLAS (%s)", "SELECT: RULES (%s)"), what);
+    plat_key_label(PK_RULES, key, sizeof key);
+    snprintf(line, sizeof line, "%s: %s", key, what);
+    g_vb_lit += ((g_vb_hover ? 1.0f : 0.0f) - g_vb_lit) * 0.25f;
     begin_2d();
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
     PortSkinBegin();
-    /* the COLOR box is 290..312 from the left edge (FrontEnd.c palette_box) */
-    PortSkinText(line, 8, 277, 0, 0.36f, g_ow * 0.34f, 1, 0.9f);
+    PortSkinButton(st_tx("REGLAS", "RULES"), VB_X, VB_Y, VB_W, VB_H, 0,
+                   g_vb_press && g_vb_hover ? 3 : g_vb_hover ? 1 : 0, g_vb_lit, 1.0f);
+    PortSkinText(line, VB_X + 2, VB_Y + VB_H + 4, 0, 0.34f, g_ow * 0.34f, r ? 1 : 0, 0.9f);
     skin_end();
     end_2d();                           /* the game's matrices and state back */
 }

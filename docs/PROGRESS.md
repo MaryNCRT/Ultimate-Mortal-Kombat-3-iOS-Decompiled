@@ -136,6 +136,13 @@ The plan and Mary's decisions: [research/ONLINE-PHASE-PLAN.md](research/ONLINE-P
   were never popped) and the hint over player one's COLOR box (moved up).
   Both fixed; **Mary played it again and it works** (2026-11-12): the frame
   rate, the hint, the kodes window.
+- **The RULES button** (Mary): the hint is now a button in the select
+  screen's top left corner (`vs_rules_button_mouse`, a press that begins on
+  it is kept from the game's touch) with the rules under it. A key of its
+  own, `PK_RULES` (CONTROLS > KEYBOARD - MENU, VERSUS RULES, `key_rules=`,
+  R), and a pad action of its own (17, `pad_rules=` / `p2pad_rules=`,
+  SELECT); PK_MOVES no longer opens the window. Built into the test folder;
+  not played yet.
 
 ## 0.4.4 beta (2026-11-12)
 

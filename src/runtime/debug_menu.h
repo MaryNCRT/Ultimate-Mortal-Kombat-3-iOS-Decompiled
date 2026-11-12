@@ -180,5 +180,7 @@ void vs_rules_draw(void);
 void vs_rules_mouse(float fx, float fy, int down);
 void vs_rules_keys(int left, int right, int up, int down, int ok, int back);
 void vs_rules_hint(void);
+/* the RULES button's mouse: 1 while it has it (the game does not) */
+int  vs_rules_button_mouse(float fx, float fy, int down);
 
 #endif

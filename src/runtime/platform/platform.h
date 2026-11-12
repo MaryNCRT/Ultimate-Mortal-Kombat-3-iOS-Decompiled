@@ -229,6 +229,8 @@ enum {
     /* player two's pause menu, moves list and ACCEPT on the menus, as
      * player one's P, M and Enter (port) */
     PK_P2_PAUSE, PK_P2_MOVES, PK_P2_OK,
+    /* the local versus's rules window, its select screen (port) */
+    PK_RULES,
     PK_COUNT
 };
 

@@ -387,6 +387,9 @@ static unsigned g_pad_pause = 1u << PB_START;
 static unsigned g_pad_settings = 1u << PB_HOME;
 static unsigned g_p2pad_settings = 1u << PB_HOME;
 static unsigned g_pad_moves = 1u << PB_SELECT;
+/* port: the pad's VERSUS RULES (pad_rules=, SELECT unless bound) */
+static unsigned g_pad_rules = 1u << PB_SELECT;
+static unsigned g_p2pad_rules = 1u << PB_SELECT;
 
 /* Player two's pad, the same actions and defaults: the launcher's GAMEPAD
  * tab for player two writes p2pad_<action>= and p2pad5_<p|b|k|r>= (port). */
@@ -1081,6 +1084,8 @@ static void read_config_p2(const char *n, const char *v)
             g_p2pad_moves = pad_combo(v);
         else if (strcmp(n + 4, "settings") == 0)
             g_p2pad_settings = pad_combo(v);
+        else if (strcmp(n + 4, "rules") == 0)
+            g_p2pad_rules = pad_combo(v);
     } else if (strncmp(n, "key5_", 5) == 0) {
         for (i = 0; i < 4; i++)
             if (strcmp(n + 5, names5[i]) == 0)
@@ -1272,6 +1277,8 @@ static void read_config(const char *dir)
                 g_pad_moves = pad_combo(v);
             else if (strcmp(line + 4, "settings") == 0)
                 g_pad_settings = pad_combo(v);
+            else if (strcmp(line + 4, "rules") == 0)
+                g_pad_rules = pad_combo(v);
         }
         else if (strcmp(line, "pad") == 0) {  /* auto, off, xinput, vvvv:pppp */
             plat_pad_select(v);
@@ -1299,6 +1306,8 @@ static void read_config(const char *dir)
                 plat_bind_key(PK_PAUSE, atoi(v));
             else if (strcmp(line + 4, "moves") == 0)
                 plat_bind_key(PK_MOVES, atoi(v));
+            else if (strcmp(line + 4, "rules") == 0)
+                plat_bind_key(PK_RULES, atoi(v));
             else if (strcmp(line + 4, "special") == 0)
                 plat_bind_key(PK_SPECIAL, atoi(v));
             else {
@@ -2872,6 +2881,8 @@ unsigned *port_pad_action(int player, int i)
         return player ? &g_p2pad_moves : &g_pad_moves;
     if (i == 16)
         return player ? &g_p2pad_settings : &g_pad_settings;
+    if (i == 17)
+        return player ? &g_p2pad_rules : &g_pad_rules;
     none = 0;
     return &none;
 }
@@ -3314,6 +3325,11 @@ int main(int argc, char **argv)
             else if (vs_rules_is_open())        /* VS RULES */
                 vs_rules_mouse(tx / g_virt_w, ty / g_virt_h,
                                plat_mouse(&mx, &my) && g_ntaps == 0);
+            else if (CurrentTask == 3 && FE_CurrentTask == 0x1b && GameMode == 6
+                     && !dbg_menu_is_open()
+                     && vs_rules_button_mouse(tx / g_virt_w, ty / g_virt_h,
+                                              plat_mouse(&mx, &my) && g_ntaps == 0))
+                down = 0;               /* the RULES button's, not the game's */
             else if (rp_playing() && !dbg_menu_is_open() && g_rp_hidden) {
                 /* HIDE: a click anywhere has the player back -- a new one:
                  * the click that hid it is let go first (a toggle, not a
@@ -3546,14 +3562,18 @@ int main(int argc, char **argv)
             }
             /* STAGE SELECT (debug_menu.c): the frame is its own while it is
              * up, as the settings menu's; Task_GameInit waits for it */
-            /* VS RULES (port): SELECT -- the pad's, or the moves key -- on
-             * the local versus's select screen opens the fight's rules; the
-             * game stands still under it, as under STAGE SELECT */
+            /* VS RULES (port): the RULES key (CONTROLS, R unless bound),
+             * the pad's VERSUS RULES button (SELECT unless bound) or the
+             * RULES button in the top left corner on the local versus's
+             * select screen opens the fight's rules; the game stands still
+             * under it, as under STAGE SELECT */
             {
                 static int sel_was;
-                const unsigned pb = (g_pad.connected ? g_pad.buttons : 0)
-                                    | (g_pad2.connected ? g_pad2.buttons : 0);
-                int sel = (pb & (1u << PB_SELECT)) || plat_key(PK_MOVES);
+                int sel = plat_key(PK_RULES)
+                          || (g_pad.connected && g_pad_rules
+                              && (g_pad.buttons & g_pad_rules) == g_pad_rules)
+                          || (g_pad2.connected && g_p2pad_rules
+                              && (g_pad2.buttons & g_p2pad_rules) == g_p2pad_rules);
                 extern int FE_CurrentTask;
 
                 if (sel && !sel_was && !vs_rules_is_open() && !set_menu_is_open()
@@ -3571,7 +3591,9 @@ int main(int argc, char **argv)
                               plat_key(PK_OK) || (pb & (1u << PB_SOUTH))
                                   || (pb & (1u << PB_START)),
                               plat_key(PK_BACK) || (pb & (1u << PB_EAST))
-                                  || (pb & (1u << PB_SELECT)) || plat_key(PK_MOVES));
+                                  || (g_pad_rules && (g_pad.buttons & g_pad_rules) == g_pad_rules)
+                                  || (g_p2pad_rules && (g_pad2.buttons & g_p2pad_rules) == g_p2pad_rules)
+                                  || plat_key(PK_RULES));
                 clear_frame(ww, wh, vx, vy, vw, vh);
                 if (vs_rules_is_open()) {
                     use_surface(0);
@@ -3802,7 +3824,7 @@ int main(int argc, char **argv)
             }
             stage_menu_watch_draw();    /* the host's STAGE SELECT, online's guest */
             if (CurrentTask == 3 && FE_CurrentTask == 0x1b && GameMode == 6)
-                vs_rules_hint();        /* SELECT: RULES, the local versus (port) */
+                vs_rules_hint();        /* the RULES button, the local versus (port) */
             online_after_frame();   /* the ONLINE screens' badges (port) */
             render_resolve();
             if (rp_playing() && g_rp_hidden) {          /* HIDE: the fight alone */
