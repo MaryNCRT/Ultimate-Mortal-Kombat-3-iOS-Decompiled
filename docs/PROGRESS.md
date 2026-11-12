@@ -100,6 +100,27 @@ traced to the binary's own mechanism before anything is changed.
 
 ## 0.4.4 beta, in the test folder (2026-11-12)
 
+- **Mary in the test folder**: she chose ENHANCED at the first start
+  (`preset=enhanced`) and saw WHAT'S NEW (`seen_version=0.4.4`); the game's
+  ONLINE > FRIENDS works for her (a friend's banner and RETAR).
+- **First start: YOUR ACCOUNT** (Mary): after the preset, a player with no
+  account, while the server answers, is offered one -- ACCOUNT's own form
+  (`ProfAccount.svelte`, `compact`: make one first, log in, recover; the
+  recovery code shown; no e-mail, recovery or delete boxes) in a window,
+  with PLAY WITHOUT AN ACCOUNT. Once only (`account_asked=1`).
+- **The launcher's FRIENDS as the game's** (Mary's screenshot of ONLINE >
+  FRIENDS): the heading bar FRIENDS (n) with + ADD FRIEND (which opens the
+  code and the search), and every friend, request and invite as a banner
+  (`FriendBanner.svelte`): their gradient from the server's `look`
+  (icon|colour|L/D/C|colour2|angle|outfit, the fields friends.txt hands the
+  game), their fighter out of its left end, the name in the heading face,
+  CHALLENGE / RETAR and the rest on dark steel plates. Nothing changed in
+  what the buttons do.
+- Checked: `npm run ui`, `node --test` (23 pass); both seen in the UI
+  harness (`UMK3_HARNESS_FIRST=1` for the first start's windows,
+  `UMK3_HARNESS_ACCOUNT=1` for sample friends; the harness has no
+  fighters' pictures). Packed into the test folder; not seen in Electron.
+
 - **Shao Kahn's Lost Treasures** (a GitHub report: every treasure was a
   fight against Shao Kahn; on the device each has its own line-up).
   `GameInit_LoadABit` (armv7 `0x2b940`), step 43, has a `GameMode == 5`

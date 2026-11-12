@@ -141,7 +141,12 @@ press COMPILE.
 ## 7. Open work
 
 - **0.4.4 waits for Mary** (2026-11-12): the game and the launcher are in
-  the test folder; the release is made once she has tried them.
+  the test folder; the release is made once she has tried them. She has
+  chosen ENHANCED and seen WHAT'S NEW; the treasures, the account window
+  and the new FRIENDS are still to be tried.
+- **The UI harness** (`scripts/ui-harness.js`) answers `api.account.*` now:
+  `UMK3_HARNESS_ACCOUNT=1` signs in with sample friends,
+  `UMK3_HARNESS_FIRST=1` shows the first start's windows again.
 - **Building into the test folder without `node_modules`**: the folder's
   own launcher runs the CLI, as `build-game.cmd` does
   (`ELECTRON_RUN_AS_NODE=1`, `launcher\bin\UMK3-Launcher.exe
