@@ -22,10 +22,10 @@ import { stagePictures } from './mods/stagepics.js';
 /* ------------------------------------------------------------ tables -- */
 
 /* the menu, in order; QUIT closes */
-export const SECTIONS = ['build', 'play', 'video', 'profile', 'mods', 'replays', 'quit'];
+export const SECTIONS = ['build', 'play', 'video', 'profile', 'mods', 'replays', 'steam', 'quit'];
 /* each section's name in the menu and its full-screen header */
-export const TITLE = { build: 'mBuild', play: 'mPlay', video: 'mVideo', controls: 'mControls', profile: 'mProfile', mods: 'mMods', replays: 'mReplays', quit: 'mQuit' };
-export const DESC = { build: 'dBuild', video: 'dVideo', controls: 'dControls', profile: 'dProfile', play: 'dPlay', mods: 'dMods', replays: 'dReplays', quit: 'dQuit' };
+export const TITLE = { build: 'mBuild', play: 'mPlay', video: 'mVideo', controls: 'mControls', profile: 'mProfile', mods: 'mMods', replays: 'mReplays', steam: 'mSteam', quit: 'mQuit' };
+export const DESC = { build: 'dBuild', video: 'dVideo', controls: 'dControls', profile: 'dProfile', play: 'dPlay', mods: 'dMods', replays: 'dReplays', steam: 'dSteam', quit: 'dQuit' };
 /* the pages of SETTINGS (once GRAPHICS; CONTROLS, a section of its own up to
  * 0.2.0, is its last page) in the game's settings menu's order, and
  * CONTROLS' own pages under it */
@@ -33,6 +33,8 @@ export const GFX_TABS = [['video', 'gVideo'], ['gfx', 'gGfx'], ['tex', 'gTex'], 
 export const CTL_TABS = [['p', 'tabKb'], ['pad', 'tabPad'], ['dbg', 'tabDbg']];
 /* PROFILE's pages: the profile, the account, the friends */
 export const PROF_TABS = [['me', 'tabProfile'], ['account', 'tabAccount'], ['friends', 'tabFriends']];
+/* STEAM's pages: the shortcut and what Steam shows, SteamGridDB, what is downloaded */
+export const STEAM_TABS = [['steam', 'stTabSteam'], ['browse', 'stTabBrowse'], ['library', 'stTabLibrary']];
 
 /* index = res in the launcher (lib/ini.js, the same list): smallest to largest */
 export const RES = [
@@ -120,7 +122,7 @@ export const app = $state({
     frIn: 0,                            /* friend requests and invites waiting: the red dot on PROFILE, FRIENDS */
     frLive: null,                       /* the last /v1/friends main.js heard (pollFriends) */
     full: false,                        /* a section fills the window */
-    gfxTab: 'video', ctlTab: 'p', profTab: 'me',
+    gfxTab: 'video', ctlTab: 'p', profTab: 'me', steamTab: 'steam',
     pl: 1,                              /* the player KEYBOARD and GAMEPAD edit */
     waitingKey: null,                   /* the action waiting for its key */
     usingPad: false,                    /* the last input: the pad's pictures show */
@@ -226,15 +228,16 @@ export function stepPage(d) {
         }
     }
     const tabs = app.sec === 'video' ? GFX_TABS : app.sec === 'mods' ? MODS_TABS
-               : app.sec === 'profile' ? PROF_TABS : null;
+               : app.sec === 'profile' ? PROF_TABS : app.sec === 'steam' ? STEAM_TABS : null;
     if (!tabs) return;
-    const cur = app.sec === 'video' ? app.gfxTab : app.sec === 'mods' ? ms.tab : app.sec === 'profile' ? app.profTab : app.ctlTab;
+    const cur = app.sec === 'video' ? app.gfxTab : app.sec === 'mods' ? ms.tab : app.sec === 'profile' ? app.profTab : app.sec === 'steam' ? app.steamTab : app.ctlTab;
     const i = Math.max(0, tabs.findIndex(t => t[0] === cur));
     const next = tabs[(i + d + tabs.length) % tabs.length][0];
     selectBlip();
     if (app.sec === 'video') app.gfxTab = next;
     else if (app.sec === 'mods') ms.tab = next;
     else if (app.sec === 'profile') app.profTab = next;
+    else if (app.sec === 'steam') app.steamTab = next;
     else setCtlTab(next);
 }
 

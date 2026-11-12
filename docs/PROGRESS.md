@@ -98,6 +98,24 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+### 2026-11-12 -- STEAM: the launcher as a non-Steam game, SteamGridDB artwork (in progress)
+
+A new launcher section, STEAM ([STEAM-INTEGRATION.md](STEAM-INTEGRATION.md)):
+it adds or removes the launcher from the Steam library as "Ultimate Mortal
+Kombat 3 IOs Decomp" by editing `shortcuts.vdf` (only while Steam is closed,
+with a backup, an atomic write and no duplicates), browses SteamGridDB game
+38752 with the player's own API key, downloads the originals into
+`data/steam-artwork/`, and copies the chosen ones into
+`Steam/userdata/<id>/config/grid/` under the shortcut's app id. Steam's
+naming and the app id were checked against a shortcut on the project
+machine that Steam already shows with its artwork. **Tested:** 9 unit tests
+(fake Steam folder, fake SteamGridDB, the real `shortcuts.vdf` round-tripped
+read only), and the page in the harness against a copy of that file
+(ADD TO STEAM wrote our entry and left the other game byte-identical).
+**Not tested yet:** the live SteamGridDB API (it needs Mary's key), the real
+Steam client, Linux. Discord Rich Presence, the third part of the request,
+is not started.
+
 ### 2026-11-12 -- ONLINE stage 3: LOBBIES; a second monitor's refresh
 
 **A second monitor.** Mary: the game ran slow on a monitor that is not the
