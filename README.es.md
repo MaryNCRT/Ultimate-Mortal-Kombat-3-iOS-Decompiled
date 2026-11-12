@@ -32,7 +32,7 @@ La única fuente de verdad es el binario. Nada entra al árbol si no se deriva d
 |---|---|---|
 | **Decompilación** (`src/decomp/`) | **2.572 / 2.572 (100%)** | Motor 3D LIME (109), menús y escenas (291), motor de combate arcade (2.172). |
 | **Verificación** (`tools/decomp/`) | **100%** | Tests diferenciales contra el oráculo ARM→C `armrecomp`; 229 tablas de datos comprobadas al compilar (`ctest`). |
-| **Port a PC** (`src/runtime/`) | **Jugable — v0.1.15 beta** | OpenGL, Vulkan, Direct3D 12; Windows y Linux; 3:2 / 4:3 / 16:9 / 21:9; teclado y mandos; 2 jugadores local, LAN y en línea con rollback; repeticiones; mods. |
+| **Port a PC** (`src/runtime/`) | **Jugable — v0.4.5 beta** | OpenGL, Vulkan, Direct3D 12; Windows y Linux; 3:2 / 4:3 / 16:9 / 21:9; teclado y mandos; 2 jugadores local, LAN y en línea con rollback; repeticiones; mods. |
 | **Launcher** (`launcher/`) | Windows y Linux | Compila el juego con un `zig cc` incluido (nada que instalar), se actualiza solo, herramientas de MODS. |
 
 Cada versión la prueba la tester del proyecto, Mary, antes de que la siguiente se construya encima; el [registro de cambios](docs/CHANGELOG.md) dice en cada cambio si ya lo jugó.
