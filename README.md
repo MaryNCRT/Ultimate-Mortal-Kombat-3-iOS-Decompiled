@@ -88,7 +88,8 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 ## Known problems (0.4.3 beta)
 
 - Online: 0.2.1's fixes (the rollback off one boot in two, fights drifting apart) were checked with two games on one PC, not yet between two machines. Both players need 0.2.1, built fresh.
-- With the on-screen controls hidden, a click on the screen still moves the fighter (Mary); next on the list.
+- With the on-screen controls hidden, a click on the screen still moves the fighter (Mary): fixed for 0.4.4, in the test folder, not played yet.
+- Shao Kahn's Lost Treasures were always a fight against Shao Kahn (a GitHub report): fixed from the binary for 0.4.4, in the test folder, not played yet.
 - Joining online, a pad's X glyph showed over START (Mary); not reproduced yet.
 - Some stages still pause up to ~1.3 s on their first frames (THE STREET), as their events load. A round's start can still show a slow frame or two.
 - With ENHANCED LIGHTING, the first frames after starting can stall a second or more while the driver finishes the shader (Direct3D 12); shorter since 0.3.0, not gone.

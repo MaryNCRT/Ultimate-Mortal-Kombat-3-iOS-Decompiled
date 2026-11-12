@@ -8,6 +8,23 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## 0.4.4 beta (not released yet; in the test folder 2026-11-12)
+
+- **Shao Kahn's Lost Treasures fight their own opponents again** (a GitHub
+  report): every treasure was a fight against Shao Kahn, because a block of
+  the game's fight setup was missing from the transcription. Now as on the
+  device: Motaro, Noob Saibot, random ladder line-ups, a CPU-against-CPU
+  fight, and the three endurance treasures with their queues.
+- **With the touch controls hidden, a click no longer moves the fighter**.
+- **First start: ORIGINAL or ENHANCED** (Mary): the iPhone's game as it
+  was, or the screen's largest resolution, no touch controls and ENHANCED
+  LIGHTING. A folder that already had settings can keep them.
+- **New folders start at the screen's largest resolution**, borderless,
+  with the touch controls hidden.
+- **WHAT'S NEW**: the launcher shows each version's news once, and again
+  from UPDATES.
+- Not played by Mary yet.
+
 ## 0.4.3 beta (2026-11-07)
 
 - **The replay player in the ONLINE screen's look** (Mary): a stone panel

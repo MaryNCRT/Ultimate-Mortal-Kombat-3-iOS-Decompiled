@@ -138,6 +138,7 @@ export const app = $state({
     gameClosed: 0,                      /* counts the game closing (REPLAYS reads its list again) */
     logo: null, hero: null,
     picker: null,                       /* { x, y, kind, pick } */
+    whatsNew: false,                    /* UPDATES' button: FirstRun opens WHAT'S NEW */
 });
 
 /* The fighters' pictures for the profile icons: Image objects, kept out of

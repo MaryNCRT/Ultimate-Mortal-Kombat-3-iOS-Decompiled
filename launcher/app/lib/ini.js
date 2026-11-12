@@ -167,7 +167,7 @@ function defaultConfig() {
         skipIntro: false,            /* skip_intro=1: no publisher logos */
         compileShaders: false,       /* compile_shaders=1: PLAY runs --compile-shaders first */
         replays: true,               /* replays=1: the game keeps the last fights (REPLAYS) */
-        hideControls: false,         /* hide_controls=1: no on-screen stick and buttons */
+        hideControls: true,          /* hide_controls=1: no on-screen stick and buttons (hidden by default since 0.4.4) */
         cornerButtons: true,         /* corner_buttons=0: no INFO / PAUSE buttons in a fight */
         vsync: true,                 /* vsync=0: no waiting for the screen's refresh */
         lowLatency: true,            /* low_latency=0: frames may queue ahead */
@@ -182,6 +182,8 @@ function defaultConfig() {
         language: 0,                 /* "" = follow Windows */
         ui: 'EN',                    /* the launcher's own language */
         ipa: '',
+        preset: '',                  /* preset=: the first start's choice, original or enhanced ('' = not asked yet) */
+        seenVersion: '',             /* seen_version=: the launcher version whose WHAT'S NEW was shown */
         marco: '',                   /* fullscreen bars picture, optional */
         buttons: 5,                  /* the layout the game starts with (its factory default, Settings[4] = 5) */
         pad: 'auto',                 /* pad=: auto, off, xinput or vvvv:pppp */
@@ -266,6 +268,10 @@ function load(p) {
             cfg.ui = val.toUpperCase() === 'ES' ? 'ES' : 'EN';
         } else if (key === 'ipa') {
             cfg.ipa = val;
+        } else if (key === 'preset') {
+            cfg.preset = /^(original|enhanced|kept)$/.test(val) ? val : '';
+        } else if (key === 'seen_version') {
+            cfg.seenVersion = val.replace(/[^0-9A-Za-z.\-]/g, '');
         } else if (key === 'marco') {
             cfg.marco = val;
         } else if (key === 'gpu') {
@@ -352,6 +358,8 @@ function save(p, cfg) {
         'language=' + lang,
         'ui=' + (cfg.ui === 'ES' ? 'ES' : 'EN'),
         'ipa=' + cfg.ipa,
+        'preset=' + (/^(original|enhanced|kept)$/.test(cfg.preset || '') ? cfg.preset : ''),
+        'seen_version=' + String(cfg.seenVersion || '').replace(/[^0-9A-Za-z.\-]/g, ''),
         'debug_keys=' + (cfg.debug ? 1 : 0),
         'skip_intro=' + (cfg.skipIntro ? 1 : 0),
         'compile_shaders=' + (cfg.compileShaders ? 1 : 0),
@@ -430,6 +438,69 @@ function save(p, cfg) {
     fs.writeFileSync(p, lines.join('\n') + '\n', 'utf8');
 }
 
+/* The largest listed resolution that fits a screen of w x h pixels (the
+ * desktop's): its index in RES, the 960x640 window when none fits. */
+function fitRes(w, h) {
+    let best = -1;
+    RES.forEach((r, i) => {
+        if (r.w <= w && r.h <= h && (best < 0 || r.w * r.h > RES[best].w * RES[best].h))
+            best = i;
+    });
+    return best < 0 ? 1 : best;
+}
+
+/* The game's aspect nearest a screen's shape. */
+function aspectFor(w, h) {
+    const want = w / Math.max(1, h);
+    let best = '3:2', d = Infinity;
+    for (const [a, v] of [['3:2', 1.5], ['4:3', 4 / 3], ['16:9', 16 / 9], ['21:9', 21 / 9]])
+        if (Math.abs(v - want) < d) { d = Math.abs(v - want); best = a; }
+    return best;
+}
+
+/* A new umk3.ini's look (0.4.4, Mary): the screen's largest resolution,
+ * borderless over the monitor, the on-screen controls hidden. */
+function fitScreen(cfg, screen) {
+    if (!screen || !(screen.w > 0) || !(screen.h > 0))
+        return cfg;
+    cfg.res = fitRes(screen.w, screen.h);
+    cfg.aspect = aspectFor(screen.w, screen.h);
+    cfg.fullscreen = false;
+    cfg.borderless = true;
+    cfg.hideControls = true;
+    return cfg;
+}
+
+/* The first start's choice (0.4.4, Mary), so a player who does not know the
+ * options finds them:
+ *   original  the iPhone's game: its 960x640 window and 3:2, the on-screen
+ *             controls, its own textures, no ENHANCED LIGHTING
+ *   enhanced  the screen's largest resolution borderless, no on-screen
+ *             controls, ENHANCED LIGHTING (with a renderer that has it:
+ *             Direct3D 12 on Windows, Vulkan elsewhere) and the full textures
+ *   kept      the settings already there, untouched */
+function applyPreset(cfg, name, screen, platform) {
+    if (name === 'original') {
+        cfg.res = 1;
+        cfg.aspect = '3:2';
+        cfg.fullscreen = false;
+        cfg.borderless = false;
+        cfg.hideControls = false;
+        cfg.rtShadows = false;
+        cfg.textureQuality = 'iphone';
+    } else if (name === 'enhanced') {
+        fitScreen(cfg, screen);
+        cfg.rtShadows = true;
+        if (cfg.renderer === 'opengl' || !cfg.renderer)
+            cfg.renderer = (platform || process.platform) === 'win32' ? 'd3d12' : 'vulkan';
+        cfg.textureQuality = 'max';
+    } else if (name !== 'kept') {
+        return cfg;
+    }
+    cfg.preset = name;
+    return cfg;
+}
+
 /* The game's executable for arch= (x86 or x64) across platforms. */
 function gameExe(arch) {
     if (process.platform !== 'win32') {
@@ -460,4 +531,5 @@ function gameReady(root, arch) {
 module.exports = { SHARP_ANGLE, SHARP_STRENGTH, RES, LANGS, KEY_NAMES, KEY_DEFAULTS, KEY5_NAMES, KEY5_DEFAULTS,
                    PAD_NAMES, PAD_DEFAULTS, PAD5_NAMES, PAD5_DEFAULTS,
                    P2_KEY_NAMES, P2_KEY_DEFAULTS, P2_KEY5_DEFAULTS, defaultConfig,
-                   load, save, gameExe, gameReady, gameBuiltAt };
+                   load, save, gameExe, gameReady, gameBuiltAt,
+                   fitRes, aspectFor, fitScreen, applyPreset };

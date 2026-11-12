@@ -17,6 +17,7 @@
     import SecHead from './components/SecHead.svelte';
     import CmdBar from './components/CmdBar.svelte';
     import Picker from './components/Picker.svelte';
+    import FirstRun from './components/FirstRun.svelte';
     import SecBuild from './sections/SecBuild.svelte';
     import SecPlay from './sections/SecPlay.svelte';
     import SecVideo from './sections/SecVideo.svelte';
@@ -47,6 +48,7 @@
         {/if}
         <CmdBar />
         <Picker />
+        <FirstRun />
     </div>
 {/if}
 

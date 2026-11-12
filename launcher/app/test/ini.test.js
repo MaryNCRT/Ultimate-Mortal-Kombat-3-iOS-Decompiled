@@ -148,3 +148,41 @@ test('texture_quality= round-trips and rejects junk', () => {
     fs.writeFileSync(p, 'texture_quality=ultra\n');
     assert.equal(ini.load(p).textureQuality, 'iphone');
 });
+
+test('a new folder fits the screen: largest resolution, borderless, controls hidden (0.4.4)', () => {
+    const c = ini.fitScreen(ini.defaultConfig(), { w: 1920, h: 1080 });
+    assert.deepEqual(ini.RES[c.res], { w: 1920, h: 1080 });
+    assert.equal(c.aspect, '16:9');
+    assert.equal(c.borderless, true);
+    assert.equal(c.hideControls, true);
+    assert.deepEqual(ini.RES[ini.fitRes(2560, 1600)], { w: 2400, h: 1600 });
+    assert.deepEqual(ini.RES[ini.fitRes(3440, 1440)], { w: 3440, h: 1440 });
+    assert.equal(ini.fitRes(400, 300), 1);        /* nothing fits: the 960x640 window */
+    assert.equal(ini.aspectFor(3440, 1440), '21:9');
+});
+
+test('presets: original, enhanced, kept, and preset=/seen_version= round trip (0.4.4)', () => {
+    const p = tmpIni();
+    const scr = { w: 2560, h: 1440 };
+    const e = ini.applyPreset(ini.defaultConfig(), 'enhanced', scr, 'win32');
+    assert.equal(e.preset, 'enhanced');
+    assert.deepEqual(ini.RES[e.res], { w: 2560, h: 1440 });
+    assert.equal(e.hideControls, true);
+    assert.equal(e.rtShadows, true);
+    assert.equal(e.renderer, 'd3d12');
+    assert.equal(ini.applyPreset(ini.defaultConfig(), 'enhanced', scr, 'linux').renderer, 'vulkan');
+    const o = ini.applyPreset(ini.defaultConfig(), 'original', scr, 'win32');
+    assert.equal(o.res, 1);
+    assert.equal(o.hideControls, false);
+    assert.equal(o.rtShadows, false);
+    const k = ini.defaultConfig();
+    k.res = 7;
+    assert.equal(ini.applyPreset(k, 'kept', scr).res, 7);
+    assert.equal(k.preset, 'kept');
+    e.seenVersion = '0.4.4';
+    ini.save(p, e);
+    const back = ini.load(p);
+    assert.equal(back.preset, 'enhanced');
+    assert.equal(back.seenVersion, '0.4.4');
+    assert.equal(ini.load(tmpIni()).preset, '');  /* not asked yet */
+});

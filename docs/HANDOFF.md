@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-11-07 (release 0.4.3 beta: the replay player in the ONLINE skin, STAGE SELECT without scrolling, the Esc menu's black box fixed; 0.4.2: STAGE SELECT in the ONLINE skin; the launcher renewed in dark blued steel, PROFILE rebuilt around the Player Banner, icon and favourite fighter one, Esc's PROFILE page removed).
+**Last updated:** 2026-11-12 (0.4.4 beta built into the test folder, not released: the Lost Treasures' opponents from the binary, a click no longer reaching hidden controls, the first start's ORIGINAL / ENHANCED choice, WHAT'S NEW, new folders at the screen's largest resolution with the controls hidden. Before it, release 0.4.3 beta: the replay player in the ONLINE skin, STAGE SELECT without scrolling, the Esc menu's black box fixed; 0.4.2: STAGE SELECT in the ONLINE skin; the launcher renewed in dark blued steel, PROFILE rebuilt around the Player Banner, icon and favourite fighter one, Esc's PROFILE page removed).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
@@ -30,8 +30,9 @@ changed is in [CHANGELOG.md](CHANGELOG.md).
   has played them; the CHANGELOG says which ones she has.
 - **Fix locally first.** A change is built into her test folder, she tries
   it, and only then is it released. Her test folder is
-  `WORK\release-0.1.12\UMK3-PC-0.1.12-beta` on the project machine (the
-  name is historical: it is updated in place).
+  `WORK\release-0.1.12\Test` on the project machine (renamed from
+  `UMK3-PC-0.1.12-beta`; updated in place). Its `src\` is the tree's with
+  CRLF line endings: compare with `diff --strip-trailing-cr`.
 - **Investigate before fixing.** A gameplay problem is traced to the
   binary's own mechanism (disassembly, the recompiled oracle, her logs)
   before any change. Several "bugs" were the original game's own rules
@@ -113,6 +114,9 @@ A release is a GitHub pre-release `v<version>-beta` with two packages:
    both files. The notes say what is new, what is known broken, and that
    Mary has not played it yet when she has not.
 6. CHANGELOG, README status and PROGRESS updated on `main`.
+7. WHAT'S NEW: an entry for the version in `launcher/app/lib/whatsnew.json`
+   (ES and EN, a few lines for players). The launcher shows it once per
+   version (`seen_version=` in umk3.ini) and from UPDATES' button.
 
 The packages hold no game data: the player's `.ipa` supplies it when they
 press COMPILE.
@@ -135,6 +139,17 @@ press COMPILE.
 | Release packaging | `launcher/make_release.py`, `make_release_linux.py`, `launcher/stub/` |
 
 ## 7. Open work
+
+- **0.4.4 waits for Mary** (2026-11-12): the game and the launcher are in
+  the test folder; the release is made once she has tried them.
+- **Building into the test folder without `node_modules`**: the folder's
+  own launcher runs the CLI, as `build-game.cmd` does
+  (`ELECTRON_RUN_AS_NODE=1`, `launcher\bin\UMK3-Launcher.exe
+  launcher\bin\resources\app.asar\cli.js --root <Test> <ipa> --arch x64`);
+  from PowerShell use `Start-Process -Wait`, which waits for it.
+- **factdiff on `GameInit_LoadABit`** did not finish in 25 minutes (3,300
+  instructions); its GameMode 5 block was checked by reading the
+  disassembly, not by the tool.
 
 - **The launcher's look (Mary, 2026-11-07)**: dark blued steel, slate and
   smoke, gold details, deep red for the chosen; the UMK3 Xbox 360 layout
