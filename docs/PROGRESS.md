@@ -129,6 +129,13 @@ traced to the binary's own mechanism before anything is changed.
   skips the dial and the touch scan for both players when they are
   hidden; keys and pads go on as before. The pause corners are a
   different path and are untouched. Built; not played.
+- **Debug menu: UNLOCK EVERYTHING** (MENUS page, UNLOCKS; Mary, to test the
+  treasures): the four hidden fighters' flags, `TreasureGained[0..9]` and
+  `EndingsGained[0..22]` set to 1 (the value the game writes for "won"),
+  then `Write_SaveData` with GameMode lent as 0 (it writes nothing in
+  other modes). The log says `debug menu: everything unlocked`. Port only
+  (debug_menu.c). Compiled; not linked into the test folder yet, as the
+  game was running from it.
 - **Launcher** (Mary's request): a new umk3.ini gets the primary screen's
   largest listed resolution, its aspect, borderless, `hide_controls=1`
   (`ini.fitScreen`; the default `hideControls` is now true). The first

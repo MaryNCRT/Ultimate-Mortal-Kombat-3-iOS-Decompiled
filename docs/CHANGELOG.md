@@ -23,6 +23,8 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
   with the touch controls hidden.
 - **WHAT'S NEW**: the launcher shows each version's news once, and again
   from UPDATES.
+- **Debug menu (F2) > MENUS > UNLOCK EVERYTHING**: the hidden fighters,
+  every treasure and every ending, saved -- to try the Lost Treasures.
 - Not played by Mary yet.
 
 ## 0.4.3 beta (2026-11-07)
