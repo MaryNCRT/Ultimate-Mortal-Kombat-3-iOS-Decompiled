@@ -59,6 +59,13 @@ void mplobby_set_me(const char *code, const char *name, const char *look, int re
 void mplobby_set_ready(int ready) { (void)ready; }
 void mplobby_set_rules(const char *rules) { (void)rules; }
 void mplobby_set_name(const char *name) { (void)name; }
+void mplobby_set_priv(int priv) { (void)priv; }
+void mplobby_invite(const char *code) { (void)code; }
+int  mplobby_invite_status(void) { return 0; }
+int  mplobby_invites(struct mplobby_invite *out, int max) { (void)out; (void)max; return 0; }
+int  mplobby_accept_invite(int i) { (void)i; return 0; }
+void mplobby_drop_invite(int i) { (void)i; }
+void mplobby_invite_got(const unsigned char *p, int n) { (void)p; (void)n; }
 void mplobby_kick(const char *who) { (void)who; }
 void mplobby_promote(const char *who) { (void)who; }
 void mplobby_call(const char *who) { (void)who; }
@@ -130,7 +137,9 @@ static unsigned ticks(void)
     X(EOS_LobbyModification_Release) \
     X(EOS_LobbyDetails_CopyInfo) X(EOS_LobbyDetails_Info_Release) \
     X(EOS_LobbyDetails_CopyAttributeByKey) X(EOS_LobbyDetails_CopyMemberAttributeByKey) \
-    X(EOS_LobbyDetails_GetMemberCount) X(EOS_LobbyDetails_GetMemberByIndex)
+    X(EOS_LobbyDetails_GetMemberCount) X(EOS_LobbyDetails_GetMemberByIndex) \
+    X(EOS_Lobby_SendInvite) X(EOS_Lobby_AddNotifyLobbyInviteReceived) \
+    X(EOS_Lobby_CopyLobbyDetailsHandleByInviteId)
 
 #define DECL(f) static __typeof__(f) *p_##f;
 EOS_FUNCS(DECL)
@@ -658,6 +667,7 @@ static int  L_w_priv, L_w_max, L_attr_dirty, L_go_n;
 /* the fight call this game was given */
 static char L_go_seen[64];
 static int  L_go_primed;               /* the call there on joining is not ours */
+static void make_key(char *out);
 static int  L_call;
 static char L_call_code[16], L_call_who[40];
 
@@ -952,13 +962,27 @@ static void EOS_CALL on_member_status(const EOS_Lobby_LobbyMemberStatusReceivedC
         lobby_reset(MPLOBBY_EV_KICKED);
         return;
     }
-    if (d->CurrentStatus == EOS_LMS_PROMOTED && !strcmp(who, mine))
-        L_attr_dirty = 1;               /* the new owner writes its name as host */
     lobby_refresh();
+    if (d->CurrentStatus == EOS_LMS_PROMOTED && !strcmp(who, mine)) {
+        /* the new owner writes its name as host, and the lobby's own
+         * fields as they are: what it would write is still empty */
+        copy_str(L_w_name, sizeof L_w_name, L_info.name);
+        copy_str(L_w_rules, sizeof L_w_rules, L_info.rules);
+        copy_str(L_w_key, sizeof L_w_key, L_info.key);
+        L_w_priv = L_info.priv;
+        if (!L_w_key[0])
+            make_key(L_w_key);
+        L_attr_dirty = 1;
+    }
 }
+
+static void EOS_CALL on_invite_received(const EOS_Lobby_LobbyInviteReceivedCallbackInfo *d);
+static void make_key(char *out);
 
 static void lobby_notifies(void)
 {
+    EOS_Lobby_AddNotifyLobbyInviteReceivedOptions iv;
+
     EOS_Lobby_AddNotifyLobbyUpdateReceivedOptions a;
     EOS_Lobby_AddNotifyLobbyMemberUpdateReceivedOptions b;
     EOS_Lobby_AddNotifyLobbyMemberStatusReceivedOptions c;
@@ -972,6 +996,9 @@ static void lobby_notifies(void)
     memset(&c, 0, sizeof c);
     c.ApiVersion = EOS_LOBBY_ADDNOTIFYLOBBYMEMBERSTATUSRECEIVED_API_LATEST;
     p_EOS_Lobby_AddNotifyLobbyMemberStatusReceived(g_lobby, &c, NULL, on_member_status);
+    memset(&iv, 0, sizeof iv);
+    iv.ApiVersion = EOS_LOBBY_ADDNOTIFYLOBBYINVITERECEIVED_API_LATEST;
+    p_EOS_Lobby_AddNotifyLobbyInviteReceived(g_lobby, &iv, NULL, on_invite_received);
 }
 
 /* ---- create, join, leave */
@@ -1412,6 +1439,179 @@ int mplobby_take_call(char *code, int cn, char *who, int wn)
     return 1;
 }
 
+/* ---- public / private, invites (port; stage 3, Mary 2026-11-12) */
+
+void mplobby_set_priv(int priv)
+{
+    if (L_w_priv != (priv != 0)) {
+        L_w_priv = priv != 0;
+        if (!L_w_key[0])
+            make_key(L_w_key);
+        L_attr_dirty = 1;
+    }
+}
+
+/* An invite asked for: the player's code is looked up as FIND MATCH looks
+ * it up (their ONLINE screen open), then the invite goes to the user found
+ * over P2P, mp_net's channel (lobby_invite_tick, from mpeos_tick): a packet
+ * "U3" MPLOBBY_INV_KIND 1, then the lobby's id, the host's name and the
+ * lobby's, each ending in 0; mp_net.c hands it to mplobby_invite_got.
+ * EOS_Lobby_SendInvite answered EOS_AccessDenied with this product's client
+ * policy (2026-11-12). */
+static char L_inv_code[16];
+static int  L_inv_state;                /* 0 none, 1 looking, 3 sending, 2 sent, -1 failed */
+
+static void EOS_CALL on_invite_sent(const EOS_Lobby_SendInviteCallbackInfo *d)
+{
+    L_inv_state = d->ResultCode == EOS_Success ? 2 : -1;
+    printf("online: lobby: invite to %s %s\n", L_inv_code,
+           d->ResultCode == EOS_Success ? "sent" : res(d->ResultCode));
+    L_serial++;
+}
+
+void mplobby_invite(const char *code)
+{
+    if (L_state != MPLOBBY_IN || !code || !code[0])
+        return;
+    copy_str(L_inv_code, sizeof L_inv_code, code);
+    L_inv_state = 1;
+    mpeos_lookup(code);
+    L_serial++;
+}
+
+int mplobby_invite_status(void) { return L_inv_state; }
+
+static void lobby_invite_tick(void)
+{
+    char who[40];
+    int r;
+
+    if (L_inv_state != 1)
+        return;
+    if (L_state != MPLOBBY_IN) {
+        L_inv_state = -1;
+        return;
+    }
+    r = mpeos_lookup_result(who, sizeof who);
+    if (r < 0) {
+        L_inv_state = -1;
+        printf("online: lobby: %s not found to invite\n", L_inv_code);
+        L_serial++;
+    } else if (r == 1) {
+        unsigned char b[4 + 128 + 64 + 48];
+        int n = 4, k;
+        b[0] = 'U'; b[1] = '3'; b[2] = MPLOBBY_INV_KIND; b[3] = 1;
+        n += snprintf((char *)b + n, sizeof b - (size_t)n, "%s", L_id) + 1;
+        n += snprintf((char *)b + n, sizeof b - (size_t)n, "%s", L_me_name) + 1;
+        n += snprintf((char *)b + n, sizeof b - (size_t)n, "%s", L_info.name) + 1;
+        if (n > (int)sizeof b)
+            n = (int)sizeof b;
+        for (k = 0; k < 3; k++)         /* unreliable: three times, kept once */
+            mpeos_send(who, b, n);
+        L_inv_state = 2;
+        printf("online: lobby: invite sent to %s\n", L_inv_code);
+        L_serial++;
+        (void)on_invite_sent;
+    }
+}
+
+/* the invites this game was sent, newest last */
+#define L_MAX_INV 8
+static struct mplobby_invite L_inv[L_MAX_INV];
+static int L_ninv;
+
+static void invite_store(const char *invite_id, const char *lobby, const char *from,
+                         const char *name)
+{
+    int i;
+
+    if (!lobby || !lobby[0] || !strcmp(lobby, L_id))
+        return;
+    for (i = 0; i < L_ninv; i++)        /* the same lobby again: the newer one */
+        if (!strcmp(L_inv[i].lobby, lobby))
+            break;
+    if (i < L_ninv && !strcmp(L_inv[i].from, from ? from : ""))
+        return;                         /* a copy (the packet comes three times) */
+    if (i == L_ninv) {
+        if (L_ninv == L_MAX_INV) {
+            memmove(L_inv, L_inv + 1, sizeof L_inv[0] * (L_MAX_INV - 1));
+            L_ninv--;
+        }
+        i = L_ninv++;
+    }
+    copy_str(L_inv[i].id, sizeof L_inv[i].id, invite_id);
+    copy_str(L_inv[i].lobby, sizeof L_inv[i].lobby, lobby);
+    copy_str(L_inv[i].from, sizeof L_inv[i].from, from);
+    copy_str(L_inv[i].name, sizeof L_inv[i].name, name);
+    L_inv[i].seen = 0;
+    printf("online: lobby: invited to %s by %s\n", name ? name : "", from ? from : "");
+    L_serial++;
+}
+
+void mplobby_invite_got(const unsigned char *p, int n)
+{
+    char t[4 + 128 + 64 + 48 + 3];
+    const char *lobby, *from, *name;
+
+    if (n <= 4 || n >= (int)sizeof t)
+        return;
+    memcpy(t, p, (size_t)n);
+    t[n] = t[n + 1] = t[n + 2] = 0;
+    lobby = t + 4;
+    from = lobby + strlen(lobby) + 1;
+    name = from + strlen(from) + 1;
+    invite_store("", lobby, from, name);
+}
+
+static void EOS_CALL on_invite_received(const EOS_Lobby_LobbyInviteReceivedCallbackInfo *d)
+{
+    EOS_Lobby_CopyLobbyDetailsHandleByInviteIdOptions o;
+    EOS_HLobbyDetails h = NULL;
+    struct mplobby_info in;
+
+    if (!d->InviteId)
+        return;
+    memset(&o, 0, sizeof o);
+    o.ApiVersion = EOS_LOBBY_COPYLOBBYDETAILSHANDLEBYINVITEID_API_LATEST;
+    o.InviteId = d->InviteId;
+    if (p_EOS_Lobby_CopyLobbyDetailsHandleByInviteId(g_lobby, &o, &h) != EOS_Success || !h)
+        return;
+    read_info(h, &in);
+    p_EOS_LobbyDetails_Release(h);
+    invite_store(d->InviteId, in.id, in.host, in.name);
+}
+
+int mplobby_invites(struct mplobby_invite *out, int max)
+{
+    int i;
+
+    for (i = 0; i < L_ninv && i < max; i++)
+        out[i] = L_inv[i];
+    for (i = 0; i < L_ninv; i++)
+        L_inv[i].seen = 1;
+    return L_ninv < max ? L_ninv : max;
+}
+
+void mplobby_drop_invite(int i)
+{
+    if (i < 0 || i >= L_ninv)
+        return;
+    memmove(L_inv + i, L_inv + i + 1, sizeof L_inv[0] * (size_t)(L_ninv - i - 1));
+    L_ninv--;
+    L_serial++;
+}
+
+int mplobby_accept_invite(int i)
+{
+    char id[128];
+
+    if (i < 0 || i >= L_ninv || L_state != MPLOBBY_NONE)
+        return 0;
+    copy_str(id, sizeof id, L_inv[i].lobby);
+    mplobby_drop_invite(i);
+    return mplobby_join(id);
+}
+
 /* --------------------------------------------------------------- login */
 
 static void logged_in(EOS_ProductUserId u)
@@ -1661,6 +1861,7 @@ void mpeos_tick(void)
     if (g_plat) {
         p_EOS_Platform_Tick(g_plat);
         lobby_flush();
+        lobby_invite_tick();
     }
 }
 

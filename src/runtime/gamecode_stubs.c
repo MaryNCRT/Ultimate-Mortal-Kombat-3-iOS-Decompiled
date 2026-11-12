@@ -36,6 +36,7 @@
 #include <sys/stat.h>
 
 #include "gamecode_globals.h"
+#include "mp_eos.h"           /* port: LOBBIES, the members' looks */
 
 
 /* ---- counters, so a test can assert a call happened without a server ---- */
@@ -276,8 +277,18 @@ int port_online_friend_look(const char *code, int *icon, unsigned *color, int *d
         snprintf(f, sizeof f, "%s", g_of[i].look);
     else if (g_found.look[0] && !strcmp(g_found.code, code))
         snprintf(f, sizeof f, "%s", g_found.look);
-    else
-        return 0;
+    else {
+        /* port: a member of the lobby this game is in (FrontEnd.c LOBBIES
+         * writes the look in this same form, mp_eos.c carries it) */
+        struct mplobby_member m[MPLOBBY_MAX_MEMBERS];
+        int j, n = mplobby_members(m, MPLOBBY_MAX_MEMBERS);
+        for (j = 0; j < n; j++)
+            if (m[j].look[0] && !strcmp(m[j].code, code))
+                break;
+        if (j >= n)
+            return 0;
+        snprintf(f, sizeof f, "%s", m[j].look);
+    }
     for (p = f; k < 6; k++) {
         fld[k] = p;
         if (!(p = strchr(p, '|')))

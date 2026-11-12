@@ -10,11 +10,31 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
-- **Online lobbies, the core** (no screen yet): creating, finding (public,
-  or private by a six-letter key), joining and leaving EOS lobbies, with
-  the rules, the members' names, looks and READY, kick and promote; the
-  lobby's owner calls a member and hosts the fight. Tested against Epic's
-  service with two test programs; LOBBIES in the ONLINE screen comes next.
+- **LOBBIES in the ONLINE screen** (Mary): the open lobbies, refreshed
+  every 5 seconds and with REFRESH, ALL or only those with MY RULES, a box
+  that finds a lobby by its name as you type or joins one by its key;
+  CREATE LOBBY with its name, PUBLIC / PRIVATE, 2 to 8 players and the
+  rules (the rules window, with HOST ADVANTAGE). In a lobby: the players'
+  banners with HOST and READY, the key with COPY, READY and LEAVE; the
+  host changes the rules, makes it public or private, and for the player
+  chosen FIGHT, KICK or MAKE HOST. Anyone invites a player by their code
+  or a friend's (their ONLINE screen open); the invite shows at the top of
+  the list with JOIN. FIGHT connects both and goes to the select screen.
+  Tested with two copies of the game on one PC: create, join, invite,
+  ready, the call, the select screen, the online fight. **Mary has not
+  played it yet.**
+- **The players' banners online** (Mary): the online select screen and the
+  versus screen show both players in the banner of the ONLINE screen, not
+  the old badge. Seen on the select screen. (The fight's names are PR #209's
+  gold plates.)
+- **A second monitor** (Mary): on a 60 Hz monitor beside a 180 Hz main the
+  game ran at 20 frames a second; it now reads the refresh of the monitor
+  the window is on, again when it moves. Checked 60 -> 180 -> 60 Hz.
+- **Online lobbies, the core**: creating, finding (public, or private by a
+  six-letter key), joining and leaving EOS lobbies, with the rules, the
+  members' names, looks and READY, kick and promote; the lobby's owner
+  calls a member and hosts the fight. A promoted host no longer blanks the
+  lobby's name, rules and key.
 
 ## 0.4.5 beta (2026-11-12)
 

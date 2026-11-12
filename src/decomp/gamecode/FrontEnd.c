@@ -16,6 +16,8 @@
 #include <stdlib.h>
 #include <time.h>
 #include "mp_net.h"     /* port: ONLINE */
+#include "mp_eos.h"     /* port: ONLINE, LOBBIES */
+#include "online_rules.h"
 #include "profiles.h"
 
 /* Both live in the slice's data and both hold 1.0f as shipped. */
@@ -12296,6 +12298,11 @@ enum { OB_TAB0, OB_SUB0 = OB_TAB0 + OS_N, OB_COPY = OB_SUB0 + PS_N, OB_BOX, OB_F
        OB_ANGR, OB_SAVE, OB_CANCEL, OB_RESET, OB_GAL0, OB_GALCLR = OB_GAL0 + 24,
        OB_GALCLOSE, OB_SOON, OB_MAINBAN, OB_ADV, OB_CSSBOX, OB_CSSAPPLY, OB_CSSCOPY,
        OB_CSSGEN, OB_CSSCLR, OB_ANGBOX, OB_HEX1, OB_HEX2, OB_DIAL, OB_HEXBOX, OB_GSAVE, OB_GCANCEL, OB_PICKSV, OB_PICKH, OB_PICKR, OB_PICKG, OB_PICKB, OB_PICKOK, OB_PICKBACK, OB_PRE0, OB_PRE_END = OB_PRE0 + 16,
+       /* LOBBIES */
+       OB_LALL, OB_LMINE, OB_LREF, OB_LKEY, OB_LKJOIN, OB_LNAME, OB_LVIS, OB_LPL, OB_LPR,
+       OB_LRULES, OB_LCREATE, OB_LCOPY, OB_LREADY, OB_LLEAVE, OB_LFIGHT, OB_LKICK, OB_LPROMO,
+       OB_LROW0, OB_LROW_END = OB_LROW0 + 5, OB_LINVOK0 = OB_LROW_END, OB_LINVNO0 = OB_LINVOK0 + 2,
+       OB_LINVBOX = OB_LINVNO0 + 2, OB_LINVFR, OB_LINV,
        OB_CARD0, OB_ACT0 = OB_CARD0 + PORT_ROWS, OB_ACT2 = OB_ACT0 + PORT_ROWS,
        OB_N = OB_ACT2 + PORT_ROWS };
 static long  PortOnlineWas[OB_N];
@@ -13156,6 +13163,14 @@ static void OnLook(const char *code, unsigned *color, int *dark, unsigned *color
     *dark = 1;
     *color2 = 0;
     *angle = -1;
+    extern int PortBandLook[6];
+    if (code && code[0] == '@') {       /* PortSkinBandOf's: a look given */
+        *color = (unsigned)PortBandLook[2];
+        *dark = PortBandLook[3];
+        *color2 = (unsigned)PortBandLook[4];
+        *angle = PortBandLook[5];
+        return;
+    }
     if (code && code[0] == '*' && PortDraftOn) {     /* MY PROFILE's draft */
         *color = PortDraft.color;
         *dark = PortDraft.dark;
@@ -14914,6 +14929,662 @@ static void PortOnlineProfile(float cx, float cw, float a, int searching, int ni
 
 /* LOBBIES, QUICK MATCH, PARTY: no system yet (stages 4 and 7). What there
  * is is shown -- you, for the party -- and the actions are off. */
+/* ------------------------------------------------------------- LOBBIES
+ *
+ * Port, not in the binary (docs/research/ONLINE-PHASE-PLAN.md, stage 3):
+ * EOS lobbies through runtime/mp_eos.c's mplobby_* calls.
+ *
+ *   not in a lobby   left, the open lobbies (ALL, or those with MY RULES,
+ *                    the rules of CREATE LOBBY), refreshed every 5 seconds,
+ *                    a click joins; a private lobby's KEY and JOIN under
+ *                    them. Right, CREATE LOBBY: its name, PUBLIC / PRIVATE,
+ *                    the players (2..8) and the rules (the rules window,
+ *                    runtime/debug_menu.c, with HOST ADVANTAGE).
+ *   in a lobby       left, the members' banners (HOST, READY); right, the
+ *                    lobby, its key (COPY), its rules, READY and LEAVE. The
+ *                    host also has EDIT RULES and, for the member chosen,
+ *                    FIGHT (once they are ready), KICK and PROMOTE.
+ *
+ * FIGHT is the lobby's "go": the member's mpnet_poll takes it and connects
+ * to the host, who hosts, and the screen goes on as FIND MATCH does once
+ * connected (the end of FE_Task_Online). The lobby's rules are the online
+ * block (rules_set_active) while this game is in it. No ping yet. */
+void lobby_rules_open(const online_rules *r, void (*done)(const online_rules *));  /* debug_menu.c */
+
+#define LB_ROWS 5
+static online_rules PortLobbyDraft;     /* CREATE LOBBY's rules */
+static int   PortLobbyDraftSet;
+static char  PortLobbyName[32];
+static int   PortLobbyNameMine;         /* the name typed, not the default */
+static int   PortLobbyPriv, PortLobbyMax = 2;
+static int   PortLobbyMine;             /* the list: 1 only lobbies with MY RULES */
+static char  PortLobbyKey[32];         /* a key, or part of a name */
+static int   PortLobbyKeyWait;          /* a key searched, its lobby to be joined */
+static float PortLobbyNext;             /* PortOnlineT of the next search */
+static struct mplobby_info PortLobbyRes[MPLOBBY_MAX_RESULTS];
+static int   PortLobbyResN = -1;        /* -1 not searched yet */
+static int   PortLobbyReady;
+static char  PortLobbySel[40];          /* the member chosen (EOS user) */
+static int   PortLobbyWasState;
+static int   PortLobbyRulesOn;          /* the lobby's rules made the online block */
+
+static void PortLobbySay(const char *s)
+{
+    snprintf(PortToast, sizeof PortToast, "%s", s);
+    PortToastT = 240.0f;
+}
+
+/* this player's banner for the lobby: as the launcher writes a friend's look
+ * (gamecode_stubs.c port_online_friend_look reads it back) */
+static void PortLobbyMe(void)
+{
+    const struct profile *me = prof_get();
+    char look[48], ang[8];
+
+    if (!me)
+        return;
+    if (me->angle >= 0)
+        snprintf(ang, sizeof ang, "%d", me->angle);
+    else
+        snprintf(ang, sizeof ang, "-");
+    snprintf(look, sizeof look, "%d|%06x|%c|%06x|%s|%d", me->icon, me->color & 0xffffffu,
+             me->dark == 1 ? 'D' : me->dark == 2 ? 'C' : 'L', me->color2 & 0xffffffu, ang,
+             me->alt ? 1 : 0);
+    mplobby_set_me(me->id, me->name, look, PortLobbyReady);
+}
+
+/* the rules in two short lines */
+static void PortLobbyRulesText(const char *text, char *l1, int n1, char *l2, int n2)
+{
+    online_rules r;
+    char f[32], t[24];
+    int i, k = 0;
+
+    if (!text || !rules_decode(text, &r)) {
+        snprintf(l1, (size_t)n1, "%s", PortFrTx("REGLAS DE OTRA VERSI\xc3\x93N", "ANOTHER VERSION'S RULES"));
+        l2[0] = 0;
+        return;
+    }
+    if (r.series > 1)
+        snprintf(f, sizeof f, PortFrTx("%d PELEAS", "%d FIGHTS"), r.series);
+    else
+        snprintf(f, sizeof f, "%s", PortFrTx("1 PELEA", "1 FIGHT"));
+    if (r.time == 0)
+        snprintf(t, sizeof t, "%s", PortFrTx("SIN TIEMPO", "NO TIME LIMIT"));
+    else
+        snprintf(t, sizeof t, PortFrTx("TIEMPO %d", "TIME %d"), r.time);
+    if (r.best_of == 1)
+        snprintf(l1, (size_t)n1, PortFrTx("1 RONDA, %s, %s", "1 ROUND, %s, %s"), f, t);
+    else
+        snprintf(l1, (size_t)n1, PortFrTx("MEJOR DE %d, %s, %s", "BEST OF %d, %s, %s"), r.best_of, f, t);
+    for (i = 0; i < 20; i++)
+        k += (r.kodes >> i) & 1;
+    if (k)
+        snprintf(t, sizeof t, "%d KODE%s", k, k > 1 ? "S" : "");
+    else
+        snprintf(t, sizeof t, "%s", PortFrTx("SIN KODES", "NO KODES"));
+    snprintf(l2, (size_t)n2, "%s%s%s", r.kombo_slide ? "" : "KOMBO SLIDE OFF, ",
+             r.host_adv ? "" : PortFrTx("LADO AL AZAR, ", "SIDE DRAWN, "), t);
+}
+
+static void PortLobbyDraftDone(const online_rules *r)
+{
+    PortLobbyDraft = *r;
+}
+
+static void PortLobbyRulesDone(const online_rules *r)
+{
+    char t[ONLINE_RULES_TEXT];
+
+    rules_encode(r, t, sizeof t);
+    mplobby_set_rules(t);
+}
+
+static void PortLobbySearch(void)
+{
+    char t[ONLINE_RULES_TEXT];
+
+    rules_encode(&PortLobbyDraft, t, sizeof t);
+    mplobby_search(PortLobbyMine ? t : NULL, NULL);
+    PortLobbyNext = PortOnlineT + 5.0f;
+}
+
+/* Every frame of the ONLINE screen, whatever the section: the lobby's rules
+ * as the online block, its end told, this player's banner kept. */
+static void PortLobbyTick(void)
+{
+    int st = mplobby_state();
+
+    if (!PortLobbyDraftSet) {
+        rules_default(&PortLobbyDraft);
+        PortLobbyDraftSet = 1;
+    }
+    {
+        /* an invite new: the notice, whatever the section (LOBBIES lists it) */
+        struct mplobby_invite iv[8];
+        int i, k = mplobby_invites(iv, 8);
+        for (i = 0; i < k; i++)
+            if (!iv[i].seen) {
+                char line[96];
+                snprintf(line, sizeof line, PortFrTx("%s TE INVITA A SU SALA", "%s INVITES YOU TO A LOBBY"),
+                         OnName(iv[i].from));
+                PortLobbySay(line);
+            }
+    }
+    if (st == MPLOBBY_IN) {
+        const struct mplobby_info *in = mplobby_info();
+        static char had[ONLINE_RULES_TEXT + 16];
+        online_rules r;
+        /* set when they change, not every frame (it logs them) */
+        if (in && (!PortLobbyRulesOn || strcmp(had, in->rules)) && rules_decode(in->rules, &r)) {
+            rules_set_active(&r);
+            snprintf(had, sizeof had, "%s", in->rules);
+            PortLobbyRulesOn = 1;
+        }
+        PortLobbyMe();
+    } else if (PortLobbyRulesOn) {
+        rules_clear_active();
+        PortLobbyRulesOn = 0;
+    }
+    if (st == MPLOBBY_NONE && PortLobbyWasState != MPLOBBY_NONE) {
+        PortLobbyReady = 0;
+        PortLobbySel[0] = 0;
+        PortLobbyNext = 0.0f;           /* the list again at once */
+        switch (mplobby_event()) {
+        case MPLOBBY_EV_KICKED:    PortLobbySay(PortFrTx("TE SACARON DE LA SALA", "YOU WERE KICKED FROM THE LOBBY")); break;
+        case MPLOBBY_EV_CLOSED:    PortLobbySay(PortFrTx("LA SALA SE CERR\xc3\x93", "THE LOBBY WAS CLOSED")); break;
+        case MPLOBBY_EV_FULL:      PortLobbySay(PortFrTx("LA SALA EST\xc3\x81 LLENA", "THE LOBBY IS FULL")); break;
+        case MPLOBBY_EV_NOT_FOUND: PortLobbySay(PortFrTx("ESA SALA YA NO EXISTE", "THAT LOBBY IS GONE")); break;
+        case MPLOBBY_EV_FAILED:    PortLobbySay(PortFrTx("NO SE PUDO, PRUEBA OTRA VEZ", "IT FAILED, TRY AGAIN")); break;
+        case MPLOBBY_EV_OFFLINE:   PortLobbySay(PortFrTx("SIN CONEXI\xc3\x93N A INTERNET", "NOT CONNECTED TO THE INTERNET")); break;
+        }
+    }
+    {
+        /* a test aid, as UMK3_ONLINE_FIND: UMK3_LOBBY_TEST=host makes
+         * "LOBBY TEST" and calls the first member who is ready;
+         * UMK3_LOBBY_TEST=join enters it from the list and is ready (two
+         * games on one PC: the second with UMK3_EOS_NEW_DEVICE=1, its own
+         * UMK3_SAVE_DIR and UMK3_PROFILES) */
+        static int made, called, joined;
+        const char *e = getenv("UMK3_LOBBY_TEST");
+        if (e && mpeos_state() == MPEOS_READY && !isMPConnected()) {
+            PortOnlineSection = OS_LOBBIES;
+            /* invite:<code> hosts as host does and invites that player;
+             * accept takes the first invite and is ready */
+            {
+                static float again;     /* not found yet (its game not up): again */
+                int is = mplobby_invite_status();
+                if (!strncmp(e, "invite:", 7) && st == MPLOBBY_IN && !called
+                    && (is == 0 || (is == -1 && PortOnlineT >= again))) {
+                    printf("lobby test: inviting %s\n", e + 7);
+                    mplobby_invite(e + 7);
+                    again = PortOnlineT + 4.0f;
+                }
+            }
+            if (!strcmp(e, "accept")) {
+                struct mplobby_invite iv[1];
+                if (st == MPLOBBY_NONE && !joined && mplobby_invites(iv, 1) > 0) {
+                    joined = 1;
+                    PortLobbyMe();
+                    printf("lobby test: accept %d (%s from %s)\n", mplobby_accept_invite(0), iv[0].name,
+                           iv[0].from);
+                }
+                if (st == MPLOBBY_IN && !PortLobbyReady) {
+                    PortLobbyReady = 1;
+                    mplobby_set_ready(1);
+                    printf("lobby test: ready\n");
+                }
+            }
+            if (!strcmp(e, "host") || !strncmp(e, "invite:", 7)) {
+                if (st == MPLOBBY_NONE && !made) {
+                    char t[ONLINE_RULES_TEXT];
+                    made = 1;
+                    rules_encode(&PortLobbyDraft, t, sizeof t);
+                    PortLobbyMe();
+                    printf("lobby test: create %d\n", mplobby_create("LOBBY TEST", t, 0, 2));
+                }
+                if (st == MPLOBBY_IN && !called) {
+                    struct mplobby_member m[MPLOBBY_MAX_MEMBERS];
+                    int i, n = mplobby_members(m, MPLOBBY_MAX_MEMBERS);
+                    for (i = 0; i < n; i++)
+                        if (!m[i].owner && m[i].ready) {
+                            printf("lobby test: calling %s\n", m[i].name);
+                            mplobby_call(m[i].who);
+                            called = 1;
+                            break;
+                        }
+                }
+            } else if (!strcmp(e, "join")) {
+                int i;
+                for (i = 0; st == MPLOBBY_NONE && !joined && i < PortLobbyResN; i++)
+                    if (!strcmp(PortLobbyRes[i].name, "LOBBY TEST")) {
+                        joined = 1;
+                        PortLobbyMe();
+                        printf("lobby test: join %d\n", mplobby_join(PortLobbyRes[i].id));
+                    }
+                if (st == MPLOBBY_IN && !PortLobbyReady) {
+                    PortLobbyReady = 1;
+                    mplobby_set_ready(1);
+                    printf("lobby test: ready\n");
+                }
+            }
+        }
+    }
+    PortLobbyWasState = st;
+}
+
+/* `name` has `part` in it, ignoring case */
+static int PortLobbyHas(const char *name, const char *part)
+{
+    size_t n = strlen(part), i, k;
+
+    if (!n)
+        return 1;
+    for (i = 0; name[i]; i++) {
+        for (k = 0; k < n && name[i + k]; k++) {
+            char a = name[i + k], b = part[k];
+            if (a >= 'a' && a <= 'z') a -= 32;
+            if (b >= 'a' && b <= 'z') b -= 32;
+            if (a != b)
+                break;
+        }
+        if (k == n)
+            return 1;
+    }
+    return 0;
+}
+
+/* the text is a key: six of the keys' letters and digits */
+static int PortLobbyIsKey(const char *s)
+{
+    int i;
+
+    for (i = 0; s[i]; i++)
+        if (!((s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= '0' && s[i] <= '9')))
+            return 0;
+    return i == 6;
+}
+
+/* the list and CREATE LOBBY */
+static void PortLobbyBrowser(float cx, float cw, float a)
+{
+    float lw = cw * 0.60f, rx = cx + lw + 8.0f, rw = cw - lw - 8.0f, y;
+    int i, n, pages, busy = mplobby_state() != MPLOBBY_NONE, st, rows, ninv, view[MPLOBBY_MAX_RESULTS], nv = 0;
+    struct mplobby_invite inv[8];
+    char l1[64], l2[64], line[96];
+
+    /* the search: every 5 seconds, the last answer kept while asking */
+    if (!busy && PortOnlineT >= PortLobbyNext)
+        PortLobbySearch();
+    n = mplobby_results(PortLobbyRes, MPLOBBY_MAX_RESULTS);
+    if (n >= 0) {
+        if (PortLobbyKeyWait) {         /* a key searched: its lobby */
+            PortLobbyKeyWait = 0;
+            if (n > 0 && !busy) {
+                PortLobbyMe();
+                mplobby_join(PortLobbyRes[0].id);
+                PortLobbySay(PortFrTx("ENTRANDO A LA SALA...", "JOINING THE LOBBY..."));
+            } else
+                PortLobbySay(PortFrTx("NINGUNA SALA TIENE ESA CLAVE", "NO LOBBY HAS THAT KEY"));
+            PortLobbyNext = PortOnlineT + 1.0f;
+            n = -1;
+        } else
+            PortLobbyResN = n;
+    }
+    for (i = 0; PortLobbyKey[i]; i++)   /* upper case, as the keys are made */
+        if (PortLobbyKey[i] >= 'a' && PortLobbyKey[i] <= 'z')
+            PortLobbyKey[i] -= 32;
+    /* the box filters the list by the lobbies' names as it is typed */
+    for (i = 0; i < PortLobbyResN; i++)
+        if (PortLobbyHas(PortLobbyRes[i].name, PortLobbyKey))
+            view[nv++] = i;
+    ninv = mplobby_invites(inv, 2);
+
+    /* ---- left: the lobbies ---- */
+    OnPanel(cx, 64.0f, lw, 212.0f, a, 1);
+    OnHeading(PortFrTx("SALAS ABIERTAS", "OPEN LOBBIES"), PortLobbyResN >= 0 ? nv : -1,
+              cx + 10.0f, 69.0f, lw - 20.0f, a);
+    if (OnButton(OB_LALL, PortFrTx("TODAS", "ALL"), cx + 10.0f, 88.0f, 56.0f, 15.0f,
+                 PortLobbyMine ? BT_NORMAL : BT_MAIN, a) && PortLobbyMine) {
+        PortLobbyMine = 0;
+        PortLobbyNext = 0.0f;
+        PortOnlinePage = 0;
+    }
+    if (OnButton(OB_LMINE, PortFrTx("MIS REGLAS", "MY RULES"), cx + 70.0f, 88.0f, 72.0f, 15.0f,
+                 PortLobbyMine ? BT_MAIN : BT_NORMAL, a) && !PortLobbyMine) {
+        PortLobbyMine = 1;
+        PortLobbyNext = 0.0f;
+        PortOnlinePage = 0;
+    }
+    if (OnButton(OB_LREF, PortFrTx("ACTUALIZAR", "REFRESH"), cx + 146.0f, 88.0f, 70.0f, 15.0f,
+                 busy ? BT_OFF : BT_NORMAL, a))
+        PortLobbyNext = 0.0f;
+    rows = LB_ROWS - ninv;              /* the invites first, in the list's place */
+    pages = (nv + rows - 1) / rows;
+    if (PortOnlinePage >= pages)
+        PortOnlinePage = pages ? pages - 1 : 0;
+    if (pages > 1) {
+        snprintf(line, sizeof line, "%d/%d", PortOnlinePage + 1, pages);
+        if (OnButton(OB_UP, "<", cx + lw - 74.0f, 88.0f, 18.0f, 15.0f,
+                     PortOnlinePage > 0 ? BT_NORMAL : BT_OFF, a))
+            PortOnlinePage--;
+        OnText(line, cx + lw - 42.0f, 89.0f, 1, 0.38f, 28.0f, OnDim, a);
+        if (OnButton(OB_DOWN, ">", cx + lw - 28.0f, 88.0f, 18.0f, 15.0f,
+                     PortOnlinePage < pages - 1 ? BT_NORMAL : BT_OFF, a))
+            PortOnlinePage++;
+    }
+    y = 108.0f;
+    for (i = 0; i < ninv; i++, y += 25.0f) {    /* an invite: gold, ENTER and X */
+        static const float g0[4] = { 0.55f, 0.40f, 0.10f, 0.45f }, g1[4] = { 0.20f, 0.12f, 0.03f, 0.25f };
+        OnVGrad(cx + 8.0f, y, lw - 16.0f, 23.0f, g0, g1, a);
+        OnFrame(cx + 8.0f, y, lw - 16.0f, 23.0f, 0.8f, 1.0f, 0.70f, 0.25f, a);
+        snprintf(line, sizeof line, PortFrTx("%s TE INVITA", "%s INVITES YOU"), OnName(inv[i].from));
+        OnText(line, cx + 13.0f, y + 2.0f, 0, 0.46f, lw - 120.0f, OnWhite, a);
+        OnText(OnName(inv[i].name), cx + 13.0f, y + 13.0f, 0, 0.32f, lw - 120.0f, OnAmber, a);
+        if (OnButton(OB_LINVOK0 + i, PortFrTx("ENTRAR", "JOIN"), cx + lw - 100.0f, y + 3.0f, 60.0f, 17.0f,
+                     busy ? BT_OFF : BT_MAIN, a)) {
+            PortLobbyMe();
+            if (mplobby_accept_invite(i))
+                PortLobbySay(PortFrTx("ENTRANDO A LA SALA...", "JOINING THE LOBBY..."));
+        }
+        if (OnButton(OB_LINVNO0 + i, "X", cx + lw - 36.0f, y + 3.0f, 22.0f, 17.0f, BT_NORMAL, a))
+            mplobby_drop_invite(i);
+    }
+    if (mpeos_state() != MPEOS_READY)
+        PortOnlineEmpty(PortFrTx("INTERNET NO DISPONIBLE", "INTERNET NOT READY"),
+                        PortFrTx("LAS SALAS USAN EPIC ONLINE SERVICES", "LOBBIES USE EPIC ONLINE SERVICES"),
+                        cx, 150.0f + 12.0f * (float)ninv, lw, a);
+    else if (PortLobbyResN < 0)
+        PortOnlineEmpty(PortFrTx("BUSCANDO SALAS...", "LOOKING FOR LOBBIES..."), "", cx,
+                        150.0f + 12.0f * (float)ninv, lw, a);
+    else if (nv == 0)
+        PortOnlineEmpty(PortLobbyKey[0] ? PortFrTx("NINGUNA SALA CON ESE NOMBRE", "NO LOBBY BY THAT NAME")
+                                        : PortFrTx("NO HAY SALAS ABIERTAS", "NO OPEN LOBBIES"),
+                        PortLobbyIsKey(PortLobbyKey) ? PortFrTx("SI ES UNA CLAVE, PULSA ENTRAR", "IF IT IS A KEY, PRESS JOIN")
+                                                     : PortFrTx("CREA UNA A LA DERECHA", "CREATE ONE ON THE RIGHT"),
+                        cx, 150.0f + 12.0f * (float)ninv, lw, a);
+    for (i = 0; i < rows; i++, y += 25.0f) {
+        static const float h0[4] = { 0.80f, 0.60f, 0.30f, 0.0f }, h1[4] = { 0.80f, 0.60f, 0.30f, 0.16f };
+        int k = PortOnlinePage * rows + i;
+        const struct mplobby_info *r;
+        char cnt[16];
+        int full;
+
+        if (k >= nv)
+            break;
+        r = &PortLobbyRes[view[k]];
+        full = r->members >= r->max_members;
+        if (OnArea(OB_LROW0 + i, cx + 8.0f, y, lw - 16.0f, 23.0f, &st) && !busy && !full) {
+            PortLobbyMe();
+            if (mplobby_join(r->id))
+                PortLobbySay(PortFrTx("ENTRANDO A LA SALA...", "JOINING THE LOBBY..."));
+        }
+        OnFill(cx + 8.0f, y, lw - 16.0f, 23.0f, 0.0f, 0.0f, 0.0f, 0.35f * a);
+        if (st)
+            OnVGrad(cx + 8.0f, y, lw - 16.0f, 23.0f, h0, h1, a);
+        if (st == 2)
+            OnFrame(cx + 8.0f, y, lw - 16.0f, 23.0f, 1.0f, 1.0f, 0.30f, 0.22f, a);
+        OnText(OnName(r->name), cx + 13.0f, y + 2.0f, 0, 0.50f, lw - 80.0f, st ? OnWhite : OnPale, a);
+        PortLobbyRulesText(r->rules, l1, sizeof l1, l2, sizeof l2);
+        snprintf(line, sizeof line, "%s  -  %s", OnName(r->host), l1);
+        OnText(line, cx + 13.0f, y + 13.0f, 0, 0.32f, lw - 80.0f, OnDim, a);
+        snprintf(cnt, sizeof cnt, "%d/%d", r->members, r->max_members);
+        OnText(cnt, cx + lw - 14.0f, y + 5.0f, 2, 0.50f, 40.0f, full ? OnRed : OnGreen, a);
+    }
+    OnRule(cx + 12.0f, 234.0f, lw - 24.0f, a);
+    OnText(PortFrTx("CLAVE O NOMBRE DE LA SALA", "A LOBBY'S KEY OR NAME"), cx + 12.0f, 239.0f, 0, 0.34f,
+           lw - 120.0f, OnDim, a);
+    if ((OnTextBox(OB_LKEY, PortLobbyKey, 24, TB_NAME, cx + 12.0f, 250.0f, lw - 120.0f, 20.0f,
+                   PortFrTx("ESCRIBE PARA BUSCAR", "TYPE TO SEARCH"), a) == 2
+         && PortLobbyIsKey(PortLobbyKey) && nv == 0)
+        || OnButton(OB_LKJOIN, PortFrTx("ENTRAR CON CLAVE", "JOIN BY KEY"), cx + lw - 100.0f, 248.0f, 88.0f, 22.0f,
+                    busy || !PortLobbyIsKey(PortLobbyKey) ? BT_OFF : BT_NORMAL, a)) {
+        if (!busy && PortLobbyIsKey(PortLobbyKey)) {
+            mplobby_search(NULL, PortLobbyKey);
+            PortLobbyKeyWait = 1;
+            PortLobbyNext = PortOnlineT + 5.0f;
+        }
+    }
+
+    /* ---- right: CREATE LOBBY ---- */
+    OnPanel(rx, 64.0f, rw, 212.0f, a, 0);
+    OnHeading(PortFrTx("CREAR SALA", "CREATE LOBBY"), -1, rx + 10.0f, 69.0f, rw - 20.0f, a);
+    if (!PortLobbyNameMine && PortOnlineEdit != OB_LNAME) {
+        const struct profile *me = prof_get();
+        snprintf(PortLobbyName, sizeof PortLobbyName, PortFrTx("SALA DE %s", "%s'S LOBBY"),
+                 OnName(me ? me->name : "PLAYER"));
+    }
+    if (PortOnlineEdit == OB_LNAME)
+        PortLobbyNameMine = 1;
+    OnTextBox(OB_LNAME, PortLobbyName, 24, TB_NAME, rx + 10.0f, 89.0f, rw - 20.0f, 20.0f,
+              PortFrTx("NOMBRE DE LA SALA", "LOBBY NAME"), a);
+    if (!PortLobbyName[0] && PortOnlineEdit != OB_LNAME)
+        PortLobbyNameMine = 0;
+    OnText(PortFrTx("VISIBLE", "VISIBILITY"), rx + 12.0f, 118.0f, 0, 0.40f, rw * 0.45f, OnPale, a);
+    if (OnButton(OB_LVIS, PortLobbyPriv ? PortFrTx("PRIVADA", "PRIVATE") : PortFrTx("P\xc3\x9a" "BLICA", "PUBLIC"),
+                 rx + rw - 92.0f, 115.0f, 82.0f, 17.0f, BT_NORMAL, a))
+        PortLobbyPriv = !PortLobbyPriv;
+    OnText(PortFrTx("JUGADORES", "PLAYERS"), rx + 12.0f, 140.0f, 0, 0.40f, rw * 0.45f, OnPale, a);
+    if (OnButton(OB_LPL, "<", rx + rw - 92.0f, 137.0f, 18.0f, 17.0f,
+                 PortLobbyMax > 2 ? BT_NORMAL : BT_OFF, a))
+        PortLobbyMax--;
+    snprintf(line, sizeof line, "%d", PortLobbyMax);
+    OnText(line, rx + rw - 51.0f, 138.0f, 1, 0.50f, 30.0f, OnWhite, a);
+    if (OnButton(OB_LPR, ">", rx + rw - 28.0f, 137.0f, 18.0f, 17.0f,
+                 PortLobbyMax < MPLOBBY_MAX_MEMBERS ? BT_NORMAL : BT_OFF, a))
+        PortLobbyMax++;
+    OnText(PortFrTx("REGLAS", "RULES"), rx + 12.0f, 162.0f, 0, 0.40f, rw - 24.0f, OnPale, a);
+    {
+        char t[ONLINE_RULES_TEXT];
+        rules_encode(&PortLobbyDraft, t, sizeof t);
+        PortLobbyRulesText(t, l1, sizeof l1, l2, sizeof l2);
+    }
+    OnText(l1, rx + 12.0f, 176.0f, 0, 0.34f, rw - 24.0f, OnDim, a);
+    OnText(l2, rx + 12.0f, 187.0f, 0, 0.34f, rw - 24.0f, OnDim, a);
+    if (OnButton(OB_LRULES, PortFrTx("EDITAR REGLAS", "EDIT RULES"), rx + 10.0f, 202.0f, rw - 20.0f, 18.0f,
+                 BT_NORMAL, a))
+        lobby_rules_open(&PortLobbyDraft, PortLobbyDraftDone);
+    if (OnButton(OB_LCREATE, mplobby_state() == MPLOBBY_CREATING ? PortFrTx("CREANDO...", "CREATING...")
+                                                                 : PortFrTx("CREAR SALA", "CREATE LOBBY"),
+                 rx + 10.0f, 240.0f, rw - 20.0f, 26.0f,
+                 busy || mpeos_state() != MPEOS_READY ? BT_OFF : BT_MAIN, a)) {
+        char t[ONLINE_RULES_TEXT];
+        rules_encode(&PortLobbyDraft, t, sizeof t);
+        PortLobbyReady = 0;
+        PortLobbyMe();
+        if (!mplobby_create(PortLobbyName[0] ? PortLobbyName : "LOBBY", t, PortLobbyPriv, PortLobbyMax))
+            PortLobbySay(PortFrTx("NO SE PUDO CREAR LA SALA", "THE LOBBY COULD NOT BE MADE"));
+    }
+}
+
+/* the lobby this game is in */
+static char PortLobbyInvite[16];        /* the code to invite */
+static int  PortLobbyFriend = -1;       /* the friend the > button put there */
+
+static void PortLobbyRoom(float cx, float cw, float a)
+{
+    const struct mplobby_info *in = mplobby_info();
+    const struct profile *me = prof_get();
+    struct mplobby_member m[MPLOBBY_MAX_MEMBERS];
+    float lw = cw * 0.60f, rx = cx + lw + 8.0f, rw = cw - lw - 8.0f, y, dx, t;
+    int i, n = mplobby_members(m, MPLOBBY_MAX_MEMBERS), owner = mplobby_am_owner(), pages;
+    int sel = -1, ist;
+    char l1[64], l2[64], line[96];
+
+    if (!in)
+        return;
+    for (i = 0; i < n; i++)
+        if (PortLobbySel[0] && !strcmp(m[i].who, PortLobbySel))
+            sel = i;
+    if (sel < 0)
+        PortLobbySel[0] = 0;
+
+    /* ---- left: who is in ---- */
+    OnPanel(cx, 64.0f, lw, 212.0f, a, 1);
+    OnHeading(OnName(in->name), -1, cx + 10.0f, 69.0f, lw - 60.0f, a);
+    snprintf(line, sizeof line, "%d/%d", n, in->max_members);
+    OnText(line, cx + lw - 14.0f, 69.0f, 2, 0.50f, 40.0f, OnGreen, a);
+    pages = (n + LB_ROWS - 1) / LB_ROWS;
+    if (PortOnlinePage >= pages)
+        PortOnlinePage = pages ? pages - 1 : 0;
+    if (pages > 1) {
+        if (OnButton(OB_UP, "<", cx + lw - 80.0f, 88.0f, 18.0f, 15.0f,
+                     PortOnlinePage > 0 ? BT_NORMAL : BT_OFF, a))
+            PortOnlinePage--;
+        if (OnButton(OB_DOWN, ">", cx + lw - 28.0f, 88.0f, 18.0f, 15.0f,
+                     PortOnlinePage < pages - 1 ? BT_NORMAL : BT_OFF, a))
+            PortOnlinePage++;
+    }
+    t = OnEnter(0, &dx);
+    y = 92.0f;
+    for (i = 0; i < LB_ROWS; i++, y += 36.0f) {
+        int k = PortOnlinePage * LB_ROWS + i, mine;
+        const char *state;
+        const float *rgb;
+
+        if (k >= n)
+            break;
+        mine = me && !strcmp(m[k].code, me->id);
+        if (m[k].owner) {
+            state = m[k].ready ? PortFrTx("ANFITRI\xc3\x93N, LISTO", "HOST, READY")
+                               : PortFrTx("ANFITRI\xc3\x93N", "HOST");
+            rgb = OnGold;
+        } else {
+            state = m[k].ready ? PortFrTx("LISTO", "READY") : PortFrTx("NO EST\xc3\x81 LISTO", "NOT READY");
+            rgb = m[k].ready ? OnGreen : OnDim;
+        }
+        if (OnCard(OB_CARD0 + i, mine ? "" : m[k].code, m[k].name[0] ? m[k].name : "?", state, rgb, 0,
+                   cx + 12.0f + dx, y, lw - 24.0f, 32.0f, k == sel ? 1.0f : 0.0f, a * t)
+            && owner && !mine)
+            snprintf(PortLobbySel, sizeof PortLobbySel, "%s", m[k].who);
+    }
+
+    /* ---- right: the lobby ---- */
+    OnPanel(rx, 64.0f, rw, 212.0f, a, 0);
+    OnHeading(PortFrTx("LA SALA", "THE LOBBY"), -1, rx + 10.0f, 69.0f, rw - 20.0f, a);
+    /* public or private; the host changes it */
+    if (in->priv)
+        OnText(PortFrTx("PRIVADA", "PRIVATE"), rx + 12.0f, 89.0f, 0, 0.42f, rw - 110.0f, OnAmber, a);
+    else {
+        snprintf(line, sizeof line, PortFrTx("P\xc3\x9a" "BLICA, DE %s", "PUBLIC, %s'S"), OnName(in->host));
+        OnText(line, rx + 12.0f, 89.0f, 0, 0.42f, owner ? rw - 110.0f : rw - 24.0f, OnPale, a);
+    }
+    if (owner && OnButton(OB_LVIS, in->priv ? PortFrTx("HACER P\xc3\x9a" "BLICA", "MAKE PUBLIC")
+                                            : PortFrTx("HACER PRIVADA", "MAKE PRIVATE"),
+                          rx + rw - 96.0f, 87.0f, 86.0f, 14.0f, BT_NORMAL, a))
+        mplobby_set_priv(!in->priv);
+    /* the key: anyone with it finds the lobby, public or private */
+    snprintf(line, sizeof line, PortFrTx("CLAVE %s", "KEY %s"), in->key[0] ? in->key : "-");
+    OnText(line, rx + 12.0f, 105.0f, 0, 0.42f, rw - 80.0f, OnWhite, a);
+    if (OnButton(OB_LCOPY, PortOnlineWord(PortOnlineCopied > 0.0f ? OT_COPIED : OT_COPY),
+                 rx + rw - 64.0f, 103.0f, 54.0f, 14.0f, in->key[0] ? BT_NORMAL : BT_OFF, a)) {
+        plat_clipboard_set(in->key);
+        PortOnlineCopied = 120.0f;
+    }
+    if (PortOnlineCopied > 0.0f)
+        PortOnlineCopied -= 1.0f / limeFPSScaleFactor;
+    PortLobbyRulesText(in->rules, l1, sizeof l1, l2, sizeof l2);
+    OnText(l1, rx + 12.0f, 121.0f, 0, 0.34f, rw - 24.0f, OnDim, a);
+    OnText(l2, rx + 12.0f, 131.0f, 0, 0.34f, rw - 24.0f, OnDim, a);
+    if (owner && OnButton(OB_LRULES, PortFrTx("EDITAR REGLAS", "EDIT RULES"), rx + 10.0f, 143.0f, rw - 20.0f,
+                          15.0f, BT_NORMAL, a)) {
+        online_rules r;
+        if (!rules_decode(in->rules, &r))
+            rules_default(&r);
+        lobby_rules_open(&r, PortLobbyRulesDone);
+    }
+
+    /* invite: a player's code, or a friend's (>) */
+    {
+        char fc[24][16], fn[24][32];
+        int nf = PortOnlineList(FK_FRIEND, fc, fn, 24);
+        float bx = rx + rw - 70.0f;
+
+        OnTextBox(OB_LINVBOX, PortLobbyInvite, 14, TB_ID, rx + 10.0f, 163.0f, rw - 104.0f, 16.0f,
+                  PortFrTx("C\xc3\x93" "DIGO DE JUGADOR", "PLAYER CODE"), a);
+        if (OnButton(OB_LINVFR, ">", rx + rw - 90.0f, 163.0f, 16.0f, 16.0f, nf ? BT_NORMAL : BT_OFF, a)
+            && nf) {
+            PortLobbyFriend = (PortLobbyFriend + 1) % nf;
+            snprintf(PortLobbyInvite, sizeof PortLobbyInvite, "%s", fc[PortLobbyFriend]);
+        }
+        ist = mplobby_invite_status();
+        if (OnButton(OB_LINV, PortFrTx("INVITAR", "INVITE"), bx, 163.0f, 60.0f, 16.0f,
+                     strlen(PortLobbyInvite) == 14 && ist != 1 && ist != 3 ? BT_NORMAL : BT_OFF, a))
+            mplobby_invite(PortLobbyInvite);
+        line[0] = 0;
+        for (i = 0; i < nf; i++)        /* whose code it is, when a friend's */
+            if (!strcmp(fc[i], PortLobbyInvite))
+                snprintf(line, sizeof line, "%s", OnName(fn[i]));
+        if (ist == 1 || ist == 3)
+            OnText(PortFrTx("INVITANDO...", "INVITING..."), rx + 12.0f, 181.0f, 0, 0.32f, rw - 24.0f, OnGold, a);
+        else if (ist == 2)
+            OnText(PortFrTx("INVITACI\xc3\x93N ENVIADA", "INVITE SENT"), rx + 12.0f, 181.0f, 0, 0.32f, rw - 24.0f, OnGreen, a);
+        else if (ist == -1)
+            OnText(PortFrTx("NO ENCONTRADO: DEBE TENER ABIERTA SU PANTALLA EN L\xc3\x8dNEA",
+                            "NOT FOUND: THEIR ONLINE SCREEN MUST BE OPEN"),
+                   rx + 12.0f, 181.0f, 0, 0.32f, rw - 24.0f, OnRed, a);
+        else if (line[0])
+            OnText(line, rx + 12.0f, 181.0f, 0, 0.32f, rw - 24.0f, OnDim, a);
+    }
+
+    if (owner) {
+        OnRule(rx + 12.0f, 193.0f, rw - 24.0f, a);
+        if (sel >= 0) {
+            float bw = (rw - 28.0f) / 3.0f;
+            snprintf(line, sizeof line, PortFrTx("ELEGIDO: %s", "CHOSEN: %s"), OnName(m[sel].name));
+            OnText(line, rx + 12.0f, 198.0f, 0, 0.36f, rw - 24.0f, OnWhite, a);
+            if (OnButton(OB_LFIGHT, PortFrTx("PELEAR", "FIGHT"), rx + 10.0f, 210.0f, bw, 18.0f,
+                         m[sel].ready ? BT_MAIN : BT_OFF, a)) {
+                mplobby_call(m[sel].who);
+                snprintf(line, sizeof line, PortFrTx("LLAMANDO A %s...", "CALLING %s..."), OnName(m[sel].name));
+                PortLobbySay(line);
+            }
+            if (OnButton(OB_LKICK, PortFrTx("EXPULSAR", "KICK"), rx + 14.0f + bw, 210.0f, bw, 18.0f,
+                         BT_NORMAL, a)) {
+                mplobby_kick(m[sel].who);
+                PortLobbySel[0] = 0;
+            }
+            if (OnButton(OB_LPROMO, PortFrTx("HACER ANFITRI\xc3\x93N", "MAKE HOST"), rx + 18.0f + 2.0f * bw,
+                         210.0f, bw, 18.0f, BT_NORMAL, a)) {
+                mplobby_promote(m[sel].who);
+                PortLobbySel[0] = 0;
+            }
+        } else
+            OnText(n > 1 ? PortFrTx("ELIGE A UN JUGADOR: PELEAR O EXPULSAR", "CHOOSE A PLAYER: FIGHT OR KICK")
+                         : PortFrTx("ESPERANDO JUGADORES...", "WAITING FOR PLAYERS..."),
+                   rx + rw * 0.5f, 208.0f, 1, 0.36f, rw - 24.0f, OnDim, a);
+    } else {
+        OnRule(rx + 12.0f, 193.0f, rw - 24.0f, a);
+        OnText(PortLobbyReady ? PortFrTx("EL ANFITRI\xc3\x93N TE LLAMAR\xc3\x81 A PELEAR",
+                                         "THE HOST WILL CALL YOU TO FIGHT")
+                              : PortFrTx("PULSA LISTO PARA PELEAR", "PRESS READY TO FIGHT"),
+               rx + rw * 0.5f, 208.0f, 1, 0.38f, rw - 24.0f, PortLobbyReady ? OnGreen : OnDim, a);
+    }
+    if (OnButton(OB_LREADY, PortLobbyReady ? PortFrTx("NO LISTO", "NOT READY") : PortFrTx("LISTO", "READY"),
+                 rx + 10.0f, 240.0f, (rw - 24.0f) * 0.5f, 26.0f, PortLobbyReady ? BT_NORMAL : BT_MAIN, a)) {
+        PortLobbyReady = !PortLobbyReady;
+        mplobby_set_ready(PortLobbyReady);
+    }
+    if (OnButton(OB_LLEAVE, PortFrTx("SALIR", "LEAVE"), rx + 14.0f + (rw - 24.0f) * 0.5f, 240.0f,
+                 (rw - 24.0f) * 0.5f, 26.0f, BT_NORMAL, a)) {
+        mplobby_leave();
+        PortLobbyReady = 0;
+    }
+}
+
+static void PortOnlineLobbies(float cx, float cw, float a)
+{
+    int st = mplobby_state();
+
+    if (st == MPLOBBY_IN)
+        PortLobbyRoom(cx, cw, a);
+    else if (st == MPLOBBY_LEAVING) {
+        OnPanel(cx, 64.0f, cw, 212.0f, a, 1);
+        PortOnlineEmpty(PortFrTx("SALIENDO DE LA SALA...", "LEAVING THE LOBBY..."), "", cx, 150.0f, cw, a);
+    } else
+        PortLobbyBrowser(cx, cw, a);
+}
+
 static void PortOnlineLater(int section, float cx, float cw, float a)
 {
     const struct profile *me = prof_get();
@@ -15110,6 +15781,7 @@ void FE_Task_Online(void)
     ninv = PortOnlineWaiting(FK_INVITE, &finv);
     PortOnlineNotices();
     PortOnlineRenameAnswer();
+    PortLobbyTick();                    /* LOBBIES: the lobby's rules, its end told */
     PortOnlinePicN = 0;
     PortOnlineFriendsOn = 0;
     if (PortOnlineSent > 0.0f) {
@@ -15250,6 +15922,7 @@ void FE_Task_Online(void)
     else switch (PortOnlineSection) {
     case OS_HOME:    PortOnlineHome(cx, cw, a, searching, nfr, nin); break;
     case OS_PROFILE: PortOnlineProfile(cx, cw, a, searching, nin, fin); break;
+    case OS_LOBBIES: PortOnlineLobbies(cx, cw, a); break;
     default:         PortOnlineLater(PortOnlineSection, cx, cw, a); break;
     }
     PortNoInput = 0;
@@ -15289,6 +15962,7 @@ void FE_Task_Online(void)
     limeDrawFONT(&GameFont, GameText(7),
                  FE_X(423.0f), FE_Y(296.0f), 1, FE_WidthScale, fontcol);
     if (back && !PortOnlineLeaving) {
+        mplobby_leave();                /* out of the screen, out of the lobby */
         mpnet_cancel_find();
         endMP();
         PopFETaskDeferred();
@@ -18719,4 +19393,25 @@ void PortSkinBand(float x, float y, float w, float h, float art, float a)
     OnText(OnName(me->name[0] ? me->name : "-"), tx, y + h * 0.14f, 0, h * 0.020f, x + w - tx - 6.0f,
            OnWhite, a);
     OnText(me->id, tx, y + h * 0.60f, 0, h * 0.012f, x + w - tx - 6.0f, OnGold, a);
+}
+
+/* Any player's banner, their look given (icon, alt, colour, dark, colour2,
+ * angle, as struct profile has them) -- online_ui.c, the online select
+ * screen and the fight (Mary: the badges in the banner's design). `sub`
+ * the line under the name, NULL none. Without its fighter, as above. */
+int PortBandLook[6];
+
+void PortSkinBandOf(float x, float y, float w, float h, float art, float a, const char *name,
+                    const char *sub, const int look[6])
+{
+    int n = PortOnlinePicN;
+    float tx = x + OnBandText(art);
+
+    memcpy(PortBandLook, look, sizeof PortBandLook);
+    OnBand("@", x, y, w, h, art, 0.0f, 0, a);
+    PortOnlinePicN = n;
+    OnText(OnName(name && name[0] ? name : "-"), tx, y + (sub ? h * 0.10f : (h - h * 0.62f) * 0.5f), 0,
+           h * (sub ? 0.022f : 0.026f), x + w - tx - 4.0f, OnWhite, a);
+    if (sub)
+        OnText(sub, tx, y + h * 0.60f, 0, h * 0.013f, x + w - tx - 4.0f, OnGold, a);
 }

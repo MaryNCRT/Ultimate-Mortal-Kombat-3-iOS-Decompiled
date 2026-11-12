@@ -761,6 +761,10 @@ static void on_packet(const unsigned char *b, int n, const struct paddr *a)
         if (g_lan_only && !a->eos && !g_connected && n >= 4 + INFO_BYTES)
             lobby_heard(&a->in, b + 4);
         break;
+    case MPLOBBY_INV_KIND:              /* port: an invite to an EOS lobby (mp_eos.c) */
+        if (a->eos)
+            mplobby_invite_got(b, n);
+        break;
     }
 }
 

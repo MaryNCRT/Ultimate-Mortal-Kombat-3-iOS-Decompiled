@@ -3646,6 +3646,12 @@ int main(int argc, char **argv)
             }
             if (vs_rules_is_open() && !set_menu_is_open()) {
                 const unsigned pb = g_pad.buttons | g_pad2.buttons;
+                /* a lobby's rules over the ONLINE screen: the lobby goes
+                 * on under it (port) */
+                {
+                    void mpeos_tick(void);
+                    mpeos_tick();
+                }
                 vs_rules_keys(plat_key(PK_LEFT) || g_pad.left || g_pad2.left,
                               plat_key(PK_RIGHT) || g_pad.right || g_pad2.right,
                               plat_key(PK_UP) || g_pad.up || g_pad2.up,

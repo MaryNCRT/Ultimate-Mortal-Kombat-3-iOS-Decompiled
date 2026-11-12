@@ -77,6 +77,10 @@ void ui_badge_at(int slot, const char *name, const unsigned char *icon,
 float ui_space_width(void);
 #define UI_PICTURES 40
 void ui_profile_banner(float x, float y, float w, float h);   /* Esc menu: the player banner */
+/* any player's banner (online select screen, fight); look: icon, alt,
+ * colour, dark, colour2, angle; slot 0 or 1 */
+void ui_player_banner(int slot, const char *name, const char *sub, const int look[6],
+                      float x, float y, float w, float h);
 void ui_picture_at(int slot, const unsigned char *rgba, int pw, int ph, unsigned key,
                    float x, float y, float w, float h, float a);
 void ui_rect_outline(float x, float y, float w, float h, float t,

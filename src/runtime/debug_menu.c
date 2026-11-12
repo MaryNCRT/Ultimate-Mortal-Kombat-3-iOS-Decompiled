@@ -3718,3 +3718,38 @@ void ui_profile_banner(float x, float y, float w, float h)
     if (art)
         ui_picture_at(UI_PICTURES - 1, art, 256, 256, key, x - sz * 0.08f, y + h - sz, sz, sz, 1.0f);
 }
+
+/* Any player's banner (port, Mary 2026-11-12): the online select screen's
+ * and the fight's players, in place of the old badge (ui_badge_at). `look`
+ * icon, alt, colour, dark, colour2, angle; `slot` 0 or 1 (each its own
+ * fighter picture). */
+void PortSkinBandOf(float x, float y, float w, float h, float art, float a, const char *name,
+                    const char *sub, const int look[6]);
+
+void ui_player_banner(int slot, const char *name, const char *sub, const int look[6],
+                      float x, float y, float w, float h)
+{
+    static unsigned char *art[2];
+    static unsigned have[2];
+    float sz = h * 1.45f;
+    unsigned key;
+
+    if (slot < 0 || slot > 1)
+        return;
+    begin_2d();
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+    PortSkinBegin();
+    PortSkinBandOf(x, y, w, h, sz, 1.0f, name, sub, look);
+    skin_end();
+    end_2d();
+    key = ((unsigned)look[0] * 2654435761u) ^ (look[1] ? 0x5bd1e995u : 0u) ^ 0x3c6ef372u
+          ^ (unsigned)(slot + 1);
+    if (key != have[slot] || !art[slot]) {
+        free(art[slot]);
+        art[slot] = prof_art_rgba(look[0], look[1]);
+        have[slot] = key;
+    }
+    if (art[slot])
+        ui_picture_at(UI_PICTURES - 2 - slot, art[slot], 256, 256, key, x - sz * 0.08f, y + h - sz,
+                      sz, sz, 1.0f);
+}
