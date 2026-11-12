@@ -25,7 +25,7 @@ stages 1-2 (audit, HOME, PROFILE) are done.
    text, name, public/private), search with filters, join by id, members
    and member attributes (ready, name, look), leave, kick, promote,
    updates; the lobby owner hosts the `mp_net` session over P2P.
-3. **LOBBIES in the ONLINE screen**: browser with filters, CREATE LOBBY
+3. **LOBBIES in the ONLINE screen** -- done, see below: browser with filters, CREATE LOBBY
    (the rules window's rows, plus HOST ADVANTAGE), the room (members,
    READY, ping, START for the host).
 4. **Rules checked in HELLO** (`rollback.c`): both blocks equal or the
@@ -93,3 +93,46 @@ both `PROBE OK`. Build it with zig from the repository root:
 and run it beside the EOS DLL and eos.ini (`probe host [priv]`, then
 `probe join [KEY]`). Not tried yet: kick, promote, host migration, the
 private lobby kept out of a public search, the rules filter.
+
+## LOBBIES in the ONLINE screen (stage 3)
+
+`FrontEnd.c` (port), `PortOnlineLobbies` and around it, over `mplobby_*`:
+
+- **Not in a lobby**: the open lobbies (`mplobby_search` every 5 s and
+  REFRESH; ALL or MY RULES, the draft's rules text), rows with name, host,
+  rules and n/m, a click joins. One box takes a lobby's name (filters the
+  list as typed) or its key (JOIN BY KEY, `mplobby_search(NULL, key)`).
+  Invites received sit at the top of the list (JOIN, X). CREATE LOBBY:
+  name, PUBLIC / PRIVATE, 2..8 players, the rules through the rules window
+  (`debug_menu.c lobby_rules_open`, the VS RULES window with HOST
+  ADVANTAGE, ACCEPT hands the block back).
+- **In a lobby**: the members' banners (`OnCard`, each look from the
+  member's `look` attribute, `port_online_friend_look` reads it), HOST /
+  READY; the key and COPY (every lobby has one; private ones are found by
+  it alone); READY, LEAVE. The host: EDIT RULES (`mplobby_set_rules`),
+  MAKE PUBLIC / PRIVATE (`mplobby_set_priv`), and for the member chosen
+  FIGHT (`mplobby_call`, once ready), KICK, MAKE HOST.
+- **Invites**: `mplobby_invite(code)` finds the player as FIND MATCH does
+  (`mpeos_lookup`, their ONLINE screen open), then sends a packet of kind
+  `MPLOBBY_INV_KIND` over P2P (mp_net's channel) with the lobby's id, the
+  host's name and the lobby's; `mp_net.c` hands it to `mplobby_invite_got`.
+  `EOS_Lobby_SendInvite` answered `EOS_AccessDenied` under this product's
+  client policy, so it is not used (the received-invite notification is
+  still registered).
+- While in a lobby its rules are the online block (`rules_set_active`, set
+  when they change); leaving clears it. BACK out of the screen leaves the
+  lobby. The rules window keeps EOS ticking (`game_main.c`).
+
+The key is the host's to choose (Mary): 4..12 letters and digits, in CREATE
+LOBBY (empty: six made up) or changed in the room (`mplobby_set_key`). Two
+lobbies may end up with one key; a key search joins the first found.
+
+Test aid: `UMK3_LOBBY_TEST=host | join | invite:<code> | accept | key:<KEY>`
+(the host's `UMK3_LOBBY_KEY` and `UMK3_LOBBY_PRIV=1`) drives the
+section by itself (two games on one PC: the second with
+`UMK3_EOS_NEW_DEVICE=1`, its own `UMK3_SAVE_DIR` and `UMK3_PROFILES`; start
+the host first, so the two are different EOS users). Seen: create, join
+from the list, ready, the call, the select screen and the online fight;
+invite by code, accepted, the call. Frames from `UMK3_SHOTS` (the game's
+own, no window capture). Not tried: kick, promote, the rules changed in a
+room. No ping yet.

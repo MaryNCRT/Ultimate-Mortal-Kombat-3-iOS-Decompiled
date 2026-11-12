@@ -48,6 +48,8 @@ int  mpeos_players(void);
 #define MPLOBBY_PROTO       "1"
 #define MPLOBBY_MAX_MEMBERS 8
 #define MPLOBBY_MAX_RESULTS 32
+#define MPLOBBY_KEY_MIN     4           /* a key the host types: 4..12 letters and digits */
+#define MPLOBBY_KEY_MAX     12
 
 struct mplobby_member {
     char who[40];                       /* EOS user, for kick / promote */
@@ -63,7 +65,7 @@ struct mplobby_info {
     char name[48];
     char host[64];
     char rules[64];
-    char key[8];
+    char key[MPLOBBY_KEY_MAX + 4];
     char owner[40];                     /* EOS user */
     int  priv;
     int  members, max_members;
@@ -108,7 +110,37 @@ void mplobby_set_ready(int ready);
 /* The owner's: the lobby's name and rules (members see them change). */
 void mplobby_set_rules(const char *rules);
 void mplobby_set_name(const char *name);
+/* The owner's: public or private after the lobby is made (the key stays). */
+void mplobby_set_priv(int priv);
+/* The key, the host's own (Mary): before creating, the next lobby's (too
+ * short or empty: one made up, six characters); in a lobby, the owner's
+ * change. mplobby_key_clean: what a key keeps of a text (letters and
+ * digits, upper case, MPLOBBY_KEY_MAX at most). */
+void mplobby_set_key(const char *key);
+void mplobby_key_clean(const char *in, char *out, int n);
 void mplobby_kick(const char *who);
+
+/* Invites. mplobby_invite: a player by their code, found as FIND MATCH
+ * finds them (their ONLINE screen open), then sent an EOS lobby invite;
+ * mplobby_invite_status: 0 none, 1 looking, 3 sending, 2 sent, -1 failed.
+ * mplobby_invites: the invites this game was sent (`seen` once read);
+ * mplobby_accept_invite joins one (and drops it). */
+struct mplobby_invite {
+    char id[128];
+    char lobby[128];
+    char from[64];                      /* the host's name */
+    char name[48];                      /* the lobby's */
+    int  seen;
+};
+void mplobby_invite(const char *code);
+/* The invite travels over P2P as one of mp_net's packets, of this kind
+ * (mp_net.c on_packet gives it to mplobby_invite_got, whole). */
+#define MPLOBBY_INV_KIND 0x40
+void mplobby_invite_got(const unsigned char *p, int n);
+int  mplobby_invite_status(void);
+int  mplobby_invites(struct mplobby_invite *out, int max);
+int  mplobby_accept_invite(int i);
+void mplobby_drop_invite(int i);
 void mplobby_promote(const char *who);
 /* The owner calls a member to fight; that member's game takes the call
  * (mplobby_take_call: 1 once, with the owner's code and EOS user). */

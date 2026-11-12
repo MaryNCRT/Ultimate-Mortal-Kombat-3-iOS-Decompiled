@@ -70,6 +70,21 @@ static void badge(int slot, const char *name, const struct look *l,
     ui_badge_at(slot, name, icon, ICON_PX, key_of(name, l), x, y, align, size);
 }
 
+/* A player's banner, `right` measured from its right end */
+static void banner(int slot, const char *name, const struct look *l, float x, float y,
+                   float w, float h, int right)
+{
+    int look[6];
+
+    look[0] = l->icon;
+    look[1] = l->alt;
+    look[2] = (int)l->color;
+    look[3] = l->dark;
+    look[4] = (int)l->color2;
+    look[5] = l->angle;
+    ui_player_banner(slot, name, NULL, look, right ? x - w : x, y, w, h);
+}
+
 static void my_look(struct look *l)
 {
     const struct profile *p = prof_get();
@@ -175,21 +190,19 @@ void online_after_frame(void)
         return;
     peer_look(o, &ol);
 
+    /* Mary (2026-11-12): the players in the banner's design, the ONLINE
+     * screen's (FrontEnd.c PortSkinBandOf), no longer the old badge */
     if (CurrentTask == 3 && FE_CurrentTask == 0x2a) {
-        badge(0, me->name, &ml, 4.0f, 6.0f, 0, 0.8f);
-        badge(1, o->name, &ol, w - 4.0f, 6.0f, 2, 0.8f);
-    } else if ((CurrentTask == 3 && FE_CurrentTask == 0x2b)
-               || CurrentTask == 6) {
-        /* the versus screen and the fight: player 1 (the host) left. In
-         * the fight, above the life bars, beside the moves (i) and pause
-         * buttons in the top corners, so they cover nothing. */
+        /* above the roster's first row (y 30), the fighter inside the screen */
+        banner(0, me->name, &ml, 10.0f, 9.0f, 116.0f, 19.0f, 0);
+        banner(1, o->name, &ol, w - 10.0f, 9.0f, 116.0f, 19.0f, 1);
+    } else if (CurrentTask == 3 && FE_CurrentTask == 0x2b) {
+        /* the versus screen: player 1 (the host) left. The fight's names
+         * are its own, gold plates from DrawHUD (PR #209) */
         int host = mpnet_am_server();
-        int fight = CurrentTask == 6;
-        float y = fight ? 2.0f : 6.0f;
-        float k = fight ? 0.55f : 0.8f;
-        float x = fight ? 26.0f : 4.0f;
 
-        badge(2, host ? me->name : o->name, host ? &ml : &ol, x, y, 0, k);
-        badge(3, host ? o->name : me->name, host ? &ol : &ml, w - x, y, 2, k);
+        banner(0, host ? me->name : o->name, host ? &ml : &ol, 10.0f, 9.0f, 116.0f, 19.0f, 0);
+        banner(1, host ? o->name : me->name, host ? &ol : &ml, w - 10.0f, 9.0f, 116.0f, 19.0f, 1);
     }
+    (void)badge;
 }

@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-11-12 (release 0.4.5 beta: TRAINING's screen -- the moves window and the inputs, one player's controls -- DUELO against the CPU, the RULES button with its key. Before it, the ONLINE phase began: the rules block, `online_rules.c`, and the local versus's VS RULES window opened by SELECT, kodes ticked in a checklist; Mary played it. Then ONLINE stage 2, the EOS lobby core (`mplobby_*`), tested against the service with two probes. Next: LOBBIES in the ONLINE screen, [research/ONLINE-PHASE-PLAN.md](research/ONLINE-PHASE-PLAN.md) stage 3. Before it, 0.4.4 beta: the Lost Treasures' opponents from the binary, a click no longer reaching hidden controls, the first start's ORIGINAL / ENHANCED choice, WHAT'S NEW, new folders at the screen's largest resolution with the controls hidden. Before it, release 0.4.3 beta: the replay player in the ONLINE skin, STAGE SELECT without scrolling, the Esc menu's black box fixed; 0.4.2: STAGE SELECT in the ONLINE skin; the launcher renewed in dark blued steel, PROFILE rebuilt around the Player Banner, icon and favourite fighter one, Esc's PROFILE page removed).
+**Last updated:** 2026-11-12 (ONLINE stage 3: LOBBIES in the ONLINE screen -- the list, CREATE LOBBY, the room, invites, FIGHT -- the online select screen's banners, and the game on a second monitor of another refresh rate (20 fps on a 60 Hz monitor beside a 180 Hz main, fixed). Before it, release 0.4.5 beta: TRAINING's screen -- the moves window and the inputs, one player's controls -- DUELO against the CPU, the RULES button with its key. Before it, the ONLINE phase began: the rules block, `online_rules.c`, and the local versus's VS RULES window opened by SELECT, kodes ticked in a checklist; Mary played it. Then ONLINE stage 2, the EOS lobby core (`mplobby_*`), tested against the service with two probes. Next: LOBBIES in the ONLINE screen, [research/ONLINE-PHASE-PLAN.md](research/ONLINE-PHASE-PLAN.md) stage 3. Before it, 0.4.4 beta: the Lost Treasures' opponents from the binary, a click no longer reaching hidden controls, the first start's ORIGINAL / ENHANCED choice, WHAT'S NEW, new folders at the screen's largest resolution with the controls hidden. Before it, release 0.4.3 beta: the replay player in the ONLINE skin, STAGE SELECT without scrolling, the Esc menu's black box fixed; 0.4.2: STAGE SELECT in the ONLINE skin; the launcher renewed in dark blued steel, PROFILE rebuilt around the Player Banner, icon and favourite fighter one, Esc's PROFILE page removed).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
@@ -152,7 +152,12 @@ press COMPILE.
   (`mplobby_*` in `mp_eos.c`), is done and tested with
   `tests/eos_lobby_probe.c` (two probes on one PC, the second with
   `UMK3_EOS_NEW_DEVICE=1`); kick, promote and host migration not tried
-  yet. Next, stage 3: LOBBIES in the ONLINE screen. Not seen yet on screen: ROUND 5, the coins past two, the
+  yet. Stage 3, LOBBIES in the ONLINE screen, is done (list, key or name,
+  CREATE, the room, public / private after, invites by code over P2P, FIGHT;
+  two copies on one PC reached the online fight; Mary has not played it;
+  kick, promote and a rules change in a room not tried). Test aid
+  `UMK3_LOBBY_TEST`; see the plan. Next, stage 4: the rules checked in HELLO.
+  Not seen yet on screen: ROUND 5, the coins past two, the
   series line under the clock. Scripted runs of the menus are not used in
   Mary's test folder (one went into Arcade's tower).
 - **0.4.4 released** (2026-11-12): Mary confirmed the Lost Treasures,

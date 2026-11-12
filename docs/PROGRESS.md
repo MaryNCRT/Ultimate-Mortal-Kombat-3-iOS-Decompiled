@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-12 (ONLINE stage 2: the EOS lobby core, `mplobby_*` in mp_eos.c, tested with two probes against the service) · before: 2026-11-12 (release 0.4.5 beta: TRAINING's own screen, DUELO against the CPU, the RULES button) · before: 2026-11-12 (the ONLINE phase's rules block and the local versus's VS RULES window with its kodes checklist, Mary confirmed) · before: 2026-11-12 (0.4.4 beta in the test folder: the Lost Treasures fixed from the binary, hidden controls ignore clicks, the first start's preset, WHAT'S NEW) · earlier: 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-12 (ONLINE stage 3: LOBBIES in the ONLINE screen, invites over P2P, the online select screen's banners; a second monitor's refresh) · before: 2026-11-12 (ONLINE stage 2: the EOS lobby core, `mplobby_*` in mp_eos.c, tested with two probes against the service) · before: 2026-11-12 (release 0.4.5 beta: TRAINING's own screen, DUELO against the CPU, the RULES button) · before: 2026-11-12 (the ONLINE phase's rules block and the local versus's VS RULES window with its kodes checklist, Mary confirmed) · before: 2026-11-12 (0.4.4 beta in the test folder: the Lost Treasures fixed from the binary, hidden controls ignore clicks, the first start's preset, WHAT'S NEW) · earlier: 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -97,6 +97,46 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+### 2026-11-12 -- ONLINE stage 3: LOBBIES; a second monitor's refresh
+
+**A second monitor.** Mary: the game ran slow on a monitor that is not the
+main one. Her main runs at 180 Hz, the others at 60. `plat_refresh_hz`
+(win32_gl.c) read `GetDeviceCaps(VREFRESH)` on the window's DC, the main
+monitor's, once; Direct3D 12 / Vulkan then kept every frame up three
+refreshes (`rgl_swap_interval` 3), 20 frames a second on a 60 Hz monitor.
+Now it asks the window's monitor (`MonitorFromWindow` +
+`EnumDisplaySettings`; SDL: `SDL_GetWindowDisplayIndex`), and `pace_frame`
+(game_main.c) looks twice a second and resets the interval when it changes.
+Checked with `UMK3_LOG_PACE=1`, the window moved 60 -> 180 -> 60 Hz: 16.7 ms
+between swaps on each.
+
+**LOBBIES** (FrontEnd.c `PortOnlineLobbies`; plan:
+[research/ONLINE-PHASE-PLAN.md](research/ONLINE-PHASE-PLAN.md), stage 3).
+The list (5 s, REFRESH, ALL / MY RULES), a box for a lobby's name or key,
+CREATE LOBBY (name, public / private, 2..8, the rules window in a lobby
+mode with HOST ADVANTAGE, debug_menu.c `lobby_rules_open`), the room
+(members' banners, key and COPY, READY, LEAVE; the host: EDIT RULES, MAKE
+PUBLIC / PRIVATE, FIGHT / KICK / MAKE HOST), invites by a player's code or a
+friend's. In mp_eos.c: `mplobby_set_priv`; invites sent as a P2P packet
+(`MPLOBBY_INV_KIND`, handed over by mp_net.c) because
+`EOS_Lobby_SendInvite` answered `EOS_AccessDenied` under this product's
+client policy; a promoted host no longer writes the lobby's name, rules and
+key empty; an old call in a lobby is not taken on joining. The members'
+looks travel in their `look` attribute (gamecode_stubs.c
+`port_online_friend_look` reads them for the portraits).
+
+Checked with two copies of the game on one PC (`UMK3_LOBBY_TEST`, the
+second with `UMK3_EOS_NEW_DEVICE=1`, its own save folder and profiles
+file): create, join from the list, ready, the call, the select screen and
+an online fight (player 1 and 2); invite by code, accepted, the call, the
+select screen. Frames from `UMK3_SHOTS`. Not tried: kick, promote, a rules
+change in a room. Mary has not played it.
+
+**The online select screen's banners** (Mary): online_ui.c draws both
+players with the ONLINE screen's banner (FrontEnd.c `PortSkinBandOf`,
+debug_menu.c `ui_player_banner`) on the select and versus screens; seen on
+the select screen. The fight's names are PR #209's.
 
 ## ONLINE stage 2: the EOS lobby core (2026-11-12)
 

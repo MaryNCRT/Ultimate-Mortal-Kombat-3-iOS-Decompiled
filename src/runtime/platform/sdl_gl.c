@@ -586,7 +586,11 @@ int plat_key(int code)
 
 int plat_refresh_hz(void)
 {
+    /* the monitor the window is on now, not the window's fullscreen mode */
     SDL_DisplayMode m;
+    int d = g_wnd ? SDL_GetWindowDisplayIndex(g_wnd) : -1;
+    if (d >= 0 && SDL_GetCurrentDisplayMode(d, &m) == 0)
+        return m.refresh_rate;
     if (g_wnd && SDL_GetWindowDisplayMode(g_wnd, &m) == 0)
         return m.refresh_rate;
     return 0;
