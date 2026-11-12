@@ -215,6 +215,7 @@ extern int limeScreenWidth;
 extern int port_corner_buttons;         /* game_main.c: the (i) and pause */
 
 #define NP_H     17.0f                  /* the plate, HUD points */
+#define NP_Y      3.0f                  /* its top, below the screen's edge */
 #define NP_EDGE   2.0f                  /* its margin for the beam's flare */
 
 static float np_clamp(float v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
@@ -378,7 +379,7 @@ static void np_draw(void *font, float s, const char *name, int right)
     char text[100], key[64];
     float edge = port_corner_buttons ? 33.0f : 3.0f;
     float room = (float)limeScreenWidth / s * 0.5f - 30.0f - edge;  /* to the clock */
-    float pad = 7.0f, k = 0.92f, tw, pw, x;
+    float pad = 11.0f, k = 0.78f, tw, pw, x;
     int wpx, hpx, mpx;
     unsigned char *px;
     TEXTURE *t;
@@ -390,8 +391,8 @@ static void np_draw(void *font, float s, const char *name, int right)
         tw = limeGetStringWidth(font, text) * k;
     }
     pw = tw + 2 * pad;
-    if (pw < 64.0f)
-        pw = 64.0f;
+    if (pw < 72.0f)
+        pw = 72.0f;
     /* the plate, made at the screen's pixels: one per size, kept */
     wpx = (int)(pw * s + 0.5f);
     hpx = (int)(NP_H * s + 0.5f);
@@ -412,12 +413,12 @@ static void np_draw(void *font, float s, const char *name, int right)
     t = tex[right];
     x = right ? (float)limeScreenWidth - (edge + pw) * s : edge * s;
     if (t)
-        limeDrawSprite(t, x - (float)mpx, 1.0f * s - (float)mpx,
+        limeDrawSprite(t, x - (float)mpx, NP_Y * s - (float)mpx,
                        (float)(wpx + 2 * mpx), (float)(hpx + 2 * mpx),
                        0.0f, 0.0f, 1.0f, 1.0f, white);
-    /* the name, set against the plate's outer end, centred in the stone */
-    limeDrawFONT(font, text, right ? x + (pw - pad) * s : x + pad * s,
-                 (1.0f + 4.6f) * s, right ? 2 : 0, k * s, gold);
+    /* the name, centred in the stone with room above and below, clear of
+     * the frame (Mary) */
+    limeDrawFONT(font, text, x + pw * 0.5f * s, (NP_Y + 5.0f) * s, 1, k * s, gold);
 }
 
 /* Called by DrawHUD (GameCode.c, port) while the fight is not paused, with

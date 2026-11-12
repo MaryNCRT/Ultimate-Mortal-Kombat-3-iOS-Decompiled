@@ -14,8 +14,9 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
   alone, without the profile icon (it could be taken for the fighter's), in
   the type of the fighters' names on the life bars, gold, on a plate of the
   ONLINE screen's dress (stone, a gold beam, a bronze foot). Above the life
-  bars and short of the clock; right against the screen's edges when the
-  (i) and pause buttons are hidden. Not yet seen by Mary in an online fight.
+  bars and short of the clock, the name centred with room around it; right
+  against the screen's edges when the (i) and pause buttons are hidden.
+  Mary approved it in her test folder.
 - **Online lobbies, the core** (no screen yet): creating, finding (public,
   or private by a six-letter key), joining and leaving EOS lobbies, with
   the rules, the members' names, looks and READY, kick and promote; the

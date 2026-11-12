@@ -117,7 +117,8 @@ when the corner buttons are hidden (`corner_buttons=0`).
 - The plate is made in software (`np_make`: stone, gold beam flared at the
   corners, oxblood line, bronze foot, fine gold frame), uploaded with
   `limeTextureFromRGBA` once per pixel size and kept. The name is upper
-  case, tinted gold, set against the plate's outer end; a long name gets a
+  case, tinted gold, centred in the plate at 0.78 of NameFont's size so it
+  clears the frame above and below (Mary asked twice); a long name gets a
   smaller scale so the plate stops 30 points short of the clock. NameFont
   has only ASCII: accented Latin-1 letters (UTF-8 or single bytes) become
   their plain letter, anything else `?`.
@@ -128,8 +129,9 @@ when the corner buttons are hidden (`corner_buttons=0`).
   player of that name, for screenshots (`--fight` / `UMK3_FIGHT`).
 
 Checked: screenshots in a scratch copy of the test folder at 16:9 and 4:3,
-with the corner buttons on and off, a long name and an accented one. Not
-yet checked in a real online fight between two machines.
+with the corner buttons on and off, a long name and an accented one; Mary
+approved the final look in her test folder. Not yet checked in a real
+online fight between two machines.
 
 ## ONLINE stage 2: the EOS lobby core (2026-11-12)
 
