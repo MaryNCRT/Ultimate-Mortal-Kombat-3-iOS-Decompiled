@@ -146,6 +146,12 @@ press COMPILE.
 
 ## 7. Open work
 
+- **The online fight's player names** (2026-11-12): redesigned on Mary's
+  choice (name only, NameFont, gold plate, flush to the edges with the
+  corner buttons hidden), drawn from `DrawHUD` by
+  `online_fight_names_hud` (online_ui.c). Checked with
+  `UMK3_NAMES_PREVIEW` in a local fight; not yet seen in a real online
+  fight.
 - **The ONLINE phase** ([research/ONLINE-PHASE-PLAN.md](research/ONLINE-PHASE-PLAN.md)):
   stage 1, the rules block, is done and in the local versus (SELECT on its
   select screen); Mary played it. Stage 2, the EOS lobby core

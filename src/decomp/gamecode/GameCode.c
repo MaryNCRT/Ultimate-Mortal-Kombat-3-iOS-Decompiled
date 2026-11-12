@@ -9641,6 +9641,14 @@ void DrawHUD(void)
     limeDrawFONT(&CountDownFont, strBuf, (float)(limeScreenWidth / 2),
                  s * 20.0f, 1, s, fontcol);
 
+    /* Port, not in the binary: an online fight's player names above the
+     * life bars, in the fighters' names' type (runtime/online_ui.c) */
+    {
+        extern void online_fight_names_hud(void *font, float scale);
+        if (!GamePaused)
+            online_fight_names_hud(&NameFont, s);
+    }
+
     /* ---- who won ---- */
     if (WinnerMessage[0] || WinnerMessage[1]) {
         RoundEndedAgainst(0);

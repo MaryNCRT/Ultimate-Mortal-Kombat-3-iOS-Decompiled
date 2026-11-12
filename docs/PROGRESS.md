@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-12 (ONLINE stage 2: the EOS lobby core, `mplobby_*` in mp_eos.c, tested with two probes against the service) · before: 2026-11-12 (release 0.4.5 beta: TRAINING's own screen, DUELO against the CPU, the RULES button) · before: 2026-11-12 (the ONLINE phase's rules block and the local versus's VS RULES window with its kodes checklist, Mary confirmed) · before: 2026-11-12 (0.4.4 beta in the test folder: the Lost Treasures fixed from the binary, hidden controls ignore clicks, the first start's preset, WHAT'S NEW) · earlier: 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-12 (the online fight's player names redesigned: name only, the fighters' NameFont, a gold plate) · before: 2026-11-12 (ONLINE stage 2: the EOS lobby core, `mplobby_*` in mp_eos.c, tested with two probes against the service) · before: 2026-11-12 (release 0.4.5 beta: TRAINING's own screen, DUELO against the CPU, the RULES button) · before: 2026-11-12 (the ONLINE phase's rules block and the local versus's VS RULES window with its kodes checklist, Mary confirmed) · before: 2026-11-12 (0.4.4 beta in the test folder: the Lost Treasures fixed from the binary, hidden controls ignore clicks, the first start's preset, WHAT'S NEW) · earlier: 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -97,6 +97,39 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## The online fight's player names, redesigned (2026-11-12)
+
+Port, not in the binary: the names were always the port's own drawing.
+Before, `online_ui.c` drew each player's badge (icon and name in a small
+grey box, the system font) over the finished frame beside the (i) and
+pause buttons. Mary chose a new look in three steps: a gold plate in the
+ONLINE screen's dress; no profile icon (it could be taken for the
+fighter); the type of the fighters' names; and flush to the screen's edges
+when the corner buttons are hidden (`corner_buttons=0`).
+
+- `online_fight_names_hud(&NameFont, HUD_Scale)` (end of
+  `src/runtime/online_ui.c`) is called by `DrawHUD` (GameCode.c, a port
+  block right after the clock), so the names are drawn with the HUD in the
+  game's own `NameFont`, and not while paused. `online_after_frame` no
+  longer draws anything in CurrentTask 6; the versus screen keeps its
+  badges.
+- The plate is made in software (`np_make`: stone, gold beam flared at the
+  corners, oxblood line, bronze foot, fine gold frame), uploaded with
+  `limeTextureFromRGBA` once per pixel size and kept. The name is upper
+  case, tinted gold, set against the plate's outer end; a long name gets a
+  smaller scale so the plate stops 30 points short of the clock. NameFont
+  has only ASCII: accented Latin-1 letters (UTF-8 or single bytes) become
+  their plain letter, anything else `?`.
+- Player 1 is the host, on the left, as before. The plates start 33 points
+  from each edge with the corner buttons on (`port_corner_buttons`), 3
+  without.
+- `UMK3_NAMES_PREVIEW=<name>` draws them in any fight against a made-up
+  player of that name, for screenshots (`--fight` / `UMK3_FIGHT`).
+
+Checked: screenshots in a scratch copy of the test folder at 16:9 and 4:3,
+with the corner buttons on and off, a long name and an accented one. Not
+yet checked in a real online fight between two machines.
 
 ## ONLINE stage 2: the EOS lobby core (2026-11-12)
 

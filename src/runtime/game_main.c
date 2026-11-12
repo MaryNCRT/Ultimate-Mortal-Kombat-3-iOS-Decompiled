@@ -61,6 +61,8 @@
  *   UMK3_VSRULES_PREVIEW=<tick>[:hint]  the local versus's VS RULES window at that tick
  *   UMK3_RULES=<block>         an online fight's rules for every versus fight
  *                              ("r1;b5;t30;k-1;s1;h1", online_rules.h)
+ *   UMK3_NAMES_PREVIEW=<name>  with --fight: the online fight's player names,
+ *                              against a made-up player of that name
  *   UMK3_PADS=<tick:buttons:hold;...>  player one's pad by script (scripted_pad)
  *   UMK3_SCREENS=<tick:n;...>  open front-end screen n at that tick, so one
  *                              session can walk the whole menu
