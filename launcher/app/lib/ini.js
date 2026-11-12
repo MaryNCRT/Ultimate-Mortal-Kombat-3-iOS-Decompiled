@@ -184,6 +184,7 @@ function defaultConfig() {
         ipa: '',
         preset: '',                  /* preset=: the first start's choice, original or enhanced ('' = not asked yet) */
         seenVersion: '',             /* seen_version=: the launcher version whose WHAT'S NEW was shown */
+        accountAsked: false,         /* account_asked=1: the first start's ACCOUNT window was shown */
         marco: '',                   /* fullscreen bars picture, optional */
         buttons: 5,                  /* the layout the game starts with (its factory default, Settings[4] = 5) */
         pad: 'auto',                 /* pad=: auto, off, xinput or vvvv:pppp */
@@ -268,6 +269,8 @@ function load(p) {
             cfg.ui = val.toUpperCase() === 'ES' ? 'ES' : 'EN';
         } else if (key === 'ipa') {
             cfg.ipa = val;
+        } else if (key === 'account_asked') {
+            cfg.accountAsked = num === 1;
         } else if (key === 'preset') {
             cfg.preset = /^(original|enhanced|kept)$/.test(val) ? val : '';
         } else if (key === 'seen_version') {
@@ -358,6 +361,7 @@ function save(p, cfg) {
         'language=' + lang,
         'ui=' + (cfg.ui === 'ES' ? 'ES' : 'EN'),
         'ipa=' + cfg.ipa,
+        'account_asked=' + (cfg.accountAsked ? 1 : 0),
         'preset=' + (/^(original|enhanced|kept)$/.test(cfg.preset || '') ? cfg.preset : ''),
         'seen_version=' + String(cfg.seenVersion || '').replace(/[^0-9A-Za-z.\-]/g, ''),
         'debug_keys=' + (cfg.debug ? 1 : 0),

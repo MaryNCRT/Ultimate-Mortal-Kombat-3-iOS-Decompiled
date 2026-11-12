@@ -8,7 +8,7 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## 0.4.4 beta (not released yet; in the test folder 2026-11-12)
+## 0.4.4 beta (2026-11-12)
 
 - **Shao Kahn's Lost Treasures fight their own opponents again** (a GitHub
   report): every treasure was a fight against Shao Kahn, because a block of
@@ -23,9 +23,16 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
   with the touch controls hidden.
 - **WHAT'S NEW**: the launcher shows each version's news once, and again
   from UPDATES.
+- **First start without an account** (Mary): a window to make one or log
+  in, or play without; shown once.
+- **The launcher's FRIENDS look like the game's**: FRIENDS (n) and + ADD
+  FRIEND on a black steel bar, each friend on their own banner with their
+  fighter and gradient, and CHALLENGE (RETAR).
 - **Debug menu (F2) > MENUS > UNLOCK EVERYTHING**: the hidden fighters,
   every treasure and every ending, saved -- to try the Lost Treasures.
-- Not played by Mary yet.
+- Mary tried it in the test folder and asked for the release: the Lost
+  Treasures (each with its own opponents, after UNLOCK EVERYTHING), ENHANCED
+  at the first start, WHAT'S NEW, the friends in the game.
 
 ## 0.4.3 beta (2026-11-07)
 

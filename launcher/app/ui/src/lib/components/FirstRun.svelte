@@ -5,25 +5,45 @@
      *      iPhone's game) or ENHANCED (the screen's largest resolution, no
      *      touch controls, ENHANCED LIGHTING); a folder that already had
      *      settings may keep them (lib/ini.js applyPreset).
-     *   2. WHAT'S NEW, once per launcher version (lib/whatsnew.json), and
+     *   2. YOUR ACCOUNT, once (account_asked=), to a player with no account
+     *      while the server answers: make one or log in (ProfAccount in its
+     *      compact form, the recovery code included), or play without.
+     *   3. WHAT'S NEW, once per launcher version (lib/whatsnew.json), and
      *      again from UPDATES' button (app.whatsNew = true). */
     import { onMount, onDestroy } from 'svelte';
-    import { app, tx } from '#lib/app.svelte.js';
+    import { app, tx, save } from '#lib/app.svelte.js';
+    import ProfAccount from '#lib/sections/ProfAccount.svelte';
     import { api } from '#lib/platform.js';
     import { portal } from '#lib/portal.js';
     import { hoverBlip, selectBlip } from '#lib/sound.js';
 
-    let step = $state('');              /* '', 'preset', 'news' */
+    let step = $state('');              /* '', 'preset', 'login', 'news' */
+    let acc = $state(null);             /* account:status while YOUR ACCOUNT is up */
     let news = $state(null);            /* whatsnew:get's answer */
     let busy = $state(false);
 
     const lines = e => e[app.ui === 'ES' ? 'ES' : 'EN'] || e.EN || [];
 
+    /* the next window after `from` */
+    async function next(from) {
+        if (from === '' && app.cfg && !app.cfg.preset) { step = 'preset'; return; }
+        if ((from === '' || from === 'preset') && app.cfg && !app.cfg.accountAsked) {
+            const st = await api.account?.status().catch(() => null);
+            if (st && st.server && !st.user) { acc = st; step = 'login'; return; }
+        }
+        step = news?.show ? 'news' : '';
+    }
+
     onMount(async () => {
         news = await api.whatsNew?.();
-        if (app.cfg && !app.cfg.preset) step = 'preset';
-        else if (news?.show) step = 'news';
+        await next('');
     });
+
+    async function closeLogin() {
+        selectBlip();
+        await save({ accountAsked: true });
+        await next('login');
+    }
 
     /* UPDATES' WHAT'S NEW button */
     $effect(() => {
@@ -40,7 +60,7 @@
         const cfg = await api.applyPreset(name);
         if (cfg) app.cfg = cfg;
         busy = false;
-        step = news?.show ? 'news' : '';
+        await next('preset');
     }
 
     async function closeNews() {
@@ -92,6 +112,19 @@
                     <button class="btn" disabled={busy} onpointerenter={hoverBlip} onclick={() => choose('kept')}>{tx('frKeep')}</button>
                 </div>
             {/if}
+        </div>
+    </div>
+{:else if step === 'login'}
+    <div class="veil" role="presentation" use:portal>
+        <div class="win acc" role="dialog" aria-modal="true" aria-label={tx('loTitle')}>
+            <i class="orn tl"></i><i class="orn tr"></i><i class="orn bl"></i><i class="orn br"></i>
+            <h2>{tx('loTitle')}</h2>
+            <p class="sub">{tx('loSub')}</p>
+            <div class="form"><ProfAccount compact onstatus={s => { acc = s; }} /></div>
+            <div class="foot end">
+                <button class="btn" class:hot={acc && acc.user} onpointerenter={hoverBlip}
+                        onclick={closeLogin}>{tx(acc && acc.user ? 'loDone' : 'loGuest')}</button>
+            </div>
         </div>
     </div>
 {:else if step === 'news'}
@@ -160,6 +193,8 @@
         background: linear-gradient(rgba(215, 228, 255, .14), rgba(255, 255, 255, 0) 50%), var(--tex-grain), linear-gradient(#7d1913, #2c0503);
     }
     .card.hot span { color: var(--text); }
+    .win.acc { width: min(92vw, calc(var(--u) * 64)); }
+    .form { overflow-y: auto; min-height: 0; padding-right: calc(var(--u) * .4); }
     .list { overflow-y: auto; padding-right: calc(var(--u) * .6); }
     section { padding: calc(var(--u) * .8) 0; border-bottom: 1px solid #2e3846; }
     section:last-child { border-bottom: 0; }

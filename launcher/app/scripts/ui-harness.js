@@ -23,7 +23,8 @@ const editFile = id => path.join(root, 'stage edits', id + '.json');
 let g_hub = [];
 const calls = {
     root: () => ({ root, ready: true, builtAt: 0, version: 'harness', both: false, any: true }),
-    loadConfig: () => ini.load(path.join(root, 'umk3.ini')),
+    loadConfig: () => Object.assign(ini.load(path.join(root, 'umk3.ini')),
+        process.env.UMK3_HARNESS_FIRST === '1' ? { preset: '', accountAsked: false } : {}),
     saveConfig: () => ini.load(path.join(root, 'umk3.ini')),
     /* the first start's windows, nothing written: the preset shown, WHAT'S NEW always offered */
     applyPreset: name => ini.applyPreset(ini.load(path.join(root, 'umk3.ini')), name, { w: 1920, h: 1080 }),
@@ -32,6 +33,17 @@ const calls = {
         return { entries, current: entries[0].version, fresh: false, show: true };
     },
     whatsNewSeen: () => true,
+    /* the account: UMK3_HARNESS_ACCOUNT=1 signed in with sample friends (a
+     * picture of FRIENDS), else a guest with the server up; the first
+     * start's windows again with UMK3_HARNESS_FIRST=1 */
+    'account.status': () => process.env.UMK3_HARNESS_ACCOUNT === '1'
+        ? { server: true, user: 'tester' } : { server: true, user: null },
+    'account.me': () => ({ ok: true, email: '' }),
+    'account.friends': () => ({ ok: true, code: '7KQ2-9XMD-4TPA', name: 'TESTER',
+        friends: [{ code: 'AAAA-BBBB-CCCC', name: 'FRIEND ONE', look: '20|E6B800|C|F2D21B|90|0' },
+                  { code: 'DDDD-EEEE-FFFF', name: 'FRIEND TWO', look: '15|3A8EE6|L' }],
+        incoming: [{ code: 'GGGG-HHHH-JJJJ', name: 'A REQUEST', look: '3|7A1F45|C|1D0C17|135|1' }],
+        outgoing: [], invites: [{ code: 'KKKK-MMMM-NNNN', name: 'A CHALLENGER', look: '8|0B6E2C|D' }] }),
     modsList: () => mods.list(root),
     resFiles: () => mods.resFiles(root),
     resRead: (rel, layer) => mods.resRead(root, rel, layer),
@@ -53,7 +65,10 @@ const shim = `<script>
         if (j && j.__bytes !== undefined) { const s = atob(j.__bytes); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b; }
         return j;
     };
-    window.umk3 = new Proxy({ platform: 'win32' }, {
+    const ns = pre => new Proxy({}, {
+        get: (t, k) => (typeof k === 'string' && k.startsWith('on') ? () => {} : (...a) => call(pre + k, a)),
+    });
+    window.umk3 = new Proxy({ platform: 'win32', account: ns('account.') }, {
         get: (t, k) => (k in t ? t[k] : typeof k === 'string' && k.startsWith('on') ? () => {} : (...a) => call(k, a)),
     });
 })();

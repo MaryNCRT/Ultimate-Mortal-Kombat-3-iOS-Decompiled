@@ -10,8 +10,11 @@
     import { api } from '#lib/platform.js';
     import { selectBlip, hoverBlip } from '#lib/sound.js';
 
+    /* compact: the first start's window (FirstRun.svelte, 0.4.4) -- log in or
+     * make an account, and the recovery code; no e-mail, recovery or delete */
+    let { compact = false, onstatus } = $props();
     let st = $state(null);              /* {server, user, guest} */
-    let mode = $state('login');         /* login | register | recover */
+    let mode = $state(compact ? 'register' : 'login');   /* login | register | recover */
     let f = $state({ username: '', password: '', password2: '', email: '', recovery: '' });
     let msg = $state('');
     let busy = $state(false);
@@ -23,7 +26,8 @@
 
     async function refresh() {
         st = await api.account.status();
-        if (st.user) {
+        onstatus?.(st);
+        if (st.user && !compact) {
             const m = await api.account.me();
             if (m.ok) { email = m.email || ''; hasEmail = !!m.email; }
         }
@@ -135,6 +139,7 @@
                 <button class="btn hot" disabled={busy} onpointerenter={hoverBlip} onclick={syncNow}>{tx('acSync')}</button>
                 <button class="btn" disabled={busy} onpointerenter={hoverBlip} onclick={logout}>{tx('acLogout')}</button>
             </div>
+            {#if !compact}
             <div class="fields">
                 <div class="field wide">
                     <label class="lbl" for="acEmail">{tx('acEmail')}</label>
@@ -148,9 +153,11 @@
                     <button class="btn" disabled={busy} onpointerenter={hoverBlip} onclick={dropEmail}>{tx('acRemoveEmail')}</button>
                 {/if}
             </div>
+            {/if}
 
             </section>
 
+            {#if !compact}
             <section class="box rec">
             <h3 class="first">{tx('acRecTitle')}</h3>
             {#if recPass !== null}
@@ -178,6 +185,7 @@
             </div>
             <div class="row"><button class="btn danger" disabled={busy || !f.password} onpointerenter={hoverBlip} onclick={remove}>{tx(delArmed ? 'acDeleteAsk' : 'acDelete')}</button></div>
             </section>
+            {/if}
         {:else}
             <section class="box">
             <p class="note first">{tx('acGuest')}</p>

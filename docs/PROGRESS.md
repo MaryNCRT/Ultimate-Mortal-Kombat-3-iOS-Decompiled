@@ -98,7 +98,32 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
-## 0.4.4 beta, in the test folder (2026-11-12)
+## 0.4.4 beta (2026-11-12)
+
+- **Released** on Mary's word ("todo listo"): she confirmed the Lost
+  Treasures each fight their own opponents (with UNLOCK EVERYTHING), chose
+  ENHANCED, saw WHAT'S NEW; the game's FRIENDS works for her.
+
+- **Mary in the test folder**: she chose ENHANCED at the first start
+  (`preset=enhanced`) and saw WHAT'S NEW (`seen_version=0.4.4`); the game's
+  ONLINE > FRIENDS works for her (a friend's banner and RETAR).
+- **First start: YOUR ACCOUNT** (Mary): after the preset, a player with no
+  account, while the server answers, is offered one -- ACCOUNT's own form
+  (`ProfAccount.svelte`, `compact`: make one first, log in, recover; the
+  recovery code shown; no e-mail, recovery or delete boxes) in a window,
+  with PLAY WITHOUT AN ACCOUNT. Once only (`account_asked=1`).
+- **The launcher's FRIENDS as the game's** (Mary's screenshot of ONLINE >
+  FRIENDS): the heading bar FRIENDS (n) with + ADD FRIEND (which opens the
+  code and the search), and every friend, request and invite as a banner
+  (`FriendBanner.svelte`): their gradient from the server's `look`
+  (icon|colour|L/D/C|colour2|angle|outfit, the fields friends.txt hands the
+  game), their fighter out of its left end, the name in the heading face,
+  CHALLENGE / RETAR and the rest on dark steel plates. Nothing changed in
+  what the buttons do.
+- Checked: `npm run ui`, `node --test` (23 pass); both seen in the UI
+  harness (`UMK3_HARNESS_FIRST=1` for the first start's windows,
+  `UMK3_HARNESS_ACCOUNT=1` for sample friends; the harness has no
+  fighters' pictures). Packed into the test folder; not seen in Electron.
 
 - **Shao Kahn's Lost Treasures** (a GitHub report: every treasure was a
   fight against Shao Kahn; on the device each has its own line-up).
@@ -134,8 +159,8 @@ traced to the binary's own mechanism before anything is changed.
   `EndingsGained[0..22]` set to 1 (the value the game writes for "won"),
   then `Write_SaveData` with GameMode lent as 0 (it writes nothing in
   other modes). The log says `debug menu: everything unlocked`. Port only
-  (debug_menu.c). Compiled; not linked into the test folder yet, as the
-  game was running from it.
+  (debug_menu.c). Built into the test folder (its strings in the exe);
+  not tried yet.
 - **Launcher** (Mary's request): a new umk3.ini gets the primary screen's
   largest listed resolution, its aspect, borderless, `hide_controls=1`
   (`ini.fitScreen`; the default `hideControls` is now true). The first

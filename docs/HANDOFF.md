@@ -114,6 +114,12 @@ A release is a GitHub pre-release `v<version>-beta` with two packages:
    both files. The notes say what is new, what is known broken, and that
    Mary has not played it yet when she has not.
 6. CHANGELOG, README status and PROGRESS updated on `main`.
+   On the project machine (0.4.4): run the packagers with `python`
+   (Python312), not `python3` -- that one (3.15, the install manager's)
+   does not see `%LOCALAPPDATA%\umk3-launcher\toolchain`, where the zig
+   they need is; `UMK3_EOS_INI=D:\MK3 PROJECT\TOOLS\eos\eos.ini`. The
+   GitHub CLI is not installed there: the release is made on the web
+   (Releases > Draft a new release, tag `v<version>`, pre-release).
 7. WHAT'S NEW: an entry for the version in `launcher/app/lib/whatsnew.json`
    (ES and EN, a few lines for players). The launcher shows it once per
    version (`seen_version=` in umk3.ini) and from UPDATES' button.
@@ -140,8 +146,12 @@ press COMPILE.
 
 ## 7. Open work
 
-- **0.4.4 waits for Mary** (2026-11-12): the game and the launcher are in
-  the test folder; the release is made once she has tried them.
+- **0.4.4 released** (2026-11-12): Mary confirmed the Lost Treasures,
+  ENHANCED and WHAT'S NEW. The first start's account window and the
+  launcher's new FRIENDS went out without her trying them in the launcher.
+- **The UI harness** (`scripts/ui-harness.js`) answers `api.account.*` now:
+  `UMK3_HARNESS_ACCOUNT=1` signs in with sample friends,
+  `UMK3_HARNESS_FIRST=1` shows the first start's windows again.
 - **Building into the test folder without `node_modules`**: the folder's
   own launcher runs the CLI, as `build-game.cmd` does
   (`ELECTRON_RUN_AS_NODE=1`, `launcher\bin\UMK3-Launcher.exe
