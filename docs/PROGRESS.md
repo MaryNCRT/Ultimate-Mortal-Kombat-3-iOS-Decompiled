@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-12 (the ONLINE phase's rules block and the local versus's VS RULES window with its kodes checklist, Mary confirmed) · before: 2026-11-12 (0.4.4 beta in the test folder: the Lost Treasures fixed from the binary, hidden controls ignore clicks, the first start's preset, WHAT'S NEW) · earlier: 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-12 (release 0.4.5 beta: TRAINING's own screen, DUELO against the CPU, the RULES button) · before: 2026-11-12 (the ONLINE phase's rules block and the local versus's VS RULES window with its kodes checklist, Mary confirmed) · before: 2026-11-12 (0.4.4 beta in the test folder: the Lost Treasures fixed from the binary, hidden controls ignore clicks, the first start's preset, WHAT'S NEW) · earlier: 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -97,6 +97,36 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## 0.4.5 beta: TRAINING's screen (2026-11-12)
+
+- **Training apart from 2 PLAYER** (Mary). Still GameMode 6 with
+  `PortPractice`, but nothing two-player reaches it: `P2Controls` 0 at
+  step 43 and in ReadControls (one player's touch layout; the engine gets
+  `joy[1]` 0, so player two stands still as before), the pause menu's
+  layout rows are player one's, `rules_use_mode` gets 0, and the RULES
+  button / key and the DUELO box are not on its select screen.
+- **The moves window** (GameCode.c `PortTrainDraw`, after DrawHUD, not
+  while paused): left corner under the health bars (y 56), 92 units wide,
+  as tall as its rows; the portrait and name as MovesList draws them and
+  one section of MovesListTab (or PortKombosRead), icons through
+  DrawMoveListEntry -- so with the controls hidden they are the pad's or
+  the keys' pictures (PortMovePlayers gives player one alone in
+  training).
+- **The input column**: right corner, the word GetReal6ButtonJoyBits
+  builds for player one each tick (Task_GameMain, not paused, not in the
+  round summary): a new line when something is pressed that was not down
+  the tick before, else the top line counts on; arrows facing-relative
+  (0x800 toward, 0x1000 away), as the moves list writes them.
+- **Pause menu**: in training eight rows 40 apart (PAUSE_ROW_PITCH); rows
+  7 and 8 cycle MOVES (off / specials / finishers / kombos) and INPUTS ON
+  SCREEN; umk3.ini `train_moves=` / `train_inputs=`.
+- Checked: built; `--fight 18 3 0` with UMK3_PRACTICE and a scripted pad,
+  run from a scratch folder (not Mary's test folder), the window, the
+  column and the pad's pictures in a screenshot. Mary asked for it smaller,
+  the moves on the other side and clear of the health bar; done, and she
+  played it: "ya está perfecto". The list is the iOS game's own (the
+  special button S, its 6-button notation), not the arcade's inputs.
 
 ## ONLINE phase: the rules block; VS RULES in the local versus (2026-11-12)
 

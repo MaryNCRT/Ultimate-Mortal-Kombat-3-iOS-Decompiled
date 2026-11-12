@@ -2,6 +2,22 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.4.5",
+      "date": "2026-11-12",
+      "ES": [
+        "ENTRENAMIENTO con su propia pantalla: la lista de movimientos de tu luchador en la esquina izquierda y los botones que pulsas en la derecha (con los botones de tu mando). El menú de pausa los quita y pone.",
+        "El entrenamiento usa los controles táctiles de un jugador.",
+        "DUELO contra la CPU: al lado de OK elige JUGADOR 2 o CPU y su nivel (1 a 10). El jugador 2 se une pulsando START.",
+        "REGLAS del versus: botón arriba a la izquierda en la selección (o tecla R / SELECT): rondas, series de peleas, tiempo, kombo slide y kodes (varios a la vez)."
+      ],
+      "EN": [
+        "TRAINING has its own screen: your fighter's moves in the left corner and the buttons you press in the right one (with your pad's buttons). The pause menu turns them on and off.",
+        "Training uses one player's touch controls.",
+        "DUEL against the CPU: beside OK pick PLAYER 2 or CPU and its level (1 to 10). Player two joins with START.",
+        "VERSUS RULES: a button in the select screen's top left corner (or R / SELECT): rounds, a series of fights, time, kombo slide and kodes (several at once)."
+      ]
+    },
+    {
       "version": "0.4.4",
       "date": "2026-11-12",
       "ES": [

@@ -309,6 +309,7 @@ extern int  CurrentTask;
 extern long SplashCount;                /* Task_LoadSplashScreen's frame */
 extern float StaticMeshAmbient[3];      /* CreateFadedRGBS's offset */
 extern int  FE_CurrentTask;
+extern int  PortPractice;             /* FrontEnd.c: training */
 extern long PLAYER1MODEL, PLAYER2MODEL, Character1, Character2, LevelSelect,
             Character2Override;
 extern const char *CharacterNames[26];
@@ -1286,6 +1287,15 @@ static void read_config(const char *dir)
         }
         else if (strcmp(line, "hide_controls") == 0)
             PortHideControls = atoi(v) != 0;
+        else if (strcmp(line, "train_moves") == 0) {   /* training's window */
+            extern int PortTrainMoves;
+            int n = atoi(v);
+            PortTrainMoves = n >= 0 && n <= 3 ? n : 1;
+        }
+        else if (strcmp(line, "train_inputs") == 0) {
+            extern int PortTrainInputs;
+            PortTrainInputs = atoi(v) != 0;
+        }
         else if (strcmp(line, "vs_p2") == 0) {     /* DUELO: a person or the CPU */
             extern int PortVsCpu;
             PortVsCpu = strcmp(v, "cpu") == 0;
@@ -1613,8 +1623,8 @@ int PortMovePlayers(void)
 {
     if (!PortHideControls)
         return 0;
-    if (GameMode != 6)
-        return 1;
+    if (GameMode != 6 || PortPractice)
+        return 1;                       /* training: player one's alone */
     return g_moves_who == 1 ? 1 : g_moves_who == 2 ? 2 : 3;
 }
 
@@ -3362,7 +3372,7 @@ int main(int argc, char **argv)
                 vs_rules_mouse(tx / g_virt_w, ty / g_virt_h,
                                plat_mouse(&mx, &my) && g_ntaps == 0);
             else if (CurrentTask == 3 && FE_CurrentTask == 0x1b && GameMode == 6
-                     && !dbg_menu_is_open()
+                     && !PortPractice && !dbg_menu_is_open()
                      && vs_rules_button_mouse(tx / g_virt_w, ty / g_virt_h,
                                               plat_mouse(&mx, &my) && g_ntaps == 0))
                 down = 0;               /* the RULES button's, not the game's */
@@ -3614,7 +3624,7 @@ int main(int argc, char **argv)
 
                 if (sel && !sel_was && !vs_rules_is_open() && !set_menu_is_open()
                     && !dbg_menu_is_open() && CurrentTask == 3
-                    && FE_CurrentTask == 0x1b && GameMode == 6)
+                    && FE_CurrentTask == 0x1b && GameMode == 6 && !PortPractice)
                     vs_rules_open();
                 sel_was = sel;
             }
@@ -3859,7 +3869,8 @@ int main(int argc, char **argv)
                 lime_tex_prefetch_end();
             }
             stage_menu_watch_draw();    /* the host's STAGE SELECT, online's guest */
-            if (CurrentTask == 3 && FE_CurrentTask == 0x1b && GameMode == 6)
+            if (CurrentTask == 3 && FE_CurrentTask == 0x1b && GameMode == 6
+                && !PortPractice)
                 vs_rules_hint();        /* the RULES button, the local versus (port) */
             online_after_frame();   /* the ONLINE screens' badges (port) */
             render_resolve();
