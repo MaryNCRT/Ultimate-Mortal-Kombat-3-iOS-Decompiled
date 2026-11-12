@@ -83,14 +83,17 @@ Todos se pueden cambiar en el launcher (CONTROLES) o en el juego (`Esc`).
 - **TEXTURAS:** todas las texturas del juego según a qué pertenecen, reemplazadas en un mod.
 - **EXPORTAR:** luchadores, escenarios, modelos y texturas en FBX, GLB, USD (USDA/USDC/USDZ) u OBJ con texturas PNG.
 
-## Problemas conocidos (0.1.15 beta)
+## Problemas conocidos (0.4.3 beta)
 
-- La intro de una pelea puede saltarse un cuadro cuando suavizar a los dos luchadores tarda más de un tick.
-- Las amistades y animalities pueden repetir un grito de muerte (abierto: los logs muestran que el juego pide uno por remate).
-- Todavía no se puede duplicar un luchador en un hueco nuevo.
-- Perder contra Motaro desde el menú de depuración bloquea el juego (abierto, hace falta un log).
-- ESCULPIR en el editor de escenarios dio una vez "500 Internal Error"; no se pudo reproducir y está protegido, la causa es desconocida.
-- En un kombo, el golpeado retrocede un poco tras varios puñetazos (issue #114). Es una regla del propio juego original (`t_ccp3` → `t_separate_us`), comprobada instrucción por instrucción contra el binario.
+- Con los controles táctiles ocultos, un clic en la pantalla todavía movía al luchador (Mary): corregido para 0.4.4, en la carpeta de pruebas, sin jugar aún.
+- Los Tesoros Perdidos de Shao Kahn eran siempre una pelea contra Shao Kahn (un reporte en GitHub): corregido desde el binario para 0.4.4, en la carpeta de pruebas, sin jugar aún.
+- En línea: las correcciones de 0.2.1 (el rollback apagado una vez de cada dos, peleas que se separaban) se comprobaron con dos juegos en un PC, todavía no entre dos máquinas.
+- Al unirse en línea, el glifo X del mando apareció sobre START (Mary); sin reproducir aún.
+- Algunos escenarios todavía se pausan hasta ~1,3 s en sus primeros cuadros (THE STREET) mientras cargan sus eventos.
+- Con ILUMINACIÓN MEJORADA, los primeros cuadros pueden congelarse un segundo o más mientras el driver termina el shader (Direct3D 12).
+- ILUMINACIÓN MEJORADA y OCLUSIÓN AMBIENTAL son solo Vulkan y DirectX 12; OpenGL dibuja como antes.
+- Steam Deck: la pelea usaba el esquema de 5 botones elegido lo que se eligiera (#171); 0.2.0 cambió cómo se guarda, sin comprobar aún en un Deck.
+- En un kombo, el golpeado retrocede un poco tras varios puñetazos (issue #114): es una regla del propio juego original, comprobada contra el binario.
 
 ## Compilar desde el código
 

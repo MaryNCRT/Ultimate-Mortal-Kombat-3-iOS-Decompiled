@@ -11,7 +11,7 @@
  */
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, nativeImage, net, Notification, shell, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage, net, Notification, shell, safeStorage, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const ini = require('./lib/ini');
@@ -237,9 +237,61 @@ ipcMain.handle('app:relaunch', () => {
     app.exit(0);
 });
 
+/* The primary monitor's size in pixels (not Windows' scaled units). */
+function screenPixels() {
+    try {
+        const d = screen.getPrimaryDisplay();
+        const k = d.scaleFactor || 1;
+        return { w: Math.round(d.size.width * k), h: Math.round(d.size.height * k) };
+    } catch (_) {
+        return null;
+    }
+}
+
+/* umk3.ini did not exist when the launcher opened: the first start's
+ * preset window offers no KEEP MY SETTINGS (0.4.4) */
+let g_freshIni = null;
+
 ipcMain.handle('config:load', () => {
-    g_cfg = ini.load(path.join(g_root, 'umk3.ini'));
+    const p = path.join(g_root, 'umk3.ini');
+    if (g_freshIni === null)
+        g_freshIni = !fs.existsSync(p);
+    if (!fs.existsSync(p)) {
+        /* a new folder (0.4.4, Mary): the screen's largest resolution,
+         * borderless, the on-screen controls hidden */
+        ini.save(p, ini.fitScreen(ini.defaultConfig(), screenPixels()));
+    }
+    g_cfg = ini.load(p);
     return JSON.parse(JSON.stringify(g_cfg));
+});
+
+/* The first start's choice, ORIGINAL or ENHANCED (or the settings kept). */
+ipcMain.handle('preset:apply', (_ev, name) => {
+    const p = path.join(g_root, 'umk3.ini');
+    g_cfg = ini.applyPreset(ini.load(p), String(name), screenPixels());
+    ini.save(p, g_cfg);
+    return JSON.parse(JSON.stringify(g_cfg));
+});
+
+/* WHAT'S NEW (0.4.4): lib/whatsnew.json, newest first; `show` when this
+ * version has an entry the player has not seen yet. */
+ipcMain.handle('whatsnew:get', () => {
+    let entries = [];
+    try {
+        entries = JSON.parse(fs.readFileSync(path.join(__dirname, 'lib', 'whatsnew.json'), 'utf8')).entries || [];
+    } catch (_) { entries = []; }
+    const cur = app.getVersion().replace(/-beta.*$/, '');
+    const seen = (g_cfg || ini.load(path.join(g_root, 'umk3.ini'))).seenVersion;
+    return { entries, current: cur, fresh: !!g_freshIni,
+             show: seen !== cur && entries.some(e => e.version === cur) };
+});
+
+ipcMain.handle('whatsnew:seen', () => {
+    const p = path.join(g_root, 'umk3.ini');
+    g_cfg = ini.load(p);
+    g_cfg.seenVersion = app.getVersion().replace(/-beta.*$/, '');
+    ini.save(p, g_cfg);
+    return true;
 });
 
 ipcMain.handle('config:save', (_ev, delta) => {

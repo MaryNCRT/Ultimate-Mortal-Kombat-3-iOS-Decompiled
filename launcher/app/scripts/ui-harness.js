@@ -25,6 +25,13 @@ const calls = {
     root: () => ({ root, ready: true, builtAt: 0, version: 'harness', both: false, any: true }),
     loadConfig: () => ini.load(path.join(root, 'umk3.ini')),
     saveConfig: () => ini.load(path.join(root, 'umk3.ini')),
+    /* the first start's windows, nothing written: the preset shown, WHAT'S NEW always offered */
+    applyPreset: name => ini.applyPreset(ini.load(path.join(root, 'umk3.ini')), name, { w: 1920, h: 1080 }),
+    whatsNew: () => {
+        const entries = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'lib', 'whatsnew.json'), 'utf8')).entries;
+        return { entries, current: entries[0].version, fresh: false, show: true };
+    },
+    whatsNewSeen: () => true,
     modsList: () => mods.list(root),
     resFiles: () => mods.resFiles(root),
     resRead: (rel, layer) => mods.resRead(root, rel, layer),

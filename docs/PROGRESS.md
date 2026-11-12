@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-12 (0.4.4 beta in the test folder: the Lost Treasures fixed from the binary, hidden controls ignore clicks, the first start's preset, WHAT'S NEW) · earlier: 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -65,7 +65,7 @@ EDITOR, TEXTURES and EXPORT (FBX, GLB, USD, OBJ).
 
 ### What the tester has and has not played
 
-Mary plays every build in a test folder (`WORK\release-0.1.12\UMK3-PC-0.1.12-beta`
+Mary plays every build in a test folder (`WORK\release-0.1.12\Test`
 on her machine) before it is released. **Played and confirmed:** everything
 up to 0.1.10b (the Linux package, the Vulkan and Direct3D 12 renderers),
 REAL-TIME SHADOWS' note on its own row in 0.1.13. **Not yet played as a whole:** 0.1.11 to
@@ -97,6 +97,57 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## 0.4.4 beta, in the test folder (2026-11-12)
+
+- **Shao Kahn's Lost Treasures** (a GitHub report: every treasure was a
+  fight against Shao Kahn; on the device each has its own line-up).
+  `GameInit_LoadABit` (armv7 `0x2b940`), step 43, has a `GameMode == 5`
+  block at `0x2db2a..0x2e038` that the transcription did not have, so mode
+  5 kept the `Character2 = 0x19` FE_Task_Select_Character gives it. Read
+  instruction by instruction, slots resolved in `symbols.txt`
+  (`0xf3814` TreasurePlayed, `0xf3544` Character2, `0xf37fc` Character1,
+  `0xf3584` TowerRand, `0x10ded0` theKode):
+  - 2: `Character2 = PLAYER2MODEL = 0x18` (Motaro);
+  - 5: `i = (limeRand() & 3) * 22 + (limeRand() & 7)`; both fighters from
+    `TowerRand[i]`, `[i + 1]`, `AIOn = 2` (both CPU);
+  - 6: the opponent `TowerRand[(r1 & 3) * 22 + (r2 & 7) + 1]`, `theKode = 1`;
+  - 7, 8, 9: `IsEndurance = 1`, so the four draws and InitEnduranceMatch's
+    queues (`0x2d9a4`);
+  - 10: `Character2 = PLAYER2MODEL = 0x17` (Noob Saibot).
+  Also: the endurance path goes on at `0x2ba44`, not straight to `return
+  0` as transcribed -- RoundParam+0x3c is cleared and the tower's last
+  stage sets it. Checked: the oracle (`recomp.py --func
+  __Z17GameInit_LoadABitl`) built, but factdiff did not finish on this
+  function in 25 minutes, so the check is the reading above; built into
+  the test folder; **not played** -- needs Mary's treasures (or a save
+  with them) to see each line-up.
+- **A click moved the fighter with the on-screen controls hidden** (README's
+  known problem). `DrawControls` returns early with `hide_controls=1` but
+  ReadControls still hit-tested every touch (the mouse is a finger)
+  against the invisible layout. ReadControls (port lines, marked) now
+  skips the dial and the touch scan for both players when they are
+  hidden; keys and pads go on as before. The pause corners are a
+  different path and are untouched. Built; not played.
+- **Debug menu: UNLOCK EVERYTHING** (MENUS page, UNLOCKS; Mary, to test the
+  treasures): the four hidden fighters' flags, `TreasureGained[0..9]` and
+  `EndingsGained[0..22]` set to 1 (the value the game writes for "won"),
+  then `Write_SaveData` with GameMode lent as 0 (it writes nothing in
+  other modes). The log says `debug menu: everything unlocked`. Port only
+  (debug_menu.c). Compiled; not linked into the test folder yet, as the
+  game was running from it.
+- **Launcher** (Mary's request): a new umk3.ini gets the primary screen's
+  largest listed resolution, its aspect, borderless, `hide_controls=1`
+  (`ini.fitScreen`; the default `hideControls` is now true). The first
+  start asks ORIGINAL (960x640 3:2, touch controls, iPhone textures, no
+  ENHANCED LIGHTING) or ENHANCED (largest resolution borderless, no touch
+  controls, ENHANCED LIGHTING with Direct3D 12 / Vulkan, `max` textures),
+  or KEEP MY SETTINGS when the folder had a umk3.ini (`preset=`,
+  `ini.applyPreset`, `FirstRun.svelte`). WHAT'S NEW
+  (`lib/whatsnew.json`) shows once per version (`seen_version=`) and from
+  UPDATES. Checked: `node --test` (25, two new), both windows seen in the
+  UI harness; packed into the test folder's app.asar as 0.4.4-beta. Not
+  seen in Electron by Claude, not tried by Mary.
 
 ## 0.4.3 beta (2026-11-07)
 

@@ -304,8 +304,51 @@ enum {
     ROW_HEALTH, ROW_CLOCK,
     ROW_KEYS, ROW_INFO, ROW_FPS, ROW_NET,
     ROW_HITBOX, ROW_AODBG, ROW_SPEED, ROW_SLOT, ROW_SAVE, ROW_LOAD,
+    ROW_UNLOCK,
     ROW_CLOSE, ROW_HEAD
 };
+
+/* UNLOCK EVERYTHING (0.4.4, Mary: to test the Lost Treasures): the four
+ * hidden fighters, the ten treasures and the 23 endings, as the save keeps
+ * them (GameCode.c Write_SaveData: 1 = won), then written to `savedata`.
+ * Write_SaveData only writes in GameMode 0, so the mode is lent for it. */
+extern long ClassicSubZeroUnlocked, ErmacUnlocked, MileenaUnlocked, JadeUnlocked;
+extern int  TreasureGained[10];
+extern long EndingsGained[23];
+extern long GameMode;
+void Write_SaveData(void);
+static int g_unlocked;                  /* done this session: the row says so */
+
+static int all_unlocked(void)
+{
+    int i;
+    if (!ClassicSubZeroUnlocked || !ErmacUnlocked || !MileenaUnlocked || !JadeUnlocked)
+        return 0;
+    for (i = 0; i < 10; i++)
+        if (TreasureGained[i] != 1)
+            return 0;
+    for (i = 0; i < 23; i++)
+        if (EndingsGained[i] != 1)
+            return 0;
+    return 1;
+}
+
+static void unlock_all(void)
+{
+    long mode = GameMode;
+    int i;
+
+    ClassicSubZeroUnlocked = ErmacUnlocked = MileenaUnlocked = JadeUnlocked = 1;
+    for (i = 0; i < 10; i++)
+        TreasureGained[i] = 1;
+    for (i = 0; i < 23; i++)
+        EndingsGained[i] = 1;
+    GameMode = 0;
+    Write_SaveData();
+    GameMode = mode;
+    g_unlocked = 1;
+    printf("debug menu: everything unlocked (fighters, treasures, endings), savedata written\n");
+}
 
 #define MAX_ROWS 40
 #define VIS_ROWS 30                     /* two columns of 15 */
@@ -522,6 +565,10 @@ static void build(void)
         add(ROW_SCREEN, tx("PANTALLA", "SCREEN"), "< %2d %s >", g_screen,
             FETaskNames[g_screen] + 8);
         add(ROW_MAIN, tx("MENU PRINCIPAL", "MAIN MENU"), "");
+        head(tx("DESBLOQUEOS", "UNLOCKS"));
+        add(ROW_UNLOCK, tx("DESBLOQUEAR TODO", "UNLOCK EVERYTHING"), "%s",
+            g_unlocked || all_unlocked() ? tx("HECHO", "DONE")
+                                         : tx("LUCHADORES, TESOROS, FINALES", "FIGHTERS, TREASURES, ENDINGS"));
         break;
     case PAGE_TOOLS:
         head("GENERAL");
@@ -898,6 +945,10 @@ int dbg_menu_tick(struct dbg_request *rq)
             drop_open(row);
             return 0;
         }
+    }
+    if (row == ROW_UNLOCK) {            /* done here; the menu stays open */
+        unlock_all();
+        return 0;
     }
     switch (row) {
     case ROW_FIGHT:

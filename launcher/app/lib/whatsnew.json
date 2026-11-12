@@ -1,0 +1,51 @@
+{
+  "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
+  "entries": [
+    {
+      "version": "0.4.4",
+      "date": "2026-11-12",
+      "ES": [
+        "Primer inicio: elige entre ORIGINAL (el juego como en el iPhone) y MEJORADO (resolución máxima, sin controles táctiles, iluminación mejorada).",
+        "Nueva configuración: el juego arranca a la resolución máxima de tu pantalla y con los controles táctiles ocultos.",
+        "Esta ventana de NOVEDADES: lo nuevo de cada versión al abrir el launcher.",
+        "Tesoros perdidos de Shao Kahn: cada tesoro vuelve a enfrentarte a sus propios rivales, como en el iPhone (antes siempre era Shao Kahn).",
+        "Con los controles táctiles ocultos, un clic en la pantalla ya no mueve al luchador."
+      ],
+      "EN": [
+        "First start: choose ORIGINAL (the game as on the iPhone) or ENHANCED (the largest resolution, no touch controls, enhanced lighting).",
+        "New settings: the game starts at your screen's largest resolution with the touch controls hidden.",
+        "This WHAT'S NEW window: each version's news when the launcher opens.",
+        "Shao Kahn's Lost Treasures: each treasure brings back its own opponents, as on the iPhone (it was always Shao Kahn).",
+        "With the touch controls hidden, a click on the screen no longer moves the fighter."
+      ]
+    },
+    {
+      "version": "0.4.3",
+      "date": "2026-11-07",
+      "ES": [
+        "El reproductor de repeticiones con el aspecto del menú ONLINE.",
+        "SELECCIÓN DE ESCENARIO muestra todos los escenarios sin desplazarse.",
+        "El menú de ajustes (Esc) muestra tu banner de jugador."
+      ],
+      "EN": [
+        "The replay player in the ONLINE screen's look.",
+        "STAGE SELECT shows every stage, nothing to scroll.",
+        "The settings menu (Esc) shows your player banner."
+      ]
+    },
+    {
+      "version": "0.4.2",
+      "date": "2026-11-07",
+      "ES": [
+        "Launcher renovado en acero azulado oscuro, oro y rojo.",
+        "PERFIL rehecho alrededor del banner de jugador; el icono es tu luchador favorito.",
+        "SELECCIÓN DE ESCENARIO con el aspecto del menú ONLINE."
+      ],
+      "EN": [
+        "The launcher renewed in dark blued steel, gold and red.",
+        "PROFILE rebuilt around the player banner; the icon is your favourite fighter.",
+        "STAGE SELECT in the ONLINE screen's look."
+      ]
+    }
+  ]
+}

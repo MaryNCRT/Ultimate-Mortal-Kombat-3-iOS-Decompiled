@@ -57,6 +57,8 @@
         <div class="state {app.upd.cls}">{app.upd.text}</div>
         <button class="btn" disabled={app.upd.checking || app.upd.busy} onpointerenter={hoverBlip}
                 onclick={() => { selectBlip(); checkUpdate(); }}>{tx('updCheck')}</button>
+        <button class="btn" onpointerenter={hoverBlip}
+                onclick={() => { selectBlip(); app.whatsNew = true; }}>{tx('wnOpen')}</button>
         {#if app.upd.canGet}
             <button class="btn hot" disabled={app.upd.busy} onpointerenter={hoverBlip} onclick={installUpdate}>{tx('updGet')}</button>
         {/if}

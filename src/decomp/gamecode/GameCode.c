@@ -4517,6 +4517,7 @@ int PortKeyDial;
 int PortKeyButtonsP2[7];
 int PortKeyDialP2;
 extern int PortPractice;                /* FrontEnd.c, port: training */
+extern int PortHideControls;            /* port: hide_controls=1, defined below */
 
 
 /* -------------------------------------------------------------- ReadControls
@@ -4584,7 +4585,11 @@ void ReadControls(void)
     if (GameMode == 6)
         P2Controls = GameMode - 5;
 
-    JoystickState = CheckLeftDial(0) + 1;
+    /* Port, not in the binary: with the on-screen controls hidden
+     * (hide_controls=1, DrawControls draws nothing) a touch or a click must
+     * not reach the invisible stick and buttons -- Mary saw a click move the
+     * fighter. The keys and the pad below still drive both players. */
+    JoystickState = PortHideControls ? 0 : CheckLeftDial(0) + 1;
 
     LastButtonStates[0] = ButtonStates[0];
     ButtonStates[0] = 0;
@@ -4593,7 +4598,7 @@ void ReadControls(void)
         ButtonStates[i] = 0;
     }
 
-    for (t = 0; t < TOUCH_SLOTS_RC; t++) {
+    for (t = 0; t < TOUCH_SLOTS_RC && !PortHideControls; t++) {
         float best = 999.0f;
         long nearest = -1;
 
@@ -4643,7 +4648,7 @@ void ReadControls(void)
     if (P2Controls == 0)
         return;
 
-    JoystickStateP2 = CheckLeftDial(1) + 1;
+    JoystickStateP2 = PortHideControls ? 0 : CheckLeftDial(1) + 1;  /* port: as P1 */
 
     LastButtonStatesP2[0] = ButtonStatesP2[0];
     ButtonStatesP2[0] = 0;
@@ -4652,7 +4657,7 @@ void ReadControls(void)
         ButtonStatesP2[i] = 0;
     }
 
-    for (t = 0; t < TOUCH_SLOTS_RC; t++) {
+    for (t = 0; t < TOUCH_SLOTS_RC && !PortHideControls; t++) {
         float best = 999.0f;
         long nearest = -1;
 
@@ -7649,16 +7654,68 @@ long GameInit_LoadABit(long step)
             IsEndurance = 0;
             if (GameMode == 0) {
                 IsEndurance = EnduranceTowerList[Destiny * 11 + Stage];
-                if (IsEndurance != 0) {
-                    /* Four independent draws, each masked to 0..3: the two
-                     * endurance opponents and their alternates. */
-                    girlrand  = limeRand() & 3;
-                    girlrand2 = limeRand() & 3;
-                    boyrand   = limeRand() & 3;
-                    boyrand2  = limeRand() & 3;
-                    InitEnduranceMatch();
-                    return 0;
+            } else if (GameMode == 5) {
+                /* Shao Kahn's Lost Treasures -- 0x2db2a..0x2e038. This
+                 * block was missing from the transcription, so every
+                 * treasure kept the Character2 = 0x19 (Shao Kahn) that
+                 * FE_Task_Select_Character gives mode 5 (GitHub report).
+                 *
+                 *      2      Character2 = 0x18
+                 *      5      both fighters from a TowerRand row, CPU v CPU
+                 *      6      the opponent from a TowerRand row, theKode = 1
+                 *      7 8 9  IsEndurance = 1: InitEnduranceMatch's queues
+                 *      10     Character2 = 0x17
+                 *
+                 * The rows are TowerRand's 22-wide ones (`a*16 - a*4 - a`,
+                 * doubled), indexed by two fresh draws, not by
+                 * endurancerand1/2. */
+                long t = TreasurePlayed;
+
+                if (t > 6) {
+                    IsEndurance = 1;                        /* 0x2df68 */
+                    if (t == 10) {
+                        IsEndurance = 0;
+                        Character2   = 0x17;
+                        PLAYER2MODEL = 0x17;
+                    }
+                } else if (t == 2) {
+                    Character2   = 0x18;
+                    PLAYER2MODEL = 0x18;
+                } else if (t == 5) {                        /* 0x2dfdc */
+                    long a = limeRand() & 3;
+                    long b = limeRand() & 7;
+                    long i = a * 22 + b;
+
+                    Character1   = TowerRand[i];
+                    PLAYER1MODEL = TowerRand[i];
+                    Character2   = TowerRand[i + 1];
+                    PLAYER2MODEL = TowerRand[i + 1];
+                    AIOn = 2;
+                } else if (t == 6) {                        /* 0x2db92 */
+                    long a = limeRand();
+                    long b = limeRand();
+                    long i = (a & 3) * 22 + (b & 7) + 1;
+
+                    Character2   = TowerRand[i];
+                    PLAYER2MODEL = TowerRand[i];
+                    *theKode = 1;
                 }
+            }
+            if (IsEndurance != 0) {                         /* 0x2ba2c */
+                /* Four independent draws, each masked to 0..3: the two
+                 * endurance opponents and their alternates. */
+                girlrand  = limeRand() & 3;
+                girlrand2 = limeRand() & 3;
+                boyrand   = limeRand() & 3;
+                boyrand2  = limeRand() & 3;
+                InitEnduranceMatch();
+                /* 0x2d9e8 goes on at 0x2ba44: RoundParam+0x18 keeps the
+                 * queue, but +0x3c is still cleared and the tower's last
+                 * stage still sets it. */
+                RoundParam[0x3c / 4] = 0;
+                if (GameMode == 0 && Destiny + 7 <= Stage)
+                    RoundParam[0x3c / 4] = 1;
+                return 0;
             }
         }
 
