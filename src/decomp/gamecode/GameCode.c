@@ -6131,6 +6131,7 @@ extern long   DoIntro;                  /* 0x0014e1c0 */
 extern long   WinsNeeded;               /* 0x0014e234 */
 extern long   KarnageScore;             /* 0x0014df88 */
 extern long  *theKode;                  /* pointer slot -> 0x0010ded0 */
+int rules_kode_on(int kode);            /* runtime/online_rules.c, port */
 extern long  *H;                        /* pointer slot */
 extern long  *TrainingCatagoryP;        /* pointer slot -> 0x0017809c */
 
@@ -6380,9 +6381,10 @@ void Task_GameInit(void)
     for (i = 1; i < 25; i++)
         AnimateIntroCharacterPlayers1Frame(1);
 
-    /* Port, not in the binary: the rules' VS kode (runtime/online_rules.h)
+    /* Port, not in the binary: the rules' VS kodes (runtime/online_rules.h)
      * in place of the one typed on the versus screen, on both machines,
-     * before the binary applies it */
+     * before the binary applies it -- the lowest in theKode, the binary's
+     * one; the others by rules_kode_on where the binary reads theKode */
     if (GameMode == 1 || GameMode == 6) {
         extern int rules_kode(void);
         int k = rules_kode();
@@ -6391,6 +6393,14 @@ void Task_GameInit(void)
     }
 
     preprocessPostloadKode();
+    /* Port: preprocessPostloadKode's three flags for each of the rules'
+     * kodes, not the one in theKode alone */
+    if (rules_kode_on(2))
+        H[0x18 / 2] = 1;
+    if (rules_kode_on(0x12))
+        H[0x1a / 2] = 1;
+    if (rules_kode_on(0))
+        H[0x1c / 2] = 1;
     puts("########## TASK_GAME_INIT: 10");
 
     if (GameMode == 1 && *theKode == 0x13) {
@@ -6581,6 +6591,18 @@ void ResetFightData(void)
         /* The one whose side rule is inverted -- see the header. */
         SetKodeHandicap(100, 0xa6, 25, 0x29,
                         rb_active() || isParent() == isParentBasedOnSpeed());
+    }
+    /* Port, not in the binary: the rules' kodes can weaken both players at
+     * once (one of 0x0d/0x0e for player one, 0x0f/0x10 for player two):
+     * each side's health as its kode's, the bars 1.66 times it */
+    if (*theKode != 0x13
+        && (rules_kode_on(0x0d) || rules_kode_on(0x0e))
+        && (rules_kode_on(0x0f) || rules_kode_on(0x10))) {
+        long h1 = rules_kode_on(0x0e) ? 25 : 50, h2 = rules_kode_on(0x10) ? 25 : 50;
+        Health[0] = (int)h1;
+        G->healthBar1 = h1 == 25 ? 0x29 : 0x53;
+        Health[1] = (int)h2;
+        G->healthBar2 = h2 == 25 ? 0x29 : 0x53;
     }
 
     FlawlessCounter  = 0;
@@ -9088,7 +9110,7 @@ void DrawHUD(void)
 
     /* Blackout. IsInFinishing suspends it, which is what makes the kode
      * playable at all -- the fatality stays lit. */
-    if (*theKode == 1) {
+    if (*theKode == 1 || rules_kode_on(1)) {       /* port: or the rules' */
         if (lightsOn == 0.0f && !IsInFinishing) {
             limeFillRect(0.0f, 0.0f, (float)limeScreenWidth,
                          (float)limeScreenHeight, 0.0f, 0.0f, 0.0f, 1.0f);
@@ -9157,7 +9179,7 @@ void DrawHUD(void)
      * the whole plate block to the streak line); drawn here, it covered
      * the score at (8, 32). */
     if (GameMode != 3) {
-        if (*theKode != 0x11)
+        if (*theKode != 0x11 && !rules_kode_on(0x11))  /* port: or the rules' */
             DrawPlayerPlate(0);
         DrawRoundWinCoins(0);
     }
@@ -9177,7 +9199,7 @@ void DrawHUD(void)
                        0.0f, 0.0f, 1.0f, 1.0f, col);
 
     /* Karnage is the one mode that never shows player 2's plate. */
-    if (*theKode != 0x11 && GameMode != 3) {
+    if (*theKode != 0x11 && !rules_kode_on(0x11) && GameMode != 3) {   /* port: the rules' */
         DrawPlayerPlate(1);
         DrawRoundWinCoins(1);
     }

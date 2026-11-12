@@ -20,7 +20,7 @@ void rules_default(online_rules *r)
     r->best_of = 3;                     /* the binary's WinsNeeded 2 */
     r->series = 1;                      /* one fight */
     r->time = 99;
-    r->kode = -1;
+    r->kodes = 0;
     r->kombo_slide = 1;                 /* the original's rule */
     r->host_adv = 1;                    /* as today */
 }
@@ -31,22 +31,24 @@ static int valid(const online_rules *r)
         && (r->best_of == 1 || r->best_of == 3 || r->best_of == 5)
         && (r->series == 1 || r->series == 3 || r->series == 5)
         && (r->time == 0 || r->time == 30 || r->time == 60 || r->time == 99)
-        && r->kode >= -1 && r->kode <= 19
+        && r->kodes < (1u << 20)
         && (r->kombo_slide == 0 || r->kombo_slide == 1)
         && (r->host_adv == 0 || r->host_adv == 1);
 }
 
 int rules_encode(const online_rules *r, char *out, int n)
 {
-    return snprintf(out, (size_t)n, "r%d;b%d;m%d;t%d;k%d;s%d;h%d", r->version,
-                    r->best_of, r->series, r->time, r->kode, r->kombo_slide, r->host_adv);
+    return snprintf(out, (size_t)n, "r%d;b%d;m%d;t%d;k%u;s%d;h%d", r->version,
+                    r->best_of, r->series, r->time, r->kodes, r->kombo_slide, r->host_adv);
 }
 
-/* "r1;b3;m1;t99;k-1;s1;h1": fields in any order, all seven needed. */
+/* "r2;b3;m1;t99;k0;s1;h1": fields in any order, all seven needed. Version
+ * 1 ("r1;...;k-1;...", one kode, -1 none) is read as the same rules. */
 int rules_decode(const char *s, online_rules *r)
 {
     online_rules t;
     unsigned seen = 0;
+    long k = 0;
     char buf[ONLINE_RULES_TEXT * 2], *p, *next;
 
     if (!s || strlen(s) >= sizeof buf)
@@ -71,14 +73,25 @@ int rules_decode(const char *s, online_rules *r)
         case 'b': t.best_of = (int)v;     bit = 1; break;
         case 'm': t.series = (int)v;      bit = 6; break;
         case 't': t.time = (int)v;        bit = 2; break;
-        case 'k': t.kode = (int)v;        bit = 3; break;
+        case 'k': k = v;                  bit = 3; break;
         case 's': t.kombo_slide = (int)v; bit = 4; break;
         case 'h': t.host_adv = (int)v;    bit = 5; break;
         default:  return 0;
         }
         seen |= 1u << bit;
     }
-    if (seen != 0x7f || !valid(&t))
+    if (seen != 0x7f)
+        return 0;
+    if (t.version == 1) {               /* one kode, -1 none */
+        if (k < -1 || k > 19)
+            return 0;
+        t.version = ONLINE_RULES_VERSION;
+        t.kodes = k < 0 ? 0u : 1u << k;
+    } else if (k < 0 || k >= (1L << 20))
+        return 0;
+    else
+        t.kodes = (unsigned)k;
+    if (!valid(&t))
         return 0;
     *r = t;
     return 1;
@@ -88,22 +101,26 @@ int rules_equal(const online_rules *a, const online_rules *b)
 {
     return a->version == b->version && a->best_of == b->best_of
         && a->series == b->series
-        && a->time == b->time && a->kode == b->kode
+        && a->time == b->time && a->kodes == b->kodes
         && a->kombo_slide == b->kombo_slide && a->host_adv == b->host_adv;
 }
 
 void rules_describe(const online_rules *r, char *out, int n)
 {
-    char t[16], k[16];
+    char t[16], k[80];
 
     if (r->time == 0)
         snprintf(t, sizeof t, "INFINITE");
     else
         snprintf(t, sizeof t, "%d", r->time);
-    if (r->kode < 0)
+    if (!r->kodes)
         snprintf(k, sizeof k, "NO KODE");
-    else
-        snprintf(k, sizeof k, "KODE %d", r->kode);
+    else {
+        int i, o = snprintf(k, sizeof k, "KODE");
+        for (i = 0; i < 20 && o < (int)sizeof k - 4; i++)
+            if (r->kodes & (1u << i))
+                o += snprintf(k + o, sizeof k - (size_t)o, " %d", i);
+    }
     snprintf(out, (size_t)n, "BEST OF %d ROUNDS, %s, TIME %s, %s, KOMBO SLIDE %s, HOST ADVANTAGE %s",
              r->best_of, r->series > 1 ? (r->series == 3 ? "BEST OF 3 FIGHTS" : "BEST OF 5 FIGHTS") : "ONE FIGHT",
              t, k, r->kombo_slide ? "ON" : "OFF", r->host_adv ? "ON" : "OFF");
@@ -230,7 +247,18 @@ int rules_wins_needed(int binary_value)
 int rules_kode(void)
 {
     const online_rules *r = rules_active();
-    return r ? r->kode : -1;
+    int i;
+
+    for (i = 0; r && i < 20; i++)
+        if (r->kodes & (1u << i))
+            return i;
+    return -1;
+}
+
+int rules_kode_on(int kode)
+{
+    const online_rules *r = rules_active();
+    return r && kode >= 0 && kode < 20 && (r->kodes & (1u << kode)) != 0;
 }
 
 int rules_kombo_slide(int otherwise)

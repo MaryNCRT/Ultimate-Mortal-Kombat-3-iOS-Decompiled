@@ -2,7 +2,7 @@
  * agree on before frame 0. Port, not in the binary: the iPhone's versus had
  * no rules beyond the VS kode its versus screen sends.
  *
- * The block travels as a short text ("r1;b3;m1;t99;k-1;s1;h1") in an EOS
+ * The block travels as a short text ("r2;b3;m1;t99;k0;s1;h1") in an EOS
  * lobby's attributes and in rollback's HELLO; a fight whose two blocks
  * differ does not start (docs/research/ONLINE-PHASE-PLAN.md).
  *
@@ -14,8 +14,12 @@
  *                  rules_series_* below, between fights
  *     time         99 the binary's; 30, 60 the port's; 0 infinite (the
  *                  clock frozen, as training freezes it: other.c t_clock4)
- *     kode         -1 none, else a VS kode 0..19 (the binary's table at
- *                  0x00176c04: blocking off, dark kombat, ...)
+ *     kodes        the VS kodes in force, a bit each (bit n kode n, 0..19,
+ *                  the binary's table at 0x00176c04: blocking off, dark
+ *                  kombat, ...); 0 none. The binary plays one kode at a
+ *                  time; several at once are the port's (Mary, 2026-11-12),
+ *                  rules_kode_on at each place the binary reads theKode.
+ *                  Version 1's text had one kode ("k-1", "k2"), still read
  *     kombo_slide  1 the original's push apart in a kombo, 0 the port's
  *                  KOMBO SLIDE off (issue #114)
  *     host_adv     1 the host is player 1 and picks the stage, as today;
@@ -24,7 +28,7 @@
 #ifndef UMK3_ONLINE_RULES_H
 #define UMK3_ONLINE_RULES_H
 
-#define ONLINE_RULES_VERSION 1
+#define ONLINE_RULES_VERSION 2
 #define ONLINE_RULES_TEXT    48         /* enough for any encoded block */
 
 typedef struct online_rules {
@@ -32,7 +36,7 @@ typedef struct online_rules {
     int best_of;
     int series;
     int time;
-    int kode;
+    unsigned kodes;
     int kombo_slide;
     int host_adv;
 } online_rules;
@@ -65,7 +69,9 @@ const online_rules *rules_local(void);
  *   rules_kombo_slide   game_main.c, PortNoKomboSlide */
 int  rules_wins_needed(int binary_value);
 int  rules_kombo_slide(int otherwise);
-int  rules_kode(void);                  /* GameCode.c, before preprocessPostloadKode; -1 none */
+int  rules_kode(void);                  /* GameCode.c, before preprocessPostloadKode: the
+                                         * lowest kode in force, -1 none */
+int  rules_kode_on(int kode);           /* 1 when that kode is one of the rules' */
 extern int PortRoundTime;               /* 0 the binary's 99, 30, 60, -1 infinite */
 void rules_fight_begin(void);           /* the fight loads: PortRoundTime from the block */
 
