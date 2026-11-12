@@ -134,8 +134,8 @@ traced to the binary's own mechanism before anything is changed.
   `EndingsGained[0..22]` set to 1 (the value the game writes for "won"),
   then `Write_SaveData` with GameMode lent as 0 (it writes nothing in
   other modes). The log says `debug menu: everything unlocked`. Port only
-  (debug_menu.c). Compiled; not linked into the test folder yet, as the
-  game was running from it.
+  (debug_menu.c). Built into the test folder (its strings in the exe);
+  not tried yet.
 - **Launcher** (Mary's request): a new umk3.ini gets the primary screen's
   largest listed resolution, its aspect, borderless, `hide_controls=1`
   (`ini.fitScreen`; the default `hideControls` is now true). The first
