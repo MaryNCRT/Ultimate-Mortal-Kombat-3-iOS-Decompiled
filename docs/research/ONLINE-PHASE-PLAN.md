@@ -21,7 +21,7 @@ stages 1-2 (audit, HOME, PROFILE) are done.
 ## Stages
 
 1. **Rules block** -- done on `claude/online-lobbies`, see below.
-2. **EOS lobby core** (`mp_eos.c`): create with attributes (version, rules
+2. **EOS lobby core** -- done, see below. (`mp_eos.c`): create with attributes (version, rules
    text, name, public/private), search with filters, join by id, members
    and member attributes (ready, name, look), leave, kick, promote,
    updates; the lobby owner hosts the `mp_net` session over P2P.
@@ -72,3 +72,24 @@ it), fixed. Its hint sat on player one's COLOR box; it is above it now.
 Tests: `tests/online_rules_test.c` (ctest `online_rules`); a scripted fight
 (`UMK3_TWOUP=1 UMK3_RULES=... --fight`) showed the clock from 30 and a fight
 going on past two round wins.
+
+## The lobby core (stage 2)
+
+`mp_eos.c` / `mp_eos.h` (port), the `mplobby_*` calls: create, search,
+join by id, leave, kick, promote, the lobby's attributes (`ver name host
+rules priv key go`) and each member's (`code name look ready`), sent one
+UpdateLobby at a time from `mpeos_tick`; the lobby notifications re-read
+it. A private lobby is advertised but `priv=1`, found only by its `key`.
+The owner calls a member (`go`), whose `mpnet_poll` connects to the owner
+(`mpnet_find_eos`), and the owner hosts the mp_net session.
+
+Tested with `tests/eos_lobby_probe.c`, two of them on one PC (the second
+`UMK3_EOS_NEW_DEVICE=1`, its own `UMK3_SAVE_DIR`), public and private:
+both `PROBE OK`. Build it with zig from the repository root:
+
+    zig cc -target x86_64-windows-gnu -DUMK3_EOS -I <eos>/SDK/Include -I src/runtime
+           tests/eos_lobby_probe.c src/runtime/mp_eos.c -o probe.exe
+
+and run it beside the EOS DLL and eos.ini (`probe host [priv]`, then
+`probe join [KEY]`). Not tried yet: kick, promote, host migration, the
+private lobby kept out of a public search, the rules filter.

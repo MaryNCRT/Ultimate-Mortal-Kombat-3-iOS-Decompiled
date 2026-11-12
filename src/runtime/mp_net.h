@@ -39,6 +39,8 @@ enum { MPNET_IDLE, MPNET_SEARCHING, MPNET_NOT_FOUND, MPNET_CONNECTED,
  * the ONLINE screen open). Whoever is found hosts the fight. */
 void mpnet_find(const char *code);
 void mpnet_cancel_find(void);
+/* The same with the player's EOS user known (a lobby's fight call). */
+void mpnet_find_eos(const char *code, const char *who);
 int  mpnet_status(void);                /* MPNET_* */
 /* Internet play (Epic Online Services, mp_eos.h): MPEOS_OFF, _STARTING,
  * _READY or _FAILED. */

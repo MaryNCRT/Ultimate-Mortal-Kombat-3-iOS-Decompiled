@@ -42,6 +42,29 @@ int  mpeos_recv(char *who, int wn, void *buf, int max)
 { (void)who; (void)wn; (void)buf; (void)max; return 0; }
 int  mpeos_players(void) { return -1; }
 
+int  mplobby_state(void) { return MPLOBBY_NONE; }
+int  mplobby_event(void) { return MPLOBBY_EV_OFFLINE; }
+unsigned mplobby_serial(void) { return 0; }
+int  mplobby_create(const char *name, const char *rules, int priv, int max_members)
+{ (void)name; (void)rules; (void)priv; (void)max_members; return 0; }
+int  mplobby_join(const char *id) { (void)id; return 0; }
+void mplobby_leave(void) {}
+void mplobby_search(const char *rules, const char *key) { (void)rules; (void)key; }
+int  mplobby_results(struct mplobby_info *out, int max) { (void)out; (void)max; return 0; }
+const struct mplobby_info *mplobby_info(void) { return NULL; }
+int  mplobby_members(struct mplobby_member *out, int max) { (void)out; (void)max; return 0; }
+int  mplobby_am_owner(void) { return 0; }
+void mplobby_set_me(const char *code, const char *name, const char *look, int ready)
+{ (void)code; (void)name; (void)look; (void)ready; }
+void mplobby_set_ready(int ready) { (void)ready; }
+void mplobby_set_rules(const char *rules) { (void)rules; }
+void mplobby_set_name(const char *name) { (void)name; }
+void mplobby_kick(const char *who) { (void)who; }
+void mplobby_promote(const char *who) { (void)who; }
+void mplobby_call(const char *who) { (void)who; }
+int  mplobby_take_call(char *code, int cn, char *who, int wn)
+{ (void)code; (void)cn; (void)who; (void)wn; return 0; }
+
 #else
 
 #include <stdlib.h>
@@ -95,7 +118,19 @@ static unsigned ticks(void)
     X(EOS_LobbyDetails_GetLobbyOwner) X(EOS_LobbyDetails_Release) \
     X(EOS_P2P_SendPacket) X(EOS_P2P_ReceivePacket) \
     X(EOS_P2P_GetNextReceivedPacketSize) X(EOS_P2P_AcceptConnection) \
-    X(EOS_P2P_AddNotifyPeerConnectionRequest)
+    X(EOS_P2P_AddNotifyPeerConnectionRequest) \
+    X(EOS_Lobby_JoinLobbyById) X(EOS_Lobby_LeaveLobby) \
+    X(EOS_Lobby_UpdateLobbyModification) X(EOS_Lobby_UpdateLobby) \
+    X(EOS_Lobby_PromoteMember) X(EOS_Lobby_KickMember) \
+    X(EOS_Lobby_AddNotifyLobbyUpdateReceived) \
+    X(EOS_Lobby_AddNotifyLobbyMemberUpdateReceived) \
+    X(EOS_Lobby_AddNotifyLobbyMemberStatusReceived) \
+    X(EOS_Lobby_CopyLobbyDetailsHandle) X(EOS_Lobby_Attribute_Release) \
+    X(EOS_LobbyModification_AddAttribute) X(EOS_LobbyModification_AddMemberAttribute) \
+    X(EOS_LobbyModification_Release) \
+    X(EOS_LobbyDetails_CopyInfo) X(EOS_LobbyDetails_Info_Release) \
+    X(EOS_LobbyDetails_CopyAttributeByKey) X(EOS_LobbyDetails_CopyMemberAttributeByKey) \
+    X(EOS_LobbyDetails_GetMemberCount) X(EOS_LobbyDetails_GetMemberByIndex)
 
 #define DECL(f) static __typeof__(f) *p_##f;
 EOS_FUNCS(DECL)
@@ -598,6 +633,779 @@ int mpeos_recv(char *who, int wn, void *buf, int max)
     return (int)got;
 }
 
+/* ------------------------------------------------------------- LOBBIES
+ *
+ * Port, not in the binary (the iPhone game had only Bluetooth). One lobby at
+ * a time; what the screen asks for is kept here and sent to EOS one call at
+ * a time from mpeos_tick (lobby_flush). See mp_eos.h for the attributes. */
+#define LOBBY_BUCKET "umk3-lobby"
+
+static int      L_state = MPLOBBY_NONE, L_event;
+static unsigned L_serial;
+static char     L_id[128];
+static struct mplobby_info   L_info;
+static struct mplobby_member L_mem[MPLOBBY_MAX_MEMBERS];
+static int      L_nmem;
+static int      L_busy;                 /* an UpdateLobby in flight */
+static unsigned L_retry_at;             /* after a failed update */
+
+/* what this game wants the lobby to say */
+static char L_me_code[16], L_me_name[64], L_me_look[48];
+static int  L_me_ready, L_me_dirty;
+static char L_w_name[48], L_w_rules[64], L_w_key[8], L_w_go[64];
+static int  L_w_priv, L_w_max, L_attr_dirty, L_go_n;
+
+/* the fight call this game was given */
+static char L_go_seen[64];
+static int  L_call;
+static char L_call_code[16], L_call_who[40];
+
+/* search */
+static int  L_search = 0;               /* 0 idle / done, 1 asking */
+static struct mplobby_info L_res[MPLOBBY_MAX_RESULTS];
+static int  L_nres;
+static EOS_HLobbySearch L_search_h;     /* the newest search; older answers dropped */
+
+static void copy_str(char *dst, int n, const char *s)
+{
+    snprintf(dst, (size_t)n, "%s", s ? s : "");
+}
+
+static void my_id(char *out, int n)
+{
+    id_string(g_me, out, n);
+}
+
+/* an attribute as text (an int64 written out), "" when missing */
+static void attr_text(EOS_HLobbyDetails d, const char *key, const char *member_who,
+                      char *out, int n)
+{
+    EOS_Lobby_Attribute *a = NULL;
+    EOS_EResult r;
+
+    out[0] = 0;
+    if (member_who) {
+        EOS_LobbyDetails_CopyMemberAttributeByKeyOptions o;
+        memset(&o, 0, sizeof o);
+        o.ApiVersion = EOS_LOBBYDETAILS_COPYMEMBERATTRIBUTEBYKEY_API_LATEST;
+        o.TargetUserId = p_EOS_ProductUserId_FromString(member_who);
+        o.AttrKey = key;
+        r = p_EOS_LobbyDetails_CopyMemberAttributeByKey(d, &o, &a);
+    } else {
+        EOS_LobbyDetails_CopyAttributeByKeyOptions o;
+        memset(&o, 0, sizeof o);
+        o.ApiVersion = EOS_LOBBYDETAILS_COPYATTRIBUTEBYKEY_API_LATEST;
+        o.AttrKey = key;
+        r = p_EOS_LobbyDetails_CopyAttributeByKey(d, &o, &a);
+    }
+    if (r != EOS_Success || !a)
+        return;
+    if (a->Data) {
+        if (a->Data->ValueType == EOS_AT_STRING)
+            copy_str(out, n, a->Data->Value.AsUtf8);
+        else if (a->Data->ValueType == EOS_AT_INT64)
+            snprintf(out, (size_t)n, "%lld", (long long)a->Data->Value.AsInt64);
+        else if (a->Data->ValueType == EOS_AT_BOOLEAN)
+            snprintf(out, (size_t)n, "%d", a->Data->Value.AsBool ? 1 : 0);
+    }
+    p_EOS_Lobby_Attribute_Release(a);
+}
+
+/* A lobby's own fields from its details (a search result or ours) */
+static void read_info(EOS_HLobbyDetails d, struct mplobby_info *out)
+{
+    EOS_LobbyDetails_CopyInfoOptions o;
+    EOS_LobbyDetails_Info *inf = NULL;
+    char t[16];
+
+    memset(out, 0, sizeof *out);
+    memset(&o, 0, sizeof o);
+    o.ApiVersion = EOS_LOBBYDETAILS_COPYINFO_API_LATEST;
+    if (p_EOS_LobbyDetails_CopyInfo(d, &o, &inf) == EOS_Success && inf) {
+        copy_str(out->id, sizeof out->id, inf->LobbyId);
+        id_string(inf->LobbyOwnerUserId, out->owner, sizeof out->owner);
+        out->max_members = (int)inf->MaxMembers;
+        out->members = (int)(inf->MaxMembers - inf->AvailableSlots);
+        p_EOS_LobbyDetails_Info_Release(inf);
+    }
+    attr_text(d, "name", NULL, out->name, sizeof out->name);
+    attr_text(d, "host", NULL, out->host, sizeof out->host);
+    attr_text(d, "rules", NULL, out->rules, sizeof out->rules);
+    attr_text(d, "key", NULL, out->key, sizeof out->key);
+    attr_text(d, "priv", NULL, t, sizeof t);
+    out->priv = t[0] == '1';
+}
+
+static void EOS_CALL on_destroyed_quiet(const EOS_Lobby_DestroyLobbyCallbackInfo *d)
+{
+    (void)d;
+}
+
+static void EOS_CALL on_left_quiet(const EOS_Lobby_LeaveLobbyCallbackInfo *d)
+{
+    (void)d;
+}
+
+static void lobby_reset(int ev)
+{
+    if (L_state != MPLOBBY_NONE || ev != MPLOBBY_EV_NONE)
+        L_event = ev;
+    L_state = MPLOBBY_NONE;
+    L_id[0] = 0;
+    L_nmem = 0;
+    L_busy = 0;
+    L_me_dirty = L_attr_dirty = 0;
+    L_go_seen[0] = 0;
+    L_call = 0;
+    memset(&L_info, 0, sizeof L_info);
+    L_serial++;
+}
+
+/* Reads our lobby again: its fields, its members and theirs. */
+static void lobby_refresh(void)
+{
+    EOS_Lobby_CopyLobbyDetailsHandleOptions o;
+    EOS_LobbyDetails_GetMemberCountOptions mc;
+    EOS_HLobbyDetails d = NULL;
+    char mine[40], go[64];
+    uint32_t i, n;
+
+    if (L_state != MPLOBBY_IN || !L_id[0])
+        return;
+    memset(&o, 0, sizeof o);
+    o.ApiVersion = EOS_LOBBY_COPYLOBBYDETAILSHANDLE_API_LATEST;
+    o.LobbyId = L_id;
+    o.LocalUserId = g_me;
+    if (p_EOS_Lobby_CopyLobbyDetailsHandle(g_lobby, &o, &d) != EOS_Success || !d)
+        return;
+    read_info(d, &L_info);
+    my_id(mine, sizeof mine);
+    memset(&mc, 0, sizeof mc);
+    mc.ApiVersion = EOS_LOBBYDETAILS_GETMEMBERCOUNT_API_LATEST;
+    n = p_EOS_LobbyDetails_GetMemberCount(d, &mc);
+    L_nmem = 0;
+    for (i = 0; i < n && L_nmem < MPLOBBY_MAX_MEMBERS; i++) {
+        EOS_LobbyDetails_GetMemberByIndexOptions mi;
+        struct mplobby_member *m = &L_mem[L_nmem];
+        char t[16];
+
+        memset(&mi, 0, sizeof mi);
+        mi.ApiVersion = EOS_LOBBYDETAILS_GETMEMBERBYINDEX_API_LATEST;
+        mi.MemberIndex = i;
+        memset(m, 0, sizeof *m);
+        id_string(p_EOS_LobbyDetails_GetMemberByIndex(d, &mi), m->who, sizeof m->who);
+        if (!m->who[0])
+            continue;
+        attr_text(d, "code", m->who, m->code, sizeof m->code);
+        attr_text(d, "name", m->who, m->name, sizeof m->name);
+        attr_text(d, "look", m->who, m->look, sizeof m->look);
+        attr_text(d, "ready", m->who, t, sizeof t);
+        m->ready = t[0] == '1';
+        m->owner = !strcmp(m->who, L_info.owner);
+        L_nmem++;
+    }
+    /* the owner's fight call: "<n>:<EOS user>", taken once */
+    attr_text(d, "go", NULL, go, sizeof go);
+    if (go[0] && strcmp(go, L_go_seen) != 0) {
+        const char *c = strchr(go, ':');
+        copy_str(L_go_seen, sizeof L_go_seen, go);
+        if (c && !strcmp(c + 1, mine) && strcmp(L_info.owner, mine) != 0) {
+            for (i = 0; i < (uint32_t)L_nmem; i++)
+                if (L_mem[i].owner) {
+                    copy_str(L_call_code, sizeof L_call_code, L_mem[i].code);
+                    copy_str(L_call_who, sizeof L_call_who, L_mem[i].who);
+                    L_call = 1;
+                    printf("online: lobby: called to fight %s\n", L_mem[i].name);
+                }
+        }
+    }
+    p_EOS_LobbyDetails_Release(d);
+    L_serial++;
+}
+
+static int add_attr(EOS_HLobbyModification m, int member, const char *key,
+                    const char *val)
+{
+    EOS_Lobby_AttributeData a;
+
+    memset(&a, 0, sizeof a);
+    a.ApiVersion = EOS_LOBBY_ATTRIBUTEDATA_API_LATEST;
+    a.Key = key;
+    a.Value.AsUtf8 = val;
+    a.ValueType = EOS_AT_STRING;
+    if (member) {
+        EOS_LobbyModification_AddMemberAttributeOptions o;
+        memset(&o, 0, sizeof o);
+        o.ApiVersion = EOS_LOBBYMODIFICATION_ADDMEMBERATTRIBUTE_API_LATEST;
+        o.Attribute = &a;
+        o.Visibility = EOS_LAT_PUBLIC;
+        return p_EOS_LobbyModification_AddMemberAttribute(m, &o) == EOS_Success;
+    } else {
+        EOS_LobbyModification_AddAttributeOptions o;
+        memset(&o, 0, sizeof o);
+        o.ApiVersion = EOS_LOBBYMODIFICATION_ADDATTRIBUTE_API_LATEST;
+        o.Attribute = &a;
+        o.Visibility = EOS_LAT_PUBLIC;
+        return p_EOS_LobbyModification_AddAttribute(m, &o) == EOS_Success;
+    }
+}
+
+static void EOS_CALL on_lobby_updated(const EOS_Lobby_UpdateLobbyCallbackInfo *d)
+{
+    L_busy = 0;
+    if (d->ResultCode != EOS_Success) {
+        printf("online: lobby update: %s\n", res(d->ResultCode));
+        L_retry_at = ticks() + 2000;
+        L_me_dirty = L_attr_dirty = 1;  /* again, a little later */
+        return;
+    }
+    lobby_refresh();
+}
+
+/* Sends what changed, one UpdateLobby at a time. */
+static void lobby_flush(void)
+{
+    EOS_Lobby_UpdateLobbyModificationOptions mo;
+    EOS_Lobby_UpdateLobbyOptions uo;
+    EOS_HLobbyModification m = NULL;
+    char t[8];
+    int owner, ok = 1;
+
+    if (L_state != MPLOBBY_IN || L_busy || (!L_me_dirty && !L_attr_dirty))
+        return;
+    if (L_retry_at && (int)(ticks() - L_retry_at) < 0)
+        return;
+    L_retry_at = 0;
+    owner = mplobby_am_owner();
+    if (!owner)
+        L_attr_dirty = 0;               /* only the owner writes the lobby's */
+    if (!L_me_dirty && !L_attr_dirty)
+        return;
+    memset(&mo, 0, sizeof mo);
+    mo.ApiVersion = EOS_LOBBY_UPDATELOBBYMODIFICATION_API_LATEST;
+    mo.LocalUserId = g_me;
+    mo.LobbyId = L_id;
+    if (p_EOS_Lobby_UpdateLobbyModification(g_lobby, &mo, &m) != EOS_Success || !m)
+        return;
+    if (L_attr_dirty) {
+        ok &= add_attr(m, 0, "ver", MPLOBBY_PROTO);
+        ok &= add_attr(m, 0, "name", L_w_name);
+        ok &= add_attr(m, 0, "host", L_me_name);
+        ok &= add_attr(m, 0, "rules", L_w_rules);
+        ok &= add_attr(m, 0, "priv", L_w_priv ? "1" : "0");
+        ok &= add_attr(m, 0, "key", L_w_key);
+        if (L_w_go[0])
+            ok &= add_attr(m, 0, "go", L_w_go);
+    }
+    if (L_me_dirty) {
+        ok &= add_attr(m, 1, "code", L_me_code);
+        ok &= add_attr(m, 1, "name", L_me_name);
+        ok &= add_attr(m, 1, "look", L_me_look);
+        snprintf(t, sizeof t, "%d", L_me_ready ? 1 : 0);
+        ok &= add_attr(m, 1, "ready", t);
+    }
+    if (!ok)
+        printf("online: lobby: an attribute was refused\n");
+    L_me_dirty = L_attr_dirty = 0;
+    memset(&uo, 0, sizeof uo);
+    uo.ApiVersion = EOS_LOBBY_UPDATELOBBY_API_LATEST;
+    uo.LobbyModificationHandle = m;
+    L_busy = 1;
+    p_EOS_Lobby_UpdateLobby(g_lobby, &uo, NULL, on_lobby_updated);
+    p_EOS_LobbyModification_Release(m);
+}
+
+/* ---- notifications: any lobby of ours changed */
+
+static void EOS_CALL on_lobby_update(const EOS_Lobby_LobbyUpdateReceivedCallbackInfo *d)
+{
+    if (d->LobbyId && !strcmp(d->LobbyId, L_id))
+        lobby_refresh();
+}
+
+static void EOS_CALL on_member_update(const EOS_Lobby_LobbyMemberUpdateReceivedCallbackInfo *d)
+{
+    if (d->LobbyId && !strcmp(d->LobbyId, L_id))
+        lobby_refresh();
+}
+
+static void EOS_CALL on_member_status(const EOS_Lobby_LobbyMemberStatusReceivedCallbackInfo *d)
+{
+    char who[40], mine[40];
+
+    if (!d->LobbyId || strcmp(d->LobbyId, L_id) != 0)
+        return;
+    id_string(d->TargetUserId, who, sizeof who);
+    my_id(mine, sizeof mine);
+    if (d->CurrentStatus == EOS_LMS_CLOSED) {
+        printf("online: lobby: closed\n");
+        lobby_reset(MPLOBBY_EV_CLOSED);
+        return;
+    }
+    if (!strcmp(who, mine) && d->CurrentStatus == EOS_LMS_KICKED) {
+        printf("online: lobby: kicked out\n");
+        lobby_reset(MPLOBBY_EV_KICKED);
+        return;
+    }
+    if (d->CurrentStatus == EOS_LMS_PROMOTED && !strcmp(who, mine))
+        L_attr_dirty = 1;               /* the new owner writes its name as host */
+    lobby_refresh();
+}
+
+static void lobby_notifies(void)
+{
+    EOS_Lobby_AddNotifyLobbyUpdateReceivedOptions a;
+    EOS_Lobby_AddNotifyLobbyMemberUpdateReceivedOptions b;
+    EOS_Lobby_AddNotifyLobbyMemberStatusReceivedOptions c;
+
+    memset(&a, 0, sizeof a);
+    a.ApiVersion = EOS_LOBBY_ADDNOTIFYLOBBYUPDATERECEIVED_API_LATEST;
+    p_EOS_Lobby_AddNotifyLobbyUpdateReceived(g_lobby, &a, NULL, on_lobby_update);
+    memset(&b, 0, sizeof b);
+    b.ApiVersion = EOS_LOBBY_ADDNOTIFYLOBBYMEMBERUPDATERECEIVED_API_LATEST;
+    p_EOS_Lobby_AddNotifyLobbyMemberUpdateReceived(g_lobby, &b, NULL, on_member_update);
+    memset(&c, 0, sizeof c);
+    c.ApiVersion = EOS_LOBBY_ADDNOTIFYLOBBYMEMBERSTATUSRECEIVED_API_LATEST;
+    p_EOS_Lobby_AddNotifyLobbyMemberStatusReceived(g_lobby, &c, NULL, on_member_status);
+}
+
+/* ---- create, join, leave */
+
+static void EOS_CALL on_lobby_created(const EOS_Lobby_CreateLobbyCallbackInfo *d)
+{
+    if (L_state != MPLOBBY_CREATING) {  /* left before it was made */
+        if (d->ResultCode == EOS_Success) {
+            EOS_Lobby_DestroyLobbyOptions o;
+            memset(&o, 0, sizeof o);
+            o.ApiVersion = EOS_LOBBY_DESTROYLOBBY_API_LATEST;
+            o.LocalUserId = g_me;
+            o.LobbyId = d->LobbyId;
+            p_EOS_Lobby_DestroyLobby(g_lobby, &o, NULL, on_destroyed_quiet);
+        }
+        return;
+    }
+    if (d->ResultCode != EOS_Success) {
+        printf("online: lobby not created: %s\n", res(d->ResultCode));
+        lobby_reset(MPLOBBY_EV_FAILED);
+        return;
+    }
+    copy_str(L_id, sizeof L_id, d->LobbyId);
+    L_state = MPLOBBY_IN;
+    L_event = MPLOBBY_EV_NONE;
+    L_attr_dirty = L_me_dirty = 1;
+    printf("online: lobby created (%s)\n", L_w_priv ? L_w_key : L_w_name);
+    lobby_refresh();
+    lobby_flush();
+}
+
+static void EOS_CALL on_lobby_joined(const EOS_Lobby_JoinLobbyByIdCallbackInfo *d)
+{
+    if (L_state != MPLOBBY_JOINING) {   /* left before it answered */
+        if (d->ResultCode == EOS_Success) {
+            EOS_Lobby_LeaveLobbyOptions o;
+            memset(&o, 0, sizeof o);
+            o.ApiVersion = EOS_LOBBY_LEAVELOBBY_API_LATEST;
+            o.LocalUserId = g_me;
+            o.LobbyId = d->LobbyId;
+            p_EOS_Lobby_LeaveLobby(g_lobby, &o, NULL, on_left_quiet);
+        }
+        return;
+    }
+    if (d->ResultCode != EOS_Success) {
+        printf("online: lobby not joined: %s\n", res(d->ResultCode));
+        lobby_reset(d->ResultCode == EOS_Lobby_TooManyPlayers ? MPLOBBY_EV_FULL
+                    : d->ResultCode == EOS_NotFound ? MPLOBBY_EV_NOT_FOUND
+                    : MPLOBBY_EV_FAILED);
+        return;
+    }
+    copy_str(L_id, sizeof L_id, d->LobbyId);
+    L_state = MPLOBBY_IN;
+    L_event = MPLOBBY_EV_NONE;
+    L_me_dirty = 1;
+    printf("online: lobby joined\n");
+    lobby_refresh();
+    lobby_flush();
+}
+
+/* Six letters and digits for a private lobby (no 0/O, 1/I) */
+static void make_key(char *out)
+{
+    static const char abc[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    static unsigned seed;
+    char mine[40];
+    int i;
+
+    my_id(mine, sizeof mine);
+    if (!seed)
+        for (i = 0; mine[i]; i++)
+            seed = seed * 31u + (unsigned char)mine[i];
+    seed ^= ticks();
+    for (i = 0; i < 6; i++) {
+        seed = seed * 1103515245u + 12345u;
+        out[i] = abc[(seed >> 16) % (sizeof abc - 1)];
+    }
+    out[6] = 0;
+}
+
+int mplobby_create(const char *name, const char *rules, int priv, int max_members)
+{
+    EOS_Lobby_CreateLobbyOptions o;
+
+    if (g_state != MPEOS_READY) {
+        L_event = MPLOBBY_EV_OFFLINE;
+        return 0;
+    }
+    if (L_state != MPLOBBY_NONE)
+        return 0;
+    if (max_members < 2)
+        max_members = 2;
+    if (max_members > MPLOBBY_MAX_MEMBERS)
+        max_members = MPLOBBY_MAX_MEMBERS;
+    copy_str(L_w_name, sizeof L_w_name, name);
+    copy_str(L_w_rules, sizeof L_w_rules, rules);
+    L_w_priv = priv != 0;
+    L_w_max = max_members;
+    L_w_go[0] = 0;
+    L_go_n = 0;
+    make_key(L_w_key);
+    memset(&o, 0, sizeof o);
+    o.ApiVersion = EOS_LOBBY_CREATELOBBY_API_LATEST;
+    o.LocalUserId = g_me;
+    o.MaxLobbyMembers = (uint32_t)max_members;
+    o.PermissionLevel = EOS_LPL_PUBLICADVERTISED;   /* private: hidden by "priv" */
+    o.bPresenceEnabled = EOS_FALSE;
+    o.BucketId = LOBBY_BUCKET;
+    o.bDisableHostMigration = EOS_FALSE;            /* the owner may leave */
+    o.bEnableJoinById = EOS_TRUE;
+    L_state = MPLOBBY_CREATING;
+    L_event = MPLOBBY_EV_NONE;
+    L_serial++;
+    p_EOS_Lobby_CreateLobby(g_lobby, &o, NULL, on_lobby_created);
+    return 1;
+}
+
+int mplobby_join(const char *id)
+{
+    EOS_Lobby_JoinLobbyByIdOptions o;
+
+    if (g_state != MPEOS_READY) {
+        L_event = MPLOBBY_EV_OFFLINE;
+        return 0;
+    }
+    if (L_state != MPLOBBY_NONE || !id || !id[0])
+        return 0;
+    memset(&o, 0, sizeof o);
+    o.ApiVersion = EOS_LOBBY_JOINLOBBYBYID_API_LATEST;
+    o.LobbyId = id;
+    o.LocalUserId = g_me;
+    o.bPresenceEnabled = EOS_FALSE;
+    L_state = MPLOBBY_JOINING;
+    L_event = MPLOBBY_EV_NONE;
+    L_serial++;
+    p_EOS_Lobby_JoinLobbyById(g_lobby, &o, NULL, on_lobby_joined);
+    return 1;
+}
+
+static void EOS_CALL on_lobby_left(const EOS_Lobby_LeaveLobbyCallbackInfo *d)
+{
+    if (d->ResultCode != EOS_Success)
+        printf("online: lobby leave: %s\n", res(d->ResultCode));
+    if (L_state == MPLOBBY_LEAVING)
+        lobby_reset(MPLOBBY_EV_LEFT);
+}
+
+static void EOS_CALL on_lobby_destroyed(const EOS_Lobby_DestroyLobbyCallbackInfo *d)
+{
+    if (d->ResultCode != EOS_Success)
+        printf("online: lobby destroy: %s\n", res(d->ResultCode));
+    if (L_state == MPLOBBY_LEAVING)
+        lobby_reset(MPLOBBY_EV_LEFT);
+}
+
+/* The owner alone destroys the lobby; anyone else leaves it (an owner with
+ * others in it too: EOS makes one of them the owner). */
+void mplobby_leave(void)
+{
+    if (L_state == MPLOBBY_CREATING || L_state == MPLOBBY_JOINING) {
+        lobby_reset(MPLOBBY_EV_LEFT);   /* the answer is undone when it comes */
+        return;
+    }
+    if (L_state != MPLOBBY_IN)
+        return;
+    L_state = MPLOBBY_LEAVING;
+    L_serial++;
+    if (mplobby_am_owner() && L_nmem <= 1) {
+        EOS_Lobby_DestroyLobbyOptions o;
+        memset(&o, 0, sizeof o);
+        o.ApiVersion = EOS_LOBBY_DESTROYLOBBY_API_LATEST;
+        o.LocalUserId = g_me;
+        o.LobbyId = L_id;
+        p_EOS_Lobby_DestroyLobby(g_lobby, &o, NULL, on_lobby_destroyed);
+    } else {
+        EOS_Lobby_LeaveLobbyOptions o;
+        memset(&o, 0, sizeof o);
+        o.ApiVersion = EOS_LOBBY_LEAVELOBBY_API_LATEST;
+        o.LocalUserId = g_me;
+        o.LobbyId = L_id;
+        p_EOS_Lobby_LeaveLobby(g_lobby, &o, NULL, on_lobby_left);
+    }
+}
+
+/* ---- search */
+
+static void EOS_CALL on_lobby_search(const EOS_LobbySearch_FindCallbackInfo *d)
+{
+    EOS_HLobbySearch s = (EOS_HLobbySearch)d->ClientData;
+    EOS_LobbySearch_GetSearchResultCountOptions c;
+    uint32_t i, n;
+    char mine[40];
+
+    if (L_search != 1 || s != L_search_h)
+        goto done;
+    L_search = 0;
+    L_nres = 0;
+    L_serial++;
+    if (d->ResultCode != EOS_Success) {
+        if (d->ResultCode != EOS_NotFound)
+            printf("online: lobby search: %s\n", res(d->ResultCode));
+        goto done;
+    }
+    my_id(mine, sizeof mine);
+    memset(&c, 0, sizeof c);
+    c.ApiVersion = EOS_LOBBYSEARCH_GETSEARCHRESULTCOUNT_API_LATEST;
+    n = p_EOS_LobbySearch_GetSearchResultCount(s, &c);
+    for (i = 0; i < n && L_nres < MPLOBBY_MAX_RESULTS; i++) {
+        EOS_LobbySearch_CopySearchResultByIndexOptions ci;
+        EOS_HLobbyDetails det = NULL;
+        struct mplobby_info *r = &L_res[L_nres];
+
+        memset(&ci, 0, sizeof ci);
+        ci.ApiVersion = EOS_LOBBYSEARCH_COPYSEARCHRESULTBYINDEX_API_LATEST;
+        ci.LobbyIndex = i;
+        if (p_EOS_LobbySearch_CopySearchResultByIndex(s, &ci, &det) != EOS_Success)
+            continue;
+        read_info(det, r);
+        p_EOS_LobbyDetails_Release(det);
+        if (!r->id[0] || !strcmp(r->owner, mine) || !strcmp(r->id, L_id))
+            continue;                   /* our own */
+        L_nres++;
+    }
+done:
+    p_EOS_LobbySearch_Release(s);
+}
+
+static void search_param(EOS_HLobbySearch s, const char *key, const char *val,
+                         int64_t num, EOS_EComparisonOp op)
+{
+    EOS_LobbySearch_SetParameterOptions sp;
+    EOS_Lobby_AttributeData a;
+
+    memset(&a, 0, sizeof a);
+    a.ApiVersion = EOS_LOBBY_ATTRIBUTEDATA_API_LATEST;
+    a.Key = key;
+    if (val) {
+        a.Value.AsUtf8 = val;
+        a.ValueType = EOS_AT_STRING;
+    } else {
+        a.Value.AsInt64 = num;
+        a.ValueType = EOS_AT_INT64;
+    }
+    memset(&sp, 0, sizeof sp);
+    sp.ApiVersion = EOS_LOBBYSEARCH_SETPARAMETER_API_LATEST;
+    sp.Parameter = &a;
+    sp.ComparisonOp = op;
+    p_EOS_LobbySearch_SetParameter(s, &sp);
+}
+
+void mplobby_search(const char *rules, const char *key)
+{
+    EOS_Lobby_CreateLobbySearchOptions o;
+    EOS_LobbySearch_FindOptions fo;
+    EOS_HLobbySearch s = NULL;
+    char k[8];
+    int i, j;
+
+    L_nres = 0;
+    L_search = 0;
+    L_search_h = NULL;
+    L_serial++;
+    if (g_state != MPEOS_READY)
+        return;
+    memset(&o, 0, sizeof o);
+    o.ApiVersion = EOS_LOBBY_CREATELOBBYSEARCH_API_LATEST;
+    o.MaxResults = MPLOBBY_MAX_RESULTS;
+    if (p_EOS_Lobby_CreateLobbySearch(g_lobby, &o, &s) != EOS_Success)
+        return;
+    search_param(s, EOS_LOBBY_SEARCH_BUCKET_ID, LOBBY_BUCKET, 0, EOS_CO_EQUAL);
+    search_param(s, "ver", MPLOBBY_PROTO, 0, EOS_CO_EQUAL);
+    if (key && key[0]) {
+        for (i = j = 0; key[i] && j < 6; i++) {
+            int c = (unsigned char)key[i];
+            if (c >= 'a' && c <= 'z')
+                c -= 32;
+            if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'))
+                k[j++] = (char)c;
+        }
+        k[j] = 0;
+        search_param(s, "key", k, 0, EOS_CO_EQUAL);
+    } else {
+        search_param(s, "priv", "0", 0, EOS_CO_EQUAL);
+        search_param(s, EOS_LOBBY_SEARCH_MINSLOTSAVAILABLE, NULL, 1, EOS_CO_GREATERTHANOREQUAL);
+    }
+    if (rules && rules[0])
+        search_param(s, "rules", rules, 0, EOS_CO_EQUAL);
+    memset(&fo, 0, sizeof fo);
+    fo.ApiVersion = EOS_LOBBYSEARCH_FIND_API_LATEST;
+    fo.LocalUserId = g_me;
+    L_search = 1;
+    L_search_h = s;
+    p_EOS_LobbySearch_Find(s, &fo, s, on_lobby_search);
+}
+
+int mplobby_results(struct mplobby_info *out, int max)
+{
+    int i;
+
+    if (L_search == 1)
+        return -1;
+    for (i = 0; i < L_nres && i < max; i++)
+        out[i] = L_res[i];
+    return i;
+}
+
+/* ---- the lobby we are in */
+
+int mplobby_state(void) { return L_state; }
+int mplobby_event(void) { return L_event; }
+unsigned mplobby_serial(void) { return L_serial; }
+
+const struct mplobby_info *mplobby_info(void)
+{
+    return L_state == MPLOBBY_IN ? &L_info : NULL;
+}
+
+int mplobby_members(struct mplobby_member *out, int max)
+{
+    int i;
+
+    if (L_state != MPLOBBY_IN)
+        return 0;
+    for (i = 0; i < L_nmem && i < max; i++)
+        out[i] = L_mem[i];
+    return i;
+}
+
+int mplobby_am_owner(void)
+{
+    char mine[40];
+
+    if (L_state != MPLOBBY_IN || !L_info.owner[0])
+        return 0;
+    my_id(mine, sizeof mine);
+    return !strcmp(mine, L_info.owner);
+}
+
+void mplobby_set_me(const char *code, const char *name, const char *look, int ready)
+{
+    if (strcmp(L_me_code, code ? code : "") || strcmp(L_me_name, name ? name : "")
+        || strcmp(L_me_look, look ? look : "") || L_me_ready != (ready != 0)) {
+        int host = strcmp(L_me_name, name ? name : "") != 0;
+        copy_str(L_me_code, sizeof L_me_code, code);
+        copy_str(L_me_name, sizeof L_me_name, name);
+        copy_str(L_me_look, sizeof L_me_look, look);
+        L_me_ready = ready != 0;
+        L_me_dirty = 1;
+        if (host)
+            L_attr_dirty = 1;           /* the owner's name is the lobby's "host" */
+    }
+}
+
+void mplobby_set_ready(int ready)
+{
+    if (L_me_ready != (ready != 0)) {
+        L_me_ready = ready != 0;
+        L_me_dirty = 1;
+    }
+}
+
+void mplobby_set_rules(const char *rules)
+{
+    if (strcmp(L_w_rules, rules ? rules : "")) {
+        copy_str(L_w_rules, sizeof L_w_rules, rules);
+        L_attr_dirty = 1;
+    }
+}
+
+void mplobby_set_name(const char *name)
+{
+    if (strcmp(L_w_name, name ? name : "")) {
+        copy_str(L_w_name, sizeof L_w_name, name);
+        L_attr_dirty = 1;
+    }
+}
+
+static void EOS_CALL on_kicked(const EOS_Lobby_KickMemberCallbackInfo *d)
+{
+    if (d->ResultCode != EOS_Success)
+        printf("online: lobby kick: %s\n", res(d->ResultCode));
+    lobby_refresh();
+}
+
+static void EOS_CALL on_promoted(const EOS_Lobby_PromoteMemberCallbackInfo *d)
+{
+    if (d->ResultCode != EOS_Success)
+        printf("online: lobby promote: %s\n", res(d->ResultCode));
+    lobby_refresh();
+}
+
+void mplobby_kick(const char *who)
+{
+    EOS_Lobby_KickMemberOptions o;
+
+    if (!mplobby_am_owner() || !who || !who[0])
+        return;
+    memset(&o, 0, sizeof o);
+    o.ApiVersion = EOS_LOBBY_KICKMEMBER_API_LATEST;
+    o.LobbyId = L_id;
+    o.LocalUserId = g_me;
+    o.TargetUserId = p_EOS_ProductUserId_FromString(who);
+    if (o.TargetUserId)
+        p_EOS_Lobby_KickMember(g_lobby, &o, NULL, on_kicked);
+}
+
+void mplobby_promote(const char *who)
+{
+    EOS_Lobby_PromoteMemberOptions o;
+
+    if (!mplobby_am_owner() || !who || !who[0])
+        return;
+    memset(&o, 0, sizeof o);
+    o.ApiVersion = EOS_LOBBY_PROMOTEMEMBER_API_LATEST;
+    o.LobbyId = L_id;
+    o.LocalUserId = g_me;
+    o.TargetUserId = p_EOS_ProductUserId_FromString(who);
+    if (o.TargetUserId)
+        p_EOS_Lobby_PromoteMember(g_lobby, &o, NULL, on_promoted);
+}
+
+void mplobby_call(const char *who)
+{
+    if (!mplobby_am_owner() || !who || !who[0])
+        return;
+    snprintf(L_w_go, sizeof L_w_go, "%d:%s", ++L_go_n, who);
+    L_attr_dirty = 1;
+}
+
+int mplobby_take_call(char *code, int cn, char *who, int wn)
+{
+    if (!L_call || L_state != MPLOBBY_IN)
+        return 0;
+    L_call = 0;
+    copy_str(code, cn, L_call_code);
+    copy_str(who, wn, L_call_who);
+    return 1;
+}
+
 /* --------------------------------------------------------------- login */
 
 static void logged_in(EOS_ProductUserId u)
@@ -614,6 +1422,7 @@ static void logged_in(EOS_ProductUserId u)
     n.LocalUserId = g_me;
     n.SocketId = &g_socket;
     p_EOS_P2P_AddNotifyPeerConnectionRequest(g_p2p, &n, NULL, on_request);
+    lobby_notifies();
     lobby_step();
     here_step();
     if (g_look_pending)
@@ -843,8 +1652,10 @@ void mpeos_start(void)
 
 void mpeos_tick(void)
 {
-    if (g_plat)
+    if (g_plat) {
         p_EOS_Platform_Tick(g_plat);
+        lobby_flush();
+    }
 }
 
 int mpeos_state(void) { return g_state; }

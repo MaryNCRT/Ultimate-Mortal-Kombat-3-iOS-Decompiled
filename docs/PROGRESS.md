@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-12 (release 0.4.5 beta: TRAINING's own screen, DUELO against the CPU, the RULES button) · before: 2026-11-12 (the ONLINE phase's rules block and the local versus's VS RULES window with its kodes checklist, Mary confirmed) · before: 2026-11-12 (0.4.4 beta in the test folder: the Lost Treasures fixed from the binary, hidden controls ignore clicks, the first start's preset, WHAT'S NEW) · earlier: 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-12 (ONLINE stage 2: the EOS lobby core, `mplobby_*` in mp_eos.c, tested with two probes against the service) · before: 2026-11-12 (release 0.4.5 beta: TRAINING's own screen, DUELO against the CPU, the RULES button) · before: 2026-11-12 (the ONLINE phase's rules block and the local versus's VS RULES window with its kodes checklist, Mary confirmed) · before: 2026-11-12 (0.4.4 beta in the test folder: the Lost Treasures fixed from the binary, hidden controls ignore clicks, the first start's preset, WHAT'S NEW) · earlier: 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -97,6 +97,45 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+## ONLINE stage 2: the EOS lobby core (2026-11-12)
+
+Port, not in the binary. `mp_eos.c` / `mp_eos.h`, the `mplobby_*` calls
+([research/ONLINE-PHASE-PLAN.md](research/ONLINE-PHASE-PLAN.md) stage 2).
+One lobby at a time, in the bucket `umk3-lobby`:
+
+- **Create** (2..8 players, public or private), **search** (this
+  version's open public lobbies, or the one private lobby with a key; an
+  optional exact rules filter), **join by id**, **leave** (the owner alone
+  destroys it; an owner with others leaves and EOS promotes one of them),
+  **kick**, **promote**.
+- The lobby's attributes: `ver` (MPLOBBY_PROTO "1"), `name`, `host`,
+  `rules` (online_rules text), `priv`, `key` (six letters and digits, no
+  0/O/1/I), `go`. Each member's: `code`, `name`, `look`, `ready`. A private
+  lobby is still PUBLICADVERTISED (joining by id needs it searchable) but
+  `priv=1` keeps it out of the browser's search; its key finds it.
+- What the screen asks for is kept and sent from `mpeos_tick`, one
+  UpdateLobby at a time (a failed one tried again after 2 s); the three
+  lobby notifications re-read the lobby, its members and their attributes,
+  and bump `mplobby_serial` for the screen.
+- **The owner hosts**: `mplobby_call(who)` writes `go = "<n>:<EOS user>"`;
+  that member's game takes the call (`mplobby_take_call`) and `mpnet_poll`
+  connects to the owner with `mpnet_find_eos` -- the JOIN goes straight to
+  the owner's EOS user, no code lookup; the owner answers as the code's
+  owner and hosts, as in FIND MATCH.
+
+**Tested against the real service**: `tests/eos_lobby_probe.c` (built with
+mp_eos.c alone and the SDK; not a ctest) run twice on this PC, the second
+as another EOS user (`UMK3_EOS_NEW_DEVICE=1`). Public lobby and private
+lobby found by its key, both `PROBE OK` on both sides: create, the
+lobby's and the members' attributes seen by the other, ready, the rules
+changed by the owner and seen by the member, the call taken, a P2P ping
+and pong between them, the member leaving, the owner destroying it. Not
+tried yet: kick, promote, the owner leaving with others in (host
+migration), a private lobby kept out of a public search, a search with a
+rules filter. The game builds and links with it (Windows, Linux compile
+of mp_eos.c with and without the SDK); nothing on screen uses it yet --
+LOBBIES in the ONLINE screen is stage 3.
 
 ## 0.4.5 beta: TRAINING's screen (2026-11-12)
 
