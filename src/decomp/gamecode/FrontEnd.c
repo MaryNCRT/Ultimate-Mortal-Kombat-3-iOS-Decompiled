@@ -7055,6 +7055,9 @@ int  GetNextLevel(int cur);
 
 /* Port: START's picture inside the select screen's PLAY, with the
  * on-screen controls off. */
+static void p2_slot(void);              /* port: DUELO's player two, below */
+extern int PortPractice;
+
 static void start_glyph(void)
 {
     char file[200];
@@ -7115,6 +7118,8 @@ void FE_Task_Character_Select(void)
 
     /* Port, not in the binary: the pad's highlight passes PLAY by and
      * START (or the pause key) presses it, at once; its picture inside it. */
+    if (GameMode == 6 && !PortPractice)
+        p2_slot();                      /* port: player two, or the CPU */
     PortNavSkip = 1;
     if (GameMode == 6) {
         /* Both sides have to have chosen before Play appears. */
@@ -15666,6 +15671,92 @@ static int palette_box(int side, int y, long c1, long c2)
     return hit;
 }
 
+/* Port, not in the binary: DUELO against the CPU (Mary). A box beside OK,
+ * left of it: PLAYER 2 (a person) or CPU and its level, 1..10 -- the
+ * drone's difficulty (RoundParam+0x0c, 0..9) plus one. A click on it
+ * changes who player two is; with the CPU, a click on its arrows changes
+ * the level. Player two's START (the pad's, or the keypad's pause key)
+ * joins. Kept in umk3.ini as vs_p2= and vs_cpu_level=; GameCode.c starts
+ * the fight with AIOn 1. */
+extern int  PortVsCpu, PortVsCpuLevel;  /* GameCode.c */
+int  PortP2Join(void);                  /* game_main.c: player two's START */
+void set_menu_put_key(const char *k, const char *v);   /* settings_menu.c */
+
+static void vs_cpu_save(void)
+{
+    char v[8];
+
+    set_menu_put_key("vs_p2", PortVsCpu ? "cpu" : "human");
+    snprintf(v, sizeof v, "%d", PortVsCpuLevel);
+    set_menu_put_key("vs_cpu_level", v);
+    printf("versus: player two is %s (level %d)\n",
+           PortVsCpu ? "the CPU" : "a person", PortVsCpuLevel);
+}
+
+static void p2_slot(void)
+{
+    char buf[40];
+    const int es = Language[0] == 'E' && Language[1] == 'S';
+    float L = (float)FE_X(104.0f), w = (float)FE_W(76.0f), t = (float)FE_W(2.0f);
+    float mid = L + w * 0.5f;
+    float T = FE_Y(290.0f), H = FE_H(22.0f);
+    float tx = limeTouchScreenX[0];
+    int hit;
+
+    if (PortP2Join() && PortVsCpu && FE_FadeAdd == 0.0f) {
+        PortVsCpu = 0;                  /* player two pressed START: in */
+        vs_cpu_save();
+        if (Settings[3] != 0)
+            limePlaySound(SFXHandle[0x68 / 4], MusicVol[Settings[3]] / 100.0f, 1.0f, 0);
+    }
+    if (PortVsCpuLevel < 1 || PortVsCpuLevel > 10)
+        PortVsCpuLevel = 5;
+
+    /* the COLOR boxes' frame: green for a person, as player two's mark on
+     * the grid; red for the CPU */
+    limeFillRect(L, T, w, H, 0.0f, 0.0f, 0.0f, 0.6f);
+    {
+        float r = PortVsCpu ? 1.0f : 0.0f, g = PortVsCpu ? 0.0f : 0.8f;
+        limeFillRect(L, T, w, FE_H(2.0f), r, g, 0.0f, 1.0f);
+        limeFillRect(L, T + H - FE_H(2.0f), w, FE_H(2.0f), r, g, 0.0f, 1.0f);
+        limeFillRect(L, T, t, H, r, g, 0.0f, 1.0f);
+        limeFillRect(L + w - t, T, t, H, r, g, 0.0f, 1.0f);
+    }
+    if (PortVsCpu) {
+        snprintf(buf, sizeof buf, "CPU %d", PortVsCpuLevel);
+        limeDrawFONT(&GameFont, "<", L + FE_W(8.0f), FE_Y(293.0f), 1, FE_WidthScale, fontcol);
+        limeDrawFONT(&GameFont, buf, mid, FE_Y(293.0f), 1, FE_WidthScale, fontcol);
+        limeDrawFONT(&GameFont, ">", L + w - FE_W(8.0f), FE_Y(293.0f), 1, FE_WidthScale, fontcol);
+        /* above it: player two's way in */
+        limeDrawFONT(&GameFont, es ? "J2: START" : "P2: START", mid, FE_Y(276.0f), 1,
+                     FE_WidthScale * 0.8f, fontcol);
+    } else
+        limeDrawFONT(&GameFont, es ? "JUGADOR 2" : "PLAYER 2", mid, FE_Y(294.0f), 1,
+                     FE_WidthScale * 0.8f, fontcol);
+
+    PortNavTarget(L, T, w, H, 0);
+    hit = FE_FadeAdd == 0.0f && limeLastTouchScreenX[0] == -1.0f
+          && tx >= L && tx <= L + w
+          && limeTouchScreenY[0] >= T && limeTouchScreenY[0] <= T + H;
+    if (!hit)
+        return;
+    if (PortVsCpu && !PortNavPick && tx < L + w * 0.3f)
+        PortVsCpuLevel = PortVsCpuLevel <= 1 ? 10 : PortVsCpuLevel - 1;
+    else if (PortVsCpu && !PortNavPick && tx > L + w * 0.7f)
+        PortVsCpuLevel = PortVsCpuLevel >= 10 ? 1 : PortVsCpuLevel + 1;
+    else if (PortVsCpu && PortNavPick && PortVsCpuLevel < 10)
+        PortVsCpuLevel++;               /* a pad: up the levels, then a person */
+    else {
+        PortVsCpu ^= 1;
+        if (PortVsCpu && PortNavPick)
+            PortVsCpuLevel = 1;
+    }
+    vs_cpu_save();
+    limeLastTouchScreenX[0] = tx;       /* one change a tap */
+    if (Settings[3] != 0)
+        limePlaySound(SFXHandle[0x68 / 4], MusicVol[Settings[3]] / 100.0f, 1.0f, 0);
+}
+
 static void palette_picker(void)
 {
     long p1 = (CharacterConfirmed != -1) ? CharacterConfirmed
@@ -15787,16 +15878,16 @@ long drawCharacterSelection(long sel)
                 || limeTouchScreenX[0] > FE_X((float)(cx * CS_COL_STEP + 108)))
                 continue;
 
-            if (GameMode == 6 && PortNavPick == 1 && !PortPractice) {
+            if (GameMode == 6 && PortNavPick == 1 && !PortPractice && !PortVsCpu) {
                 /* port: player one's pad or keys pick player one */
                 if (c != CharacterSelected)
                     FEPlayer1Offset = CS_SLIDE_START;
                 CharacterSelected = c;
                 PlayerSelectToggle = 0;
-            } else if (GameMode == 6 && PortNavPick == 2 && !PortPractice) {
+            } else if (GameMode == 6 && PortNavPick == 2 && !PortPractice && !PortVsCpu) {
                 opponentCharacter = c;  /* port: and player two's, two */
                 PlayerSelectToggle = 1;
-            } else if (GameMode == 6 && PortPractice && PortNavPick
+            } else if (GameMode == 6 && (PortPractice || PortVsCpu) && PortNavPick
                        && CharacterSelected != -1) {
                 opponentCharacter = c;  /* port: training, the pad's cross
                                          * after the first is the rival */

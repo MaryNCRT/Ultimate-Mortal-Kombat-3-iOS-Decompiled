@@ -1286,6 +1286,15 @@ static void read_config(const char *dir)
         }
         else if (strcmp(line, "hide_controls") == 0)
             PortHideControls = atoi(v) != 0;
+        else if (strcmp(line, "vs_p2") == 0) {     /* DUELO: a person or the CPU */
+            extern int PortVsCpu;
+            PortVsCpu = strcmp(v, "cpu") == 0;
+        }
+        else if (strcmp(line, "vs_cpu_level") == 0) {
+            extern int PortVsCpuLevel;
+            int n = atoi(v);
+            PortVsCpuLevel = n >= 1 && n <= 10 ? n : 5;
+        }
         else if (strcmp(line, "vs_rules") == 0) {  /* the local versus's rules */
             online_rules r;
             if (v[0] && rules_decode(v, &r))
@@ -1651,15 +1660,42 @@ int PortPagesExit(void)
 
 /* Port, not in the binary: START of either pad or the pause keys, once a
  * press -- the select screen's PLAY. */
+/* Player two's START: the second pad's, or the keypad's pause key. */
+static int p2_start_down(void)
+{
+    return (g_pad2.connected && (g_pad2.buttons & (1u << PB_START)))
+           || plat_key(PK_P2_PAUSE);
+}
+
+static int g_start_was2;                /* player two's START, last frame */
+
 int PortStartPress(void)
 {
+    static int was1;
+    extern int PortVsCpu;               /* GameCode.c: DUELO against the CPU */
+    int now1 = (g_pad.connected && (g_pad.buttons & (1u << PB_START)))
+               || plat_key(PK_PAUSE);
+    int now2 = p2_start_down();
+    /* against the CPU, player two's START joins (PortP2Join), it is not OK */
+    int hit = (now1 && !was1) || (now2 && !g_start_was2 && !(PortVsCpu && GameMode == 6));
+
+    was1 = now1;
+    g_start_was2 = now2;
+    return hit;
+}
+
+/* DUELO against the CPU (FrontEnd.c p2_slot, port): player two's START,
+ * pressed this frame -- they join. */
+int PortP2Join(void)
+{
+    extern int PortVsCpu;               /* GameCode.c */
     static int was;
-    int now = (g_pad.connected && (g_pad.buttons & (1u << PB_START)))
-              || (g_pad2.connected && (g_pad2.buttons & (1u << PB_START)))
-              || plat_key(PK_PAUSE) || plat_key(PK_P2_PAUSE);
+    int now = p2_start_down();
     int hit = now && !was;
 
     was = now;
+    if (hit && PortVsCpu)
+        g_start_was2 = 1;               /* the press that joins is not OK too */
     return hit;
 }
 

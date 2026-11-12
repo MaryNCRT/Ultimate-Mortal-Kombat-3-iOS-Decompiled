@@ -143,6 +143,21 @@ The plan and Mary's decisions: [research/ONLINE-PHASE-PLAN.md](research/ONLINE-P
   R), and a pad action of its own (17, `pad_rules=` / `p2pad_rules=`,
   SELECT); PK_MOVES no longer opens the window. **Mary played it, it
   works** (2026-11-12).
+- **DUELO against the CPU** (Mary): the binary already has it --
+  Task_GameInit step 43 sets `AIOn`, and `mk3_init` starts a side whose
+  model has bit 7 (`AIOn == 1`: player two) at `t_drone_begin`; the drone
+  reads its difficulty from RoundParam+0x0c (0..9), which the debug menu's
+  CPU DIFFICULTY already overrides. Port: `PortVsCpu` /
+  `PortVsCpuLevel` (GameCode.c, umk3.ini `vs_p2=` / `vs_cpu_level=`); in
+  GameMode 6 step 43 sets `AIOn = 1`, `P2Controls = 0` (ReadControls too),
+  step 51 the level minus one. FrontEnd.c `p2_slot`: the box left of OK
+  (PLAYER 2 / CPU n, arrows for the level, a pad's tap steps the levels
+  then back to a person); player two's START (`PortP2Join`: the second
+  pad's, the keypad's pause key) joins and is kept from pressing OK that
+  frame. With the CPU player one picks both, as in training. A replay
+  keeps it in setup word 17's bits 8.. (training stays bit 0, so the
+  format and older replays are unchanged). Built into the test folder;
+  not played yet.
 
 ## 0.4.4 beta (2026-11-12)
 

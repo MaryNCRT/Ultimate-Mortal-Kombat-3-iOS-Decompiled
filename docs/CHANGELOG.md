@@ -21,6 +21,10 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
   the rules under it; a click opens them. Its own key in CONTROLS
   (VERSUS RULES, R unless changed) and its own pad button (SELECT unless
   changed); the moves list's key no longer opens them. **Mary played it.**
+- **DUELO against the CPU** (Mary): a box beside OK says who player two
+  is -- PLAYER 2, or CPU and its level (1 to 10). A click changes it, the
+  arrows change the level, and player two's START joins. Against the CPU,
+  player one picks both fighters. Not played yet.
 
 ## 0.4.4 beta (2026-11-12)
 

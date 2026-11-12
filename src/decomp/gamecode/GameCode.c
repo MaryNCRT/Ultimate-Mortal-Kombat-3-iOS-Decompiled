@@ -4516,6 +4516,10 @@ int PortKeyDial;
  * one device, the iPad's DUELO), applied as the P2 touches are. */
 int PortKeyButtonsP2[7];
 int PortKeyDialP2;
+/* Port, not in the binary: DUELO against the CPU (FrontEnd.c p2_slot);
+ * umk3.ini vs_p2=cpu, vs_cpu_level=1..10 */
+int PortVsCpu;
+int PortVsCpuLevel = 5;
 extern int PortPractice;                /* FrontEnd.c, port: training */
 extern int PortHideControls;            /* port: hide_controls=1, defined below */
 
@@ -4584,6 +4588,8 @@ void ReadControls(void)
     P2Controls = 0;
     if (GameMode == 6)
         P2Controls = GameMode - 5;
+    if (PortVsCpu && !PortPractice)
+        P2Controls = 0;                 /* port: player two is the CPU */
 
     /* Port, not in the binary: with the on-screen controls hidden
      * (hide_controls=1, DrawControls draws nothing) a touch or a click must
@@ -6178,13 +6184,18 @@ static void rb_setup(void)
     v[6] = GameMode;
     for (i = 0; i < 10; i++)
         v[7 + i] = Settings[i];
-    v[17] = PortPractice;
+    /* training in bit 0; DUELO against the CPU, its level in bits 8.. (port,
+     * so the word count and older replays stay as they were) */
+    v[17] = PortPractice | (PortVsCpu ? PortVsCpuLevel << 8 : 0);
     if (!rb_fight_setup(v, 18))
         return;
     if (GameMode != 1 && v[6] != 1) {
         for (i = 0; i < 10; i++)
             Settings[i] = v[7 + i];
-        PortPractice = v[17];
+        PortPractice = v[17] & 1;
+        PortVsCpu = (v[17] >> 8) != 0;
+        if (PortVsCpu)
+            PortVsCpuLevel = v[17] >> 8;
     }
     Character1         = v[0];
     Character2         = v[1];
@@ -7712,6 +7723,12 @@ long GameInit_LoadABit(long step)
             P2Controls  = 1;
             AIOn        = 0;
             IsEndurance = 0;
+            /* Port, not in the binary: DUELO against the CPU (FrontEnd.c
+             * p2_slot) -- player two is the drone, as in Arcade */
+            if (PortVsCpu && !PortPractice) {
+                P2Controls = 0;
+                AIOn       = 1;
+            }
         } else if (GameMode == 2) {             /* training */
             AIOn        = 0;
             IsEndurance = 0;
@@ -7910,6 +7927,9 @@ long GameInit_LoadABit(long step)
             RoundParam[0x0c / 4] = GameMode - 3;
             RoundParam[0x14 / 4] = GameMode - 3;
         }
+        /* Port, not in the binary: DUELO against the CPU, its level 1..10 */
+        if (GameMode == 6 && PortVsCpu && !PortPractice)
+            RoundParam[0x0c / 4] = PortVsCpuLevel - 1;
         /* Port, not in the binary: the debug menu's CPU DIFFICULTY (or
          * UMK3_CPU_DIFF) over the ladder's, 0..9 */
         {
