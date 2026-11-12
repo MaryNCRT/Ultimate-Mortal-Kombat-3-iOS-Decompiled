@@ -146,6 +146,13 @@ press COMPILE.
 
 ## 7. Open work
 
+- **CHARACTER VIEWER reorganised** (2026-11-12, roster page, SPECIAL
+  MODELS, ONLY WHAT THE MOD REPLACES, layers export, MODS over the whole
+  window): in the test folder's launcher, Mary has not looked yet. The
+  launcher's shot aid needs the root found: run from the test folder's
+  `launcher\bin` it took `launcher\bin` as the root. Mary also asked for
+  Discord Rich Presence + Steam + SteamGridDB integration (a long spec);
+  not started, it is its own task.
 - **The ONLINE phase** ([research/ONLINE-PHASE-PLAN.md](research/ONLINE-PHASE-PLAN.md)):
   stage 1, the rules block, is done and in the local versus (SELECT on its
   select screen); Mary played it. Stage 2, the EOS lobby core

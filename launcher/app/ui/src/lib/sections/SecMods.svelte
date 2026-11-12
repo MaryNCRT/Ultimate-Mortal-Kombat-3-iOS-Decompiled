@@ -13,7 +13,7 @@
     import ModTextures from './mods/ModTextures.svelte';
 </script>
 
-<Page>
+<Page class="tight">
     <SubNav tabs={MODS_TABS} current={ms.tab} pick={v => ms.tab = v} />
     {#if ms.tab === 'mgr'}
         <ModManager />

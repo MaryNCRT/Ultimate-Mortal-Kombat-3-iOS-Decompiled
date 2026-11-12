@@ -41,7 +41,10 @@
     /* the fighters or stages that own textures, in the catalogue's order */
     const items = $derived.by(() => {
         if (!owners || !ms.cat) return [];
-        const names = new Set([...owners.values()].filter(o => o.group === ms.txGroup).map(o => o.name));
+        /* ONLY WHAT THE MOD REPLACES: the fighters and stages it has textures of */
+        const cut = ms.modOnly && inMod.size;
+        const names = new Set([...owners.entries()].filter(([t, o]) => o.group === ms.txGroup
+            && (!cut || inMod.has(t.replace(/_(LOW|LITE)$/, '').replace(/_(LOW|LITE)2$/, '2')))).map(([, o]) => o.name));
         const from = ms.txGroup === 'characters' ? ms.cat.characters : ms.txGroup === 'stages' ? ms.cat.stages : [];
         return from.filter(x => names.has(x.name)).map(x => x.name);
     });
@@ -55,6 +58,7 @@
         return ms.cat.textures.filter(t => {
             const o = owners.get(t.name.toUpperCase());
             if (!o || o.group !== ms.txGroup || (one && o.name !== ms.txItem)) return false;
+            if (ms.modOnly && inMod.size && !inMod.has(t.name.toUpperCase().replace(/_(LOW|LITE)$/, '').replace(/_(LOW|LITE)2$/, '2'))) return false;
             return !ms.autoSmall || !/_LOW\d*$|_LITE\d*$/i.test(t.name);
         });
     });
@@ -194,7 +198,10 @@
             {#if items.length}<button class="btn" disabled={busy || !owners} onpointerenter={hoverBlip} onclick={() => exportMany(true)}>{tx(ms.txGroup === 'stages' ? 'txExportStages' : 'txExportChars')}</button>{/if}
             <label class="chk"><input type="checkbox" bind:checked={ms.autoSmall}><span>{tx('vwAutoSmall')}</span></label>
             <label class="chk"><input type="checkbox" bind:checked={ms.autoIce}><span>{tx('vwAutoIce')}</span></label>
+            <!-- ONLY WHAT THE MOD REPLACES (Mary, 2026-11-12) -->
+            <label class="chk" title={tx('vwModOnlyNote')}><input type="checkbox" bind:checked={ms.modOnly} disabled={!inMod.size}><span>{tx('vwModOnly')}</span></label>
         </div>
+        {#if ms.modOnly && inMod.size && !shown.length}<p class="note">{tx('vwModNone')}</p>{/if}
         <p class="note">{tx('txNote')}</p>
         {#if note}<p class="note ok">{note}</p>{/if}
         {#if !owners}
