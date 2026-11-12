@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include "lime_glapi.h"   /* the GL calls' calling convention */
 #include <string.h>   /* memset, for clearSpriteListsAndEvents */
+int snprintf(char *buf, size_t n, const char *fmt, ...);  /* port: training */
 #include "../../runtime/smooth_models.h"   /* port: SMOOTH MODELS, what covers a skin */
 void rgl_shadow_caster(int on);         /* port: REAL-TIME SHADOWS, render/rgl.h */
 
