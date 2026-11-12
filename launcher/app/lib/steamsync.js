@@ -88,9 +88,10 @@ async function add(root, ref, opts = {}) {
     if (r.error) return { ok: false, error: r.error };
     if (!r.target) return { ok: false, error: 'noexe' };
     /* the artwork first, chosen by itself for any slot still empty: the game
-     * arrives in Steam with it (no key, no network: added without) */
+     * arrives in Steam with it (with no key, the game page's own set; no
+     * network: added without) */
     let auto = null;
-    if (art.apiKey(root) && opts.autoArt !== false) {
+    if (opts.autoArt !== false) {
         try { auto = await art.autoPick(root, false, opts.fetch); } catch (e) { auto = { ok: false, error: String(e.message || e) }; }
     }
     let res;

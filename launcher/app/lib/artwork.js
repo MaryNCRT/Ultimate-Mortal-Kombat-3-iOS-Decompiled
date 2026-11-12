@@ -332,11 +332,34 @@ function selectedFiles(root) {
 /* The best of each kind chosen by itself (SteamGridDB's score, highest
  * first) for every slot still empty, or every slot with all=true: what
  * ADD TO STEAM does, so the game arrives in Steam with its artwork. */
+/* The game's own page, https://www.steamgriddb.com/game/38752, the first of
+ * each kind in its Top order (read 2026-11-12; the wide one the first at
+ * 920x430, the logo the first that is not 6915 px wide): downloaded straight
+ * from SteamGridDB's CDN, so they need no API key -- what ADD TO STEAM puts in
+ * Steam when there is no key. */
+const PAGE_SET = [
+    { slot: 'grid', kind: 'grid', id: 161244, width: 600, height: 900, mime: 'image/png', url: 'https://cdn2.steamgriddb.com/grid/1b0087ddc6378c7dd7f3c156301f181f.png' },
+    { slot: 'wide', kind: 'grid', id: 528222, width: 920, height: 430, mime: 'image/png', url: 'https://cdn2.steamgriddb.com/grid/fd8769c391f5a6ec652151f0941ea8d1.png' },
+    { slot: 'hero', kind: 'hero', id: 253, width: 1920, height: 620, mime: 'image/png', url: 'https://cdn2.steamgriddb.com/hero/c24cd76e1ce41366a4bbe8a49b02a028.png' },
+    { slot: 'logo', kind: 'logo', id: 33461, width: 933, height: 392, mime: 'image/png', url: 'https://cdn2.steamgriddb.com/logo/c07be9421fc64b8e8ca2ebc12fcbd59d.png' },
+    { slot: 'icon', kind: 'icon', id: 76847, width: 512, height: 512, mime: 'image/png', url: 'https://cdn2.steamgriddb.com/icon/ba4eb2077a7c3feeafda768fd01d599a.png' },
+].map(i => Object.assign(i, { thumb: i.url, style: 'page', author: '' }));
+
 const AUTO = [['grid', 'grid', 'portrait'], ['wide', 'grid', 'wide'], ['hero', 'hero', 'all'], ['logo', 'logo', 'all'], ['icon', 'icon', 'all']];
 async function autoPick(root, all = false, fetchImpl) {
     const sel = loadSel(root);
     const out = { ok: true, picked: [], failed: [] };
-    if (!apiKey(root)) return { ok: false, error: 'nokey', picked: [], failed: [] };
+    if (!apiKey(root)) {
+        /* no key: the page's own set */
+        for (const item of PAGE_SET) {
+            if (!all && sel.selected[item.slot] && selectedFile(root, item.slot)) continue;
+            const s = await select(root, item, fetchImpl);
+            if (s.ok) out.picked.push({ slot: item.slot, key: s.entry.key });
+            else out.failed.push({ slot: item.slot, error: s.error });
+        }
+        if (out.failed.some(f => f.error === 'net')) out.ok = false;
+        return out;
+    }
     for (const [slot, kind, shape] of AUTO) {
         if (!all && sel.selected[slot] && selectedFile(root, slot)) continue;
         const r = await browse(root, kind, 0, shape, fetchImpl);
@@ -359,6 +382,6 @@ function noteSteam(root, accountId, info) {
 }
 
 module.exports = {
-    GAME_ID, KINDS, DIMS, SLOT_KIND, base, setVault, apiKey, keySource, setApiKey, autoPick, loadSettings, saveSettings,
+    GAME_ID, KINDS, DIMS, SLOT_KIND, base, setVault, apiKey, keySource, setApiKey, autoPick, PAGE_SET, loadSettings, saveSettings,
     browse, download, select, unselect, remove, library, selectedFiles, noteSteam, sniff, slotFor, allowedUrl,
 };

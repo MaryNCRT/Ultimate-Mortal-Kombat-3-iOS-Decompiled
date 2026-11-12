@@ -44,7 +44,7 @@ function fakeWorld() {
     const root = path.join(top, 'UMK3');
     fs.mkdirSync(root);
     fs.writeFileSync(path.join(root, 'UMK3-Launcher.exe'), 'stub');
-    const opts = { platform: 'win32', candidates: [{ path: steamDir, kind: 'windows' }], running: false };
+    const opts = { platform: 'win32', candidates: [{ path: steamDir, kind: 'windows' }], running: false, autoArt: false };
     return { top, steamDir, cfg, root, opts, vdfFile: path.join(cfg, 'shortcuts.vdf') };
 }
 
@@ -243,7 +243,7 @@ test('artwork: with the project key, ADD TO STEAM arrives with the best of each 
     const calls = [];
     const st = await sync.status(w.root, w.opts);
     assert.ok(st.hasKey);
-    const r = await sync.add(w.root, st.account, Object.assign({ fetch: fakeFetch(calls) }, w.opts));
+    const r = await sync.add(w.root, st.account, Object.assign({}, w.opts, { fetch: fakeFetch(calls), autoArt: true }));
     assert.ok(r.ok && r.auto && r.auto.ok, JSON.stringify(r));
     assert.deepStrictEqual(r.auto.picked.map(p => p.slot), ['grid', 'wide', 'hero', 'logo', 'icon']);
     assert.ok(calls.every(c => !c.auth || c.auth === 'Bearer project-key'));
@@ -254,4 +254,19 @@ test('artwork: with the project key, ADD TO STEAM arrives with the best of each 
     art.setApiKey(w.root, 'mine');
     assert.strictEqual(art.keySource(w.root), 'own');
     assert.strictEqual(art.apiKey(w.root), 'mine');
+});
+
+test('artwork: with no key at all, ADD TO STEAM puts the game page’s own set in, from the CDN', async () => {
+    const w = fakeWorld();
+    delete process.env.UMK3_SGDB_KEY;
+    assert.strictEqual(art.keySource(w.root), null);
+    const calls = [];
+    const st = await sync.status(w.root, w.opts);
+    const r = await sync.add(w.root, st.account, Object.assign({}, w.opts, { fetch: fakeFetch(calls), autoArt: true }));
+    assert.ok(r.ok && r.auto && r.auto.ok, JSON.stringify(r));
+    assert.deepStrictEqual(r.auto.picked.map(p => p.key), art.PAGE_SET.map(i => `${i.kind}:${i.id}`));
+    assert.ok(calls.every(c => new URL(c.url).hostname === 'cdn2.steamgriddb.com' && !c.auth), 'no API, no key');
+    const grid = path.join(w.cfg, 'grid');
+    for (const sfx of ['p.png', '.png', '_hero.png', '_logo.png', '_icon.png'])
+        assert.ok(fs.existsSync(path.join(grid, r.appid + sfx)), sfx);
 });

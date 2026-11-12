@@ -66,7 +66,6 @@
         let t = tx('stAddedOk');
         if (r.auto && r.auto.picked && r.auto.picked.length) t += ' ' + tx('stAutoDone');
         else if (r.auto && r.auto.error) t += ' ' + err(r.auto);
-        else if (!st.hasKey) t += ' ' + tx('stNoArt');
         if (r.artwork && r.artwork.iconPending) t += ' ' + tx('stIconPending');
         say(t);
     });
@@ -180,7 +179,7 @@
                 <div class="tools">
                     <button class="btn hot" disabled={busy || st.running || !st.target} onpointerenter={hoverBlip} onclick={add}>
                         {acc && acc.shortcut ? tx('stUpdate') : tx('stAddSteam')}</button>
-                    <button class="btn" disabled={busy || !st.hasKey} onpointerenter={hoverBlip} onclick={auto}>{tx('stAuto')}</button>
+                    <button class="btn" disabled={busy} onpointerenter={hoverBlip} onclick={auto}>{tx('stAuto')}</button>
                     <button class="btn" disabled={busy || !(acc && acc.shortcut)} onpointerenter={hoverBlip} onclick={apply}>{tx('stApply')}</button>
                     <button class="btn danger" disabled={busy || st.running || !(acc && acc.shortcut)} onpointerenter={hoverBlip} onclick={remove}>{tx('stRemove')}</button>
                     <button class="btn" disabled={busy} onpointerenter={hoverBlip} onclick={() => { selectBlip(); refresh(); }}>{tx('stRecheck')}</button>
