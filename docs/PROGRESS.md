@@ -108,12 +108,16 @@ with a backup, an atomic write and no duplicates), browses SteamGridDB game
 `data/steam-artwork/`, and copies the chosen ones into
 `Steam/userdata/<id>/config/grid/` under the shortcut's app id. Steam's
 naming and the app id were checked against a shortcut on the project
-machine that Steam already shows with its artwork. **Tested:** 9 unit tests
+machine that Steam already shows with its artwork. **Tested:** 10 unit tests
 (fake Steam folder, fake SteamGridDB, the real `shortcuts.vdf` round-tripped
 read only), and the page in the harness against a copy of that file
 (ADD TO STEAM wrote our entry and left the other game byte-identical).
 **Not tested yet:** the live SteamGridDB API (it needs Mary's key), the real
-Steam client, Linux. Discord Rich Presence, the third part of the request,
+Steam client, Linux. Mary asked for it to be automatic: ADD TO STEAM now
+picks SteamGridDB's best-scored image of each kind by itself, with the
+project's key shipped in the release (`TOOLS/steamgriddb.key`, never
+committed). The account list shows the Steam name only, never the id.
+Discord Rich Presence, the third part of the request,
 is not started.
 
 ### 2026-11-12 -- ONLINE stage 3: LOBBIES; a second monitor's refresh

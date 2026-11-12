@@ -7,7 +7,7 @@ artwork from SteamGridDB into the game folder and copies the chosen pictures
 into Steam.
 
 Status (2026-11-12): **built and tested against a fake Steam folder and a
-fake SteamGridDB** (`launcher/app/test/steam.test.js`, 9 tests). It was also
+fake SteamGridDB** (`launcher/app/test/steam.test.js`, 10 tests). It was also
 tested in the launcher's page through the harness, against a copy of the
 project machine's own `shortcuts.vdf`. **Not yet tested** against the
 real SteamGridDB, because that needs the player's own API key. Nor has it
@@ -81,7 +81,20 @@ read only:
   These are the endpoints of SteamGridDB's own npm client. 38752 is
   SteamGridDB's game id, not a Steam app id, and only that game is ever
   requested. Pages are fetched with `page=N`.
-- The API needs the player's own key (free, under SteamGridDB *Preferences >
+- **Automatic:** ADD TO STEAM first fills every empty slot with SteamGridDB's
+  best-scored image of that kind for game 38752 (portrait grid, wide grid,
+  hero, logo, icon). It downloads them and puts them in Steam with the
+  shortcut, so the game arrives in the library with its artwork and the
+  player chooses nothing. CHOOSE THE BEST does it again for every slot.
+  Any image can still be changed by hand in STEAMGRIDDB / DOWNLOADED.
+- **The project's key:** a release carries `TOOLS/steamgriddb.key` (one
+  line), copied by `make_release.py` / `make_release_linux.py` from
+  `UMK3_SGDB_KEY_FILE` or the project's `TOOLS/steamgriddb.key`.
+  `steamgriddb.key` is git-ignored everywhere. With it, players never see a
+  key box. Without it the package still works: the game is added without
+  artwork. Order the launcher looks: the player's own key, then the
+  project's, then `UMK3_SGDB_KEY`.
+- The player can still use their own key (free, under SteamGridDB *Preferences >
   API*). It is typed into the page and saved in
   `data/steam-artwork/settings.json`, sealed by Electron's `safeStorage`
   (DPAPI / the keyring). It is never committed: `data/steam-artwork/` is
@@ -102,6 +115,11 @@ data/steam-artwork/
 
 To delete a downloaded image that is currently chosen, the page asks for
 confirmation first.
+
+## Privacy
+
+The account list shows only the Steam name (PersonaName), never the account
+id or SteamID. The id is used internally to find the folder.
 
 ## Linux
 

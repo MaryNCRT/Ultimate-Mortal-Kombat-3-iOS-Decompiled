@@ -137,6 +137,27 @@ def copy_eos(out):
     print("EOS SDK from %s, eos.ini from %s" % (src, ini))
 
 
+def find_sgdb_key():
+    """The project's SteamGridDB API key (the launcher's STEAM section picks
+    the game's artwork with it, so no player types one): UMK3_SGDB_KEY_FILE,
+    else TOOLS/steamgriddb.key beside the repository's tools.  Never in git
+    (.gitignore).  None: the package works, without artwork."""
+    for c in (os.environ.get("UMK3_SGDB_KEY_FILE"), os.path.join(ROOT, "TOOLS", "steamgriddb.key"),
+              os.path.join(ROOT, "tools", "steamgriddb.key")):
+        if c and os.path.isfile(c) and open(c, encoding="utf-8").read().strip():
+            return c
+    print("no steamgriddb.key (UMK3_SGDB_KEY_FILE): STEAM adds the game without artwork")
+    return None
+
+
+def copy_sgdb_key(out):
+    key = find_sgdb_key()
+    if key:
+        os.makedirs(os.path.join(out, "TOOLS"), exist_ok=True)
+        shutil.copy2(key, os.path.join(out, "TOOLS", "steamgriddb.key"))
+        print("SteamGridDB key from %s" % key)
+
+
 def main(argv):
     if len(argv) < 3:
         raise SystemExit(__doc__.strip().splitlines()[2].strip())
@@ -173,6 +194,7 @@ def main(argv):
                     os.path.join(out, "launcher", "lighting"))
     build_stub(os.path.join(out, "UMK3-Launcher.exe"))
     copy_eos(out)
+    copy_sgdb_key(out)
 
     # Every quoted include of every copied source has to resolve in the copy.
     inc_dirs = ["src/runtime", "src/decomp/lime", "src/decomp/gamecode/logic"]

@@ -117,7 +117,22 @@ function saveSettings(root, delta) {
     writeJsonAtomic(settingsFile(root), s);
     return s;
 }
-function apiKey(root) { return unseal(loadSettings(root).key || ''); }
+/* The key: the player's own (typed in the page), else the project's, which a
+ * release carries as TOOLS/steamgriddb.key (make_release.py copies it from
+ * UMK3_SGDB_KEY_FILE or the project's TOOLS/; never committed), else
+ * UMK3_SGDB_KEY.  With the project's key nobody types anything. */
+function projectKey(root) {
+    for (const p of [path.join(root, 'TOOLS', 'steamgriddb.key'), path.join(root, 'tools', 'steamgriddb.key')]) {
+        try {
+            const k = fs.readFileSync(p, 'utf8').trim();
+            if (k) return k;
+        } catch { }
+    }
+    return String(process.env.UMK3_SGDB_KEY || '').trim();
+}
+function ownKey(root) { return unseal(loadSettings(root).key || ''); }
+function apiKey(root) { return ownKey(root) || projectKey(root); }
+function keySource(root) { return ownKey(root) ? 'own' : projectKey(root) ? 'project' : null; }
 function setApiKey(root, key) {
     key = String(key || '').trim();
     saveSettings(root, { key: seal(key) });
@@ -314,6 +329,29 @@ function selectedFiles(root) {
     return out;
 }
 
+/* The best of each kind chosen by itself (SteamGridDB's score, highest
+ * first) for every slot still empty, or every slot with all=true: what
+ * ADD TO STEAM does, so the game arrives in Steam with its artwork. */
+const AUTO = [['grid', 'grid', 'portrait'], ['wide', 'grid', 'wide'], ['hero', 'hero', 'all'], ['logo', 'logo', 'all'], ['icon', 'icon', 'all']];
+async function autoPick(root, all = false, fetchImpl) {
+    const sel = loadSel(root);
+    const out = { ok: true, picked: [], failed: [] };
+    if (!apiKey(root)) return { ok: false, error: 'nokey', picked: [], failed: [] };
+    for (const [slot, kind, shape] of AUTO) {
+        if (!all && sel.selected[slot] && selectedFile(root, slot)) continue;
+        const r = await browse(root, kind, 0, shape, fetchImpl);
+        if (!r.ok) { out.failed.push({ slot, error: r.error }); if (r.error === 'badkey' || r.error === 'net') break; continue; }
+        const fit = r.items.filter(i => kind !== 'grid' || slotFor(i) === slot)
+            .sort((a, b) => (b.score || 0) - (a.score || 0));
+        if (!fit.length) { out.failed.push({ slot, error: 'none' }); continue; }
+        const s = await select(root, fit[0], fetchImpl);
+        if (s.ok) out.picked.push({ slot, key: s.entry.key });
+        else out.failed.push({ slot, error: s.error });
+    }
+    if (out.failed.some(f => f.error === 'badkey' || f.error === 'net')) out.ok = false;
+    return out;
+}
+
 function noteSteam(root, accountId, info) {
     const sel = loadSel(root);
     sel.steam[accountId] = Object.assign({ appliedAt: new Date().toISOString() }, info);
@@ -321,6 +359,6 @@ function noteSteam(root, accountId, info) {
 }
 
 module.exports = {
-    GAME_ID, KINDS, DIMS, SLOT_KIND, base, setVault, apiKey, setApiKey, loadSettings, saveSettings,
+    GAME_ID, KINDS, DIMS, SLOT_KIND, base, setVault, apiKey, keySource, setApiKey, autoPick, loadSettings, saveSettings,
     browse, download, select, unselect, remove, library, selectedFiles, noteSteam, sniff, slotFor, allowedUrl,
 };

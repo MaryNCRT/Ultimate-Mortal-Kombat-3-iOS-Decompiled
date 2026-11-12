@@ -63,12 +63,24 @@
         selectBlip();
         const r = await api.steam.add(st.account);
         if (!r.ok) return say(err(r), true);
-        say(tx('stAddedOk') + (r.artwork && r.artwork.iconPending ? ' ' + tx('stIconPending') : ''));
+        let t = tx('stAddedOk');
+        if (r.auto && r.auto.picked && r.auto.picked.length) t += ' ' + tx('stAutoDone');
+        else if (r.auto && r.auto.error) t += ' ' + err(r.auto);
+        else if (!st.hasKey) t += ' ' + tx('stNoArt');
+        if (r.artwork && r.artwork.iconPending) t += ' ' + tx('stIconPending');
+        say(t);
     });
     const remove = () => run(async () => {
         selectBlip();
         const r = await api.steam.remove(st.account);
         say(r.ok ? tx('stRemovedOk') : err(r), !r.ok);
+    });
+    const auto = () => run(async () => {
+        selectBlip();
+        const r = await api.steam.auto();
+        if (!r.ok && !r.picked.length) return say(err(r.failed && r.failed[0] ? r.failed[0] : r), true);
+        if (r.sync && r.sync.synced) reportApply(r.sync);
+        else say(tx('stAutoDone'));
     });
     const apply = () => run(async () => { selectBlip(); reportApply(await api.steam.apply(st.account)); });
     async function chooseAccount(v) {
@@ -146,8 +158,8 @@
                 <span class="lbl">{tx('stAccount')}</span>
                 <select class="sel" disabled={busy} value={JSON.stringify([st.account.install, st.account.id])}
                         onchange={e => chooseAccount(e.currentTarget.value)}>
-                    {#each st.accounts as a}
-                        <option value={JSON.stringify([a.install, a.id])}>{a.persona || a.id} · {a.id} · {a.kind}</option>
+                    {#each st.accounts as a, i}
+                        <option value={JSON.stringify([a.install, a.id])}>{a.persona || `${tx('stAccountN')} ${i + 1}`}{a.kind === 'flatpak' || a.kind === 'snap' ? ` (${a.kind})` : ''}</option>
                     {/each}
                 </select>
             </div>
@@ -168,6 +180,7 @@
                 <div class="tools">
                     <button class="btn hot" disabled={busy || st.running || !st.target} onpointerenter={hoverBlip} onclick={add}>
                         {acc && acc.shortcut ? tx('stUpdate') : tx('stAddSteam')}</button>
+                    <button class="btn" disabled={busy || !st.hasKey} onpointerenter={hoverBlip} onclick={auto}>{tx('stAuto')}</button>
                     <button class="btn" disabled={busy || !(acc && acc.shortcut)} onpointerenter={hoverBlip} onclick={apply}>{tx('stApply')}</button>
                     <button class="btn danger" disabled={busy || st.running || !(acc && acc.shortcut)} onpointerenter={hoverBlip} onclick={remove}>{tx('stRemove')}</button>
                     <button class="btn" disabled={busy} onpointerenter={hoverBlip} onclick={() => { selectBlip(); refresh(); }}>{tx('stRecheck')}</button>
@@ -209,8 +222,8 @@
                     <button class="btn" class:hot={kind === k} onpointerenter={hoverBlip} onclick={() => setKind(k)}>{tx(label)}</button>
                 {/each}
                 <span class="grow"></span>
-                <span class="meta">{tx('stKeyHave')}</span>
-                <button class="btn" onpointerenter={hoverBlip} onclick={() => { selectBlip(); keyEdit = true; }}>{tx('stKeyChange')}</button>
+                <span class="meta">{st.keySource === 'project' ? tx('stKeyProject') : tx('stKeyHave')}</span>
+                <button class="btn" onpointerenter={hoverBlip} onclick={() => { selectBlip(); keyEdit = true; }}>{st.keySource === 'project' ? tx('stKeyOwn') : tx('stKeyChange')}</button>
                 <button class="btn" onpointerenter={hoverBlip} onclick={() => { selectBlip(); api.art.site('game'); }}>{tx('stSite')}</button>
             </div>
             {#if kind === 'grid'}

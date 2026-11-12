@@ -21,7 +21,7 @@ import os
 import sys
 import tarfile
 
-from make_release import eos_dir, find_eos_ini
+from make_release import eos_dir, find_eos_ini, find_sgdb_key
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXTRA = ["LEEME.txt", "README-linux.md", "build-game.sh", "install-shortcut.sh",
@@ -94,6 +94,10 @@ def main(argv):
         ini = find_eos_ini()
         if ini and not os.path.exists(os.path.join(have, "eos.ini")):
             add(tf, ini, top + "/resources/" + tdir + "/eos/eos.ini")
+            n += 1
+        key = find_sgdb_key()
+        if key and not os.path.exists(os.path.join(src, "TOOLS", "steamgriddb.key")):
+            add(tf, key, top + "/TOOLS/steamgriddb.key")
             n += 1
     print("%s: %d files, %.1f MB" % (out, n, os.path.getsize(out) / 1e6))
 

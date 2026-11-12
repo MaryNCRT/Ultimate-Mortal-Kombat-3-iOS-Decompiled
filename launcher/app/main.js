@@ -928,6 +928,7 @@ ipcMain.handle('steam:account', (_ev, ref) => steamsync.chooseAccount(g_root, re
 ipcMain.handle('steam:add', (_ev, ref) => steamsync.add(g_root, ref));
 ipcMain.handle('steam:remove', (_ev, ref) => steamsync.remove(g_root, ref));
 ipcMain.handle('steam:apply', (_ev, ref) => steamsync.apply(g_root, ref));
+ipcMain.handle('steam:auto', () => steamsync.autoAll(g_root));
 ipcMain.handle('art:setKey', (_ev, key) => artwork.setApiKey(g_root, key));
 ipcMain.handle('art:browse', (_ev, kind, page, shape) => artwork.browse(g_root, kind, Number(page) || 0, shape));
 ipcMain.handle('art:download', async (_ev, item) => artwork.download(g_root, item));

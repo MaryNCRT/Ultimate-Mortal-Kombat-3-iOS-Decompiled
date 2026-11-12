@@ -37,7 +37,7 @@ async function status(root, opts = {}) {
     return {
         name: steam.NAME, running, target, accounts,
         account: account ? { id: account.id, install: account.install } : null,
-        hasKey: !!art.apiKey(root), platform: opts.platform || process.platform,
+        hasKey: !!art.apiKey(root), keySource: art.keySource(root), platform: opts.platform || process.platform,
     };
 }
 
@@ -87,6 +87,12 @@ async function add(root, ref, opts = {}) {
     const r = await resolve(root, ref, opts);
     if (r.error) return { ok: false, error: r.error };
     if (!r.target) return { ok: false, error: 'noexe' };
+    /* the artwork first, chosen by itself for any slot still empty: the game
+     * arrives in Steam with it (no key, no network: added without) */
+    let auto = null;
+    if (art.apiKey(root) && opts.autoArt !== false) {
+        try { auto = await art.autoPick(root, false, opts.fetch); } catch (e) { auto = { ok: false, error: String(e.message || e) }; }
+    }
     let res;
     try {
         res = steam.upsertShortcut(r.a, r.target, null, opts);
@@ -94,7 +100,7 @@ async function add(root, ref, opts = {}) {
         return { ok: false, error: 'vdf', detail: String(e.message || e) };
     }
     const ap = await apply(root, ref, opts);
-    return { ok: true, appid: res.appid, added: res.added, removedDuplicates: res.removedDuplicates, backup: res.backup, artwork: ap };
+    return { ok: true, appid: res.appid, added: res.added, removedDuplicates: res.removedDuplicates, backup: res.backup, auto, artwork: ap };
 }
 
 async function remove(root, ref, opts = {}) {
@@ -119,4 +125,11 @@ async function syncIfAdded(root, opts = {}) {
     return Object.assign({ synced: true }, r);
 }
 
-module.exports = { status, chooseAccount, apply, add, remove, syncIfAdded };
+/* every slot chosen again by itself, then copied to Steam if the game is there */
+async function autoAll(root, opts = {}) {
+    const r = await art.autoPick(root, true, opts.fetch);
+    if (r.picked.length) r.sync = await syncIfAdded(root, opts);
+    return r;
+}
+
+module.exports = { status, chooseAccount, apply, add, remove, syncIfAdded, autoAll };

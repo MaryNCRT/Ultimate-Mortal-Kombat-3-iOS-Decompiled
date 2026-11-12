@@ -71,6 +71,7 @@ const calls = {
     'steam.add': ref => steamsync.add(root, ref, steamOpts),
     'steam.remove': ref => steamsync.remove(root, ref, steamOpts),
     'steam.apply': ref => steamsync.apply(root, ref, steamOpts),
+    'steam.auto': () => steamsync.autoAll(root, steamOpts),
     'art.setKey': key => artwork.setApiKey(root, key),
     'art.browse': (kind, page, shape) => artwork.browse(root, kind, Number(page) || 0, shape),
     'art.download': item => artwork.download(root, item),

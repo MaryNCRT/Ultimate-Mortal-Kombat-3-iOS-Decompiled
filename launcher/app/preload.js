@@ -105,6 +105,7 @@ contextBridge.exposeInMainWorld('umk3', {
         add: ref => ipcRenderer.invoke('steam:add', ref),
         remove: ref => ipcRenderer.invoke('steam:remove', ref),
         apply: ref => ipcRenderer.invoke('steam:apply', ref),
+        auto: () => ipcRenderer.invoke('steam:auto'),
     },
     art: {
         setKey: key => ipcRenderer.invoke('art:setKey', key),

@@ -234,3 +234,24 @@ test('steam: Linux native, Flatpak and the same folder through ~/.steam/steam co
     fs.writeFileSync(path.join(home, 'UMK3-Launcher'), '');
     assert.strictEqual(steam.launcherTarget(home, { platform: 'linux', env: {} }).exeField, `"${path.join(home, 'UMK3-Launcher')}"`);
 });
+
+test('artwork: with the project key, ADD TO STEAM arrives with the best of each kind chosen by itself', async () => {
+    const w = fakeWorld();
+    fs.mkdirSync(path.join(w.root, 'TOOLS'));
+    fs.writeFileSync(path.join(w.root, 'TOOLS', 'steamgriddb.key'), 'project-key\n');
+    assert.strictEqual(art.keySource(w.root), 'project');
+    const calls = [];
+    const st = await sync.status(w.root, w.opts);
+    assert.ok(st.hasKey);
+    const r = await sync.add(w.root, st.account, Object.assign({ fetch: fakeFetch(calls) }, w.opts));
+    assert.ok(r.ok && r.auto && r.auto.ok, JSON.stringify(r));
+    assert.deepStrictEqual(r.auto.picked.map(p => p.slot), ['grid', 'wide', 'hero', 'logo', 'icon']);
+    assert.ok(calls.every(c => !c.auth || c.auth === 'Bearer project-key'));
+    const grid = path.join(w.cfg, 'grid');
+    for (const sfx of ['p.png', '.jpg', '_hero.png', '_logo.png', '_icon.png'])
+        assert.ok(fs.existsSync(path.join(grid, r.appid + sfx)), sfx);
+    /* the player's own key wins over the project's */
+    art.setApiKey(w.root, 'mine');
+    assert.strictEqual(art.keySource(w.root), 'own');
+    assert.strictEqual(art.apiKey(w.root), 'mine');
+});
