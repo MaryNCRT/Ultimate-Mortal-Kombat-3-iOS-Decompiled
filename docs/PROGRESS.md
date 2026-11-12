@@ -98,7 +98,11 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
-## 0.4.4 beta, in the test folder (2026-11-12)
+## 0.4.4 beta (2026-11-12)
+
+- **Released** on Mary's word ("todo listo"): she confirmed the Lost
+  Treasures each fight their own opponents (with UNLOCK EVERYTHING), chose
+  ENHANCED, saw WHAT'S NEW; the game's FRIENDS works for her.
 
 - **Mary in the test folder**: she chose ENHANCED at the first start
   (`preset=enhanced`) and saw WHAT'S NEW (`seen_version=0.4.4`); the game's

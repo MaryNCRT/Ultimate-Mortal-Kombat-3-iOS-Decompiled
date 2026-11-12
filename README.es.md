@@ -83,10 +83,8 @@ Todos se pueden cambiar en el launcher (CONTROLES) o en el juego (`Esc`).
 - **TEXTURAS:** todas las texturas del juego según a qué pertenecen, reemplazadas en un mod.
 - **EXPORTAR:** luchadores, escenarios, modelos y texturas en FBX, GLB, USD (USDA/USDC/USDZ) u OBJ con texturas PNG.
 
-## Problemas conocidos (0.4.3 beta)
+## Problemas conocidos (0.4.4 beta)
 
-- Con los controles táctiles ocultos, un clic en la pantalla todavía movía al luchador (Mary): corregido para 0.4.4, en la carpeta de pruebas, sin jugar aún.
-- Los Tesoros Perdidos de Shao Kahn eran siempre una pelea contra Shao Kahn (un reporte en GitHub): corregido desde el binario para 0.4.4, en la carpeta de pruebas, sin jugar aún.
 - En línea: las correcciones de 0.2.1 (el rollback apagado una vez de cada dos, peleas que se separaban) se comprobaron con dos juegos en un PC, todavía no entre dos máquinas.
 - Al unirse en línea, el glifo X del mando apareció sobre START (Mary); sin reproducir aún.
 - Algunos escenarios todavía se pausan hasta ~1,3 s en sus primeros cuadros (THE STREET) mientras cargan sus eventos.
