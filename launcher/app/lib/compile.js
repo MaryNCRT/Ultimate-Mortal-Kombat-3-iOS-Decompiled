@@ -245,6 +245,7 @@ async function compileGame({
         path.join(rootDir, 'src/runtime/mp_net.c'),
         path.join(rootDir, 'src/runtime/mp_eos.c'),
         path.join(rootDir, 'src/runtime/online_ui.c'),
+        path.join(rootDir, 'src/runtime/online_rules.c'),
         path.join(rootDir, 'src/runtime/lime_menu.c'),
         path.join(rootDir, 'src/runtime/lime_platform.c'),
         path.join(rootDir, 'src/runtime/lime_app.c'),

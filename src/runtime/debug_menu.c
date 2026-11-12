@@ -3124,6 +3124,330 @@ void stage_menu_keys(int left, int right, int up, int down, int ok, int back,
     else if (e[5]) st_close(-1);
 }
 
+/* ------------------------------------------------------------ VS RULES ----
+ *
+ * Port, not in the binary (Mary, 2026-11-12): on the local versus's select
+ * screen (FE_Task_Character_Select in GameMode 6) SELECT -- the pad's, or
+ * the moves key -- opens the fight's rules in the ONLINE screen's look:
+ * ROUNDS a fight (best of 1/3/5), FIGHTS in a series (one, best of 3/5),
+ * TIME (30/60/99/infinite), KOMBO SLIDE and a VS kode (the binary's,
+ * runtime/online_rules.h). ORIGINAL puts the game's own rules back. Kept
+ * in umk3.ini as vs_rules= (empty: the game's own). The stage kodes are
+ * left out -- STAGE SELECT picks the stage -- and so is the one-round kode
+ * (0x13), which the binary only plays online. */
+#include "online_rules.h"
+
+void set_menu_put_key(const char *k, const char *v);   /* settings_menu.c */
+const char *GameTextNoHeader(long id);                  /* the game's texts, UTF-16 */
+
+enum { VR_ROUNDS, VR_FIGHTS, VR_TIME, VR_SLIDE, VR_KODE, VR_ROWS,
+       VR_ORIGINAL = VR_ROWS, VR_OK, VR_ITEMS };
+static const int k_vr_kodes[] = { -1, 0, 1, 2, 13, 14, 15, 16, 17, 18 };
+#define VR_NKODES ((int)(sizeof k_vr_kodes / sizeof k_vr_kodes[0]))
+
+static int g_vr_open, g_vr_row, g_vr_hover = -1, g_vr_fresh, g_vr_on;
+static float g_vr_in, g_vr_lit[VR_ITEMS];
+static online_rules g_vr;               /* being edited */
+static struct { float x, y, w, h; int item, dir; } g_vr_hit[3 * VR_ROWS + 2];
+static int g_vr_nhit;
+
+int vs_rules_is_open(void) { return g_vr_open; }
+
+void vs_rules_open(void)
+{
+    const online_rules *r = rules_local();
+
+    if (r) {
+        g_vr = *r;
+        g_vr_on = 1;
+    } else {
+        rules_default(&g_vr);
+        g_vr_on = 0;
+    }
+    g_vr_open = 1;
+    g_vr_row = 0;
+    g_vr_in = 0.0f;
+    g_vr_fresh = 1;                     /* SELECT is still down */
+    printf("versus rules: opened\n");
+}
+
+static void vr_close(void)
+{
+    char t[ONLINE_RULES_TEXT] = "";
+
+    if (g_vr_on)
+        rules_encode(&g_vr, t, sizeof t);
+    rules_set_local(g_vr_on ? &g_vr : NULL);
+    set_menu_put_key("vs_rules", t);
+    g_vr_open = 0;
+}
+
+static int vr_kode_index(int kode)
+{
+    int i;
+    for (i = 0; i < VR_NKODES; i++)
+        if (k_vr_kodes[i] == kode)
+            return i;
+    return 0;
+}
+
+/* a value one step on (d 1) or back (-1), round */
+static void vr_step(int row, int d)
+{
+    static const int bo[3] = { 1, 3, 5 }, tm[4] = { 30, 60, 99, 0 };
+    int i;
+
+    g_vr_on = 1;                        /* a change: these rules, not the game's */
+    switch (row) {
+    case VR_ROUNDS: case VR_FIGHTS: {
+        int *v = row == VR_ROUNDS ? &g_vr.best_of : &g_vr.series;
+        for (i = 0; i < 3 && bo[i] != *v; i++)
+            ;
+        *v = bo[((i < 3 ? i : 1) + d + 3) % 3];
+        break;
+    }
+    case VR_TIME:
+        for (i = 0; i < 4 && tm[i] != g_vr.time; i++)
+            ;
+        g_vr.time = tm[((i < 4 ? i : 2) + d + 4) % 4];
+        break;
+    case VR_SLIDE:
+        g_vr.kombo_slide = !g_vr.kombo_slide;
+        break;
+    case VR_KODE:
+        g_vr.kode = k_vr_kodes[(vr_kode_index(g_vr.kode) + d + VR_NKODES) % VR_NKODES];
+        break;
+    }
+}
+
+static void vr_original(void)
+{
+    rules_default(&g_vr);
+    g_vr_on = 0;
+}
+
+/* the binary's own name for a VS kode (english_text.dat and the others,
+ * GameText 148.. -- 166 has no kode), upper case, in the font's range */
+static void vr_kode_name(int kode, char *out, int n)
+{
+    long id = kode <= 17 ? 148 + kode : 149 + kode;
+    const unsigned short *u = (const unsigned short *)GameTextNoHeader(id);
+    int i = 0;
+
+    if (kode < 0 || !u) {
+        snprintf(out, (size_t)n, "%s", kode < 0 ? st_tx("NINGUNO", "NONE") : "KODE");
+        return;
+    }
+    for (; *u && i < n - 1; u++) {
+        unsigned c = *u;
+        if (c >= 'a' && c <= 'z')
+            c -= 32;
+        else if (c >= 0xe0 && c <= 0xfe && c != 0xf7)
+            c -= 32;                    /* latin-1 lower to upper */
+        out[i++] = c < 256 ? (char)c : '?';
+    }
+    out[i] = 0;
+}
+
+static void vr_value(int row, char *out, int n)
+{
+    switch (row) {
+    case VR_ROUNDS:
+        if (g_vr.best_of == 1)
+            snprintf(out, (size_t)n, "%s", st_tx("UNA RONDA", "ONE ROUND"));
+        else
+            snprintf(out, (size_t)n, st_tx("MEJOR DE %d", "BEST OF %d"), g_vr.best_of);
+        break;
+    case VR_FIGHTS:
+        if (g_vr.series == 1)
+            snprintf(out, (size_t)n, "%s", st_tx("UNA PELEA", "ONE FIGHT"));
+        else
+            snprintf(out, (size_t)n, st_tx("MEJOR DE %d PELEAS", "BEST OF %d FIGHTS"), g_vr.series);
+        break;
+    case VR_TIME:
+        if (g_vr.time == 0)
+            snprintf(out, (size_t)n, "%s", st_tx("INFINITO", "INFINITE"));
+        else
+            snprintf(out, (size_t)n, "%d", g_vr.time);
+        break;
+    case VR_SLIDE:
+        snprintf(out, (size_t)n, "%s", g_vr.kombo_slide ? st_tx("SI (ORIGINAL)", "ON (ORIGINAL)")
+                                                        : st_tx("NO", "OFF"));
+        break;
+    default:
+        vr_kode_name(g_vr.kode, out, n);
+        break;
+    }
+}
+
+static void vr_hit(float x, float y, float w, float h, int item, int dir)
+{
+    if (g_vr_nhit < (int)(sizeof g_vr_hit / sizeof g_vr_hit[0])) {
+        g_vr_hit[g_vr_nhit].x = x; g_vr_hit[g_vr_nhit].y = y;
+        g_vr_hit[g_vr_nhit].w = w; g_vr_hit[g_vr_nhit].h = h;
+        g_vr_hit[g_vr_nhit].item = item; g_vr_hit[g_vr_nhit].dir = dir;
+        g_vr_nhit++;
+    }
+}
+
+void vs_rules_draw(void)
+{
+    static const char *const es[VR_ROWS] = { "RONDAS POR PELEA", "PELEAS", "TIEMPO", "KOMBO SLIDE", "KODE" };
+    static const char *const en[VR_ROWS] = { "ROUNDS A FIGHT", "FIGHTS", "TIME", "KOMBO SLIDE", "KODE" };
+    float pw, ph = 262, px, py, a, rh = 30, ry, t;
+    char v[64];
+    int i;
+
+    if (!g_vr_open)
+        return;
+    begin_2d();
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+    g_vr_nhit = 0;
+    g_vr_in += (1.0f - g_vr_in) * 0.16f + 0.004f;
+    if (g_vr_in > 1.0f) g_vr_in = 1.0f;
+    a = st_ease(g_vr_in);
+    for (i = 0; i < VR_ITEMS; i++) {
+        float want = (i == g_vr_hover || i == g_vr_row) ? 1.0f : 0.0f;
+        g_vr_lit[i] += (want - g_vr_lit[i]) * 0.25f;
+    }
+
+    st_shade(0, 0, g_ow, 320, 0.62f * a);   /* the select screen, dimmed */
+    pw = g_ow - 24 < 420 ? g_ow - 24 : 420;
+    px = (g_ow - pw) / 2;
+    py = (320 - ph) / 2 + (1.0f - a) * 18.0f;
+    t = PortSkinTime();
+
+    PortSkinBegin();
+    PortSkinPanel(px, py, pw, ph, a, 1);
+    PortSkinHeading(st_tx("REGLAS DE VERSUS", "VERSUS RULES"), px + 10, py + 7, pw - 20, a);
+    PortSkinText(g_vr_on ? st_tx("ESTAS REGLAS SE USAN EN CADA VERSUS",
+                                 "THESE RULES PLAY IN EVERY VERSUS")
+                         : st_tx("REGLAS DEL JUEGO ORIGINAL", "THE ORIGINAL GAME'S RULES"),
+                 g_ow / 2, py + 36, 1, 0.42f, pw - 30, g_vr_on ? 2 : 1, a);
+
+    ry = py + 54;
+    for (i = 0; i < VR_ROWS; i++, ry += rh) {
+        float lx = px + 22, vx = px + pw * 0.45f, vw = pw * 0.55f - 22, cw = 12, l = g_vr_lit[i];
+        float nudge = (i == g_vr_row) ? 1.5f * sinf(t * 5.0f) : 0.0f;
+
+        if (i == g_vr_row)
+            PortSkinGlow(px + 12, ry + 2, pw - 24, rh - 4, 0.55f * a);
+        PortSkinText(st_tx(es[i], en[i]), lx, ry + 9, 0, 0.50f, vx - lx - 8,
+                     i == g_vr_row ? 1 : 0, a);
+        vr_value(i, v, sizeof v);
+        PortSkinText(v, vx + vw / 2, ry + 9, 1, 0.50f, vw - 2 * cw - 12,
+                     g_vr_on ? 0 : 2, a);
+        PortSkinChevron(vx - nudge, ry + 6, cw * 0.62f, rh - 12, 0, (0.55f + 0.45f * l) * a);
+        PortSkinChevron(vx + vw - cw * 0.62f + nudge, ry + 6, cw * 0.62f, rh - 12, 1,
+                        (0.55f + 0.45f * l) * a);
+        PortSkinRule(px + 16, ry + rh - 1, pw - 32, 0.35f * a);
+        vr_hit(vx - 4, ry, cw + 8, rh, i, -1);
+        vr_hit(vx + vw - cw - 4, ry, cw + 8, rh, i, 1);
+        vr_hit(px + 12, ry, pw - 24, rh, i, 0);
+    }
+
+    {
+        float bw = (pw - 60) / 2, bh = 24, by = py + ph - bh - 14, bx0 = px + 20, bx1 = px + pw - 20 - bw;
+        int s0 = g_vr_hover == VR_ORIGINAL ? 1 : g_vr_row == VR_ORIGINAL ? 2 : 0;
+        int s1 = g_vr_hover == VR_OK ? 1 : g_vr_row == VR_OK ? 2 : 0;
+
+        PortSkinButton("ORIGINAL", bx0, by, bw, bh, 0, s0, g_vr_lit[VR_ORIGINAL], a);
+        PortSkinButton(st_tx("ACEPTAR", "ACCEPT"), bx1, by, bw, bh, 1, s1, g_vr_lit[VR_OK], a);
+        vr_hit(bx0, by, bw, bh, VR_ORIGINAL, 0);
+        vr_hit(bx1, by, bw, bh, VR_OK, 0);
+    }
+    skin_end();
+}
+
+void vs_rules_mouse(float fx, float fy, int down)
+{
+    static int was;
+    float x = fx * g_ow, y = fy * 320.0f;
+    int i, hit = -1;
+
+    if (!g_vr_open) {
+        was = down;
+        return;
+    }
+    for (i = 0; i < g_vr_nhit; i++)     /* the chevrons come before their row */
+        if (x >= g_vr_hit[i].x && x < g_vr_hit[i].x + g_vr_hit[i].w
+            && y >= g_vr_hit[i].y && y < g_vr_hit[i].y + g_vr_hit[i].h) {
+            hit = i;
+            break;
+        }
+    g_vr_hover = hit >= 0 ? g_vr_hit[hit].item : -1;
+    if (was && !down && hit >= 0) {     /* a click, on release */
+        int item = g_vr_hit[hit].item;
+        if (item == VR_OK)
+            vr_close();
+        else if (item == VR_ORIGINAL)
+            vr_original();
+        else {
+            g_vr_row = item;
+            vr_step(item, g_vr_hit[hit].dir ? g_vr_hit[hit].dir : 1);
+        }
+    }
+    was = down;
+}
+
+void vs_rules_keys(int left, int right, int up, int down, int ok, int back)
+{
+    static int was[6];
+    int now[6], e[6], i;
+
+    now[0] = left; now[1] = right; now[2] = up; now[3] = down; now[4] = ok; now[5] = back;
+    for (i = 0; i < 6; i++) {
+        e[i] = now[i] && !was[i] && !g_vr_fresh;
+        was[i] = now[i];
+    }
+    g_vr_fresh = 0;
+    if (!g_vr_open)
+        return;
+    if (e[2]) g_vr_row = (g_vr_row + VR_ITEMS - 1) % VR_ITEMS;
+    if (e[3]) g_vr_row = (g_vr_row + 1) % VR_ITEMS;
+    if (g_vr_row < VR_ROWS) {
+        if (e[0]) vr_step(g_vr_row, -1);
+        if (e[1] || e[4]) vr_step(g_vr_row, 1);
+    } else {
+        if (e[0] || e[1])
+            g_vr_row = g_vr_row == VR_OK ? VR_ORIGINAL : VR_OK;
+        if (e[4]) {
+            if (g_vr_row == VR_OK)
+                vr_close();
+            else
+                vr_original();
+        }
+    }
+    if (e[5])                           /* back, SELECT again: kept, as ACCEPT */
+        vr_close();
+}
+
+/* On the local versus's select screen, a line at the top: SELECT opens the
+ * rules, and what they are now (the game's own, or a summary). */
+void vs_rules_hint(void)
+{
+    const online_rules *r = rules_local();
+    char line[96], what[48];
+
+    if (g_vr_open)
+        return;
+    if (r) {
+        char b[24];
+        if (r->series > 1)
+            snprintf(b, sizeof b, st_tx("%d PELEAS", "%d FIGHTS"), r->series);
+        else
+            snprintf(b, sizeof b, "%s", st_tx("1 PELEA", "1 FIGHT"));
+        snprintf(what, sizeof what, st_tx("MEJOR DE %d, %s", "BEST OF %d, %s"), r->best_of, b);
+    } else
+        snprintf(what, sizeof what, "%s", st_tx("ORIGINALES", "ORIGINAL"));
+    snprintf(line, sizeof line, st_tx("SELECT: REGLAS (%s)", "SELECT: RULES (%s)"), what);
+    begin_2d();
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+    PortSkinBegin();
+    PortSkinText(line, 8, 306, 0, 0.36f, g_ow * 0.34f, 1, 0.9f);   /* clear of PLAY */
+    skin_end();
+}
+
 /* The player's banner, as the game shows it now (FrontEnd.c PortSkinBand,
  * the ONLINE screen's): the gradient on steel, the name and id, the fighter
  * standing out of its left end. Esc's settings menu draws it under its
