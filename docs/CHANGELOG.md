@@ -8,6 +8,14 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased
+
+- **Online lobbies, the core** (no screen yet): creating, finding (public,
+  or private by a six-letter key), joining and leaving EOS lobbies, with
+  the rules, the members' names, looks and READY, kick and promote; the
+  lobby's owner calls a member and hosts the fight. Tested against Epic's
+  service with two test programs; LOBBIES in the ONLINE screen comes next.
+
 ## 0.4.5 beta (2026-11-12)
 
 - **TRAINING has its own screen** (Mary): player one's fighter's moves

@@ -559,6 +559,18 @@ void mpnet_find(const char *code)
     g_status = MPNET_SEARCHING;
 }
 
+/* Port: LOBBIES (mp_eos.h). The lobby's owner called this game to fight:
+ * its EOS user is known already, so the JOIN goes to it at once; the owner
+ * answers as the code's owner and hosts. */
+void mpnet_find_eos(const char *code, const char *who)
+{
+    mpnet_find(code);
+    if (g_status == MPNET_SEARCHING && who && who[0]) {
+        snprintf(g_eos_target, sizeof g_eos_target, "%s", who);
+        g_join_last = 0;
+    }
+}
+
 void mpnet_cancel_find(void)
 {
     g_want[0] = 0;
@@ -789,6 +801,11 @@ void mpnet_poll(void)
             on_packet(b, n, &e);
         if (!g_session)
             return;
+    }
+    if (!g_connected && !g_lan_only) {
+        char code[16], who[40];
+        if (mplobby_take_call(code, sizeof code, who, sizeof who))
+            mpnet_find_eos(code, who);
     }
     t = now_ms();
     if (!g_connected && g_want[0] && !g_eos_target[0]

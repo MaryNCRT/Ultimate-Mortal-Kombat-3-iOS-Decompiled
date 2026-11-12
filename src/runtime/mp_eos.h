@@ -34,4 +34,85 @@ int  mpeos_recv(char *who, int wn, void *buf, int max);
  * play off, or not counted yet); counted every 15 seconds. */
 int  mpeos_players(void);
 
+/* ---- LOBBIES (docs/research/ONLINE-PHASE-PLAN.md, stage 2) ----
+ *
+ * EOS lobbies in the bucket "umk3-lobby", one at a time. A lobby's own
+ * attributes: "ver" (MPLOBBY_PROTO; a search sees only its own), "name",
+ * "host" (the owner's name), "rules" (online_rules.c's text), "priv" (1: not
+ * in the browser, found by its "key" alone), "key" (six letters and digits),
+ * "go" (the owner calling a member to fight: "<n>:<EOS user>"). Each
+ * member's: "code" (profiles.ini's), "name", "look" (icon and colours, the
+ * caller's text), "ready". The owner hosts the fight: the member it calls
+ * connects to it through mp_net (mpnet_poll takes the call). */
+
+#define MPLOBBY_PROTO       "1"
+#define MPLOBBY_MAX_MEMBERS 8
+#define MPLOBBY_MAX_RESULTS 32
+
+struct mplobby_member {
+    char who[40];                       /* EOS user, for kick / promote */
+    char code[16];
+    char name[64];
+    char look[48];
+    int  ready;
+    int  owner;
+};
+
+struct mplobby_info {
+    char id[128];
+    char name[48];
+    char host[64];
+    char rules[64];
+    char key[8];
+    char owner[40];                     /* EOS user */
+    int  priv;
+    int  members, max_members;
+};
+
+enum { MPLOBBY_NONE,                    /* in no lobby */
+       MPLOBBY_CREATING, MPLOBBY_JOINING,
+       MPLOBBY_IN,
+       MPLOBBY_LEAVING };
+
+/* Why the last lobby ended or a create / join failed (mplobby_event). */
+enum { MPLOBBY_EV_NONE, MPLOBBY_EV_LEFT, MPLOBBY_EV_KICKED, MPLOBBY_EV_CLOSED,
+       MPLOBBY_EV_FULL, MPLOBBY_EV_NOT_FOUND, MPLOBBY_EV_FAILED, MPLOBBY_EV_OFFLINE };
+
+int  mplobby_state(void);
+int  mplobby_event(void);
+/* Bumped on every change (members, attributes, state): the screen redraws
+ * its copy when it moves. */
+unsigned mplobby_serial(void);
+
+/* Create: 2..MPLOBBY_MAX_MEMBERS players; a private one gets a key. Fails
+ * (0) while in a lobby or off line. */
+int  mplobby_create(const char *name, const char *rules, int priv, int max_members);
+/* Join a lobby by its id (a search result's). */
+int  mplobby_join(const char *id);
+void mplobby_leave(void);
+
+/* Search: the open public lobbies of this version, or, with a key, the one
+ * private lobby that has it. `rules` non-NULL keeps those with exactly these
+ * rules. mplobby_results: -1 searching, else how many (copied into out). */
+void mplobby_search(const char *rules, const char *key);
+int  mplobby_results(struct mplobby_info *out, int max);
+
+/* The lobby this game is in (NULL when none) and its members. */
+const struct mplobby_info *mplobby_info(void);
+int  mplobby_members(struct mplobby_member *out, int max);
+int  mplobby_am_owner(void);
+
+/* This game's member attributes; sent when changed. */
+void mplobby_set_me(const char *code, const char *name, const char *look, int ready);
+void mplobby_set_ready(int ready);
+/* The owner's: the lobby's name and rules (members see them change). */
+void mplobby_set_rules(const char *rules);
+void mplobby_set_name(const char *name);
+void mplobby_kick(const char *who);
+void mplobby_promote(const char *who);
+/* The owner calls a member to fight; that member's game takes the call
+ * (mplobby_take_call: 1 once, with the owner's code and EOS user). */
+void mplobby_call(const char *who);
+int  mplobby_take_call(char *code, int cn, char *who, int wn);
+
 #endif
