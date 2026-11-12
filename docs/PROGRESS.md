@@ -141,8 +141,8 @@ The plan and Mary's decisions: [research/ONLINE-PHASE-PLAN.md](research/ONLINE-P
   it is kept from the game's touch) with the rules under it. A key of its
   own, `PK_RULES` (CONTROLS > KEYBOARD - MENU, VERSUS RULES, `key_rules=`,
   R), and a pad action of its own (17, `pad_rules=` / `p2pad_rules=`,
-  SELECT); PK_MOVES no longer opens the window. Built into the test folder;
-  not played yet.
+  SELECT); PK_MOVES no longer opens the window. **Mary played it, it
+  works** (2026-11-12).
 
 ## 0.4.4 beta (2026-11-12)
 

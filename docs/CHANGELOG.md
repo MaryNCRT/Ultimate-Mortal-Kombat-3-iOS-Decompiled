@@ -20,7 +20,7 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 - **A RULES button in the select screen's top left corner** (Mary), with
   the rules under it; a click opens them. Its own key in CONTROLS
   (VERSUS RULES, R unless changed) and its own pad button (SELECT unless
-  changed); the moves list's key no longer opens them. Not played yet.
+  changed); the moves list's key no longer opens them. **Mary played it.**
 
 ## 0.4.4 beta (2026-11-12)
 
