@@ -1331,6 +1331,10 @@ static void read_config(const char *dir)
                 plat_bind_key(PK_MOVES, atoi(v));
             else if (strcmp(line + 4, "rules") == 0)
                 plat_bind_key(PK_RULES, atoi(v));
+            else if (strcmp(line + 4, "outfit") == 0)
+                plat_bind_key(PK_OUTFIT, atoi(v));
+            else if (strcmp(line + 4, "color") == 0)
+                plat_bind_key(PK_COLOR, atoi(v));
             else if (strcmp(line + 4, "special") == 0)
                 plat_bind_key(PK_SPECIAL, atoi(v));
             else {
@@ -1419,6 +1423,108 @@ static void nav_stick(void)
         if (now && now != was[i] && CurrentTask == 3)
             PortPadPalette[i && GameMode == 6 ? 1 : 0] = 1;
         was[i] = now;
+    }
+}
+
+/* The select screen's OUTFIT and COLOR lists (FrontEnd.c drop_one, port):
+ * each side's presses this frame -- its button to open a list (the pad's
+ * north and west, the keys T and C), up and down, ACCEPT, BACK -- and the
+ * buttons' pictures. Player one's side takes the first pad and the keyboard
+ * (both pads, off VS); player two's the second pad and player two's keys.
+ * While a side's list is open, and until its ACCEPT or BACK is let go after,
+ * drop_hold says so and that side's pad and keys do not move the highlight
+ * nor pick a fighter. */
+extern int  PortDropIn[2], PortDropOpen[2];
+extern char PortDropGlyph[2][2][160];
+static int  g_drop_hold[2];
+
+static int drop_screen(void)
+{
+    return CurrentTask == 3 && (FE_CurrentTask == 0x1b || FE_CurrentTask == 0x2a);
+}
+
+static void drop_glyph(char *out, const char *tok)
+{
+    const char *a = strchr(tok, 1), *z = a ? strchr(a + 1, 1) : NULL;
+
+    if (z)
+        snprintf(out, 160, "glyphs/%.*s.png", (int)(z - a - 1), a + 1);
+    else
+        out[0] = 0;
+}
+
+static void drop_input(void)
+{
+    static unsigned was[2];
+    int side, dual = GameMode == 6;
+
+    if (!drop_screen()) {
+        was[0] = was[1] = 0;
+        g_drop_hold[0] = g_drop_hold[1] = 0;
+        PortDropIn[0] = PortDropIn[1] = 0;
+        return;
+    }
+    for (side = 0; side < 2; side++) {
+        const PLAT_PAD *pa = side == 0 ? &g_pad : (dual ? &g_pad2 : NULL);
+        const PLAT_PAD *pb = side == 0 && !dual ? &g_pad2 : NULL;
+        unsigned now = 0, hit;
+        int keys = side == 0, keys2 = side == 1 || !dual;
+        char tok[128];
+        int i;
+
+        for (i = 0; i < 2; i++) {
+            const PLAT_PAD *p = i ? pb : pa;
+
+            if (!p || !p->connected)
+                continue;
+            if (p->buttons & (1u << PB_NORTH)) now |= 1;
+            if (p->buttons & (1u << PB_WEST))  now |= 2;
+            if (p->up)                         now |= 4;
+            if (p->down)                       now |= 8;
+            if (p->buttons & (1u << PB_SOUTH)) now |= 16;
+            if (p->buttons & (1u << PB_EAST))  now |= 32;
+        }
+        if (keys) {
+            if (plat_key(PK_OUTFIT)) now |= 1;
+            if (plat_key(PK_COLOR))  now |= 2;
+            if (plat_key(PK_UP))     now |= 4;
+            if (plat_key(PK_DOWN))   now |= 8;
+            if (plat_key(PK_OK))     now |= 16;
+            if (plat_key_backspace()) now |= 32;
+        }
+        if (keys2) {                    /* player two's keys: the arrows */
+            if (plat_key(PK_P2_UP))   now |= 4;
+            if (plat_key(PK_P2_DOWN)) now |= 8;
+            if (plat_key(PK_P2_OK) || plat_key(PK_P2_HP) || plat_key(PK_P2_LP))
+                now |= 16;
+            if (plat_key(PK_P2_BL))   now |= 32;
+        }
+        hit = now & ~was[side];
+        was[side] = now;
+        PortDropIn[side] |= (int)hit;   /* FrontEnd.c's DI_* bits, the same */
+        /* held for the list: open, or its ACCEPT / BACK not let go yet */
+        if (PortDropOpen[side])
+            g_drop_hold[side] = 1;
+        else if (!(now & (16 | 32 | 4 | 8)))
+            g_drop_hold[side] = 0;
+        if (PortDropIn[side] & (1 | 2))
+            g_drop_hold[side] = 1;      /* the press that opens it */
+
+        /* the pictures: that side's pad's, else the keys' */
+        if (pa && pa->connected && (side == 1 || pad_nav_device() == 1 || !keys)) {
+            int kind = plat_pad_glyph_kind(side, pa->kind);
+
+            plat_pad_glyph(kind, PB_NORTH, tok, sizeof tok);
+            drop_glyph(PortDropGlyph[side][0], tok);
+            plat_pad_glyph(kind, PB_WEST, tok, sizeof tok);
+            drop_glyph(PortDropGlyph[side][1], tok);
+        } else if (keys) {
+            plat_key_glyph(PK_OUTFIT, tok, sizeof tok);
+            drop_glyph(PortDropGlyph[side][0], tok);
+            plat_key_glyph(PK_COLOR, tok, sizeof tok);
+            drop_glyph(PortDropGlyph[side][1], tok);
+        } else
+            PortDropGlyph[side][0][0] = PortDropGlyph[side][1][0] = 0;
     }
 }
 
@@ -3803,6 +3909,7 @@ int main(int argc, char **argv)
                 }
                 hovered = on && hx > -10000.0f;
                 nav_stick();
+                drop_input();       /* the select screen's OUTFIT / COLOR */
                 PortNavHover = on;
                 if (on) {
                     limeTouchScreenX[0] = limeLastTouchScreenX[0] = hx;
@@ -3851,6 +3958,24 @@ int main(int argc, char **argv)
                     if (CurrentTask == 3 && FE_CurrentTask == 51
                         && PortOnlineBoxActive) {
                         memset(&k1, 0, sizeof k1);
+                        memset(&k2, 0, sizeof k2);
+                    }
+                }
+                /* the select screen's lists take their player's pad and
+                 * keys while open (drop_input) */
+                if (drop_screen() && (g_drop_hold[0] || g_drop_hold[1])) {
+                    int dual = GameMode == 6;
+
+                    if (g_drop_hold[0]) {
+                        memset(&q1, 0, sizeof q1);
+                        memset(&k1, 0, sizeof k1);
+                        if (!dual) {
+                            memset(&q2, 0, sizeof q2);
+                            memset(&k2, 0, sizeof k2);
+                        }
+                    }
+                    if (g_drop_hold[1] && dual) {
+                        memset(&q2, 0, sizeof q2);
                         memset(&k2, 0, sizeof k2);
                     }
                 }

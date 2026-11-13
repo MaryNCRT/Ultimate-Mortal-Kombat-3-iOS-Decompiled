@@ -231,6 +231,8 @@ enum {
     PK_P2_PAUSE, PK_P2_MOVES, PK_P2_OK,
     /* the local versus's rules window, its select screen (port) */
     PK_RULES,
+    /* the select screen's OUTFIT and COLOR lists (port, FrontEnd.c) */
+    PK_OUTFIT, PK_COLOR,
     PK_COUNT
 };
 

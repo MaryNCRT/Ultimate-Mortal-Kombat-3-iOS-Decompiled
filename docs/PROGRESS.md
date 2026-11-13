@@ -103,6 +103,39 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+### 2026-11-13 -- The select screen's OUTFIT and COLOR lists
+
+Port work, not in the binary. Mary asked for the newer games' lists in place
+of the SKIN and COLOR boxes: in each top corner a gi and a palette, one above
+the other, each with its button beside it; the button drops a list beside it.
+
+- `FrontEnd.c` (the block after `PortSendMySkin`): `drop_catch` runs before
+  the portraits and takes a fresh press that lands on the buttons or comes
+  while a list is open (it marks `limeLastTouchScreenX`, so no portrait sees
+  a fresh press); `drop_one(side)` draws the two buttons
+  (`aditional textures/ui/outfit.png`, `color.png`, made by
+  `tools/make_select_icons.py`) and the open list (`limeFillQuadGrad`
+  slanted bars, new in `draw_gl.c`), and acts on the clicks and on
+  `PortDropIn`. Player one's buttons sit at y 46 under RULES (VS) or the
+  online banner, else at y 6. `palette_box` and `skin_box` are gone;
+  `set_palette` keeps the colour's three paths (online packet, VS, solo).
+- `game_main.c` `drop_input`: per side the pad's north / west (open), up,
+  down, south, east and the keys `PK_OUTFIT` (T) / `PK_COLOR` (C), Enter,
+  Backspace (player two's: the arrows, its punches, block), edge-triggered
+  into `PortDropIn`; `g_drop_hold` blanks that side's pad and keys before
+  `pad_nav_end` while its list is open and until ACCEPT / BACK are let go,
+  so the highlight does not move nor pick a fighter. The buttons' pictures
+  (`PortDropGlyph`) are that side's pad's, else the keys'.
+- `PK_OUTFIT` / `PK_COLOR`: new codes (platform.h, win32 and SDL tables),
+  umk3.ini `key_outfit=` / `key_color=`, Esc > CONTROLS rows.
+
+Checked by script in the test folder: Arcade (UMK3_PADS right, right,
+south, north, down, south, west: the outfit list opened, MKX put on, the
+colour list opened with the outfit button still shown) and VS
+(UMK3_VSRULES_PREVIEW, taps: player one under RULES, player two's list
+opening to the left). Not tried: by Mary; online (only player one's side is
+drawn, as before).
+
 ### 2026-11-13 -- Outfits that add (skins beside the original)
 
 Released in **0.4.8 beta** (with the CPU wearing an outfit one fight in

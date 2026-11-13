@@ -17569,59 +17569,17 @@ int PortFightPalette(int side, long c1, long c2)
     return cpu_palette(c1, c2, p0);
 }
 
-#define PP_W  92                        /* the box, in 480x320 units */
-#define PP_H  22
-
-/* One box, its top at y, fixed beside the screen edge on the fighter's
- * side (player one left, player two right) on every aspect ratio; returns
- * 1 when clicked. */
-static int palette_box(int side, int y, long c1, long c2)
+/* the COLOR picked on `side`: by hand (VS), this machine's (online), or
+ * player one's alone (the rest) */
+static void set_palette(int side, int to)
 {
-    char buf[32];
-    float w = (float)FE_W((float)PP_W), t = (float)FE_W(2.0f);
-    float L = side == 0 ? (float)FE_W(8.0f)
-                        : (float)limeScreenWidth - FE_W(8.0f) - w;
-    float mid = L + w * 0.5f;
-    float T = FE_Y((float)y), H = FE_H((float)PP_H);
-    int hit, shown;
-
-    limeFillRect(L, T, w, H, 0.0f, 0.0f, 0.0f, 0.6f);
-    limeFillRect(L, T, w, FE_H(2.0f), 1.0f, 0.0f, 0.0f, 1.0f);
-    limeFillRect(L, T + H - FE_H(2.0f), w, FE_H(2.0f), 1.0f, 0.0f, 0.0f, 1.0f);
-    limeFillRect(L, T, t, H, 1.0f, 0.0f, 0.0f, 1.0f);
-    limeFillRect(L + w - t, T, t, H, 1.0f, 0.0f, 0.0f, 1.0f);
-
-    /* a network match's box is this machine's fighter, c1 */
-    shown = GameMode == 1 ? PortNetPaletteOf(1, c1, c2) : PortPaletteOf(side, c1, c2);
-    snprintf(buf, sizeof buf, "COLOR %d", shown);
-    limeDrawFONT(&GameFont, "<", L + FE_W(8.0f), FE_Y((float)(y + 3)),
-                 1, FE_WidthScale, fontcol);
-    limeDrawFONT(&GameFont, buf, mid, FE_Y((float)(y + 3)),
-                 1, FE_WidthScale, fontcol);
-    limeDrawFONT(&GameFont, ">", L + w - FE_W(8.0f),
-                 FE_Y((float)(y + 3)), 1, FE_WidthScale, fontcol);
-
-    PortNavTarget(L, T, w, H, 0);
-    hit = FE_FadeAdd == 0.0f && limeLastTouchScreenX[0] == -1.0f
-          && limeTouchScreenX[0] >= L && limeTouchScreenX[0] <= L + w
-          && limeTouchScreenY[0] >= T && limeTouchScreenY[0] <= T + H;
-    if (PortPadPalette[side] && FE_FadeAdd == 0.0f)
-        hit = 1;                        /* port: the right stick */
-    PortPadPalette[side] = 0;
-    if (hit) {
-        int to = shown == 2 ? 1 : 2;
-
-        if (GameMode == 1) {
-            PortNetPalette[0] = to;
-            sendPalettePacket(to);
-        } else if (GameMode == 6)
-            PortPalette[side] = to;
-        else
-            PortSoloPalette = to;
-        if (limeTouchScreenX[0] != -1.0f)
-            limeLastTouchScreenX[0] = limeTouchScreenX[0];  /* one switch a tap */
-    }
-    return hit;
+    if (GameMode == 1) {
+        PortNetPalette[0] = to;
+        sendPalettePacket(to);
+    } else if (GameMode == 6)
+        PortPalette[side] = to;
+    else
+        PortSoloPalette = to;
 }
 
 /* Port, not in the binary: DUELO against the CPU (Mary). A box beside OK,
@@ -17828,90 +17786,381 @@ void PortSendMySkin(void)
     sendSkinPacket(playerCharacter, key);
 }
 
-static void skin_box(int side, int y, long ch)
-{
-    char buf[40];
-    int ids[SKINS_MAX], n, k, hit, i;
-    float w = (float)FE_W((float)PP_W), t = (float)FE_W(2.0f);
-    float L = side == 0 ? (float)FE_W(8.0f)
-                        : (float)limeScreenWidth - FE_W(8.0f) - w;
-    float mid = L + w * 0.5f;
-    float T = FE_Y((float)y), H = FE_H((float)PP_H);
+/* ---- the OUTFIT and COLOR lists (port, not in the binary; Mary 2026-11-13)
+ *
+ * In the select screen's top corners -- player one's left, player two's right
+ * in VS -- as the newer games show them: two pictures, a gi for the OUTFIT
+ * and a palette for the COLOR, each with its button beside it (the pad's
+ * north and west, or the keys T and C). Nothing more shows until one is
+ * pressed or clicked: then its list drops beside it -- ORIGINAL and the
+ * fighter's added outfits, or COLOR 1 and COLOR 2 -- in slanted bars, the
+ * one under the cursor dark with white words, the one worn in gold. Up and
+ * down move, ACCEPT takes, BACK (or the same button) closes; a click on a
+ * row takes it, a click anywhere else only closes the list. While a list is
+ * open its player's pad and keys are the list's (game_main.c drop_input).
+ * The right stick still turns the colour at once. */
+TEXTURE *lime_load_extra_texture(const char *file);
+void lime_extra_texture_size(const TEXTURE *t, int *w, int *h);
+void limeFillQuadGrad(const float *xy, const float *c);
+extern float PortMouseX, PortMouseY;    /* game_main.c: the mouse, -1 off */
 
-    if (ch < 0 || ch >= 26 || (n = skins_of(ch, ids)) == 0)
+enum { DROP_OUTFIT = 1, DROP_COLOR = 2 };
+enum { DI_OUTFIT = 1, DI_COLOR = 2, DI_UP = 4, DI_DOWN = 8, DI_OK = 16, DI_BACK = 32 };
+int  PortDropIn[2];                     /* game_main.c: this frame's presses */
+int  PortDropOpen[2];                   /* the list open on each side, 0 none */
+char PortDropGlyph[2][2][160];          /* game_main.c: the buttons' pictures */
+static int  drop_cur[2];                /* the row under the cursor */
+static long drop_ch[2] = { -1, -1 };    /* whose list it is */
+static int  drop_click;                 /* a press this frame, taken from the portraits */
+static float drop_cx, drop_cy;
+
+typedef struct {
+    int  n, chosen;
+    char item[SKINS_MAX + 1][24];
+    int  ids[SKINS_MAX];
+} DropList;
+
+/* which sides show their pictures, and for which fighter */
+static int drop_side(int side, long *ch, long *c1, long *c2)
+{
+    long p1 = (CharacterConfirmed != -1) ? CharacterConfirmed : CharacterSelected;
+
+    if (GameMode == 1) {                /* online: this machine's fighter only */
+        *ch = *c1 = playerCharacter;
+        *c2 = opponentCharacter;
+        return side == 0 && playerCharacter >= 0 && playerCharacter < 26;
+    }
+    *c1 = p1;
+    *c2 = opponentCharacter;
+    *ch = side == 0 ? p1 : opponentCharacter;
+    if (side == 1 && GameMode != 6)
+        return 0;
+    return *ch >= 0 && *ch < 26;
+}
+
+static void drop_items(int side, int what, long ch, long c1, long c2, DropList *L)
+{
+    int i, k, n;
+
+    memset(L, 0, sizeof *L);
+    if (what == DROP_COLOR) {
+        int shown = GameMode == 1 ? PortNetPaletteOf(1, c1, c2) : PortPaletteOf(side, c1, c2);
+
+        L->n = 2;
+        snprintf(L->item[0], sizeof L->item[0], "COLOR 1");
+        snprintf(L->item[1], sizeof L->item[1], "COLOR 2");
+        L->chosen = shown == 2 ? 1 : 0;
         return;
+    }
+    n = skins_of(ch, L->ids);
     k = PortSkinPick[side][ch];
     if (k < 0 || k > n)
         k = PortSkinPick[side][ch] = 0;
-    /* the CPU's, until the box is changed by hand: what chance gave it */
+    /* the CPU's, until it is changed by hand: what chance gave it */
     if (side == 1 && PortVsCpu && !PortSkinTouched[1][ch]) {
-        int id = cpu_skin(ch, ids, n);
+        int id = cpu_skin(ch, L->ids, n);
         for (k = 0, i = 0; i < n; i++)
-            if (ids[i] == id)
+            if (L->ids[i] == id)
                 k = i + 1;
     }
+    L->n = n + 1;
+    snprintf(L->item[0], sizeof L->item[0], "ORIGINAL");
+    for (i = 0; i < n; i++) {
+        char *p;
+        snprintf(L->item[i + 1], sizeof L->item[0], "%s", mods_skin_title(L->ids[i]));
+        for (p = L->item[i + 1]; *p; p++)
+            if (*p >= 'a' && *p <= 'z')
+                *p = (char)(*p - 32);
+    }
+    L->chosen = k;
+}
 
-    limeFillRect(L, T, w, H, 0.0f, 0.0f, 0.0f, 0.6f);
-    limeFillRect(L, T, w, FE_H(2.0f), 1.0f, 0.8f, 0.0f, 1.0f);
-    limeFillRect(L, T + H - FE_H(2.0f), w, FE_H(2.0f), 1.0f, 0.8f, 0.0f, 1.0f);
-    limeFillRect(L, T, t, H, 1.0f, 0.8f, 0.0f, 1.0f);
-    limeFillRect(L + w - t, T, t, H, 1.0f, 0.8f, 0.0f, 1.0f);
-
-    snprintf(buf, sizeof buf, "%s", k ? mods_skin_title(ids[k - 1]) : "ORIGINAL");
-    for (i = 0; buf[i]; i++)
-        if (buf[i] >= 'a' && buf[i] <= 'z')
-            buf[i] = (char)(buf[i] - 32);
-    buf[10] = 0;                        /* what the box holds */
-    limeDrawFONT(&GameFont, "<", L + FE_W(8.0f), FE_Y((float)(y + 3)),
-                 1, FE_WidthScale, fontcol);
-    limeDrawFONT(&GameFont, buf, mid, FE_Y((float)(y + 3)),
-                 1, FE_WidthScale * (strlen(buf) > 7 ? 0.75f : 1.0f), fontcol);
-    limeDrawFONT(&GameFont, ">", L + w - FE_W(8.0f),
-                 FE_Y((float)(y + 3)), 1, FE_WidthScale, fontcol);
-
-    PortNavTarget(L, T, w, H, 0);
-    hit = FE_FadeAdd == 0.0f && limeLastTouchScreenX[0] == -1.0f
-          && limeTouchScreenX[0] >= L && limeTouchScreenX[0] <= L + w
-          && limeTouchScreenY[0] >= T && limeTouchScreenY[0] <= T + H;
-    if (!hit)
-        return;
-    if (!PortNavPick && limeTouchScreenX[0] < L + w * 0.3f)
-        k = k == 0 ? n : k - 1;         /* the left arrow: back */
-    else
-        k = k == n ? 0 : k + 1;
-    PortSkinPick[side][ch] = k;
-    PortSkinTouched[side][ch] = 1;
-    PortSendMySkin();                   /* online: the other sees it */
-    printf("select: side %d, %s in %s\n", side, PlayerDefs[ch].texBase,
-           k ? mods_skin_title(ids[k - 1]) : "the game's skin");
-    limeLastTouchScreenX[0] = limeTouchScreenX[0];  /* one change a tap */
+static void drop_take(int side, int what, long ch, const DropList *L, int row)
+{
+    if (what == DROP_COLOR)
+        set_palette(side, row + 1);
+    else {
+        PortSkinPick[side][ch] = row;
+        PortSkinTouched[side][ch] = 1;
+        PortSendMySkin();               /* online: the other sees it */
+        printf("select: side %d, %s in %s\n", side, PlayerDefs[ch].texBase,
+               row ? mods_skin_title(L->ids[row - 1]) : "the game's skin");
+    }
     if (Settings[3] != 0)
         limePlaySound(SFXHandle[0x68 / 4], MusicVol[Settings[3]] / 100.0f, 1.0f, 0);
 }
 
-static void palette_picker(void)
-{
-    long p1 = (CharacterConfirmed != -1) ? CharacterConfirmed
-                                         : CharacterSelected;
-    long p2 = opponentCharacter;
+/* the sizes, in the screen's pixels: u is one 480x320 unit, square */
+#define DROP_CW  32.0f                  /* a picture and its button */
+#define DROP_CH  16.0f
+#define DROP_GAP 8.0f
+#define DROP_RW  110.0f                 /* a row of the list */
+#define DROP_RH  15.0f
 
-    if (GameMode == 1) {                /* this machine's fighter only */
-        if (playerCharacter != -1) {
-            palette_box(0, 290, playerCharacter, opponentCharacter);
-            skin_box(0, 290 - PP_H - 4, playerCharacter);
+/* the two pictures one above the other in the corner (Mary: both stay
+ * while a list is open, the list drops beside them); player one's under the
+ * RULES button (VS) or the banner (online) */
+static void drop_cell(int side, int i, float *x, float *y, float *w, float *h)
+{
+    float u = FE_HeightScale, cw = DROP_CW * u;
+    float top = (side == 0 && (GameMode == 1 || (GameMode == 6 && !PortPractice)))
+                ? 46.0f : 6.0f;
+
+    *w = cw;
+    *h = DROP_CH * u;
+    *y = FE_Y(top + (float)i * (DROP_CH + DROP_GAP * 0.5f));
+    if (side == 0)
+        *x = 8.0f * u;
+    else
+        *x = (float)limeScreenWidth - 8.0f * u - cw;
+}
+
+static void drop_row(int side, int what, int j, float *x, float *y, float *w, float *h)
+{
+    float u = FE_HeightScale, cx, cy, cw, chh;
+
+    drop_cell(side, what - 1, &cx, &cy, &cw, &chh);
+    *w = DROP_RW * u;
+    *h = DROP_RH * u;
+    *x = side == 0 ? cx + cw + 3.0f * u : cx - 3.0f * u - *w;
+    *y = cy + (chh - *h) * 0.5f + (float)j * (*h + 2.0f * u);
+}
+
+static int drop_in(float px, float py, float x, float y, float w, float h)
+{
+    return px >= x && px <= x + w && py >= y && py <= y + h;
+}
+
+/* Before the portraits: a press on the pictures or the open list, or any
+ * press while a list is open, is the lists' -- the portraits never see it. */
+static void drop_catch(void)
+{
+    float tx = limeTouchScreenX[0], ty = limeTouchScreenY[0], x, y, w, h;
+    long ch, c1, c2;
+    int side, i, mine = 0;
+
+    drop_click = 0;
+    if (FE_FadeAdd != 0.0f || tx == -1.0f || limeLastTouchScreenX[0] != -1.0f)
+        return;
+    for (side = 0; side < 2; side++) {
+        if (!drop_side(side, &ch, &c1, &c2))
+            continue;
+        if (PortDropOpen[side])
+            mine = 1;
+        for (i = 0; i < 2; i++) {
+            drop_cell(side, i, &x, &y, &w, &h);
+            if (drop_in(tx, ty, x, y, w, h))
+                mine = 1;
         }
+    }
+    if (!mine)
+        return;
+    drop_click = 1;
+    drop_cx = tx;
+    drop_cy = ty;
+    limeLastTouchScreenX[0] = tx;       /* taken: not a fresh press below */
+}
+
+static void drop_bar(int side, float x, float y, float w, float h, int lit)
+{
+    float s = h * 0.55f, xy[8], c[16];
+    float a0 = lit ? 0.92f : 0.55f, a1 = lit ? 0.55f : 0.18f;
+    float r = lit ? 0.04f : 0.62f, g = lit ? 0.04f : 0.62f, b = lit ? 0.06f : 0.66f;
+    int i;
+
+    if (side == 0) {                    /* slanted at the left, fading right */
+        xy[0] = x + s; xy[1] = y;  xy[2] = x + w; xy[3] = y;
+        xy[4] = x + w; xy[5] = y + h;  xy[6] = x;  xy[7] = y + h;
+    } else {                            /* mirrored */
+        xy[0] = x; xy[1] = y;  xy[2] = x + w - s; xy[3] = y;
+        xy[4] = x + w; xy[5] = y + h;  xy[6] = x; xy[7] = y + h;
+    }
+    for (i = 0; i < 4; i++) {
+        int near = side == 0 ? (i == 0 || i == 3) : (i == 1 || i == 2);
+        c[i * 4] = r; c[i * 4 + 1] = g; c[i * 4 + 2] = b;
+        c[i * 4 + 3] = near ? a0 : a1;
+    }
+    limeFillQuadGrad(xy, c);
+    if (lit) {                          /* a thin light edge along the top */
+        float e[8], ec[16];
+        float t = h * 0.08f;
+
+        for (i = 0; i < 8; i++)
+            e[i] = xy[i];
+        e[5] = e[7] = y + t;
+        if (side == 0)
+            e[6] = x + s - s * (t / h);
+        else
+            e[4] = x + w - s + s * (t / h);
+        for (i = 0; i < 4; i++) {
+            int near = side == 0 ? (i == 0 || i == 3) : (i == 1 || i == 2);
+            ec[i * 4] = ec[i * 4 + 1] = ec[i * 4 + 2] = 0.85f;
+            ec[i * 4 + 3] = near ? 0.7f : 0.0f;
+        }
+        limeFillQuadGrad(e, ec);
+    }
+}
+
+static void drop_draw_cell(int side, int i, int open, int over)
+{
+    static const float white[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    static const float gold[4] = { 1.0f, 0.82f, 0.30f, 1.0f };
+    float x, y, w, h, u = FE_HeightScale, gx, ix;
+    TEXTURE *t = lime_load_extra_texture(i == 0 ? "ui/outfit.png" : "ui/color.png");
+    const char *gl = PortDropGlyph[side][i];
+
+    drop_cell(side, i, &x, &y, &w, &h);
+    limeFillRect(x, y, w, h, over || open ? 0.18f : 0.0f, over || open ? 0.18f : 0.0f,
+                 over || open ? 0.22f : 0.0f, over || open ? 0.75f : 0.5f);
+    /* player one: the button, then the picture; player two mirrored */
+    gx = side == 0 ? x + 1.0f * u : x + w - 1.0f * u - 14.0f * u;
+    ix = side == 0 ? x + 16.5f * u : x + 1.5f * u;
+    if (gl[0])
+        nav_glyph(gl, gx, y + 1.0f * u, 14.0f * u);
+    if (t)
+        limeDrawSprite(t, ix, y + 1.0f * u, 14.0f * u, 14.0f * u,
+                       0.0f, 0.0f, 1.0f, 1.0f, open ? gold : white);
+    PortNavTarget(x, y, w, h, 0);
+}
+
+static void drop_one(int side)
+{
+    static const float txt[4] = { 0.80f, 0.80f, 0.84f, 1.0f };
+    static const float lit_txt[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    static const float worn[4] = { 1.0f, 0.82f, 0.30f, 1.0f };
+    long ch, c1, c2;
+    int i, j, in = PortDropIn[side], open, hover = -1;
+    DropList L;
+    float x, y, w, h, u = FE_HeightScale;
+
+    PortDropIn[side] = 0;
+    if (!drop_side(side, &ch, &c1, &c2)) {
+        PortDropOpen[side] = 0;
         return;
     }
+    if (ch != drop_ch[side])            /* another fighter: the list shuts */
+        PortDropOpen[side] = 0;
+    drop_ch[side] = ch;
+    if (FE_FadeAdd != 0.0f)
+        in = 0;
+
+    /* port: the right stick turns the colour at once, as before */
+    if (PortPadPalette[side] && FE_FadeAdd == 0.0f) {
+        drop_items(side, DROP_COLOR, ch, c1, c2, &L);
+        drop_take(side, DROP_COLOR, ch, &L, L.chosen ? 0 : 1);
+    }
+    PortPadPalette[side] = 0;
+
+    /* the buttons: open, move, take, shut */
+    for (i = 0; i < 2; i++) {
+        int what = i + 1;
+
+        if (!(in & (i == 0 ? DI_OUTFIT : DI_COLOR)))
+            continue;
+        if (PortDropOpen[side] == what)
+            PortDropOpen[side] = 0;
+        else {
+            drop_items(side, what, ch, c1, c2, &L);
+            PortDropOpen[side] = what;
+            drop_cur[side] = L.chosen;
+        }
+        if (Settings[3] != 0)
+            limePlaySound(SFXHandle[0x68 / 4], MusicVol[Settings[3]] / 100.0f, 1.0f, 0);
+        in &= ~(DI_UP | DI_DOWN | DI_OK | DI_BACK);
+    }
+    open = PortDropOpen[side];
+
+    /* a click (taken from the portraits by drop_catch) */
+    if (drop_click) {
+        int hit = 0;
+
+        for (i = 0; i < 2 && !hit; i++) {
+            drop_cell(side, i, &x, &y, &w, &h);
+            if (drop_in(drop_cx, drop_cy, x, y, w, h)) {
+                hit = 1;
+                if (open == i + 1)
+                    open = 0;
+                else {
+                    open = i + 1;
+                    drop_items(side, open, ch, c1, c2, &L);
+                    drop_cur[side] = L.chosen;
+                }
+                if (Settings[3] != 0)
+                    limePlaySound(SFXHandle[0x68 / 4], MusicVol[Settings[3]] / 100.0f, 1.0f, 0);
+            }
+        }
+        if (!hit && open) {
+            drop_items(side, open, ch, c1, c2, &L);
+            for (j = 0; j < L.n; j++) {
+                drop_row(side, open, j, &x, &y, &w, &h);
+                if (drop_in(drop_cx, drop_cy, x, y, w, h)) {
+                    drop_take(side, open, ch, &L, j);
+                    break;
+                }
+            }
+            open = 0;                   /* a row taken, or a click outside */
+        }
+        PortDropOpen[side] = open;
+    }
+
+    if (open) {
+        drop_items(side, open, ch, c1, c2, &L);
+        if (drop_cur[side] < 0 || drop_cur[side] >= L.n)
+            drop_cur[side] = L.chosen;
+        if (in & DI_UP)
+            drop_cur[side] = (drop_cur[side] + L.n - 1) % L.n;
+        if (in & DI_DOWN)
+            drop_cur[side] = (drop_cur[side] + 1) % L.n;
+        if ((in & (DI_UP | DI_DOWN)) && Settings[3] != 0)
+            limePlaySound(SFXHandle[0x68 / 4], MusicVol[Settings[3]] / 100.0f * 0.5f, 1.0f, 0);
+        if (in & DI_OK) {
+            drop_take(side, open, ch, &L, drop_cur[side]);
+            PortDropOpen[side] = 0;
+        } else if (in & DI_BACK)
+            PortDropOpen[side] = 0;
+        open = PortDropOpen[side];
+    }
+
+    /* the pictures, both always; the open one's list beside it */
+    for (i = 0; i < 2; i++) {
+        int over;
+
+        drop_cell(side, i, &x, &y, &w, &h);
+        over = drop_in(PortMouseX, PortMouseY, x, y, w, h);
+        drop_draw_cell(side, i, open == i + 1, over);
+    }
+    if (!open)
+        return;
+    drop_items(side, open, ch, c1, c2, &L);
+    for (j = 0; j < L.n; j++) {
+        drop_row(side, open, j, &x, &y, &w, &h);
+        if (drop_in(PortMouseX, PortMouseY, x, y, w, h))
+            hover = j;
+    }
+    if (hover >= 0)
+        drop_cur[side] = hover;         /* the mouse moves the cursor too */
+    for (j = 0; j < L.n; j++) {
+        float sc = FE_WidthScale * 0.64f, tw, tx;
+        int lit = j == drop_cur[side];
+        const float *c = lit ? lit_txt : j == L.chosen ? worn : txt;
+
+        drop_row(side, open, j, &x, &y, &w, &h);
+        drop_bar(side, x, y, w, h, lit);
+        tw = (float)limeGetStringWidth(&GameFont, L.item[j]) * sc;
+        if (tw > w - h * 0.55f - 8.0f * u)  /* a long name: smaller */
+            sc *= (w - h * 0.55f - 8.0f * u) / tw, tw = w - h * 0.55f - 8.0f * u;
+        tx = side == 0 ? x + h * 0.55f + 5.0f * u : x + w - h * 0.55f - 5.0f * u - tw;
+        limeDrawFONT(&GameFont, L.item[j], tx, y + 1.6f * u, 0, sc, c);
+    }
+}
+
+static void palette_picker(void)
+{
     if (GameMode == 0 && CharacterConfirmed != -1)    /* a new ladder */
         PortArcadePalette = PortPaletteOf(0, CharacterConfirmed, -1);
-    if (p1 != -1) {
-        palette_box(0, 290, p1, p2);
-        skin_box(0, 290 - PP_H - 4, p1);
-    }
-    if (GameMode == 6 && p2 != -1) {
-        palette_box(1, 262, p1, p2);
-        skin_box(1, 262 - PP_H - 4, p2);
-    }
+    drop_one(0);
+    drop_one(1);
+    drop_click = 0;
 }
 
 int port_noob_saibot;                   /* port: umk3.ini noob_saibot= */
@@ -17926,6 +18175,7 @@ long drawCharacterSelection(long sel)
         PortNavDual();                  /* port: both pads choose at once */
 
     SetupLockedCharacters();
+    drop_catch();                       /* port: the OUTFIT and COLOR lists */
 
     /* Port, not in the binary: NOOB SAIBOT ON THE ROSTER (umk3.ini
      * noob_saibot=1, the launcher's PLAY page and the settings menu's GAME

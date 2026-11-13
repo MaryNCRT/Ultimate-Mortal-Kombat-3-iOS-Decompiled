@@ -680,6 +680,7 @@ static int g_vk[PK_COUNT] = {
     VK_ESCAPE,                          /* the settings menu */
     VK_DIVIDE, VK_MULTIPLY, VK_NUMPAD1, /* P2: pause, moves list, accept */
     'R',                                /* the versus rules */
+    'T', 'C',                           /* the select screen: OUTFIT, COLOR */
 };
 
 void plat_key_label(int code, char *out, int n)

@@ -377,6 +377,11 @@ void limeFillRectGrad(float x, float y, float w, float h, const float *c)
     (void)x; (void)y; (void)w; (void)h; (void)c;
     g_fills++;
 }
+void limeFillQuadGrad(const float *xy, const float *c)
+{
+    (void)xy; (void)c;
+    g_fills++;
+}
 #endif  /* !UMK3_REAL_GL */
 
 /* The three billboard entries -- blood and Scorpion's spear. The windowed
