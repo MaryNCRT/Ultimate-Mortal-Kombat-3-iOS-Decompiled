@@ -1524,8 +1524,17 @@ static void drop_input(void)
             drop_glyph(PortDropGlyph[side][0], tok);
             plat_key_glyph(PK_COLOR, tok, sizeof tok);
             drop_glyph(PortDropGlyph[side][1], tok);
-        } else
-            PortDropGlyph[side][0][0] = PortDropGlyph[side][1][0] = 0;
+        } else {
+            /* player two with no pad of his own yet (Mary: his buttons
+             * showed no picture): the pad's buttons all the same, in the
+             * first pad's style, Xbox's with none */
+            int kind = plat_pad_glyph_kind(side, g_pad.connected ? g_pad.kind : 0);
+
+            plat_pad_glyph(kind, PB_NORTH, tok, sizeof tok);
+            drop_glyph(PortDropGlyph[side][0], tok);
+            plat_pad_glyph(kind, PB_WEST, tok, sizeof tok);
+            drop_glyph(PortDropGlyph[side][1], tok);
+        }
     }
 }
 
@@ -3352,6 +3361,15 @@ int main(int argc, char **argv)
         }
     }
 
+    /* --make-colors: colours 3..6 written out as pictures (palettes.c,
+     * draw_gl.c port_pal_make_files) -- the launcher runs it after a build; no window */
+    for (int a = 1; a < argc; a++)
+        if (strcmp(argv[a], "--make-colors") == 0) {
+            int port_pal_make_files(void);
+            lime_platform_set_asset_root(root);
+            port_pal_make_files();
+            return 0;
+        }
     plat_open_borderless = g_cfg_borderless && !g_cfg_full;
     if (!plat_open("Ultimate Mortal Kombat 3", g_cfg_w, g_cfg_h)) {
         fprintf(stderr, "could not open a window\n");

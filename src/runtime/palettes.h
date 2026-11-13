@@ -37,4 +37,15 @@ int  pal_apply(const char *name, int n, uint8_t *rgba, int w, int h);
  * 2 when it does not say). */
 int  pal_base(const char *texBase);
 
+/* The fighters palettes.ini names, for writing their colours out */
+int  pal_fighters(void);
+const char *pal_fighter(int i);
+
+/* The file name of colour n of sheet `stem` (no extension):
+ * KUNGLAO_DIFFUSE2 -> KUNGLAO_DIFFUSE3. 0 when it has none. */
+int  pal_file_name(const char *stem, int n, char *out, size_t size);
+
+/* Write a picture as PNG; 0 on failure */
+int  pal_png_write(const char *path, const uint8_t *rgba, int w, int h);
+
 #endif

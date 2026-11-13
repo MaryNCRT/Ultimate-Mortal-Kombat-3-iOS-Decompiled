@@ -151,7 +151,9 @@ press COMPILE.
   textures/palettes.ini`): Kung Lao only so far. Asked next by Mary: bake a
   good colour into a new texture file automatically, and added outfits
   starting with one colour and growing to six with the player's own
-  textures (launcher). The launcher in the test folder still compiles from
+  textures (launcher). 23 fighters now (all but the bosses and Noob);
+  the build writes their colours as PNG (`--make-colors`). The launcher in
+  the test folder still compiles from
   its old `app.asar`, whose `lib/compile.js` lacks `palettes.c`: build with
   the repository's `launcher/app/cli.js` or repack the asar.
 

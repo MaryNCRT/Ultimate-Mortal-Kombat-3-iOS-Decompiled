@@ -130,6 +130,35 @@ V ~.62), grey unsaturated.
   the online mirror rule no longer computes 3 - host; packet 23 and
   save/palette.txt take 1..6.
 - Test aid: `UMK3_PALETTE="p1,p2"` (also sets the debug fight's palettes).
+- Then 20 more fighters (palettes.ini now has 23): each base sheet and
+  hue measured by comparing sheet 1 with sheet 2 (the pixels whose hue
+  differs are the clothes); the sheet whose clothes are furthest from the
+  skin's hue is the base (Stryker and Shang Tsung from sheet 1, their red
+  sheet 2 too near the skin; Liu Kang's red from sheet 1 with a narrow pick
+  and sat_min .66, his skin at .51). Sektor, Cyrax, Scorpion, Reptile,
+  Ermac, Classic Sub-Zero and Human Smoke have two equal sheets; Human
+  Smoke's clothes are grey, so `grey = 0.15` tints the unsaturated pixels.
+  The reference colours were read by eye from Mary's arcade pictures and
+  turned into S and V factors of the base sheet's.
+- `--make-colors` (game_main.c, before the window): draw_gl.c
+  `port_pal_make_files` writes each colour of each palettes.ini fighter as
+  PNG (palettes.c `pal_png_write`: Sub filter, LZ77 + fixed Huffman) beside
+  its source: res/Textures and the winning mod's folder; existing files are
+  kept. Names: the sheet's "2" becomes the colour (`pal_file_name`). The
+  loader takes `<name><n>.png` before recolouring, and a missing _LITE /
+  _LOW copy falls back to the full-size colour file. `pal_count` also
+  counts `<NAME>_DIFFUSE3..6` files. launcher/app/lib/compile.js runs it
+  after linking. In the test folder: 752 pictures, KUNGLAO's HD ones at
+  2508 square.
+- Viewer (assets.js, ModViewer.svelte): six COLOR slots for every fighter;
+  an empty one shows colour 2; COLOR 3..6 named. Built (npm run ui), not
+  checked in the UI harness.
+- Player two's select-screen buttons: the pad's pictures with no pad two.
+
+Checked by script: a contact sheet of every fighter's VERSUS 3..6 and the
+model sheets of Liu Kang, Ermac, Shang Tsung and Human Smoke (skin kept);
+Kung Lao's fight with the colour files (HD 2508 loaded). Sonya, Jax and Liu
+Kang have no VERSUS sheet of their base colour, so their VS art keeps it.
 
 Checked: `--fight kunglao kunglao` with 3,4 and 5,6 (green, red, purple,
 grey); select screen COLOR 4 (red model); VERSUS2 recoloured offline in

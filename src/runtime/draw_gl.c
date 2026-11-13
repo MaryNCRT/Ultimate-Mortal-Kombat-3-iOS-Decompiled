@@ -208,6 +208,42 @@ static int load_rgba(const char *path, LimeImage *out)
 
     if (!n)
         return load_rgba_file(path, out);
+    /* a picture of that colour beside the sheet (written at build time,
+     * maybe painted over since): taken as it is */
+    {
+        char stem[256], file[300];
+        const char *dot = strrchr(rest, '.');
+        size_t k = dot ? (size_t)(dot - rest) : strlen(rest);
+
+        if (k < sizeof stem) {
+            memcpy(stem, rest, k);
+            stem[k] = 0;
+            if (pal_file_name(stem, n, file, sizeof file - 5)) {
+                strcat(file, ".png");
+                if (load_rgba_file(file, out))
+                    return 1;
+            }
+            /* a smaller copy (_LITE, _LOW) the player did not make: the
+             * full-size colour, which the card scales */
+            {
+                char *q = strstr(stem, "_LITE");
+                if (!q)
+                    q = strstr(stem, "_LOW");
+                if (q) {
+                    size_t qn = strcspn(q + 1, "_") + 1;    /* "_LITE2" / "_LOW" */
+                    char last = q[qn - 1];
+                    memmove(q, q + qn, strlen(q + qn) + 1);
+                    if (last == '2' && !strstr(stem, "2")) /* DIFFUSE_LITE2 -> DIFFUSE2 */
+                        strcat(stem, "2");
+                    if (pal_file_name(stem, n, file, sizeof file - 5)) {
+                        strcat(file, ".png");
+                        if (load_rgba_file(file, out))
+                            return 1;
+                    }
+                }
+            }
+        }
+    }
     if (!load_rgba_file(rest, out))
         return 0;
     if (!pal_apply(rest, n, out->rgba, out->width, out->height))
@@ -1548,6 +1584,114 @@ void limeDrawFaceMeSpriteWH(TEXTURE *tex, const float *m, float x, float y, floa
     }
     face_draw(tex, xyz, uv, rgba, GL_FLOAT);
     glDisableClientState(GL_VERTEX_ARRAY);
+}
+
+/* Port (palettes.c): a sheet of that stem in a mod or the game's files */
+int port_tex_exists(const char *stem)
+{
+    static const char *const ext[] = { ".png", ".PNG", ".pvr", ".PVR", NULL };
+    char full[1200];
+    int e;
+
+    if (mods_find_texture(stem, full, sizeof full))
+        return 1;
+    for (e = 0; ext[e]; e++) {
+        FILE *f;
+        snprintf(full, sizeof full, "%s/Textures/%s%s", lime_platform_asset_root(), stem, ext[e]);
+        if ((f = fopen(full, "rb")) != NULL) {
+            fclose(f);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Port (palettes.c), umk3-game --make-colors after a build: colours 3..6
+ * of every palettes.ini fighter written out as PNG beside the sheet each
+ * comes from -- the game's res/Textures, and the texture mod that has the
+ * sheet (an HD pack) in its own folder. A file already there is kept: the
+ * player may have painted it. Returns how many were written. */
+int port_pal_make_files(void)
+{
+    static const char *const two[] = {
+        "_DIFFUSE2", "_DIFFUSE2_LOW", "_DIFFUSE2_LITE", "_DIFFUSE_LITE2",
+        "_DIFFUSE_LOW2", "_VERSUS2", "_VERSUS2_LOW", "BABY2", "BABILITY2", NULL };
+    static const char *const one[] = {
+        "_DIFFUSE", "_DIFFUSE_LOW", "_DIFFUSE_LITE", "_VERSUS", "_VERSUS_LOW",
+        "BABY", NULL };
+    static const char *const ext[] = { ".pvr", ".PVR", ".png", ".PNG", NULL };
+    const char *root = lime_platform_asset_root();
+    int f, made = 0;
+
+    for (f = 0; f < pal_fighters(); f++) {
+        const char *who = pal_fighter(f);
+        int count = pal_count(who), n, s;
+        const char *const *list = pal_base(who) == 1 ? one : two;
+
+        for (s = 0; list[s]; s++) {
+            char stem[128], src[2][1200], dir[2][1200];
+            int where, e;
+
+            snprintf(stem, sizeof stem, "%s%s", who, list[s]);
+            src[0][0] = src[1][0] = 0;
+            /* the game's own */
+            for (e = 0; ext[e] && !src[0][0]; e++) {
+                FILE *t;
+                snprintf(src[0], sizeof src[0], "%s/Textures/%s%s", root, stem, ext[e]);
+                if ((t = fopen(src[0], "rb")) != NULL)
+                    fclose(t);
+                else
+                    src[0][0] = 0;
+            }
+            snprintf(dir[0], sizeof dir[0], "%s/Textures", root);
+            /* a mod's (mods.c: the one that wins) */
+            if (mods_find_texture(stem, src[1], sizeof src[1])) {
+                char *sl = strrchr(src[1], '/'), *bs = strrchr(src[1], '\\');
+                if (bs > sl)
+                    sl = bs;
+                snprintf(dir[1], sizeof dir[1], "%.*s", sl ? (int)(sl - src[1]) : 0, src[1]);
+            } else
+                src[1][0] = 0;
+            for (where = 0; where < 2; where++) {
+                LimeImage img;
+
+                if (!src[where][0])
+                    continue;
+                memset(&img, 0, sizeof img);
+                for (n = 3; n <= count; n++) {
+                    char name[160], out[1400];
+                    FILE *t;
+
+                    if (!pal_file_name(stem, n, name, sizeof name))
+                        continue;
+                    snprintf(out, sizeof out, "%s/%s.png", dir[where], name);
+                    if ((t = fopen(out, "rb")) != NULL) {
+                        fclose(t);      /* already there: kept */
+                        continue;
+                    }
+                    if (!img.rgba && !try_one(src[where], &img))
+                        break;
+                    {
+                        size_t sz = (size_t)img.width * img.height * 4;
+                        uint8_t *px = (uint8_t *)malloc(sz);
+                        if (!px)
+                            break;
+                        memcpy(px, img.rgba, sz);
+                        pal_apply(stem, n, px, img.width, img.height);
+                        if (pal_png_write(out, px, img.width, img.height)) {
+                            printf("colours: wrote %s\n", out);
+                            made++;
+                        } else
+                            printf("colours: could not write %s\n", out);
+                        free(px);
+                    }
+                }
+                free(img.rgba);
+            }
+        }
+    }
+    printf("colours: %d pictures written\n", made);
+    return made;
 }
 
 /* Port (palettes.c): texture t as colour n -- the same sheet recoloured,

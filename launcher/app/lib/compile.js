@@ -577,6 +577,22 @@ async function compileGame({
         }
     }
 
+    /* Colours 3..6 (runtime/palettes.c) written out as pictures beside the
+     * sheets they come from -- res/Textures and a texture mod's folder -- so
+     * a player can paint over them; files already there are kept. The game
+     * does it (it reads the sheets), with no window. */
+    if (fs.existsSync(path.join(destDir, 'res', 'Info.plist'))) {
+        onProgress({ phase: 'Writing colours 3-6', pct: 99 });
+        try {
+            const { spawnSync } = require('child_process');
+            const r = spawnSync(outExe, ['--make-colors'], { cwd: destDir, timeout: 600000, encoding: 'utf8' });
+            const last = String(r.stdout || '').trim().split(/\r?\n/).pop();
+            if (last) onProgress({ phase: last, pct: 99 });
+        } catch (e) {
+            onProgress({ phase: `colours 3-6 not written: ${e.message}`, pct: 99 });
+        }
+    }
+
     onProgress({ phase: 'Compilation completed', pct: 100 });
     return {
         success: true,

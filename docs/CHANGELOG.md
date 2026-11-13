@@ -16,7 +16,19 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
   way: Kung Lao's trousers are 49 degrees in colour 1, 196 in colour 2).
   `aditional textures/palettes.ini` says which hues change and each colour's
   hue, saturation and value. First fighter: **Kung Lao** -- 3 green, 4 red,
-  5 purple, 6 grey, from the arcade's colours. The fight, the select screen's
+  5 purple, 6 grey, from the arcade's colours. Then the whole roster but
+  the bosses and Noob Saibot (23 fighters), each from Mary's arcade
+  references; Human Smoke's grey clothes are tinted (`grey =` in the ini).
+- After a build the launcher runs `umk3-game --make-colors`: colours 3..6
+  are written as PNG beside their sheets -- `res/Textures` (vanilla) and the
+  texture mod's folder that has the sheet (the HD CHARACTERS pack) -- for
+  whoever wants to paint them; the game takes such a file as it is, and a
+  fighter with no palettes.ini entry gets as many colours as files
+  `<NAME>_DIFFUSE3..6` exist. Files already there are kept.
+- CHARACTER VIEWER: six COLOR slots for every fighter; an empty one shows
+  colour 2 until a texture is put in it with REPLACE TEXTURE.
+- Select screen: player two's OUTFIT / COLOR buttons show the pad's buttons
+  with no second pad (they showed none). The fight, the select screen's
   model, the babality and the VERSUS art (the endings') follow; the select
   screen's portrait does not. The COLOR list shows as many as the fighter
   has; the CPU wears any of them. Added outfits keep their 2.

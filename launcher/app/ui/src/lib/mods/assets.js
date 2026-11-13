@@ -137,12 +137,22 @@ export async function loadFighter(src, ch) {
         return hasOwn && /_DIFFUSE\d*$/i.test(t) && !t.toUpperCase().startsWith(ch.id) ? own : t;
     });
     /* the outfits the game ships: <NAME>_DIFFUSE, _DIFFUSE2 (player two),
-     * _ICE (frozen), ... -- the full-size ones */
+     * _ICE (frozen), ... -- the full-size ones; and _DIFFUSE3 .. 6, colours
+     * the game recolours (runtime/palettes.c) and the build writes out */
     const base = blockTex[0];
     const variants = src.files
         .filter(f => f.toUpperCase().startsWith(('Textures/' + base).toUpperCase()) && !/_LOW\d*\.|_LITE\d*\./i.test(f))
         .map(f => f.slice(9).replace(/\.(pvr|png)$/i, ''))
         .filter((v, i, a) => a.indexOf(v) === i);
+    /* Mary: six COLOR slots for every fighter -- 1 and 2 the game's, 3..6
+     * the files the build writes (runtime/palettes.c) or none yet (the slot
+     * shows colour 2 until a texture is put in it) */
+    if (/_DIFFUSE$/i.test(base)) {
+        for (let n = 2; n <= 6; n++)
+            if (!variants.some(v => v.toUpperCase() === (base + n).toUpperCase())) variants.push(base + n);
+        const rank = v => { const m = v.toUpperCase().match(/_DIFFUSE(\d?)$/); return m ? +(m[1] || 1) : 9; };
+        variants.sort((a, b) => rank(a) - rank(b));
+    }
 
     /* What rides the fighter's bones (Kung Lao's hat on his head or in a
      * hand): the scene objects whose key names a bone, each a mesh of the

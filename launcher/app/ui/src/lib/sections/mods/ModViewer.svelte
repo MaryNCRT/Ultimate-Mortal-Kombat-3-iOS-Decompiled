@@ -750,11 +750,19 @@
     function copyOf(stem, q) {
         if (!q) return stem;
         const s = String(stem).toUpperCase(), names = [s + '_' + q];
-        if (/2$/.test(s)) names.push(s.slice(0, -1) + '_' + q + '2');
+        /* _DIFFUSE2_LOW or _DIFFUSE_LOW2; colours 3..6 the same (runtime/palettes.c) */
+        const m = s.match(/([2-6])$/);
+        if (m) names.push(s.slice(0, -1) + '_' + q + m[1]);
         return names.find(n => textureFile(src.files, n)) || null;
     }
     const qualities = $derived(fx && ms.outfit ? ['', 'LOW', 'LITE'].filter(q => copyOf(ms.outfit, q)) : []);
-    const shownOutfit = () => copyOf(ms.outfit, quality) || ms.outfit;
+    /* an empty COLOR slot (3..6 with no texture yet) shows colour 2 */
+    const shownOutfit = () => {
+        const s = copyOf(ms.outfit, quality) || ms.outfit;
+        if (textureFile(src.files, s)) return s;
+        const m = String(ms.outfit).match(/^(.*_DIFFUSE)[3-6]$/i);
+        return m ? (copyOf(m[1] + '2', quality) || m[1] + '2') : s;
+    };
 
     async function outfit(v) {
         ms.outfit = v;
@@ -943,6 +951,8 @@
     function colorName(v) {
         if (/_DIFFUSE$/i.test(v)) return tx('vwColor1');
         if (/_DIFFUSE2$/i.test(v)) return tx('vwColor2');
+        /* colours 3..6, written out at build time (runtime/palettes.c) */
+        { const m = v.match(/_DIFFUSE([3-6])$/i); if (m) return tx('vwColor') + ' ' + m[1]; }
         if (/_ICE$/i.test(v)) return tx('vwFrozen');
         return v.replace(/^[A-Z]+_/, '');
     }
