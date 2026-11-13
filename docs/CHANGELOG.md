@@ -8,6 +8,32 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased
+
+- **ONLINE: the rules checked before a fight** (stage 4 of the ONLINE
+  plan): each game's hello now carries the rules of the lobby it is in.
+  If the two games do not have the same rules (or are different versions),
+  the fight does not start: both players go back to the ONLINE screen
+  (LOBBIES, in the lobby) with a notice saying why -- instead of a fight
+  that would come apart. Same rules: the fight goes on as before.
+- **HOST ADVANTAGE OFF** now does what it says: who is player one (the
+  left side) and the stage are drawn, the same on both machines; the
+  host's STAGE SELECT does not open. ON keeps the host as player one and
+  its STAGE SELECT.
+- **Online, one player's touch controls**: the fight showed the
+  on-screen controls of two players on one device (Mary); now this
+  player's alone, where they belong.
+- **Online, back to the lobby**: when an online fight ends, or the other
+  player's game is lost, both go back to the ONLINE screen (LOBBIES, still
+  in the lobby; CONNECTION LOST in a notice when the link went) instead of
+  the original's screens, which led to the main menu or its old
+  "searching for players" lobby (Mary).
+- Checked with two copies of the game on one PC: same rules, the fight;
+  different rules, refused on both with the notice; HOST ADVANTAGE OFF,
+  the same side and stage on both in four fights, no desyncs; a game
+  closed mid-fight, the other back in the lobby. Not seen yet: a fight won
+  and then back in the lobby. Mary has not played these yet.
+
 ## 0.4.6 beta (2026-11-12)
 
 - **Discord Rich Presence** (Mary): while the game runs, the player's

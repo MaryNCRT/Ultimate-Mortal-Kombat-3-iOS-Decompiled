@@ -28,7 +28,7 @@ stages 1-2 (audit, HOME, PROFILE) are done.
 3. **LOBBIES in the ONLINE screen** -- done, see below: browser with filters, CREATE LOBBY
    (the rules window's rows, plus HOST ADVANTAGE), the room (members,
    READY, ping, START for the host).
-4. **Rules checked in HELLO** (`rollback.c`): both blocks equal or the
+4. **Rules checked in HELLO** -- done, see below (`rollback.c`): both blocks equal or the
    fight does not start, with a message; Host Advantage OFF draws the side
    and the stage from both hellos.
 5. **QUICK MATCH**: search a quick-match bucket by version, join the first
@@ -59,9 +59,7 @@ Applied in the engine, both machines before frame 0, each line marked:
 | KOMBO SLIDE | game_main.c | `PortNoKomboSlide` from the rule |
 | SERIES | GameCode.c QuitAsWin / QuitAsLose; the HUD under the clock | counted once a fight (before its fade); SERIES a - b, then who has it |
 
-Not yet: the side and stage draw (Host Advantage OFF) -- the binary ties the
-host to player 1 in the select screen, the inputs and the stats; it comes
-with stage 4. The stage kodes (3-12) act before the load and are left out;
+The side and stage draw (Host Advantage OFF) came with stage 4, below. The stage kodes (3-12) act before the load and are left out;
 STAGE SELECT picks the stage. The one-round kode (0x13) is handled by the
 binary online only.
 
@@ -136,3 +134,83 @@ from the list, ready, the call, the select screen and the online fight;
 invite by code, accepted, the call. Frames from `UMK3_SHOTS` (the game's
 own, no window capture). Not tried: kick, promote, the rules changed in a
 room. No ping yet.
+
+## Rules checked in HELLO (stage 4)
+
+`rollback.c` `rb_online_gate`, called by Task_GameInit (GameCode.c) at
+state 0 of an online fight, before STAGE SELECT and before anything loads:
+
+- **The hello** (RB_VERSION 2, reliable): the netcode's version, the
+  buttons, rollback or classic, a random number for the draw, and the
+  rules block as text (`rules_online()`, the lobby's; empty for a fight not
+  from a lobby). Both sides send theirs on entering the loading and wait
+  for the other's (a minute). The fighters and the level went to a packet
+  of their own, `RB_PKT_SETUP`, sent when the fight begins
+  (`rb_online_begin`); the guest takes the host's level from it, as it took
+  it from the old hello, and `rb_ready` waits for both.
+- **Refused**: other rules text, another version (an old game's 24-byte
+  hello counts), no hello in a minute, or the link gone. Both sides see the
+  same two hellos, so both refuse; each waits 45 frames (for its hello to
+  arrive over there), ends the session (`endMP`) and loads the front end
+  again on the ONLINE screen (FrontEnd.c `PortOnlineRefused`: the stack
+  unwound to it, LOBBIES when in a lobby, READY off, the reason in the
+  notice for 8 s, ES and EN). `disconnected()` leaves a lost link during
+  the gate to it (`rb_gate_busy`): its own way out (task 7) would free a
+  fight never loaded.
+- **HOST ADVANTAGE OFF** (rollback on both sides): a hash of the host's
+  number and the guest's, in that order, so both machines get the same:
+  its top bit is the side (1: the guest is player one), its low bits one of
+  the binary's fourteen online stages (`mpLevelList`, getRandomLevel's
+  list). Character1 / Character2 are swapped before the load, the rollback's
+  `g_me` and the seed follow, and where the game asked `isParent()` for
+  "this machine is player one" in a fight (the moves list, the flawless,
+  the stats, the finisher stat, the play counter, the palettes, the wins)
+  it asks `rb_local_p1()`. The host's STAGE SELECT does not open
+  (debug_menu.c `eligible`). A series of fights counts by player, not side
+  (`rules_series_swap`). The VS screen before the fight still shows the
+  host on the left: the draw comes after it. With the classic netcode the
+  host keeps its side and stage.
+- **HOST ADVANTAGE ON**: as before -- the host is player one and its STAGE
+  SELECT picks.
+
+Test aids: `UMK3_HELLO_RULES=<text>` sends that rules text in this side's
+hello instead of the lobby's (to make a mismatch); `UMK3_LOBBY_RULES=<text>`
+gives `UMK3_LOBBY_TEST=host`'s lobby those rules.
+
+Tested with two copies of the game on one PC (the second
+`UMK3_EOS_NEW_DEVICE=1`, its own `UMK3_SAVE_DIR` and `UMK3_PROFILES`; the
+select screen's OK tapped by `UMK3_TAPS`), 2026-11-12:
+
+- equal rules, HOST ADVANTAGE ON: the fight started, the host player 1, the
+  guest on the host's STAGE SELECT level, `desyncs 0`;
+- different rules (`UMK3_HELLO_RULES` on the guest): both logged `NO FIGHT
+  -- the rules differ` with both texts, both went back to LOBBIES in the
+  lobby with LAS REGLAS NO COINCIDEN: NO HAY PELEA (screenshots);
+- HOST ADVANTAGE OFF, four fights: both sides drew the same side and level
+  every time (host P1 on 2; guest P1 on 1; guest P1 on 11; host P1 on 0),
+  the swapped fights with Character1 / Character2 swapped on both,
+  `desyncs 0` on all;
+- the other game closed mid-fight: the one left went back to the ONLINE
+  screen with CONEXION PERDIDA.
+
+Not seen: an online fight ending by a win and coming back to the lobby
+(scripted keys did not land hits; the code is the summary's same way out),
+a series with drawn sides between real fights, the classic netcode, an old
+game's hello, the gate's minute running out, kick / promote.
+
+**Also in this stage (Mary, watching the test):**
+
+- **One player's touch controls online.** `rb_apply_inputs` sets
+  `P2Controls` so the engine reads both players, and DrawControls drew the
+  two-players-on-one-device controls (two sticks and rows, this player's in
+  the left half -- and hit-tested there). GameCode.c `DrawControls` now lays
+  out and draws one player's in GameMode 1; the engine keeps P2Controls.
+  Seen: one stick and one row in an online fight. It was so before stage 4.
+- **Back to the lobby, not the binary's screens.** An online fight from the
+  ONLINE screen ends back in it (FrontEnd.c `PortOnlineBackToLobby`, from
+  the summary, FE task 0x28) instead of the summary whose QUIT led to the
+  main menu; a lost link goes back to it with the notice CONEXION PERDIDA
+  instead of the "connection lost" screen whose button led to the binary's
+  searching lobby (FE task 3). The session ends; the host calls the next
+  fight from the room.
+- The fight's player names (gold plates) are PR #209's, not merged yet.

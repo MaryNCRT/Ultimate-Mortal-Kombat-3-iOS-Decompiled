@@ -2583,10 +2583,14 @@ void Write_Stats(void);
  *
  * Every path ends in Write_Stats, including GameMode 6 which changed nothing.
  */
+int rb_local_p1(void);                  /* runtime/rollback.c, port */
+
 void UpdateStats(void)
 {
     if (GameMode == 1) {
-        if (isParent()) {
+        /* port: rb_local_p1 for isParent -- this machine's side, the
+         * host's unless HOST ADVANTAGE OFF drew it to the right */
+        if (rb_local_p1()) {
             puts("increasing human wins/loss - parent");
             if (Health[1] == 0) {
                 puts("wins");
@@ -3306,9 +3310,15 @@ void PopFETaskDeferredSelected(long task);
  *
  * `0x29a` is 666 -- the task id to return to.
  */
+/* Port, not in the binary: FrontEnd.c PortOnlineBackToLobby, below */
+int PortOnlineBackToLobby(int lost);
+
 void FE_Task_Multiplayer_Disconnected(void)
 {
     int pressed;
+
+    if (PortOnlineBackToLobby(1))       /* port: online, the lobby again */
+        return;
 
     mpLobbyCurrentPage = 0;
 
@@ -5420,6 +5430,11 @@ void FE_Task_Multiplayer_Summary(void)
     grey[1] = 0.5f;
     grey[2] = 0.5f;
     grey[3] = 0.5f;
+
+    /* Port, not in the binary: an online fight from the ONLINE screen
+     * ends back in it, not on this summary (Mary) */
+    if (PortOnlineBackToLobby(0))
+        return;
 
     pressedPlay = 0;
     opponentPressedPlay = 0;
@@ -14974,6 +14989,89 @@ static void PortLobbySay(const char *s)
     PortToastT = 240.0f;
 }
 
+/* An online fight refused before it loaded (runtime/rollback.c's gate:
+ * the two hellos' rules differ, another version, no answer, the link
+ * gone). Task_GameInit loads the front end again; it opens on the ONLINE
+ * screen -- the stack unwound to it, LOBBIES when in a lobby -- with the
+ * reason in the notice, longer than the others'. */
+void PortOnlineRefused(int why)
+{
+    int i;
+
+    switch (why) {
+    case 1:  PortLobbySay(PortFrTx("LAS REGLAS NO COINCIDEN: NO HAY PELEA",
+                                   "THE RULES DO NOT MATCH: NO FIGHT")); break;
+    case 2:  PortLobbySay(PortFrTx("EL OTRO JUEGO ES DE OTRA VERSI\xc3\x93N: NO HAY PELEA",
+                                   "THE OTHER GAME IS ANOTHER VERSION: NO FIGHT")); break;
+    case 3:  PortLobbySay(PortFrTx("EL OTRO JUGADOR NO RESPONDI\xc3\x93",
+                                   "THE OTHER PLAYER DID NOT ANSWER")); break;
+    default: PortLobbySay(PortFrTx("SE PERDI\xc3\x93 LA CONEXI\xc3\x93N",
+                                   "THE CONNECTION WAS LOST")); break;
+    }
+    PortToastT = 480.0f;
+    if (mplobby_state() == MPLOBBY_IN)
+        PortOnlineSection = OS_LOBBIES;
+    PortLobbyReady = 0;                 /* ready again by hand */
+    mplobby_set_ready(0);
+    PendingPush = PendingPop = PendingPopAll = -1;
+    for (i = FE_TaskStackPointer - 1; i >= 0; i--)
+        if (FE_CurrentTaskStack[i] == PORT_TASK_ONLINE)
+            break;
+    if (i >= 0) {
+        FE_TaskStackPointer = i;
+        FE_CurrentTask = PORT_TASK_ONLINE;
+    } else {                            /* not from the ONLINE screen: the main menu */
+        FE_TaskStackPointer = 0;
+        FE_CurrentTask = 0;
+    }
+    printf("online: the fight was refused (%d), back to %s\n", why,
+           i >= 0 ? "the ONLINE screen" : "the main menu");
+}
+
+/* An online fight's end (the summary, FE task 0x28) or a lost link (the
+ * "connection lost" screen, 0x2c), when the fight came from the ONLINE
+ * screen: straight back to it -- LOBBIES when in a lobby, the session ended,
+ * a notice when the link was lost -- instead of the binary's screens, whose
+ * ways out led to the main menu or its searching lobby (Mary). A series
+ * goes on: the host calls the next fight from the room. 0 when the ONLINE
+ * screen is not on the stack (the binary's own screens then). */
+void disableHeartbeat(void);
+void endMP(void);
+void mpnet_cancel_find(void);
+
+int PortOnlineBackToLobby(int lost)
+{
+    int i;
+
+    for (i = FE_TaskStackPointer - 1; i >= 0; i--)
+        if (FE_CurrentTaskStack[i] == PORT_TASK_ONLINE)
+            break;
+    if (i < 0)
+        return 0;
+    if (lost) {
+        PortLobbySay(PortFrTx("CONEXI\xc3\x93N PERDIDA", "CONNECTION LOST"));
+        PortToastT = 480.0f;
+    }
+    if (mplobby_state() == MPLOBBY_IN)
+        PortOnlineSection = OS_LOBBIES;
+    PortLobbyReady = 0;                 /* ready again by hand */
+    mplobby_set_ready(0);
+    disableHeartbeat();
+    endMP();
+    mpnet_cancel_find();                /* the notice says it, not LOST */
+    GameMode = 0;
+    PendingPush = PendingPop = PendingPopAll = -1;
+    while (FE_TaskStackPointer > i) {
+        FE_TaskStackPointer--;
+        FE_Special_Destroys();
+        FE_CurrentTask = FE_CurrentTaskStack[FE_TaskStackPointer];
+        FE_Special_Inits();
+    }
+    FE_FadeAdd = 1.0f / 30.0f;
+    printf("online: back to the ONLINE screen%s\n", lost ? " (the link was lost)" : "");
+    return 1;
+}
+
 /* this player's banner for the lobby: as the launcher writes a friend's look
  * (gamecode_stubs.c port_online_friend_look reads it back) */
 static void PortLobbyMe(void)
@@ -15168,8 +15266,10 @@ static void PortLobbyTick(void)
             if (!strcmp(e, "host") || !strncmp(e, "invite:", 7)) {
                 if (st == MPLOBBY_NONE && !made) {
                     char t[ONLINE_RULES_TEXT];
+                    online_rules lr;
+                    const char *lt = getenv("UMK3_LOBBY_RULES");   /* the lobby's rules, as text */
                     made = 1;
-                    rules_encode(&PortLobbyDraft, t, sizeof t);
+                    rules_encode(lt && rules_decode(lt, &lr) ? &lr : &PortLobbyDraft, t, sizeof t);
                     PortLobbyMe();
                     mplobby_set_key(getenv("UMK3_LOBBY_KEY"));   /* the host's own key */
                     printf("lobby test: create %d\n", mplobby_create("LOBBY TEST", t, getenv("UMK3_LOBBY_PRIV") != NULL, 2));
@@ -16346,8 +16446,10 @@ int PortPaletteOf(int side, long c1, long c2)
 {
     int p0 = PortPalette[0] ? PortPalette[0] : 1;
 
-    if (GameMode == 1)                  /* side 0 is the host's fighter */
-        return PortNetPaletteOf((side == 0) == (isParent() != 0),
+    /* side 0 is the host's fighter, unless HOST ADVANTAGE OFF drew the
+     * host onto the right for the fight (rollback.c rb_local_p1) */
+    if (GameMode == 1)
+        return PortNetPaletteOf((side == 0) == (rb_local_p1() != 0),
                            side == 0 ? c1 : c2, side == 0 ? c2 : c1);
     if (GameMode != 6) {
         p0 = PortSoloPalette ? PortSoloPalette : 1;

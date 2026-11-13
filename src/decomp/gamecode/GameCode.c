@@ -633,6 +633,7 @@ void achievementsIncreaseMatchesWon(void);
  * it would look correct in single-player testing because GameMode gates it.
  */
 int rb_active(void);                    /* runtime/rollback.c, port */
+int rb_local_p1(void);                  /* runtime/rollback.c, port */
 int isParent(void);                    /* limeMPGameSpecific.c */
 
 void updateMPWins(void)
@@ -642,8 +643,9 @@ void updateMPWins(void)
 
     /* Port, not in the binary: with rollback both machines run the engine,
      * and isParentBasedOnSpeed says so on both; which player this one is
-     * stays isParent. */
-    if (rb_active() ? isParent() : isParentBasedOnSpeed()) {
+     * is rb_local_p1 -- isParent, unless HOST ADVANTAGE OFF drew the host
+     * onto the right. */
+    if (rb_active() ? rb_local_p1() : isParentBasedOnSpeed()) {
         if (Health[1] != 0)
             return;
     } else {
@@ -6167,7 +6169,12 @@ int  rb_fight_setup(int32_t *setup, int n);
 void rb_fight_rival(long *c2);
 int  stage_menu_gate(long *level);     /* runtime/debug_menu.c */
 void rb_online_begin(int c1, int c2, int level);
-int  rb_host_level(long *level);
+int  rb_online_gate(long *c1, long *c2, long *level);
+int  rb_refusal(void);
+void PortOnlineRefused(int why);        /* FrontEnd.c, port */
+void endMP(void);                       /* limeMPGameSpecific.c */
+void mpnet_cancel_find(void);           /* runtime/mp_net.c */
+extern int FEInitState;                 /* 0x001017a8 */
 int  rb_step_begin(int32_t joy[2]);
 void rb_trial_done(void);
 void rb_step_end(const uint32_t *w, int n);
@@ -6220,9 +6227,26 @@ void Task_GameInit(void)
     long i;
 
     if (GameInitState == 0) {
-        /* Port, not in the binary: the guest takes the host's level */
-        if (GameMode == 1 && rb_host_level(LevelSelectP))
-            return;
+        /* Port, not in the binary: online, the hellos -- the same rules on
+         * both sides, or no fight; HOST ADVANTAGE OFF draws the side and
+         * the level; ON, the guest takes the host's level (rollback.c) */
+        if (GameMode == 1) {
+            int g = rb_online_gate(&Character1, &Character2, LevelSelectP);
+
+            if (g == 2) {
+                /* refused, nothing loaded yet: back to the ONLINE screen,
+                 * the front end loaded again as STAGE SELECT's CANCEL does */
+                PortOnlineRefused(rb_refusal());
+                endMP();
+                mpnet_cancel_find();    /* the notice says why, not LOST */
+                GameMode    = 0;
+                FEInitState = 0;
+                CurrentTask = 2;
+                return;
+            }
+            if (g)
+                return;
+        }
         /* Port, not in the binary: STAGE SELECT (debug_menu.c), the window
          * waits here until a stage is picked */
         if (stage_menu_gate(LevelSelectP))
@@ -7696,7 +7720,9 @@ long GameInit_LoadABit(long step)
 
         /* The per-character play counter -- and in a network game only the
          * host counts it, so the two ends do not both credit the same fight. */
-        if (GameMode != 1 || isParent())
+        /* port: rb_local_p1 for isParent -- player one's machine, the
+         * host's unless HOST ADVANTAGE OFF drew it to the right */
+        if (GameMode != 1 || rb_local_p1())
             Stats[PLAYER1MODEL + 15]++;
 
         if (GameMode == 0) {
@@ -8548,7 +8574,7 @@ void MovesList(void)
     long header;
 
     /* On the guest of a network game the local player is player 2. */
-    if (GameMode == 1 && !(rb_active() ? isParent() : isParentBasedOnSpeed()))
+    if (GameMode == 1 && !(rb_active() ? rb_local_p1() : isParentBasedOnSpeed()))
         character = PLAYER2MODEL;
     /* Port, not in the binary: in VS, player two's own fighter when they
      * opened it (their pad or keys) */
@@ -8567,7 +8593,7 @@ void MovesList(void)
     {
         /* this side is player 2: the same tests as above (a mirror match
          * has one character on both sides) */
-        int p2 = (GameMode == 1 && !(rb_active() ? isParent() : isParentBasedOnSpeed()))
+        int p2 = (GameMode == 1 && !(rb_active() ? rb_local_p1() : isParentBasedOnSpeed()))
                  || PortMovesWho() == 2;
         float gold[4];
         int k;
@@ -9388,7 +9414,7 @@ static void RoundEndedAgainst(long loser)
         if (Health[1] == 100)
             FlawlessMessage = 1;
         /* the network client counts its own flawless */
-        if (GameMode == 1 && !(rb_active() ? isParent() : isParentBasedOnSpeed())
+        if (GameMode == 1 && !(rb_active() ? rb_local_p1() : isParentBasedOnSpeed())
             && Health[0] == 0 && Health[1] == 100)
             Stats[6]++;
         return;
@@ -9409,7 +9435,7 @@ static void RoundEndedAgainst(long loser)
         flawlessVictories = 0;
     }
     /* the network host counts its flawless */
-    if (GameMode == 1 && (rb_active() ? isParent() : isParentBasedOnSpeed())
+    if (GameMode == 1 && (rb_active() ? rb_local_p1() : isParentBasedOnSpeed())
         && Health[1] == 0 && Health[0] == 100)
         Stats[6]++;
 }
@@ -9780,7 +9806,9 @@ static void RoundSummaryUpdate(void)
         RoundHasEndedStatsUpdated = 1;
         if (GameMode == 1) {
             Stats[14]++;
-            Stats[13] += Health[isParent() ? 0 : 1];
+            /* port: this machine's side, the host's unless the draw
+             * moved it (rollback.c rb_local_p1) */
+            Stats[13] += Health[rb_local_p1() ? 0 : 1];
             Stats[12]  = (long)((float)Stats[12] + (99.0f - GameTime));
         } else if (GameMode == 6 || GameMode == 0) {
             Stats[14]++;
@@ -10045,7 +10073,25 @@ void set_menu_open_controls(void);     /* port: runtime/settings_menu.c */
 void set_menu_open_audio(void);        /* port: runtime/settings_menu.c */
 void set_menu_open_video(void);
 
+static void DrawControls_(void);
+
+/* Port, not in the binary: an online fight with rollback sets P2Controls
+ * (rb_apply_inputs) so the engine reads both players' inputs, which drew
+ * the two-players-on-one-device controls -- both sticks and button rows,
+ * this player's moved to the left half (Mary). Online a machine has one
+ * player: its controls are laid out, hit-tested and drawn as one
+ * player's. The engine's own reads keep P2Controls. */
 void DrawControls(void)
+{
+    long p2c = P2Controls;
+
+    if (GameMode == 1)
+        P2Controls = 0;
+    DrawControls_();
+    P2Controls = p2c;
+}
+
+static void DrawControls_(void)
 {
     float buttonCol[4];                 /* sp+0x44 */
     float joyBaseCol[4];                /* sp+0x34 */

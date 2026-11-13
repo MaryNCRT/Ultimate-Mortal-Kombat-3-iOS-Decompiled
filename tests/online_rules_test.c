@@ -85,6 +85,19 @@ int main(void)
         CHECK(rules_series_score(&a1, &a2) == -1 && a1 == 1 && a2 == 0);
         b.series = 5; rules_set_active(&b);
         CHECK(rules_series_needed() == 3);
+        /* HOST ADVANTAGE OFF: the sides drawn each fight, the series kept
+         * by player -- the host wins as player one, then as player two */
+        b.series = 3; rules_set_active(&b);
+        rules_series_reset();
+        rules_series_swap(0);
+        rules_series_won(0);                             /* the host, on the left */
+        rules_series_swap(1);
+        CHECK(rules_series_score(&a1, &a2) == -1 && a1 == 0 && a2 == 1);
+        rules_series_won(1);                             /* the host, on the right */
+        CHECK(rules_series_score(&a1, &a2) == 1 && a1 == 0 && a2 == 2);
+        rules_series_swap(0);
+        CHECK(rules_series_score(&a1, &a2) == 0 && a1 == 2 && a2 == 0);
+        rules_series_reset();
     }
     rules_clear_active();
     CHECK(rules_active() == NULL && PortRoundTime == 0);

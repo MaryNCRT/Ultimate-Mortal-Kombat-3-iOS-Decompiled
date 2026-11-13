@@ -156,6 +156,63 @@ ours, because the name match is case-insensitive. Not yet seen: the
 button itself doing it in a freshly opened launcher; Linux. Discord Rich Presence, the third part of the request,
 is not started.
 
+### 2026-11-12 -- ONLINE stage 4: the rules checked in HELLO
+
+Port, not in the binary ([research/ONLINE-PHASE-PLAN.md](research/ONLINE-PHASE-PLAN.md),
+stage 4, has the whole design). `rollback.c` `rb_online_gate`, from
+Task_GameInit's state 0 of an online fight, before STAGE SELECT: each side
+sends a hello (RB_VERSION 2: version, buttons, netcode, a random number,
+the lobby's rules text) and waits for the other's. Other rules, another
+version, no answer in a minute or the link gone: no fight -- both go back
+to the ONLINE screen with the reason (FrontEnd.c `PortOnlineRefused`).
+HOST ADVANTAGE OFF: the side and the level (one of `mpLevelList`'s
+fourteen) are drawn from both numbers, the same on both machines;
+Character1 / Character2 swapped, `rb_local_p1()` where the game asked
+`isParent()` for "this machine is player one" in a fight, the host's STAGE
+SELECT not opened, a series counted by player (`rules_series_swap`). The
+fighters and level now travel in `RB_PKT_SETUP` (25), which
+limeMPGameSpecific.c's processPacket hands to rb_net -- the first test
+stalled at the sync without it. `tests/online_rules_test.c` covers the
+series by player.
+
+Tested with two copies of the game on one PC (the second
+`UMK3_EOS_NEW_DEVICE=1`, its own `UMK3_SAVE_DIR` and `UMK3_PROFILES`; the
+select screen's OK tapped by `UMK3_TAPS`), 2026-11-12:
+
+- equal rules, HOST ADVANTAGE ON: the fight started, the host player 1, the
+  guest on the host's STAGE SELECT level, `desyncs 0`;
+- different rules (`UMK3_HELLO_RULES` on the guest): both logged `NO FIGHT
+  -- the rules differ` with both texts, both went back to LOBBIES in the
+  lobby with LAS REGLAS NO COINCIDEN: NO HAY PELEA (screenshots);
+- HOST ADVANTAGE OFF, four fights: both sides drew the same side and level
+  every time (host P1 on 2; guest P1 on 1; guest P1 on 11; host P1 on 0),
+  the swapped fights with Character1 / Character2 swapped on both,
+  `desyncs 0` on all;
+- the other game closed mid-fight: the one left went back to the ONLINE
+  screen with CONEXION PERDIDA.
+
+Not seen: an online fight ending by a win and coming back to the lobby
+(scripted keys did not land hits; the code is the summary's same way out),
+a series with drawn sides between real fights, the classic netcode, an old
+game's hello, the gate's minute running out, kick / promote.
+
+**Also in this stage (Mary, watching the test):**
+
+- **One player's touch controls online.** `rb_apply_inputs` sets
+  `P2Controls` so the engine reads both players, and DrawControls drew the
+  two-players-on-one-device controls (two sticks and rows, this player's in
+  the left half -- and hit-tested there). GameCode.c `DrawControls` now lays
+  out and draws one player's in GameMode 1; the engine keeps P2Controls.
+  Seen: one stick and one row in an online fight. It was so before stage 4.
+- **Back to the lobby, not the binary's screens.** An online fight from the
+  ONLINE screen ends back in it (FrontEnd.c `PortOnlineBackToLobby`, from
+  the summary, FE task 0x28) instead of the summary whose QUIT led to the
+  main menu; a lost link goes back to it with the notice CONEXION PERDIDA
+  instead of the "connection lost" screen whose button led to the binary's
+  searching lobby (FE task 3). The session ends; the host calls the next
+  fight from the room.
+- The fight's player names (gold plates) are PR #209's, not merged yet.
+
 ### 2026-11-12 -- ONLINE stage 3: LOBBIES; a second monitor's refresh
 
 **A second monitor.** Mary: the game ran slow on a monitor that is not the

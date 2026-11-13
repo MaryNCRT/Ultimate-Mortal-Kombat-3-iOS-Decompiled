@@ -67,6 +67,7 @@ static const char *const k_aodbg_es[6];   /* the debug views' names, below */
 static const char *const k_aodbg_en[6];
 #include "rollback.h"
 #include "mp_net.h"
+#include "online_rules.h"
 
 #ifndef GL_CLAMP
 #define GL_CLAMP 0x2900
@@ -2415,7 +2416,7 @@ void dbg_replay_loading(const char *title)
  *
  * Port, not in the binary. After the fighters are chosen -- VS (GameMode 6),
  * training (2) and online (1, the host; the guest takes the host's level,
- * rollback.c rb_host_level) -- Task_GameInit asks stage_menu_gate before it
+ * rollback.c rb_online_gate) -- Task_GameInit asks stage_menu_gate before it
  * loads anything, and a window comes up over FE_SELECTFIGHTER: the stage's
  * picture large with arrows, or a list of all of them with their pictures
  * (the TAB key, the pad's Y or the LIST button; the mouse's wheel moves
@@ -2610,7 +2611,13 @@ static int eligible(void)
 {
     if (DbgFightActive || rp_playing())
         return 0;
-    return GameMode == 6 || GameMode == 2 || (GameMode == 1 && isParent());
+    /* online, the host's -- unless the rules say HOST ADVANTAGE OFF: the
+     * stage is drawn then (rollback.c rb_online_gate) */
+    if (GameMode == 1) {
+        const online_rules *r = rules_online();
+        return isParent() && !(r && !r->host_adv);
+    }
+    return GameMode == 6 || GameMode == 2;
 }
 
 static void st_music(int on);
@@ -2626,8 +2633,11 @@ static int  g_st_tune_check;        /* back: is the tune still on? */
  * end's load latches FETuneSelection to it, so it plays on. */
 extern int CurrentTask, FEInitState, PendingPop, PendingPopAll;
 
+void rb_gate_reset(void);               /* rollback.c */
+
 static void back_to_select(void)
 {
+    rb_gate_reset();                    /* the fight's hellos again next time */
     PendingPop = PendingPopAll = -1;
     FEInitState = 0;
     CurrentTask = 2;
@@ -2652,7 +2662,7 @@ static void st_build(void)
  * The host sends the stage it shows a few times a second while its window is
  * up; the guest draws the same window, without buttons, over its frame
  * (game_main.c) until the host's hello brings the level (rollback.c
- * rb_host_level, which waits on as long as these keep coming). */
+ * rb_online_gate, which waits on as long as these keep coming). */
 static int g_st_watch, g_st_heard;      /* the guest's window; frames since the last packet */
 
 static void st_tell_guest(void)

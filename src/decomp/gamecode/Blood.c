@@ -669,11 +669,15 @@ static void PlayFinisherTune(const char *file)
 
 /* The finisher stat, which counts the local player's side in a network game and
  * player 1's everywhere else. */
+int rb_local_p1(void);                  /* runtime/rollback.c, port */
+
 static void CountFinisherStat(long index)
 {
+    /* port: rb_local_p1 for isParent -- the local side is the host's
+     * unless HOST ADVANTAGE OFF drew it to the right */
     if (GameMode == 1) {
-        if (isParent()  && Health[1] == 0) Stats[index]++;
-        if (!isParent() && Health[0] == 0) Stats[index]++;
+        if (rb_local_p1()  && Health[1] == 0) Stats[index]++;
+        if (!rb_local_p1() && Health[0] == 0) Stats[index]++;
     }
 }
 
