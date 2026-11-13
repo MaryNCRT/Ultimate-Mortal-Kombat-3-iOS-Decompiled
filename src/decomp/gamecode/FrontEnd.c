@@ -5083,6 +5083,39 @@ TEXTURE *port_pal_texture(TEXTURE *t, int n);   /* runtime/draw_gl.c */
 
 /* Port: colour `pal` of fighter ch from his two sheets: the first, the
  * second, or past 2 his base sheet recoloured (palettes.c) */
+int  PortSkinOf(int side, long ch);      /* below */
+int  mods_skin_colors(int id);          /* runtime/mods.c */
+void mods_skin_prefix(int id, char *out, size_t n);
+void *limeLoadTexture(const char *name, long a, long b);   /* as below */
+
+/* the same for `side`'s fighter in an added outfit: its own colour 3..6
+ * sheet (mods.c), colour 1 past what it has. `art` the versus portrait,
+ * which an outfit has none of: the game's, colour 1. */
+static void *pal_sheet_of(int side, int pal, long ch, void *one, void *two, int art)
+{
+    int skin = ch >= 0 && ch < 26 ? PortSkinOf(side, ch) : 0;
+
+    if (skin) {
+        char name[96], pre[16];
+
+        if (art || pal > mods_skin_colors(skin))
+            return pal == 2 && !art ? two : one;
+        if (pal < 3)
+            return pal == 2 ? two : one;
+        mods_skin_prefix(skin, pre, sizeof pre);
+        snprintf(name, sizeof name, "%s%s_DIFFUSE%d.PNG", pre,
+                 PlayerDefs[ch == 0x17 ? 0 : ch].texBase, pal);
+        {
+            void *t = limeLoadTexture(name, 0, 0);
+            return t ? t : one;
+        }
+    }
+    if (pal >= 3 && ch >= 0 && ch < 26)
+        return port_pal_texture((TEXTURE *)(pal_base(PlayerDefs[ch == 0x17 ? 0 : ch].texBase) == 1
+                                            ? one : two), pal);
+    return pal == 2 ? two : one;
+}
+
 static void *pal_sheet(int pal, long ch, void *one, void *two)
 {
     if (pal >= 3 && ch >= 0 && ch < 26)
@@ -5217,17 +5250,17 @@ void RenderFECharacters(long slot0, long slot1)
             /* Port, not in the binary: the two sides' colour picks; slot 0
              * is this machine's fighter. Nothing picked: the line above. */
             *(void *P32 *)(ch + 0x528) =
-                pal_sheet(PortNetPaletteOf(i == 0, i == 0 ? slot0 : slot1,
-                                           i == 0 ? slot1 : slot0),
-                          i == 0 ? slot0 : slot1, anim[0x14 / 4], anim[0x24 / 4]);
+                pal_sheet_of(i, PortNetPaletteOf(i == 0, i == 0 ? slot0 : slot1,
+                                                 i == 0 ? slot1 : slot0),
+                             i == 0 ? slot0 : slot1, anim[0x14 / 4], anim[0x24 / 4], 0);
         } else {
             if (i != 0 && slot0 == slot1)
                 *(void *P32 *)(ch + 0x528) = anim[0x24 / 4];
             /* Port, not in the binary: the select screen's colour picker.
              * With nothing picked it gives the same answer as above. */
             *(void *P32 *)(ch + 0x528) =
-                pal_sheet(PortPaletteOf(i, slot0, slot1), i == 0 ? slot0 : slot1,
-                          anim[0x14 / 4], anim[0x24 / 4]);
+                pal_sheet_of(i, PortPaletteOf(i, slot0, slot1), i == 0 ? slot0 : slot1,
+                             anim[0x14 / 4], anim[0x24 / 4], 0);
         }
 
         RenderPlayer(ch, 1, 0);
@@ -17866,7 +17899,8 @@ static void drop_items(int side, int what, long ch, long c1, long c2, DropList *
         int shown = GameMode == 1 ? PortNetPaletteOf(1, c1, c2) : PortPaletteOf(side, c1, c2);
 
         /* colours past 2 (palettes.c): not for an added outfit */
-        L->n = PortSkinOf(side, ch) ? 2 : pal_count(PlayerDefs[ch == 0x17 ? 0 : ch].texBase);
+        L->n = PortSkinOf(side, ch) ? mods_skin_colors(PortSkinOf(side, ch))
+                                    : pal_count(PlayerDefs[ch == 0x17 ? 0 : ch].texBase);
         for (i = 0; i < L->n; i++)
             snprintf(L->item[i], sizeof L->item[i], "COLOR %d", i + 1);
         L->chosen = shown >= 1 && shown <= L->n ? shown - 1 : 0;

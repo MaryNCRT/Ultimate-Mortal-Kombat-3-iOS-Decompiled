@@ -44,6 +44,9 @@ void mods_online(int on);
  * mods_real_name: a name without that prefix (the game's file). */
 int         mods_skin_list(const char *texbase, int *ids, int max);
 const char *mods_skin_title(int id);
+/* how many colours skin `id` has, 1..6 (mod.ini color1..6 or its
+ * <NAME>_DIFFUSE<n> sheets) */
+int  mods_skin_colors(int id);
 void        mods_skin_prefix(int id, char *out, size_t n);
 const char *mods_real_name(const char *name);
 

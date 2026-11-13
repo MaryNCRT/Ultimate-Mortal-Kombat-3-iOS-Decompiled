@@ -28,7 +28,13 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 - CHARACTER VIEWER: six COLOR slots for every fighter; an empty one shows
   colour 2 until a texture is put in it with REPLACE TEXTURE.
 - Select screen: player two's OUTFIT / COLOR buttons show the pad's buttons
-  with no second pad (they showed none). The fight, the select screen's
+  with no second pad (they showed none).
+- **Outfits that add: 1 to 6 colours** (Mary). An outfit has the colours it
+  has sheets for -- `color1`..`color6` in mod.ini or `<NAME>_DIFFUSE<n>`
+  files -- not six by force: Sonya MKX keeps her 2. A NEW OUTFIT starts with
+  one; the CHARACTER VIEWER's "+ COLOR" adds the next, up to six (pick it,
+  then REPLACE TEXTURE). The COLOR list shows the outfit's own count; a
+  colour it lacks falls back to its colour 1. The fight, the select screen's
   model, the babality and the VERSUS art (the endings') follow; the select
   screen's portrait does not. The COLOR list shows as many as the fighter
   has; the CPU wears any of them. Added outfits keep their 2.

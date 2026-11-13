@@ -277,6 +277,10 @@ static int list_dirs(const char *root, char names[][NAME_MAX_], int max)
  *     model=MKX_SONYA.skin  (else the only .skin in the folder)
  *     color1=MKX_A.png      the COLOR 1 sheet (else <NAME>_DIFFUSE)
  *     color2=MKX_B.png      COLOR 2 (else <NAME>_DIFFUSE2, else colour 1)
+ *     color3= .. color6=    COLOR 3..6 (else <NAME>_DIFFUSE3..6) -- Mary:
+ *                           an outfit starts with one colour and the player
+ *                           adds up to six; it has as many as follow on
+ *                           from 1 (mods_skin_colors)
  *     ice=MKX_ICE.png       frozen (else <NAME>_DIFFUSE_ICE, else colour 1)
  *
  * A file with the game's name in the skin comes before the one mod.ini
@@ -292,7 +296,8 @@ typedef struct Skin {
     long sig2;                      /* colour 1's bytes */
     char character[48];             /* lower case: "sonya", "" unknown */
     char model[NAME_MAX_];          /* lower case file name, "" none */
-    char color[3][NAME_MAX_];       /* color1, color2, ice: lower-case stems */
+    char color[7][NAME_MAX_];       /* color1..6, ice: lower-case stems */
+    int  colors;                    /* how many colours, 1..6 */
     long sig;                       /* the model's (else colour 1's) bytes */
     Map files, tex;
 } Skin;
@@ -327,8 +332,10 @@ static const char *skin_tex(const Skin *k, const char *key);
 
 /* A skin's sheets when mod.ini does not say which is which and they do
  * not have the game's names: by their own names -- one with "ice" in it is
- * the frozen one, one ending in 2 (COLOR2, _B2...) colour 2, the first of
- * the others colour 1. The model's part sheets (<model>_M1...) are left. */
+ * the frozen one, one ending in 2..6 (COLOR2, _B3...) that colour, the
+ * first of the others colour 1. The model's part sheets (<model>_M1...)
+ * are left. */
+#define SKIN_ICE 6
 static void skin_guess_colors(Skin *k)
 {
     char conv[NAME_MAX_ + 16], mstem[NAME_MAX_];
@@ -352,14 +359,15 @@ static void skin_guess_colors(Skin *k)
             continue;
         if (strstr(s, "_lite") || strstr(s, "_low"))
             continue;
-        w = strstr(s, "ice") ? 2 : (l && s[l - 1] == '2') ? 1 : 0;
+        w = strstr(s, "ice") ? SKIN_ICE
+            : (l && s[l - 1] >= '2' && s[l - 1] <= '6') ? s[l - 1] - '1' : 0;
         if (!k->color[w][0] || strcmp(s, k->color[w]) < 0)
             snprintf(k->color[w], sizeof k->color[w], "%s", s);
     }
     if (k->color[0][0])
-        printf("mods: skin %s, sheets by their names: %s, %s, %s\n", k->title,
+        printf("mods: skin %s, sheets by their names: %s, %s, ice %s\n", k->title,
                k->color[0], k->color[1][0] ? k->color[1] : "-",
-               k->color[2][0] ? k->color[2] : "-");
+               k->color[SKIN_ICE][0] ? k->color[SKIN_ICE] : "-");
 }
 
 /* 1 when the folder is a skin that adds (it is then taken here, not laid
@@ -418,17 +426,15 @@ static int skin_take(const char *dir, const char *folder)
             snprintf(k->character, sizeof k->character, "%s", v);
         else if (strcmp(key, "model") == 0)
             snprintf(k->model, sizeof k->model, "%s", v);
-        else if (strcmp(key, "color1") == 0)
-            snprintf(k->color[0], sizeof k->color[0], "%s", v);
-        else if (strcmp(key, "color2") == 0)
-            snprintf(k->color[1], sizeof k->color[1], "%s", v);
+        else if (strncmp(key, "color", 5) == 0 && key[5] >= '1' && key[5] <= '6' && !key[6])
+            snprintf(k->color[key[5] - '1'], sizeof k->color[0], "%s", v);
         else if (strcmp(key, "ice") == 0)
-            snprintf(k->color[2], sizeof k->color[2], "%s", v);
+            snprintf(k->color[SKIN_ICE], sizeof k->color[0], "%s", v);
     }
     fclose(f);
     lower(k->character);
     lower(k->model);
-    for (i = 0; i < 3; i++) {       /* a sheet named by its stem or its file */
+    for (i = 0; i < 7; i++) {       /* a sheet named by its stem or its file */
         lower(k->color[i]);
         if (is_picture(k->color[i]))
             *strrchr(k->color[i], '.') = 0;
@@ -486,6 +492,20 @@ static int skin_take(const char *dir, const char *folder)
             fclose(sf);
         }
     }
+    /* its colours: 1, and each next one it has a sheet for */
+    {
+        char nm[NAME_MAX_ + 16];
+        int c;
+
+        k->colors = 1;
+        for (c = 2; c <= 6; c++) {
+            snprintf(nm, sizeof nm, "%s_diffuse%d", k->character, c);
+            if (!map_get(&k->tex, nm)
+                && !(k->color[c - 1][0] && map_get(&k->tex, k->color[c - 1])))
+                break;
+            k->colors = c;
+        }
+    }
     g_skins[g_nskins++] = k;
     printf("mods: skin \"%s\" for %s (%s, model %s)\n", k->title,
            k->character[0] ? k->character : "?", folder,
@@ -535,6 +555,11 @@ int mods_skin_by_key(const char *key)
             return i;
     }
     return 0;
+}
+
+int mods_skin_colors(int id)
+{
+    return id >= 1 && id <= g_nskins ? g_skins[id - 1]->colors : 2;
 }
 
 const char *mods_skin_title(int id)
@@ -594,7 +619,8 @@ static const char *skin_file(const Skin *k, const char *key)
 /* The sheet named `key` ("sonya_diffuse2_lite", lower case) in skin k. */
 static const char *skin_tex(const Skin *k, const char *key)
 {
-    static const char *const conv[3] = { "_diffuse", "_diffuse2", "_diffuse_ice" };
+    static const char *const conv[7] = { "_diffuse", "_diffuse2", "_diffuse3", "_diffuse4",
+                                         "_diffuse5", "_diffuse6", "_diffuse_ice" };
     const char *d = strstr(key, "_diffuse"), *hit, *suf;
     char base[NAME_MAX_], name[NAME_MAX_ + 16];
     int which = -1;
@@ -607,11 +633,15 @@ static const char *skin_tex(const Skin *k, const char *key)
     suf = d + 8;
     if (!*suf || !strcmp(suf, "_low") || !strcmp(suf, "_lite"))
         which = 0;
-    else if (!strcmp(suf, "2") || !strcmp(suf, "2_low") || !strcmp(suf, "2_lite")
-             || !strcmp(suf, "_lite2") || !strcmp(suf, "_low2"))
-        which = 1;
+    else if (suf[0] >= '2' && suf[0] <= '6'
+             && (!suf[1] || !strcmp(suf + 1, "_low") || !strcmp(suf + 1, "_lite")))
+        which = suf[0] - '1';           /* 2, 3_low, 6_lite ... */
+    else if ((!strncmp(suf, "_lite", 5) || !strncmp(suf, "_low", 4))
+             && suf[strlen(suf) - 1] >= '2' && suf[strlen(suf) - 1] <= '6'
+             && strlen(suf) == (size_t)(suf[2] == 'i' ? 6 : 5))
+        which = suf[strlen(suf) - 1] - '1';   /* _lite2, _low4 */
     else if (!strcmp(suf, "_ice"))
-        which = 2;
+        which = SKIN_ICE;
     bl = (size_t)(d - key);
     if (which < 0 || bl >= sizeof base)
         return map_get(&k->tex, key);
@@ -629,7 +659,7 @@ static const char *skin_tex(const Skin *k, const char *key)
         return hit;
     if (which == 0)
         return NULL;
-    /* colour 2 and ice the skin does not have: its colour 1, not the
+    /* a colour or ice the skin does not have: its colour 1, not the
      * game's sheet, which is laid out for the game's model */
     if (k->color[0][0] && (hit = map_get(&k->tex, k->color[0])) != NULL)
         return hit;
