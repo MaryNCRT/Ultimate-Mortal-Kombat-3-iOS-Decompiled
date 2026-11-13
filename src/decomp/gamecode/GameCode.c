@@ -6171,6 +6171,8 @@ long GameInit_LoadABit(long step);
 int  rb_fight_setup(int32_t *setup, int n);
 void rb_fight_rival(long *c2);
 int  stage_menu_gate(long *level);     /* runtime/debug_menu.c */
+int  PortVsGate(void);                  /* FrontEnd.c, port */
+extern int PortVsOn;
 void rb_online_begin(int c1, int c2, int level);
 int  rb_online_gate(long *c1, long *c2, long *level);
 int  rb_refusal(void);
@@ -6252,7 +6254,10 @@ void Task_GameInit(void)
         }
         /* Port, not in the binary: STAGE SELECT (debug_menu.c), the window
          * waits here until a stage is picked */
-        if (stage_menu_gate(LevelSelectP))
+        if (!PortVsOn && stage_menu_gate(LevelSelectP))
+            return;
+        /* Port: the local versus' VERSUS screen, the stage chosen (Mary) */
+        if (PortVsGate())
             return;
         rb_setup();                     /* Port, not in the binary */
         PortTrainReset();               /* Port: training's input column */

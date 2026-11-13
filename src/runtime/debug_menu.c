@@ -1731,6 +1731,25 @@ void ui_rect_outline(float x, float y, float w, float h, float t,
     end_2d();
 }
 
+/* The front end's fade as the last layer (Mary, 0.4.10: the fighters'
+ * pictures, the banners and the pad's frames went on showing through it):
+ * black over the whole view, so nothing escapes it. */
+void ui_fade_layer(float a)
+{
+    float w;
+
+    if (a <= 0.0f)
+        return;
+    begin_2d();
+    w = g_ow;
+    glColor4f(0, 0, 0, a > 1.0f ? 1.0f : a);
+    glBegin(GL_QUADS);
+    glVertex2f(-1.0f, -1.0f);   glVertex2f(w + 1.0f, -1.0f);
+    glVertex2f(w + 1.0f, 321.0f); glVertex2f(-1.0f, 321.0f);
+    glEnd();
+    end_2d();
+}
+
 /* The menu space's width (320 high, the view's shape). */
 float ui_space_width(void)
 {

@@ -806,6 +806,6 @@ export async function init() {
 
     /* development aid: UMK3_LAUNCHER_SHOT=<png> captures the window (the
      * MODS viewer, given something to open, captures once it is open) */
-    if (!new URLSearchParams(location.search).get('pick'))
+    if (['', 'fighter'].includes(new URLSearchParams(location.search).get('pick') || ''))
         setTimeout(() => api.shot(), 600);
 }

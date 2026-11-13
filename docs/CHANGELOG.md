@@ -8,6 +8,38 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## 0.4.10 beta (2026-11-13)
+
+Mary checked the online MY PROFILE gallery and the VS screen's place and
+colours in the test folder; the controller fix was not tried on an 8BitDo
+pad here.
+
+- **VS screen in local versus and training** (Mary, issue #224): after STAGE
+  SELECT and before the fight loads, the game's VERSUS screen
+  (`FE_Task_VS_Screen`'s picture) with each fighter in the colour and outfit
+  he fights in. START, or a few seconds, goes on. The announcer says the two
+  names with the select screen's voices; neither VS screen in the binary
+  plays a sound (checked: their calls hold no sound function) and the game
+  has no "versus" voice -- a `res/audio/Skversus.wav` added by a mod plays
+  between the names.
+- The thin line at the edge of the mirrored fighter on the VS screens (the
+  online one too) is gone: the portraits are sampled two texels in from
+  their sides.
+- **Random fights**: the CPU's look is drawn once per opponent from every
+  colour of the original and every colour of each added outfit, all equally
+  likely (before: one in two an added outfit).
+- **Profile**: the fighter and his colour 1..6 are chosen in one place, the
+  gallery -- the launcher's PROFILE lost its separate colour row (it ran
+  under the background editor), and online MY PROFILE lost its FIGHTER and
+  COLOR steppers, which did what FAVOURITE's gallery did. The gallery shows
+  every fighter in the chosen colour and stays open for it.
+- **Fades over everything**: the front end's fade is drawn last, over the
+  port's fighter pictures, banners, pad frames and hints.
+- **Pads** (issue #222): WinMM axes are read in the range each pad reports
+  (an 8BitDo Ultimate 2 in D-input reported 0..255, read as a stick held
+  up and back: the fighter walked back and jumped). 8BitDo's D-input button
+  layout is mapped (vendor 0x2dc8).
+
 ## 0.4.9 beta (2026-11-13)
 
 Not played by Mary in this build yet: the colours were checked by her in

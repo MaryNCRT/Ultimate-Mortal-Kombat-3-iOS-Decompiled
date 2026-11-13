@@ -6,7 +6,9 @@
      * Banner on top -- the gradient on steel, the fighter, name, state, id and
      * favourite -- stays in sight while the page scrolls, so every change shows
      * on it; under it IDENTITY (name; the fighter -- icon and favourite are
-     * one, Mary -- chosen in a window of his own, FighterPicker; the outfit)
+     * one, Mary -- chosen in a window of his own, FighterPicker, which has
+     * his colours 1..6 too: 0.4.10, Mary, one place for both, nothing over
+     * the background's editor)
      * and LOOK (the background). Its
      * other pages: the account (ProfAccount) and the friends (ProfFriends). */
     import { app, tx, updateProf, resetProf, PROF_TABS } from '#lib/app.svelte.js';
@@ -23,7 +25,8 @@
     import { FIGHTERS } from '#lib/fighters.js';
 
     const p = $derived(app.prof);
-    let picking = $state(false);       /* the fighter's window open */
+    /* the fighter's window open (the capture aid: UMK3_LAUNCHER_PICK=fighter) */
+    let picking = $state(new URLSearchParams(location.search).get('pick') === 'fighter');
     let name = $state('');
     let typing = $state(false);
     /* the name follows the profile, except while it is being typed */
@@ -111,12 +114,6 @@
                     </button>
                 </div>
                 </div>
-                <span class="tabs sub shades">
-                    {#each [0, 1, 2, 3, 4, 5] as a}
-                        <button class="tab" class:active={(p.alt | 0) === a} onpointerenter={hoverBlip}
-                                onclick={() => pick({ alt: a })}>{tx('profColour')} {a + 1}</button>
-                    {/each}
-                </span>
                 <div class="row">
                     <button class="btn" onpointerenter={hoverBlip} onclick={resetProf}>{tx(app.profResetArmed ? 'profResetAsk' : 'profReset')}</button>
                 </div>
@@ -156,5 +153,4 @@
     .chg { color: var(--head); font-size: calc(var(--u) * 1.2); font-weight: 800; letter-spacing: .12em; }
     .fighter:hover { border-color: var(--hot-rim); box-shadow: var(--bevel), var(--hover-glow); }
     .taken { color: var(--bad-text); font-weight: bold; }
-    .shades { margin: calc(var(--u) * .8) 0 0; }
 </style>

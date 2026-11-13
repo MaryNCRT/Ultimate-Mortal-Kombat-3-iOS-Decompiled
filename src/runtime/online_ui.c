@@ -161,9 +161,11 @@ void online_after_frame(void)
                 fl.dark = PortOnlineDraftLook[3];
                 fl.color2 = (unsigned)PortOnlineDraftLook[4];
                 fl.angle = PortOnlineDraftLook[5];
-            } else if (PortOnlinePicCode[i][0] == '#') {    /* a fighter by number */
+            } else if (PortOnlinePicCode[i][0] == '#') {    /* a fighter by number, "#n" or "#n:alt" */
+                const char *c = strchr(PortOnlinePicCode[i], ':');
                 memset(&fl, 0, sizeof fl);
                 fl.icon = atoi(PortOnlinePicCode[i] + 1);
+                fl.alt = c ? atoi(c + 1) : 0;
                 fl.angle = -1;
             } else {
                 memset(&fl, 0, sizeof fl);

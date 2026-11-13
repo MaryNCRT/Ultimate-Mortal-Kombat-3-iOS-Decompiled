@@ -103,6 +103,35 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+### 2026-11-13 -- Release 0.4.10 beta: the local VS screen, random looks, one gallery, pads
+
+Mary's requests in one session; details in CHANGELOG 0.4.10.
+
+- **VS screen** (issue #224): the select screen sets `PortVsPending` (local
+  versus and training, GameMode 6) and `Task_GameInit` shows
+  `PortVsGate` after `stage_menu_gate` -- first tried before STAGE SELECT,
+  as a pushed `FE_Task_VS_Screen`; Mary saw it vanish under STAGE SELECT,
+  and that task's init also overwrites Character2 from the tower list, so
+  the gate draws its own frame with the front end's pictures, which
+  draw_gl.c never frees. Sound: the binary's two VS screens call no sound
+  function (their BL targets listed from UMK3.armv7 0x5b74..0x6488 and
+  0x16410..0x172f0); the announcer's names are the select screen's voices,
+  loaded and freed by the gate. Verified: captures of SCORPION colour 4 vs
+  REPTILE colour 5, log of the two voices.
+- **The VS line**: the mirrored portrait (u 0..-1, GL_REPEAT, linear) took
+  the far column round at its edge; `VS_EDGE` insets both portraits on all
+  three VS screens. Verified by an enlarged capture.
+- **CPU looks**: `cpu_look` draws colour and outfit together, every colour
+  of the original and of each added outfit alike. Not measured over many
+  fights.
+- **One gallery**: launcher PROFILE lost the colour row (it ran under the
+  gradient picker); online MY PROFILE lost FIGHTER / COLOR steppers, the
+  gallery got COLOR 1..6 (`OB_GALCOL0`) and "#n:alt" art codes. Captured.
+- **Fade**: `PortFadeOnTop` -- FEMain's quad is drawn by game_main.c
+  (`ui_fade_layer`) after online_after_frame. Not captured mid-fade.
+- **Pads** (issue #222): `axis_norm` / `pad_ranges` read WinMM axes in
+  JOYCAPS' range; `g_map_8bitdo`. Not tried on an 8BitDo pad.
+
 ### 2026-11-13 -- An added outfit's colours, 1 to 6
 
 Mary: outfits start with one colour and the player adds up to six; they do
