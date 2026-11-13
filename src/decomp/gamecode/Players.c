@@ -1498,12 +1498,12 @@ void RenderAnimatedCharacter(char *name, ANIMATEDCHARACTER *c,
          * baby (runtime/skin_mats.c) */
         port_skin_mats_use(tex && tex != ((void *P32 *)c)[0x1c / 4]
                            ? ((void *P32 *)c)[0x30 / 4] : NULL,
-                           tex && tex == ((void *P32 *)c)[0x18 / 4]);
+                           tex && tex == ((void *P32 *)c)[0x18 / 4], tex);
         /* port: SMOOTH MODELS draws the skin smoothed, or nothing */
         if (!port_smooth_draw(((void *P32 *)c)[0x30 / 4], frame, 0, tex,
                               grey, pos))
             LIME_RenderMeshSingleIndexed(frame, tex, grey, pos, 0);
-        port_skin_mats_use(NULL, 0);
+        port_skin_mats_use(NULL, 0, NULL);
     } else {
         /* 0x5c2f4: a body not drawn is still posed. A baked frame (Mileena's
          * nail fatality, 310..334) draws scene meshes instead, and what they
@@ -1523,7 +1523,7 @@ void RenderAnimatedCharacter(char *name, ANIMATEDCHARACTER *c,
         if (f[0x28 / 4] == 1 || (idxA == 365 && a[2] == 6)) {
             GenerateFrameVertsBySkinningSKIN2(c, idxA, idxB, t, RenderVerts);
             port_skin_mats_use(*(void *P32 *)(uintptr_t)(unsigned long)
-                                   a[0x30 / 4], 0); /* port: skin_mats.c */
+                                   a[0x30 / 4], 0, NULL); /* port: skin_mats.c */
             if (!port_smooth_draw(*(void *P32 *)(uintptr_t)(unsigned long)
                                       a[0x30 / 4], frame, 1,
                                   (void *)(uintptr_t)(unsigned long)a[0x20 / 4],
@@ -1531,7 +1531,7 @@ void RenderAnimatedCharacter(char *name, ANIMATEDCHARACTER *c,
                 LIME_RenderMeshSingleIndexed(frame,
                         (void *)(uintptr_t)(unsigned long)a[0x20 / 4],
                         grey, pos, 1);
-            port_skin_mats_use(NULL, 0);
+            port_skin_mats_use(NULL, 0, NULL);
         }
     }
     glPopMatrix();

@@ -20,7 +20,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const CATEGORIES = ['textures', 'audio', 'music', 'models', 'mixed'];
+const CATEGORIES = ['textures', 'audio', 'music', 'models', 'mixed', 'skin'];
 const KIND_OF = {
     '.png': 'textures', '.pvr': 'textures',
     '.wav': 'audio', '.mp3': 'music',
@@ -54,7 +54,7 @@ function readIni(file) {
     let text;
     try { text = fs.readFileSync(file, 'utf8'); } catch { return out; }
     for (const line of text.split(/\r?\n/)) {
-        const m = /^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$/.exec(line);
+        const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
         if (m) out[m[1].toLowerCase()] = m[2];
     }
     return out;
@@ -231,7 +231,7 @@ function setInfo(root, folder, fields) {
     if (!name) return false;
     const file = path.join(modsDir(root), name, 'mod.ini');
     const cur = readIni(file);
-    for (const k of ['name', 'author', 'version', 'category', 'description'])
+    for (const k of ['name', 'author', 'version', 'category', 'description', 'skin'])
         if (fields && typeof fields[k] === 'string') cur[k] = fields[k].replace(/[\r\n]+/g, ' ').slice(0, 400);
     if (cur.category && !CATEGORIES.includes(cur.category)) delete cur.category;
     const text = Object.entries(cur).map(([k, v]) => k + '=' + v).join('\n') + '\n';

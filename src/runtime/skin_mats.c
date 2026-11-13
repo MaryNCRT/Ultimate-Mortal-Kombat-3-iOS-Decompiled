@@ -11,7 +11,7 @@
  * triangles grouped by material and, beside it, `<skin>.mats` -- text, one
  * part a line:
  *
- *      block first count alpha texture
+ *      block first count alpha texture [texture2]
  *
  *   block     0 the body, 1 the second skin
  *   first     the part's first triangle in the block, count how many
@@ -19,6 +19,10 @@
  *             alpha-tested and blended)
  *   texture   the part's picture, or `-` for the block's own texture (the
  *             outfit chosen)
+ *   texture2  optional: the part's picture in COLOR 2. Without it, COLOR 2
+ *             takes <texture>2 when there is one (A.png -> A2.png), else
+ *             the part's own -- so each colour can have its own set of
+ *             sheets, one a part.
  *
  * The record LoadAnimatedCharacter bakes keeps the skin's triangle order
  * (RenderIndexes, three indices a face), so a part is a run of indices.
@@ -49,8 +53,9 @@ typedef struct {
     long first, count;
     int alpha;
     char name[96];          /* "" the block's own texture */
-    TEXTURE *tex[2];        /* plain, iced: loaded on the first draw */
-    int tried[2];
+    char name2[96];         /* COLOR 2's; "" <name>2, else name */
+    TEXTURE *tex[2][2];     /* [colour][plain, iced]: loaded on the first draw */
+    int tried[2][2];
 } Part;
 
 typedef struct {
@@ -62,7 +67,7 @@ typedef struct {
 #define MATS_MAX 64
 static Mats g_mats[MATS_MAX];
 static const Mats *g_use;
-static int g_ice;
+static int g_ice, g_col;
 
 static Mats *find(const void *skin)
 {
@@ -79,10 +84,12 @@ static void drop(Mats *m)
 {
     int i;
     for (i = 0; i < m->n; i++) {
-        if (m->p[i].tex[0])
-            limeDeleteTexture(m->p[i].tex[0]);
-        if (m->p[i].tex[1])
-            limeDeleteTexture(m->p[i].tex[1]);
+        int c, k;
+        for (c = 0; c < 2; c++)
+            for (k = 0; k < 2; k++)
+                if (m->p[i].tex[c][k]
+                    && (c == 0 || m->p[i].tex[c][k] != m->p[i].tex[0][k]))
+                    limeDeleteTexture(m->p[i].tex[c][k]);
     }
     free(m->p);
     if (g_use == m)
@@ -157,13 +164,18 @@ void port_skin_mats_loaded(const void *skin, const char *filename)
     blk[1] = *(void *const *)skin;      /* SKININFO+0x00, the second block */
     while (fgets(line, sizeof line, f)) {
         Part pt;
-        char tex[96];
+        char tex[96], tex2[96];
+        int got;
         memset(&pt, 0, sizeof pt);
+        tex2[0] = 0;
         if (line[0] == '#'
-            || sscanf(line, "%d %ld %ld %d %95s", &b, &pt.first, &pt.count,
-                      &pt.alpha, tex) != 5
+            || (got = sscanf(line, "%d %ld %ld %d %95s %95s", &b, &pt.first,
+                             &pt.count, &pt.alpha, tex, tex2)) < 5
             || b < 0 || b > 1 || !blk[b] || pt.first < 0 || pt.count <= 0)
             continue;
+        if (got == 6 && strcmp(tex2, "-") != 0)
+            snprintf(pt.name2, sizeof pt.name2, "%.*s%s",
+                     (int)(mods_real_name(filename) - filename), filename, tex2);
         /* an added skin's parts: its own sheets first, under its prefix
          * ("@S1@"), the game's where it has none (mods.c) */
         if (strcmp(tex, "-") != 0)
@@ -205,10 +217,15 @@ int port_skin_mats_has(const void *skin)
     return find(skin) != NULL;
 }
 
-void port_skin_mats_use(const void *skin, int ice)
+void port_skin_mats_use(const void *skin, int ice, const void *tex)
 {
+    /* the colour: the sheet the fighter is drawn with, COLOR 2's by its
+     * name (draw_gl.c keeps "res/Textures/<file>" in the TEXTURE) */
+    const char *nm = tex ? (const char *)((const TEXTURE *)tex)->_pad00 : "";
     g_use = find(skin);
     g_ice = ice != 0;
+    g_col = strstr(nm, "_DIFFUSE2") || strstr(nm, "_DIFFUSE_LITE2")
+            || strstr(nm, "_DIFFUSE_LOW2");
 }
 
 /* "A.png" -> "A_ICE.png" */
@@ -227,8 +244,8 @@ static void part(const Part *pt, const unsigned short *indices, long nfaces,
         return;
     if (first + count > nfaces)
         count = nfaces - first;
-    if (pt->tex[g_ice]) {
-        glBindTexture(GL_TEXTURE_2D, pt->tex[g_ice]->name);
+    if (pt->tex[g_col][g_ice]) {
+        glBindTexture(GL_TEXTURE_2D, pt->tex[g_col][g_ice]->name);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     } else
@@ -247,16 +264,39 @@ int port_skin_mats_draw(const unsigned short *indices, long nfaces,
         return 0;
     for (i = 0; i < m->n; i++) {
         Part *pt = &m->p[i];
-        if (pt->name[0] && !pt->tried[g_ice]) {
+        if (pt->name[0] && !pt->tried[0][g_ice]) {
             char nm[112];
-            pt->tried[g_ice] = 1;
+            pt->tried[0][g_ice] = 1;
             if (g_ice)
                 iced(pt->name, nm, sizeof nm);
             else
                 snprintf(nm, sizeof nm, "%s", pt->name);
-            pt->tex[g_ice] = limeLoadTexture(nm, 0, 0);
-            if (!pt->tex[g_ice])
+            pt->tex[0][g_ice] = limeLoadTexture(nm, 0, 0);
+            if (!pt->tex[0][g_ice])
                 printf("skin_mats: %s not found\n", nm);
+        }
+        /* COLOR 2: its own sheet (texture2, else <texture>2), else the
+         * part's */
+        if (g_col && pt->name[0] && !pt->tried[1][g_ice]) {
+            char two[112], nm[120];
+            const char *dot = strrchr(pt->name, '.');
+            pt->tried[1][g_ice] = 1;
+            if (pt->name2[0])
+                snprintf(two, sizeof two, "%s", pt->name2);
+            else
+                snprintf(two, sizeof two, "%.*s2%s",
+                         dot ? (int)(dot - pt->name) : (int)strlen(pt->name),
+                         pt->name, dot ? dot : "");
+            if (g_ice)
+                iced(two, nm, sizeof nm);
+            else
+                snprintf(nm, sizeof nm, "%s", two);
+            pt->tex[1][g_ice] = limeLoadTexture(nm, 0, 0);
+            if (!pt->tex[1][g_ice]) {
+                if (pt->name2[0])
+                    printf("skin_mats: %s not found\n", nm);
+                pt->tex[1][g_ice] = pt->tex[0][g_ice];
+            }
         }
     }
     /* the opaque parts, then the ones that see through */

@@ -269,7 +269,9 @@ static int list_dirs(const char *root, char names[][NAME_MAX_], int max)
  *
  * Its pictures and model can have any name; mod.ini says which is which:
  *
- *     name=MKX              the SKIN box's word (else the folder's name)
+ *     skin=MKX              the skin's own name, the SKIN box's word; it
+ *                           can change at will (else name=, the mod's,
+ *                           else the folder's)
  *     character=SONYA       the game's name for the fighter's files (else
  *                           taken from the model's, SONYA_STANDARD.skin)
  *     model=MKX_SONYA.skin  (else the only .skin in the folder)
@@ -284,6 +286,7 @@ static int list_dirs(const char *root, char names[][NAME_MAX_], int max)
 typedef struct Skin {
     char dir[PATH_MAX_];
     char title[48];
+    long sig2;                      /* colour 1's bytes */
     char character[48];             /* lower case: "sonya", "" unknown */
     char model[NAME_MAX_];          /* lower case file name, "" none */
     char color[3][NAME_MAX_];       /* color1, color2, ice: lower-case stems */
@@ -319,6 +322,43 @@ static void trim(char *v)
 
 static const char *skin_tex(const Skin *k, const char *key);
 
+/* A skin's sheets when mod.ini does not say which is which and they do
+ * not have the game's names: by their own names -- one with "ice" in it is
+ * the frozen one, one ending in 2 (COLOR2, _B2...) colour 2, the first of
+ * the others colour 1. The model's part sheets (<model>_M1...) are left. */
+static void skin_guess_colors(Skin *k)
+{
+    char conv[NAME_MAX_ + 16], mstem[NAME_MAX_];
+    const char *dot;
+    size_t i;
+
+    if (!k->character[0] && !k->model[0])
+        return;
+    snprintf(conv, sizeof conv, "%s_diffuse", k->character);
+    if (k->color[0][0] || (k->character[0] && map_get(&k->tex, conv)))
+        return;
+    snprintf(mstem, sizeof mstem, "%s", k->model);
+    if ((dot = strchr(mstem, '.')) != NULL)
+        mstem[dot - mstem] = 0;
+    for (i = 0; i < k->tex.cap; i++) {
+        const char *s = k->tex.slot[i].key;
+        size_t l = s ? strlen(s) : 0;
+        int w;
+        if (!s || (mstem[0] && strncmp(s, mstem, strlen(mstem)) == 0
+                   && s[strlen(mstem)] == '_' && s[strlen(mstem) + 1] == 'm'))
+            continue;
+        if (strstr(s, "_lite") || strstr(s, "_low"))
+            continue;
+        w = strstr(s, "ice") ? 2 : (l && s[l - 1] == '2') ? 1 : 0;
+        if (!k->color[w][0] || strcmp(s, k->color[w]) < 0)
+            snprintf(k->color[w], sizeof k->color[w], "%s", s);
+    }
+    if (k->color[0][0])
+        printf("mods: skin %s, sheets by their names: %s, %s, %s\n", k->title,
+               k->color[0], k->color[1][0] ? k->color[1] : "-",
+               k->color[2][0] ? k->color[2] : "-");
+}
+
 /* 1 when the folder is a skin that adds (it is then taken here, not laid
  * over the game) */
 static int skin_take(const char *dir, const char *folder)
@@ -326,7 +366,7 @@ static int skin_take(const char *dir, const char *folder)
     char path[PATH_MAX_ + 16], line[512];
     Skin *k;
     FILE *f;
-    int is_skin = 0;
+    int is_skin = 0, named = 0;
     size_t i;
 
     snprintf(path, sizeof path, "%s/mod.ini", dir);
@@ -367,7 +407,9 @@ static int skin_take(const char *dir, const char *folder)
         trim(v);
         if (!*v)
             continue;
-        if (strcmp(key, "name") == 0)
+        if (strcmp(key, "skin") == 0)
+            snprintf(k->title, sizeof k->title, "%s", v), named = 1;
+        else if (strcmp(key, "name") == 0 && !named)
             snprintf(k->title, sizeof k->title, "%s", v);
         else if (strcmp(key, "character") == 0)
             snprintf(k->character, sizeof k->character, "%s", v);
@@ -408,6 +450,8 @@ static int skin_take(const char *dir, const char *folder)
         if (n > 1)
             k->model[0] = 0;        /* which one? the game's name decides */
     }
+    skin_guess_colors(k);
+
     /* the fighter: from the model's name, sonya_standard.skin -> sonya */
     if (!k->character[0] && k->model[0]) {
         const char *u = strchr(k->model, '_'), *d = strchr(k->model, '.');
@@ -424,11 +468,18 @@ static int skin_take(const char *dir, const char *folder)
         const char *sp;
         FILE *sf;
         snprintf(c1, sizeof c1, "%s_diffuse", k->character);
-        sp = k->model[0] ? map_get(&k->files, k->model) : skin_tex(k, c1);
+        sp = k->model[0] ? map_get(&k->files, k->model) : NULL;
         sf = sp ? fopen(sp, "rb") : NULL;
         if (sf) {
             fseek(sf, 0, SEEK_END);
             k->sig = ftell(sf);
+            fclose(sf);
+        }
+        sp = skin_tex(k, c1);
+        sf = sp ? fopen(sp, "rb") : NULL;
+        if (sf) {
+            fseek(sf, 0, SEEK_END);
+            k->sig2 = ftell(sf);
             fclose(sf);
         }
     }
@@ -454,9 +505,10 @@ int mods_skin_list(const char *texbase, int *ids, int max)
     return n;
 }
 
-/* An online match: a skin is named to the other machine by its fighter,
- * its name and its model's size, "sonya|MKX|540648"; the other shows it
- * when it has a skin that answers to the same three, else the game's. */
+/* An online match: a skin is named to the other machine by its fighter and
+ * the sizes of its model and colour 1, "sonya|540648|1411748" -- not by
+ * its name, which each player may change; the other shows it when it has
+ * a skin that answers to the same three, else the game's. */
 void mods_skin_key(int id, char *out, size_t n)
 {
     const Skin *k = id >= 1 && id <= g_nskins ? g_skins[id - 1] : NULL;
@@ -465,7 +517,7 @@ void mods_skin_key(int id, char *out, size_t n)
             out[0] = 0;
         return;
     }
-    snprintf(out, n, "%s|%s|%ld", k->character, k->title, k->sig);
+    snprintf(out, n, "%s|%ld|%ld", k->character, k->sig, k->sig2);
 }
 
 int mods_skin_by_key(const char *key)
