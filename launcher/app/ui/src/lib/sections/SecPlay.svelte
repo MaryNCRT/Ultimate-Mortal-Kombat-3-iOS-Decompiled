@@ -36,6 +36,8 @@
         onchange={e => save({ debug: e.currentTarget.checked })}><span>{tx('dbg')}</span></label>
     <label class="chk"><input type="checkbox" checked={!!app.cfg.skipIntro}
         onchange={e => save({ skipIntro: e.currentTarget.checked })}><span>{tx('skip')}</span></label>
+    <label class="chk"><input type="checkbox" checked={app.cfg.discord !== false}
+        onchange={e => save({ discord: e.currentTarget.checked })}><span>{tx('discordOn')}</span></label>
     <label class="chk"><input type="checkbox" checked={!!app.cfg.noobSaibot}
         onchange={e => save({ noobSaibot: e.currentTarget.checked })}><span>{tx('noob')}</span></label>
     <label class="chk"><input type="checkbox" checked={app.cfg.komboSlide === false}

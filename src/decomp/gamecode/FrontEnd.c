@@ -15071,6 +15071,19 @@ static void PortLobbyTick(void)
                 PortLobbySay(line);
             }
     }
+    {
+        /* a Discord join (runtime/presence_game.c): into its lobby, as the
+         * list's JOIN does, once EOS is up and this game in no lobby */
+        extern int presence_take_lobby(char *id, int n);
+        char id[128];
+        if (st == MPLOBBY_NONE && mpeos_state() == MPEOS_READY && !isMPConnected()
+            && presence_take_lobby(id, sizeof id)) {
+            PortOnlineSection = OS_LOBBIES;
+            PortLobbyMe();
+            if (mplobby_join(id))
+                PortLobbySay(PortFrTx("ENTRANDO A LA SALA DESDE DISCORD...", "JOINING THE LOBBY FROM DISCORD..."));
+        }
+    }
     if (st == MPLOBBY_IN) {
         const struct mplobby_info *in = mplobby_info();
         static char had[ONLINE_RULES_TEXT + 16];
@@ -16041,6 +16054,19 @@ void FE_Task_Online(void)
         PushFETask(0x2a);
         PortOnlineBGFree();
     }
+}
+
+/* A friend's "Join" on Discord (runtime/presence_game.c): the ONLINE screen
+ * opened on LOBBIES, whose tick then joins the lobby. */
+void PortOnlineOpenLobbies(void)
+{
+    PortPractice = 0;
+    GameMode = PLAY_MODE_ARCADE;
+    PortOnlineSection = OS_LOBBIES;
+    PortOnlineFade = 0.0f;
+    PushFETaskDeferred(PORT_TASK_ONLINE);
+    mpnet_set_lan_only(0);
+    startMP();
 }
 
 /* OPTIONS > EDIT PROFILE and the main menu's banner (Mary): the ONLINE

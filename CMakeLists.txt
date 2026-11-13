@@ -238,6 +238,8 @@ if(UMK3_BINARY)
                 src/runtime/mp_net.c
                 src/runtime/online_ui.c
                 src/runtime/online_rules.c
+                src/runtime/discord_presence.c
+                src/runtime/presence_game.c
                 src/runtime/lime_menu.c
                 src/runtime/lime_platform.c
                 src/runtime/lime_app.c
