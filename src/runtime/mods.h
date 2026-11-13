@@ -32,4 +32,25 @@ int  mods_apply_data(void);
  * machines run the same fight. 0 after it puts the mods back. */
 void mods_online(int on);
 
+/* Skins that add instead of replacing (mod.ini type=skin, mods.c): another
+ * outfit for one fighter, with its own model and sheets, beside the game's.
+ *
+ * mods_skin_list: the skins for the fighter whose files are named
+ * `texbase` ("SONYA"), their ids (1..) in `ids`; returns how many.
+ * mods_skin_title: the SKIN box's word for one.
+ * mods_skin_prefix: what goes in front of a file's name ("@S1@") so that
+ * mods_find and mods_find_texture answer it from that skin, and with the
+ * game's own file where the skin has none.
+ * mods_real_name: a name without that prefix (the game's file). */
+int         mods_skin_list(const char *texbase, int *ids, int max);
+const char *mods_skin_title(int id);
+void        mods_skin_prefix(int id, char *out, size_t n);
+const char *mods_real_name(const char *name);
+
+/* Online: a skin named to the other machine ("sonya|MKX|540648": fighter,
+ * name, model size) and the local skin that answers to such a name, 0 none
+ * -- the other player is then shown in the game's. */
+void        mods_skin_key(int id, char *out, size_t n);
+int         mods_skin_by_key(const char *key);
+
 #endif

@@ -237,6 +237,15 @@ static int load_rgba(const char *path, LimeImage *out)
     /* Port: a mod's picture of the same name, .png or .pvr (mods.c) */
     if (mods_find_texture(stem, full, sizeof(full)) && try_one(full, out))
         return 1;
+    /* an added skin's sheet it does not have: the game's (mods.c) */
+    if (mods_real_name(path) != path) {
+        path = mods_real_name(path);
+        n = strlen(path);
+        dot = strrchr(path, '.');
+        n = dot ? (size_t)(dot - path) : n;
+        memcpy(stem, path, n);
+        stem[n] = 0;
+    }
 
     if (PortTextureQuality >= 1) {
         const char *base = strrchr(stem, '/') ? strrchr(stem, '/') + 1 : stem;
@@ -726,7 +735,8 @@ static void pf_note(const char *path)
 {
     int i;
 
-    if (!g_pf_recording || !path || strlen(path) >= sizeof g_pf_seen[0])
+    if (!g_pf_recording || !path || strlen(path) >= sizeof g_pf_seen[0]
+            || path[0] == '@')          /* an added skin's: its number changes */
         return;
     for (i = 0; i < g_pf_seen_n; i++)
         if (strcmp(g_pf_seen[i], path) == 0)

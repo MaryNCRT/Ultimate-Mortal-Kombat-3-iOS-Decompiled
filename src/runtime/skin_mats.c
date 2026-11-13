@@ -164,8 +164,11 @@ void port_skin_mats_loaded(const void *skin, const char *filename)
                       &pt.alpha, tex) != 5
             || b < 0 || b > 1 || !blk[b] || pt.first < 0 || pt.count <= 0)
             continue;
+        /* an added skin's parts: its own sheets first, under its prefix
+         * ("@S1@"), the game's where it has none (mods.c) */
         if (strcmp(tex, "-") != 0)
-            snprintf(pt.name, sizeof pt.name, "%s", tex);
+            snprintf(pt.name, sizeof pt.name, "%.*s%s",
+                     (int)(mods_real_name(filename) - filename), filename, tex);
         add(blk[b], &pt);
     }
     fclose(f);

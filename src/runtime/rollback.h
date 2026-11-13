@@ -12,6 +12,7 @@
 #define PORT_PKT_PALETTE 23             /* reliable: a side's colour pick (FrontEnd.c) */
 #define PORT_PKT_STAGE   24             /* the host's STAGE SELECT, for the guest (debug_menu.c) */
 #define RB_PKT_SETUP  25                /* reliable, once a fight: the fighters and the level */
+#define PORT_PKT_SKIN 26                /* reliable: a side's added skin (FrontEnd.c) */
 
 /* 1 from an online fight's Task_GameInit to its Task_GameDestroy: both
  * machines run the fight engine, from both players' inputs. */
