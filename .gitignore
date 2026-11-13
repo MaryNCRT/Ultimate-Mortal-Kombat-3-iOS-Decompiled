@@ -135,3 +135,6 @@ tools/eos/SDK/Lib/
 # The project's SteamGridDB API key (launcher STEAM section): a release
 # carries it as TOOLS/steamgriddb.key, copied by make_release*.py; never here.
 steamgriddb.key
+
+# the MAME lab: the arcade ROM and its tools never go in the repository
+LABORATORIO MAME/
