@@ -105,6 +105,10 @@ traced to the binary's own mechanism before anything is changed.
 
 ### 2026-11-13 -- Outfits that add (skins beside the original)
 
+Released in **0.4.8 beta** (with the CPU wearing an outfit one fight in
+two, drawn once per opponent like colour 2, and the viewer's BACK and
+PANEL). MOD HUB: Sonya Blade MKX 2.0 is the outfit; 1.0 deleted.
+
 Port work, not in the binary. Mary's ask: skins apart from colours -- a
 fighter can have more outfits than the game's, each with its own model and
 its own two colours, beside the original, without replacing it; the MKX
