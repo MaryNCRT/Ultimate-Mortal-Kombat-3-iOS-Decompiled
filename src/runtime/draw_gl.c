@@ -1364,6 +1364,25 @@ void limeFillRectGrad(float x, float y, float w, float h, const float *c)
 }
 
 
+/* Port: a four-cornered shape, its corners (x, y pairs) in the order drawn
+ * and a colour at each -- the select screen's slanted list bars. */
+void limeFillQuadGrad(const float *xy, const float *c)
+{
+    int i;
+
+    glDepthMask(GL_FALSE);
+    glDisable(GL_TEXTURE_2D);
+    glBegin(GL_QUADS);
+    for (i = 0; i < 4; i++) {
+        glColor4f(c[i * 4], c[i * 4 + 1], c[i * 4 + 2], c[i * 4 + 3]);
+        glVertex2f(xy[i * 2], xy[i * 2 + 1]);
+    }
+    glEnd();
+    glDepthMask(GL_TRUE);
+    g_fills++;
+}
+
+
 /* The character models on the select screen go through the array pointers and
  * `glDrawElements`, all of which opengl32 provides unchanged. Nothing to add
  * here. */

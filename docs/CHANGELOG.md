@@ -8,6 +8,22 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## After 0.4.8 (not released yet)
+
+- **Select screen: OUTFIT and COLOR lists** (Mary, as in the newer games):
+  in the top corner of each player (player one's left, under RULES in VS;
+  player two's right) two small buttons, one above the other -- a gi for the
+  outfit, a palette for the colour, each with its button beside it (the
+  pad's triangle / Y and square / X, or the keys T and C). Pressing one
+  drops its list beside it (ORIGINAL and the added outfits, or COLOR 1 and
+  COLOR 2) in slanted bars; up / down, ACCEPT takes, BACK closes, the mouse
+  clicks a row. Both buttons stay while a list is open. They replace the
+  SKIN and COLOR boxes at the bottom. The right stick still turns the colour.
+  T and C can be changed in Esc > CONTROLS (key_outfit=, key_color=).
+- **Tried**: by script in Arcade and VS (the pad's triangle opened the
+  outfit list, down + cross put on MKX; square opened the colours; a click
+  opened player two's list). **Not tried by Mary yet.**
+
 ## 0.4.8 beta (2026-11-13)
 
 - **Outfits that add** (Mary): a mod whose mod.ini says `type=skin`

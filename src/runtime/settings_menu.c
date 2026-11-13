@@ -496,6 +496,8 @@ static void reset_keys(int player)
         plat_bind_key(PK_PAUSE, 'P');
         plat_bind_key(PK_MOVES, 'M');
         plat_bind_key(PK_RULES, 'R');
+        plat_bind_key(PK_OUTFIT, 'T');
+        plat_bind_key(PK_COLOR, 'C');
     } else {
         plat_bind_key(PK_P2_PAUSE, 0x6f);   /* the keypad's / * 1 */
         plat_bind_key(PK_P2_MOVES, 0x6a);
@@ -653,6 +655,10 @@ static void key_row(int code)
         add(R_KEY, code, tx("ACEPTAR", "ACCEPT"), "%s", k);
     else if (code == PK_RULES)
         add(R_KEY, code, tx("REGLAS DEL VERSUS", "VERSUS RULES"), "%s", k);
+    else if (code == PK_OUTFIT)
+        add(R_KEY, code, tx("TRAJE (SELECCION)", "OUTFIT (SELECT)"), "%s", k);
+    else if (code == PK_COLOR)
+        add(R_KEY, code, tx("COLOR (SELECCION)", "COLOR (SELECT)"), "%s", k);
     else
         add(R_KEY, code, tx("LISTA DE MOVIMIENTOS", "MOVES LIST"), "%s", k);
 }
@@ -831,7 +837,11 @@ static void build(void)
         if (g_player)
             key_row(PK_OK);             /* player one's is Enter */
         else
+        {
             key_row(PK_RULES);          /* one for both: the select screen's */
+            key_row(PK_OUTFIT);         /* its OUTFIT and COLOR lists */
+            key_row(PK_COLOR);
+        }
         add(R_KRESET, 0, tx("RESTABLECER TECLAS", "RESET KEYS"), "");
         break;                          /* the keys' page ends here */
 pad:
@@ -2447,6 +2457,8 @@ static void save_ini(void)
     put("key_pause", "%d", plat_key_bound(PK_PAUSE));
     put("key_moves", "%d", plat_key_bound(PK_MOVES));
     put("key_rules", "%d", plat_key_bound(PK_RULES));
+    put("key_outfit", "%d", plat_key_bound(PK_OUTFIT));
+    put("key_color", "%d", plat_key_bound(PK_COLOR));
     put("p2key_special", "%d", plat_key_bound(PK_P2_SPECIAL));
     put("p2key_pause", "%d", plat_key_bound(PK_P2_PAUSE));
     put("p2key_moves", "%d", plat_key_bound(PK_P2_MOVES));

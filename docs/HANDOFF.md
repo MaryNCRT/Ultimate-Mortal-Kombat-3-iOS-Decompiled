@@ -147,6 +147,13 @@ press COMPILE.
 
 ## 7. Open work
 
+- **Select screen's OUTFIT / COLOR lists** (2026-11-13, after 0.4.8,
+  FrontEnd.c `drop_one`, game_main.c `drop_input`): built in the test
+  folder and checked by script in Arcade and VS; not played by Mary yet.
+  New keys T / C (`PK_OUTFIT`, `PK_COLOR`), pad north / west. The icons are
+  `launcher/aditional textures/ui/` (copied to the test folder's
+  `aditional textures/ui/` by hand).
+
 - **0.4.8 beta released** (2026-11-13) with outfits that add, the CPU
   wearing one as often as colour 2, and the viewer's BACK / PANEL. The MOD
   HUB's `sonya-blade-mkx` is now 2.0, an outfit (`type=skin`) in the same

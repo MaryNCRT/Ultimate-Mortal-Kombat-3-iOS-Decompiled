@@ -76,7 +76,7 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 - **Discord Rich Presence:** the mode, the fighters and the time on the player's Discord profile, with a Join button in an online lobby; through the Discord app already open, no account to link ([docs/DISCORD-PRESENCE.md](docs/DISCORD-PRESENCE.md)).
 - **REPLAYS:** every local fight recorded and played back in the game with a full player (pause, frame step, seek, speed).
 - **Mods:** a folder per mod in `mods\`, files named like the game's replace them; data overrides for the fight tables (`data.ini`).
-- **Outfits that add** (0.4.8): a mod whose `mod.ini` says `type=skin` replaces nothing: it is another outfit for one fighter, with its own model and its own COLOR 1, COLOR 2 and frozen sheets (any file names; `skin=`, `model=`, `color1=`, `color2=`, `ice=`), beside the original. The select screen's SKIN box above COLOR picks it, and the preview shows it. Online, the other player sees it only if they have the same outfit, else the original; the fight is the same either way.
+- **Outfits that add** (0.4.8): a mod whose `mod.ini` says `type=skin` replaces nothing: it is another outfit for one fighter, with its own model and its own COLOR 1, COLOR 2 and frozen sheets (any file names; `skin=`, `model=`, `color1=`, `color2=`, `ice=`), beside the original. On the select screen the OUTFIT list (the gi in the top corner, or triangle / Y, or T) picks it, and the preview shows it; the COLOR list is beside it. Online, the other player sees it only if they have the same outfit, else the original; the fight is the same either way.
 - **Debug menu** (`F2`): any fighter including the bosses, stage, round, hitboxes, save states.
 
 **The launcher's MODS section:**
