@@ -4054,6 +4054,10 @@ int main(int argc, char **argv)
                 && !PortPractice)
                 vs_rules_hint();        /* the RULES button, the local versus (port) */
             online_after_frame();   /* the ONLINE screens' badges (port) */
+            /* the front end's fade, last: over the pictures, banners,
+             * frames and hints above too (FrontEnd.c PortFadeOnTop) */
+            if (CurrentTask == 3 && FE_Fade < 1.0f)
+                ui_fade_layer(1.0f - FE_Fade);
             render_resolve();
             if (rp_playing() && g_rp_hidden) {          /* HIDE: the fight alone */
                 if (g_rp_hint > 0)
@@ -4174,6 +4178,12 @@ int main(int argc, char **argv)
                  * for testing an online fight's rules (UMK3_RULES) alone */
                 else if (getenv("UMK3_TWOUP"))
                     GameMode = 6;
+                /* UMK3_VS_SCREEN=1: the local versus' VERSUS screen
+                 * first (FrontEnd.c PortVsGate), a capture aid */
+                if (getenv("UMK3_VS_SCREEN") && GameMode == 6) {
+                    extern int PortVsPending;
+                    PortVsPending = 1;
+                }
                 CurrentTask = 4;                /* Task_FEDestroy */
                 g_fight_p1 = -1;
                 g_fight_override = 1;

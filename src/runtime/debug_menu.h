@@ -85,6 +85,9 @@ void ui_picture_at(int slot, const unsigned char *rgba, int pw, int ph, unsigned
                    float x, float y, float w, float h, float a);
 void ui_rect_outline(float x, float y, float w, float h, float t,
                      float r, float g, float b, float a);
+/* black over the whole view at alpha `a`: the front end's fade, over
+ * everything the port draws too */
+void ui_fade_layer(float a);
 /* the player's badge, top right; rebuilt when `key` changes */
 void ui_badge(const char *name, const unsigned char *icon, int icon_px,
               unsigned key);

@@ -923,12 +923,52 @@ typedef struct {
     unsigned      vidpid;               /* its vendor | product << 16 */
     char          name[64];
     volatile LONG xi;                   /* the XInput slot last read, or -1 */
+    LONG          capid;                /* the WinMM pad `rng` is for, or -1 */
+    UINT          rng[6][2];            /* X Y Z R U V: each axis' min, max */
 } PAD_SLOT;
 
 static PAD_SLOT g_slot[2] = {
-    { "auto", -1, 0, "", -1 },
-    { "auto", -1, 0, "", -1 },
+    { "auto", -1, 0, "", -1, -1, { { 0 } } },
+    { "auto", -1, 0, "", -1, -1, { { 0 } } },
 };
+
+/* An axis to 0..65535 by the range the pad gives for it (JOYCAPS): WinMM
+ * returns each pad's own numbers, and 0..255 read as 0..65535 is a stick
+ * held up and left -- an 8BitDo Ultimate 2 walked back and jumped by itself
+ * (issue #222). An axis with no range is the middle. */
+static DWORD axis_norm(const PAD_SLOT *ps, int a, DWORD v)
+{
+    UINT lo = ps->rng[a][0], hi = ps->rng[a][1];
+
+    if (hi <= lo)
+        return 32767;
+    if (v <= lo)
+        return 0;
+    if (v >= hi)
+        return 65535;
+    return (DWORD)(((unsigned long long)(v - lo) * 65535u) / (hi - lo));
+}
+
+/* the axes' ranges of WinMM pad `id`, once a pad */
+static void pad_ranges(PAD_SLOT *ps, LONG id)
+{
+    JOYCAPSA c;
+
+    if (ps->capid == id)
+        return;
+    memset(ps->rng, 0, sizeof ps->rng);
+    if (joyGetDevCapsA((UINT)id, &c, sizeof c) == JOYERR_NOERROR) {
+        ps->rng[0][0] = c.wXmin; ps->rng[0][1] = c.wXmax;
+        ps->rng[1][0] = c.wYmin; ps->rng[1][1] = c.wYmax;
+        if (c.wCaps & JOYCAPS_HASZ) { ps->rng[2][0] = c.wZmin; ps->rng[2][1] = c.wZmax; }
+        if (c.wCaps & JOYCAPS_HASR) { ps->rng[3][0] = c.wRmin; ps->rng[3][1] = c.wRmax; }
+        if (c.wCaps & JOYCAPS_HASU) { ps->rng[4][0] = c.wUmin; ps->rng[4][1] = c.wUmax; }
+        if (c.wCaps & JOYCAPS_HASV) { ps->rng[5][0] = c.wVmin; ps->rng[5][1] = c.wVmax; }
+        if (c.wNumAxes < 2)             /* no stick: the pad's cross alone */
+            ps->rng[0][1] = ps->rng[1][1] = 0;
+    }
+    ps->capid = id;
+}
 
 static unsigned want_vidpid(const PAD_SLOT *ps)
 {
@@ -1059,6 +1099,11 @@ static const signed char g_map_nintendo[PB_COUNT] =  /* Switch Pro */
     { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
 static const signed char g_map_generic[PB_COUNT] =   /* most USB pads */
     { 1, 2, 0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
+/* 8BitDo (vendor 0x2dc8) in D-input mode: B A Y X at 1 0 4 3, buttons 2 and
+ * 5 unused, then L1 R1 L2 R2 SELECT START HOME L3 R3 from 6 (the layout
+ * 8BitDo's pads report there; not tried on one here) */
+static const signed char g_map_8bitdo[PB_COUNT] =
+    { 1, 0, 4, 3, 6, 7, 8, 9, 10, 11, 13, 14, 12 };
 
 static int pad_winmm(PAD_SLOT *ps, PLAT_PAD *out)
 {
@@ -1082,8 +1127,10 @@ static int pad_winmm(PAD_SLOT *ps, PLAT_PAD *out)
     switch (ps->vidpid & 0xffff) {
     case 0x054c: map = g_map_sony; break;
     case 0x057e: map = g_map_nintendo; break;
+    case 0x2dc8: map = g_map_8bitdo; break;
     default:     map = g_map_generic; break;
     }
+    pad_ranges(ps, id);
     for (i = 0; i < PB_COUNT; i++)
         if (map[i] >= 0 && (j.dwButtons & (1u << map[i])))
             out->buttons |= 1u << i;
@@ -1094,13 +1141,19 @@ static int pad_winmm(PAD_SLOT *ps, PLAT_PAD *out)
         if (pov >= 13500 && pov <= 22500) out->down = 1;
         if (pov >= 22500 && pov <= 31500) out->left = 1;
     }
-    /* the stick: 0..65535, a direction past a third of the way out */
-    if (j.dwYpos < 20000) out->up = 1;
-    if (j.dwYpos > 45535) out->down = 1;
-    if (j.dwXpos < 20000) out->left = 1;
-    if (j.dwXpos > 45535) out->right = 1;
-    {   /* the right stick across: Z on a Sony pad, U elsewhere */
-        DWORD r = (ps->vidpid & 0xffff) == 0x054c ? j.dwZpos : j.dwUpos;
+    /* the stick, brought to 0..65535 (axis_norm): a direction past a
+     * third of the way out */
+    {
+        DWORD x = axis_norm(ps, 0, j.dwXpos), y = axis_norm(ps, 1, j.dwYpos);
+
+        if (y < 20000) out->up = 1;
+        if (y > 45535) out->down = 1;
+        if (x < 20000) out->left = 1;
+        if (x > 45535) out->right = 1;
+    }
+    {   /* the right stick across: Z on a Sony or 8BitDo pad, U elsewhere */
+        int z = (ps->vidpid & 0xffff) == 0x054c || (ps->vidpid & 0xffff) == 0x2dc8;
+        DWORD r = z ? axis_norm(ps, 2, j.dwZpos) : axis_norm(ps, 4, j.dwUpos);
         out->rx = r < 12000 ? -1 : r > 53535 ? 1 : 0;
     }
     snprintf(out->name, sizeof out->name, "%s", ps->name);

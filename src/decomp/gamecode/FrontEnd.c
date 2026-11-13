@@ -1889,6 +1889,12 @@ int drawPage1x3Small(void)
 extern int   FEInitState;               /* 0x001017a8 */
 extern int   FE_LoadCount;              /* 0x001017ac */
 extern float FE_Fade;                   /* 0x00100898 */
+/* port: 1, FEMain leaves its fade quad to game_main.c, which draws it over
+ * everything else (ui_fade_layer) */
+int PortFadeOnTop = 1;
+/* port: the local versus' VERSUS screen -- asked for by the select screen,
+ * shown by PortVsGate between STAGE SELECT and the fight's loading */
+int PortVsPending, PortVsOn;
 void Task_LoadingScreen_DRAWSCREEN(long a, long percent);
 void DeleteLoadingScreenTexture(void);
 int  FEInit_LoadABit(long step);
@@ -7204,6 +7210,9 @@ void FE_Task_Character_Select(void)
         } else if (GameMode == 6) {
             LevelSelect = GetNextLevel(LevelSelect);
             CurrentTask = 4;
+            /* port: the VERSUS screen, once STAGE SELECT has its stage
+             * (PortVsGate, Task_GameInit; Mary 0.4.10, issue #224) */
+            PortVsPending = 1;
             EASDK_LogEventEnumEnumStringNum(0x7556, 15,
                                             "2 Players on 1 iPad", 0, 0);
         }
@@ -7747,7 +7756,9 @@ void Task_FEMain(void)
 
     limeDisableDepthTest();
 
-    if (FE_Fade != 1.0f)
+    /* port: the fade is drawn last instead, over what the port adds on top
+     * of the frame (game_main.c, debug_menu.c ui_fade_layer; Mary, 0.4.10) */
+    if (FE_Fade != 1.0f && !PortFadeOnTop)
         limeFillRect(0.0f, 0.0f,
                      (float)limeScreenWidth, (float)limeScreenHeight,
                      0.0f, 0.0f, 0.0f, 1.0f - FE_Fade);
@@ -11117,6 +11128,11 @@ turn:
 #define VS_START_BAND   64.0f
 #define VS_START_TOP    128.0f
 #define VS_LOG_MATCH    0x7555
+/* port: the portraits sampled two texels in from their sides: drawn as
+ * 0..1 (or 0..-1, mirrored) the filter took the far side's column round
+ * too, a thin line at the mirrored one's edge (Mary, 0.4.10) */
+#define VS_EDGE         (2.0f / 256.0f)
+#define VS_PORT_SHOW    150.0f          /* port: the frames the pair holds */
 
 extern long  FadeMusicOut;              /* 0x0010dee8 */
 
@@ -11161,15 +11177,15 @@ void FE_Task_VS_Screen(void)
     limeEnableAlphaBlending_Basic();
 
     /* ---- player one, sliding in from the left ---- */
-    /* (port: the colour picker can give player one the second palette) */
-    limeDrawSprite((TEXTURE *)pal_sheet(PortPaletteOf(0, Character1, Character2), Character1,
-                                        CharacterVSTexture[Character1],
-                                        CharacterVSTexture2[Character1]),
+    /* (port: the colour picker's colour 1..6, or an added outfit's art) */
+    limeDrawSprite((TEXTURE *)pal_sheet_of(0, PortPaletteOf(0, Character1, Character2), Character1,
+                                           CharacterVSTexture[Character1],
+                                           CharacterVSTexture2[Character1], 1),
                    0.0f - FE_WidthScale * VSScroll,
                    (float)limeScreenHeight + FE_HeightScale * -VS_PORTRAIT,
                    FE_WidthScale * VS_PORTRAIT,
                    FE_HeightScale * VS_PORTRAIT,
-                   0.0f, 0.0f, 1.0f, 1.0f, col);
+                   VS_EDGE, 0.0f, 1.0f - 2.0f * VS_EDGE, 1.0f, col);
 
     /* ---- player two, mirrored, from the right ---- */
     if ((unsigned long)(Character2 - VS_BOSS_FIRST) <= 1) {  /* 24 or 25 */
@@ -11184,8 +11200,8 @@ void FE_Task_VS_Screen(void)
 
         /* Port, not in the binary: the colour picker's choice. With
          * nothing picked it is the rule above. */
-        portrait = pal_sheet(PortPaletteOf(1, Character1, Character2), Character2,
-                             CharacterVSTexture[Character2], CharacterVSTexture2[Character2]);
+        portrait = pal_sheet_of(1, PortPaletteOf(1, Character1, Character2), Character2,
+                                CharacterVSTexture[Character2], CharacterVSTexture2[Character2], 1);
 
         limeDrawSprite((TEXTURE *)portrait,
                        (float)limeScreenWidth
@@ -11195,7 +11211,7 @@ void FE_Task_VS_Screen(void)
                        (float)limeScreenHeight + FE_HeightScale * -VS_PORTRAIT,
                        FE_WidthScale * VS_PORTRAIT,
                        FE_HeightScale * VS_PORTRAIT,
-                       0.0f, 0.0f, -1.0f, 1.0f, col);      /* u extent -1 */
+                       1.0f - VS_EDGE, 0.0f, -(1.0f - 2.0f * VS_EDGE), 1.0f, col);      /* u extent -1 */
     }
 
     /* ---- the slide ---- */
@@ -11298,6 +11314,152 @@ void FE_Task_VS_Screen(void)
         EASDK_LogEventEnumEnumString(VS_LOG_MATCH, 15,
                                      DestinyNames[Destiny], 15,
                                      CharacterNames[Character1]);
+}
+
+/* Port, not in the binary: the local versus' and training's VERSUS screen
+ * (Mary, 0.4.10; issue #224) -- FE_Task_VS_Screen's picture, each fighter
+ * in the colour and outfit he fights in, after STAGE SELECT and before the
+ * fight loads (Task_GameInit). The front end is gone by then, but its
+ * pictures stay loaded (draw_gl.c keeps every texture), and its fade is
+ * drawn here. START, or the pair held a while, goes on. 1 while shown. */
+int PortFightPalette(int side, long c1, long c2);   /* below */
+
+/* The announcer says each fighter's name, as the select screen does: the
+ * binary's VS screens play no sound of their own and the game has no
+ * "versus" voice (Mary: the screen wanted sound). These are the select
+ * screen's voices (FELoad_LoadABit 28..39), loaded once for this. */
+long limeLoadSound(const char *name);
+static long g_vs_voice[3];
+static int  g_vs_voices;
+
+static void vs_announce(long ch)
+{
+    static const char *const name[26] = {
+        "Skkano", "Sksonya", "Skjax", "Sknitwlf", "Sksubz", "Skstrkr2", "Sksindel",
+        "Sksector", "Skcyrax", "Skknglao", "Skcabal", "Sksheeva", "Skshang", "Skliukng",
+        "Sksmoke", "Kitana", "Jade", "Malena", "Scorpion", "Reptile", "Skermac",
+        "Sksubz", "Sksmoke", NULL, "Skmotaro", NULL,
+    };
+    long h;
+
+    if (Settings[3] == 0 || (ch != -2 && (ch < 0 || ch >= 26 || !name[ch])))
+        return;
+    /* loaded for this screen and let go when it ends (vs_quiet): a slot
+     * kept would be another sound's once the front end loads again */
+    h = limeLoadSound(ch == -2 ? "Skversus" : name[ch]);
+    if (h < 0)
+        return;
+    if (g_vs_voices < 3)
+        g_vs_voice[g_vs_voices++] = h;
+    limePlaySound(h, MusicVol[Settings[3]] / 100.0f, 1.0f, 0);
+}
+
+static void vs_quiet(void)
+{
+    int i;
+
+    for (i = 0; i < g_vs_voices; i++)
+        limeDeleteSound(g_vs_voice[i]);
+    g_vs_voices = 0;
+}
+
+int PortVsGate(void)
+{
+    static float fade;
+    static int out, said;
+    void *pic;
+    float k = 1.0f / (30.0f * limeFPSScaleFactor);
+
+    if (!PortVsOn) {
+        if (!PortVsPending || GameMode != 6) {
+            PortVsPending = 0;
+            return 0;
+        }
+        PortVsPending = 0;
+        PortVsOn = 1;
+        printf("versus screen: %ld vs %ld, colours %d and %d\n", (long)Character1, (long)Character2,
+               PortFightPalette(0, Character1, Character2), PortFightPalette(1, Character1, Character2));
+        VSWait = 0.0f;
+        VSScroll = 256.0f;
+        fade = 0.0f;
+        out = 0;
+        said = 0;
+    }
+
+    /* player one's name as the two slide in, then "versus" -- res/audio/
+     * Skversus.wav, which the game has none of: a mod or a player's own
+     * file; silent without it -- then player two's */
+    if (said == 0 && VSWait > VS_HOLD_FRAMES) {
+        vs_announce(Character1);
+        said = 1;
+    } else if (said == 1 && VSWait > VS_HOLD_FRAMES + 40.0f) {
+        vs_announce(-2);
+        said = 2;
+    } else if (said == 2 && VSWait > VS_HOLD_FRAMES + 80.0f) {
+        vs_announce(Character2);
+        said = 3;
+    }
+
+    limeEnableAlphaBlending_Basic();
+    limeSet2DDrawing();
+    limeDrawSprite((TEXTURE *)MetalScreenTexture, 0.0f, 0.0f,
+                   (float)limeScreenWidth, (float)limeScreenHeight,
+                   0.0f, 0.0f, 1.0f, 1.0f, col);
+    limeDrawSprite((TEXTURE *)VSTexture,
+                   ((float)limeScreenWidth + FE_WidthScale * -64.0f) * 0.5f,
+                   FE_HeightScale * 80.0f, FE_WidthScale * 64.0f, FE_HeightScale * 128.0f,
+                   0.0f, 0.0f, 1.0f, 1.0f, col);
+    limeEnableAlphaBlending_Additive();
+    DrawAnimAsSprite(0, 0, FE_WidthScale, 0x80, 0x80, (long)(uintptr_t)SpotlightTextures,
+                     spotlight_SpriteDef, spotlight_Anim, 0, (long)GameCounter,
+                     0, spotlight_Anim[0] - 1, 1, col);
+    DrawAnimAsSprite((long)((float)limeScreenWidth + FE_WidthScale * -128.0f), 0,
+                     FE_WidthScale, 0x80, 0x80, (long)(uintptr_t)SpotlightTextures,
+                     spotlight_SpriteDef, spotlight_Anim, 1, (long)GameCounter,
+                     0, spotlight_Anim[0] - 1, 1, col);
+    limeEnableAlphaBlending_Basic();
+
+    if (Character1 >= 0 && Character1 < 26) {
+        pic = pal_sheet_of(0, PortFightPalette(0, Character1, Character2), Character1,
+                           CharacterVSTexture[Character1], CharacterVSTexture2[Character1], 1);
+        limeDrawSprite((TEXTURE *)pic, 0.0f - FE_WidthScale * VSScroll,
+                       (float)limeScreenHeight + FE_HeightScale * -VS_PORTRAIT,
+                       FE_WidthScale * VS_PORTRAIT, FE_HeightScale * VS_PORTRAIT,
+                       VS_EDGE, 0.0f, 1.0f - 2.0f * VS_EDGE, 1.0f, col);
+    }
+    if (Character2 >= 0 && Character2 < VS_BOSS_FIRST) {
+        pic = pal_sheet_of(1, PortFightPalette(1, Character1, Character2), Character2,
+                           CharacterVSTexture[Character2], CharacterVSTexture2[Character2], 1);
+        limeDrawSprite((TEXTURE *)pic,
+                       (float)limeScreenWidth + FE_WidthScale * VSScroll
+                       + FE_WidthScale * -VS_PORTRAIT,
+                       (float)limeScreenHeight + FE_HeightScale * -VS_PORTRAIT,
+                       FE_WidthScale * VS_PORTRAIT, FE_HeightScale * VS_PORTRAIT,
+                       1.0f - VS_EDGE, 0.0f, -(1.0f - 2.0f * VS_EDGE), 1.0f, col);       /* mirrored */
+    }
+
+    if (VSWait > VS_HOLD_FRAMES)
+        VSScroll += -VS_SLIDE_RATE / limeFPSScaleFactor;
+    if (VSScroll <= 0.0f)
+        VSScroll = 0.0f;
+    VSWait += 1.0f / limeFPSScaleFactor;
+
+    if (!out && fade >= 1.0f
+        && (PortStartPress() || VSWait > VS_HOLD_FRAMES + VS_PORT_SHOW))
+        out = 1;
+    fade += out ? -k : k;
+    if (fade > 1.0f)
+        fade = 1.0f;
+    if (fade < 1.0f)
+        limeFillRect(0.0f, 0.0f, (float)limeScreenWidth, (float)limeScreenHeight,
+                     0.0f, 0.0f, 0.0f, fade < 0.0f ? 1.0f : 1.0f - fade);
+    if (out && fade <= 0.0f) {
+        vs_quiet();
+        PortVsOn = 0;
+        VSWait = 0.0f;
+        return 0;
+    }
+    return 1;
 }
 
 
@@ -12415,7 +12577,7 @@ enum { OB_TAB0, OB_SUB0 = OB_TAB0 + OS_N, OB_COPY = OB_SUB0 + PS_N, OB_BOX, OB_F
        OB_ADDFIND, OB_ADDACT, OB_NAMEBOX, OB_AVL, OB_AVR, OB_OUT1, OB_OUT2, OB_FAVPICK,
        OB_FAVCLR, OB_MODE0, OB_MODE1, OB_MODE2, OB_C1L, OB_C1R, OB_C2L, OB_C2R, OB_ANGL,
        OB_ANGR, OB_SAVE, OB_CANCEL, OB_RESET, OB_GAL0, OB_GALCLR = OB_GAL0 + 24,
-       OB_GALCLOSE, OB_SOON, OB_MAINBAN, OB_ADV, OB_CSSBOX, OB_CSSAPPLY, OB_CSSCOPY,
+       OB_GALCLOSE, OB_GALCOL0, OB_GALCOL_END = OB_GALCOL0 + 6, OB_SOON, OB_MAINBAN, OB_ADV, OB_CSSBOX, OB_CSSAPPLY, OB_CSSCOPY,
        OB_CSSGEN, OB_CSSCLR, OB_ANGBOX, OB_HEX1, OB_HEX2, OB_DIAL, OB_HEXBOX, OB_GSAVE, OB_GCANCEL, OB_PICKSV, OB_PICKH, OB_PICKR, OB_PICKG, OB_PICKB, OB_PICKOK, OB_PICKBACK, OB_PRE0, OB_PRE_END = OB_PRE0 + 16,
        /* LOBBIES */
        OB_LALL, OB_LMINE, OB_LREF, OB_LKEY, OB_LKJOIN, OB_LNAME, OB_LVIS, OB_LPL, OB_LPR,
@@ -14536,37 +14698,26 @@ static void PortOnlineMe(float cx, float cw, float y0, float a)
     OnText(PortFrTx("NOMBRE", "NAME"), lx, ry[0] + 3.0f, 0, 0.36f, ex - 4.0f, OnPale, a);
     OnTextBox(OB_NAMEBOX, d->name, PROF_NAME_MAX, 0, lx + ex, ry[0], lw - ex - 8.0f, 15.0f,
               PortFrTx("TU NOMBRE", "YOUR NAME"), a);
-    /* the fighter: the banner's, the icon's and the favourite -- one
-     * (Mary, 0.4.2) */
+    /* the fighter -- the banner's, the icon's and the favourite, one (Mary,
+     * 0.4.2) -- and his colour 1..6: both in the gallery, the one place
+     * that chooses them (Mary, 0.4.10: a stepper here did the same) */
     OnText(PortFrTx("LUCHADOR", "FIGHTER"), lx, ry[1] + 3.0f, 0, 0.36f, ex - 4.0f, OnPale, a);
-    i = OnStepper(OB_AVL, OB_AVR, CharacterNames[d->icon >= 0 && d->icon < PROF_ICONS ? d->icon : 0],
-                  lx + ex, ry[1], lw - ex, a);
-    if (i)
-        d->icon = (d->icon + i + PROF_ICONS) % PROF_ICONS;
-    d->fav = d->icon;
-    /* the colour, 1..6 (Mary: the profile's picture in colours 3..6 too) */
-    OnText(PortFrTx("COLOR", "COLOUR"), lx, ry[2] + 3.0f, 0, 0.36f, ex - 4.0f, OnPale, a);
-    snprintf(line, sizeof line, "COLOR %d", (d->alt >= 0 && d->alt < PROF_ALTS ? d->alt : 0) + 1);
-    i = OnStepper(OB_OUT1, OB_OUT2, line, lx + ex, ry[2], lw - ex, a);
-    if (i)
-        d->alt = ((d->alt + i) % PROF_ALTS + PROF_ALTS) % PROF_ALTS;
-
-    /* the favourite is the fighter on the left; the gallery chooses it
-     * with every fighter in sight */
-    OnText(PortFrTx("FAVORITO", "FAVOURITE"), rx, ry[0] + 3.0f, 0, 0.36f, ex - 4.0f, OnPale, a);
-    OnText(CharacterNames[d->icon >= 0 && d->icon < PROF_ICONS ? d->icon : 0],
-           rx + ex, ry[0] + 3.0f, 0, 0.46f, 110.0f, OnWhite, a);
-    if (OnButton(OB_FAVPICK, PortFrTx("GALER\xc3\x8d" "A", "GALLERY"), rx + ex + 114.0f, ry[0], 72.0f, 15.0f,
+    snprintf(line, sizeof line, "%s  %s %d", CharacterNames[d->icon >= 0 && d->icon < PROF_ICONS ? d->icon : 0],
+             PortFrTx("COLOR", "COLOUR"), (d->alt >= 0 && d->alt < PROF_ALTS ? d->alt : 0) + 1);
+    OnText(line, lx + ex, ry[1] + 3.0f, 0, 0.42f, lw - ex - 86.0f, OnWhite, a);
+    if (OnButton(OB_FAVPICK, PortFrTx("GALER\xc3\x8d" "A", "GALLERY"), lx + lw - 80.0f, ry[1], 72.0f, 15.0f,
                  BT_NORMAL, a))
         PortGallery = 1;
+    d->fav = d->icon;
+
     /* the gradient, as the launcher's picker can make it */
-    OnText(PortFrTx("FONDO", "BACKGROUND"), rx, ry[1] + 3.0f, 0, 0.36f, ex - 4.0f, OnPale, a);
+    OnText(PortFrTx("FONDO", "BACKGROUND"), rx, ry[0] + 3.0f, 0, 0.36f, ex - 4.0f, OnPale, a);
     {
         static const char *const es[3] = { "CLARO", "OSCURO", "PERSONAL" };
         static const char *const en[3] = { "LIGHT", "DARK", "CUSTOM" };
         float bw = (cw - (rx - cx) - ex - 14.0f) / 3.0f;
         for (i = 0; i < 3; i++)
-            if (OnButton(OB_MODE0 + i, PortFrTx(es[i], en[i]), rx + ex + (float)i * bw, ry[1],
+            if (OnButton(OB_MODE0 + i, PortFrTx(es[i], en[i]), rx + ex + (float)i * bw, ry[0],
                          bw - 3.0f, 15.0f, d->dark == i ? BT_MAIN : BT_NORMAL, a)) {
                 if (i == 2)                     /* PERSONAL: the gradient's window */
                     PortGradBegin();
@@ -14576,29 +14727,29 @@ static void PortOnlineMe(float cx, float cw, float y0, float a)
                 }
             }
     }
-    OnText(PortFrTx("COLORES", "COLOURS"), rx, ry[2] + 3.0f, 0, 0.36f, ex - 4.0f, OnPale, a);
+    OnText(PortFrTx("COLORES", "COLOURS"), rx, ry[1] + 3.0f, 0, 0.36f, ex - 4.0f, OnPale, a);
     {
         float x = rx + ex;
-        if (OnButton(OB_C1L, "<", x, ry[2], 16.0f, 15.0f, BT_NORMAL, a))
+        if (OnButton(OB_C1L, "<", x, ry[1], 16.0f, 15.0f, BT_NORMAL, a))
             d->color = PortPaletteStep(d->color, -1);
-        OnSwatch(d->color, x + 20.0f, ry[2] + 1.5f, 12.0f, a);
-        if (OnButton(OB_C1R, ">", x + 38.0f, ry[2], 16.0f, 15.0f, BT_NORMAL, a))
+        OnSwatch(d->color, x + 20.0f, ry[1] + 1.5f, 12.0f, a);
+        if (OnButton(OB_C1R, ">", x + 38.0f, ry[1], 16.0f, 15.0f, BT_NORMAL, a))
             d->color = PortPaletteStep(d->color, 1);
         x += 64.0f;
-        if (OnButton(OB_C2L, "<", x, ry[2], 16.0f, 15.0f, BT_NORMAL, a))
+        if (OnButton(OB_C2L, "<", x, ry[1], 16.0f, 15.0f, BT_NORMAL, a))
             d->color2 = PortPaletteStep(d->color2, -1);
-        OnSwatch(d->color2, x + 20.0f, ry[2] + 1.5f, 12.0f, a);
-        if (OnButton(OB_C2R, ">", x + 38.0f, ry[2], 16.0f, 15.0f, BT_NORMAL, a))
+        OnSwatch(d->color2, x + 20.0f, ry[1] + 1.5f, 12.0f, a);
+        if (OnButton(OB_C2R, ">", x + 38.0f, ry[1], 16.0f, 15.0f, BT_NORMAL, a))
             d->color2 = PortPaletteStep(d->color2, 1);
     }
-    OnText(PortFrTx("DIRECCI\xc3\x93N", "DIRECTION"), rx, ry[3] + 3.0f, 0, 0.36f, ex - 4.0f, OnPale, a);
+    OnText(PortFrTx("DIRECCI\xc3\x93N", "DIRECTION"), rx, ry[2] + 3.0f, 0, 0.36f, ex - 4.0f, OnPale, a);
     if (d->dark == 2) {
         snprintf(line, sizeof line, "%d%s", d->angle < 0 ? 180 : d->angle, PortFrTx(" GRADOS", " DEGREES"));
-        i = OnStepper(OB_ANGL, OB_ANGR, line, rx + ex, ry[3], 120.0f, a);
+        i = OnStepper(OB_ANGL, OB_ANGR, line, rx + ex, ry[2], 120.0f, a);
         if (i)
             d->angle = ((d->angle < 0 ? 180 : d->angle) + i * 45 + 360) % 360;
     } else
-        OnText(PortFrTx("DE ARRIBA ABAJO", "TOP TO BOTTOM"), rx + ex, ry[3] + 3.0f, 0, 0.42f, 130.0f,
+        OnText(PortFrTx("DE ARRIBA ABAJO", "TOP TO BOTTOM"), rx + ex, ry[2] + 3.0f, 0, 0.42f, 130.0f,
                OnDim, a);
 
     /* ---- save, cancel, defaults ---- */
@@ -14705,11 +14856,16 @@ static void PortOnlineRenameAnswer(void)
 }
 
 /* The fighter's gallery -- the icon and the favourite, one (Mary, 0.4.2):
- * every fighter, the chosen one framed in red. */
+ * every fighter, the chosen one framed in red, each in the colour chosen
+ * under them, 1..6 (Mary, 0.4.10: the one place that chooses both, so a
+ * fighter's click no longer closes it). Rows of 54 from y 92 end at 254;
+ * the colours and CLOSE, 16 high at 257, end inside the panel (278). */
 static void PortOnlineGallery(float cx, float cw, float a)
 {
-    float gx = cx + 10.0f, gw = cw - 20.0f, cwid = gw / 8.0f, ch = 58.0f, y0 = 92.0f;
-    int i, st;
+    float gx = cx + 10.0f, gw = cw - 20.0f, cwid = gw / 8.0f, ch = 54.0f, y0 = 92.0f;
+    float by = y0 + ch * 3.0f + 3.0f, closew = 80.0f, colw = (gw - closew - 8.0f) / (float)PROF_ALTS;
+    int i, st, alt = PortDraft.alt >= 0 && PortDraft.alt < PROF_ALTS ? PortDraft.alt : 0;
+    char lbl[24];
 
     OnFill(0.0f, 0.0f, OnVW(), 320.0f, 0.0f, 0.0f, 0.02f, 0.55f);
     OnPanel(cx, 62.0f, cw, 216.0f, 1.0f, 1);
@@ -14717,13 +14873,12 @@ static void PortOnlineGallery(float cx, float cw, float a)
               cx + 10.0f, 67.0f, cw - 20.0f, 1.0f);
     for (i = 0; i < PROF_ICONS; i++) {
         float x = gx + cwid * (float)(i % 8), y = y0 + ch * (float)(i / 8);
-        char key[8];
+        char key[16];
         int on = PortDraft.icon == i;
 
         if (OnArea(OB_GAL0 + i, x + 1.0f, y, cwid - 2.0f, ch - 4.0f, &st)) {
             PortDraft.icon = i;
             PortDraft.fav = i;
-            PortGallery = 0;
         }
         if (on)
             OnFill(x + 1.0f, y, cwid - 2.0f, ch - 4.0f, 0.55f, 0.06f, 0.05f, 0.75f);
@@ -14733,12 +14888,18 @@ static void PortOnlineGallery(float cx, float cw, float a)
             OnFrame(x + 1.0f, y, cwid - 2.0f, ch - 4.0f, 1.0f, 1.0f, 0.30f, 0.22f, 1.0f);
         else if (st)
             OnFrame(x + 1.0f, y, cwid - 2.0f, ch - 4.0f, 1.0f, 0.92f, 0.78f, 0.46f, 1.0f);
-        snprintf(key, sizeof key, "#%d", i);
-        OnArt(key, x + (cwid - 42.0f) * 0.5f, y + 1.0f, 42.0f, 1.0f);
-        OnText(CharacterNames[i], x + cwid * 0.5f, y + ch - 15.0f, 1, 0.30f, cwid - 6.0f, OnWhite, 1.0f);
+        snprintf(key, sizeof key, "#%d:%d", i, alt);     /* online_ui.c: the fighter in that colour */
+        OnArt(key, x + (cwid - 38.0f) * 0.5f, y + 1.0f, 38.0f, 1.0f);
+        OnText(CharacterNames[i], x + cwid * 0.5f, y + ch - 14.0f, 1, 0.30f, cwid - 6.0f, OnWhite, 1.0f);
     }
-    if (OnButton(OB_GALCLOSE, PortFrTx("CERRAR", "CLOSE"), cx + cw * 0.5f - 62.0f,
-                 y0 + ch * 3.0f + 6.0f, 124.0f, 18.0f, BT_NORMAL, 1.0f))
+    for (i = 0; i < PROF_ALTS; i++) {
+        snprintf(lbl, sizeof lbl, "%s %d", PortFrTx("COLOR", "COLOUR"), i + 1);
+        if (OnButton(OB_GALCOL0 + i, lbl, gx + (float)i * colw, by, colw - 3.0f, 16.0f,
+                     i == alt ? BT_MAIN : BT_NORMAL, 1.0f))
+            PortDraft.alt = i;
+    }
+    if (OnButton(OB_GALCLOSE, PortFrTx("CERRAR", "CLOSE"), gx + gw - closew, by, closew, 16.0f,
+                 BT_NORMAL, 1.0f))
         PortGallery = 0;
 }
 
@@ -17531,27 +17692,14 @@ int PortSoloPalette;
 #define PP_MOTARO 0x18
 #define PP_KAHN   0x19
 
-/* The computer's palette for c2 against c1: 1 or 2 by chance, drawn once
- * per opponent; never player one's own in a mirror match. */
+static int cpu_look(long ch, int *slot);    /* below, with the outfits */
+
+/* The computer's palette for c2 against c1, drawn once per opponent with
+ * his outfit (cpu_look); never player one's own in a mirror match. */
 static int cpu_palette(long c1, long c2, int p0)
 {
-    static long last = -2;
-    static int pick = 1;
+    int pick = cpu_look(c2, NULL);
 
-    if (c2 != last) {
-        static unsigned seed;
-
-        if (!seed)                      /* its own, not the game's rand() */
-            seed = (unsigned)time(NULL) | 1u;
-        seed = seed * 1103515245u + 12345u;
-        last = c2;
-        pick = (int)((seed >> 16) & 1) + 1;
-        /* port: a fighter with colours past 2 (palettes.c) wears any */
-        if (c2 >= 0 && c2 < 26 && pal_count(PlayerDefs[c2].texBase) > 2) {
-            seed = seed * 1103515245u + 12345u;
-            pick = 1 + (int)((seed >> 16) % (unsigned)pal_count(PlayerDefs[c2].texBase));
-        }
-    }
     if (c2 == PP_MOTARO || c2 == PP_KAHN)
         return 1;
     if (c1 == c2)                       /* never player one's own */
@@ -17768,30 +17916,63 @@ static int net_skin_of(long ch)
     return 0;                           /* another fighter's skin */
 }
 
-/* The computer's outfit for fighter ch, as cpu_palette draws its colour:
- * drawn once per opponent, with the same chance as COLOR 2 -- one in two an
- * added outfit (any of his, alike), else the original. 0 when he has none. */
-static int PortSkinTouched[2][32];      /* the SKIN box changed by hand */
-
-static int cpu_skin(long ch, const int *ids, int n)
+/* The computer's look for fighter ch, drawn once per opponent: his colour
+ * and outfit together, every colour of the original (1..6, palettes.c) and
+ * of each added outfit (mods_skin_colors) equally likely (Mary, 0.4.10: a
+ * random fight shows all of them). *slot: 0 the original, k the k-th of
+ * skins_of. Returns the colour. */
+static int cpu_look(long ch, int *slot)
 {
     static long last = -2;
-    static int pick;
+    static int pal = 1, sk;
 
     if (ch != last) {
         static unsigned seed;
+        int ids[SKINS_MAX], n = 0, i, own = 2, total, r;
 
         if (!seed)                      /* its own, not the game's rand() */
             seed = ((unsigned)time(NULL) * 2654435761u) | 1u;
         seed = seed * 1103515245u + 12345u;
         last = ch;
-        pick = (seed >> 16) & 1;        /* COLOR 2's chance: one in two */
-        if (pick) {
-            seed = seed * 1103515245u + 12345u;
-            pick = 1 + (int)((seed >> 16) % 0x7fffu);
+        if (ch >= 0 && ch < 26) {
+            int pc = pal_count(PlayerDefs[ch == 0x17 ? 0 : ch].texBase);
+            own = pc > 2 ? pc : 2;
+            n = skins_of(ch, ids);
+        }
+        total = own;
+        for (i = 0; i < n; i++)
+            total += mods_skin_colors(ids[i]) > 0 ? mods_skin_colors(ids[i]) : 1;
+        r = (int)((seed >> 8) % (unsigned)total);
+        sk = 0;
+        pal = r + 1;
+        if (r >= own) {
+            r -= own;
+            for (i = 0; i < n; i++) {
+                int c = mods_skin_colors(ids[i]) > 0 ? mods_skin_colors(ids[i]) : 1;
+                if (r < c) {
+                    sk = i + 1;
+                    pal = r + 1;
+                    break;
+                }
+                r -= c;
+            }
         }
     }
-    return pick && n ? ids[(pick - 1) % n] : 0;
+    if (slot)
+        *slot = sk;
+    return pal;
+}
+
+/* The computer's outfit for fighter ch, from the same draw as his colour.
+ * 0 when it is the original (or he has none). */
+static int PortSkinTouched[2][32];      /* the SKIN box changed by hand */
+
+static int cpu_skin(long ch, const int *ids, int n)
+{
+    int slot;
+
+    cpu_look(ch, &slot);
+    return slot >= 1 && slot <= n ? ids[slot - 1] : 0;
 }
 
 int PortSkinOf(int side, long ch)
@@ -17810,7 +17991,7 @@ int PortSkinOf(int side, long ch)
         const char *e = getenv("UMK3_SKIN");
         k = side == 0 ? atoi(e) : (strchr(e, ',') ? atoi(strchr(e, ',') + 1) : 0);
     } else if (side == 1 && (GameMode != 6 || (PortVsCpu && !PortSkinTouched[1][ch])))
-        return cpu_skin(ch, ids, n);    /* the CPU: by chance, as COLOR 2 */
+        return cpu_skin(ch, ids, n);    /* the CPU: by chance (cpu_look) */
     return k >= 1 && k <= n ? ids[k - 1] : 0;
 }
 
@@ -19515,7 +19696,7 @@ void FE_Task_Multiplayer_Versus_Screen(void)
                    0.0f - FE_WidthScale * VSScroll,
                    (float)limeScreenHeight + FE_HeightScale * -256.0f,
                    FE_WidthScale * 256.0f, FE_HeightScale * 256.0f,
-                   0.0f, 0.0f, 1.0f, 1.0f, col);
+                   VS_EDGE, 0.0f, 1.0f - 2.0f * VS_EDGE, 1.0f, col);
 
     /* (port: the colour picks; the binary's own rule with none) */
     limeDrawSprite((TEXTURE *)pal_sheet(PortPaletteOf(1, Character1, Character2), right,
@@ -19524,7 +19705,7 @@ void FE_Task_Multiplayer_Versus_Screen(void)
                    + FE_WidthScale * -256.0f,
                    (float)limeScreenHeight + FE_HeightScale * -256.0f,
                    FE_WidthScale * 256.0f, FE_HeightScale * 256.0f,
-                   0.0f, 0.0f, -1.0f, 1.0f, col);   /* mirrored */
+                   1.0f - VS_EDGE, 0.0f, -(1.0f - 2.0f * VS_EDGE), 1.0f, col);   /* mirrored */
 
     /* ---- the shared kode row: six digits, 3..6 skipped ---- */
     for (i = 0; i < MVS_DIGITS; i++) {

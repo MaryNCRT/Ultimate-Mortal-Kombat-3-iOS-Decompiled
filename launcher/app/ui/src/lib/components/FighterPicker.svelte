@@ -23,9 +23,11 @@
     onMount(() => { app.overlay++; window.addEventListener('keydown', onKey, true); });
     onDestroy(() => { app.overlay--; window.removeEventListener('keydown', onKey, true); });
 
+    /* the fighter; the window stays open for his colour (Mary, 0.4.10:
+     * the gallery chooses both) */
     function choose(i) {
+        selectBlip();
         pick({ icon: i });
-        close();
     }
 </script>
 
@@ -42,7 +44,7 @@
             {/each}
         </div>
         <div class="foot">
-            <span class="tabs sub">
+            <span class="tabs sub cols6">
                 {#each [0, 1, 2, 3, 4, 5] as a}
                     <button class="tab" class:active={(p.alt | 0) === a} onpointerenter={hoverBlip}
                             onclick={() => { selectBlip(); pick({ alt: a }); }}>{tx('profColour')} {a + 1}</button>
@@ -100,5 +102,10 @@
         background: linear-gradient(rgba(215, 228, 255, .2), rgba(255, 255, 255, 0) 50%), var(--tex-grain), linear-gradient(#a3201a, #420604);
         box-shadow: var(--bevel), 0 0 calc(var(--u) * 1) rgba(196, 25, 15, .6);
     }
-    .foot { display: flex; justify-content: space-between; align-items: center; margin-top: calc(var(--u) * 1.4); gap: calc(var(--u) * 1); }
+    .foot { display: flex; justify-content: space-between; align-items: center; margin-top: calc(var(--u) * 1.4); gap: calc(var(--u) * 1.4); }
+    /* colours 1..6 share the row's width, never past the CLOSE button (Mary:
+     * nothing overlaps anything) */
+    .cols6 { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: calc(var(--u) * .6); }
+    .cols6 .tab { min-width: 0; padding-left: calc(var(--u) * .4); padding-right: calc(var(--u) * .4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+    .foot > .btn { flex: none; }
 </style>

@@ -2,6 +2,26 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.4.10",
+      "date": "2026-11-13",
+      "ES": [
+        "PANTALLA VS en el versus local y en ENTRENAMIENTO: después de elegir escenario, cada luchador con su color y traje, y el locutor dice sus nombres.",
+        "La línea que se veía en el borde del luchador de la derecha en las pantallas VS ya no aparece.",
+        "Contra la CPU todos los colores y trajes salen con la misma probabilidad.",
+        "PERFIL: el luchador y su color (1 a 6) se eligen en la galería, en el launcher y en el MI PERFIL del online.",
+        "El fundido de los menús cubre todo: imágenes de luchadores, banners y marcos del mando.",
+        "Mandos: los que reportan sus ejes en otro rango (8BitDo en modo D-input y otros) ya no caminan ni saltan solos; botones de 8BitDo en D-input."
+      ],
+      "EN": [
+        "VS SCREEN in local versus and TRAINING: after the stage select, each fighter in his colour and outfit, and the announcer says their names.",
+        "The line at the right-hand fighter's edge on the VS screens is gone.",
+        "Against the CPU every colour and outfit is equally likely.",
+        "PROFILE: the fighter and his colour (1 to 6) are chosen in the gallery, in the launcher and in online MY PROFILE.",
+        "The menus' fade covers everything: fighter pictures, banners and the pad's frames.",
+        "Pads: those that report their axes in another range (8BitDo in D-input mode and others) no longer walk and jump by themselves; 8BitDo D-input buttons mapped."
+      ]
+    },
+    {
       "version": "0.4.9",
       "date": "2026-11-13",
       "ES": [
