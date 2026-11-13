@@ -9,6 +9,7 @@
     import './theme/base.css';
     import { onMount } from 'svelte';
     import { app, init } from './app.svelte.js';
+    import { ms } from './mods/store.svelte.js';
     import Backdrop from './components/Backdrop.svelte';
     import TitleBar from './components/TitleBar.svelte';
     import Logo from './components/Logo.svelte';
@@ -39,7 +40,9 @@
         <TitleBar />
         {#if app.full && Sec}
             <main class="stage" class:wide={app.sec === 'mods'}>
-                <SecHead />
+                <!-- inside a fighter in the CHARACTER VIEWER the section's header
+                     gives its room to the viewer (Mary, 2026-11-13) -->
+                {#if !(app.sec === 'mods' && ms.tab === 'view' && ms.inside)}<SecHead />{/if}
                 <Sec />
             </main>
         {:else}
