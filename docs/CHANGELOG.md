@@ -8,7 +8,10 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## After 0.4.8 (not released yet)
+## 0.4.9 beta (2026-11-13)
+
+Not played by Mary in this build yet: the colours were checked by her in
+the test folder; the profile pictures and the HD pack's update were not.
 
 - **Profile pictures in colours 1 to 6** (Mary): the profile's fighter can
   wear any of his six colours -- PROFILE in the launcher (COLOR 1..6 under

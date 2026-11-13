@@ -2,6 +2,26 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.4.9",
+      "date": "2026-11-13",
+      "ES": [
+        "COLORES 3 A 6 para 23 luchadores, sin texturas nuevas: el juego tiñe la ropa de cada uno con los colores del arcade. Elígelos en la lista COLOR de la selección.",
+        "Después de compilar, los colores se guardan como imágenes en res/Textures y en el pack de texturas HD, para quien quiera pintarlos.",
+        "Selección: listas TRAJE y COLOR en las esquinas de arriba, cada una con su botón (Y / X o T / C).",
+        "PERFIL: tu luchador puede llevar cualquiera de sus 6 colores, también en línea.",
+        "Trajes añadidos: de 1 a 6 colores; en el VISOR DE PERSONAJES, + COLOR añade el siguiente.",
+        "Pack HD CHARACTERS 1.1 en el MOD HUB con todos los colores nuevos."
+      ],
+      "EN": [
+        "COLOURS 3 TO 6 for 23 fighters with no new textures: the game tints each one's clothes with the arcade's colours. Pick them in the select screen's COLOR list.",
+        "After a build the colours are saved as pictures in res/Textures and in the HD texture pack, for anyone who wants to paint them.",
+        "Select screen: OUTFIT and COLOR lists in the top corners, each with its button (Y / X or T / C).",
+        "PROFILE: your fighter can wear any of his 6 colours, online too.",
+        "Added outfits: 1 to 6 colours; in the CHARACTER VIEWER, + COLOR adds the next.",
+        "HD CHARACTERS 1.1 in the MOD HUB with every new colour."
+      ]
+    },
+    {
       "version": "0.4.8",
       "date": "2026-11-13",
       "ES": [
