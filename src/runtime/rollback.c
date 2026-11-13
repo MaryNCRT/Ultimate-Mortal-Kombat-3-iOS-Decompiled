@@ -68,7 +68,8 @@ void     disableHeartbeat(void);        /* limeMPGameSpecific.c */
 long     isMPConnected(void);           /* limeMPGameSpecific.c */
 extern int mpLevelList[14];             /* gamecode_globals.c: the binary's online stages */
 
-#define RB_VERSION      2               /* 2: the hello carries the rules and a draw's number */
+#define RB_VERSION      3               /* 2: the hello carries the rules and a draw's number;
+                                         * 3: and a lobby room's stage */
 #define RB_DELAY        2               /* frames at the start; UMK3_RB_DELAY 0..6 fixes it */
 #define RB_DELAY_MAX    6
 #define RB_DEPTH        3               /* the rollback adapt_delay aims at */
@@ -106,6 +107,7 @@ static double   g_rtt;                  /* ms, smoothed; 0 before a sample */
  * setup: its view of the fight's fighters and level */
 static int      g_hello, g_their_buttons, g_their_version, g_their_rollback;
 static uint32_t g_my_draw, g_their_draw;
+static int32_t  g_their_room = -1;      /* the other's room stage, -1 none */
 static char     g_my_rules[ONLINE_RULES_TEXT], g_their_rules[ONLINE_RULES_TEXT];
 static int      g_setup_in;
 static int32_t  g_setup[3], g_their_setup[3];
@@ -211,9 +213,12 @@ static void send_inputs(void)
 }
 
 /* The hello: version, buttons, the netcode (1 rollback, 0 classic), the
- * number for the draw, then the rules block as text (empty: no rules, a
- * fight not from a lobby). */
-#define RB_HELLO_LEN    (16 + ONLINE_RULES_TEXT)
+ * number for the draw, the lobby room's stage (a level, -1 none: the
+ * fight's own way), then the rules block as text (empty: no rules, a fight
+ * not from a lobby). The room's stage rides here too: the one called to
+ * host could be connected before its lobby told it the call, and opened
+ * STAGE SELECT for a stage the room had chosen (Mary). */
+#define RB_HELLO_LEN    (20 + ONLINE_RULES_TEXT)
 
 static int classic(void)
 {
@@ -243,7 +248,8 @@ static void send_hello(void)
     put32(b + 4, (uint32_t)Settings[4]);
     put32(b + 8, classic() ? 0u : 1u);
     put32(b + 12, g_my_draw);
-    memcpy(b + 16, g_my_rules, ONLINE_RULES_TEXT);
+    put32(b + 16, (uint32_t)rules_room_level());
+    memcpy(b + 20, g_my_rules, ONLINE_RULES_TEXT);
     mpnet_send(RB_PKT_HELLO, b, RB_HELLO_LEN, 1);
     mpnet_flush();
     printf("rollback: hello sent, rules \"%s\"\n", g_my_rules);
@@ -573,7 +579,8 @@ void rb_net(long type, const void *data, long len)
             g_their_buttons = (int)get32(b + 4);
             g_their_rollback = (int)get32(b + 8);
             g_their_draw = get32(b + 12);
-            memcpy(g_their_rules, b + 16, ONLINE_RULES_TEXT);
+            g_their_room = (int32_t)get32(b + 16);
+            memcpy(g_their_rules, b + 20, ONLINE_RULES_TEXT);
             g_their_rules[ONLINE_RULES_TEXT - 1] = 0;
         }
         g_hello = 1;
@@ -698,6 +705,12 @@ int rb_online_gate(long *c1, long *c2, long *level)
             return refuse(2);
         if (strcmp(g_my_rules, g_their_rules))
             return refuse(1);
+        if (rules_room_level() < 0 && g_their_room >= 0) {
+            /* the room's stage, from the other side's hello: this side's
+             * lobby had not told it yet */
+            rules_set_room_level(g_their_room);
+            printf("rollback: the room's level %d, from the other side\n", (int)g_their_room);
+        }
         {
             online_rules r;
             int drawn = g_my_rules[0] && rules_decode(g_my_rules, &r) && !r.host_adv;
@@ -713,7 +726,8 @@ int rb_online_gate(long *c1, long *c2, long *level)
                 uint32_t h = mix(host ^ mix(guest + 0x9e3779b9u));
 
                 g_swap = (int)(h >> 31);
-                *level = mpLevelList[(h & 0xffffu) % 14];
+                *level = rules_room_level() >= 0 ? rules_room_level()   /* the room's */
+                                                 : mpLevelList[(h & 0xffffu) % 14];
                 if (g_swap) {
                     long t = *c1;
                     *c1 = *c2;
@@ -728,6 +742,10 @@ int rb_online_gate(long *c1, long *c2, long *level)
             }
         }
         rules_series_swap(0);
+        if (rules_room_level() >= 0) {  /* the room chose it: no STAGE SELECT */
+            *level = rules_room_level();
+            printf("rollback: the room's level %ld\n", *level);
+        }
         g_gate = 2;
         g_gate_wait = 0;
         /* fall through */

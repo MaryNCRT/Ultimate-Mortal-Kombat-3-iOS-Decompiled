@@ -2607,6 +2607,30 @@ static void st_thumb(int level, float x, float y, float w, float h, float big)
     }
 }
 
+/* Port: a lobby room's stage (FrontEnd.c, its stage column and its window):
+ * the online stage at `place` in mpLevelList, its picture in the front
+ * end's units (`vw` wide, 320 high) and its name. */
+extern int mpLevelList[14];             /* gamecode_globals.c */
+
+void stage_room_thumb(int place, float vw, float x, float y, float w, float h)
+{
+    if (place < 0 || place >= 14)
+        return;
+    begin_2d_w(vw);
+    st_thumb(mpLevelList[place], x, y, w, h, 1.0f);
+    end_2d();
+}
+
+const char *stage_room_name(int place)
+{
+    return place >= 0 && place < 14 ? st_name(mpLevelList[place]) : "";
+}
+
+int stage_room_level(int place)
+{
+    return place >= 0 && place < 14 ? mpLevelList[place] : -1;
+}
+
 static int eligible(void)
 {
     if (DbgFightActive || rp_playing())
@@ -2615,7 +2639,7 @@ static int eligible(void)
      * stage is drawn then (rollback.c rb_online_gate) */
     if (GameMode == 1) {
         const online_rules *r = rules_online();
-        return isParent() && !(r && !r->host_adv);
+        return isParent() && !(r && !r->host_adv) && rules_room_level() < 0;   /* nor a room's */
     }
     return GameMode == 6 || GameMode == 2;
 }

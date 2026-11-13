@@ -9089,6 +9089,18 @@ extern int PortPractice;                /* FrontEnd.c, port: training */
  * (runtime/debug_menu.c sets them; bit 0 player one, bit 1 player two). */
 int PortDbgClock;
 extern int PortRoundTime;               /* port: runtime/online_rules.c, -1 infinite */
+int rules_wins_needed(int binary_value);    /* port: runtime/online_rules.c */
+
+/* Port, not in the binary: the round wins that end a match. The binary's
+ * 2 (best of three); online and in a local versus a ROUNDS 5 rule's 3, so
+ * a best of five does not end at two. ROUNDS 1 stays 2: it is played as
+ * the binary's one-round kode is, both a round up from the start
+ * (GameCode.c Task_GameInit). */
+static uint32_t port_match_wins(void)
+{
+    int w = rules_wins_needed(2);
+    return (uint32_t)(w < 2 ? 2 : w);
+}
 int PortDbgHealth;
 
 long t_clock4(MK3THREAD *thread)
@@ -9196,7 +9208,7 @@ long t_results_retp(MK3THREAD *thread)
         uint32_t i = (uint32_t)(w - 1);
 
         if ((*(const uint32_t *)(Pp + i * PP_STRIDE + 0x10) & 1) != 0 &&
-            ((const uint32_t *)H)[i] == 2) {            /* best of three */
+            ((const uint32_t *)H)[i] == port_match_wins()) {  /* best of three; port: the rule's */
             *mk3_frame(thread, thread->frame + 1) = 0x121f;
             thread->frame = thread->frame + 1;          /* push a level */
             mk3_frame(thread, thread->frame)[1] =
@@ -10713,7 +10725,7 @@ long t_play3(MK3THREAD *thread)
         MKEvent_Add(3, 4, 0, 0);
         obj->field1c = h[0];
         obj->field20 = h[1];
-        if (h[0] == 2 || h[1] == 2)
+        if (h[0] == port_match_wins() || h[1] == port_match_wins())   /* port: the rule's */
             end_of_match_chores(obj);
 
         mk3_frame(thread, thread->frame)[1] =
@@ -10726,7 +10738,7 @@ long t_play3(MK3THREAD *thread)
         obj->field1c = h[0];
         obj->field20 = h[1];
 
-        if (h[0] == 2 || h[1] == 2) {           /* the match is over */
+        if (h[0] == port_match_wins() || h[1] == port_match_wins()) {   /* the match is over (port: the rule's) */
             int32_t a = *(const int16_t *)(G_BYTES + 0x45e);
             int32_t b = *(const int16_t *)(G_BYTES + 0x460);
 
