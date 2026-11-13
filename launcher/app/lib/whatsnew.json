@@ -2,6 +2,22 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.4.7",
+      "date": "2026-11-13",
+      "ES": [
+        "LA SALA online tiene su propia pantalla: los dos que pelean con sus victorias, el escenario con su foto y las reglas, y la fila de los que esperan.",
+        "1 VS 1 o ROTACIÓN (el ganador se queda o rotan los dos), la fila que ordena el líder, pedir pasar, entrada libre o con solicitud, tiempo para estar LISTO.",
+        "El escenario se elige en la sala: el líder, una votación, los que pelean, el perdedor o al azar.",
+        "Un empate por tiempo ya no congela la pelea, y una pelea de 1 asalto es ya el asalto final, con FINISH HIM."
+      ],
+      "EN": [
+        "The online ROOM has a screen of its own: the two who fight with their wins, the stage with its picture and the rules, and the line of those waiting.",
+        "1 VS 1 or ROTATION (the winner stays or both rotate), a line the leader orders, asking to pass, joining free or on request, a time to be READY.",
+        "The stage is picked in the room: the leader, a vote, the fighters, the loser or at random.",
+        "A tie on time no longer freezes the fight, and a one-round fight is the final round at once, with FINISH HIM."
+      ]
+    },
+    {
       "version": "0.4.6",
       "date": "2026-11-12",
       "ES": [
