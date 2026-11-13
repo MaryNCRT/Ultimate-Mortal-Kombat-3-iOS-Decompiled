@@ -14,6 +14,8 @@
     import { api } from '#lib/platform.js';
     import { hoverBlip, selectBlip, doneChord, failChord } from '#lib/sound.js';
     import { ms, src, loadCatalog, fighter, VIEW_KINDS } from '#lib/mods/store.svelte.js';
+    import { specialModels } from '#lib/mods/derived.js';
+    import { parseMeshset } from '#lib/mods/formats.js';
     import { fighterDesc, stageDesc, meshsetDesc, exportFiles, pngBytes, textureFile } from '#lib/mods/assets.js';
     import { stageExport } from '#lib/mods/stagerun.js';
     import { homeOf, textureOwners, textureHome, exportTexDir } from '#lib/mods/owners.js';
@@ -29,7 +31,10 @@
     let line = $state('');
     let done = $state('');
 
-    const items = $derived(ms.cat ? ms.cat[kind] || [] : []);
+    /* SPECIAL MODELS: read from the fighters' meshsets (mods/derived.js) */
+    let specials = $state.raw([]);
+    $effect(() => { if (kind === 'special' && ms.cat && !specials.length) specialModels(ms.cat, f => src.read(f, ''), parseMeshset).then(l => { specials = l; }); });
+    const items = $derived(kind === 'special' ? specials : ms.cat ? ms.cat[kind] || [] : []);
     /* USD three ways: text, binary, and the binary packed with its pictures */
     const FORMATS = [['fbx', 'FBX'], ['glb', 'GLB'], ['usd', 'USDA'], ['usdc', 'USDC'], ['usdz', 'USDZ'], ['obj', 'OBJ']];
 
@@ -82,10 +87,10 @@
                         /* a stage with its animation: as the engine plays it,
                          * its effects and glows too (mods/stagerun.js) */
                         desc = kind === 'stages' ? (stageAnim && format !== 'obj' ? await stageExport(src, it) : await stageDesc(src, it))
-                            : await meshsetDesc(src, it.id);
+                            : await meshsetDesc(src, it.file || it.id, it.only || undefined);
                         files = await exportFiles(src, desc, format);
                     }
-                    sub = homeOf(kind, it) + '/' + format.toUpperCase();
+                    sub = homeOf(kind === 'special' ? 'models' : kind, it.only ? { name: it.owner + ' - ' + it.name } : it) + '/' + format.toUpperCase();
                 }
                 last = await api.exportSave(sub, files);
             }

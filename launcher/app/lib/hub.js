@@ -34,7 +34,7 @@ const REPO = 'MaryNCRT/UMK3-IOS-Mod-Hub';
 const RAW = 'https://raw.githubusercontent.com/' + REPO + '/main/';
 const INDEX = RAW + 'index.json';
 const DL = 'https://github.com/' + REPO + '/releases/download/';
-const CATEGORIES = ['textures', 'audio', 'music', 'models', 'mixed'];
+const CATEGORIES = ['textures', 'audio', 'music', 'models', 'mixed', 'skin'];
 
 const modsDir = root => path.join(root, 'mods');
 

@@ -5,7 +5,8 @@ import { catalog, loadFighter } from './assets.js';
 
 export const MODS_TABS = [['mgr', 'modsMgr'], ['hub', 'modsHub'], ['view', 'modsView'], ['stage', 'modsStage'], ['edit', 'modsEdit'], ['tex', 'modsTex'], ['exp', 'modsExp']];
 /* the stages have a viewer of their own (STAGE VIEWER, StageViewer.svelte) */
-export const VIEW_KINDS = [['characters', 'vwChars'], ['models', 'vwModels'], ['textures', 'vwTex']];
+/* SPECIAL MODELS: those of a move or an ending (mods/derived.js specialModels) */
+export const VIEW_KINDS = [['characters', 'vwChars'], ['special', 'vwSpecial'], ['models', 'vwModels'], ['textures', 'vwTex']];
 
 export const ms = $state({
     tab: 'mgr',
@@ -15,6 +16,12 @@ export const ms = $state({
     files: null, cat: null, noGame: false,
     /* the viewer: kind of thing, the chosen one, its settings */
     kind: 'characters', pick: null, search: '',
+    /* inside a fighter (the roster left): the MODS bar above is hidden and
+     * the viewer takes the page (SecMods.svelte) */
+    inside: false,
+    /* inside: MODELS or TEXTURES (the bar above), and whether one is
+     * chosen (the list gives way to the viewer's options) */
+    leftTab: 'models', chosen: false,
     pose: 'tpose', clip: -1, frame: 0, playing: false, speed: 1, loop: true, solo: false, outfit: '', bones: false, wire: false, solid: false, weights: false, floor: true, extras: true,
     bgStage: '',                        /* STAGE: the stage behind a fighter ('' none) */
     loading: false, error: '',
@@ -26,6 +33,11 @@ export const ms = $state({
     layer: '',
     /* TEXTURES by fighter (a fighter's id, '' all); `rev` counts REFRESH */
     texFighter: '', rev: 0,
+    /* ONLY WHAT THE MOD REPLACES: the viewer's lists and TEXTURES' cards
+     * cut to what the mod looked at has (Mary, 2026-11-12) */
+    modOnly: false,
+    /* FIGHTERS: the roster's page (true) or the fighter picked */
+    roster: true,
     /* REPLACE TEXTURE also writes the game's smaller copies (_LOW, _LITE) */
     autoSmall: true,
     autoIce: true,                      /* REPLACE TEXTURE: its _ICE copy too (image.js icePicture) */
@@ -50,6 +62,22 @@ export async function reloadMods() {
     await refreshMods();
     forgetMod();
     ms.rev++;
+}
+
+/* What a mod replaces, by name: each of its files' names without the
+ * extension, upper case (KANO_DIFFUSE, KANO_STANDARD), and the game file
+ * each one stands for. `layer` as ms.layer: one mod's folder, or '*' for
+ * every mod that is on. */
+export function modNames(layer) {
+    const mods = layer === '*' ? ms.list.filter(m => m.on) : ms.list.filter(m => m.folder === layer);
+    const out = new Set();
+    const stem = f => f.replace(/^.*\//, '').replace(/\.[^.]+$/, '').toUpperCase();
+    for (const m of mods)
+        for (const f of m.files || []) {
+            out.add(stem(f.file));
+            if (f.replaces) out.add(stem(f.replaces));
+        }
+    return out;
 }
 
 /* the order as it stands, to mods/mods.ini (the game reads it at start) */

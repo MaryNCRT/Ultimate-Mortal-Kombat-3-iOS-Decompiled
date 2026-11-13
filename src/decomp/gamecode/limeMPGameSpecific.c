@@ -585,6 +585,21 @@ void sendPalettePacket(int pick)
         mpnet_send(PORT_PKT_PALETTE, &w, 4, 1);
 }
 
+/* Port, not in the binary: this machine's added skin for its fighter
+ * (FrontEnd.c PortSkinOf), named as mods_skin_key names it, "" none: the
+ * fighter's number then the name, 64 bytes. */
+void sendSkinPacket(long who, const char *key)
+{
+    struct { int32_t who; char key[60]; } p;
+
+    memset(&p, 0, sizeof p);
+    p.who = (int32_t)who;
+    if (key)
+        snprintf(p.key, sizeof p.key, "%s", key);
+    if (mpnet_session_exists())
+        mpnet_send(PORT_PKT_SKIN, &p, (int)sizeof p, 1);
+}
+
 void sendCharacterPacket(long who)
 {
     sendPacket(1, (float)who, 0.0f, NULL);
@@ -1055,6 +1070,16 @@ void processPacket(const void *payload, long len, long type)
         extern int PortNetPalette[2];
         if (len == 4 && w[0] >= 0 && w[0] <= 2)
             PortNetPalette[1] = w[0];
+        break;
+    }
+    case PORT_PKT_SKIN: {               /* port: the other side's added skin */
+        void PortNetSkinGot(long who, const char *key);   /* FrontEnd.c */
+        char key[60];
+        if (len != 64)
+            return;
+        memcpy(key, (const char *)w + 4, sizeof key);
+        key[sizeof key - 1] = 0;
+        PortNetSkinGot(w[0], key);
         break;
     }
     case PORT_PKT_STAGE: {              /* port: the host's STAGE SELECT */

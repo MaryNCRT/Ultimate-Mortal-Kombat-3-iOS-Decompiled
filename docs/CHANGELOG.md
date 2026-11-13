@@ -8,6 +8,32 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## 0.4.8 beta (2026-11-13)
+
+- **Outfits that add** (Mary): a mod whose mod.ini says `type=skin`
+  replaces nothing -- it is another outfit for one fighter, with its own
+  model and its own COLOR 1, COLOR 2 and frozen sheets, beside the
+  original; the two can fight each other. Its files can have any names
+  (`skin=` its name, `model=`, `color1=`, `color2=`, `ice=`, or found by
+  their names); a model with several parts can have its own set of sheets
+  for each colour. The select screen's **SKIN** box above COLOR picks it,
+  the preview shows it; the CPU wears one as often as it wears colour 2.
+  Online each side sees the other's outfit only with the same mod, else the
+  original; the fight is the same.
+- **CHARACTER VIEWER**: OUTFIT slots (1 the original, the added outfits,
+  NEW OUTFIT as a copy of the original) and COLOR 1 / 2 / FROZEN with the
+  chosen sheet and REPLACE TEXTURE under it; changes go to the outfit shown.
+  The roster page (a fighter by his portrait), SPECIAL MODELS. Inside a
+  fighter the headers give their room: MODELS / TEXTURES above, then the
+  chosen model with the whole window.
+- Fixed: the launcher dropped mod.ini lines whose names have digits
+  (`color1=`) when it saved a mod.
+- MOD HUB: **Sonya Blade MKX 2.0** is now an outfit that adds (UPDATE from
+  the MOD HUB).
+- **Tried by Mary**: the MKX outfit beside the original in fights, both
+  colours, the SKIN box, the CPU wearing it. **Not tried**: online between
+  two PCs.
+
 ## 0.4.7 beta (2026-11-13)
 
 - **ONLINE, the room** (Mary): once in a lobby it opens a page of its own,
@@ -75,6 +101,30 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
   for it. Other images can be chosen in STEAMGRIDDB and DOWNLOADED. Only
   your Steam name is shown, never ids. *Mary confirmed the game added to
   her Steam library.*
+
+- **The CHARACTER VIEWER reorganised** (Mary, 2026-11-12):
+  - FIGHTERS opens on a page of its own with the whole roster, each by its
+    select-screen portrait; a click opens the fighter in the viewer, and
+    BACK TO THE ROSTER returns to the page. Beside the fighter: his
+    model, FROZEN, his special models, the derived models (headless,
+    babality ...) and all his textures, each opening in place.
+  - **SPECIAL MODELS**: Raiden (Nightwolf's Friendship, hidden in
+    `NIGHTWOLF_STANDARD.meshset`, eleven frames of the change, FRAME
+    picks one) first; then the other models hidden in the fighters' own
+    files (the animalities' animals, the arcade cabinets, the snowman ...)
+    and the ANIMALITY_ / FRIENDSHIP_ files. They export from EXPORT too.
+  - **ONLY WHAT THE MOD REPLACES**: with a mod chosen in SHOW WITH, a
+    checkbox cuts the roster, the special and other models, the textures
+    and a model's TEXTURES tab to what the mod has; TEXTURES (the page)
+    has the same checkbox, its fighters and stages cut too.
+  - **EXPORT ONLY THE LAYERS SHOWN**: the EXPORT tab writes the model with
+    only the meshes LAYERS has on (FBX, GLB, USD, OBJ).
+  - The MODS pages take the whole window: no command bar (its keys still
+    work) and narrower margins.
+  Tried in the UI harness with the test folder's files (the roster page,
+  Nightwolf's page, Raiden's frames, the filter with Sonya Blade MKX, the
+  layers export of Sindel without her hair and of one Raiden frame). In the
+  test folder's launcher; **Mary has not looked at it yet.**
 
 - **LOBBIES in the ONLINE screen** (Mary): the open lobbies, refreshed
   every 5 seconds and with REFRESH, ALL or only those with MY RULES, a box

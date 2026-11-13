@@ -111,6 +111,8 @@ static void resolve(const char *rel, char *out, size_t n)
     /* port: a mod's file of the same name first (mods.c) */
     if (mods_find(rel, out, n))
         return;
+    /* an added skin's name the skin has no file for: the game's file */
+    rel = mods_real_name(rel);
     snprintf(out, n, "%s/%s", g_lime_asset_root, rel);
 }
 

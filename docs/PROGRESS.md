@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-12 (ONLINE stage 3: LOBBIES in the ONLINE screen, invites over P2P, the online select screen's banners; a second monitor's refresh) · before: 2026-11-12 (ONLINE stage 2: the EOS lobby core, `mplobby_*` in mp_eos.c, tested with two probes against the service) · before: 2026-11-12 (release 0.4.5 beta: TRAINING's own screen, DUELO against the CPU, the RULES button) · before: 2026-11-12 (the ONLINE phase's rules block and the local versus's VS RULES window with its kodes checklist, Mary confirmed) · before: 2026-11-12 (0.4.4 beta in the test folder: the Lost Treasures fixed from the binary, hidden controls ignore clicks, the first start's preset, WHAT'S NEW) · earlier: 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-13 (outfits that add: `type=skin` mods, the SKIN box, the CHARACTER VIEWER's OUTFIT / COLOR) · 2026-11-12 (ONLINE stage 3: LOBBIES in the ONLINE screen, invites over P2P, the online select screen's banners; a second monitor's refresh) · before: 2026-11-12 (ONLINE stage 2: the EOS lobby core, `mplobby_*` in mp_eos.c, tested with two probes against the service) · before: 2026-11-12 (release 0.4.5 beta: TRAINING's own screen, DUELO against the CPU, the RULES button) · before: 2026-11-12 (the ONLINE phase's rules block and the local versus's VS RULES window with its kodes checklist, Mary confirmed) · before: 2026-11-12 (0.4.4 beta in the test folder: the Lost Treasures fixed from the binary, hidden controls ignore clicks, the first start's preset, WHAT'S NEW) · earlier: 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -102,6 +102,49 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+### 2026-11-13 -- Outfits that add (skins beside the original)
+
+Port work, not in the binary. Mary's ask: skins apart from colours -- a
+fighter can have more outfits than the game's, each with its own model and
+its own two colours, beside the original, without replacing it; the MKX
+Sonya mod the test.
+
+- **Game.** A mod with `type=skin` in its mod.ini is indexed apart
+  (`mods.c` `skin_take`); its files are asked for only through a fighter
+  loaded with it, under the game's names with `@S<n>@` in front
+  (`Players.c` `PortSkinLoad` around `LoadAnimatedCharacter`), so the
+  texture cache, the lighting bakes and `skin_mats` keep the two apart and
+  the original and the outfit fight each other. A name the outfit lacks is
+  the game's file (`mods_real_name` in `resolve` and `load_rgba`). Its
+  files can have any names: `model=`, `color1=`, `color2=`, `ice=`, or by
+  their own names (ice, ...2, the rest); a game-named file in it wins (the
+  launcher writes those). `skin=` is its own name. A `.mats` part can name
+  COLOR 2's sheet (sixth column, else `<sheet>2`): each colour has its own
+  set of part sheets. The select screen's SKIN box above COLOR (FrontEnd.c
+  `skin_box`), the preview loaded for it (`PortFESkinAnim`, freed with the
+  front end's fighters). Online: packet 26 names a side's outfit by fighter
+  + model size + colour 1 size; the other machine shows it only when it has
+  the same, else the original.
+- **Checked:** `--fight sonya sonya` with `UMK3_SKIN`: MKX against the
+  original, MKX against MKX in colour 2, a two-part test outfit whose part
+  turned to its own COLOR 2 sheet (red, on purpose); the select screen's
+  SKIN box and preview by scripted taps (`UMK3_TAPS`). Mary played it and
+  saw the MKX model drawn with the original's sheet: the launcher had
+  rewritten mod.ini without `color1=` / `color2=` (its ini reader took no
+  digits in key names). Fixed on both sides. Not checked: online between
+  two machines.
+- **Launcher.** `lib/mods.js` reads an outfit for the viewer by the game's
+  rules (`skinRead`), lists mods with their `skin`, leaves outfits out of
+  the mods that replace (`'*'`), and makes a NEW OUTFIT as a copy of what
+  the fighter wears now (`skinCreate`). The CHARACTER VIEWER (built on the
+  roster branch `claude/viewer-roster-special`, merged here): OUTFIT slots
+  and COLOR 1 / 2 / FROZEN with the chosen sheet and REPLACE TEXTURE under
+  it; changes go to the outfit shown. Inside a fighter (Mary's layout): the
+  section header and the MODS pages bar give their room to MODELS /
+  TEXTURES; his models (or the open model's textures, as pictures) beside
+  the viewer, then the model chosen with the viewer and its options alone.
+  Checked in the UI harness on a copy of the test folder's mods.
 
 ### 2026-11-12 -- Discord Rich Presence, and joining a lobby from Discord
 
@@ -263,6 +306,43 @@ game's hello, the gate's minute running out, kick / promote.
   searching lobby (FE task 3). The session ends; the host calls the next
   fight from the room.
 - The fight's player names (gold plates) are PR #209's, not merged yet.
+
+### 2026-11-12 — CHARACTER VIEWER: roster page, SPECIAL MODELS, mod filter, layers export
+
+Mary asked (in Spanish) for: a SPECIAL MODELS category with the Raiden of
+Nightwolf's Friendship; the fighters as a grid of their portraits, each
+opening with everything of theirs beside it; a checkbox to see only what a
+mod replaces. Then, while it was built: the roster as a page of its own
+with a way back, the filter on textures and models, exporting only the
+layers shown, and the editor's pages over the whole window.
+
+- **Where the viewer is**: the launcher (`launcher/app/ui/src/lib/sections/mods/ModViewer.svelte`),
+  not the game's debug menu.
+- **Raiden** is not a file of its own: it is eleven meshes `Raiden001..011`
+  (1708 triangles each, texture `RAYDEN_DIFFUSE`) inside
+  `NIGHTWOLF_STANDARD.meshset`. `derived.js specialModels` reads every
+  fighter's meshset and groups the meshes of 300+ triangles whose texture is
+  not the fighter's by texture, leaving out what every file has (`WHITE`
+  shells, `HIRESSKELETON`, `ROBOT_SKELETON`, `FROZEN_MANB`) and roster
+  skins (`<F>_DIFFUSE`, Sonya's `SONIA DIFF`). Only Raiden's label
+  (Friendship) is stated, because Mary said so; the rest are labelled "in
+  the fighter's file", named from their meshes. 36 found, plus the
+  `ANIMALITY_*` / `FRIENDSHIP_*` meshsets. A group whose meshes are all the
+  same size is shown one mesh at a time (FRAME).
+- **Mod filter**: `store.svelte.js modNames(layer)` from the mod list's files
+  and what each replaces; a texture counts for its `_LOW` / `_LITE`.
+- **Layers export**: `fighterDesc(..., { parts: true })` emits one mesh per
+  block or per part, the order LAYERS' `b*` / `p*` keys follow; bone
+  attachments (`e*`) are not exported, as in EXPORT.
+- **Capture aid**: `UMK3_LAUNCHER_PICK` takes `characters/` (the roster page),
+  `special/<id>[@frame]` and a leading `~<mod>~` (filter on); the shot
+  window opens with `showInactive`. The shot run from the test folder's
+  `launcher\bin` found the wrong root (`launcher\bin`) and captured
+  nothing; Mary asked to stop the windows and look at it herself.
+- Checked in `scripts/ui-harness.js` with the test folder: all of the above.
+  Packed into the test folder's `app.asar` (the old one was the 0.4.4 asar;
+  no open PR changes the launcher). **Not seen by Mary yet.**
+
 
 ### 2026-11-12 -- ONLINE stage 3: LOBBIES; a second monitor's refresh
 

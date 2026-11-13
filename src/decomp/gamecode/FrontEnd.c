@@ -5080,13 +5080,28 @@ int  PortPaletteOf(int side, long c1, long c2);  /* port: the colour picker */
 int  PortNetPaletteOf(int local, long c_this, long c_other);   /* port */
 extern int PortNetPalette[2];
 void sendPalettePacket(int pick);       /* limeMPGameSpecific.c, port */
+void PortSendMySkin(void);              /* port: below, the SKIN box */
+
+int   PortSkinOf(int side, long ch);    /* port: the SKIN box, below */
+void *PortFESkinAnim(long slot, int id);   /* Players.c, port */
+
+static void *P32 fe_lent_own;           /* port: the slot's own fighter */
 
 void RenderFECharacters(long slot0, long slot1)
 {
     int i;
+    int skin[2];
 
     FEChars[0] = slot0;
     FEChars[1] = slot1;
+
+    /* port: a fighter shown in a skin that adds is loaded here, before
+     * the 3D pass, the first time it is asked for (Players.c) */
+    for (i = 0; i < 2; i++) {
+        skin[i] = FEChars[i] == -1 ? 0 : PortSkinOf(i, FEChars[i]);
+        if (skin[i] && PortFESkinAnim(FEChars[i], skin[i]) == NULL)
+            skin[i] = 0;
+    }
 
     LIMEDS_Set3dMode();
     SceneGroundOffset = 0.0f;
@@ -5168,6 +5183,17 @@ void RenderFECharacters(long slot0, long slot1)
         *(float *)(ch + 0x5dc) = 0.65f;
         *(float *)(ch + 0x5e0) = 0.7f;
 
+        /* port: the slot drawn with the skin's fighter, its own put back
+         * after RenderPlayer */
+        {
+            void *P32 own = *(void *P32 *)(ch + 4);
+            void *lent = skin[i] ? PortFESkinAnim(which, skin[i]) : NULL;
+
+            if (lent)
+                *(void *P32 *)(ch + 4) = (void *P32)lent;
+            fe_lent_own = own;
+        }
+
         anim = *(void *P32 *P32 *)(ch + 4);
         *(void *P32 *)(ch + 0x528) = anim[0x14 / 4];
         *(long *)(ch + 0x52c) = 0;
@@ -5190,6 +5216,7 @@ void RenderFECharacters(long slot0, long slot1)
         }
 
         RenderPlayer(ch, 1, 0);
+        *(void *P32 *)(ch + 4) = fe_lent_own;   /* port: the slot's own back */
     }
 }
 
@@ -9015,6 +9042,7 @@ void FE_Task_Multiplayer_Character_Select(void)
         && playerCharacter != -1) {
         sendCharacterPacket(playerCharacter);
         sendPalettePacket(PortNetPalette[0]);   /* port: the colour pick */
+        PortSendMySkin();                       /* port: the added skin */
         if ((unsigned long)(syncCharacters - 1) <= 3)
             syncCharacters++;
         puts("sending character packet");
@@ -17682,6 +17710,185 @@ static void p2_slot(void)
         limePlaySound(SFXHandle[0x68 / 4], MusicVol[Settings[3]] / 100.0f, 1.0f, 0);
 }
 
+/* Port, not in the binary: the SKIN box. A fighter with skins that add
+ * (mods.c, mod.ini type=skin) gets a box above his COLOR box: ORIGINAL, the
+ * game's, then each skin by its name. The COLOR box then picks the skin's
+ * colour 1 or 2. Remembered per side and fighter while the game runs. Not
+ * online, where both machines show the game's. */
+#include "../../runtime/mods.h"
+
+#define SKINS_MAX 16
+static int PortSkinPick[2][32];         /* 0 the game's, k the k-th skin */
+
+static int skins_of(long ch, int *ids)
+{
+    if (ch < 0 || ch >= 26)
+        return 0;
+    return mods_skin_list(PlayerDefs[ch == 0x17 ? 0 : ch].texBase, ids, SKINS_MAX);
+}
+
+/* the mods.c id of the skin `side` shows fighter `ch` in, 0 the game's */
+/* Online: the other machine's skin for its fighter, as it named it
+ * (packet 26, limeMPGameSpecific.c). Shown when this machine has the same
+ * skin (mods_skin_by_key), else the other player is seen in the game's --
+ * the fight is the same either way, a skin only changes what is drawn. */
+static char PortNetSkin[60];
+static long PortNetSkinChar = -1;
+
+void PortNetSkinGot(long who, const char *key)
+{
+    if (who == PortNetSkinChar && strcmp(key, PortNetSkin) == 0)
+        return;
+    PortNetSkinChar = who;
+    snprintf(PortNetSkin, sizeof PortNetSkin, "%s", key);
+    if (*key)
+        printf("online: the other player's %ld in the skin %s -- %s here\n",
+               who, key, mods_skin_by_key(key) ? "shown" : "not");
+}
+
+static int net_skin_of(long ch)
+{
+    int ids[SKINS_MAX], n, i, id;
+
+    if (ch != PortNetSkinChar || !(id = mods_skin_by_key(PortNetSkin)))
+        return 0;
+    n = skins_of(ch, ids);
+    for (i = 0; i < n; i++)
+        if (ids[i] == id)
+            return id;
+    return 0;                           /* another fighter's skin */
+}
+
+/* The computer's outfit for fighter ch, as cpu_palette draws its colour:
+ * drawn once per opponent, with the same chance as COLOR 2 -- one in two an
+ * added outfit (any of his, alike), else the original. 0 when he has none. */
+static int PortSkinTouched[2][32];      /* the SKIN box changed by hand */
+
+static int cpu_skin(long ch, const int *ids, int n)
+{
+    static long last = -2;
+    static int pick;
+
+    if (ch != last) {
+        static unsigned seed;
+
+        if (!seed)                      /* its own, not the game's rand() */
+            seed = ((unsigned)time(NULL) * 2654435761u) | 1u;
+        seed = seed * 1103515245u + 12345u;
+        last = ch;
+        pick = (seed >> 16) & 1;        /* COLOR 2's chance: one in two */
+        if (pick) {
+            seed = seed * 1103515245u + 12345u;
+            pick = 1 + (int)((seed >> 16) % 0x7fffu);
+        }
+    }
+    return pick && n ? ids[(pick - 1) % n] : 0;
+}
+
+int PortSkinOf(int side, long ch)
+{
+    int ids[SKINS_MAX], n, k;
+
+    if (ch < 0 || ch >= 26)
+        return 0;
+    if (GameMode == 1 && side == 1)
+        return net_skin_of(ch);
+    n = skins_of(ch, ids);
+    k = PortSkinPick[side][ch];
+    /* a test aid: UMK3_SKIN="p1,p2", each side's skin by its place in the
+     * fighter's list (0 the game's), over the picks and for a --fight */
+    if (getenv("UMK3_SKIN") && GameMode != 1) {
+        const char *e = getenv("UMK3_SKIN");
+        k = side == 0 ? atoi(e) : (strchr(e, ',') ? atoi(strchr(e, ',') + 1) : 0);
+    } else if (side == 1 && (GameMode != 6 || (PortVsCpu && !PortSkinTouched[1][ch])))
+        return cpu_skin(ch, ids, n);    /* the CPU: by chance, as COLOR 2 */
+    return k >= 1 && k <= n ? ids[k - 1] : 0;
+}
+
+int PortFightSkin(int side, long c1, long c2)
+{
+    /* online, side 0 is the host's fighter: this machine's own skin or
+     * the other's (as PortPaletteOf, rb_local_p1) */
+    if (GameMode == 1)
+        return PortSkinOf((side == 0) == (rb_local_p1() != 0) ? 0 : 1,
+                          side == 0 ? c1 : c2);
+    return PortSkinOf(side, side == 0 ? c1 : c2);
+}
+
+void sendSkinPacket(long who, const char *key);   /* limeMPGameSpecific.c */
+
+/* online: this machine's fighter's skin, to the other */
+void PortSendMySkin(void)
+{
+    char key[60];
+
+    if (GameMode != 1 || playerCharacter < 0 || playerCharacter >= 26)
+        return;
+    mods_skin_key(PortSkinOf(0, playerCharacter), key, sizeof key);
+    sendSkinPacket(playerCharacter, key);
+}
+
+static void skin_box(int side, int y, long ch)
+{
+    char buf[40];
+    int ids[SKINS_MAX], n, k, hit, i;
+    float w = (float)FE_W((float)PP_W), t = (float)FE_W(2.0f);
+    float L = side == 0 ? (float)FE_W(8.0f)
+                        : (float)limeScreenWidth - FE_W(8.0f) - w;
+    float mid = L + w * 0.5f;
+    float T = FE_Y((float)y), H = FE_H((float)PP_H);
+
+    if (ch < 0 || ch >= 26 || (n = skins_of(ch, ids)) == 0)
+        return;
+    k = PortSkinPick[side][ch];
+    if (k < 0 || k > n)
+        k = PortSkinPick[side][ch] = 0;
+    /* the CPU's, until the box is changed by hand: what chance gave it */
+    if (side == 1 && PortVsCpu && !PortSkinTouched[1][ch]) {
+        int id = cpu_skin(ch, ids, n);
+        for (k = 0, i = 0; i < n; i++)
+            if (ids[i] == id)
+                k = i + 1;
+    }
+
+    limeFillRect(L, T, w, H, 0.0f, 0.0f, 0.0f, 0.6f);
+    limeFillRect(L, T, w, FE_H(2.0f), 1.0f, 0.8f, 0.0f, 1.0f);
+    limeFillRect(L, T + H - FE_H(2.0f), w, FE_H(2.0f), 1.0f, 0.8f, 0.0f, 1.0f);
+    limeFillRect(L, T, t, H, 1.0f, 0.8f, 0.0f, 1.0f);
+    limeFillRect(L + w - t, T, t, H, 1.0f, 0.8f, 0.0f, 1.0f);
+
+    snprintf(buf, sizeof buf, "%s", k ? mods_skin_title(ids[k - 1]) : "ORIGINAL");
+    for (i = 0; buf[i]; i++)
+        if (buf[i] >= 'a' && buf[i] <= 'z')
+            buf[i] = (char)(buf[i] - 32);
+    buf[10] = 0;                        /* what the box holds */
+    limeDrawFONT(&GameFont, "<", L + FE_W(8.0f), FE_Y((float)(y + 3)),
+                 1, FE_WidthScale, fontcol);
+    limeDrawFONT(&GameFont, buf, mid, FE_Y((float)(y + 3)),
+                 1, FE_WidthScale * (strlen(buf) > 7 ? 0.75f : 1.0f), fontcol);
+    limeDrawFONT(&GameFont, ">", L + w - FE_W(8.0f),
+                 FE_Y((float)(y + 3)), 1, FE_WidthScale, fontcol);
+
+    PortNavTarget(L, T, w, H, 0);
+    hit = FE_FadeAdd == 0.0f && limeLastTouchScreenX[0] == -1.0f
+          && limeTouchScreenX[0] >= L && limeTouchScreenX[0] <= L + w
+          && limeTouchScreenY[0] >= T && limeTouchScreenY[0] <= T + H;
+    if (!hit)
+        return;
+    if (!PortNavPick && limeTouchScreenX[0] < L + w * 0.3f)
+        k = k == 0 ? n : k - 1;         /* the left arrow: back */
+    else
+        k = k == n ? 0 : k + 1;
+    PortSkinPick[side][ch] = k;
+    PortSkinTouched[side][ch] = 1;
+    PortSendMySkin();                   /* online: the other sees it */
+    printf("select: side %d, %s in %s\n", side, PlayerDefs[ch].texBase,
+           k ? mods_skin_title(ids[k - 1]) : "the game's skin");
+    limeLastTouchScreenX[0] = limeTouchScreenX[0];  /* one change a tap */
+    if (Settings[3] != 0)
+        limePlaySound(SFXHandle[0x68 / 4], MusicVol[Settings[3]] / 100.0f, 1.0f, 0);
+}
+
 static void palette_picker(void)
 {
     long p1 = (CharacterConfirmed != -1) ? CharacterConfirmed
@@ -17689,16 +17896,22 @@ static void palette_picker(void)
     long p2 = opponentCharacter;
 
     if (GameMode == 1) {                /* this machine's fighter only */
-        if (playerCharacter != -1)
+        if (playerCharacter != -1) {
             palette_box(0, 290, playerCharacter, opponentCharacter);
+            skin_box(0, 290 - PP_H - 4, playerCharacter);
+        }
         return;
     }
     if (GameMode == 0 && CharacterConfirmed != -1)    /* a new ladder */
         PortArcadePalette = PortPaletteOf(0, CharacterConfirmed, -1);
-    if (p1 != -1)
+    if (p1 != -1) {
         palette_box(0, 290, p1, p2);
-    if (GameMode == 6 && p2 != -1)
+        skin_box(0, 290 - PP_H - 4, p1);
+    }
+    if (GameMode == 6 && p2 != -1) {
         palette_box(1, 262, p1, p2);
+        skin_box(1, 262 - PP_H - 4, p2);
+    }
 }
 
 int port_noob_saibot;                   /* port: umk3.ini noob_saibot= */

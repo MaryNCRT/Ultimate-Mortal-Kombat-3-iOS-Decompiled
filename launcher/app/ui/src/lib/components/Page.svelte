@@ -47,6 +47,8 @@
     .orn.tr { right: calc(var(--u) * -.7); top: calc(var(--u) * -.6); background-image: var(--orn-tr); }
     .orn.bl { left: calc(var(--u) * -.7); bottom: calc(var(--u) * -.6); background-image: var(--orn-bl); filter: sepia(.5) brightness(.8); }
     .orn.br { right: calc(var(--u) * -.7); bottom: calc(var(--u) * -.6); background-image: var(--orn-br); filter: sepia(.5) brightness(.8); }
+    /* tight: MODS, whose pages want every pixel */
+    .page.tight .scroll { padding: calc(var(--u) * 1) calc(var(--u) * 1.2); }
     .scroll {
         display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0;
         overflow-x: hidden; overflow-y: auto;

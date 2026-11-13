@@ -9,6 +9,7 @@
     import './theme/base.css';
     import { onMount } from 'svelte';
     import { app, init } from './app.svelte.js';
+    import { ms } from './mods/store.svelte.js';
     import Backdrop from './components/Backdrop.svelte';
     import TitleBar from './components/TitleBar.svelte';
     import Logo from './components/Logo.svelte';
@@ -35,11 +36,13 @@
 
 <Backdrop />
 {#if app.cfg}
-    <div class="app">
+    <div class="app" class:modsfull={app.full && app.sec === 'mods'}>
         <TitleBar />
         {#if app.full && Sec}
             <main class="stage" class:wide={app.sec === 'mods'}>
-                <SecHead />
+                <!-- inside a fighter in the CHARACTER VIEWER the section's header
+                     gives its room to the viewer (Mary, 2026-11-13) -->
+                {#if !(app.sec === 'mods' && ms.tab === 'view' && ms.inside)}<SecHead />{/if}
                 <Sec />
             </main>
         {:else}
@@ -72,4 +75,10 @@
     }
     /* MODS: the whole window, for the viewer and the editor */
     .stage.wide { width: 100%; padding: calc(var(--u) * .6) calc(var(--u) * 1.2) calc(var(--u) * .8); }
+    /* ... and nothing under it (Mary, 2026-11-12: every page of the editor
+     * as large as it can be): no command bar (its keys still work), the
+     * page to the window's edges */
+    .app.modsfull { grid-template-rows: calc(var(--u) * 4.2) minmax(0, 1fr) 0; }
+    .app.modsfull :global(.cmdbar) { display: none; }
+    .app.modsfull .stage.wide { padding: calc(var(--u) * .3) calc(var(--u) * .5) calc(var(--u) * .5); }
 </style>

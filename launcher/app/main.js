@@ -171,7 +171,9 @@ function createWindow() {
     g_win.loadFile(path.join(__dirname, 'renderer', 'index.html'),
                    { query: { sec: process.env.UMK3_LAUNCHER_SEC || '', pick: process.env.UMK3_LAUNCHER_PICK || '' } });
     g_win.webContents.once('did-finish-load', () => dbg('did-finish-load'));
-    g_win.once('ready-to-show', () => g_win.show());
+    /* the shot aid shows the window without taking the focus from
+     * whatever the person at the computer is doing */
+    g_win.once('ready-to-show', () => (process.env.UMK3_LAUNCHER_SHOT ? g_win.showInactive() : g_win.show()));
     g_win.on('closed', () => { g_win = null; });
 }
 
@@ -959,6 +961,7 @@ ipcMain.handle('mods:list', () => mods.list(g_root));
 ipcMain.handle('mods:save', (_ev, order) => mods.save(g_root, order));
 ipcMain.handle('mods:create', (_ev, fields) => mods.create(g_root, fields));
 ipcMain.handle('mods:info', (_ev, folder, fields) => mods.setInfo(g_root, folder, fields));
+ipcMain.handle('mods:skinCreate', (_ev, fields) => mods.skinCreate(g_root, fields));
 ipcMain.handle('mods:put', (_ev, folder, file, bytes) => mods.putFile(g_root, folder, file, bytes));
 ipcMain.handle('mods:add', async (_ev, folder) => {
     if (!g_win)

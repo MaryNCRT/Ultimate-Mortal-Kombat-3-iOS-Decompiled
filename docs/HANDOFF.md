@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-11-13 (ONLINE stage 4b: the room -- a page of its own, 1 VS 1 / ROTATION, the line, the stage picked in the room, joining on request, a READY clock, DISSOLVE / MAKE LEADER; a tie on time and ROUNDS 1 no longer freeze a fight. Open: a second fight in one session counted desyncs in one test. Next: that, then stage 4c, spectators. Before it, ONLINE stage 4: the rules checked in HELLO -- other rules, no fight, both back in the lobby with a notice; HOST ADVANTAGE OFF draws the side and the stage; one player's touch controls online; an online fight or a lost link back to the lobby, not the original's screens. Before it, ONLINE stage 3: LOBBIES in the ONLINE screen -- the list, CREATE LOBBY, the room, invites, FIGHT -- the online select screen's banners, and the game on a second monitor of another refresh rate (20 fps on a 60 Hz monitor beside a 180 Hz main, fixed). Before it, release 0.4.5 beta: TRAINING's screen -- the moves window and the inputs, one player's controls -- DUELO against the CPU, the RULES button with its key. Before it, the ONLINE phase began: the rules block, `online_rules.c`, and the local versus's VS RULES window opened by SELECT, kodes ticked in a checklist; Mary played it. Then ONLINE stage 2, the EOS lobby core (`mplobby_*`), tested against the service with two probes. Next: LOBBIES in the ONLINE screen, [research/ONLINE-PHASE-PLAN.md](research/ONLINE-PHASE-PLAN.md) stage 3. Before it, 0.4.4 beta: the Lost Treasures' opponents from the binary, a click no longer reaching hidden controls, the first start's ORIGINAL / ENHANCED choice, WHAT'S NEW, new folders at the screen's largest resolution with the controls hidden. Before it, release 0.4.3 beta: the replay player in the ONLINE skin, STAGE SELECT without scrolling, the Esc menu's black box fixed; 0.4.2: STAGE SELECT in the ONLINE skin; the launcher renewed in dark blued steel, PROFILE rebuilt around the Player Banner, icon and favourite fighter one, Esc's PROFILE page removed).
+**Last updated:** 2026-11-13 (OUTFITS THAT ADD: a mod with `type=skin` is another outfit beside the fighter's original -- the game's SKIN box, the launcher's OUTFIT / COLOR panel and a CHARACTER VIEWER that gives a fighter the whole window; built on the unmerged `claude/viewer-roster-special`, now merged in this branch. Before it, ONLINE stage 4b: the room -- a page of its own, 1 VS 1 / ROTATION, the line, the stage picked in the room, joining on request, a READY clock, DISSOLVE / MAKE LEADER; a tie on time and ROUNDS 1 no longer freeze a fight. Open: a second fight in one session counted desyncs in one test. Next: that, then stage 4c, spectators. Before it, ONLINE stage 4: the rules checked in HELLO -- other rules, no fight, both back in the lobby with a notice; HOST ADVANTAGE OFF draws the side and the stage; one player's touch controls online; an online fight or a lost link back to the lobby, not the original's screens. Before it, ONLINE stage 3: LOBBIES in the ONLINE screen -- the list, CREATE LOBBY, the room, invites, FIGHT -- the online select screen's banners, and the game on a second monitor of another refresh rate (20 fps on a 60 Hz monitor beside a 180 Hz main, fixed). Before it, release 0.4.5 beta: TRAINING's screen -- the moves window and the inputs, one player's controls -- DUELO against the CPU, the RULES button with its key. Before it, the ONLINE phase began: the rules block, `online_rules.c`, and the local versus's VS RULES window opened by SELECT, kodes ticked in a checklist; Mary played it. Then ONLINE stage 2, the EOS lobby core (`mplobby_*`), tested against the service with two probes. Next: LOBBIES in the ONLINE screen, [research/ONLINE-PHASE-PLAN.md](research/ONLINE-PHASE-PLAN.md) stage 3. Before it, 0.4.4 beta: the Lost Treasures' opponents from the binary, a click no longer reaching hidden controls, the first start's ORIGINAL / ENHANCED choice, WHAT'S NEW, new folders at the screen's largest resolution with the controls hidden. Before it, release 0.4.3 beta: the replay player in the ONLINE skin, STAGE SELECT without scrolling, the Esc menu's black box fixed; 0.4.2: STAGE SELECT in the ONLINE skin; the launcher renewed in dark blued steel, PROFILE rebuilt around the Player Banner, icon and favourite fighter one, Esc's PROFILE page removed).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
@@ -31,7 +31,7 @@ changed is in [CHANGELOG.md](CHANGELOG.md).
 - **Fix locally first.** A change is built into her test folder, she tries
   it, and only then is it released. Her test folder is
   `WORK\release-0.1.12\Test` on the project machine (renamed from
-  `UMK3-PC-0.1.12-beta`; updated in place). Its `src\` is the tree's with
+  `UMK3-PC-0.1.12-beta`, now `WORK\release-0.1.12\Test`; updated in place). Its `src\` is the tree's with
   CRLF line endings: compare with `diff --strip-trailing-cr`.
 - **Investigate before fixing.** A gameplay problem is traced to the
   binary's own mechanism (disassembly, the recompiled oracle, her logs)
@@ -147,10 +147,36 @@ press COMPILE.
 
 ## 7. Open work
 
+- **Outfits that add** (2026-11-13, `src/runtime/mods.c` "skins that add",
+  `skin_mats.c`, Players.c `PortSkinLoad` / `PortFESkinAnim`, FrontEnd.c
+  `skin_box` / `PortSkinOf`, packet 26; launcher `lib/mods.js` `skinOf` /
+  `skinRead` / `skinCreate`, ModViewer's OUTFIT / COLOR): Mary played the
+  MKX Sonya as an added outfit beside the original (both in one fight,
+  colours 1 and 2) and found the launcher had dropped `color1=` from its
+  mod.ini (fixed: the ini reader took no digits in keys; the game also
+  finds a skin's sheets by their names now). Not tried: online between two
+  machines (each side shows the other's outfit only if it has the same one,
+  matched by fighter + model size + colour 1 size); the launcher's outfit
+  panel by Mary in the launcher itself (it was checked in the UI harness on
+  a copy of her mods; the test folder's `app.asar` was repacked, the old one
+  kept as `app.asar.before-outfits.bak`). Test aid: `UMK3_SKIN="p1,p2"`
+  with `--fight` picks each side's outfit by its place in the list.
+  Her test folder's `mods.ini` was changed for the test: `Sonya Blade MKX`
+  (the replacing mod) off, `Sonya MKX Skin` (the outfit) on; the old one is
+  `mods.ini.before-skins.bak`.
+
 - **Discord Rich Presence** ([DISCORD-PRESENCE.md](DISCORD-PRESENCE.md)):
   Mary saw it on her profile (2026-11-12). Still to try: a friend's Join
   into a lobby (two accounts, two PCs), and Linux. Launching the game
   from Discord (registering the game) is not done.
+
+- **CHARACTER VIEWER reorganised** (2026-11-12, roster page, SPECIAL
+  MODELS, ONLY WHAT THE MOD REPLACES, layers export, MODS over the whole
+  window): in the test folder's launcher, Mary has not looked yet. The
+  launcher's shot aid needs the root found: run from the test folder's
+  `launcher\bin` it took `launcher\bin` as the root. Mary also asked for
+  Discord Rich Presence + Steam + SteamGridDB integration (a long spec);
+  not started, it is its own task.
 - **The ONLINE phase** ([research/ONLINE-PHASE-PLAN.md](research/ONLINE-PHASE-PLAN.md)):
   stage 1, the rules block, is done and in the local versus (SELECT on its
   select screen); Mary played it. Stage 2, the EOS lobby core

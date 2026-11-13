@@ -2,6 +2,22 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.4.8",
+      "date": "2026-11-13",
+      "ES": [
+        "TRAJES QUE SE AÑADEN: un mod de tipo skin es otro traje del luchador, con su propio modelo y sus colores 1 y 2, junto al original (no lo reemplaza).",
+        "En la selección, la caja SKIN sobre COLOR elige el traje; el CPU también puede salir con uno, con la misma probabilidad que el color 2.",
+        "En línea, ves el traje del otro si tienes el mismo mod; si no, el original. La pelea es la misma.",
+        "VISOR DE PERSONAJES: TRAJE (original, los añadidos, NUEVO TRAJE) y COLOR con su textura para reemplazar; dentro de un luchador, MODELOS y TEXTURAS arriba y la pantalla entera para el modelo."
+      ],
+      "EN": [
+        "OUTFITS THAT ADD: a skin mod is another outfit for the fighter, with its own model and its colours 1 and 2, beside the original (it does not replace it).",
+        "On the select screen the SKIN box above COLOR picks the outfit; the CPU can wear one too, as often as it wears colour 2.",
+        "Online you see the other player's outfit if you have the same mod; otherwise the original. The fight is the same.",
+        "CHARACTER VIEWER: OUTFIT (the original, the added ones, NEW OUTFIT) and COLOR with its texture to replace; inside a fighter, MODELS and TEXTURES above and the whole window for the model."
+      ]
+    },
+    {
       "version": "0.4.7",
       "date": "2026-11-13",
       "ES": [

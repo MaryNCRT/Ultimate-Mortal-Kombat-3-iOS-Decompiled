@@ -16,8 +16,9 @@ void port_skin_mats_forget(const void *skin);
 int  port_skin_mats_has(const void *skin);
 /* RenderAnimatedCharacter: the block the next LIME_RenderMeshSingleIndexed
  * draws, ice when frozen; NULL for babality and the shadow (one texture
- * for all) */
-void port_skin_mats_use(const void *skin, int ice);
+ * for all). `tex` the sheet it is drawn with: its name says COLOR 1 or 2,
+ * and each colour has its own set of part sheets. NULL: colour 1. */
+void port_skin_mats_use(const void *skin, int ice, const void *tex);
 /* LIME_RenderMeshSingleIndexed: draws the triangles part by part, each with
  * its own texture, and returns 1; 0 when the block has no parts */
 int  port_skin_mats_draw(const unsigned short *indices, long nfaces,

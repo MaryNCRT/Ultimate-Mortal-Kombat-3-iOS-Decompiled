@@ -12,6 +12,7 @@
 #include <stdlib.h>   /* malloc, free: the bakes kept */
 #include "../../runtime/smooth_models.h"   /* port: SMOOTH MODELS */
 #include "../../runtime/skin_mats.h"       /* port: a modded skin's textures */
+#include "../../runtime/mods.h"            /* port: skins that add */
 int rgl_shadow_active(void);            /* port: REAL-TIME SHADOWS, render/rgl.h */
 
 typedef struct TEXTURE TEXTURE;
@@ -250,9 +251,13 @@ extern char TheFECharacters[FE_CHARACTER_SLOTS][FE_CHARACTER_STRIDE];  /* 0x0020
  * path that could touch the slot is not something this function assumes it
  * cannot.
  */
+void PortFESkinFree(void);              /* port: below */
+
 void FreeFrontEndCharacters(void)
 {
     int i;
+
+    PortFESkinFree();                   /* port: the added skins' fighters */
 
     for (i = 0; i < FE_CHARACTER_SLOTS; i++) {
         void *P32 *slot = (void *P32 *)(TheFECharacters[i] + 4);
@@ -956,6 +961,8 @@ void LoadGameCharacterCheckCache(PLAYER *p, const PLAYERDEF *def,
 extern int DbgPalette[2];              /* runtime/debug_menu.c, port only */
 extern int DbgFightActive;             /* the same, while a debug fight runs */
 int PortFightPalette(int side, long c1, long c2);  /* FrontEnd.c, port only */
+int PortFightSkin(int side, long c1, long c2);     /* the same, the SKIN box */
+extern int PortSkinLoad;                           /* below, port only */
 
 void LoadLevelCharacters(EPLAYER a, EPLAYER b)
 {
@@ -980,8 +987,12 @@ void LoadLevelCharacters(EPLAYER a, EPLAYER b)
         int pa = DbgFightActive ? DbgPalette[0] : PortFightPalette(0, a, b);
         int pb = DbgFightActive ? DbgPalette[1] : PortFightPalette(1, a, b);
 
+        /* port: and the SKIN box's pick, a skin that adds (mods.c) */
+        PortSkinLoad = PortFightSkin(0, a, b);
         LoadGameCharacter(p0, da, 0, pa ? pa == 2 : 0);
+        PortSkinLoad = PortFightSkin(1, a, b);
         LoadGameCharacter(p1, db, 0, pb ? pb == 2 : (a == b) ? 1 : 0);
+        PortSkinLoad = 0;
     }
 
     p0->altCostume = 0;                 /* already cleared, twice over */
@@ -1143,6 +1154,74 @@ void LoadFrontEndCharacters(long who)
                    (FRONTEND_CHARACTER *)fc, 0, 0);
 
     ((long *)fc)[0] = who;              /* stamped AFTER the load */
+}
+
+
+/* Port, not in the binary: the select screen's fighter in a skin that adds
+ * (mods.c, the SKIN box in FrontEnd.c). Loaded the first time it is shown,
+ * as LoadFrontEndCharacters loads the game's -- the same slot passed as the
+ * front-end character, so its frames are the ones the slot plays -- and
+ * kept beside the slot's own until the front end's fighters are freed.
+ * RenderFECharacters lends it the slot while it draws. */
+#define FESKIN_MAX 8
+static struct { long slot; int id; ANIMATEDCHARACTER *c; } g_feskin[FESKIN_MAX];
+extern int PortSkinLoad;
+
+void *PortFESkinAnim(long slot, int id)
+{
+    const PLAYERDEF *def;
+    ANIMATEDCHARACTER *c;
+    long who;
+    int i, k = -1;
+
+    if (slot < 0 || slot >= FE_CHARACTER_SLOTS || id <= 0)
+        return NULL;
+    for (i = 0; i < FESKIN_MAX; i++) {
+        if (g_feskin[i].c && g_feskin[i].slot == slot && g_feskin[i].id == id)
+            return g_feskin[i].c;
+        if (!g_feskin[i].c && k < 0)
+            k = i;
+    }
+    if (k < 0) {                        /* full: the oldest goes */
+        c = g_feskin[0].c;
+        if (*(void *P32 *)((char *)c + 0x10))
+            LIME_FreeScene(*(void *P32 *)((char *)c + 0x10));
+        FreeAnimatedCharacter(c);
+        memmove(&g_feskin[0], &g_feskin[1], sizeof g_feskin[0] * (FESKIN_MAX - 1));
+        k = FESKIN_MAX - 1;
+        g_feskin[k].c = NULL;
+    }
+    who = (slot == 0x17) ? 0 : slot;
+    def = &PlayerDefs[who];
+    PortSkinLoad = id;
+    c = LoadAnimatedCharacter((char *)def->scene, (char *)def->skin,
+                              (char *)def->bones, (char *)def->lighting,
+                              (char *)def->skinAnim, (char *)def->texBase,
+                              (char *)def->frameList, (EPLAYER)def->id,
+                              (FRONTEND_CHARACTER *)TheFECharacters[slot], 0, 1, 0);
+    PortSkinLoad = 0;
+    if (c == NULL)
+        return NULL;
+    c->id = (EPLAYER)who;               /* as Load1Character stamps it */
+    g_feskin[k].slot = slot;
+    g_feskin[k].id = id;
+    g_feskin[k].c = c;
+    return c;
+}
+
+void PortFESkinFree(void)
+{
+    int i;
+
+    for (i = 0; i < FESKIN_MAX; i++) {
+        ANIMATEDCHARACTER *c = g_feskin[i].c;
+        if (!c)
+            continue;
+        if (*(void *P32 *)((char *)c + 0x10))
+            LIME_FreeScene(*(void *P32 *)((char *)c + 0x10));
+        FreeAnimatedCharacter(c);
+        g_feskin[i].c = NULL;
+    }
 }
 
 
@@ -1419,12 +1498,12 @@ void RenderAnimatedCharacter(char *name, ANIMATEDCHARACTER *c,
          * baby (runtime/skin_mats.c) */
         port_skin_mats_use(tex && tex != ((void *P32 *)c)[0x1c / 4]
                            ? ((void *P32 *)c)[0x30 / 4] : NULL,
-                           tex && tex == ((void *P32 *)c)[0x18 / 4]);
+                           tex && tex == ((void *P32 *)c)[0x18 / 4], tex);
         /* port: SMOOTH MODELS draws the skin smoothed, or nothing */
         if (!port_smooth_draw(((void *P32 *)c)[0x30 / 4], frame, 0, tex,
                               grey, pos))
             LIME_RenderMeshSingleIndexed(frame, tex, grey, pos, 0);
-        port_skin_mats_use(NULL, 0);
+        port_skin_mats_use(NULL, 0, NULL);
     } else {
         /* 0x5c2f4: a body not drawn is still posed. A baked frame (Mileena's
          * nail fatality, 310..334) draws scene meshes instead, and what they
@@ -1444,7 +1523,7 @@ void RenderAnimatedCharacter(char *name, ANIMATEDCHARACTER *c,
         if (f[0x28 / 4] == 1 || (idxA == 365 && a[2] == 6)) {
             GenerateFrameVertsBySkinningSKIN2(c, idxA, idxB, t, RenderVerts);
             port_skin_mats_use(*(void *P32 *)(uintptr_t)(unsigned long)
-                                   a[0x30 / 4], 0); /* port: skin_mats.c */
+                                   a[0x30 / 4], 0, NULL); /* port: skin_mats.c */
             if (!port_smooth_draw(*(void *P32 *)(uintptr_t)(unsigned long)
                                       a[0x30 / 4], frame, 1,
                                   (void *)(uintptr_t)(unsigned long)a[0x20 / 4],
@@ -1452,7 +1531,7 @@ void RenderAnimatedCharacter(char *name, ANIMATEDCHARACTER *c,
                 LIME_RenderMeshSingleIndexed(frame,
                         (void *)(uintptr_t)(unsigned long)a[0x20 / 4],
                         grey, pos, 1);
-            port_skin_mats_use(NULL, 0);
+            port_skin_mats_use(NULL, 0, NULL);
         }
     }
     glPopMatrix();
@@ -1968,6 +2047,10 @@ static void *port_bake_lighting(ANIMATEDCHARACTER *c, SKININFO *skin,
     return out;
 }
 
+/* Port, not in the binary: the added skin (mods.c id, 0 the game's) the
+ * next LoadAnimatedCharacter loads; set around a load and put back to 0. */
+int PortSkinLoad;
+
 ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
                                          char *bonesFile, char *lightingName,
                                          char *meshbaseFile, char *texBase,
@@ -1983,6 +2066,7 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
     const short *list;
     void  *lighting;
     long   i, meshCount, size1 = 0, size2 = 0;
+    const char *texName;                /* port: texBase, or an added skin's */
 
     /* the frame-list name: uppercased in place and cut at the first '.' */
     memcpy(name, frameListName, strlen(frameListName));
@@ -2015,6 +2099,32 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
                                         sizeof(ANIMATEDCHARACTER));
     if (c == NULL)
         Error("LAC: outofmem1\n");      /* and then carries straight on */
+
+    /* Port, not in the binary: a skin that adds (mods.c, mod.ini
+     * type=skin), PortSkinLoad set by whoever loads this fighter. Its model
+     * and its sheets are asked for under the game's names with the skin's
+     * prefix ("@S1@SONYA_STANDARD.skin"): mods.c answers them from the
+     * skin, the game's file where it has none. The bones, the frames, the
+     * lighting file and the scene stay the game's names. The prefixed
+     * names also keep the two apart in the texture cache and the bakes, so
+     * the game's Sonya and the skin's can fight each other. */
+    {
+        static char vskin[2][160], vtex[2][96];
+        static int flip;
+        char pre[16];
+
+        texName = texBase;
+        if (PortSkinLoad > 0) {
+            flip ^= 1;
+            mods_skin_prefix(PortSkinLoad, pre, sizeof pre);
+            snprintf(vskin[flip], sizeof vskin[flip], "%s%s", pre, skinFile);
+            snprintf(vtex[flip], sizeof vtex[flip], "%s%s", pre, texBase);
+            printf("LAC: %s in the skin \"%s\"\n", texBase,
+                   mods_skin_title(PortSkinLoad));
+            skinFile = vskin[flip];
+            texName = vtex[flip];
+        }
+    }
 
     c->skin = LIME_LoadSkin(skinFile);
     c->bones = LIME_LoadBones(bonesFile);
@@ -2265,14 +2375,14 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
             if (dummy)
                 strcpy(texPath, "DUMMY_DIFFUSE_LITE.PNG");
             else
-                sprintf(texPath, "%s_DIFFUSE2_LITE.PNG", texBase);
+                sprintf(texPath, "%s_DIFFUSE2_LITE.PNG", texName);
             c->diffuse2 = port_load_lite(texPath);
 
             if (c->diffuse2 == NULL) {
                 if (dummy)
                     strcpy(texPath, "DUMMY_DIFFUSE_LITE.PNG");
                 else
-                    sprintf(texPath, "%s_DIFFUSE_LITE2.PNG", texBase);
+                    sprintf(texPath, "%s_DIFFUSE_LITE2.PNG", texName);
                 c->diffuse2 = port_load_lite(texPath);
             }
         }
@@ -2280,7 +2390,7 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
         if (dummy)
             strcpy(texPath, "DUMMY_DIFFUSE_LITE.PNG");
         else
-            sprintf(texPath, "%s_DIFFUSE_LITE.PNG", texBase);
+            sprintf(texPath, "%s_DIFFUSE_LITE.PNG", texName);
         c->diffuse = port_load_lite(texPath);
     } else {
         int dummy = (strcmp(frameListName, "dummyframes.txt") == 0);
@@ -2289,14 +2399,14 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
             strcpy(texPath, "DUMMY_DIFFUSE.PNG");
         } else if (r != 0) {
             if (UseLOWAssets)
-                sprintf(texPath, "%s_DIFFUSE2_LOW.PNG", texBase);
+                sprintf(texPath, "%s_DIFFUSE2_LOW.PNG", texName);
             else
-                sprintf(texPath, "%s_DIFFUSE2.PNG", texBase);
+                sprintf(texPath, "%s_DIFFUSE2.PNG", texName);
         } else {
             if (UseLOWAssets)
-                sprintf(texPath, "%s_DIFFUSE_LOW.PNG", texBase);
+                sprintf(texPath, "%s_DIFFUSE_LOW.PNG", texName);
             else
-                sprintf(texPath, "%s_DIFFUSE.PNG", texBase);
+                sprintf(texPath, "%s_DIFFUSE.PNG", texName);
         }
         /* (0, 0), not (r, r): every arm reaches limeLoadTexture with r1 =
          * r2 = 0 (0x5cab8 r5 is 0 there, 0x5cb46 r is 0 there, 0x5c7ec). */
@@ -2311,7 +2421,7 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
     if (strcmp(frameListName, "dummyframes.txt") == 0)
         strcpy(texPath, "DUMMY_DIFFUSE_ICE.PNG");
     else
-        sprintf(texPath, "%s_DIFFUSE_ICE.PNG", texBase);
+        sprintf(texPath, "%s_DIFFUSE_ICE.PNG", texName);
     c->diffuseIce = limeLoadTexture(texPath, 0, 0);
 
     /* the babality sheet is the only texture with a fallback spelling */
@@ -2319,11 +2429,11 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
         if (strcmp(frameListName, "dummyframes.txt") == 0)
             strcpy(texPath, "DUMMY_DIFFUSE_ICE.PNG");
         else
-            sprintf(texPath, "%sBABY2.PVR", texBase);
+            sprintf(texPath, "%sBABY2.PVR", texName);
         c->babality = limeLoadTexture(texPath, 0, 0);
 
         if (c->babality == NULL) {
-            sprintf(texPath, "%sBABILITY2.PVR", texBase);
+            sprintf(texPath, "%sBABILITY2.PVR", texName);
             c->babality = limeLoadTexture(texPath, 0, 0);
         }
     } else {
