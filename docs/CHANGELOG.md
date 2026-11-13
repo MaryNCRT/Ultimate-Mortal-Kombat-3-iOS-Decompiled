@@ -10,6 +10,9 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## After 0.4.8 (not released yet)
 
+- **Reptile's colours 3 to 6 are green now** (Mary: they were too yellow
+  and looked like Scorpion's): dark green, bright green, teal green, pale
+  green, all near his own green (hue 105 to 150 where olive was 70 to 80).
 - **Colours 3 to 6** (Mary), with no new textures: the game recolours a
   fighter's own sheet when it loads it, turning the hue of his clothes as
   a paint program's Hue / Saturation / Value does (EA made colour 2 the same

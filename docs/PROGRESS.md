@@ -123,6 +123,15 @@ palettes.bak`) so it compiles palettes.c and writes the colours after a
 build; `launcher/bin/resources/src` and its palettes.ini synced too. Not
 checked: adding a colour to an outfit in the viewer.
 
+### 2026-11-13 -- Reptile's colours greener
+
+Mary: Reptile's colours 3-6 were too yellow and looked like Scorpion's.
+palettes.ini [REPTILE] 3..6 = hue 118 / 105 / 150 / 135 (were 80 / 110 /
+150 / 70). In the test folder his 36 colour files (vanilla and HD NINJAS)
+were deleted and rewritten by `--make-colors` (it keeps existing files, so
+an ini change needs them removed). Checked on a contact sheet beside
+Scorpion's: all four green, none yellow. Not played in a fight yet.
+
 ### 2026-11-13 -- Colours 3 to 6 from a fighter's own sheets
 
 Port work, not in the binary. Mary: colours up to 6 without new textures,
