@@ -8,7 +8,7 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased
+## 0.4.7 beta (2026-11-13)
 
 - **ONLINE, the room** (Mary): once in a lobby it opens a page of its own,
   in three columns -- the two who fight next (their fighters, their wins),
