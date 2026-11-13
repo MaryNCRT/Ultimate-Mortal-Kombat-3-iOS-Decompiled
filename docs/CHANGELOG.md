@@ -8,6 +8,16 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased
+
+- **ESSENTIAL MODS** (Mary): COMPILE has a box, ticked by default
+  (`essentials=1` in umk3.ini), that installs the MOD HUB's essential mods
+  with the game -- the modpack of the project's improvements. A hub entry is
+  essential with `"essential": true` (`publish.js --essential`, or
+  `essential=1` in its mod.ini); none is published yet. A mod can add a
+  sound the game does not have (`res/audio/Skversus.wav`, the VS screen's
+  "versus") without replacing any.
+
 ## 0.4.10 beta (2026-11-13)
 
 Mary checked the online MY PROFILE gallery and the VS screen's place and

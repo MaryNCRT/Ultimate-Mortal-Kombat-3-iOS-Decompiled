@@ -14,7 +14,7 @@ contextBridge.exposeInMainWorld('umk3', {
     whatsNewSeen: () => ipcRenderer.invoke('whatsnew:seen'),
     browseIpa: () => ipcRenderer.invoke('ipa:browse'),
     browseFrame: () => ipcRenderer.invoke('frame:browse'),
-    startBuild: ipa => ipcRenderer.invoke('build:start', ipa),
+    startBuild: (ipa, essential) => ipcRenderer.invoke('build:start', ipa, essential === true),
     cancelBuild: () => ipcRenderer.invoke('build:cancel'),
     play: () => ipcRenderer.invoke('play'),
     account: {

@@ -449,7 +449,7 @@ export async function startBuild() {
     selectBlip();
     const wasLocked = app.locked;
     showBuildUI(true);
-    const r = await api.startBuild(ipa.trim());
+    const r = await api.startBuild(ipa.trim(), app.cfg.essentials !== false);
     showBuildUI(false);
     app.build.show = true;
     await refreshRoot();
