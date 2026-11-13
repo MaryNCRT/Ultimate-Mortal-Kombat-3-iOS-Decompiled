@@ -156,6 +156,57 @@ ours, because the name match is case-insensitive. Not yet seen: the
 button itself doing it in a freshly opened launcher; Linux. Discord Rich Presence, the third part of the request,
 is not started.
 
+### 2026-11-13 -- ONLINE stage 4b: the room
+
+Port, not in the binary ([research/ONLINE-PHASE-PLAN.md](research/ONLINE-PHASE-PLAN.md),
+"The room", has the whole design and the phases' checklist). FrontEnd.c
+`PortRoomPage` (the room's own page, three columns, the OPTIONS and stage
+windows), `PortRoomOwner` (the leader's game: the line, requests, fights'
+ends, the next call, the READY clock); `src/runtime/lobby_queue.c` (the
+line and the options, pure logic, built inside online_rules.c because the
+launchers out there compile a fixed list of files; `tests/lobby_queue_test.c`);
+mp_eos.c lobby protocol 2 (`room`, `q`, `go` with two players and a
+stage; members' `want`, `res`, `wins`, `vote`; `mplobby_dissolve`,
+`mplobby_leave_now` on closing); rollback.c RB_VERSION 3 (the room's stage
+in the hello); GameCode.c a tie on time and ROUNDS 1 as kode 0x13;
+other.c `port_match_wins` (ROUNDS 5); debug_menu.c `stage_room_thumb`.
+
+Tested with three copies of the game on one PC (ANA the leader, BETO and
+CARLA by the key; `UMK3_LOBBY_TEST`, no keys or taps sent), 2026-11-12/13,
+Mary watching and playing in the windows:
+
+- the page: the three columns, the top, the stage's picture, the windows
+  (screenshots);
+- 1 VS 1 / ROTATION, NEXT FIGHT BY ITSELF: ANA vs BETO called by itself,
+  CARLA waiting; a draw on time sent both to the back; a fight won (Mary
+  played it) turned the line -- the winner stayed, the loser to the back,
+  the next call ANA vs CARLA;
+- the stage: A VOTE (BETO and CARLA voted the same) -- THE GRAVEYARD,
+  level 2, on both; THE LEADER -- THE STREET, level 5, on both, the host
+  told it by the guest's hello and no STAGE SELECT;
+- the leader's game closed: it left the lobby at once ("left on closing"),
+  EOS made BETO the leader, the room went on.
+
+Seen wrong and fixed on the way: READY never reached the others (the
+member attributes' read reused one buffer); the select screen locked
+after the first fight (pressedPlay left at 1, the summary skipped); the
+winner of a one-round fight stood still (fixed as kode 0x13, above); a tie
+on time stood still; the host opened STAGE SELECT for the room's stage;
+the loser saw CONNECTION LOST after a fight that ended; a call whose
+fighter left showed FIGHTING for good (the call is over at once now; CALL
+IT OFF is gone); the test aid picked the fighter for a player.
+
+**Known problem, first to look at:** in one test the second fight of a
+session -- BETO, who had fought the first, against CARLA -- counted
+desyncs (23 by its end). Every first fight of a session had none. Two
+fights in one game's run had not been tried before this stage (each
+earlier test started the games anew). Something of the first fight is
+left in the state rollback hashes; not found yet.
+
+Not seen: ROUNDS 1's FINISH HIM since it is played as kode 0x13, a
+series' rematch, the READY clock running out, ASK TO PASS answered,
+JOINING ON REQUEST's window in play, MAX STREAK, more than three players.
+
 ### 2026-11-12 -- ONLINE stage 4: the rules checked in HELLO
 
 Port, not in the binary ([research/ONLINE-PHASE-PLAN.md](research/ONLINE-PHASE-PLAN.md),

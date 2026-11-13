@@ -109,7 +109,7 @@ static int host(int priv)
     show();
     mplobby_set_rules(RULES2);
     WAIT(!strcmp(mplobby_info()->rules, RULES2), "rules change");
-    mplobby_call(who);
+    mplobby_call(mplobby_info()->owner, who);   /* the owner hosts, the member connects */
     printf("PROBE called\n");
     fflush(stdout);
     WAIT(got_packet("ping", from), "ping");

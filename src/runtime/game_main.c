@@ -4198,6 +4198,8 @@ int main(int argc, char **argv)
 
     {
         void discord_presence_shutdown(void);
+        void mplobby_leave_now(void);   /* mp_eos.c: out of a lobby, so its place empties at once */
+        mplobby_leave_now();
         discord_presence_shutdown();
     }
     plat_close();

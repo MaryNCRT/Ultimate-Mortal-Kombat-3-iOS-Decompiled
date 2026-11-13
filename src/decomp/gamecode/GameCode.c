@@ -4986,6 +4986,9 @@ void EASDK_LogEventEnumEnumStringNum(long id, long a, const char *s,
  * `FadeMusicOut = 1`.
  */
 static void port_series_count(int side);    /* port: below, by QuitAsWin */
+void PortLobbyFightOver(int side);          /* port: FrontEnd.c, a lobby's room */
+static int PortRoundDrawn;                  /* port: the round just ended tied on time */
+static int PortOneRound;                    /* port: ROUNDS 1, played as kode 0x13 does */
 
 void QuitAsLose(void)
 {
@@ -6352,6 +6355,7 @@ void Task_GameInit(void)
     Round            = 0;
     RoundWins[0]     = 0;
     RoundWins[1]     = 0;
+    PortRoundDrawn   = 0;                /* port */
 
     FightMessage      = 0;
     FightMessageTimer = 0;
@@ -6402,8 +6406,18 @@ void Task_GameInit(void)
 
         /* the online block, or the local versus's -- not in training */
         rules_use_mode(GameMode == 6 && PortPractice ? 0 : (int)GameMode);
+        PortOneRound = 0;
         if (GameMode == 1 || GameMode == 6) {
             WinsNeeded = rules_wins_needed(WinsNeeded);
+            /* ROUNDS 1: the binary's own one-round match (kode 0x13, below):
+             * WinsNeeded stays 2 and both start a round up, here and in the
+             * engine's tallies, so round 1 is the final round -- FINISH HIM,
+             * and the match over (Mary: with WinsNeeded 1 the engine, which
+             * ends a match at two, stood still after it) */
+            if (WinsNeeded == 1) {
+                WinsNeeded = 2;
+                PortOneRound = 1;
+            }
             rules_fight_begin();
         } else {
             PortRoundTime = 0;
@@ -6449,6 +6463,12 @@ void Task_GameInit(void)
     puts("########## TASK_GAME_INIT: 10");
 
     if (GameMode == 1 && *theKode == 0x13) {
+        RoundWins[0] = WinsNeeded - 1;
+        RoundWins[1] = WinsNeeded - 1;
+        H[0] = 1;
+        H[1] = 1;
+    }
+    if (PortOneRound) {                 /* port: ROUNDS 1, as kode 0x13 */
         RoundWins[0] = WinsNeeded - 1;
         RoundWins[1] = WinsNeeded - 1;
         H[0] = 1;
@@ -9206,6 +9226,9 @@ static void DrawRoundWinCoins(long p)
     long  wins = (GameMode == 1 && *theKode == 0x13) ? RoundWins[p ^ 1]
                                                      : RoundWins[p];
 
+    if (PortOneRound && !(GameMode == 1 && *theKode == 0x13))
+        wins--;                         /* port: ROUNDS 1's round given at the start */
+
     if (wins > 0)
         limeDrawSprite(CoinTPage, edge + dir * (p ? 50.0f : 18.0f) * s,
                        54.0f * s, HUD_COIN * s, HUD_COIN * s,
@@ -9617,6 +9640,15 @@ void DrawHUD(void)
             Round++;
             if (Health[0] != 100)
                 flawlessVictories = 0;
+        } else if (Health[1] == Health[0] && RoundSummary == 0) {
+            /* Port, not in the binary: an exact tie on time. The binary
+             * started no summary here, and the fight stood still on a
+             * clock at 0 for good (Mary saw it online, one round, 30 s).
+             * The round goes to nobody: the next one, or a drawn fight
+             * when no round is left (RoundSummaryUpdate). */
+            RoundSummary = 1;
+            Round++;
+            PortRoundDrawn = 1;
         }
     } else if (!GamePaused) {
         /* Every mode draws the two corner buttons while not paused (0x28910,
@@ -9769,6 +9801,41 @@ tail:
 /* The summary timer and everything hanging off it: the tap that skips the wait,
  * the end-of-round stats, the two ways a match can finish, and the setup for
  * the next round. This is `DrawHUD`'s `RoundSummary == 1` arm. */
+/* Port: a fight that ran out of rounds with nobody at WinsNeeded (each
+ * round tied on time): drawn. Online and in a local versus it ends there,
+ * as a lost fight ends but counted for nobody; elsewhere it goes on to
+ * the next round, as the binary would have if it had not stood still. */
+static int port_fight_drawn(void)
+{
+    if (!PortRoundDrawn || (GameMode != 1 && GameMode != 6)
+        || Round < (PortOneRound ? 1 : 2 * WinsNeeded - 1)
+        || RoundWins[0] == WinsNeeded || RoundWins[1] == WinsNeeded)
+        return 0;
+    printf("fight: drawn on time, no round left\n");
+    JustWon = 0;
+    winningStryk = 0;
+    feedPosted  = 0;
+    if (GameMode == 1) {
+        /* the host waits as a winner does, the guest leaves as a loser
+         * does (QuitAsWin / QuitAsLose): both sending the quit, the host's
+         * came first and the guest saw a lost link */
+        PortLobbyFightOver(-1);
+        PushFETask(0x28);
+        Player1Wins = 0;
+        if (isParentBasedOnSpeed()) {
+            WaitForOpponent = 1;
+            sendQuit();
+        } else {
+            WaitForOpponent = 0;
+            sendQuit();
+        }
+        if (*FE_FadeAddP == 0.0f)
+            UpdateStats();
+    }
+    *FE_FadeAddP = -0.033333335f;
+    return 1;
+}
+
 static void RoundSummaryUpdate(void)
 {
     /* Only the host runs the AI. */
@@ -9819,6 +9886,8 @@ static void RoundSummaryUpdate(void)
 
     if (RoundWins[0] == WinsNeeded) {
         QuitAsWin();
+        if (GameMode == 1)
+            PortLobbyFightOver(0);      /* port: the lobby's room, player one took it */
         RoundSummaryTime = 0.0f;
         if (GameMode == 6) {
             EASDK_LogEvent(0x7559, 15, "2 Players on 1 iPad", 0, (const char *)0);
@@ -9829,6 +9898,8 @@ static void RoundSummaryUpdate(void)
     }
     if (WinsNeeded == RoundWins[1]) {
         QuitAsLose();
+        if (GameMode == 1)
+            PortLobbyFightOver(1);      /* port: the lobby's room, player two took it */
         RoundSummaryTime = 0.0f;
         if (GameMode == 6) {
             EASDK_LogEvent(0x7559, 15, "2 Players on 1 iPad", 0, (const char *)0);
@@ -9837,6 +9908,13 @@ static void RoundSummaryUpdate(void)
         }
         return;
     }
+
+    if (port_fight_drawn()) {           /* port: drawn, no round left */
+        RoundSummaryTime = 0.0f;
+        PortRoundDrawn = 0;
+        return;
+    }
+    PortRoundDrawn = 0;
 
     /* Nobody has the match yet. Fade out first, unless the fade already ran, in
      * which case start the next round now. */

@@ -81,7 +81,19 @@ void mplobby_drop_invite(int i) { (void)i; }
 void mplobby_invite_got(const unsigned char *p, int n) { (void)p; (void)n; }
 void mplobby_kick(const char *who) { (void)who; }
 void mplobby_promote(const char *who) { (void)who; }
-void mplobby_call(const char *who) { (void)who; }
+void mplobby_dissolve(void) {}
+void mplobby_leave_now(void) {}
+void mplobby_set_room(const char *opts) { (void)opts; }
+void mplobby_set_line(const char *line) { (void)line; }
+const char *mplobby_room(void) { return ""; }
+const char *mplobby_line(void) { return ""; }
+void mplobby_want(const char *act) { (void)act; }
+void mplobby_report(const char *res) { (void)res; }
+int  mplobby_go_parts(const char *go, char *n, int nn, char *a, int an, char *b, int bn)
+{ (void)go; (void)n; (void)nn; (void)a; (void)an; (void)b; (void)bn; return 0; }
+void mplobby_call(const char *a, const char *b, int stage) { (void)a; (void)b; (void)stage; }
+int  mplobby_go_stage(const char *go) { (void)go; return -1; }
+void mplobby_vote(int stage) { (void)stage; }
 int  mplobby_take_call(char *code, int cn, char *who, int wn)
 { (void)code; (void)cn; (void)who; (void)wn; return 0; }
 
@@ -674,12 +686,18 @@ static unsigned L_retry_at;             /* after a failed update */
 /* what this game wants the lobby to say */
 static char L_me_code[16], L_me_name[64], L_me_look[48];
 static int  L_me_ready, L_me_dirty;
-static char L_w_name[48], L_w_rules[64], L_w_key[MPLOBBY_KEY_MAX + 4], L_w_go[64];
+static char L_w_name[48], L_w_rules[64], L_w_key[MPLOBBY_KEY_MAX + 4], L_w_go[96];
+static char L_w_room[48], L_w_q[520];   /* the room's options, its line (lobby_queue.h) */
+static char L_info_q[520];              /* the lobby's line, as read */
+static char L_me_want[72], L_me_res[32];
+static int  L_me_wins, L_me_vote = -1;
+static int  L_want_n;
+static char L_my_go[24];                /* the number of the last call this game was in */
 static char L_next_key[MPLOBBY_KEY_MAX + 4];  /* the host's own key for the next lobby */
 static int  L_w_priv, L_w_max, L_attr_dirty, L_go_n;
 
 /* the fight call this game was given */
-static char L_go_seen[64];
+static char L_go_seen[96];
 static int  L_go_primed;               /* the call there on joining is not ours */
 static void make_key(char *out);
 static int  L_call;
@@ -757,6 +775,7 @@ static void read_info(EOS_HLobbyDetails d, struct mplobby_info *out)
     attr_text(d, "host", NULL, out->host, sizeof out->host);
     attr_text(d, "rules", NULL, out->rules, sizeof out->rules);
     attr_text(d, "key", NULL, out->key, sizeof out->key);
+    attr_text(d, "room", NULL, out->room, sizeof out->room);
     attr_text(d, "priv", NULL, t, sizeof t);
     out->priv = t[0] == '1';
 }
@@ -783,6 +802,11 @@ static void lobby_reset(int ev)
     L_go_seen[0] = 0;
     L_go_primed = 0;
     L_call = 0;
+    L_info_q[0] = 0;
+    L_me_want[0] = L_me_res[0] = 0;
+    L_me_wins = 0;
+    L_me_vote = -1;
+    L_my_go[0] = 0;
     memset(&L_info, 0, sizeof L_info);
     L_serial++;
 }
@@ -793,7 +817,7 @@ static void lobby_refresh(void)
     EOS_Lobby_CopyLobbyDetailsHandleOptions o;
     EOS_LobbyDetails_GetMemberCountOptions mc;
     EOS_HLobbyDetails d = NULL;
-    char mine[40], go[64];
+    char mine[40], go[96];
     uint32_t i, n;
 
     if (L_state != MPLOBBY_IN || !L_id[0])
@@ -826,26 +850,40 @@ static void lobby_refresh(void)
         attr_text(d, "name", m->who, m->name, sizeof m->name);
         attr_text(d, "look", m->who, m->look, sizeof m->look);
         attr_text(d, "ready", m->who, t, sizeof t);
-        m->ready = t[0] == '1';
+        m->ready = t[0] == '1';         /* before t is used again */
+        attr_text(d, "want", m->who, m->want, sizeof m->want);
+        attr_text(d, "res", m->who, m->res, sizeof m->res);
+        attr_text(d, "wins", m->who, t, sizeof t);
+        m->wins = atoi(t);
+        attr_text(d, "vote", m->who, t, sizeof t);
+        m->vote = t[0] ? atoi(t) : -1;
         m->owner = !strcmp(m->who, L_info.owner);
         L_nmem++;
     }
-    /* the owner's fight call: "<n>:<EOS user>", taken once */
+    attr_text(d, "q", NULL, L_info_q, sizeof L_info_q);
+    /* the owner's fight call: "<n>:<A>:<B>", taken once; B connects to A */
     attr_text(d, "go", NULL, go, sizeof go);
+    copy_str(L_info.go, sizeof L_info.go, go);
     if (!L_go_primed) {                 /* an older call, from before this game came in */
         L_go_primed = 1;
         copy_str(L_go_seen, sizeof L_go_seen, go);
     } else if (go[0] && strcmp(go, L_go_seen) != 0) {
-        const char *c = strchr(go, ':');
+        char gn[24], ga[40], gb[40];
         copy_str(L_go_seen, sizeof L_go_seen, go);
-        if (c && !strcmp(c + 1, mine) && strcmp(L_info.owner, mine) != 0) {
-            for (i = 0; i < (uint32_t)L_nmem; i++)
-                if (L_mem[i].owner) {
-                    copy_str(L_call_code, sizeof L_call_code, L_mem[i].code);
-                    copy_str(L_call_who, sizeof L_call_who, L_mem[i].who);
-                    L_call = 1;
-                    printf("online: lobby: called to fight %s\n", L_mem[i].name);
-                }
+        if (mplobby_go_parts(go, gn, sizeof gn, ga, sizeof ga, gb, sizeof gb)
+            && (!strcmp(ga, mine) || !strcmp(gb, mine)) && strcmp(ga, gb) != 0) {
+            copy_str(L_my_go, sizeof L_my_go, gn);
+            L_me_res[0] = 0;            /* this call's end not told yet */
+            if (!strcmp(gb, mine)) {    /* B: connect to A */
+                for (i = 0; i < (uint32_t)L_nmem; i++)
+                    if (!strcmp(L_mem[i].who, ga)) {
+                        copy_str(L_call_code, sizeof L_call_code, L_mem[i].code);
+                        copy_str(L_call_who, sizeof L_call_who, L_mem[i].who);
+                        L_call = 1;
+                        printf("online: lobby: called to fight %s (call %s)\n", L_mem[i].name, gn);
+                    }
+            } else
+                printf("online: lobby: called to fight, hosting (call %s)\n", gn);
         }
     }
     p_EOS_LobbyDetails_Release(d);
@@ -897,7 +935,7 @@ static void lobby_flush(void)
     EOS_Lobby_UpdateLobbyModificationOptions mo;
     EOS_Lobby_UpdateLobbyOptions uo;
     EOS_HLobbyModification m = NULL;
-    char t[8];
+    char t[8], tw[12], tv[12];          /* each its own: EOS reads them at UpdateLobby */
     int owner, ok = 1;
 
     if (L_state != MPLOBBY_IN || L_busy || (!L_me_dirty && !L_attr_dirty))
@@ -925,6 +963,10 @@ static void lobby_flush(void)
         ok &= add_attr(m, 0, "key", L_w_key);
         if (L_w_go[0])
             ok &= add_attr(m, 0, "go", L_w_go);
+        if (L_w_room[0])
+            ok &= add_attr(m, 0, "room", L_w_room);
+        if (L_w_q[0])
+            ok &= add_attr(m, 0, "q", L_w_q);
     }
     if (L_me_dirty) {
         ok &= add_attr(m, 1, "code", L_me_code);
@@ -932,6 +974,14 @@ static void lobby_flush(void)
         ok &= add_attr(m, 1, "look", L_me_look);
         snprintf(t, sizeof t, "%d", L_me_ready ? 1 : 0);
         ok &= add_attr(m, 1, "ready", t);
+        if (L_me_want[0])
+            ok &= add_attr(m, 1, "want", L_me_want);
+        if (L_me_res[0])
+            ok &= add_attr(m, 1, "res", L_me_res);
+        snprintf(tw, sizeof tw, "%d", L_me_wins);
+        ok &= add_attr(m, 1, "wins", tw);
+        snprintf(tv, sizeof tv, "%d", L_me_vote);
+        ok &= add_attr(m, 1, "vote", tv);
     }
     if (!ok)
         printf("online: lobby: an attribute was refused\n");
@@ -983,6 +1033,9 @@ static void EOS_CALL on_member_status(const EOS_Lobby_LobbyMemberStatusReceivedC
         copy_str(L_w_name, sizeof L_w_name, L_info.name);
         copy_str(L_w_rules, sizeof L_w_rules, L_info.rules);
         copy_str(L_w_key, sizeof L_w_key, L_info.key);
+        copy_str(L_w_room, sizeof L_w_room, L_info.room);
+        copy_str(L_w_q, sizeof L_w_q, L_info_q);
+        copy_str(L_w_go, sizeof L_w_go, "");
         L_w_priv = L_info.priv;
         if (!L_w_key[0])
             make_key(L_w_key);
@@ -1112,6 +1165,7 @@ int mplobby_create(const char *name, const char *rules, int priv, int max_member
     L_w_priv = priv != 0;
     L_w_max = max_members;
     L_w_go[0] = 0;
+    L_w_q[0] = 0;                       /* the owner's line, made as members come */
     L_go_n = 0;
     if (L_next_key[0]) {                /* the host's own (mplobby_set_key) */
         copy_str(L_w_key, sizeof L_w_key, L_next_key);
@@ -1430,13 +1484,123 @@ void mplobby_promote(const char *who)
         p_EOS_Lobby_PromoteMember(g_lobby, &o, NULL, on_promoted);
 }
 
-void mplobby_call(const char *who)
+void mplobby_call(const char *a, const char *b, int stage)
 {
-    if (!mplobby_am_owner() || !who || !who[0])
+    if (!mplobby_am_owner() || !a || !a[0] || !b || !b[0] || !strcmp(a, b))
         return;
     /* the clock in it: a promoted owner's first call differs from the old one's */
-    snprintf(L_w_go, sizeof L_w_go, "%u.%d:%s", ticks() & 0xffffu, ++L_go_n, who);
+    snprintf(L_w_go, sizeof L_w_go, "%u.%d:%s:%s:%d", ticks() & 0xffffu, ++L_go_n, a, b, stage);
     L_attr_dirty = 1;
+}
+
+int mplobby_go_parts(const char *go, char *n, int nn, char *a, int an, char *b, int bn)
+{
+    const char *c1 = go ? strchr(go, ':') : NULL, *c2 = c1 ? strchr(c1 + 1, ':') : NULL;
+
+    if (!c1 || !c2 || c1 == go || c2 == c1 + 1 || !c2[1])
+        return 0;
+    snprintf(n, (size_t)nn, "%.*s", (int)(c1 - go), go);
+    snprintf(a, (size_t)an, "%.*s", (int)(c2 - c1 - 1), c1 + 1);
+    snprintf(b, (size_t)bn, "%.*s", (int)strcspn(c2 + 1, ":"), c2 + 1);
+    return 1;
+}
+
+int mplobby_go_stage(const char *go)
+{
+    const char *c = go ? strchr(go, ':') : NULL;
+    int i;
+
+    for (i = 0; c && i < 2; i++)
+        c = strchr(c + 1, ':');
+    return c && c[1] ? atoi(c + 1) : -1;
+}
+
+void mplobby_vote(int stage)
+{
+    if (L_me_vote != stage) {
+        L_me_vote = stage;
+        L_me_dirty = 1;
+    }
+}
+
+void mplobby_set_room(const char *opts)
+{
+    if (strcmp(L_w_room, opts ? opts : "")) {
+        copy_str(L_w_room, sizeof L_w_room, opts);
+        L_attr_dirty = 1;
+    }
+}
+
+void mplobby_set_line(const char *line)
+{
+    if (strcmp(L_w_q, line ? line : "")) {
+        copy_str(L_w_q, sizeof L_w_q, line);
+        L_attr_dirty = 1;
+    }
+}
+
+const char *mplobby_room(void)
+{
+    return mplobby_am_owner() && L_w_room[0] ? L_w_room : L_info.room;
+}
+
+const char *mplobby_line(void)
+{
+    return mplobby_am_owner() ? L_w_q : L_info_q;
+}
+
+void mplobby_want(const char *act)
+{
+    if (L_state != MPLOBBY_IN || !act || !act[0])
+        return;
+    snprintf(L_me_want, sizeof L_me_want, "%u.%d:%s", ticks() & 0xffffu, ++L_want_n, act);
+    L_me_dirty = 1;
+}
+
+void mplobby_report(const char *r)
+{
+    if (L_state != MPLOBBY_IN || !L_my_go[0] || !r || !r[0])
+        return;
+    snprintf(L_me_res, sizeof L_me_res, "%s:%s", L_my_go, r);
+    if (r[0] == 'W')
+        L_me_wins++;
+    L_me_dirty = 1;
+    printf("online: lobby: the fight of call %s ended %s\n", L_my_go, r);
+}
+
+void mplobby_leave_now(void)
+{
+    unsigned t0;
+
+    if (L_state != MPLOBBY_IN || !g_plat)
+        return;
+    mplobby_leave();
+    t0 = ticks();
+    while (L_state == MPLOBBY_LEAVING && (int)(ticks() - t0) < 1000) {
+        p_EOS_Platform_Tick(g_plat);
+#ifdef _WIN32
+        Sleep(10);
+#else
+        usleep(10000);
+#endif
+    }
+    printf("online: lobby: left on closing (%s)\n", L_state == MPLOBBY_NONE ? "done" : "no answer yet");
+}
+
+void mplobby_dissolve(void)
+{
+    EOS_Lobby_DestroyLobbyOptions o;
+
+    if (!mplobby_am_owner())
+        return;
+    L_state = MPLOBBY_LEAVING;
+    L_serial++;
+    memset(&o, 0, sizeof o);
+    o.ApiVersion = EOS_LOBBY_DESTROYLOBBY_API_LATEST;
+    o.LocalUserId = g_me;
+    o.LobbyId = L_id;
+    printf("online: lobby: dissolved by its owner\n");
+    p_EOS_Lobby_DestroyLobby(g_lobby, &o, NULL, on_lobby_destroyed);
 }
 
 int mplobby_take_call(char *code, int cn, char *who, int wn)

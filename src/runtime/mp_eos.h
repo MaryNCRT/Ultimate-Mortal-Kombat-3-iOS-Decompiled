@@ -40,12 +40,20 @@ int  mpeos_players(void);
  * attributes: "ver" (MPLOBBY_PROTO; a search sees only its own), "name",
  * "host" (the owner's name), "rules" (online_rules.c's text), "priv" (1: not
  * in the browser, found by its "key" alone), "key" (six letters and digits),
- * "go" (the owner calling a member to fight: "<n>:<EOS user>"). Each
- * member's: "code" (profiles.ini's), "name", "look" (icon and colours, the
- * caller's text), "ready". The owner hosts the fight: the member it calls
- * connects to it through mp_net (mpnet_poll takes the call). */
+ * "go" (the owner calling two members to fight: "<n>:<A>:<B>", EOS users),
+ * "room" (the room's options, lobby_queue.h's text), "q" (the line,
+ * lobby_queue.h's text). Each member's: "code" (profiles.ini's), "name",
+ * "look" (icon and colours, the caller's text), "ready", "want" (a request
+ * to the owner about the line: "<n>:in|out|up|down"), "res" (how this
+ * member's last fight ended: "<call n>:<W|L|D|X><1|0>", won / lost /
+ * drawn / no result, the series over or not), "wins" (fights won in this
+ * lobby), "vote" (a stage, mpLevelList's place). The call may end in
+ * ":<stage>", the stage the room chose. A hosts the fight: B connects to it
+ * through mp_net (mpnet_poll takes the call); A is often, not always, the
+ * owner. Protocol 2: the room and the line (protocol 1's "go" was
+ * "<n>:<EOS user>", the owner always A). */
 
-#define MPLOBBY_PROTO       "1"
+#define MPLOBBY_PROTO       "2"
 #define MPLOBBY_MAX_MEMBERS 8
 #define MPLOBBY_MAX_RESULTS 32
 #define MPLOBBY_KEY_MIN     4           /* a key the host types: 4..12 letters and digits */
@@ -56,6 +64,10 @@ struct mplobby_member {
     char code[16];
     char name[64];
     char look[48];
+    char want[72];                      /* "<n>:<act>", a request about the line */
+    char res[32];                       /* "<call n>:<W|L|X><1|0>", the last fight */
+    int  wins;                          /* fights won in this lobby */
+    int  vote;                          /* the stage voted (mpLevelList's place), -1 none */
     int  ready;
     int  owner;
 };
@@ -67,6 +79,8 @@ struct mplobby_info {
     char rules[64];
     char key[MPLOBBY_KEY_MAX + 4];
     char owner[40];                     /* EOS user */
+    char room[48];                      /* lobby_queue.h lq_opts text */
+    char go[96];                        /* the last fight call */
     int  priv;
     int  members, max_members;
 };
@@ -142,9 +156,37 @@ int  mplobby_invites(struct mplobby_invite *out, int max);
 int  mplobby_accept_invite(int i);
 void mplobby_drop_invite(int i);
 void mplobby_promote(const char *who);
-/* The owner calls a member to fight; that member's game takes the call
- * (mplobby_take_call: 1 once, with the owner's code and EOS user). */
-void mplobby_call(const char *who);
+/* The owner closes the lobby with everyone in it (each told
+ * MPLOBBY_EV_CLOSED). */
+void mplobby_dissolve(void);
+/* The game is closing: out of the lobby now, waiting a moment for EOS, so
+ * the others see the place empty at once (a closed window left it taken
+ * until EOS timed the player out -- Mary). */
+void mplobby_leave_now(void);
+
+/* The room (port, Mary 2026-11-12): its options and its line, as
+ * lobby_queue.h's texts. The owner writes them (set before mplobby_create
+ * for the first lobby's options); mplobby_room / mplobby_line give what the
+ * owner wrote last, or the lobby's for anyone else. */
+void mplobby_set_room(const char *opts);
+void mplobby_set_line(const char *line);
+const char *mplobby_room(void);
+const char *mplobby_line(void);
+/* A member asks the owner: "in", "out", "up" or "down" in the line. */
+void mplobby_want(const char *act);
+/* This game's last fight call ended: "W1" won (series over), "L0" lost
+ * (series goes on), "X0" no result. Sent with that call's number. */
+void mplobby_report(const char *res);
+/* A "go" text's parts: its number, A (who hosts) and B; 0 when not one. */
+int  mplobby_go_parts(const char *go, char *n, int nn, char *a, int an, char *b, int bn);
+/* The stage a "go" names: mpLevelList's place, -1 none (the fight's own). */
+int  mplobby_go_stage(const char *go);
+/* This player's stage vote (member attribute "vote"), -1 none. */
+void mplobby_vote(int stage);
+/* The owner calls two members to fight, A hosting (either may be the
+ * owner); B's mpnet_poll connects to A (mplobby_take_call: 1 once, with
+ * A's code and EOS user). */
+void mplobby_call(const char *a, const char *b, int stage);
 int  mplobby_take_call(char *code, int cn, char *who, int wn);
 
 #endif

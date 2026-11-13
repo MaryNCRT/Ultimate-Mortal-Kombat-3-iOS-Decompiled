@@ -290,3 +290,13 @@ void rules_fight_begin(void)
 
     PortRoundTime = !r || r->time == 99 ? 0 : r->time == 0 ? -1 : r->time;
 }
+
+static int g_room_level = -1;
+
+void rules_set_room_level(int level) { g_room_level = level; }
+int  rules_room_level(void) { return g_room_level; }
+
+/* A lobby's line (lobby_queue.c), built with this file: the launchers out
+ * there compile a fixed list of files, and a new one would not link with
+ * theirs. */
+#include "lobby_queue.c"

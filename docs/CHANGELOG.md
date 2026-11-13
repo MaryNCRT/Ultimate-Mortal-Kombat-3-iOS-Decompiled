@@ -10,6 +10,26 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
+- **ONLINE, the room** (Mary): once in a lobby it opens a page of its own,
+  in three columns -- the two who fight next (their fighters, their wins),
+  the stage with its picture and the rules, and the line of those
+  waiting. 1 VS 1 or ROTATION (WINNER STAYS or BOTH ROTATE, a MAX
+  STREAK); the line, which the leader orders (TO FIGHT, up, down, out,
+  KICK, MAKE LEADER) and, if the room allows, each player too (join,
+  leave, up, down, ASK TO PASS -- one of the two may give their place);
+  the stage picked by the leader, a VOTE, the two who fight, the loser,
+  at random or in the fight as before; JOINING free or ON REQUEST
+  (ACCEPT / REJECT); a TIME TO BE READY of up to 30 s; NEXT FIGHT by hand
+  or by itself; a series' rematch by itself; DISSOLVE. Fights go on until
+  the room is closed; a game that closes leaves the lobby at once.
+- **A tie on time no longer freezes the fight**: the binary did nothing
+  when the clock ran out with both health bars equal. The round goes to
+  nobody; with no round left the fight is drawn and ends.
+- **ROUNDS 1** is the final round at once, with FINISH HIM, as the
+  original's one-round kode plays it; the winner no longer stands still.
+  ROUNDS 5 no longer ends at two round wins.
+- Known problem: in one test a second fight in the same session counted
+  desyncs; first fights had none. Being looked at.
 - **ONLINE: the rules checked before a fight** (stage 4 of the ONLINE
   plan): each game's hello now carries the rules of the lobby it is in.
   If the two games do not have the same rules (or are different versions),

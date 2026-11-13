@@ -17,6 +17,12 @@ stages 1-2 (audit, HOME, PROFILE) are done.
 | Local versus | the same rules, in a window SELECT opens on its select screen (2026-11-12) |
 | Rounds past two wins | a coin each, side by side (2026-11-12) |
 | Kodes | several at once, ticked in a checklist the rules window opens (2026-11-12) |
+| The room | 1 VS 1 or ROTATION, one line, the leader's options; DISSOLVE, MAKE LEADER (2026-11-12) |
+| The room's page | a page of its own, three columns: the two who fight, the stage and rules, those waiting (2026-11-13) |
+| The stage in the room | its picture, arrows and all of them in a window; picked by the leader, a vote, the fighters, the loser, at random, or in the fight (2026-11-13) |
+| Joining | free, or on request with ACCEPT / REJECT (2026-11-13) |
+| ROUNDS 1 | the final round at once, FINISH HIM, then the room (2026-11-13) |
+| Spectators | watch a fight live from the room, over the replays and rollback (2026-11-12; next, after the room) |
 
 ## Stages
 
@@ -31,6 +37,13 @@ stages 1-2 (audit, HOME, PROFILE) are done.
 4. **Rules checked in HELLO** -- done, see below (`rollback.c`): both blocks equal or the
    fight does not start, with a message; Host Advantage OFF draws the side
    and the stage from both hellos.
+4b. **The room** -- done, see below: a page of its own, 1 VS 1 or
+   ROTATION, one line the first two of which fight, the stage chosen in
+   the room, joining on request, the leader's options, DISSOLVE, MAKE
+   LEADER. The phases' checklist is at the end.
+4c. **Spectators**: the others in the room watch the fight live (the
+   fighters' inputs sent on, the replay player and rollback's resimulation
+   playing them). Not started.
 5. **QUICK MATCH**: search a quick-match bucket by version, join the first
    open lobby, else create one and wait.
 6. **PARTY**: a private lobby of friends (invites by the friends' codes
@@ -214,3 +227,165 @@ game's hello, the gate's minute running out, kick / promote.
   searching lobby (FE task 3). The session ends; the host calls the next
   fight from the room.
 - The fight's player names (gold plates) are PR #209's, not merged yet.
+
+## The room: its own page, 1 VS 1, ROTATION, the line (stage 4b)
+
+Mary asked for it (2026-11-12/13, watching three copies of the game play
+it): a 1 VS 1 and a rotation, the players moving in the line, the leader
+taking them out or putting them in, a setting for each of these, the
+wins of each player, the stage chosen in the room (with its picture; a
+vote, the two who fight, the loser, the leader), joining on request,
+asking for a place, a READY clock, DISSOLVE and MAKE LEADER; a page of
+its own once in a lobby, three columns.
+
+**The page** (FrontEnd.c `PortRoomPage`): once in a lobby the ONLINE
+screen gives way to it, over the whole screen (no sections' bar). Top:
+the lobby's name, KEY and COPY, players n/m, PUBLIC / PRIVATE, the mode,
+who picks the stage, the leader. Left, FIGHTING NEXT: the first two of
+the line on their banners (their fighter, READY, wins "n WON", the
+place), the state (fighting on which stage, the countdown, the READY
+clock), the leader's FIGHT (both READY; FIGHTING while a call is on),
+READY -- the first two's alone (Mary); one who goes back to wait is
+not ready any more. Middle, STAGE: the picture (debug_menu.c
+`stage_room_thumb`, STAGE SELECT's pictures -- the CS_BG sheets and the
+launcher's `aditional textures/stages`), arrows to its sides, SEE ALL (a
+window with the fourteen) and VOTE in a vote, CHOOSE STAGE for the leader;
+the rules; OPTIONS (a window) and LEAVE. Right, WAITING: the rest of the
+line, then those out of it (OUT), four banners and "AND n MORE"; under
+them the leader's actions for the player chosen (TO FIGHT -- up to the
+second place --, up, down, OUT OF / INTO LINE, KICK, MAKE LEADER) or a
+player's own (JOIN / LEAVE LINE, UP / DOWN, ASK TO PASS). BACK leaves the
+lobby, to LOBBIES. A window (OPTIONS, the stages, a request) hides the
+columns under it: the banners' fighters are drawn last of all and came
+out over it.
+
+**The options** (lobby attribute `room`, `lobby_queue.h` `lq_opts`, text
+`o1;a0;s0;l1;n0;e0;p0;j0;c1;t0`), the leader's; the others see them:
+
+| Option | Values |
+|---|---|
+| MODE | 1 VS 1 (the same two again) / ROTATION |
+| AFTER A FIGHT | WINNER STAYS (the loser to the back) / BOTH ROTATE |
+| MAX STREAK | NO LIMIT / 2 / 3 / 5 wins in a row, then the winner to the back too |
+| THE LINE | LEADER ONLY / IN AND OUT / FREE (also up and down) |
+| NEXT FIGHT | BY HAND (the leader's FIGHT) / BY ITSELF (5 s once the first two are ready) |
+| STAGE | IN THE FIGHT (the host's STAGE SELECT, or drawn) / THE LEADER / A VOTE / THE FIGHTERS / THE LOSER / AT RANDOM |
+| ASK TO PASS | ALLOWED / NO |
+| TIME TO BE READY | NO LIMIT / 10 / 20 / 30 s; one of the first two not ready in time goes to the back |
+| JOINING | FREE / ON REQUEST |
+
+With the KEY, PUBLIC / PRIVATE, INVITE, EDIT RULES and DISSOLVE (pressed
+twice; EOS closes the lobby, everyone told THE LOBBY WAS CLOSED).
+
+**The line** (lobby attribute `q`, `<streak>|<call counted>|ids|ids
+out|<last loser>|ids asking`, `lq_line`): the first two fight, the first
+hosting (player one with HOST ADVANTAGE ON). Who comes in goes to its
+back -- or, JOINING ON REQUEST, waits: the leader sees a window with
+ACCEPT / REJECT (REJECT kicks them), the one waiting a notice. A fight's
+end turns it by the options; a draw sends both to the back in ROTATION.
+A player's requests (member attribute `want`, `<n>:in|out|up|down|pass|cede:<id>`)
+are done by the leader's game when the options allow them. ASK TO PASS:
+one waiting asks; each of the two about to fight sees a window, GIVE IT
+(their places swapped) or NO. Both of the two must be READY for a
+fight, the leader too.
+
+**The stage** (`lq_stage`): the leader's game picks it when it calls
+(A VOTE: the most votes, a tie drawn; THE FIGHTERS: both the same, else
+one of their two drawn; THE LOSER: the last loser's vote, the first fight
+drawn; member attribute `vote`) and the call carries it (`go`,
+`<n>:<A>:<B>:<stage>`). Both fighters set it for the fight
+(`rules_set_room_level`), and it rides in rollback's hello too
+(RB_VERSION 3) -- the one called to host could be connected before its
+lobby told it the call, and opened STAGE SELECT for a stage the room had
+chosen (Mary saw it). STAGE SELECT stays shut then.
+
+**A fight's end**: GameCode.c tells FrontEnd.c `PortLobbyFightOver` who
+took it; back in the room each fighter writes `res`
+(`<call>:<W|L|D|X><series over>`) and its own `wins`. The leader turns the
+line once both told it (or left) and keeps the call's number in the line,
+so a new leader does not count it twice. A series (FIGHTS best of 3 / 5)
+not over: the same two again by themselves (a rematch). A call that never
+became a fight (45 s in the room, not connected) tells X, and one of the
+two leaving the lobby ends the call at once, so the room does not show it
+FIGHTING for good. The other side leaving first after a fight
+that ended is not CONNECTION LOST.
+
+**The engine's fixes found on the way** (each a port line, marked):
+
+- **A tie on time** (GameCode.c, the HUD's clock): the binary started no
+  summary when the clock ran out with both health bars equal, and the
+  fight stood still on a 0 for good (Mary saw it: one round, 30 s, nobody
+  hit). The round goes to nobody: the next one, or -- no round left -- a
+  drawn fight, which ends as a lost one does but counted for nobody
+  (online and in a local versus).
+- **ROUNDS 1** is played as the binary's one-round kode (0x13) is:
+  WinsNeeded stays 2 and both start a round up, in GameCode.c and in the
+  engine's tallies (`H`), so round 1 is the final round with FINISH HIM,
+  and the match ends there. With WinsNeeded 1 the engine, which ends a
+  match at two round wins (other.c `t_play3`), stood still after it (Mary).
+  The coins do not show the round given. ROUNDS 5: the engine ends at
+  three (other.c `port_match_wins`), not two.
+
+Test aids: `UMK3_LOBBY_TEST=host` with `UMK3_LOBBY_ROOM=<options text>`,
+`UMK3_LOBBY_MAX=<players>` (makes the lobby, is ready, calls the first two
+once that many are in), `UMK3_LOBBY_AUTOACCEPT=<s>` (lets one asking in
+after that long); `UMK3_LOBBY_VOTE=<0..13>`; and in an online select screen
+`UMK3_LOBBY_TEST` picks a fighter when nobody has in 15 s (counted again
+each time; left alone once a player moves the choice). `tests/lobby_queue_test.c`
+(ctest `lobby_queue`) covers the line, the options, the stage, asking.
+
+Tested with three copies of the game on one PC (ANA the leader, BETO and
+CARLA by the key; `UMK3_LOBBY_TEST`, no keys or taps sent), 2026-11-12/13,
+Mary watching and playing in the windows:
+
+- the page: the three columns, the top, the stage's picture, the windows
+  (screenshots);
+- 1 VS 1 / ROTATION, NEXT FIGHT BY ITSELF: ANA vs BETO called by itself,
+  CARLA waiting; a draw on time sent both to the back; a fight won (Mary
+  played it) turned the line -- the winner stayed, the loser to the back,
+  the next call ANA vs CARLA;
+- the stage: A VOTE (BETO and CARLA voted the same) -- THE GRAVEYARD,
+  level 2, on both; THE LEADER -- THE STREET, level 5, on both, the host
+  told it by the guest's hello and no STAGE SELECT;
+- the leader's game closed: it left the lobby at once ("left on closing"),
+  EOS made BETO the leader, the room went on.
+
+Seen wrong and fixed on the way: READY never reached the others (the
+member attributes' read reused one buffer); the select screen locked
+after the first fight (pressedPlay left at 1, the summary skipped); the
+winner of a one-round fight stood still (fixed as kode 0x13, above); a tie
+on time stood still; the host opened STAGE SELECT for the room's stage;
+the loser saw CONNECTION LOST after a fight that ended; a call whose
+fighter left showed FIGHTING for good (the call is over at once now; CALL
+IT OFF is gone); the test aid picked the fighter for a player.
+
+**Known problem, first to look at:** in one test the second fight of a
+session -- BETO, who had fought the first, against CARLA -- counted
+desyncs (23 by its end). Every first fight of a session had none. Two
+fights in one game's run had not been tried before this stage (each
+earlier test started the games anew). Something of the first fight is
+left in the state rollback hashes; not found yet.
+
+Not seen: ROUNDS 1's FINISH HIM since it is played as kode 0x13, a
+series' rematch, the READY clock running out, ASK TO PASS answered,
+JOINING ON REQUEST's window in play, MAX STREAK, more than three players.
+
+## The phases: the checklist (2026-11-13)
+
+| Stage | What | State |
+|---|---|---|
+| 1 | Rules block (`online_rules.c`), local versus's VS RULES | done, played by Mary |
+| 2 | EOS lobby core (`mp_eos.c` `mplobby_*`) | done, probes against the service |
+| 3 | LOBBIES in the ONLINE screen: list, CREATE LOBBY, invites | done (0.4.6) |
+| 4 | Rules checked in HELLO, HOST ADVANTAGE OFF's draw | done (#215) |
+| 4b | The room: its page, 1 VS 1 / ROTATION, the line, the stage, joining, READY clock, DISSOLVE / MAKE LEADER | done; partly seen in play by Mary; a second fight's desyncs open |
+| 4b | Engine: a tie on time, ROUNDS 1 as kode 0x13, ROUNDS 5 at three | done; ROUNDS 1's FINISH HIM to be seen in play |
+| 4c | Spectators: the room watches the fight live (replays, rollback) | not started -- next |
+| 5 | QUICK MATCH | not started |
+| 6 | PARTY | not started |
+| 7 | Tests on two machines, every rule, desyncs 0 | partly: one PC, two and three copies |
+
+Within 4b, not seen yet in play: a ROUNDS 1 fight won by a KO (FINISH
+HIM, then the room), a series' rematch, the READY clock running out, ASK
+TO PASS answered, MAX STREAK reached, a leader promoted mid-room, the room
+with more than three players.

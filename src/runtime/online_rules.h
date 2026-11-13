@@ -91,5 +91,11 @@ void rules_series_reset(void);
  * guest -- not by side, so a series whose fights draw the sides anew
  * still adds each win to whoever took it; the calls above stay in sides. */
 void rules_series_swap(int swapped);
+/* A lobby room's stage for the next online fight (lobby_queue.h's stage
+ * option): a level number, -1 none -- the host's STAGE SELECT, or drawn.
+ * Set by FrontEnd.c when this game is called to fight; rollback.c's gate
+ * takes it, debug_menu.c's STAGE SELECT stays shut. */
+void rules_set_room_level(int level);
+int  rules_room_level(void);
 
 #endif
