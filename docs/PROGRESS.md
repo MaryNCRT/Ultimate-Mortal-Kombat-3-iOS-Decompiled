@@ -123,6 +123,18 @@ palettes.bak`) so it compiles palettes.c and writes the colours after a
 build; `launcher/bin/resources/src` and its palettes.ini synced too. Not
 checked: adding a colour to an outfit in the viewer.
 
+### 2026-11-13 -- Release 0.4.9 beta; HD CHARACTERS 1.1
+
+Released as the pre-release `v0.4.9-beta` (zip 148 MB, Linux tar.gz 129
+MB) with the colours 3..6, the select screen's lists, the profile's six
+colours and outfits with 1..6 colours. The MOD HUB's HD CHARACTERS
+(`hd-ninjas`) is 1.1: the test folder's pack with its colours 3..6, 92
+full-size pictures; its 240 `_LITE` / `_LOW` colour copies (byte-equal to
+the full ones) were left out so the zip stays under GitHub's 2 GB (the
+folder is 3.3 GB with them); draw_gl.c load_rgba falls back to the pack's
+full one (PR 230). The hub's UPDATE replaces the folder; the next build
+writes the copies again.
+
 ### 2026-11-13 -- Profile pictures in colours 1 to 6
 
 Port work, not in the binary. Mary: the player profile's pictures with the
