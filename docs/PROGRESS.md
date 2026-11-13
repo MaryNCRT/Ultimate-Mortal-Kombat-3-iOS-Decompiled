@@ -98,6 +98,21 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+### 2026-11-12 -- Discord Rich Presence, and joining a lobby from Discord
+
+The game talks to the running Discord client over its local IPC
+(`src/runtime/discord_presence.c`, no SDK, no OAuth) with Mary's
+application id; `src/runtime/presence_game.c` maps `CurrentTask`,
+`FE_CurrentTask`, `GameMode`, `PortPractice`, `Character1/2` and the EOS
+lobby to the profile's texts, with a party and a join secret in a lobby.
+A Discord join opens ONLINE > LOBBIES (`FrontEnd.c PortOnlineOpenLobbies`)
+and joins it from `PortLobbyTick`. `umk3.ini discord=0/1` from the
+launcher's PLAY page. Checked: `tests/discord_presence_test.c` (JSON, join
+parsing, `--live` against the project machine's Discord); the game built
+into the test folder; **Mary saw the presence on her profile** and the
+log says `discord: connected`. Not tried: Join between two accounts,
+Linux. Details: [DISCORD-PRESENCE.md](DISCORD-PRESENCE.md).
+
 ### 2026-11-12 -- ONLINE stage 3: LOBBIES; a second monitor's refresh
 
 **A second monitor.** Mary: the game ran slow on a monitor that is not the

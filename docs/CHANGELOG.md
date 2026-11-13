@@ -10,6 +10,17 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
+- **Discord Rich Presence** (Mary): while the game runs, the player's
+  Discord profile shows "Playing UMK3 iOS Decomp" with the HD dragon icon
+  of the Steam artwork, the mode (main menu, arcade, survival, karnage,
+  treasures, local versus, training, online), the fighters and the time
+  played, in the game's language. It talks to the Discord app already open
+  on the PC: no account to link, no SDK. In an online lobby the profile
+  shows the lobby and a **Join** button that takes a friend's open game into
+  it. PLAY > SHOW ON DISCORD WHAT YOU PLAY turns it off (`umk3.ini
+  discord=0`). **Mary saw it on her profile** (2026-11-12). Join between
+  two accounts not tried yet. See [DISCORD-PRESENCE.md](DISCORD-PRESENCE.md).
+
 - **LOBBIES in the ONLINE screen** (Mary): the open lobbies, refreshed
   every 5 seconds and with REFRESH, ALL or only those with MY RULES, a box
   that finds a lobby by its name as you type or joins one by its key;

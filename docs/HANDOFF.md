@@ -146,6 +146,10 @@ press COMPILE.
 
 ## 7. Open work
 
+- **Discord Rich Presence** ([DISCORD-PRESENCE.md](DISCORD-PRESENCE.md)):
+  Mary saw it on her profile (2026-11-12). Still to try: a friend's Join
+  into a lobby (two accounts, two PCs), and Linux. Launching the game
+  from Discord (registering the game) is not done.
 - **The ONLINE phase** ([research/ONLINE-PHASE-PLAN.md](research/ONLINE-PHASE-PLAN.md)):
   stage 1, the rules block, is done and in the local versus (SELECT on its
   select screen); Mary played it. Stage 2, the EOS lobby core

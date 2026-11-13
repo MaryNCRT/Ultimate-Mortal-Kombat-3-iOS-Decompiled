@@ -11,9 +11,10 @@ lobby in their own game.
 
 Status (2026-11-12): built into the test folder.
 `tests/discord_presence_test.c` passes, and its `--live` mode connected to
-the project machine's Discord and showed an activity. **Not yet seen** in the
-game itself on Mary's profile. A Join between two accounts has not been
-tried either.
+the project machine's Discord and showed an activity. **Mary saw it on her
+profile** while playing the test-folder build (2026-11-12, 19:20); that
+session's log has `discord: connected`. A Join between two accounts has
+not been tried yet, and neither has Linux.
 
 ## How (and why not the Social SDK)
 
