@@ -8,7 +8,7 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased
+## 0.4.6 beta (2026-11-12)
 
 - **Discord Rich Presence** (Mary): while the game runs, the player's
   Discord profile shows "Playing UMK3 iOS Decomp" with the HD dragon icon

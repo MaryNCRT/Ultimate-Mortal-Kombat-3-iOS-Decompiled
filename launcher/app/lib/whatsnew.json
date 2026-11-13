@@ -2,6 +2,22 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.4.6",
+      "date": "2026-11-12",
+      "ES": [
+        "SALAS en la pantalla ONLINE: busca salas o entra con su clave, crea la tuya (pública o privada, 2 a 8 jugadores, con tus reglas), invita a amigos y pulsa PELEAR.",
+        "STEAM en el launcher: AÑADIR A STEAM pone el juego en tu biblioteca de Steam con su portada, banner, logo e icono de SteamGridDB.",
+        "DISCORD: tu perfil muestra a qué juegas (modo, luchadores y tiempo) y, en una sala online, un botón Unirse para tus amigos. Sin vincular nada. Se apaga en JUGAR.",
+        "En el online, la selección y el VS muestran los banners de los dos jugadores. El juego ya no va lento en un segundo monitor de otra frecuencia."
+      ],
+      "EN": [
+        "LOBBIES in the ONLINE screen: find lobbies or join one by its key, create your own (public or private, 2 to 8 players, your rules), invite friends and press FIGHT.",
+        "STEAM in the launcher: ADD TO STEAM puts the game in your Steam library with its cover, banner, logo and icon from SteamGridDB.",
+        "DISCORD: your profile shows what you play (mode, fighters and time) and, in an online lobby, a Join button for your friends. Nothing to link. Turned off in PLAY.",
+        "Online, the select and VS screens show both players' banners. The game no longer runs slow on a second monitor of another refresh rate."
+      ]
+    },
+    {
       "version": "0.4.5",
       "date": "2026-11-12",
       "ES": [
