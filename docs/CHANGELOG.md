@@ -25,7 +25,9 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
   chosen sheet and REPLACE TEXTURE under it; changes go to the outfit shown.
   The roster page (a fighter by his portrait), SPECIAL MODELS. Inside a
   fighter the headers give their room: MODELS / TEXTURES above, then the
-  chosen model with the whole window.
+  chosen model with the whole window; BACK above goes to the list (and
+  from the list to the roster); PANEL moves the panel shown to the other
+  side, remembered.
 - Fixed: the launcher dropped mod.ini lines whose names have digits
   (`color1=`) when it saved a mod.
 - MOD HUB: **Sonya Blade MKX 2.0** is now an outfit that adds (UPDATE from

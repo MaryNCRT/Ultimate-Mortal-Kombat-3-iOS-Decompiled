@@ -9,7 +9,9 @@
     /* tabs: [[value, text key]]; current; pick(value); dot: the values
      * with something new (the red dot) */
     /* step: what the arrows do (default: the section's pages) */
-    let { tabs, current, pick, dot = [], step = null } = $props();
+    /* back: { label, go } -- a BACK button at the row's left (the viewer,
+     * inside a fighter) */
+    let { tabs, current, pick, dot = [], step = null, back = null } = $props();
 
     function choose(v, el) {
         selectBlip();
@@ -18,7 +20,10 @@
     }
 </script>
 
-<div class="subnav" class:many={tabs.length > 5}>
+<div class="subnav" class:many={tabs.length > 5} class:hasback={back}>
+    {#if back}
+        <button class="backbtn" onpointerenter={hoverBlip} onclick={e => { selectBlip(); back.go(); e.currentTarget.blur(); }}>&#8592; {back.label}</button>
+    {/if}
     <Arrow dir="l" onclick={() => (step ? step(-1) : stepPage(-1))} />
     {#each tabs as [v, key]}
         <button class="pg" class:active={current === v} class:news={dot.includes(v)} onpointerenter={hoverBlip}
@@ -64,5 +69,12 @@
     }
     .pg.news { padding-right: calc(var(--u) * 3); }
     .pg.active::before { top: 0; }
+    .backbtn {
+        flex: none;
+        background: linear-gradient(#2c3040, #12141c); border: 1px solid #6a5a3a; border-radius: 3px; cursor: pointer;
+        color: #f1d9a0; font-family: var(--font-head); font-weight: 900; text-transform: uppercase; letter-spacing: .06em;
+        font-size: calc(var(--t) * 1.15); padding: calc(var(--u) * .5) calc(var(--u) * 1); white-space: nowrap;
+    }
+    .backbtn:hover { color: #fff; border-color: #f1cc78; }
     .pg.active:not(.news)::after { bottom: 0; }
 </style>
