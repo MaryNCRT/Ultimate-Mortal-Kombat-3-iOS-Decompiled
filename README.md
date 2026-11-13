@@ -76,12 +76,13 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 - **Discord Rich Presence:** the mode, the fighters and the time on the player's Discord profile, with a Join button in an online lobby; through the Discord app already open, no account to link ([docs/DISCORD-PRESENCE.md](docs/DISCORD-PRESENCE.md)).
 - **REPLAYS:** every local fight recorded and played back in the game with a full player (pause, frame step, seek, speed).
 - **Mods:** a folder per mod in `mods\`, files named like the game's replace them; data overrides for the fight tables (`data.ini`).
+- **Outfits that add** (after 0.4.7): a mod whose `mod.ini` says `type=skin` replaces nothing: it is another outfit for one fighter, with its own model and its own COLOR 1, COLOR 2 and frozen sheets (any file names; `skin=`, `model=`, `color1=`, `color2=`, `ice=`), beside the original. The select screen's SKIN box above COLOR picks it, and the preview shows it. Online, the other player sees it only if they have the same outfit, else the original; the fight is the same either way.
 - **Debug menu** (`F2`): any fighter including the bosses, stage, round, hitboxes, save states.
 
 **The launcher's MODS section:**
 - **MOD MANAGER:** order, on/off, new mod, open folder.
 - **MOD HUB:** mods published by Mary and her collaborators in [UMK3-IOS-Mod-Hub](https://github.com/MaryNCRT/UMK3-IOS-Mod-Hub), downloaded into `mods\` with a click and updated when a newer version is out.
-- **CHARACTER VIEWER:** every fighter with its outfits, derived models, animations, a stage behind it; texture replacement; **REPLACE MODEL** from FBX, GLB or OBJ (humanoid rigs retargeted, weights painted and smoothed, bones posed with a Blender-style gizmo, shape keys with a keyed timeline); corrective animation layers; exports for Blender.
+- **CHARACTER VIEWER:** inside a fighter, MODELS / TEXTURES in the bar above, then the model chosen with the whole window; OUTFIT slots (1 the original, the outfits that add, + NEW OUTFIT as a copy of the original) and COLOR 1 / 2 / FROZEN with the chosen sheet and REPLACE TEXTURE under it; every fighter with its derived models, animations, a stage behind it; texture replacement; **REPLACE MODEL** from FBX, GLB or OBJ (humanoid rigs retargeted, weights painted and smoothed, bones posed with a Blender-style gizmo, shape keys with a keyed timeline); corrective animation layers; exports for Blender.
 - **STAGE VIEWER:** a stage played as the engine plays it, with its effects; elements picked, isolated and edited as in Blender (move / rotate / scale, keyframes, a dope-sheet timeline, shape keys and sculpting), kept per stage and exported as GLB, FBX or USD; its textures seen and replaced.
 - **CHARACTER EDITOR:** a fighter's attacks, kombos, data and texts.
 - **TEXTURES:** every texture of the game by where it belongs, replaced into a mod.
@@ -89,6 +90,7 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 
 ## Known problems (0.4.7 beta)
 
+- Outfits that add (in the test folder, not released): not yet tried between two machines online. The launcher's outfit tools were tried in its UI harness, not by Mary in the launcher yet.
 - Online, a lobby's room: in one test the second fight of a session counted desyncs (the first fights none); being looked at.
 
 - Online: 0.2.1's fixes (the rollback off one boot in two, fights drifting apart) were checked with two games on one PC, not yet between two machines. Both players need 0.2.1, built fresh.

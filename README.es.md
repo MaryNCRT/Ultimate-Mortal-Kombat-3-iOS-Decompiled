@@ -75,6 +75,7 @@ Todos se pueden cambiar en el launcher (CONTROLES) o en el juego (`Esc`).
 - **REGLAS DEL VERSUS** (0.4.5): en la selección del versus local, SELECT abre las reglas -- rondas (1/3/5), una serie de peleas (una, al mejor de 3, al mejor de 5), tiempo (30/60/99/infinito), kodes marcados en una lista, kombo slide. Son las mismas que usarán los lobbies en línea.
 - **REPETICIONES:** cada pelea local se graba y se reproduce en el juego con un reproductor completo (pausa, cuadro a cuadro, salto, velocidad).
 - **Mods:** una carpeta por mod en `mods\`; los archivos con el nombre de uno del juego lo reemplazan; datos de las tablas de combate (`data.ini`).
+- **Trajes que se añaden** (después de 0.4.7): un mod cuyo `mod.ini` dice `type=skin` no reemplaza nada: es otro traje para un luchador, con su propio modelo y sus propios COLOR 1, COLOR 2 y congelado (con cualquier nombre de archivo; `skin=`, `model=`, `color1=`, `color2=`, `ice=`), junto al original. En la selección se elige con la caja SKIN sobre COLOR. En línea, el otro jugador lo ve solo si tiene el mismo traje; si no, ve el original.
 - **Menú de depuración** (`F2`): cualquier luchador incluidos los jefes, escenario, ronda, hitboxes, estados guardados.
 
 **La sección MODS del launcher:**
