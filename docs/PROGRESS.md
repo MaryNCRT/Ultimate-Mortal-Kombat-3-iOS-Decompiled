@@ -103,6 +103,39 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+### 2026-11-13 -- Colours 3 to 6 from a fighter's own sheets
+
+Port work, not in the binary. Mary: colours up to 6 without new textures,
+by hue / saturation / value as in Substance Painter; Kung Lao first, his
+trousers green, red, purple, grey (her arcade reference).
+
+Measured: Kung Lao's `_DIFFUSE` trousers are hue 49, S .93, V .47 and
+`_DIFFUSE2`'s hue 196 at the same S and V -- EA's colour 2 is a hue turn.
+His skin is hue 29, S .51, so the pick (196 +-26, S >= .30) leaves it.
+The reference's trousers: green 118, red 358, purple 286 (S .86-.95,
+V ~.62), grey unsaturated.
+
+- `src/runtime/palettes.c` reads `aditional textures/palettes.ini` (and a
+  `palettes.ini` beside umk3.ini over it): per fighter `base`, `hue`,
+  `pick`, `sat_min`, and `3`..`6` = hue (-1 keep), saturation x, value x.
+  `pal_apply` turns the picked hues by (new - hue), scales S and V, and
+  feathers the edges (10 degrees, 0.6..1 x sat_min).
+- `draw_gl.c`: a texture named `@P<n>@NAME` is NAME recoloured
+  (`load_rgba`); `port_pal_texture(t, n)` gives a loaded texture's colour-n
+  twin, cached under that name.
+- `Players.c` `LoadLevelCharacters` / LAC: `PortPalLoad` recolours the
+  fight's diffuse and babality. `FrontEnd.c` `pal_sheet`: the select
+  screen's model (+0x528) and both VERSUS screens' art. `pal_count` sizes
+  the COLOR list (2 for an added outfit); `cpu_palette` draws among all;
+  the online mirror rule no longer computes 3 - host; packet 23 and
+  save/palette.txt take 1..6.
+- Test aid: `UMK3_PALETTE="p1,p2"` (also sets the debug fight's palettes).
+
+Checked: `--fight kunglao kunglao` with 3,4 and 5,6 (green, red, purple,
+grey); select screen COLOR 4 (red model); VERSUS2 recoloured offline in
+Python with the same sums (green, grey). Not tried: by Mary in play,
+online, the endings. Grey was darkened to V x0.80 after the first shot.
+
 ### 2026-11-13 -- The select screen's OUTFIT and COLOR lists
 
 Port work, not in the binary. Mary asked for the newer games' lists in place

@@ -62,6 +62,7 @@
  *   UMK3_RULES=<block>         an online fight's rules for every versus fight
  *                              ("r1;b5;t30;k-1;s1;h1", online_rules.h)
  *   UMK3_PADS=<tick:buttons:hold;...>  player one's pad by script (scripted_pad)
+ *   UMK3_PALETTE=<p1,p2>       each side's colour 1..6 (palettes.c), also a --fight
  *   UMK3_SCREENS=<tick:n;...>  open front-end screen n at that tick, so one
  *                              session can walk the whole menu
  *
@@ -2569,6 +2570,16 @@ static void palette_load(void)
     FILE *f;
     int a = 0, b = 0, c = 0;
 
+    /* a test aid: UMK3_PALETTE="p1,p2", each side's colour (1..6) */
+    if (getenv("UMK3_PALETTE")) {
+        extern int PortSoloPalette;
+        const char *e = getenv("UMK3_PALETTE");
+        PortPalette[0] = PortSoloPalette = atoi(e);
+        PortPalette[1] = strchr(e, ',') ? atoi(strchr(e, ',') + 1) : 0;
+        DbgPalette[0] = PortPalette[0];  /* a --fight is the debug menu's */
+        DbgPalette[1] = PortPalette[1];
+        return;
+    }
     if (palette_scripted())
         return;
     port_save_path(path, sizeof path, "palette.txt");
@@ -2576,9 +2587,9 @@ static void palette_load(void)
     if (!f)
         return;
     if (fscanf(f, "%d %d %d", &a, &b, &c) >= 2) {
-        PortPalette[0] = (a == 1 || a == 2) ? a : 0;
-        PortPalette[1] = (b == 1 || b == 2) ? b : 0;
-        PortArcadePalette = (c == 1 || c == 2) ? c : 0;
+        PortPalette[0] = (a >= 1 && a <= 6) ? a : 0;   /* 3..6: palettes.c */
+        PortPalette[1] = (b >= 1 && b <= 6) ? b : 0;
+        PortArcadePalette = (c >= 1 && c <= 6) ? c : 0;
     }
     fclose(f);
 }

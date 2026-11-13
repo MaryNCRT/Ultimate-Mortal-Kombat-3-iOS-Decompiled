@@ -47,6 +47,7 @@
 #include <string.h>
 
 #include "mods.h"
+#include "palettes.h"
 #include "platform/gl.h"
 #include "platform/platform.h"
 #include "lime/png.h"
@@ -197,7 +198,24 @@ static int try_one(const char *full, LimeImage *out)
 
 static int fit_twin(LimeImage *img, int cw, int ch, int dw, int dh);
 
+static int load_rgba_file(const char *path, LimeImage *out);
+
+/* Port: "@P<n>@NAME" is NAME recoloured as colour n (palettes.c) */
 static int load_rgba(const char *path, LimeImage *out)
+{
+    const char *rest;
+    int n = pal_strip(path, &rest);
+
+    if (!n)
+        return load_rgba_file(path, out);
+    if (!load_rgba_file(rest, out))
+        return 0;
+    if (!pal_apply(rest, n, out->rgba, out->width, out->height))
+        printf("palettes: nothing says how to make colour %d of %s\n", n, rest);
+    return 1;
+}
+
+static int load_rgba_file(const char *path, LimeImage *out)
 {
     /* Where the bundle keeps sheets, in the order that finds them soonest:
      * Textures/ holds 1,620 of them and res/ itself almost none. Nothing is
@@ -1530,6 +1548,43 @@ void limeDrawFaceMeSpriteWH(TEXTURE *tex, const float *m, float x, float y, floa
     }
     face_draw(tex, xyz, uv, rgba, GL_FLOAT);
     glDisableClientState(GL_VERTEX_ARRAY);
+}
+
+/* Port (palettes.c): texture t as colour n -- the same sheet recoloured,
+ * loaded once under "@P<n>@" and its name and kept. t itself for n below 3
+ * or a texture this cache did not load. */
+TEXTURE *port_pal_texture(TEXTURE *t, int n)
+{
+    static struct { TEXTURE *t, *r; int n; } memo[32];
+    static int next;
+    TexEntry *e;
+    char name[600];
+    int i;
+
+    if (!t || n < 3)
+        return t;
+    for (i = 0; i < 32; i++)
+        if (memo[i].t == t && memo[i].n == n)
+            return memo[i].r;
+    for (e = g_textures; e; e = e->next)
+        if (&e->tex == t)
+            break;
+    if (!e || !e->path)
+        return t;
+    {
+        const char *rest;
+        pal_strip(e->path, &rest);      /* never twice */
+        pal_prefix(n, name, sizeof name);
+        strncat(name, rest, sizeof name - strlen(name) - 1);
+    }
+    memo[next].t = t;
+    memo[next].n = n;
+    memo[next].r = load_texture(name, 0, 0);
+    if (!memo[next].r)
+        memo[next].r = t;
+    t = memo[next].r;
+    next = (next + 1) % 32;
+    return t;
 }
 
 /* port: its time, for the slow-frame line (rgl_front.c) */

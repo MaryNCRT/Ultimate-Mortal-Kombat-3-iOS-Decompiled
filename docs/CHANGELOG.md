@@ -10,6 +10,19 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## After 0.4.8 (not released yet)
 
+- **Colours 3 to 6** (Mary), with no new textures: the game recolours a
+  fighter's own sheet when it loads it, turning the hue of his clothes as
+  a paint program's Hue / Saturation / Value does (EA made colour 2 the same
+  way: Kung Lao's trousers are 49 degrees in colour 1, 196 in colour 2).
+  `aditional textures/palettes.ini` says which hues change and each colour's
+  hue, saturation and value. First fighter: **Kung Lao** -- 3 green, 4 red,
+  5 purple, 6 grey, from the arcade's colours. The fight, the select screen's
+  model, the babality and the VERSUS art (the endings') follow; the select
+  screen's portrait does not. The COLOR list shows as many as the fighter
+  has; the CPU wears any of them. Added outfits keep their 2.
+- **Tried by script**: Kung Lao against himself in 3/4 and 5/6, COLOR 4 on
+  the select screen, the VERSUS art recoloured offline with the same sums.
+
 - **Select screen: OUTFIT and COLOR lists** (Mary, as in the newer games):
   in the top corner of each player (player one's left, under RULES in VS;
   player two's right) two small buttons, one above the other -- a gi for the
