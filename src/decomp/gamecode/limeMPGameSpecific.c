@@ -1068,7 +1068,7 @@ void processPacket(const void *payload, long len, long type)
     }
     case PORT_PKT_PALETTE: {            /* port: the other side's colour */
         extern int PortNetPalette[2];
-        if (len == 4 && w[0] >= 0 && w[0] <= 2)
+        if (len == 4 && w[0] >= 0 && w[0] <= 6)   /* colours 3..6: palettes.c */
             PortNetPalette[1] = w[0];
         break;
     }

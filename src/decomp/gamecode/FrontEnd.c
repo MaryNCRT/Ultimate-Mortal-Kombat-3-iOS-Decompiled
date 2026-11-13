@@ -5077,6 +5077,19 @@ void LIME_GLAPI glLoadIdentity(void);
 void LIME_GLAPI glRotatef(float angle, float x, float y, float z);
 long RenderPlayer(void *player, long a, long b);
 int  PortPaletteOf(int side, long c1, long c2);  /* port: the colour picker */
+int  pal_count(const char *texBase);    /* runtime/palettes.c: colours 3..6 */
+int  pal_base(const char *texBase);
+TEXTURE *port_pal_texture(TEXTURE *t, int n);   /* runtime/draw_gl.c */
+
+/* Port: colour `pal` of fighter ch from his two sheets: the first, the
+ * second, or past 2 his base sheet recoloured (palettes.c) */
+static void *pal_sheet(int pal, long ch, void *one, void *two)
+{
+    if (pal >= 3 && ch >= 0 && ch < 26)
+        return port_pal_texture((TEXTURE *)(pal_base(PlayerDefs[ch == 0x17 ? 0 : ch].texBase) == 1
+                                            ? one : two), pal);
+    return pal == 2 ? two : one;
+}
 int  PortNetPaletteOf(int local, long c_this, long c_other);   /* port */
 extern int PortNetPalette[2];
 void sendPalettePacket(int pick);       /* limeMPGameSpecific.c, port */
@@ -5204,15 +5217,17 @@ void RenderFECharacters(long slot0, long slot1)
             /* Port, not in the binary: the two sides' colour picks; slot 0
              * is this machine's fighter. Nothing picked: the line above. */
             *(void *P32 *)(ch + 0x528) =
-                anim[PortNetPaletteOf(i == 0, i == 0 ? slot0 : slot1,
-                                 i == 0 ? slot1 : slot0) == 2 ? 0x24 / 4 : 0x14 / 4];
+                pal_sheet(PortNetPaletteOf(i == 0, i == 0 ? slot0 : slot1,
+                                           i == 0 ? slot1 : slot0),
+                          i == 0 ? slot0 : slot1, anim[0x14 / 4], anim[0x24 / 4]);
         } else {
             if (i != 0 && slot0 == slot1)
                 *(void *P32 *)(ch + 0x528) = anim[0x24 / 4];
             /* Port, not in the binary: the select screen's colour picker.
              * With nothing picked it gives the same answer as above. */
             *(void *P32 *)(ch + 0x528) =
-                anim[PortPaletteOf(i, slot0, slot1) == 2 ? 0x24 / 4 : 0x14 / 4];
+                pal_sheet(PortPaletteOf(i, slot0, slot1), i == 0 ? slot0 : slot1,
+                          anim[0x14 / 4], anim[0x24 / 4]);
         }
 
         RenderPlayer(ch, 1, 0);
@@ -11114,9 +11129,9 @@ void FE_Task_VS_Screen(void)
 
     /* ---- player one, sliding in from the left ---- */
     /* (port: the colour picker can give player one the second palette) */
-    limeDrawSprite((TEXTURE *)(PortPaletteOf(0, Character1, Character2) == 2
-                               ? CharacterVSTexture2[Character1]
-                               : CharacterVSTexture[Character1]),
+    limeDrawSprite((TEXTURE *)pal_sheet(PortPaletteOf(0, Character1, Character2), Character1,
+                                        CharacterVSTexture[Character1],
+                                        CharacterVSTexture2[Character1]),
                    0.0f - FE_WidthScale * VSScroll,
                    (float)limeScreenHeight + FE_HeightScale * -VS_PORTRAIT,
                    FE_WidthScale * VS_PORTRAIT,
@@ -11136,9 +11151,8 @@ void FE_Task_VS_Screen(void)
 
         /* Port, not in the binary: the colour picker's choice. With
          * nothing picked it is the rule above. */
-        portrait = PortPaletteOf(1, Character1, Character2) == 2
-                   ? CharacterVSTexture2[Character2]
-                   : CharacterVSTexture[Character2];
+        portrait = pal_sheet(PortPaletteOf(1, Character1, Character2), Character2,
+                             CharacterVSTexture[Character2], CharacterVSTexture2[Character2]);
 
         limeDrawSprite((TEXTURE *)portrait,
                        (float)limeScreenWidth
@@ -17500,11 +17514,16 @@ static int cpu_palette(long c1, long c2, int p0)
         seed = seed * 1103515245u + 12345u;
         last = c2;
         pick = (int)((seed >> 16) & 1) + 1;
+        /* port: a fighter with colours past 2 (palettes.c) wears any */
+        if (c2 >= 0 && c2 < 26 && pal_count(PlayerDefs[c2].texBase) > 2) {
+            seed = seed * 1103515245u + 12345u;
+            pick = 1 + (int)((seed >> 16) % (unsigned)pal_count(PlayerDefs[c2].texBase));
+        }
     }
     if (c2 == PP_MOTARO || c2 == PP_KAHN)
         return 1;
-    if (c1 == c2)
-        return p0 == 2 ? 1 : 2;
+    if (c1 == c2)                       /* never player one's own */
+        return pick != p0 ? pick : (p0 == 1 ? 2 : 1);
     return pick;
 }
 
@@ -17525,7 +17544,7 @@ int PortNetPaletteOf(int local, long c_this, long c_other)
     int guest = guest_pick ? guest_pick : (mirror ? 2 : 1);
 
     if (mirror && guest == host)
-        guest = 3 - host;
+        guest = host == 1 ? 2 : 1;      /* (3 - host, with colours past 2) */
     return (local ? isParent() : !isParent()) ? host : guest;
 }
 
@@ -17846,10 +17865,11 @@ static void drop_items(int side, int what, long ch, long c1, long c2, DropList *
     if (what == DROP_COLOR) {
         int shown = GameMode == 1 ? PortNetPaletteOf(1, c1, c2) : PortPaletteOf(side, c1, c2);
 
-        L->n = 2;
-        snprintf(L->item[0], sizeof L->item[0], "COLOR 1");
-        snprintf(L->item[1], sizeof L->item[1], "COLOR 2");
-        L->chosen = shown == 2 ? 1 : 0;
+        /* colours past 2 (palettes.c): not for an added outfit */
+        L->n = PortSkinOf(side, ch) ? 2 : pal_count(PlayerDefs[ch == 0x17 ? 0 : ch].texBase);
+        for (i = 0; i < L->n; i++)
+            snprintf(L->item[i], sizeof L->item[i], "COLOR %d", i + 1);
+        L->chosen = shown >= 1 && shown <= L->n ? shown - 1 : 0;
         return;
     }
     n = skins_of(ch, L->ids);
@@ -19457,18 +19477,16 @@ void FE_Task_Multiplayer_Versus_Screen(void)
     /* The binary draws them through FE_X / FE_W / FE_H, inside the middle
      * 480 of a wide screen; at the screen's edges as FE_Task_VS_Screen has
      * them (port, Mary) */
-    limeDrawSprite((TEXTURE *)(PortPaletteOf(0, Character1, Character2) == 2
-                               ? CharacterVSTexture2[left]
-                               : CharacterVSTexture[left]),
+    limeDrawSprite((TEXTURE *)pal_sheet(PortPaletteOf(0, Character1, Character2), left,
+                                        CharacterVSTexture[left], CharacterVSTexture2[left]),
                    0.0f - FE_WidthScale * VSScroll,
                    (float)limeScreenHeight + FE_HeightScale * -256.0f,
                    FE_WidthScale * 256.0f, FE_HeightScale * 256.0f,
                    0.0f, 0.0f, 1.0f, 1.0f, col);
 
     /* (port: the colour picks; the binary's own rule with none) */
-    limeDrawSprite((TEXTURE *)(PortPaletteOf(1, Character1, Character2) == 2
-                               ? CharacterVSTexture2[right]
-                               : CharacterVSTexture[right]),
+    limeDrawSprite((TEXTURE *)pal_sheet(PortPaletteOf(1, Character1, Character2), right,
+                                        CharacterVSTexture[right], CharacterVSTexture2[right]),
                    (float)limeScreenWidth + FE_WidthScale * VSScroll
                    + FE_WidthScale * -256.0f,
                    (float)limeScreenHeight + FE_HeightScale * -256.0f,

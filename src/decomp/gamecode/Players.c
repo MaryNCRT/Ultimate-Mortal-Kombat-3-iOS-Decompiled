@@ -963,6 +963,9 @@ extern int DbgFightActive;             /* the same, while a debug fight runs */
 int PortFightPalette(int side, long c1, long c2);  /* FrontEnd.c, port only */
 int PortFightSkin(int side, long c1, long c2);     /* the same, the SKIN box */
 extern int PortSkinLoad;                           /* below, port only */
+extern int PortPalLoad;                            /* the same: colours 3..6 */
+int  pal_base(const char *texBase);                /* runtime/palettes.c */
+TEXTURE *port_pal_texture(TEXTURE *t, int n);      /* runtime/draw_gl.c */
 
 void LoadLevelCharacters(EPLAYER a, EPLAYER b)
 {
@@ -987,12 +990,19 @@ void LoadLevelCharacters(EPLAYER a, EPLAYER b)
         int pa = DbgFightActive ? DbgPalette[0] : PortFightPalette(0, a, b);
         int pb = DbgFightActive ? DbgPalette[1] : PortFightPalette(1, a, b);
 
-        /* port: and the SKIN box's pick, a skin that adds (mods.c) */
+        /* port: and the SKIN box's pick, a skin that adds (mods.c); a
+         * colour past 2 loads its base sheet and recolours it (palettes.c,
+         * PortPalLoad) */
         PortSkinLoad = PortFightSkin(0, a, b);
-        LoadGameCharacter(p0, da, 0, pa ? pa == 2 : 0);
+        PortPalLoad = pa >= 3 && !PortSkinLoad ? pa : 0;
+        LoadGameCharacter(p0, da, 0, pa >= 3 ? (PortSkinLoad ? 0 : pal_base(da->texBase) == 2)
+                                             : pa ? pa == 2 : 0);
         PortSkinLoad = PortFightSkin(1, a, b);
-        LoadGameCharacter(p1, db, 0, pb ? pb == 2 : (a == b) ? 1 : 0);
+        PortPalLoad = pb >= 3 && !PortSkinLoad ? pb : 0;
+        LoadGameCharacter(p1, db, 0, pb >= 3 ? (PortSkinLoad ? 0 : pal_base(db->texBase) == 2)
+                                             : pb ? pb == 2 : (a == b) ? 1 : 0);
         PortSkinLoad = 0;
+        PortPalLoad = 0;
     }
 
     p0->altCostume = 0;                 /* already cleared, twice over */
@@ -2050,6 +2060,9 @@ static void *port_bake_lighting(ANIMATEDCHARACTER *c, SKININFO *skin,
 /* Port, not in the binary: the added skin (mods.c id, 0 the game's) the
  * next LoadAnimatedCharacter loads; set around a load and put back to 0. */
 int PortSkinLoad;
+/* Port: the colour (3..6) the next fight load recolours its sheets to,
+ * palettes.c; 0 none */
+int PortPalLoad;
 
 ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
                                          char *bonesFile, char *lightingName,
@@ -2411,6 +2424,8 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
         /* (0, 0), not (r, r): every arm reaches limeLoadTexture with r1 =
          * r2 = 0 (0x5cab8 r5 is 0 there, 0x5cb46 r is 0 there, 0x5c7ec). */
         c->diffuse = limeLoadTexture(texPath, 0, 0);
+        if (PortPalLoad >= 3)           /* port: colours 3..6 (palettes.c) */
+            c->diffuse = port_pal_texture(c->diffuse, PortPalLoad);
     }
 
     /* The ice sheet, for BOTH paths: the fight path's arms all branch back
@@ -2436,6 +2451,8 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
             sprintf(texPath, "%sBABILITY2.PVR", texName);
             c->babality = limeLoadTexture(texPath, 0, 0);
         }
+        if (PortPalLoad >= 3)           /* port: the baby too */
+            c->babality = port_pal_texture(c->babality, PortPalLoad);
     } else {
         c->babality = NULL;
     }
