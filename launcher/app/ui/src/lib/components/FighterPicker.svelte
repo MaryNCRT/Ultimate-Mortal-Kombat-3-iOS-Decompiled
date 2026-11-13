@@ -43,9 +43,9 @@
         </div>
         <div class="foot">
             <span class="tabs sub">
-                {#each [[0, 'profOutfit1'], [1, 'profOutfit2']] as [a, key]}
-                    <button class="tab" class:active={(p.alt ? 1 : 0) === a} onpointerenter={hoverBlip}
-                            onclick={() => { selectBlip(); pick({ alt: a }); }}>{tx(key)}</button>
+                {#each [0, 1, 2, 3, 4, 5] as a}
+                    <button class="tab" class:active={(p.alt | 0) === a} onpointerenter={hoverBlip}
+                            onclick={() => { selectBlip(); pick({ alt: a }); }}>{tx('profColour')} {a + 1}</button>
                 {/each}
             </span>
             <button class="btn" onpointerenter={hoverBlip} onclick={() => { selectBlip(); close(); }}>{tx('profPickClose')}</button>

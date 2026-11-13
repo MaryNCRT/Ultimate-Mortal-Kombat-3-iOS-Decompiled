@@ -215,6 +215,13 @@ int pal_count(const char *texBase)
     }
 }
 
+/* 1 when palettes.ini has a section of this very name */
+int pal_known(const char *name)
+{
+    const PalDef *d = find(name);
+    return d && name && _stricmp(d->name, name) == 0;
+}
+
 int pal_base(const char *texBase)
 {
     const PalDef *d = find(texBase);

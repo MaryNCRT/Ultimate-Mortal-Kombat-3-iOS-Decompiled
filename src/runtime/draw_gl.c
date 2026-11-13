@@ -218,10 +218,36 @@ static int load_rgba(const char *path, LimeImage *out)
         if (k < sizeof stem) {
             memcpy(stem, rest, k);
             stem[k] = 0;
-            if (pal_file_name(stem, n, file, sizeof file - 5)) {
-                strcat(file, ".png");
-                if (load_rgba_file(file, out))
-                    return 1;
+            {
+                /* a mod with the full-size colour but not this smaller copy
+                 * (the HD CHARACTERS pack ships no _LITE / _LOW colours, they
+                 * are the same pictures): its full one, not the game's small
+                 * one from res/Textures */
+                char got[1200], full[256];
+                int skip = 0;
+
+                if (pal_file_name(stem, n, file, sizeof file - 5) && !mods_find_texture(file, got, sizeof got)
+                    && (strstr(stem, "_LITE") || strstr(stem, "_LOW"))) {
+                    char *q;
+                    snprintf(full, sizeof full, "%s", stem);
+                    q = strstr(full, "_LITE");
+                    if (!q)
+                        q = strstr(full, "_LOW");
+                    {
+                        size_t qn = strcspn(q + 1, "_") + 1;
+                        char last = q[qn - 1];
+                        memmove(q, q + qn, strlen(q + qn) + 1);
+                        if (last == '2' && !strstr(full, "2"))
+                            strcat(full, "2");
+                    }
+                    if (pal_file_name(full, n, got, sizeof got - 5) && mods_find_texture(got, file, sizeof file))
+                        skip = 1;       /* the next block finds the mod's full one */
+                }
+                if (!skip && pal_file_name(stem, n, file, sizeof file - 5)) {
+                    strcat(file, ".png");
+                    if (load_rgba_file(file, out))
+                        return 1;
+                }
             }
             /* a smaller copy (_LITE, _LOW) the player did not make: the
              * full-size colour, which the card scales */

@@ -7,7 +7,7 @@
      * on top, the red line under. Nothing here is saved: PROFILE's fields
      * below it change the profile, and the banner follows. */
     import { onMount } from 'svelte';
-    import { app, tx, profArt, profArtAlt } from '#lib/app.svelte.js';
+    import { app, tx, profArt, artOf } from '#lib/app.svelte.js';
     import { api } from '#lib/platform.js';
     import { FIGHTERS } from '#lib/fighters.js';
 
@@ -25,7 +25,7 @@
     let cv = $state();
     $effect(() => {
         app.artTick;
-        const art = (p && p.alt && profArtAlt[who]) || profArt[who];
+        const art = p ? artOf(who, p.alt) : profArt[who];
         if (!cv) return;
         const g = cv.getContext('2d');
         g.clearRect(0, 0, cv.width, cv.height);

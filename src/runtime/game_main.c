@@ -3368,6 +3368,7 @@ int main(int argc, char **argv)
             int port_pal_make_files(void);
             lime_platform_set_asset_root(root);
             port_pal_make_files();
+            printf("colours: %d profile pictures written\n", prof_make_files());
             return 0;
         }
     plat_open_borderless = g_cfg_borderless && !g_cfg_full;

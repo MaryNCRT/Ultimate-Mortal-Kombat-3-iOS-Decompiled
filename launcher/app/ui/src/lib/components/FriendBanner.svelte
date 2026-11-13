@@ -6,7 +6,7 @@
      * at its right end (RETAR ...). `look` is the server's, as friends.txt
      * carries it to the game: icon|colour|L/D/C|colour2|angle|outfit
      * (gamecode_stubs.c port_online_friend_look). */
-    import { app, tx, profArt, profArtAlt } from '#lib/app.svelte.js';
+    import { app, tx, artOf } from '#lib/app.svelte.js';
 
     let { p, tag = '', children } = $props();
 
@@ -19,7 +19,8 @@
         const shade = /^[dD]/.test(f[2] || '') ? 'D' : /^[cC]/.test(f[2] || '') ? 'C' : 'L';
         const color2 = /^[0-9a-f]{6}$/i.test(f[3] || '') ? f[3].toLowerCase() : SHADE2[shade];
         const angle = /^\d/.test(f[4] || '') ? parseInt(f[4], 10) : -1;
-        return { icon, color, shade, color2, angle, alt: f[5] === '1' };
+        const alt = parseInt(f[5], 10);
+        return { icon, color, shade, color2, angle, alt: alt >= 0 && alt <= 5 ? alt : 0 };
     });
     /* the gradient as ProfileBadge.svelte draws the player's own */
     const grad = $derived.by(() => {
@@ -33,7 +34,7 @@
     $effect(() => {
         app.artTick;
         if (!cv) return;
-        const art = (lk.alt && profArtAlt[lk.icon]) || profArt[lk.icon];
+        const art = artOf(lk.icon, lk.alt);
         const g = cv.getContext('2d');
         g.clearRect(0, 0, cv.width, cv.height);
         if (!art) return;

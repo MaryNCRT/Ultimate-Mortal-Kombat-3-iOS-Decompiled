@@ -4,7 +4,7 @@
      * gradient on brushed steel, a gold bar on top and the red line under,
      * the fighter standing out of its left end, the name and EDIT PROFILE.
      * A click chooses PROFILE. */
-    import { app, tx, setSection, profArt, profArtAlt } from '#lib/app.svelte.js';
+    import { app, tx, setSection, artOf } from '#lib/app.svelte.js';
     import { selectBlip } from '#lib/sound.js';
 
     /* docked: at the left end of the command bar (Mary: so it covers nothing) */
@@ -30,7 +30,7 @@
     $effect(() => {
         app.artTick;
         if (!p || !cv) return;
-        const art = (p.alt && profArtAlt[p.icon]) || profArt[p.icon];
+        const art = artOf(p.icon, p.alt);
         const g = cv.getContext('2d');
         g.clearRect(0, 0, cv.width, cv.height);
         if (!art) return;

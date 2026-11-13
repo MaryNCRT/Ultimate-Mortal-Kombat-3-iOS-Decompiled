@@ -32,6 +32,7 @@
 #include <string.h>
 
 #include "profiles.h"
+#include "palettes.h"
 #include "lime/png.h"
 #include "lime/pvr.h"
 
@@ -69,7 +70,20 @@ static const char *const k_art[PROF_ICONS] = {
     "SUBZERO", "SMOKE_SECRET", "NOOBSAIBOT",
 };
 
+/* each icon's fighter as palettes.ini names him (PlayerDefs' texBase): his
+ * VERSUS art is not always named the same (JAXX, LUIKANG, SUBZERO_HUMAN is
+ * Sub-Zero, SUBZERO Classic Sub-Zero, SMOKE_SECRET Human Smoke) */
+static const char *const k_pal[PROF_ICONS] = {
+    "KANO", "SONYA", "JAX", "NIGHTWOLF", "SUBZERO", "STRYKER", "SINDEL",
+    "SEKTOR", "CYRAX", "KUNGLAO", "KABAL", "SHEEVA", "SHANGTSUNG", "LIUKANG",
+    "SMOKE", "KITANA", "JADE", "MILEENA", "SCORPION", "REPTILE", "ERMAC",
+    "OLDSUBZERO", "OLDSMOKE", "NOOBSAIBOT",
+};
+
 struct profile *prof_get(void) { return g_have ? &g_prof : NULL; }
+
+/* the colour (1..6) an outfit value (0..5) is, and back */
+static int clamp_alt(int a) { return a < 0 ? 0 : a > PROF_ALTS - 1 ? PROF_ALTS - 1 : a; }
 
 int prof_name_len(const char *s)
 {
@@ -139,7 +153,7 @@ void prof_save(void)
             snprintf(fav, sizeof fav, "-");
         fprintf(f, "profile=%s|%s|%d|%06X|%c|%06X|%s|%d|%s\n", g_prof.id, g_prof.name, g_prof.icon,
                 g_prof.color & 0xffffff, "LDC"[g_prof.dark >= 0 && g_prof.dark <= 2 ? g_prof.dark : 0],
-                g_prof.color2 & 0xffffff, ang, g_prof.alt ? 1 : 0, fav);
+                g_prof.color2 & 0xffffff, ang, clamp_alt(g_prof.alt), fav);
     }
     fclose(f);
 }
@@ -220,7 +234,8 @@ void prof_load(const char *ini_path, const char *default_name)
             if (*v >= '0' && *v <= '9')
                 g_prof.angle = atoi(v) % 360;
             if ((v = strchr(v, '|')) != NULL) {
-                g_prof.alt = v[1] == '1';
+                /* the colour less one: 0..5 (an older file: 0 or 1) */
+                g_prof.alt = v[1] >= '0' && v[1] <= '9' ? clamp_alt(v[1] - '0') : 0;
                 /* the favourite fighter, after the outfit: "-" none */
                 if ((v = strchr(v + 1, '|')) != NULL && v[1] >= '0' && v[1] <= '9') {
                     g_prof.fav = atoi(v + 1);
@@ -305,16 +320,23 @@ static float sd_round(float x, float y, float c, float h, float r)
  * Sonya's is SONYA_2_VERSUS.pvr. None: 0, and the first is drawn. */
 #define ALT_FRAME 1.061f
 
-static int alt_art(const char *root, int icon, uint8_t **art, int *aw, int *ah)
+static int colour_art(const char *root, int icon, int colour, uint8_t **art, int *aw, int *ah);
+
+static int alt_art(const char *root, int icon, int alt, uint8_t **art, int *aw, int *ah)
 {
     char path[1200];
     LimeImage im;
     uint8_t *out;
     int n = 256, x, y;
 
-    snprintf(path, sizeof path, "%s/Textures/%s_VERSUS2.pvr", root ? root : "res", k_art[icon]);
+    if (alt >= 2)                       /* colours 3..6 */
+        return colour_art(root, icon, alt + 1, art, aw, ah);
+    snprintf(path, sizeof path, "%s/Textures/%s_VERSUS%s.pvr", root ? root : "res", k_art[icon],
+             alt ? "2" : "");
     memset(&im, 0, sizeof im);
     if (!lime_pvr_load(path, &im) || !im.rgba) {
+        if (!alt)
+            return 0;
         /* Sonya's is named the other way round: SONYA_2_VERSUS.pvr */
         snprintf(path, sizeof path, "%s/Textures/%s_2_VERSUS.pvr", root ? root : "res", k_art[icon]);
         memset(&im, 0, sizeof im);
@@ -339,6 +361,72 @@ static int alt_art(const char *root, int icon, uint8_t **art, int *aw, int *ah)
     return 1;
 }
 
+/* Colour 3..6's picture, 256 square: <ART>_PROFILE<n>.png if there is one
+ * (prof_make_files, or a modder's), else the colour's sheet framed as above
+ * and recoloured as the VERSUS screen does (palettes.c, under the fighter's
+ * own palettes.ini name). 0: no such colour. */
+/* The palette the VERSUS art is recoloured by: <NAME>_ART when palettes.ini
+ * has one (Sonya: her second art is not her second sheet's colours, so the
+ * first art is turned from its own hue), else the fighter's own. */
+static const char *art_palette(int icon, char *buf, size_t size)
+{
+    snprintf(buf, size, "%s_ART", k_pal[icon]);
+    return pal_known(buf) ? buf : k_pal[icon];
+}
+
+static int colour_art(const char *root, int icon, int colour, uint8_t **art, int *aw, int *ah)
+{
+    char path[1200], pb[48];
+    const char *pal = art_palette(icon, pb, sizeof pb);
+
+    if (colour < 3 || colour > PAL_MAX || colour > pal_count(k_pal[icon]))
+        return 0;
+    snprintf(path, sizeof path, "%s/Textures/%s_PROFILE%d.png", root ? root : "res", k_art[icon], colour);
+    if (lime_png_load(path, art, aw, ah)) {
+        if (*aw == 256 && *ah == 256)
+            return 1;
+        free(*art);
+        *art = NULL;
+    }
+    if (!alt_art(root, icon, pal_base(pal) == 2, art, aw, ah))
+        return 0;
+    pal_apply(pal, colour, *art, *aw, *ah);
+    return 1;
+}
+
+/* After a build (game_main.c --make-colors): every icon's colours 3..6 as
+ * res/Textures/<ART>_PROFILE<n>.png, for the launcher's profile and anyone
+ * who wants to paint them. Existing ones are kept. */
+int prof_make_files(void)
+{
+    const char *root = lime_platform_asset_root();
+    int icon, n, made = 0;
+
+    for (icon = 0; icon < PROF_ICONS; icon++)
+        for (n = 3; n <= PAL_MAX && n <= pal_count(k_pal[icon]); n++) {
+            char path[1200], pb[48];
+            const char *pal = art_palette(icon, pb, sizeof pb);
+            uint8_t *art = NULL;
+            int aw, ah;
+            FILE *t;
+
+            snprintf(path, sizeof path, "%s/Textures/%s_PROFILE%d.png", root ? root : "res", k_art[icon], n);
+            if ((t = fopen(path, "rb")) != NULL) {
+                fclose(t);
+                continue;
+            }
+            if (!alt_art(root, icon, pal_base(pal) == 2, &art, &aw, &ah))
+                continue;
+            pal_apply(pal, n, art, aw, ah);
+            if (pal_png_write(path, art, aw, ah)) {
+                printf("colours: wrote %s\n", path);
+                made++;
+            }
+            free(art);
+        }
+    return made;
+}
+
 unsigned char *prof_icon_rgba(int icon, int alt, unsigned color, int dark,
                               unsigned color2, int angle, int S)
 {
@@ -353,7 +441,7 @@ unsigned char *prof_icon_rgba(int icon, int alt, unsigned color, int dark,
 
     if (icon < 0 || icon >= PROF_ICONS || S <= 0)
         return NULL;
-    if (!alt || !alt_art(root, icon, &art, &aw, &ah)) {
+    if (!alt || !alt_art(root, icon, alt, &art, &aw, &ah)) {
         snprintf(path, sizeof path, "%s/Textures/%s_VERSUS.PNG", root ? root : "res",
                  k_art[icon]);
         if (!lime_png_load(path, &art, &aw, &ah))
@@ -486,7 +574,7 @@ unsigned char *prof_art_rgba(int icon, int alt)
 
     if (icon < 0 || icon >= PROF_ICONS)
         return NULL;
-    if (alt && alt_art(root, icon, &art, &aw, &ah) && aw == 256 && ah == 256)
+    if (alt && alt_art(root, icon, alt, &art, &aw, &ah) && aw == 256 && ah == 256)
         return art;
     free(art);
     art = NULL;

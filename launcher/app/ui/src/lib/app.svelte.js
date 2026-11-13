@@ -148,6 +148,15 @@ export const app = $state({
 export const profArt = [];
 /* the second outfits' pictures (profileIcon.js altArt); none for Sonya */
 export const profArtAlt = [];
+/* colours 3..6 (profArtCol[n][i], Image objects): <NAME>_PROFILE<n>.png */
+export const profArtCol = { 3: [], 4: [], 5: [], 6: [] };
+/* the picture of fighter `icon` in colour alt + 1 (a profile's alt, 0..5);
+ * colour 1's when that one is not there */
+export function artOf(icon, alt) {
+    const a = alt | 0;
+    return (a === 1 ? profArtAlt[icon] : a >= 2 ? profArtCol[a + 1] && profArtCol[a + 1][icon] : null)
+        || profArt[icon] || null;
+}
 
 export const tx = k => (T[app.ui][k] !== undefined ? T[app.ui][k] : k);
 
@@ -609,6 +618,16 @@ async function loadProfArt() {
         const img = b && decodePvr(new Uint8Array(b));
         if (img) profArtAlt[i] = altArt(img);
     }
+    for (let n = 3; n <= 6; n++)
+        for (let i = 0; i < 24; i++) {
+            if (profArtCol[n][i] || !api.profileIconCol) continue;
+            const url = await api.profileIconCol(i, n);
+            if (!url) continue;
+            const im = new Image();
+            im.src = url;
+            await im.decode().catch(() => {});
+            profArtCol[n][i] = im;
+        }
     app.artTick++;
 }
 

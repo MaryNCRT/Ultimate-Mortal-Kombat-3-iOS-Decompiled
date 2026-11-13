@@ -22,8 +22,9 @@ struct profile {
                                            degrees as CSS has it (0 up, 180
                                            down; the launcher's gradient
                                            picker); -1 the older custom look */
-    int      alt;                       /* 1: the fighter in his second outfit
-                                           (<NAME>_VERSUS2.pvr) */
+    int      alt;                       /* the fighter's colour less one, 0..5:
+                                           1 his second (<NAME>_VERSUS2.pvr),
+                                           2..5 colours 3..6 (palettes.c) */
     int      fav;                       /* the favourite fighter, 0..23 as the
                                            icon, -1 none: a preference of its
                                            own, not the icon (the ONLINE
@@ -51,6 +52,10 @@ unsigned char *prof_icon_rgba(int icon, int alt, unsigned color, int dark,
 unsigned prof_shade_default(int dark);
 /* the fighter's VERSUS art alone, 256 square straight RGBA, NULL if absent */
 unsigned char *prof_art_rgba(int icon, int alt);
+/* every icon's colours 3..6 as res/Textures/<ART>_PROFILE<n>.png (after a
+ * build); how many were written */
+int prof_make_files(void);
+#define PROF_ALTS 6                     /* colours a profile's fighter can wear */
 /* Changes whenever the icon would look different. */
 unsigned prof_look_key(const struct profile *p);
 

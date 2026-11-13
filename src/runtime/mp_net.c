@@ -308,7 +308,7 @@ static void info_put(unsigned char *p)
      * outfit: an older game reads the word as the kind and draws the icon
      * without them */
     put32(p + 128, ((uint32_t)pr->dark & 0xff) | ((uint32_t)(pr->angle + 1) & 0x1ff) << 8
-                   | (uint32_t)(pr->alt ? 1 : 0) << 20);
+                   | (uint32_t)(pr->alt & 7) << 20);   /* colour less one; an older game reads bit 20 */
 }
 
 static void info_get(const unsigned char *p, struct mpnet_peer *o)
@@ -327,7 +327,9 @@ static void info_get(const unsigned char *p, struct mpnet_peer *o)
         o->angle = (int)((v >> 8) & 0x1ff) - 1;
         if (o->angle >= 360)
             o->angle = -1;
-        o->alt = (int)((v >> 20) & 1);
+        o->alt = (int)((v >> 20) & 7);
+        if (o->alt >= PROF_ALTS)
+            o->alt = 0;
     }
 }
 

@@ -891,8 +891,7 @@ pad:
             add(R_PICON, 0, tx("ICONO", "ICON"), "< %s >",
                 tx(k_fighter_es[p->icon], k_fighter_en[p->icon]));
             /* the launcher's OUTFIT 1 / OUTFIT 2 (SecProfile.svelte) */
-            add(R_PALT, 0, tx("TRAJE", "OUTFIT"), "< %s >",
-                p->alt ? tx("2 (COLORES ALTERNATIVOS)", "2 (ALTERNATE COLOURS)") : "1");
+            add(R_PALT, 0, tx("COLOR", "COLOUR"), "< %d >", p->alt + 1);
             /* the background: the launcher's gradient picker, opened */
             {
                 struct plat_grad g;
@@ -1253,7 +1252,7 @@ static void change(int kind, int d)
         return;
     case R_PALT:
         if (prof_get()) {
-            prof_get()->alt = !prof_get()->alt;
+            prof_get()->alt = wrap(prof_get()->alt + (d ? d : 1), PROF_ALTS);
             prof_save();
         }
         return;
