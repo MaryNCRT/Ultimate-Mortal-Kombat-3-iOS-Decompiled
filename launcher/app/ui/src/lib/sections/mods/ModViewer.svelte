@@ -132,6 +132,26 @@
     });
     /* the roster's page: FIGHTERS opens on it, a fighter picked leaves it */
     const showRoster = $derived(ms.kind === 'characters' && (ms.roster || !owner));
+    /* inside a fighter: only his models and textures on the left, the MODS
+     * bar above hidden (Mary, 2026-11-13) */
+    const inside = $derived(ms.kind === 'characters' && !showRoster && !!owner);
+    $effect(() => { ms.inside = inside; });
+    onDestroy(() => { ms.inside = false; });
+    /* inside, two steps (Mary, 2026-11-13): first the fighter's models and
+     * textures to choose from, then the one chosen with the viewer and its
+     * options taking the room the list had; MODELS goes back */
+    const choose = f => { ms.chosen = true; f(); };
+    /* inside: the textures of the model open (its outfit's colours, its
+     * parts), not every picture of the fighter; kept while one of them is
+     * looked at */
+    let modelTex = $state([]);
+    $effect(() => {
+        if (!ms.cat || !stems.length || (ms.pick && ms.pick.tex)) return;
+        const want = new Set(stems.map(s => s.toUpperCase()));
+        const seen = new Set();
+        modelTex = ms.cat.textures.filter(t => want.has(t.name.toUpperCase())
+            && !seen.has(t.name.toUpperCase()) && seen.add(t.name.toUpperCase()));
+    });
     /* a texture shown in the fighter's own page */
     const texMode = $derived(ms.kind === 'textures' || !!(ms.pick && ms.pick.tex));
     const kindName = s => { const t = tx('dv'); return ((t && t[s.key]) || s.key).toUpperCase(); };
@@ -859,9 +879,58 @@
 
     async function setLayer(v) {
         selectBlip();
+        if (!skinMod(v)) baseLayer = v;
         ms.layer = v;
         texCache.clear();
         if (ms.pick) await open(ms.pick);
+    }
+
+    /* ---------------------------------------------- OUTFITS and COLOURS --
+     * A fighter's OUTFITS: 1 the original (the game's, with the mods that
+     * replace it), then each outfit that adds (a mod of type=skin, lib/
+     * mods.js, runtime/mods.c) -- its own model and its own COLOR 1, COLOR 2
+     * and frozen sheets, beside the original, chosen in the game's SKIN
+     * box. Choosing an outfit shows it and sends every change (a texture, a
+     * model) to it; the original is left as it is. A new outfit starts as a
+     * copy of the original. */
+    let baseLayer = $state(ms.layer && !ms.list.some(m => m.folder === ms.layer && m.skin) ? ms.layer : '*');
+    let newOutfit = $state(null);           /* the name being typed for a new one */
+    let outfitName = $state('');
+    const skinMod = f => f && ms.list.find(m => m.folder === f && m.skin) || null;
+    const outfits = $derived(fx ? ms.list.filter(m => m.skin && m.skin.character === String(fx.ch.id).toLowerCase()) : []);
+    const curOutfit = $derived(skinMod(ms.layer));
+    $effect(() => { outfitName = curOutfit ? curOutfit.skin.title : ''; });
+    /* the edits go where the outfit shown is */
+    $effect(() => { if (curOutfit) untrack(() => { target = curOutfit.folder; }); });
+
+    async function pickOutfit(m) {
+        newOutfit = null;
+        if (m) { await setLayer(m.folder); target = m.folder; }
+        else { await setLayer(baseLayer); if (skinMod(target)) target = ''; }
+    }
+    async function createOutfit() {
+        const title = (newOutfit || '').trim();
+        if (!title || !fx) return;
+        selectBlip();
+        const r = await api.modsSkinCreate({ texBase: fx.ch.id, skinFile: fx.ch.file + '.skin', title });
+        if (!r || !r.ok) { ms.error = tx('vwOutfitBad'); return; }
+        newOutfit = null;
+        await refreshMods();
+        forgetMod();
+        await pickOutfit(ms.list.find(m => m.folder === r.folder));
+    }
+    async function renameOutfit() {
+        const v = outfitName.replace(/[\r\n=]+/g, ' ').trim();
+        if (!curOutfit || !v || v === curOutfit.skin.title) return;
+        await api.modsInfo(curOutfit.folder, { skin: v });
+        await refreshMods();
+    }
+    /* a sheet's colour by its name: COLOR 1, COLOR 2, frozen, or its own */
+    function colorName(v) {
+        if (/_DIFFUSE$/i.test(v)) return tx('vwColor1');
+        if (/_DIFFUSE2$/i.test(v)) return tx('vwColor2');
+        if (/_ICE$/i.test(v)) return tx('vwFrozen');
+        return v.replace(/^[A-Z]+_/, '');
     }
 
     /* the textures of what is on screen, as PNG, to exports\<name>_TEXTURES */
@@ -1291,7 +1360,7 @@
             <select class="sel" value={ms.layer} onchange={e => setLayer(e.currentTarget.value)}>
                 <option value="">{tx('vwLayerGame')}</option>
                 <option value="*">{tx('vwLayerOn')}</option>
-                {#each ms.list as m}<option value={m.folder}>{m.name}</option>{/each}
+                {#each ms.list.filter(m => !m.skin || m.folder === ms.layer) as m}<option value={m.folder}>{m.skin ? tx('vwOutfit') + ': ' + m.skin.title : m.name}</option>{/each}
             </select></label>
         <button class="btn" onclick={refresh}>{tx('vwRefresh')}</button>
         {#if ms.layer}
@@ -1305,7 +1374,7 @@
         </div>
 {/snippet}
 
-<div class="viewer" class:full class:solo={ms.solo} bind:this={mainEl}>
+<div class="viewer" class:full class:solo={ms.solo} class:picking={inside && !ms.chosen} class:chosen={inside && ms.chosen} bind:this={mainEl}>
     {#if showRoster}
         <!-- THE ROSTER (Mary, 2026-11-12): a page of its own, every fighter
              by his select screen portrait; a click opens him in the viewer,
@@ -1318,7 +1387,7 @@
                 {#each items as it (it.id)}
                     {@const p = portraits[ms.layer + '|' + it.id]}
                     <button class="cell" class:on={owner && owner.id === it.id} title={it.name} use:lazy={() => portrait(it)}
-                            onpointerenter={hoverBlip} onclick={() => open(it)}>
+                            onpointerenter={hoverBlip} onclick={() => { ms.chosen = false; ms.leftTab = 'models'; open(it); }}>
                         <span class="face">{#if p}<img src={p} alt="">{:else}<i>{it.name.slice(0, 2)}</i>{/if}</span>
                         <span class="nm">{it.name}</span>
                     </button>
@@ -1327,8 +1396,8 @@
             </div>
         </div>
     {/if}
-    <aside class="side">
-        {@render sideHead()}
+    <aside class="side" class:inside>
+        {#if !inside}{@render sideHead()}{/if}
         {#if ms.kind === 'textures' && ms.cat}
             <select class="sel" bind:value={ms.texFighter}>
                 <option value="">{tx('vwTexAll')}</option>
@@ -1344,30 +1413,33 @@
                     <span class="face">{#if p}<img src={p} alt="">{/if}</span>
                     <span class="wn">{owner.name.toUpperCase()}</span>
                 </div>
+                {#if ms.leftTab === 'models'}
                 <ul class="list related">
-                    <li class="subhead">{tx('vwRelModels')}</li>
-                    <li class="sub"><button class:on={ms.pick === owner || (ms.pick.id === owner.id && !ms.pick.tex)} onclick={() => open(owner)}>{tx('vwRoster')}</button></li>
+                    <li class="sub"><button class:on={ms.pick === owner || (ms.pick.id === owner.id && !ms.pick.tex)} onclick={() => choose(() => open(owner))}>{tx('vwRoster')}</button></li>
                     {#if hasIce}
-                        <li class="sub"><button class:on={!ms.pick.derived && !ms.pick.tex && /_ICE$/i.test(ms.outfit)} onclick={openFrozen}>{tx('vwFrozen')}</button></li>
+                        <li class="sub"><button class:on={!ms.pick.derived && !ms.pick.tex && /_ICE$/i.test(ms.outfit)} onclick={() => choose(openFrozen)}>{tx('vwFrozen')}</button></li>
                     {/if}
                     {#each ownSpecials as d (d.id)}
                         <li class="sub"><button class="special" class:on={ms.pick.id === d.id} title={d.name}
-                                onclick={() => openRelated(d, { derived: true })}>&#9733; {d.name.toUpperCase()} <small>{kindName(d)}</small></button></li>
+                                onclick={() => choose(() => openRelated(d, { derived: true }))}>&#9733; {d.name.toUpperCase()} <small>{kindName(d)}</small></button></li>
                     {/each}
                     {#each derived as d (d.item.id)}
                         <li class="sub"><button class:on={ms.pick.derived && ms.pick.id === d.item.id} title={d.item.name}
-                                onclick={() => openDerived(d)}>{dvName(d)}</button></li>
-                    {/each}
-                    <li class="subhead">{tx('vwRelTex')} ({ownTextures.length})</li>
-                    {#each ownTextures as t (t.id)}
-                        <li class="sub tex" use:lazy={() => texPic(t.name)}>
-                            <button class:on={ms.pick.tex && ms.pick.id === t.id} title={t.name} onclick={() => openRelated(t, { tex: true })}>
-                                <span class="pic">{#if pics[ms.layer + '|' + t.name]}<img src={pics[ms.layer + '|' + t.name]} alt="">{/if}</span>
-                                <span class="tn">{t.name}</span>
-                            </button>
-                        </li>
+                                onclick={() => choose(() => openDerived(d))}>{dvName(d)}</button></li>
                     {/each}
                 </ul>
+                {:else}
+                <!-- the fighter's textures, as pictures -->
+                <div class="texgrid">
+                    {#each modelTex as t (t.id)}
+                        <button class="tcell" class:on={ms.pick.tex && ms.pick.id === t.id} title={t.name}
+                                use:lazy={() => texPic(t.name)} onpointerenter={hoverBlip} onclick={() => choose(() => openRelated(t, { tex: true }))}>
+                            <span class="pic">{#if pics[ms.layer + '|' + t.name]}<img src={pics[ms.layer + '|' + t.name]} alt="">{/if}</span>
+                            <span class="tn">{t.name.replace(new RegExp('^' + owner.id + '_?', 'i'), '') || t.name}</span>
+                        </button>
+                    {/each}
+                </div>
+                {/if}
             {/if}
         {:else}
             <ul class="list">
@@ -1422,6 +1494,60 @@
             </div>
         {/if}
 
+        {#if fx && ms.kind === 'characters' && (rtab === 'view' || rtab === 'tex' || rtab === 'import')}
+            <div class="look">
+                <span class="step"><b>1</b>{tx('vwOutfit')}</span>
+                <div class="slots">
+                    <button class="slot" class:on={!curOutfit} onpointerenter={hoverBlip} onclick={() => pickOutfit(null)}>
+                        <span class="n">1</span><span class="t">{tx('vwOriginal')}</span></button>
+                    {#each outfits as m, i (m.folder)}
+                        <button class="slot" class:on={curOutfit && curOutfit.folder === m.folder} class:off={!m.on}
+                                title={m.folder} onpointerenter={hoverBlip} onclick={() => pickOutfit(m)}>
+                            <span class="n">{i + 2}</span><span class="t">{m.skin.title}</span></button>
+                    {/each}
+                    <button class="slot add" class:on={newOutfit !== null} onpointerenter={hoverBlip}
+                            onclick={() => { selectBlip(); newOutfit = newOutfit === null ? '' : null; }}>
+                        <span class="n">+</span><span class="t">{tx('vwNewOutfit')}</span></button>
+                </div>
+                {#if newOutfit !== null}
+                    <p class="note">{tx('vwNewOutfitNote')}</p>
+                    <div class="pair">
+                        <input class="edt" spellcheck="false" placeholder={tx('vwOutfitName')} bind:value={newOutfit}
+                               onkeydown={e => { if (e.key === 'Enter') createOutfit(); }}>
+                        <button class="btn hot" disabled={!newOutfit.trim()} onclick={createOutfit}>{tx('vwCreate')}</button>
+                    </div>
+                {:else if curOutfit}
+                    <label class="named"><span class="lbl">{tx('vwOutfitName')}</span>
+                        <input class="edt" spellcheck="false" bind:value={outfitName} onchange={renameOutfit}
+                               onkeydown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}></label>
+                    {#if !curOutfit.on}<p class="note warn">{tx('vwOutfitOff')}</p>{/if}
+                {/if}
+                {#if fx.variants.length > 1}
+                    <span class="step"><b>2</b>{tx('vwColor')}</span>
+                    <div class="slots colors">
+                        {#each fx.variants as v (v)}
+                            <button class="slot" class:on={ms.outfit === v} title={v} onpointerenter={hoverBlip}
+                                    onclick={() => { selectBlip(); outfit(v); }}><span class="t">{colorName(v)}</span></button>
+                        {/each}
+                    </div>
+                {/if}
+                {#if ms.outfit}
+                    <!-- the chosen colour's sheet: its picture, its name, REPLACE -->
+                    {#key ms.layer + '|' + ms.outfit}
+                        <div class="texcard" use:lazy={() => texPic(ms.outfit)}>
+                            <span class="pic">{#if pics[ms.layer + '|' + ms.outfit]}<img src={pics[ms.layer + '|' + ms.outfit]} alt="">{/if}</span>
+                            <span class="tinfo">
+                                <span class="tfile" title={ms.outfit}>{ms.outfit}</span>
+                                <span class="tfrom">{curOutfit ? tx('vwOutfit') + ' ' + curOutfit.skin.title : tx('vwOriginal')}</span>
+                                <button class="btn hot" onclick={() => replaceTexture(ms.outfit)}>{tx('vwImpTex')}</button>
+                            </span>
+                        </div>
+                    {/key}
+                {/if}
+                <p class="dest" class:skin={curOutfit}>{curOutfit ? tx('vwDestOutfit') + ' ' + curOutfit.skin.title : tx('vwDestOriginal')}</p>
+            </div>
+        {/if}
+
         {#if rtab === 'view' || !ms.pick}
             {#if ms.kind === 'characters' && fx}
                 <span class="lbl">{tx('vwAnim')}</span>
@@ -1435,12 +1561,7 @@
                         <button class="tab" class:active={ms.pose === 'bind'} onclick={() => ms.pose = 'bind'}>{tx('vwBind')}</button>
                     </span>
                 {/if}
-                {#if fx.variants.length > 1}
-                    <span class="lbl">{tx('vwOutfit')}</span>
-                    <select class="sel" value={ms.outfit} onchange={e => outfit(e.currentTarget.value)}>
-                        {#each fx.variants as v}<option value={v}>{v}</option>{/each}
-                    </select>
-                {/if}
+
                 {#if qualities.length > 1}
                     <span class="lbl">{tx('vwQuality')}</span>
                     <span class="tabs sub q{qualities.length}">
@@ -1680,6 +1801,48 @@
     .opts .head { margin-top: calc(var(--u) * .8); border-top: 1px solid var(--line); padding-top: calc(var(--u) * .6); }
     .checks { display: flex; flex-wrap: wrap; gap: calc(var(--u) * .9); }
     .pair { display: flex; gap: calc(var(--u) * .5); }
+    .look .pair .edt { flex: 1; width: auto; min-width: 0; }
+    .look .pair .btn { flex: none; width: auto; }
+    /* inside a fighter: MODELS / TEXTURES, the textures as a grid of pictures */
+    .ltabs { margin-top: calc(var(--u) * .3); }
+    .side.inside .related { flex: 1; min-height: 0; }
+    .texgrid { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: calc(var(--u) * .4); align-content: start; padding-right: 2px; }
+    .tcell { display: flex; flex-direction: column; gap: 3px; padding: calc(var(--u) * .3); background: rgba(120, 140, 170, .1);
+        border: 1px solid var(--line); border-radius: 4px; color: var(--lav); cursor: pointer; font: inherit; min-width: 0; }
+    .tcell:hover { background: rgba(120, 140, 170, .26); color: #fff; }
+    .tcell.on { border-color: #ffc890; background: rgba(170, 30, 40, .45); color: #fff; }
+    .tcell .pic { display: block; aspect-ratio: 1; background: #0c0a1e; border-radius: 3px; overflow: hidden; }
+    .tcell .pic img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .tcell .tn { font-size: calc(var(--t) * .85); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+    /* OUTFIT and COLOR: big numbered slots, the chosen one lit */
+    .look { display: flex; flex-direction: column; gap: calc(var(--u) * .5); padding-bottom: calc(var(--u) * .7);
+        margin-bottom: calc(var(--u) * .5); border-bottom: 1px solid var(--line); }
+    .step { display: flex; align-items: center; gap: calc(var(--u) * .5); color: var(--lav); font-size: calc(var(--t) * 1.1); letter-spacing: .06em; }
+    .step b { display: inline-grid; place-items: center; width: calc(var(--u) * 1.5); height: calc(var(--u) * 1.5); border-radius: 50%;
+        background: rgba(255, 200, 144, .18); color: #ffc890; font-weight: 400; font-size: calc(var(--t) * .95); }
+    .slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: calc(var(--u) * .4); }
+    .slot { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: calc(var(--u) * 3.2);
+        padding: calc(var(--u) * .35); background: rgba(120, 140, 170, .12); border: 1px solid var(--line); border-radius: 4px;
+        color: var(--lav); cursor: pointer; font: inherit; min-width: 0; }
+    .slot:hover { background: rgba(120, 140, 170, .28); color: #fff; }
+    .slot.on { background: rgba(170, 30, 40, .55); border-color: #ffc890; color: #fff; }
+    .slot.off { opacity: .6; }
+    .slot.add { border-style: dashed; }
+    .slot .n { font-size: calc(var(--t) * 1.5); line-height: 1; color: #ffc890; }
+    .slot .t { font-size: calc(var(--t) * .95); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .slots.colors .slot { min-height: calc(var(--u) * 2.2); }
+    .named { display: flex; flex-direction: column; gap: 2px; }
+    .texcard { display: grid; grid-template-columns: calc(var(--u) * 6) minmax(0, 1fr); gap: calc(var(--u) * .5); align-items: center;
+        padding: calc(var(--u) * .4); background: rgba(120, 140, 170, .1); border: 1px solid var(--line); border-radius: 4px; }
+    .texcard .pic { display: block; aspect-ratio: 1; background: #0c0a1e; border-radius: 3px; overflow: hidden; }
+    .texcard .pic img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .texcard .tinfo { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .texcard .tfile { color: #fff; font-size: calc(var(--t) * .95); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .texcard .tfrom { color: var(--dim); font-size: calc(var(--t) * .85); }
+    .dest { margin: 0; font-size: calc(var(--t) * .95); color: var(--dim); line-height: 1.4; }
+    .dest.skin { color: #ffc890; }
+    .note.warn { color: #ffb070; }
     .opts .pair .btn { flex: 1; width: auto; }
     .kinds { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u) * .4); }
     .kinds .tab { font-size: calc(var(--t) * 1.15); padding: calc(var(--u) * .5) calc(var(--u) * .3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1715,6 +1878,12 @@
     .topbtns .btn { height: auto; padding: calc(var(--u) * .35) calc(var(--u) * .9); font-size: calc(var(--t) * 1.2); opacity: .85; }
     /* SOLO MODEL: the side panels away, the view across */
     .viewer.solo { grid-template-columns: minmax(0, 1fr); }
+    /* inside a fighter: choosing (the list and the viewer), then chosen
+     * (the viewer and its options, the list gone) */
+    .viewer.picking:not(.solo) { grid-template-columns: calc(var(--u) * 26) minmax(0, 1fr); }
+    .viewer.picking .opts { display: none; }
+    .viewer.chosen:not(.solo) { grid-template-columns: minmax(0, 1fr) calc(var(--u) * 26); }
+    .viewer.chosen .side { display: none; }
     .viewer.solo .side, .viewer.solo .opts { display: none; }
     .play { display: flex; align-items: center; gap: calc(var(--u) * .9); margin-top: calc(var(--u) * .6); }
     .play input[type=range] { flex: 1; accent-color: var(--blue); }

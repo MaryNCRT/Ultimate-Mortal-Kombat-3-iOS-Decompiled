@@ -11,10 +11,17 @@
     import ModEditor from './mods/ModEditor.svelte';
     import ModExporter from './mods/ModExporter.svelte';
     import ModTextures from './mods/ModTextures.svelte';
+    const INSIDE_TABS = [['models', 'vwRelModels'], ['tex', 'vwRelTex']];
 </script>
 
 <Page class="tight">
-    <SubNav tabs={MODS_TABS} current={ms.tab} pick={v => ms.tab = v} />
+    {#if ms.tab === 'view' && ms.inside}
+        <!-- inside a fighter: his MODELS and TEXTURES where the pages were -->
+        <SubNav tabs={INSIDE_TABS} current={ms.leftTab} pick={v => { ms.leftTab = v; ms.chosen = false; }}
+                step={() => { ms.leftTab = ms.leftTab === 'models' ? 'tex' : 'models'; ms.chosen = false; }} />
+    {:else}
+        <SubNav tabs={MODS_TABS} current={ms.tab} pick={v => ms.tab = v} />
+    {/if}
     {#if ms.tab === 'mgr'}
         <ModManager />
     {:else if ms.tab === 'hub'}

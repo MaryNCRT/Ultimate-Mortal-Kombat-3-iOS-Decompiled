@@ -59,6 +59,8 @@ const calls = {
         incoming: [{ code: 'GGGG-HHHH-JJJJ', name: 'A REQUEST', look: '3|7A1F45|C|1D0C17|135|1' }],
         outgoing: [], invites: [{ code: 'KKKK-MMMM-NNNN', name: 'A CHALLENGER', look: '8|0B6E2C|D' }] }),
     modsList: () => mods.list(root),
+    modsSkinCreate: fields => mods.skinCreate(root, fields),
+    modsInfo: (folder, fields) => mods.setInfo(root, folder, fields),
     resFiles: () => mods.resFiles(root),
     resRead: (rel, layer) => mods.resRead(root, rel, layer),
     gameTables: () => mods.gameTables(root),

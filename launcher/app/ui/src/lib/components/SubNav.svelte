@@ -8,7 +8,8 @@
 
     /* tabs: [[value, text key]]; current; pick(value); dot: the values
      * with something new (the red dot) */
-    let { tabs, current, pick, dot = [] } = $props();
+    /* step: what the arrows do (default: the section's pages) */
+    let { tabs, current, pick, dot = [], step = null } = $props();
 
     function choose(v, el) {
         selectBlip();
@@ -18,12 +19,12 @@
 </script>
 
 <div class="subnav" class:many={tabs.length > 5}>
-    <Arrow dir="l" onclick={() => stepPage(-1)} />
+    <Arrow dir="l" onclick={() => (step ? step(-1) : stepPage(-1))} />
     {#each tabs as [v, key]}
         <button class="pg" class:active={current === v} class:news={dot.includes(v)} onpointerenter={hoverBlip}
                 onclick={e => choose(v, e.currentTarget)}>{tx(key)}</button>
     {/each}
-    <Arrow dir="r" onclick={() => stepPage(1)} />
+    <Arrow dir="r" onclick={() => (step ? step(1) : stepPage(1))} />
 </div>
 
 <style>

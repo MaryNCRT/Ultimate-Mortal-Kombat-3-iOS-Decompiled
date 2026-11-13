@@ -310,7 +310,9 @@ function list(root) {
             names.push({ file: path.relative(base, p).split(path.sep).join('/'), replaces: target || null });
         }
         const kindList = Object.keys(kinds).filter(k => k !== 'other');
-        const category = CATEGORIES.includes(info.category) ? info.category
+        const isSkin = String(info.type || '').toLowerCase() === 'skin';
+        if (isSkin) unknown = 0;            /* an outfit's files have its own names */
+        const category = isSkin ? 'skin' : CATEGORIES.includes(info.category) ? info.category
             : kindList.length === 1 ? kindList[0] : kindList.length ? 'mixed' : 'mixed';
         let preview = null;
         for (const p of ['cover.png', 'cover.jpg', 'cover.jpeg', 'preview.png', 'preview.jpg']) {
