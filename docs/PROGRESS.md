@@ -123,6 +123,31 @@ palettes.bak`) so it compiles palettes.c and writes the colours after a
 build; `launcher/bin/resources/src` and its palettes.ini synced too. Not
 checked: adding a colour to an outfit in the viewer.
 
+### 2026-11-13 -- Profile pictures in colours 1 to 6
+
+Port work, not in the binary. Mary: the player profile's pictures with the
+new colours up to 6. `struct profile.alt` was 0/1 (the second outfit); it
+is now the colour less one, 0..5, in profiles.ini (an older file's 0/1
+reads the same), the lobby look (FrontEnd PortLobbyMe, gamecode_stubs
+port_online_friend_look) and the online info word (mp_net.c: bits 20..22;
+an older game reads bit 20). profiles.c: `k_pal` names each icon's
+palettes.ini fighter (the art names differ: JAXX, LUIKANG, SUBZERO_HUMAN
+is Sub-Zero, SUBZERO Classic Sub-Zero, SMOKE_SECRET Human Smoke);
+colour_art takes `<ART>_PROFILE<n>.png` or makes it: the base colour's
+VERSUS .pvr framed as alt_art does, then pal_apply. `prof_make_files`
+(after port_pal_make_files in --make-colors) writes them: 92 in the test
+folder (23 fighters x 4; Noob Saibot has 2 colours). Sonya's second art is
+not her second sheet's magenta, so nothing changed: `pal_known` + a
+`[SONYA_ART]` section turn her first art's clothes (hue 65) instead.
+Menus: the game's settings row COLOR < n >, ONLINE MY PROFILE a COLOR
+stepper; the launcher's PROFILE and fighter gallery COLOR 1..6 tabs,
+`artOf(icon, alt)` (app.svelte.js) for every icon, IPC profile:iconCol.
+draw_gl.c load_rgba: a mod with the full-size colour n but not its
+_LITE/_LOW copy gives its full one (before, res/Textures' small one won),
+so the HD pack can ship one copy of each colour (its _LITE/_LOW sheets are
+the same pictures). Checked: a contact sheet of all 24 x 5 pictures; the
+build. Not checked: the launcher's tabs in the window, online.
+
 ### 2026-11-13 -- Scorpion's colour 5 yellow
 
 Mary: Scorpion 5 was red (orange, hue 20). palettes.ini SCORPION 5 =

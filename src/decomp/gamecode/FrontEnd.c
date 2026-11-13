@@ -14544,13 +14544,12 @@ static void PortOnlineMe(float cx, float cw, float y0, float a)
     if (i)
         d->icon = (d->icon + i + PROF_ICONS) % PROF_ICONS;
     d->fav = d->icon;
-    OnText(PortFrTx("TRAJE", "OUTFIT"), lx, ry[2] + 3.0f, 0, 0.36f, ex - 4.0f, OnPale, a);
-    if (OnButton(OB_OUT1, "1", lx + ex, ry[2], (lw - ex) * 0.5f - 2.0f, 15.0f,
-                 d->alt ? BT_NORMAL : BT_MAIN, a))
-        d->alt = 0;
-    if (OnButton(OB_OUT2, PortFrTx("2 (ALTERNATIVO)", "2 (ALTERNATE)"), lx + ex + (lw - ex) * 0.5f + 2.0f,
-                 ry[2], (lw - ex) * 0.5f - 2.0f, 15.0f, d->alt ? BT_MAIN : BT_NORMAL, a))
-        d->alt = 1;
+    /* the colour, 1..6 (Mary: the profile's picture in colours 3..6 too) */
+    OnText(PortFrTx("COLOR", "COLOUR"), lx, ry[2] + 3.0f, 0, 0.36f, ex - 4.0f, OnPale, a);
+    snprintf(line, sizeof line, "COLOR %d", (d->alt >= 0 && d->alt < PROF_ALTS ? d->alt : 0) + 1);
+    i = OnStepper(OB_OUT1, OB_OUT2, line, lx + ex, ry[2], lw - ex, a);
+    if (i)
+        d->alt = ((d->alt + i) % PROF_ALTS + PROF_ALTS) % PROF_ALTS;
 
     /* the favourite is the fighter on the left; the gallery chooses it
      * with every fighter in sight */
@@ -15581,7 +15580,7 @@ static void PortLobbyMe(void)
         snprintf(ang, sizeof ang, "-");
     snprintf(look, sizeof look, "%d|%06x|%c|%06x|%s|%d", me->icon, me->color & 0xffffffu,
              me->dark == 1 ? 'D' : me->dark == 2 ? 'C' : 'L', me->color2 & 0xffffffu, ang,
-             me->alt ? 1 : 0);
+             me->alt);
     mplobby_set_me(me->id, me->name, look, PortLobbyReady);
 }
 

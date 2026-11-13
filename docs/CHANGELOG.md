@@ -10,6 +10,16 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## After 0.4.8 (not released yet)
 
+- **Profile pictures in colours 1 to 6** (Mary): the profile's fighter can
+  wear any of his six colours -- PROFILE in the launcher (COLOR 1..6 under
+  the fighter and in the gallery), MY PROFILE in the game's ONLINE screen
+  and the game's settings. After a build the game writes each fighter's
+  colours 3..6 as `res/Textures/<NAME>_PROFILE<n>.png` (92 pictures), which
+  the launcher shows; others online see your colour too. Sonya's are made
+  from her first VERSUS art (`[SONYA_ART]` in palettes.ini). Noob Saibot
+  has only his two.
+- A texture pack with the full-size colour but not its `_LITE` / `_LOW`
+  copy now shows its own full-size one, not the game's small one.
 - **Scorpion's colour 5 is golden yellow** (Mary: it looked red; it was
   orange, hue 20 -- now 50).
 - **Colours 3 to 6 further apart** (Mary): Sektor's and Cyrax's were the

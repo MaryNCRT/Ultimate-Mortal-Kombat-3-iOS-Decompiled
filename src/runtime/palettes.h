@@ -36,6 +36,8 @@ int  pal_apply(const char *name, int n, uint8_t *rgba, int w, int h);
 /* The fighter's sheet to start colour n from: 1 or 2 (palettes.ini base=,
  * 2 when it does not say). */
 int  pal_base(const char *texBase);
+/* 1 when palettes.ini has a section of exactly this name ("SONYA_ART") */
+int  pal_known(const char *name);
 
 /* The fighters palettes.ini names, for writing their colours out */
 int  pal_fighters(void);

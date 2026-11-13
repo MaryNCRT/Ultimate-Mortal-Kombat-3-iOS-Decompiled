@@ -304,7 +304,9 @@ int port_online_friend_look(const char *code, int *icon, unsigned *color, int *d
     *color2 = fld[3] && fld[3][0] ? (unsigned)strtoul(fld[3], NULL, 16) & 0xffffff
             : *dark == 1 ? 0x000000 : *dark == 2 ? 0x6e0b12 : 0xffffff;
     *angle = fld[4] && fld[4][0] >= '0' && fld[4][0] <= '9' ? atoi(fld[4]) : -1;   /* "-": none */
-    *alt = fld[5] ? atoi(fld[5]) != 0 : 0;
+    *alt = fld[5] ? atoi(fld[5]) : 0;
+    if (*alt < 0 || *alt >= 6)          /* profiles.h PROF_ALTS */
+        *alt = 0;
     return 1;
 }
 

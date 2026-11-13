@@ -82,7 +82,7 @@ function read(root) {
         return { id: f[0], name: cleanName(f[1]),
                  icon: icon >= 0 && icon < ICONS ? icon : DEFAULTS.icon,
                  color: cleanColor(f[3]), ...readShade(f[4], f[5]),
-                 angle: cleanAngle(f[6]), alt: f[7] === '1' ? 1 : 0,
+                 angle: cleanAngle(f[6]), alt: cleanAlt(f[7]),
                  fav: icon >= 0 && icon < ICONS ? icon : DEFAULTS.icon };   /* the icon is the favourite (0.4.2) */
     }
     return null;
@@ -118,7 +118,7 @@ function save(root, p) {
                                  /^[0-9A-F]{6}$/i.test(p.color2 || '') ? p.color2.toUpperCase()
                                      : SHADE_COLOR2[p.shade] || 'FFFFFF',
                                  cleanAngle(p.angle) < 0 ? '-' : cleanAngle(p.angle),
-                                 p.alt ? 1 : 0,
+                                 cleanAlt(p.alt),
                                  cleanFav(p.fav) < 0 ? '-' : cleanFav(p.fav)].join('|')];
     fs.writeFileSync(path.join(root, 'profiles.ini'), lines.join('\n') + '\n', 'utf8');
 }
@@ -162,7 +162,7 @@ function update(root, fields) {
     if (fields.color2 && /^#?[0-9A-F]{6}$/i.test(fields.color2))
         p.color2 = fields.color2.replace('#', '').toUpperCase();
     if (fields.angle !== undefined) p.angle = cleanAngle(fields.angle);
-    if (fields.alt !== undefined) p.alt = fields.alt ? 1 : 0;
+    if (fields.alt !== undefined) p.alt = cleanAlt(fields.alt);
     p.fav = p.icon;                 /* one fighter: the icon is the favourite (Mary, 0.4.2) */
     save(root, p);
     return p;
@@ -193,4 +193,24 @@ function iconAltData(root, i) {
     return null;
 }
 
-module.exports = { load, save, update, reset, newId, cleanName, cleanColor, cleanAngle, iconData, iconAltData, ICONS, NAME_MAX };
+/* The fighter's colour less one, 0..5 (an older file: 0 or 1). */
+function cleanAlt(v) {
+    const n = parseInt(v, 10);
+    return n >= 0 && n <= 5 ? n : 0;
+}
+
+/* Colour n's (3..6) picture: <NAME>_PROFILE<n>.png, which the game writes
+ * after a build (runtime/profiles.c prof_make_files), as a data: URL, or
+ * null. */
+function iconColData(root, i, n) {
+    const f = ICON_FILES[i];
+    if (!f || !(n >= 3 && n <= 6)) return null;
+    try {
+        return 'data:image/png;base64,' + fs.readFileSync(
+            path.join(root, 'res', 'Textures', f.replace('_VERSUS.PNG', '_PROFILE' + n + '.png'))).toString('base64');
+    } catch (err) {
+        return null;
+    }
+}
+
+module.exports = { load, save, update, reset, newId, cleanName, cleanColor, cleanAngle, cleanAlt, iconData, iconAltData, iconColData, ICONS, NAME_MAX };
