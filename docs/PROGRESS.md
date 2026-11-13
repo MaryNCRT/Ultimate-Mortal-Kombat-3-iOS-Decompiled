@@ -103,6 +103,19 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+### 2026-11-13 -- ESSENTIAL MODS at compile
+
+Mary: the essential mods are the modpack of the project's improvements,
+installed when compiling, the box ticked by default. `lib/hub.js`
+`essentials()` installs or updates every hub entry with `"essential": true`
+after a good build (`main.js` build:start; a failure is logged, the build
+stands); `essentials=1` in umk3.ini; publish.js `--essential`. Verified:
+launcher tests pass (35), the box shows ticked on the compile page; not
+run against a real essential mod (none published). A test mod in the
+test folder holding `Skversus.wav` (a copy of one of the game's own
+voices, removed after) loaded and played between the names: mods add
+sounds the game lacks. The pack's "versus" voice is Mary's to supply.
+
 ### 2026-11-13 -- Release 0.4.10 beta: the local VS screen, random looks, one gallery, pads
 
 Mary's requests in one session; details in CHANGELOG 0.4.10.

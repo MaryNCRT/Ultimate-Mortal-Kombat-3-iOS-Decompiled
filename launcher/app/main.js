@@ -395,7 +395,7 @@ ipcMain.handle('frame:browse', async () => {
     return r.filePaths[0];
 });
 
-ipcMain.handle('build:start', async (_ev, ipa) => {
+ipcMain.handle('build:start', async (_ev, ipa, essential) => {
     if (!ipa || typeof ipa !== 'string')
         return { ok: false, code: -2 };
     if (!fs.existsSync(ipa))
@@ -404,6 +404,15 @@ ipcMain.handle('build:start', async (_ev, ipa) => {
     const ok = code === 0 && ini.gameReady(g_root, arch());
     if (ok)
         upd.builtAfterUpdate(g_root);   /* the update's game is the one now */
+    /* ESSENTIAL MODS ticked: the hub's essential mods with the game */
+    if (ok && essential === true) {
+        send('build:data', { phase: 'ESSENTIAL MODS' });
+        try {
+            await hub.essentials(net.fetch, g_root, text => send('build:data', { text }));
+        } catch (err) {
+            send('build:data', { text: 'essential mods: the hub could not be read (' + err.message + ')' });
+        }
+    }
     return { ok, code };
 });
 

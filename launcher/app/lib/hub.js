@@ -13,7 +13,10 @@
  *       "category": "textures", "description": "...",
  *       "thumbnail": "mods/rain/cover.png",
  *       "url": "https://github.com/MaryNCRT/UMK3-IOS-Mod-Hub/releases/download/rain-v1.0/rain-1.0.zip",
- *       "size": 1234, "sha256": "<64 hex>" } ] }
+ *       "size": 1234, "sha256": "<64 hex>", "essential": true } ] }
+ *
+ * "essential": the mods COMPILE installs with the game when its ESSENTIAL
+ * MODS box is ticked (essentials(), main.js build:start; Mary, 0.4.11).
  *
  * What is installed from the HUB is kept in mods/hub.json (id -> folder,
  * version, sha256). A mod counts as installed when hub.json names it or
@@ -77,6 +80,7 @@ function parseIndex(text) {
             thumbnail: /^[\w\-/. ]+\.(png|jpe?g)$/i.test(thumb) && !thumb.includes('..') ? thumb : '',
             size: Number.isFinite(m.size) && m.size > 0 ? m.size : 0,
             sha256: /^[0-9a-f]{64}$/.test(sha256) ? sha256 : '',
+            essential: m.essential === true,
         });
     }
     return out;
@@ -383,4 +387,31 @@ function get(fetchFn, root, mod, onProgress) {
     return folderOf(root, readInstalled(root), mod) ? sync(fetchFn, root, mod, onProgress) : install(fetchFn, root, mod, onProgress);
 }
 
-module.exports = { REPO, INDEX, parseIndex, status, check, fetchIndex, install, sync, get, register, readInstalled, zipFiles, remote, crc32 };
+/* After a compile with ESSENTIAL MODS ticked: every essential mod of the
+ * hub installed, or brought up to its version, one after another; `say`
+ * gets a line for each. A mod that fails is said and skipped -- the game
+ * is built either way. How many were installed or updated. */
+async function essentials(fetchFn, root, say) {
+    const list = (await fetchIndex(fetchFn)).filter(m => m.essential);
+    let done = 0;
+    if (!list.length) {
+        say('essential mods: none in the hub');
+        return 0;
+    }
+    for (const m of status(root, list)) {
+        if (m.installed !== null && !m.update) {
+            say('essential mods: ' + m.name + ' ' + m.installed + ' already here');
+            continue;
+        }
+        try {
+            await get(fetchFn, root, m, () => {});
+            say('essential mods: ' + m.name + ' ' + m.version + (m.installed !== null ? ' updated' : ' installed'));
+            done++;
+        } catch (err) {
+            say('essential mods: ' + m.name + ' failed: ' + err.message);
+        }
+    }
+    return done;
+}
+
+module.exports = { essentials, REPO, INDEX, parseIndex, status, check, fetchIndex, install, sync, get, register, readInstalled, zipFiles, remote, crc32 };

@@ -37,6 +37,9 @@
             {#each tx('arches') as n, i}<option value={i}>{n}</option>{/each}
         </select>
     </div>
+    <!-- the MOD HUB's essential mods installed with the game (lib/hub.js essentials) -->
+    <label class="chk ess"><input type="checkbox" disabled={app.build.on} checked={app.cfg.essentials !== false}
+            onchange={e => { selectBlip(); save({ essentials: e.currentTarget.checked }); }}><span>{tx('essLbl')}</span></label>
     <div class="row">
         <button class="btn hot" disabled={app.build.on || app.upd.busy} onpointerenter={hoverBlip}
                 onclick={startBuild}>{tx(app.ready ? 'rebuild' : 'build')}</button>
