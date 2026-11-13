@@ -24,7 +24,7 @@
     import SharpSliders from '#lib/components/SharpSliders.svelte';
     import { api } from '#lib/platform.js';
     import { hoverBlip, selectBlip } from '#lib/sound.js';
-    import { ms, src, loadCatalog, fighter, gameFighter, refreshMods, reloadMods, exportThis, forgetMod, VIEW_KINDS } from '#lib/mods/store.svelte.js';
+    import { ms, src, loadCatalog, fighter, gameFighter, refreshMods, reloadMods, exportThis, forgetMod, VIEW_KINDS, modNames } from '#lib/mods/store.svelte.js';
     import { stageDesc, meshsetDesc, textureFile, pngBytes, exportFiles, isPng, attachVerts, fighterDesc } from '#lib/mods/assets.js';
     import { withLayers, bakeLayers, keyAt } from '#lib/mods/corrective.js';
     import { parseAnim } from '#lib/mods/formats.js';
@@ -32,7 +32,8 @@
     import { readFbx, fbxScene, fbxTakes, importAnim, rigDesc } from '#lib/mods/fbxin.js';
     import { sheetPng, matsText, solidPicture, bonesText, packSource, unpackSource } from '#lib/mods/modelin.js';
     import { decodePicture } from '#lib/mods/image.js';
-    import { derivedModels } from '#lib/mods/derived.js';
+    import { derivedModels, specialModels } from '#lib/mods/derived.js';
+    import { parseMeshset } from '#lib/mods/formats.js';
     import { thumb, forgetThumbs, lazy } from '#lib/mods/thumbs.js';
     import ModelImport from './ModelImport.svelte';
     import { ViewNav } from '#lib/mods/viewnav.js';
@@ -70,20 +71,94 @@
     let topEl;                              /* the buttons the camera gizmo sits under */              /* Blender's view name, bottom left */
     let fighterView = null;                 /* { f, meshes: [{ mesh, map }], rest } */
 
+    /* a fighter's textures, by name (KANO_..., KANOPORTRAIT, IPADKANO...) */
+    const ownTex = id => new RegExp('^(IPAD)?' + id + '(_|BABY|BABILITY|PORTRAIT|X_)', 'i');
+
+    /* ONLY WHAT THE MOD REPLACES (Mary, 2026-11-12): with a mod looked at
+     * (LAYER: one mod, or every mod on), the lists cut to what it has. A
+     * texture counts for its smaller copies too (the game finds X_LOW,
+     * X_LITE by X: runtime/mods.c), a fighter for any file named for him
+     * (his skin, bones, animations, textures), a model for its file or its
+     * textures. */
+    const modSet = $derived(ms.layer ? modNames(ms.layer) : null);
+    const filtering = $derived(!!(ms.modOnly && modSet));
+    const texIn = name => {
+        const n = name.toUpperCase();
+        return modSet.has(n) || modSet.has(n.replace(/_(LOW|LITE)$/, '')) || modSet.has(n.replace(/_(LOW|LITE)2$/, '2'));
+    };
+    const fighterIn = id => { for (const n of modSet) if (n.startsWith(id) || n.startsWith('IPAD' + id)) return true; return false; };
+    const modelIn = it => {
+        if (it.only) return (it.textures || []).some(texIn) || modSet.has(it.file.replace(/\.meshset$/i, '').toUpperCase());
+        return modSet.has(String(it.file || it.id).replace(/^.*\//, '').replace(/\.[^.]+$/, '').toUpperCase());
+    };
+    const inMod = (kind, it) => !filtering || (kind === 'textures' ? texIn(it.name) : kind === 'characters' ? fighterIn(it.id) : modelIn(it));
+
+    /* SPECIAL MODELS: read from the fighters' meshsets when first wanted */
+    let specials = $state.raw(null);
+    async function loadSpecials() {
+        if (specials || !ms.cat) return;
+        try { specials = await specialModels(ms.cat, f => src.read(f, ''), parseMeshset); } catch { specials = []; }
+    }
+    $effect(() => { if (ms.cat && (ms.kind === 'special' || ms.kind === 'characters')) untrack(loadSpecials); });
+
     const items = $derived.by(() => {
         if (!ms.cat) return [];
         const q = ms.search.trim().toLowerCase();
-        const all = ms.cat[ms.kind] || [];
+        const all = (ms.kind === 'special' ? specials : ms.cat[ms.kind]) || [];
         const fid = ms.kind === 'textures' && ms.texFighter;
-        const own = fid ? new RegExp('^(IPAD)?' + fid + '(_|BABY|BABILITY|PORTRAIT|X_)', 'i') : null;
-        const mine = own ? all.filter(x => own.test(x.name)) : all;
-        const hit = q ? mine.filter(x => x.name.toLowerCase().includes(q) || String(x.id).toLowerCase().includes(q)) : mine;
+        const own = fid ? ownTex(fid) : null;
+        const mine = (own ? all.filter(x => own.test(x.name)) : all).filter(x => inMod(ms.kind, x));
+        const hit = q ? mine.filter(x => x.name.toLowerCase().includes(q) || String(x.id).toLowerCase().includes(q)
+            || (x.owner && typeof x.owner === 'string' && x.owner.toLowerCase().includes(q))) : mine;
         return hit.slice(0, 400);
     });
 
-    /* the fighter open (or whose model is): its other models */
-    const owner = $derived(ms.kind === 'characters' && ms.pick ? (ms.pick.owner || ms.pick) : null);
-    const derived = $derived(owner && ms.cat ? derivedModels(ms.cat).get(owner.id) || [] : []);
+    /* the fighter open (or whose model or texture is): what belongs to him */
+    const owner = $derived.by(() => {
+        const p = ms.pick;
+        if (ms.kind !== 'characters' || !p || !ms.cat) return null;
+        const o = p.owner && typeof p.owner === 'object' ? p.owner : p;
+        return ms.cat.characters.find(c => c.id === o.id && c.file === o.file) ? o : null;
+    });
+    const derived = $derived(owner && ms.cat ? (derivedModels(ms.cat).get(owner.id) || []).filter(d => inMod('models', d.item)) : []);
+    const ownSpecials = $derived(owner && specials ? specials.filter(s => s.owner === owner.id && inMod('special', s)) : []);
+    const ownTextures = $derived.by(() => {
+        if (!owner || !ms.cat) return [];
+        const re = ownTex(owner.id);
+        /* one of each name: a .png beside the .pvr is the same texture */
+        const seen = new Set();
+        return ms.cat.textures.filter(t => re.test(t.name) && !/_LOW\d*$|_LITE\d*$/i.test(t.name) && inMod('textures', t)
+            && !seen.has(t.name.toUpperCase()) && seen.add(t.name.toUpperCase()));
+    });
+    /* the roster's page: FIGHTERS opens on it, a fighter picked leaves it */
+    const showRoster = $derived(ms.kind === 'characters' && (ms.roster || !owner));
+    /* a texture shown in the fighter's own page */
+    const texMode = $derived(ms.kind === 'textures' || !!(ms.pick && ms.pick.tex));
+    const kindName = s => { const t = tx('dv'); return ((t && t[s.key]) || s.key).toUpperCase(); };
+    const fighterName = id => { const c = ms.cat && ms.cat.characters.find(x => x.id === id); return c ? c.name : id; };
+
+    /* THE ROSTER: each fighter by his portrait, the select screen's picture
+     * (<F>PORTRAIT, from the mod looked at when it has one) */
+    let portraits = $state({});
+    function portrait(c) {
+        const k = ms.layer + '|' + c.id;
+        if (portraits[k] !== undefined) return;
+        portraits[k] = '';
+        const file = textureFile(src.files, c.id + 'PORTRAIT');
+        if (file) thumb(src, file, ms.layer, 96).then(t => { portraits[k] = t ? t.url : ''; });
+    }
+    function openRelated(it, extra) {
+        open({ ...it, ...extra, owner });
+    }
+
+    /* a special model whose meshes are the frames of one change (Raiden:
+     * eleven meshes of the same size): shown one at a time, FRAME picks it */
+    let seq = $state(0), seqAt = $state(0);
+    function showSeq(k) {
+        seqAt = k;
+        layers.forEach((_, i) => { layers[i].on = i === k; });
+        if (root) root.children.forEach((o, i) => { o.visible = i === k; });
+    }
     const dvName = d => { const t = tx('dv'); return ((t && t[d.key]) || d.key).toUpperCase() + (d.arg ? ' ' + d.arg.toUpperCase() : ''); };
     const hasIce = $derived(!!(fx && fx.variants.find(v => /_ICE$/i.test(v))));
     function openDerived(d) {
@@ -288,13 +363,15 @@
         done = '';
         texPick = '';
         stems = [];
+        seq = 0;
         ms.loading = true;
         ms.playing = false;
         try {
             clear();
-            if (ms.kind === 'textures') {
+            if (ms.kind === 'textures' || item.tex) {
                 await showTexture(item);
             } else if (ms.kind === 'characters' && !item.derived) {
+                ms.roster = false;
                 const f = await fighter(item);
                 if (my !== token) return;
                 fx = f;
@@ -308,7 +385,7 @@
                 await buildFighter(f);
                 info = item.name + ' · ' + f.rig.num + ' bones · ' + f.topo.src.length + ' verts · ' + f.clips.length + ' clips';
             } else {
-                const d = ms.kind === 'stages' ? await stageDesc(src, item) : await meshsetDesc(src, item.id);
+                const d = ms.kind === 'stages' ? await stageDesc(src, item) : await meshsetDesc(src, item.file || item.id, item.only || undefined);
                 if (my !== token) return;
                 root = new THREE.Group();
                 for (const m of d.meshes) root.add(await meshFrom(m, d.materials[m.material].stem));
@@ -317,6 +394,10 @@
                 scene.add(root);
                 frame(root, ms.kind === 'stages');
                 info = item.name + ' · ' + d.meshes.length + ' meshes';
+                /* the frames of one change: the first, FRAME for the rest */
+                const n = d.meshes.length, tris = d.meshes.map(m => m.faces.length);
+                seq = item.only && n > 2 && tris.every(t => t === tris[0]) ? n : 0;
+                if (seq) showSeq(0);
             }
         } catch (e) {
             ms.error = String(e && e.message || e);
@@ -797,6 +878,47 @@
         done = tx('exDone') + ' ' + await api.exportSave(exportTexDir(home), files);
     }
 
+    /* EXPORT ONLY THE LAYERS SHOWN: the model as the exporter writes it
+     * (assets.js), its meshes cut to those LAYERS has on. A fighter's
+     * meshes are his blocks, or each part of a block that has parts (a
+     * model brought in), in that order; what rides his bones (e*) is not
+     * part of his export, as in EXPORT. A special model keeps only its own
+     * meshes. Materials no mesh uses are dropped. */
+    const LAY_FORMATS = [['fbx', 'FBX'], ['glb', 'GLB'], ['usd', 'USDA'], ['usdc', 'USDC'], ['usdz', 'USDZ'], ['obj', 'OBJ']];
+    let layFormat = $state('fbx');
+    async function exportLayers() {
+        selectBlip();
+        done = copied = '';
+        ms.error = '';
+        try {
+            let desc, home;
+            if (fx) {
+                desc = fighterDesc(fx, { rest: ms.pose === 'tpose' && fx.tpose ? 'tpose' : 'bind', variant: ms.outfit, parts: true,
+                    clips: layFormat === 'obj' || ms.clip < 0 ? [] : [ms.clip] });
+                const keep = [];
+                fx.topo.blocks.forEach((_, bi) => {
+                    const ps = fx.parts && fx.parts[bi] && fx.parts[bi].length ? fx.parts[bi] : null;
+                    if (ps) ps.forEach((_, k) => keep.push(shown('b' + bi) && shown('p' + bi + '_' + k)));
+                    else keep.push(shown('b' + bi));
+                });
+                desc.meshes = desc.meshes.filter((_, i) => keep[i]);
+                home = homeOf('characters', fx.ch);
+            } else {
+                desc = await meshsetDesc(src, ms.pick.file || ms.pick.id, ms.pick.only || undefined);
+                desc.meshes = desc.meshes.filter((_, i) => shown('m' + i));
+                home = homeOf('models', { name: ms.pick.owner && ms.pick.only ? fighterName(typeof ms.pick.owner === 'object' ? ms.pick.owner.id : ms.pick.owner) + ' - ' + ms.pick.name : ms.pick.name });
+            }
+            const used = [...new Set(desc.meshes.map(m => m.material))];
+            desc.materials = used.map(i => desc.materials[i]);
+            desc.meshes = desc.meshes.map(m => ({ ...m, material: used.indexOf(m.material) }));
+            desc.name = (ms.pick.only ? ms.pick.name.replace(/\W+/g, '_').toUpperCase() : desc.name) + '_LAYERS';
+            const files = await exportFiles(src, desc, layFormat);
+            done = tx('exDone') + ' ' + await api.exportSave(home + '/' + layFormat.toUpperCase() + ' LAYERS', files);
+        } catch (e) {
+            ms.error = String(e && e.message || e);
+        }
+    }
+
     /* the rig to model over: T-pose, no animation, FBX with its textures */
     /* EXPORT RIG / ANIMATIONS: the skeleton and skin alone, or with every
      * clip, as FBX or GLB */
@@ -1132,16 +1254,26 @@
         setup();
         refreshMods();
         await loadCatalog();
-        /* the capture aid: UMK3_LAUNCHER_PICK=characters/KANO[@clip] */
-        const raw = new URLSearchParams(location.search).get('pick') || '';
+        /* the capture aid: UMK3_LAUNCHER_PICK=characters/KANO[@clip];
+         * characters/ alone is the roster's page, special/<id>[@frame] a
+         * special model (special:NIGHTWOLF:Raiden@10), and a leading
+         * ~<mod folder>~ looks at that mod with ONLY WHAT THE MOD REPLACES
+         * on (~Sonya Blade MKX~textures/) */
+        let raw = new URLSearchParams(location.search).get('pick') || '';
+        const lm = /^~([^~]+)~/.exec(raw);
+        if (lm) { raw = raw.slice(lm[0].length); ms.layer = lm[1]; ms.modOnly = true; }
         const cut = raw.indexOf('/'), at = raw.lastIndexOf('@');
         const want = [raw.slice(0, cut), raw.slice(cut + 1, at > cut ? at : undefined), at > cut ? raw.slice(at + 1) : ''];
-        if (want[1] && ms.cat && ms.cat[want[0]]) {
+        if (want[0] === 'special') await loadSpecials();
+        const list = want[0] === 'special' ? specials : ms.cat && ms.cat[want[0]];
+        if (cut > 0 && list) {
             ms.kind = want[0];
-            const it = ms.cat[want[0]].find(x => String(x.id).toUpperCase() === want[1].toUpperCase());
+            ms.roster = true;
+            const it = want[1] && list.find(x => String(x.id).toUpperCase() === want[1].toUpperCase());
             if (it) await open(it);
-            if (want[2]) { ms.clip = Number(want[2]); ms.frame = 2; }
-            setTimeout(() => api.shot(), 300);
+            if (want[2] && seq) showSeq(Math.min(seq - 1, Number(want[2])));
+            else if (want[2]) { ms.clip = Number(want[2]); ms.frame = 2; }
+            setTimeout(() => api.shot(), want[1] ? 300 : 2500);
         } else if (ms.pick && ms.cat) open(ms.pick);
     });
     onDestroy(() => {
@@ -1154,8 +1286,7 @@
     });
 </script>
 
-<div class="viewer" class:full class:solo={ms.solo} bind:this={mainEl}>
-    <aside class="side">
+{#snippet sideHead()}
         <label class="layer"><span class="lbl">{tx('vwLayer')}</span>
             <select class="sel" value={ms.layer} onchange={e => setLayer(e.currentTarget.value)}>
                 <option value="">{tx('vwLayerGame')}</option>
@@ -1163,40 +1294,97 @@
                 {#each ms.list as m}<option value={m.folder}>{m.name}</option>{/each}
             </select></label>
         <button class="btn" onclick={refresh}>{tx('vwRefresh')}</button>
+        {#if ms.layer}
+            <label class="chk modonly" title={tx('vwModOnlyNote')}><input type="checkbox" bind:checked={ms.modOnly}><span>{tx('vwModOnly')}</span></label>
+        {/if}
         <div class="kinds">
             {#each VIEW_KINDS as [k, key]}
                 <button class="tab" class:active={ms.kind === k} onpointerenter={hoverBlip}
-                        onclick={() => { selectBlip(); ms.kind = k; ms.search = ''; }}>{tx(key)}</button>
+                        onclick={() => { selectBlip(); ms.kind = k; ms.search = ''; if (k === 'characters') ms.roster = true; }}>{tx(key)}</button>
             {/each}
         </div>
+{/snippet}
+
+<div class="viewer" class:full class:solo={ms.solo} bind:this={mainEl}>
+    {#if showRoster}
+        <!-- THE ROSTER (Mary, 2026-11-12): a page of its own, every fighter
+             by his select screen portrait; a click opens him in the viewer,
+             and BACK TO THE ROSTER returns here -->
+        <div class="rosterpage">
+            <aside class="side">{@render sideHead()}
+                <input class="edt search" placeholder={tx('vwSearch')} spellcheck="false" bind:value={ms.search}>
+            </aside>
+            <div class="grid">
+                {#each items as it (it.id)}
+                    {@const p = portraits[ms.layer + '|' + it.id]}
+                    <button class="cell" class:on={owner && owner.id === it.id} title={it.name} use:lazy={() => portrait(it)}
+                            onpointerenter={hoverBlip} onclick={() => open(it)}>
+                        <span class="face">{#if p}<img src={p} alt="">{:else}<i>{it.name.slice(0, 2)}</i>{/if}</span>
+                        <span class="nm">{it.name}</span>
+                    </button>
+                {/each}
+                {#if !items.length}<p class="note">{tx(filtering ? 'vwModNone' : 'vwPick')}</p>{/if}
+            </div>
+        </div>
+    {/if}
+    <aside class="side">
+        {@render sideHead()}
         {#if ms.kind === 'textures' && ms.cat}
             <select class="sel" bind:value={ms.texFighter}>
                 <option value="">{tx('vwTexAll')}</option>
                 {#each ms.cat.characters as c}<option value={c.id}>{c.name}</option>{/each}
             </select>
         {/if}
-        <input class="edt search" placeholder={tx('vwSearch')} spellcheck="false" bind:value={ms.search}>
-        <ul class="list">
-            {#each items as it (it.id)}
-                <li><button class:on={ms.pick && ms.pick.id === it.id} class:own={owner && owner.id === it.id && ms.pick.derived}
-                            onclick={() => open(it)}>{it.name}</button></li>
-                {#if owner && owner.id === it.id && (derived.length || hasIce)}
-                    <li class="subhead">{tx('vwDerived')}</li>
+        {#if ms.kind !== 'characters'}<input class="edt search" placeholder={tx('vwSearch')} spellcheck="false" bind:value={ms.search}>{/if}
+        {#if ms.kind === 'characters'}
+            <button class="btn back" onpointerenter={hoverBlip} onclick={() => { selectBlip(); ms.roster = true; }}>&#8592; {tx('vwBackRoster')}</button>
+            {#if owner}
+                {@const p = portraits[ms.layer + '|' + owner.id]}
+                <div class="who" use:lazy={() => portrait(owner)}>
+                    <span class="face">{#if p}<img src={p} alt="">{/if}</span>
+                    <span class="wn">{owner.name.toUpperCase()}</span>
+                </div>
+                <ul class="list related">
+                    <li class="subhead">{tx('vwRelModels')}</li>
+                    <li class="sub"><button class:on={ms.pick === owner || (ms.pick.id === owner.id && !ms.pick.tex)} onclick={() => open(owner)}>{tx('vwRoster')}</button></li>
                     {#if hasIce}
-                        <li class="sub"><button class:on={!ms.pick.derived && /_ICE$/i.test(ms.outfit)} onclick={openFrozen}>{tx('vwFrozen')}</button></li>
+                        <li class="sub"><button class:on={!ms.pick.derived && !ms.pick.tex && /_ICE$/i.test(ms.outfit)} onclick={openFrozen}>{tx('vwFrozen')}</button></li>
                     {/if}
+                    {#each ownSpecials as d (d.id)}
+                        <li class="sub"><button class="special" class:on={ms.pick.id === d.id} title={d.name}
+                                onclick={() => openRelated(d, { derived: true })}>&#9733; {d.name.toUpperCase()} <small>{kindName(d)}</small></button></li>
+                    {/each}
                     {#each derived as d (d.item.id)}
                         <li class="sub"><button class:on={ms.pick.derived && ms.pick.id === d.item.id} title={d.item.name}
                                 onclick={() => openDerived(d)}>{dvName(d)}</button></li>
                     {/each}
-                {/if}
-            {/each}
-        </ul>
+                    <li class="subhead">{tx('vwRelTex')} ({ownTextures.length})</li>
+                    {#each ownTextures as t (t.id)}
+                        <li class="sub tex" use:lazy={() => texPic(t.name)}>
+                            <button class:on={ms.pick.tex && ms.pick.id === t.id} title={t.name} onclick={() => openRelated(t, { tex: true })}>
+                                <span class="pic">{#if pics[ms.layer + '|' + t.name]}<img src={pics[ms.layer + '|' + t.name]} alt="">{/if}</span>
+                                <span class="tn">{t.name}</span>
+                            </button>
+                        </li>
+                    {/each}
+                </ul>
+            {/if}
+        {:else}
+            <ul class="list">
+                {#if ms.kind === 'special' && !specials}<li class="subhead">{tx('vwLoading')}</li>{/if}
+                {#each items as it (it.id)}
+                    <li><button class:on={ms.pick && ms.pick.id === it.id} title={it.name}
+                                onclick={() => open(it)}>{#if ms.kind === 'special'}<span class="spn">{it.name.toUpperCase()}</span>
+                                <small class="spk">{it.owner ? fighterName(it.owner).toUpperCase() + ' · ' : ''}{kindName(it)}</small>{:else}{it.name}{/if}</button></li>
+                {/each}
+                {#if filtering && !items.length}<li class="subhead">{tx('vwModNone')}</li>{/if}
+            </ul>
+        {/if}
     </aside>
 
     <section class="main">
-        <div class="view" class:hide={ms.kind === 'textures'} bind:this={host}><div class="vname">{viewName}</div></div>
-        {#if ms.kind === 'textures'}
+        <div class="view" class:hide={texMode} bind:this={host}><div class="vname">{viewName}</div></div>
+        {#if texMode}
             <div class="texview"><canvas bind:this={pic} class:hide={!texInfo}></canvas></div>
         {/if}
         <div class="over">
@@ -1225,9 +1413,9 @@
     </section>
 
     <aside class="opts">
-        {#if ms.pick && !ms.loading && (ms.kind === 'textures' ? texInfo : true)}
+        {#if ms.pick && !ms.loading && (texMode ? texInfo : true)}
             <div class="rtabs">
-                {#each [['view', 'vwTabView'], ...(ms.kind !== 'textures' ? [['layers', 'vwTabLayers']] : []), ['tex', 'vwTabTex'], ...(fx ? [['import', 'vwTabImport'], ['corr', 'vwTabCorr']] : []), ['export', 'vwTabExport']] as [k, key]}
+                {#each [['view', 'vwTabView'], ...(!texMode ? [['layers', 'vwTabLayers']] : []), ['tex', 'vwTabTex'], ...(fx ? [['import', 'vwTabImport'], ['corr', 'vwTabCorr']] : []), ['export', 'vwTabExport']] as [k, key]}
                     <button class="tab" class:active={rtab === k} onpointerenter={hoverBlip}
                             onclick={() => { selectBlip(); rtab = k; }}>{tx(key)}</button>
                 {/each}
@@ -1286,13 +1474,18 @@
                         <label class="chk"><input type="checkbox" bind:checked={ms.extras}><span>{tx('vwExtras')}</span></label>
                     {/if}
                 </div>
-            {:else if ms.pick && ms.kind !== 'textures' && !ms.loading}
+            {:else if ms.pick && !texMode && !ms.loading}
+                {#if seq}
+                    <span class="lbl">{tx('vwFrame')} {seqAt + 1} / {seq}</span>
+                    <input class="seq" type="range" min="0" max={seq - 1} value={seqAt} oninput={e => showSeq(Number(e.currentTarget.value))}>
+                    <p class="note">{tx('vwSeqNote')}</p>
+                {/if}
                 <div class="checks">
                     <label class="chk"><input type="checkbox" bind:checked={ms.wire}><span>{tx('vwWire')}</span></label>
                     <label class="chk"><input type="checkbox" bind:checked={ms.solid}><span>{tx('vwSolid')}</span></label>
                     {#if ms.kind !== 'stages'}<label class="chk"><input type="checkbox" bind:checked={ms.floor}><span>{tx('vwFloor')}</span></label>{/if}
                 </div>
-            {:else if ms.kind === 'textures' && texInfo}
+            {:else if texMode && texInfo}
                 <span class="lbl">{texInfo.name}</span>
                 <span class="lbl">{texInfo.w} × {texInfo.h}</span>
             {/if}
@@ -1315,12 +1508,12 @@
             <ModTarget bind:value={target} placeholder={defaultTarget()} />
             <label class="chk"><input type="checkbox" bind:checked={ms.autoSmall}><span>{tx('vwAutoSmall')}</span></label>
             <label class="chk"><input type="checkbox" bind:checked={ms.autoIce}><span>{tx('vwAutoIce')}</span></label>
-            {#if ms.kind === 'textures'}
+            {#if texMode}
                 <button class="btn hot" onclick={() => replaceTexture(texInfo.name)}>{tx('vwImpTex')}</button>
                 <button class="btn" onclick={toMod}>{tx('vwToMod')}</button>
             {:else}
                 <ul class="texlist">
-                    {#each stems as st (st)}
+                    {#each stems.filter(st => inMod('textures', { name: st })) as st (st)}
                         <li use:lazy={() => texPic(st)}>
                             <button class:on={texPick === st} onclick={() => pickTexStem(st)} title={st}>
                                 <span class="pic">{#if pics[ms.layer + '|' + st]}<img src={pics[ms.layer + '|' + st]} alt="">{/if}</span>
@@ -1423,7 +1616,16 @@
 
         {:else if rtab === 'export'}
             <button class="btn" onclick={exportThis}>{tx('vwExport')}</button>
-            {#if ms.kind !== 'textures' && stems.length}<button class="btn" onclick={exportTextures}>{tx('vwExpTex')}</button>{/if}
+            {#if !texMode && layers.length}
+                <!-- EXPORT ONLY THE LAYERS SHOWN (Mary, 2026-11-12): what LAYERS has on -->
+                <span class="lbl head">{tx('vwExpLayers')} ({layers.filter(l => l.on && l.key[0] !== 'e').length}/{layers.filter(l => l.key[0] !== 'e').length})</span>
+                <select class="sel" bind:value={layFormat}>
+                    {#each LAY_FORMATS as [v, n]}<option value={v}>{n}</option>{/each}
+                </select>
+                <button class="btn hot" disabled={!layers.some(l => l.on && l.key[0] !== 'e')} onclick={exportLayers}>{tx('vwExpLayersGo')}</button>
+                <p class="note">{tx('vwExpLayersNote')}</p>
+            {/if}
+            {#if !texMode && stems.length}<button class="btn" onclick={exportTextures}>{tx('vwExpTex')}</button>{/if}
         {/if}
         {#if done}<p class="note ok">{done}</p>{/if}
         {#if copied}<p class="note ok">{copied}</p>{/if}
@@ -1437,6 +1639,36 @@
 <style>
     .viewer { display: grid; grid-template-columns: calc(var(--u) * 22) minmax(0, 1fr) calc(var(--u) * 24); gap: calc(var(--u) * 1.2); flex: 1; min-height: calc(var(--u) * 40); }
     .viewer.full { background: var(--bg); padding: calc(var(--u) * 1.2); }
+    /* THE ROSTER's page, over the viewer (which stays, its 3D kept) */
+    .viewer { position: relative; }
+    .rosterpage { position: absolute; inset: 0; z-index: 5; display: grid; grid-template-columns: calc(var(--u) * 22) minmax(0, 1fr);
+        gap: calc(var(--u) * 1.2); background: var(--bg, #0b0e14); }
+    .viewer.full .rosterpage { inset: calc(var(--u) * 1.2); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--u) * 10), 1fr)); gap: calc(var(--u) * .7); align-content: start;
+        overflow-y: auto; min-height: 0; background: var(--well); border-radius: var(--r-sm); padding: calc(var(--u) * .8); }
+    .cell { display: flex; flex-direction: column; align-items: stretch; gap: calc(var(--u) * .3); padding: calc(var(--u) * .3); background: none;
+        border: 1px solid transparent; border-radius: var(--r-sm); cursor: pointer; color: var(--lav); min-width: 0; }
+    .cell:hover { border-color: rgba(120, 140, 170, .6); color: #fff; }
+    .cell.on { border-color: #e0463c; background: rgba(163, 32, 26, .45); color: #fff; }
+    .cell .face, .who .face { aspect-ratio: 1; display: grid; place-items: center; background: #05070b; border-radius: 3px; overflow: hidden; }
+    .cell .face img, .who .face img { width: 100%; height: 100%; object-fit: cover; }
+    .cell .face i { font-style: normal; color: var(--dim); font-size: calc(var(--t) * 1.6); }
+    .cell .nm { font-size: calc(var(--t) * 1.2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+    .back { flex: none; }
+    .who { display: flex; align-items: center; gap: calc(var(--u) * .8); flex: none; }
+    .who .face { flex: 0 0 calc(var(--u) * 5); }
+    .wn { color: #fff; font-size: calc(var(--t) * 1.5); letter-spacing: .06em; }
+    .related { flex: 1; }
+    .related .tex button { display: flex; align-items: center; gap: calc(var(--u) * .5); }
+    .related .tex .pic { flex: 0 0 calc(var(--u) * 2.6); height: calc(var(--u) * 2.6); display: grid; place-items: center; border-radius: 2px;
+        background: repeating-conic-gradient(#161c26 0 25%, #0b0e14 0 50%) 0 0 / 8px 8px; overflow: hidden; }
+    .related .tex .pic img { max-width: 100%; max-height: 100%; }
+    .related .tn { overflow: hidden; text-overflow: ellipsis; }
+    .related .special { color: #ffd77a; }
+    .related small, .spk { color: var(--dim); font-size: calc(var(--t) * 1); margin-left: calc(var(--u) * .4); }
+    .spk { display: block; margin-left: 0; }
+    .modonly { flex: none; }
+    .seq { width: 100%; accent-color: var(--blue); }
     .side, .opts { display: flex; flex-direction: column; gap: calc(var(--u) * .6); min-height: 0; }
     .side .sel, .side .btn { flex: none; }
     .opts { overflow-x: hidden; overflow-y: auto; padding-right: calc(var(--u) * .3); }

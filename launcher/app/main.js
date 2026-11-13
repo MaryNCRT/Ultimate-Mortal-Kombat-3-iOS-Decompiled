@@ -171,7 +171,9 @@ function createWindow() {
     g_win.loadFile(path.join(__dirname, 'renderer', 'index.html'),
                    { query: { sec: process.env.UMK3_LAUNCHER_SEC || '', pick: process.env.UMK3_LAUNCHER_PICK || '' } });
     g_win.webContents.once('did-finish-load', () => dbg('did-finish-load'));
-    g_win.once('ready-to-show', () => g_win.show());
+    /* the shot aid shows the window without taking the focus from
+     * whatever the person at the computer is doing */
+    g_win.once('ready-to-show', () => (process.env.UMK3_LAUNCHER_SHOT ? g_win.showInactive() : g_win.show()));
     g_win.on('closed', () => { g_win = null; });
 }
 

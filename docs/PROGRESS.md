@@ -264,6 +264,43 @@ game's hello, the gate's minute running out, kick / promote.
   fight from the room.
 - The fight's player names (gold plates) are PR #209's, not merged yet.
 
+### 2026-11-12 — CHARACTER VIEWER: roster page, SPECIAL MODELS, mod filter, layers export
+
+Mary asked (in Spanish) for: a SPECIAL MODELS category with the Raiden of
+Nightwolf's Friendship; the fighters as a grid of their portraits, each
+opening with everything of theirs beside it; a checkbox to see only what a
+mod replaces. Then, while it was built: the roster as a page of its own
+with a way back, the filter on textures and models, exporting only the
+layers shown, and the editor's pages over the whole window.
+
+- **Where the viewer is**: the launcher (`launcher/app/ui/src/lib/sections/mods/ModViewer.svelte`),
+  not the game's debug menu.
+- **Raiden** is not a file of its own: it is eleven meshes `Raiden001..011`
+  (1708 triangles each, texture `RAYDEN_DIFFUSE`) inside
+  `NIGHTWOLF_STANDARD.meshset`. `derived.js specialModels` reads every
+  fighter's meshset and groups the meshes of 300+ triangles whose texture is
+  not the fighter's by texture, leaving out what every file has (`WHITE`
+  shells, `HIRESSKELETON`, `ROBOT_SKELETON`, `FROZEN_MANB`) and roster
+  skins (`<F>_DIFFUSE`, Sonya's `SONIA DIFF`). Only Raiden's label
+  (Friendship) is stated, because Mary said so; the rest are labelled "in
+  the fighter's file", named from their meshes. 36 found, plus the
+  `ANIMALITY_*` / `FRIENDSHIP_*` meshsets. A group whose meshes are all the
+  same size is shown one mesh at a time (FRAME).
+- **Mod filter**: `store.svelte.js modNames(layer)` from the mod list's files
+  and what each replaces; a texture counts for its `_LOW` / `_LITE`.
+- **Layers export**: `fighterDesc(..., { parts: true })` emits one mesh per
+  block or per part, the order LAYERS' `b*` / `p*` keys follow; bone
+  attachments (`e*`) are not exported, as in EXPORT.
+- **Capture aid**: `UMK3_LAUNCHER_PICK` takes `characters/` (the roster page),
+  `special/<id>[@frame]` and a leading `~<mod>~` (filter on); the shot
+  window opens with `showInactive`. The shot run from the test folder's
+  `launcher\bin` found the wrong root (`launcher\bin`) and captured
+  nothing; Mary asked to stop the windows and look at it herself.
+- Checked in `scripts/ui-harness.js` with the test folder: all of the above.
+  Packed into the test folder's `app.asar` (the old one was the 0.4.4 asar;
+  no open PR changes the launcher). **Not seen by Mary yet.**
+
+
 ### 2026-11-12 -- ONLINE stage 3: LOBBIES; a second monitor's refresh
 
 **A second monitor.** Mary: the game ran slow on a monitor that is not the

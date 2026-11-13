@@ -96,3 +96,84 @@ export function textureGroups(list, owner) {
     for (const t of list) put(count.get(first(t)) >= 3 ? pretty(first(t)) : 'Other', t);
     return [...groups.keys()].sort((a, b) => (a === 'Other') - (b === 'Other') || a.localeCompare(b)).map(g => [g, groups.get(g)]);
 }
+
+/* SPECIAL MODELS (Mary, 2026-11-12): the models that belong to a move or an
+ * ending rather than to a fighter's own roster slot.
+ *
+ * Most of them are hidden inside a fighter's own <F>_STANDARD.meshset, next
+ * to the fighter's body: Nightwolf's carries Raiden (eleven meshes
+ * Raiden001..011, textured RAYDEN_DIFFUSE -- Mary: it is his Friendship's),
+ * the animals the animalities turn into, arcade cabinets, a snowman ...
+ * They are found by what the meshset says, nothing more: meshes of 300
+ * triangles or more whose texture is not the fighter's own, grouped by
+ * texture and named by their meshes' common name. What is in every
+ * fighter's file (the white shell, the skeletons, the ice man) and a
+ * roster fighter's own skin seen in another's file are left out.
+ *
+ * Then the separate .meshset files named for one (ANIMALITY_..., FRIENDSHIP_...).
+ *
+ * Returns [{ id, name, file, only (mesh indices, or null for all), owner
+ * (fighter id or ''), key (i18n dv: 'Friendship', 'Inside', ...), frames }],
+ * Raiden first. `read(file)` -> bytes; parseMeshset from formats.js. */
+const SPECIAL_SKIP = /^(WHITE|HIRESSKELETON|ROBOT_SKELETON|FROZEN_MANB|PARTICLE.*)$/i;
+/* what is known of one beyond its meshes: who said so */
+const SPECIAL_KNOWN = { RAYDEN_DIFFUSE: { name: 'Raiden', key: 'Friendship' } };   /* Mary, 2026-11-12 */
+
+let g_special = null;
+export async function specialModels(cat, read, parseMeshset) {
+    if (g_special && g_special.cat === cat) return g_special.list;
+    const ids = cat.characters.map(c => c.id);
+    const skins = new RegExp('^(' + ids.join('|') + ')_DIFFUSE', 'i');
+    const out = [];
+    for (const ch of cat.characters) {
+        const file = ch.file + '.meshset';
+        let set;
+        try { set = parseMeshset((await read(file)) || new Uint8Array(0)); } catch { continue; }
+        const groups = new Map();
+        set.forEach((m, i) => {
+            const t = (m.texture || '').toUpperCase(), n = (m.name || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (!t || SPECIAL_SKIP.test(t) || t.startsWith(ch.id) || /^EVENT/.test(n)) return;
+            /* a skin: a roster fighter's (<F>_DIFFUSE), or Sonya's own
+             * frozen copy ('SONIA DIFF') */
+            if ((skins.test(t) || /DIFF/.test(t)) && !SPECIAL_KNOWN[t]) return;
+            if (!groups.has(t)) groups.set(t, []);
+            groups.get(t).push({ i, name: m.name || '', tris: m.faces.length / 3 });
+        });
+        /* one name per group: the stem most of its meshes share */
+        const byName = new Map();
+        for (const [t, ms] of groups) {
+            if (Math.max(...ms.map(m => m.tris)) < 300) continue;
+            const count = new Map();
+            for (const m of ms) {
+                const s = m.name.replace(/[\d\s_]+$/, '').replace(/STAND$/i, '').trim() || t;
+                count.set(s, (count.get(s) || 0) + 1);
+            }
+            const stem = [...count].sort((a, b) => b[1] - a[1])[0][0];
+            const known = SPECIAL_KNOWN[t];
+            /* a modeller's default name (Object006, Cylinder013) or one
+             * that holds the texture's (Skin_ZSphereTopology_Bunny002):
+             * the texture's */
+            const words = stem.replace(/([a-z])([A-Z])/g, '$1_$2').toUpperCase().split(/[_\s]+/);
+            const generic = /^(OBJECT|CYLINDER|BOX|RECTANGLE|PLANE|SPHERE|MESH)$/.test(words[0]);
+            const name = known ? known.name : pretty(generic || words.includes(t) ? t : words.join('_'));
+            const g = byName.get(name) || { name, only: [], textures: [], key: known ? known.key : 'Inside' };
+            g.only.push(...ms.map(m => m.i));
+            g.textures.push(t);
+            byName.set(name, g);
+        }
+        for (const g of byName.values())
+            out.push({ id: 'special:' + ch.id + ':' + g.name, name: g.name, file, only: g.only.sort((a, b) => a - b),
+                owner: ch.id, key: g.key, frames: g.only.length, textures: g.textures });
+    }
+    for (const m of cat.models) {
+        const k = /^(ANIMALITY|FRIENDSHIP)_(.+)$/i.exec(m.name);
+        if (!k) continue;
+        const who = ids.find(id => k[2].toUpperCase().startsWith(id)) || '';
+        out.push({ id: m.id, name: pretty(m.name), file: m.id, only: null, owner: who,
+            key: k[1].toUpperCase() === 'ANIMALITY' ? 'Animality' : 'Friendship', frames: 0, textures: [] });
+    }
+    const rank = s => (s.key === 'Friendship' && s.only ? 0 : 1);
+    out.sort((a, b) => rank(a) - rank(b) || a.owner.localeCompare(b.owner) || a.name.localeCompare(b.name));
+    g_special = { cat, list: out };
+    return out;
+}
