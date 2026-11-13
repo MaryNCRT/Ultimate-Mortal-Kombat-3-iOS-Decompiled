@@ -61,7 +61,11 @@ MaryNCRT/UMK3-IOS-Mod-Hub, installed and updated), CHARACTER VIEWER (with REPLAC
 weight paint, Blender-style bones, shape keys, corrective animation
 layers), STAGE VIEWER (the engine's stage playback, Blender-style element
 editing with keyframes and shape keys, texture replacement), CHARACTER
-EDITOR, TEXTURES and EXPORT (FBX, GLB, USD, OBJ).
+EDITOR, TEXTURES and EXPORT (FBX, GLB, USD, OBJ). STEAM
+([STEAM-INTEGRATION.md](STEAM-INTEGRATION.md)) adds the launcher to the
+Steam library as "Ultimate Mortal Kombat 3 IOS Decomp", a non-Steam game
+with SteamGridDB artwork (game 38752), and closes and reopens Steam
+itself to do it.
 
 ### What the tester has and has not played
 
@@ -72,7 +76,8 @@ REAL-TIME SHADOWS' note on its own row in 0.1.13. **Not yet played as a whole:**
 0.1.18; she has tried pieces of them as she reported problems (STAGE
 SELECT's music and CANCEL, the 4:3 menus, the stage editor, the MOD HUB,
 the kombo branch and the KOMBOS page, Noob Saibot on the roster, EXPORT ALL and the settings categories, which she confirmed work), each
-marked in the log below.
+marked in the log below. **STEAM** (2026-11-12): Mary confirmed the game
+added to her Steam library beside her other non-Steam game.
 
 ### Open problems
 
@@ -97,6 +102,44 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+### 2026-11-12 -- STEAM: the launcher as a non-Steam game, SteamGridDB artwork
+
+A new launcher section, STEAM ([STEAM-INTEGRATION.md](STEAM-INTEGRATION.md)):
+it adds or removes the launcher from the Steam library as "Ultimate Mortal
+Kombat 3 IOS Decomp" by editing `shortcuts.vdf` (only while Steam is closed,
+with a backup, an atomic write and no duplicates), browses SteamGridDB game
+38752 with the player's own API key, downloads the originals into
+`data/steam-artwork/`, and copies the chosen ones into
+`Steam/userdata/<id>/config/grid/` under the shortcut's app id. Steam's
+naming and the app id were checked against a shortcut on the project
+machine that Steam already shows with its artwork. **Tested:** 10 unit tests
+(fake Steam folder, fake SteamGridDB, the real `shortcuts.vdf` round-tripped
+read only), and the page in the harness against a copy of that file
+(ADD TO STEAM wrote our entry and left the other game byte-identical).
+**Not tested yet:** the live SteamGridDB API (it needs Mary's key), the real
+Steam client, Linux. Mary asked for it to be automatic: ADD TO STEAM now
+picks SteamGridDB's best-scored image of each kind by itself, with the
+project's key shipped in the release (`TOOLS/steamgriddb.key`, never
+committed). The account list shows the Steam name only, never the id.
+With no key at all, ADD TO STEAM uses the game page's own set (the first of
+each kind in its Top order, downloaded from SteamGridDB's CDN). Mary's first
+try in the test folder: the images downloaded, but the game was not added,
+because Steam was still running in the tray and the button stayed disabled.
+ADD / REMOVE now close Steam themselves (`-shutdown`), write, and reopen
+it, and the page no longer shows the app id. Her second try still did not
+add it: her launcher had been opened before the new one was put in
+(probably; the code saw her Steam, account and launcher correctly). The
+same `steamsync.add` the button calls was then run against her test
+folder and her Steam: it closed Steam, wrote the entry (app id
+3831288398, backup beside it) and the five pictures, and reopened Steam
+in 4.9 s. After Steam's restart, `shortcuts.vdf` still had both entries:
+the other game byte-identical, ours with its icon field. **Mary confirmed
+it in her library.** The name became "Ultimate Mortal Kombat 3 IOS Decomp"
+at her request. An entry under the old spelling is still recognised as
+ours, because the name match is case-insensitive. Not yet seen: the
+button itself doing it in a freshly opened launcher; Linux. Discord Rich Presence, the third part of the request,
+is not started.
 
 ### 2026-11-12 -- ONLINE stage 3: LOBBIES; a second monitor's refresh
 

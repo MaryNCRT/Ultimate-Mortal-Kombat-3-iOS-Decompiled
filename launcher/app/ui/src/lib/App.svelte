@@ -25,8 +25,9 @@
     import SecProfile from './sections/SecProfile.svelte';
     import SecMods from './sections/SecMods.svelte';
     import SecReplays from './sections/SecReplays.svelte';
+    import SecSteam from './sections/SecSteam.svelte';
 
-    const PAGES = { build: SecBuild, play: SecPlay, video: SecVideo, profile: SecProfile, mods: SecMods, replays: SecReplays };
+    const PAGES = { build: SecBuild, play: SecPlay, video: SecVideo, profile: SecProfile, mods: SecMods, replays: SecReplays, steam: SecSteam };
     const Sec = $derived(PAGES[app.sec]);
 
     onMount(init);

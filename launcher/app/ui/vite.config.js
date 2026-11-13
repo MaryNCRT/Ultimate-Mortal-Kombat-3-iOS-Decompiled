@@ -25,7 +25,9 @@ export default defineConfig({
                 /* the viewer's SMOOTH MODEL is WebAssembly (mods/subsurf.js) */
                 'script-src': ['self', 'wasm-unsafe-eval'],
                 'style-src': ['self'],
-                'img-src': ['self', 'data:'],
+                /* STEAM: SteamGridDB's previews from its CDN, the downloaded
+                 * originals from the game folder (data/steam-artwork) */
+                'img-src': ['self', 'data:', 'file:', 'https://*.steamgriddb.com'],
             },
         },
     })],
