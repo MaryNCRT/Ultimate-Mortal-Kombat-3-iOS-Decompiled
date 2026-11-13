@@ -4,6 +4,7 @@
     import Page from '#lib/components/Page.svelte';
     import SubNav from '#lib/components/SubNav.svelte';
     import { ms, MODS_TABS } from '#lib/mods/store.svelte.js';
+    import { tx } from '#lib/app.svelte.js';
     import ModManager from './mods/ModManager.svelte';
     import ModHub from './mods/ModHub.svelte';
     import ModViewer from './mods/ModViewer.svelte';
@@ -18,6 +19,8 @@
     {#if ms.tab === 'view' && ms.inside}
         <!-- inside a fighter: his MODELS and TEXTURES where the pages were -->
         <SubNav tabs={INSIDE_TABS} current={ms.leftTab} pick={v => { ms.leftTab = v; ms.chosen = false; }}
+                back={ms.chosen ? { label: tx('vwBack'), go: () => { ms.chosen = false; } }
+                                : { label: tx('vwBackRoster'), go: () => { ms.roster = true; } }}
                 step={() => { ms.leftTab = ms.leftTab === 'models' ? 'tex' : 'models'; ms.chosen = false; }} />
     {:else}
         <SubNav tabs={MODS_TABS} current={ms.tab} pick={v => ms.tab = v} />

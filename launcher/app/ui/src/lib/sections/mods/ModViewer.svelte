@@ -141,6 +141,20 @@
      * textures to choose from, then the one chosen with the viewer and its
      * options taking the room the list had; MODELS goes back */
     const choose = f => { ms.chosen = true; f(); };
+    /* PANEL: which side each panel goes to, inside a fighter (Mary): the
+     * list (left by default) and the options (right); the button moves the
+     * one shown, and the choice is kept on this computer */
+    const sideKey = 'umk3.viewerSides';
+    let sides = $state((() => {
+        try { return Object.assign({ list: 'left', opts: 'right' }, JSON.parse(localStorage.getItem(sideKey) || '{}')); }
+        catch { return { list: 'left', opts: 'right' }; }
+    })());
+    function flipPanel() {
+        selectBlip();
+        const k = ms.chosen ? 'opts' : 'list';
+        sides[k] = sides[k] === 'left' ? 'right' : 'left';
+        try { localStorage.setItem(sideKey, JSON.stringify(sides)); } catch { /* kept for this session */ }
+    }
     /* inside: the textures of the model open (its outfit's colours, its
      * parts), not every picture of the fighter; kept while one of them is
      * looked at */
@@ -1374,7 +1388,8 @@
         </div>
 {/snippet}
 
-<div class="viewer" class:full class:solo={ms.solo} class:picking={inside && !ms.chosen} class:chosen={inside && ms.chosen} bind:this={mainEl}>
+<div class="viewer" class:full class:solo={ms.solo} class:picking={inside && !ms.chosen} class:chosen={inside && ms.chosen}
+     class:listright={sides.list === 'right'} class:optsleft={sides.opts === 'left'} bind:this={mainEl}>
     {#if showRoster}
         <!-- THE ROSTER (Mary, 2026-11-12): a page of its own, every fighter
              by his select screen portrait; a click opens him in the viewer,
@@ -1406,7 +1421,7 @@
         {/if}
         {#if ms.kind !== 'characters'}<input class="edt search" placeholder={tx('vwSearch')} spellcheck="false" bind:value={ms.search}>{/if}
         {#if ms.kind === 'characters'}
-            <button class="btn back" onpointerenter={hoverBlip} onclick={() => { selectBlip(); ms.roster = true; }}>&#8592; {tx('vwBackRoster')}</button>
+            {#if !inside}<button class="btn back" onpointerenter={hoverBlip} onclick={() => { selectBlip(); ms.roster = true; }}>&#8592; {tx('vwBackRoster')}</button>{/if}
             {#if owner}
                 {@const p = portraits[ms.layer + '|' + owner.id]}
                 <div class="who" use:lazy={() => portrait(owner)}>
@@ -1467,6 +1482,9 @@
         </div>
         <div class="info">{info}</div>
         <div class="topbtns" bind:this={topEl}>
+            {#if inside && !ms.solo}
+                <button class="btn" title={tx('vwPanelSideNote')} onclick={flipPanel}>{tx('vwPanelSide')} &#8644;</button>
+            {/if}
             <button class="btn" onclick={() => { selectBlip(); ms.solo = !ms.solo; }}>{ms.solo ? tx('vwPanels') : tx('vwSolo')}</button>
             <button class="btn" onclick={toggleFull}>{full ? tx('vwFullExit') : tx('vwFull')}</button>
         </div>
@@ -1884,6 +1902,10 @@
     .viewer.picking .opts { display: none; }
     .viewer.chosen:not(.solo) { grid-template-columns: minmax(0, 1fr) calc(var(--u) * 26); }
     .viewer.chosen .side { display: none; }
+    .viewer.picking.listright:not(.solo) { grid-template-columns: minmax(0, 1fr) calc(var(--u) * 26); }
+    .viewer.picking.listright .side { order: 2; }
+    .viewer.chosen.optsleft:not(.solo) { grid-template-columns: calc(var(--u) * 26) minmax(0, 1fr); }
+    .viewer.chosen.optsleft .opts { order: -1; }
     .viewer.solo .side, .viewer.solo .opts { display: none; }
     .play { display: flex; align-items: center; gap: calc(var(--u) * .9); margin-top: calc(var(--u) * .6); }
     .play input[type=range] { flex: 1; accent-color: var(--blue); }
