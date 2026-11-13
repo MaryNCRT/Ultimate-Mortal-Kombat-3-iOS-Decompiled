@@ -10,6 +10,15 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## After 0.4.8 (not released yet)
 
+- **Colours 3 to 6 further apart** (Mary): Sektor's and Cyrax's were the
+  wrong way round -- Sektor now has only reds and pinks (wine, bright red,
+  pale pink, crimson magenta), Cyrax yellows (bright yellow, olive, bronze,
+  khaki). Every fighter's colours were measured against each other and 15
+  fighters changed so no two of one fighter look alike, without borrowing
+  another fighter's colour: Kitana stays teal / blue / white (no purple),
+  Mileena's 5 is pale pink (not blue), Ermac's 5 and 6 brick and blood red
+  (not brown and orange), Classic Sub-Zero's 4 a darker ice blue (not white
+  like Smoke). The HD CHARACTERS pack gets every corrected colour too.
 - **Reptile's colours 3 to 6 are green now** (Mary: they were too yellow
   and looked like Scorpion's): dark green, bright green, teal green, pale
   green, all near his own green (hue 105 to 150 where olive was 70 to 80).
