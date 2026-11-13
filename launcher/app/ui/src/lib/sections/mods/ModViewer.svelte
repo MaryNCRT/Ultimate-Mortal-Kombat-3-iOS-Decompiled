@@ -756,6 +756,14 @@
         return names.find(n => textureFile(src.files, n)) || null;
     }
     const qualities = $derived(fx && ms.outfit ? ['', 'LOW', 'LITE'].filter(q => copyOf(ms.outfit, q)) : []);
+    /* the COLOR slots: six for the original; an added outfit's own colours
+     * (it starts with one) and "+ COLOR" for its next, up to six */
+    const colorSlots = $derived(fx ? fx.variants.filter(v => {
+        const m = String(v).toUpperCase().match(/_DIFFUSE(\d?)$/);
+        return !m || !curOutfit || +(m[1] || 1) <= (curOutfit.skin.colors || 1) || v === ms.outfit;
+    }) : []);
+    const nextColor = $derived(fx && curOutfit && (curOutfit.skin.colors || 1) < 6
+        ? (fx.variants.find(v => /_DIFFUSE$/i.test(v)) || '') + ((curOutfit.skin.colors || 1) + 1) : null);
     /* an empty COLOR slot (3..6 with no texture yet) shows colour 2 */
     const shownOutfit = () => {
         const s = copyOf(ms.outfit, quality) || ms.outfit;
@@ -1550,13 +1558,18 @@
                                onkeydown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}></label>
                     {#if !curOutfit.on}<p class="note warn">{tx('vwOutfitOff')}</p>{/if}
                 {/if}
-                {#if fx.variants.length > 1}
+                {#if colorSlots.length > 1 || nextColor}
                     <span class="step"><b>2</b>{tx('vwColor')}</span>
                     <div class="slots colors">
-                        {#each fx.variants as v (v)}
+                        {#each colorSlots as v (v)}
                             <button class="slot" class:on={ms.outfit === v} title={v} onpointerenter={hoverBlip}
                                     onclick={() => { selectBlip(); outfit(v); }}><span class="t">{colorName(v)}</span></button>
                         {/each}
+                        {#if nextColor && ms.outfit !== nextColor && nextColor !== '2'}
+                            <!-- the outfit's next colour: chosen empty, made with REPLACE TEXTURE -->
+                            <button class="slot" title={tx('vwAddColorNote')} onpointerenter={hoverBlip}
+                                    onclick={() => { selectBlip(); outfit(nextColor); }}><span class="t">{tx('vwAddColor')}</span></button>
+                        {/if}
                     </div>
                 {/if}
                 {#if ms.outfit}

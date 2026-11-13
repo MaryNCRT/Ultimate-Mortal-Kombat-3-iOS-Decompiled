@@ -124,18 +124,27 @@ function skinOf(base) {
     }
     let character = String(info.character || '').toLowerCase();
     if (!character && model) character = model.split(/[_.]/)[0];
-    const color = [stem(info.color1), stem(info.color2), stem(info.ice)];
+    /* color[0..5] colours 1..6, color[6] frozen (runtime/mods.c SKIN_ICE) */
+    const color = [1, 2, 3, 4, 5, 6].map(n => stem(info['color' + n]));
+    color.push(stem(info.ice));
     /* the sheets by their own names, when mod.ini and the game's names do not say */
     if (!color[0] && !(character && byStem.has(character + '_diffuse'))) {
         const mstem = model.replace(/\..*$/, '');
         for (const s of [...byStem.keys()].sort()) {
             if (mstem && s.startsWith(mstem + '_m')) continue;
             if (/_lite|_low/.test(s)) continue;
-            const w = s.includes('ice') ? 2 : s.endsWith('2') ? 1 : 0;
+            const w = s.includes('ice') ? 6 : /[2-6]$/.test(s) ? +s.slice(-1) - 1 : 0;
             if (!color[w]) color[w] = s;
         }
     }
-    return { title: info.skin || info.name || path.basename(base), character, model, color, byName, byStem };
+    /* its colours: 1, and each next one it has a sheet for (Mary: an outfit
+     * starts with one and the player adds up to six) */
+    let colors = 1;
+    for (let n = 2; n <= 6; n++) {
+        if (!byStem.has(character + '_diffuse' + n) && !(color[n - 1] && byStem.has(color[n - 1]))) break;
+        colors = n;
+    }
+    return { title: info.skin || info.name || path.basename(base), character, model, color, colors, byName, byStem };
 }
 
 const g_skins = new Map();
@@ -160,10 +169,12 @@ function skinTex(k, key) {
     const i = key.lastIndexOf('_diffuse');
     if (i < 0) return k.byStem.get(key) || null;
     const suf = key.slice(i + 8), base = key.slice(0, i);
+    let m;
     const which = ['', '_low', '_lite'].includes(suf) ? 0
-        : ['2', '2_low', '2_lite', '_lite2', '_low2'].includes(suf) ? 1 : suf === '_ice' ? 2 : -1;
+        : (m = /^([2-6])(_low|_lite)?$/.exec(suf)) || (m = /^_(?:low|lite)([2-6])$/.exec(suf)) ? +m[1] - 1
+        : suf === '_ice' ? 6 : -1;
     if (which < 0) return k.byStem.get(key) || null;
-    const conv = ['_diffuse', '_diffuse2', '_diffuse_ice'];
+    const conv = ['_diffuse', '_diffuse2', '_diffuse3', '_diffuse4', '_diffuse5', '_diffuse6', '_diffuse_ice'];
     return k.byStem.get(key) || k.byStem.get(base + conv[which])
         || (k.color[which] && k.byStem.get(k.color[which]))
         || (which ? k.byStem.get(base + conv[0]) || (k.color[0] && k.byStem.get(k.color[0])) : null)
@@ -196,10 +207,12 @@ function skinCreate(root, fields) {
     fs.writeFileSync(path.join(base, 'mod.ini'), ['name=' + title, 'type=skin', 'skin=' + title,
         'character=' + texBase, 'category=skin', 'version=1.0', 'author=',
         'description=' + title + ': another outfit for ' + texBase + ', beside the original', ''].join('\n'));
-    /* the default, copied: the sheets as the game shows them now */
+    /* the default, copied: colour 1 and the frozen sheet as the game shows
+     * them now -- one colour to start with (Mary); COLOR 2..6 are added in
+     * the CHARACTER VIEWER */
     const res = resIndex(root), on = modIndex(root, '*');
     const game = n => res.byLower.get(n) && path.join(resDir(root), res.byLower.get(n));
-    for (const suf of ['_DIFFUSE', '_DIFFUSE2', '_DIFFUSE_ICE']) {
+    for (const suf of ['_DIFFUSE', '_DIFFUSE_ICE']) {
         const stem = texBase + suf, lo = stem.toLowerCase();
         const from = on.byStem.get(lo) || game(lo + '.pvr') || game(lo + '.png');
         if (from) try { fs.copyFileSync(from, path.join(base, stem + path.extname(from).toLowerCase())); } catch { /* without it */ }
@@ -325,7 +338,7 @@ function list(root) {
         const sk = skinOf(base);
         return {
             folder: o.folder, on: o.on,
-            skin: sk ? { title: sk.title, character: sk.character } : null,
+            skin: sk ? { title: sk.title, character: sk.character, colors: sk.colors } : null,
             name: info.name || o.folder, author: info.author || '', version: info.version || '',
             description: info.description || '', category, kinds,
             files: names, count: files.length, unknown, lost, preview,

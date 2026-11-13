@@ -103,6 +103,26 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+### 2026-11-13 -- An added outfit's colours, 1 to 6
+
+Mary: outfits start with one colour and the player adds up to six; they do
+not need six (Sonya MKX has 2). `mods.c`: `Skin.color[7]` (1..6, ice),
+`color3..6=` and names ending 2..6 guessed, `skin_tex` answers
+`_diffuse3.._diffuse6` (and `_LOW` / `_LITE` spellings), a missing one is
+colour 1; `mods_skin_colors` counts 1 + each next colour present.
+`Players.c` loads `@S<n>@<NAME>_DIFFUSE<k>.PNG` for an outfit's colour 3..6
+(no recolouring) and clamps a colour past the outfit's to 1; `FrontEnd.c`
+`pal_sheet_of` does the same for the select screen's model; the COLOR list
+shows the outfit's count. Launcher `lib/mods.js`: the same rules, `colors`
+on the mod list, `skinCreate` copies colour 1 and the frozen sheet only;
+the viewer shows an outfit's own colours and "+ COLOR" for the next.
+
+Checked: Sonya in MKX on the select screen lists COLOR 1 and 2. The test
+folder's launcher was repacked (app.asar, old one `app.asar.before-
+palettes.bak`) so it compiles palettes.c and writes the colours after a
+build; `launcher/bin/resources/src` and its palettes.ini synced too. Not
+checked: adding a colour to an outfit in the viewer.
+
 ### 2026-11-13 -- Colours 3 to 6 from a fighter's own sheets
 
 Port work, not in the binary. Mary: colours up to 6 without new textures,

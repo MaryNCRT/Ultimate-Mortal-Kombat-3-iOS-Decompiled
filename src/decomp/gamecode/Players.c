@@ -993,12 +993,18 @@ void LoadLevelCharacters(EPLAYER a, EPLAYER b)
         /* port: and the SKIN box's pick, a skin that adds (mods.c); a
          * colour past 2 loads its base sheet and recolours it (palettes.c,
          * PortPalLoad) */
+        /* an added outfit: its own colour 3..6 sheet (no recolouring),
+         * colour 1 when it has fewer */
         PortSkinLoad = PortFightSkin(0, a, b);
-        PortPalLoad = pa >= 3 && !PortSkinLoad ? pa : 0;
+        if (PortSkinLoad && pa > mods_skin_colors(PortSkinLoad))
+            pa = 1;
+        PortPalLoad = pa >= 3 ? pa : 0;
         LoadGameCharacter(p0, da, 0, pa >= 3 ? (PortSkinLoad ? 0 : pal_base(da->texBase) == 2)
                                              : pa ? pa == 2 : 0);
         PortSkinLoad = PortFightSkin(1, a, b);
-        PortPalLoad = pb >= 3 && !PortSkinLoad ? pb : 0;
+        if (PortSkinLoad && pb > mods_skin_colors(PortSkinLoad))
+            pb = 1;
+        PortPalLoad = pb >= 3 ? pb : 0;
         LoadGameCharacter(p1, db, 0, pb >= 3 ? (PortSkinLoad ? 0 : pal_base(db->texBase) == 2)
                                              : pb ? pb == 2 : (a == b) ? 1 : 0);
         PortSkinLoad = 0;
@@ -2424,7 +2430,13 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
         /* (0, 0), not (r, r): every arm reaches limeLoadTexture with r1 =
          * r2 = 0 (0x5cab8 r5 is 0 there, 0x5cb46 r is 0 there, 0x5c7ec). */
         c->diffuse = limeLoadTexture(texPath, 0, 0);
-        if (PortPalLoad >= 3)           /* port: colours 3..6 (palettes.c) */
+        if (PortPalLoad >= 3 && PortSkinLoad > 0) {
+            /* port: an added outfit's own colour 3..6 (mods.c) */
+            TEXTURE *own;
+            sprintf(texPath, "%s_DIFFUSE%d.PNG", texName, (int)PortPalLoad);
+            if ((own = limeLoadTexture(texPath, 0, 0)) != NULL)
+                c->diffuse = own;
+        } else if (PortPalLoad >= 3)    /* port: colours 3..6 (palettes.c) */
             c->diffuse = port_pal_texture(c->diffuse, PortPalLoad);
     }
 
@@ -2451,7 +2463,7 @@ ANIMATEDCHARACTER *LoadAnimatedCharacter(char *scene, char *skinFile,
             sprintf(texPath, "%sBABILITY2.PVR", texName);
             c->babality = limeLoadTexture(texPath, 0, 0);
         }
-        if (PortPalLoad >= 3)           /* port: the baby too */
+        if (PortPalLoad >= 3 && PortSkinLoad <= 0)   /* port: the baby too */
             c->babality = port_pal_texture(c->babality, PortPalLoad);
     } else {
         c->babality = NULL;

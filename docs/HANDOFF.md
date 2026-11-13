@@ -152,10 +152,10 @@ press COMPILE.
   good colour into a new texture file automatically, and added outfits
   starting with one colour and growing to six with the player's own
   textures (launcher). 23 fighters now (all but the bosses and Noob);
-  the build writes their colours as PNG (`--make-colors`). The launcher in
-  the test folder still compiles from
-  its old `app.asar`, whose `lib/compile.js` lacks `palettes.c`: build with
-  the repository's `launcher/app/cli.js` or repack the asar.
+  the build writes their colours as PNG (`--make-colors`). The test
+  folder's launcher was repacked with it (2026-11-13; the old one is
+  `app.asar.before-palettes.bak`). Added outfits have 1..6 colours
+  (`mods_skin_colors`), "+ COLOR" in the viewer -- not yet tried there.
 
 - **Select screen's OUTFIT / COLOR lists** (2026-11-13, after 0.4.8,
   FrontEnd.c `drop_one`, game_main.c `drop_input`): built in the test
