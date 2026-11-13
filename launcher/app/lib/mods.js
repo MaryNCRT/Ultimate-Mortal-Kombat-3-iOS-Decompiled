@@ -14,7 +14,14 @@
  * cover.png (or .jpg; preview.* from before), optional, is its picture in
  * the list, and data.ini the numbers it changes in the fight engine (the
  * CHARACTER EDITOR; runtime/mods.c). Every other file replaces the game file
- * of the same name. */
+ * of the same name.
+ *
+ * A mod whose mod.ini says type=skin replaces nothing: it is an OUTFIT that
+ * adds, another look for one fighter beside the game's (runtime/mods.c,
+ * "skins that add"). skin= is its own name, character= the fighter's file
+ * name (SONYA), model= / color1= / color2= / ice= its files when they do not
+ * have the game's names. The viewer reads such a mod as the game does
+ * (skinRead below): its files first, the game's where it has none. */
 'use strict';
 
 const fs = require('fs');
@@ -96,6 +103,123 @@ function writeOrder(root, order) {
 
 /* every game file, relative to res/ with forward slashes, by lower case */
 let g_resCache = null;
+/* ---------------------------------------------------- outfits (skins) --
+ * The same rules as the game's (runtime/mods.c skin_take, skin_file,
+ * skin_tex, skin_guess_colors), so the viewer shows what the fight will. */
+function skinOf(base) {
+    const info = readIni(path.join(base, 'mod.ini'));
+    if (String(info.type || '').toLowerCase() !== 'skin') return null;
+    const files = walk(base).filter(p => !isOwn(path.relative(base, p)));
+    const byName = new Map(), byStem = new Map();
+    for (const p of files) {
+        const n = path.basename(p).toLowerCase();
+        if (!byName.has(n)) byName.set(n, p);
+        if (/\.(png|pvr)$/.test(n) && !byStem.has(n.slice(0, -4))) byStem.set(n.slice(0, -4), p);
+    }
+    const stem = v => String(v || '').toLowerCase().replace(/\.(png|pvr)$/, '');
+    let model = String(info.model || '').toLowerCase();
+    if (!model || !byName.has(model)) {
+        const all = [...byName.keys()].filter(n => n.endsWith('.skin'));
+        model = all.length === 1 ? all[0] : '';
+    }
+    let character = String(info.character || '').toLowerCase();
+    if (!character && model) character = model.split(/[_.]/)[0];
+    const color = [stem(info.color1), stem(info.color2), stem(info.ice)];
+    /* the sheets by their own names, when mod.ini and the game's names do not say */
+    if (!color[0] && !(character && byStem.has(character + '_diffuse'))) {
+        const mstem = model.replace(/\..*$/, '');
+        for (const s of [...byStem.keys()].sort()) {
+            if (mstem && s.startsWith(mstem + '_m')) continue;
+            if (/_lite|_low/.test(s)) continue;
+            const w = s.includes('ice') ? 2 : s.endsWith('2') ? 1 : 0;
+            if (!color[w]) color[w] = s;
+        }
+    }
+    return { title: info.skin || info.name || path.basename(base), character, model, color, byName, byStem };
+}
+
+const g_skins = new Map();
+function skinCached(root, folder) {
+    const key = root + '|' + folder, c = g_skins.get(key);
+    if (c && Date.now() - c.at < 3000) return c.k;
+    const k = skinOf(path.join(modsDir(root), folder));
+    g_skins.set(key, { at: Date.now(), k });
+    return k;
+}
+
+/* a file of outfit k by the game's name, or null */
+function skinFile(k, n) {
+    let hit = k.byName.get(n);
+    if (!hit && k.model) {
+        const m = /\.skin(\..*)?$/.exec(n);
+        if (m) hit = k.byName.get(k.model + (m[1] || ''));
+    }
+    return hit || null;
+}
+function skinTex(k, key) {
+    const i = key.lastIndexOf('_diffuse');
+    if (i < 0) return k.byStem.get(key) || null;
+    const suf = key.slice(i + 8), base = key.slice(0, i);
+    const which = ['', '_low', '_lite'].includes(suf) ? 0
+        : ['2', '2_low', '2_lite', '_lite2', '_low2'].includes(suf) ? 1 : suf === '_ice' ? 2 : -1;
+    if (which < 0) return k.byStem.get(key) || null;
+    const conv = ['_diffuse', '_diffuse2', '_diffuse_ice'];
+    return k.byStem.get(key) || k.byStem.get(base + conv[which])
+        || (k.color[which] && k.byStem.get(k.color[which]))
+        || (which ? k.byStem.get(base + conv[0]) || (k.color[0] && k.byStem.get(k.color[0])) : null)
+        || null;
+}
+function skinRead(k, rel) {
+    const n = path.posix.basename(rel).toLowerCase();
+    let hit = skinFile(k, n);
+    if (!hit && /\.(png|pvr)$/.test(n)) hit = skinTex(k, n.slice(0, -4));
+    return hit;
+}
+
+/* A new OUTFIT for a fighter: a mod of type=skin that starts as a copy of
+ * what the fighter wears now (the game's, under the mods that are on) --
+ * its colour sheets, and its model when a mod replaced it -- so it can be
+ * changed without touching the original. `texBase` the fighter's file name
+ * (SONYA), `skinFile` its model (SONYA_STANDARD.skin). */
+function skinCreate(root, fields) {
+    const texBase = String(fields && fields.texBase || '').toUpperCase();
+    const skinFileName = String(fields && fields.skinFile || '');
+    const title = String(fields && fields.title || '').replace(/[\r\n=]+/g, ' ').trim().slice(0, 40);
+    if (!/^[A-Z0-9_]+$/.test(texBase) || !title) return { ok: false, error: 'name' };
+    let folder = safeName(title + ' (' + texBase.charAt(0) + texBase.slice(1).toLowerCase() + ' outfit)');
+    if (!folder) folder = safeName(texBase + ' outfit');
+    if (!folder) return { ok: false, error: 'name' };
+    for (let i = 2; fs.existsSync(path.join(modsDir(root), folder)); i++)
+        folder = safeName(title + ' (' + texBase + ' outfit ' + i + ')');
+    const base = path.join(modsDir(root), folder);
+    fs.mkdirSync(base, { recursive: true });
+    fs.writeFileSync(path.join(base, 'mod.ini'), ['name=' + title, 'type=skin', 'skin=' + title,
+        'character=' + texBase, 'category=skin', 'version=1.0', 'author=',
+        'description=' + title + ': another outfit for ' + texBase + ', beside the original', ''].join('\n'));
+    /* the default, copied: the sheets as the game shows them now */
+    const res = resIndex(root), on = modIndex(root, '*');
+    const game = n => res.byLower.get(n) && path.join(resDir(root), res.byLower.get(n));
+    for (const suf of ['_DIFFUSE', '_DIFFUSE2', '_DIFFUSE_ICE']) {
+        const stem = texBase + suf, lo = stem.toLowerCase();
+        const from = on.byStem.get(lo) || game(lo + '.pvr') || game(lo + '.png');
+        if (from) try { fs.copyFileSync(from, path.join(base, stem + path.extname(from).toLowerCase())); } catch { /* without it */ }
+    }
+    /* a model a mod put on the fighter goes with it; the game's is found anyway */
+    if (/^[A-Za-z0-9_]+\.skin$/.test(skinFileName)) {
+        const idx = modIndex(root, '*');
+        for (const ext of ['', '.mats', '.bones']) {
+            const p = idx.byName.get((skinFileName + ext).toLowerCase());
+            if (p) try { fs.copyFileSync(p, path.join(base, skinFileName + ext)); } catch { /* skip */ }
+        }
+    }
+    const order = readOrder(root).filter(o => o.folder !== folder);
+    order.unshift({ folder, on: true });
+    writeOrder(root, order);
+    writeMeta(root, folder);
+    g_skins.clear();
+    return { ok: true, folder };
+}
+
 function resIndex(root) {
     if (g_resCache && g_resCache.root === root) return g_resCache;
     const base = resDir(root);
@@ -179,7 +303,7 @@ function list(root) {
                 target = res.byLower.get(stem + '.pvr') || res.byLower.get(stem + '.png') || res.byLower.get(stem + '_low.pvr');
             }
             if (!target) unknown++;
-            if (o.on) {
+            if (o.on && String(info.type || '').toLowerCase() !== 'skin') {
                 if (claimed.has(n)) lost++;
                 else claimed.set(n, o.folder);
             }
@@ -196,8 +320,10 @@ function list(root) {
                 break;
             }
         }
+        const sk = skinOf(base);
         return {
             folder: o.folder, on: o.on,
+            skin: sk ? { title: sk.title, character: sk.character } : null,
             name: info.name || o.folder, author: info.author || '', version: info.version || '',
             description: info.description || '', category, kinds,
             files: names, count: files.length, unknown, lost, preview,
@@ -237,6 +363,7 @@ function setInfo(root, folder, fields) {
     const text = Object.entries(cur).map(([k, v]) => k + '=' + v).join('\n') + '\n';
     fs.writeFileSync(file, text);
     writeMeta(root, name);
+    g_skins.clear();
     return true;
 }
 
@@ -332,7 +459,7 @@ function dataWrite(root, folder, entries) {
  * stem. */
 function modIndex(root, layer) {
     const folders = layer === '*'
-        ? list(root).mods.filter(m => m.on).map(m => m.folder)
+        ? list(root).mods.filter(m => m.on && !m.skin).map(m => m.folder)
         : [safeName(layer)].filter(Boolean);
     const byName = new Map(), byStem = new Map();
     for (const folder of folders) {
@@ -358,6 +485,14 @@ function resFiles(root) {
 let g_layer = null;
 function resRead(root, rel, layer) {
     if (typeof rel !== 'string') return null;
+    /* an OUTFIT (type=skin): its files by the game's rules, then what the
+     * game shows without it (the mods that are on, the game) */
+    const sk = layer && layer !== '*' && safeName(layer) ? skinCached(root, safeName(layer)) : null;
+    if (sk) {
+        const hit = skinRead(sk, rel);
+        if (hit) try { return new Uint8Array(fs.readFileSync(hit)); } catch { /* then the rest */ }
+        layer = '*';
+    }
     if (layer) {
         if (!g_layer || g_layer.key !== root + '|' + layer || Date.now() - g_layer.at > 3000)
             g_layer = { key: root + '|' + layer, at: Date.now(), ...modIndex(root, layer) };
@@ -410,5 +545,5 @@ function exportSave(root, sub, files) {
     return dir;
 }
 
-module.exports = { list, save, create, setInfo, addFiles, putFile, modPath, setCover, dataRead, dataWrite,
+module.exports = { list, save, create, setInfo, addFiles, putFile, modPath, setCover, dataRead, dataWrite, skinCreate,
     resFiles, resRead, gameTables, exportSave, CATEGORIES };

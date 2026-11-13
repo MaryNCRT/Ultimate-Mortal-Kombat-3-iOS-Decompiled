@@ -279,8 +279,11 @@ static int list_dirs(const char *root, char names[][NAME_MAX_], int max)
  *     color2=MKX_B.png      COLOR 2 (else <NAME>_DIFFUSE2, else colour 1)
  *     ice=MKX_ICE.png       frozen (else <NAME>_DIFFUSE_ICE, else colour 1)
  *
- * The model's .mats and .bones go beside it as <model>.mats / .bones; the
- * part sheets a .mats names are looked for in the skin first. */
+ * A file with the game's name in the skin comes before the one mod.ini
+ * names (the launcher writes the game's names when it replaces a sheet or
+ * the model, and the newest should win). The model's .mats and .bones go
+ * beside it as <model>.mats / .bones; the part sheets a .mats names are
+ * looked for in the skin first. */
 #define SKIN_MAX 64
 
 typedef struct Skin {
@@ -615,12 +618,14 @@ static const char *skin_tex(const Skin *k, const char *key)
     memcpy(base, key, bl);
     base[bl] = 0;
 
-    if (k->color[which][0] && (hit = map_get(&k->tex, k->color[which])) != NULL)
-        return hit;
+    /* the game's name first -- what the launcher writes when a sheet is
+     * replaced, so the newest wins -- then the one mod.ini names */
     if ((hit = map_get(&k->tex, key)) != NULL)          /* the size asked for */
         return hit;
     snprintf(name, sizeof name, "%s%s", base, conv[which]);
     if ((hit = map_get(&k->tex, name)) != NULL)
+        return hit;
+    if (k->color[which][0] && (hit = map_get(&k->tex, k->color[which])) != NULL)
         return hit;
     if (which == 0)
         return NULL;

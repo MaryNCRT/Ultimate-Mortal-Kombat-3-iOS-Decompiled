@@ -70,6 +70,7 @@ contextBridge.exposeInMainWorld('umk3', {
     modsSave: order => ipcRenderer.invoke('mods:save', order),
     modsCreate: fields => ipcRenderer.invoke('mods:create', fields),
     modsInfo: (folder, fields) => ipcRenderer.invoke('mods:info', folder, fields),
+    modsSkinCreate: fields => ipcRenderer.invoke('mods:skinCreate', fields),
     modsPut: (folder, file, bytes) => ipcRenderer.invoke('mods:put', folder, file, bytes),
     modsAdd: folder => ipcRenderer.invoke('mods:add', folder),
     modsOpen: folder => ipcRenderer.invoke('mods:open', folder),

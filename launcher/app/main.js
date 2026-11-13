@@ -959,6 +959,7 @@ ipcMain.handle('mods:list', () => mods.list(g_root));
 ipcMain.handle('mods:save', (_ev, order) => mods.save(g_root, order));
 ipcMain.handle('mods:create', (_ev, fields) => mods.create(g_root, fields));
 ipcMain.handle('mods:info', (_ev, folder, fields) => mods.setInfo(g_root, folder, fields));
+ipcMain.handle('mods:skinCreate', (_ev, fields) => mods.skinCreate(g_root, fields));
 ipcMain.handle('mods:put', (_ev, folder, file, bytes) => mods.putFile(g_root, folder, file, bytes));
 ipcMain.handle('mods:add', async (_ev, folder) => {
     if (!g_win)
