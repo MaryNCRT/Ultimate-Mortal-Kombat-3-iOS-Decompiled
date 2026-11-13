@@ -17759,6 +17759,32 @@ static int net_skin_of(long ch)
     return 0;                           /* another fighter's skin */
 }
 
+/* The computer's outfit for fighter ch, as cpu_palette draws its colour:
+ * drawn once per opponent, with the same chance as COLOR 2 -- one in two an
+ * added outfit (any of his, alike), else the original. 0 when he has none. */
+static int PortSkinTouched[2][32];      /* the SKIN box changed by hand */
+
+static int cpu_skin(long ch, const int *ids, int n)
+{
+    static long last = -2;
+    static int pick;
+
+    if (ch != last) {
+        static unsigned seed;
+
+        if (!seed)                      /* its own, not the game's rand() */
+            seed = ((unsigned)time(NULL) * 2654435761u) | 1u;
+        seed = seed * 1103515245u + 12345u;
+        last = ch;
+        pick = (seed >> 16) & 1;        /* COLOR 2's chance: one in two */
+        if (pick) {
+            seed = seed * 1103515245u + 12345u;
+            pick = 1 + (int)((seed >> 16) % 0x7fffu);
+        }
+    }
+    return pick && n ? ids[(pick - 1) % n] : 0;
+}
+
 int PortSkinOf(int side, long ch)
 {
     int ids[SKINS_MAX], n, k;
@@ -17774,8 +17800,8 @@ int PortSkinOf(int side, long ch)
     if (getenv("UMK3_SKIN") && GameMode != 1) {
         const char *e = getenv("UMK3_SKIN");
         k = side == 0 ? atoi(e) : (strchr(e, ',') ? atoi(strchr(e, ',') + 1) : 0);
-    } else if (side == 1 && GameMode != 6)
-        return 0;                       /* the CPU: the game's */
+    } else if (side == 1 && (GameMode != 6 || (PortVsCpu && !PortSkinTouched[1][ch])))
+        return cpu_skin(ch, ids, n);    /* the CPU: by chance, as COLOR 2 */
     return k >= 1 && k <= n ? ids[k - 1] : 0;
 }
 
@@ -17817,6 +17843,13 @@ static void skin_box(int side, int y, long ch)
     k = PortSkinPick[side][ch];
     if (k < 0 || k > n)
         k = PortSkinPick[side][ch] = 0;
+    /* the CPU's, until the box is changed by hand: what chance gave it */
+    if (side == 1 && PortVsCpu && !PortSkinTouched[1][ch]) {
+        int id = cpu_skin(ch, ids, n);
+        for (k = 0, i = 0; i < n; i++)
+            if (ids[i] == id)
+                k = i + 1;
+    }
 
     limeFillRect(L, T, w, H, 0.0f, 0.0f, 0.0f, 0.6f);
     limeFillRect(L, T, w, FE_H(2.0f), 1.0f, 0.8f, 0.0f, 1.0f);
@@ -17847,6 +17880,7 @@ static void skin_box(int side, int y, long ch)
     else
         k = k == n ? 0 : k + 1;
     PortSkinPick[side][ch] = k;
+    PortSkinTouched[side][ch] = 1;
     PortSendMySkin();                   /* online: the other sees it */
     printf("select: side %d, %s in %s\n", side, PlayerDefs[ch].texBase,
            k ? mods_skin_title(ids[k - 1]) : "the game's skin");
