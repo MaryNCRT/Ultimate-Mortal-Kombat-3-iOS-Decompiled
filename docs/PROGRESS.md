@@ -123,6 +123,28 @@ palettes.bak`) so it compiles palettes.c and writes the colours after a
 build; `launcher/bin/resources/src` and its palettes.ini synced too. Not
 checked: adding a colour to an outfit in the viewer.
 
+### 2026-11-13 -- Colours 3-6 told apart (Sektor and Cyrax swapped)
+
+Mary: Sektor's extra colours were Cyrax's (yellows) and the other way
+round; then colours of one fighter must not look alike, nor like another
+fighter's. Measured: the mean colour of each fighter's picked pixels in
+colours 1..6 (colours 3-6 by applying the ini to the base sheet), turned
+into CIE Lab; pairs under delta-E 25 flagged. 15 fighters had close pairs
+(Smoke, Cyrax, Jade, Kitana, Scorpion and Classic Sub-Zero many). New
+values in palettes.ini for SONYA 5, JAX 5, SHANGTSUNG 5, SHEEVA 4, SMOKE,
+SEKTOR, CYRAX, JADE, MILEENA, KITANA, SCORPION, REPTILE, ERMAC, OLDSUBZERO,
+OLDSMOKE. Mary looked at them in the test folder and corrected: Kitana 3
+was purple (Mileena's) -- back to her reference's dark teal; Mileena 5
+blue (Kitana's) -- pale pink; Ermac 5/6 brown and orange -- brick and
+blood red; Classic Sub-Zero 4 near-white (Smoke) -- darker ice blue;
+Sektor no yellowish tones -- wine, bright red, pale pink, crimson magenta.
+The rest she approved as seen. Left close (under 25): only colour 1 vs 2
+pairs (EA's), Kitana 2-3 22, Ermac 3-5 22, Classic Sub-Zero 3-4 20 and
+1-4 24, Sektor 3-6 19 / 2-3 21. Test folder: those fighters' colour files
+deleted and rewritten by --make-colors (708 in all), in res/Textures and
+mods/HD NINJAS (22 fighters there, 12 files each; Sonya has no HD sheet).
+Not played in a fight.
+
 ### 2026-11-13 -- Reptile's colours greener
 
 Mary: Reptile's colours 3-6 were too yellow and looked like Scorpion's.
