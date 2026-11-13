@@ -49,6 +49,7 @@
 #include "mp_net.h"
 #include "rollback.h"
 #include "mods.h"
+#include "online_rules.h"
 
 /* debug_menu.c: the host's STAGE SELECT, as the guest sees it */
 int  stage_menu_watch_frame(void);
@@ -63,8 +64,11 @@ extern uint32_t umk3_rand_seed;         /* fight_runtime.c: the engine's */
 uint16_t rb_game_local_input(void);     /* GameCode.c */
 uint32_t rb_game_hash(void);            /* GameCode.c */
 void     rb_game_buttons(int p1, int p2);   /* GameCode.c */
+void     disableHeartbeat(void);        /* limeMPGameSpecific.c */
+long     isMPConnected(void);           /* limeMPGameSpecific.c */
+extern int mpLevelList[14];             /* gamecode_globals.c: the binary's online stages */
 
-#define RB_VERSION      1
+#define RB_VERSION      2               /* 2: the hello carries the rules and a draw's number */
 #define RB_DELAY        2               /* frames at the start; UMK3_RB_DELAY 0..6 fixes it */
 #define RB_DELAY_MAX    6
 #define RB_DEPTH        3               /* the rollback adapt_delay aims at */
@@ -98,9 +102,18 @@ static int      g_linger;
 static double   g_sent_ms[RB_RING];
 static double   g_rtt;                  /* ms, smoothed; 0 before a sample */
 
-/* hello: the other machine's buttons and its view of the fight's setup */
-static int      g_hello, g_their_buttons;
+/* hello: the other machine's buttons, rules and number for the draw;
+ * setup: its view of the fight's fighters and level */
+static int      g_hello, g_their_buttons, g_their_version, g_their_rollback;
+static uint32_t g_my_draw, g_their_draw;
+static char     g_my_rules[ONLINE_RULES_TEXT], g_their_rules[ONLINE_RULES_TEXT];
+static int      g_setup_in;
 static int32_t  g_setup[3], g_their_setup[3];
+
+/* the gate (rb_online_gate): 0 nothing said yet, 1 waiting for the other's
+ * hello, 2 the guest waiting for the host's level, 3 through, 4 refusing */
+static int      g_gate, g_gate_wait, g_refusal;
+static int      g_swap;                 /* the draw put the host on the right */
 
 /* desync check */
 static uint32_t g_hash[RB_RING], g_hash_frame[RB_RING];
@@ -197,17 +210,57 @@ static void send_inputs(void)
     mpnet_flush();
 }
 
+/* The hello: version, buttons, the netcode (1 rollback, 0 classic), the
+ * number for the draw, then the rules block as text (empty: no rules, a
+ * fight not from a lobby). */
+#define RB_HELLO_LEN    (16 + ONLINE_RULES_TEXT)
+
+static int classic(void)
+{
+    const char *e = getenv("UMK3_NETCODE");
+    return e && !strcmp(e, "classic");
+}
+
 static void send_hello(void)
 {
-    unsigned char b[24];
+    unsigned char b[RB_HELLO_LEN];
+    const online_rules *r = rules_online();
+    const char *test = getenv("UMK3_HELLO_RULES");  /* a test aid: other rules */
+    uint32_t t = (uint32_t)(now_ms() * 1000.0);
 
+    memset(g_my_rules, 0, sizeof g_my_rules);
+    if (test && *test)
+        snprintf(g_my_rules, sizeof g_my_rules, "%s", test);
+    else if (r)
+        rules_encode(r, g_my_rules, sizeof g_my_rules);
+    /* the number: the clock's microseconds, this process, the stack */
+    g_my_draw = t * 0x9e3779b1u ^ (uint32_t)rand() << 16 ^ (uint32_t)(uintptr_t)&t;
+#ifdef _WIN32
+    g_my_draw ^= (uint32_t)GetCurrentProcessId() * 0x85ebca6bu;
+#endif
+    memset(b, 0, sizeof b);
     put32(b, RB_VERSION);
     put32(b + 4, (uint32_t)Settings[4]);
-    put32(b + 8, (uint32_t)g_setup[0]);
-    put32(b + 12, (uint32_t)g_setup[1]);
-    put32(b + 16, (uint32_t)g_setup[2]);
-    put32(b + 20, (uint32_t)g_me);
-    mpnet_send(RB_PKT_HELLO, b, 24, 1);
+    put32(b + 8, classic() ? 0u : 1u);
+    put32(b + 12, g_my_draw);
+    memcpy(b + 16, g_my_rules, ONLINE_RULES_TEXT);
+    mpnet_send(RB_PKT_HELLO, b, RB_HELLO_LEN, 1);
+    mpnet_flush();
+    printf("rollback: hello sent, rules \"%s\"\n", g_my_rules);
+    fflush(stdout);
+}
+
+/* The setup, once each side knows its fighters and level: the guest takes
+ * the host's level from it (HOST ADVANTAGE ON), and start() compares. */
+static void send_setup(void)
+{
+    unsigned char b[12];
+
+    put32(b, (uint32_t)g_setup[0]);
+    put32(b + 4, (uint32_t)g_setup[1]);
+    put32(b + 8, (uint32_t)g_setup[2]);
+    mpnet_send(RB_PKT_SETUP, b, 12, 1);
+    mpnet_flush();
 }
 
 static void report(void)
@@ -510,15 +563,27 @@ void rb_net(long type, const void *data, long len)
 {
     const unsigned char *b = (const unsigned char *)data;
 
-    if (type == RB_PKT_HELLO && len >= 24) {
-        if (get32(b) != RB_VERSION)
+    if (type == RB_PKT_HELLO && len >= 4) {
+        g_their_version = (int)get32(b);
+        if (g_their_version != RB_VERSION || len < RB_HELLO_LEN) {
             printf("rollback: the other game's netcode is version %u, this is %u\n",
                    get32(b), RB_VERSION);
-        g_their_buttons = (int)get32(b + 4);
-        g_their_setup[0] = (int32_t)get32(b + 8);
-        g_their_setup[1] = (int32_t)get32(b + 12);
-        g_their_setup[2] = (int32_t)get32(b + 16);
+            g_their_version = -1;
+        } else {
+            g_their_buttons = (int)get32(b + 4);
+            g_their_rollback = (int)get32(b + 8);
+            g_their_draw = get32(b + 12);
+            memcpy(g_their_rules, b + 16, ONLINE_RULES_TEXT);
+            g_their_rules[ONLINE_RULES_TEXT - 1] = 0;
+        }
         g_hello = 1;
+        return;
+    }
+    if (type == RB_PKT_SETUP && len >= 12) {
+        g_their_setup[0] = (int32_t)get32(b);
+        g_their_setup[1] = (int32_t)get32(b + 4);
+        g_their_setup[2] = (int32_t)get32(b + 8);
+        g_setup_in = 1;
         return;
     }
     if (!g_on)
@@ -546,7 +611,7 @@ void rb_silent(int quiet, int nodraw)
     g_quiet = quiet;
     g_nodraw = nodraw;
 }
-int rb_ready(void)  { return !g_on || g_hello; }
+int rb_ready(void)  { return !g_on || (g_hello && g_setup_in); }
 
 /* One line of the numbers report() logs, for the debug menu's NET STATS
  * (game_main.c draws it); 0 when no rollback fight is on. */
@@ -561,31 +626,161 @@ int rb_stats(char *out, int n)
     return 1;
 }
 
-/* The guest's fight waits, before anything loads, for the host's hello and
- * takes the host's level: each side picked one of its own on the select
- * screen, and the host's word (sendLevelPacket) can come after the guest has
- * begun loading. 1 while waiting; gives up after ten seconds. */
-int rb_host_level(long *level)
-{
-    static int waited;
+/* ---------------------------------------------------------------- the gate
+ *
+ * Both sides say hello on entering the fight's loading, before STAGE SELECT,
+ * and wait for the other's (ONLINE-PHASE-PLAN.md stage 4):
+ *
+ *   - the rules blocks (online_rules.c, the lobby's) must be the same text,
+ *     and the netcode the same version, or the fight does not start: both
+ *     sides see the same two hellos and refuse it together, and go back to
+ *     the ONLINE screen (FrontEnd.c PortOnlineRefused) instead of loading a
+ *     fight that would desync;
+ *   - HOST ADVANTAGE OFF (both on rollback): the side and the level are
+ *     drawn from both hellos' numbers, host's first, so both machines draw
+ *     the same -- who is player one, and one of the binary's fourteen
+ *     online stages (mpLevelList, getRandomLevel's list);
+ *   - HOST ADVANTAGE ON: as before, the host is player one and its STAGE
+ *     SELECT picks; the guest waits for the host's setup and takes its
+ *     level (a fight's level picked on each side's select screen, and the
+ *     host's word, sendLevelPacket, could come after the guest had begun
+ *     loading).
+ */
+#define RB_GATE_WAIT    3600            /* a minute for the other's hello */
+#define RB_REFUSE_SHOW  45              /* frames before leaving, for the packets */
 
-    /* the classic netcode too: its guest drew a level it never loaded when
-     * the host's arrived mid-fight (RenderLevelBG) */
-    if (isParent())
+static int seat(void) { return isParent() ? 0 : 1; }
+
+static uint32_t mix(uint32_t h)
+{
+    h ^= h >> 16;
+    h *= 0x7feb352du;
+    h ^= h >> 15;
+    h *= 0x846ca68bu;
+    h ^= h >> 16;
+    return h;
+}
+
+static int refuse(int why)
+{
+    static const char *const name[] = { "", "the rules differ", "another version",
+                                        "no answer", "the link is gone" };
+
+    g_refusal = why;
+    g_gate = 4;
+    g_gate_wait = 0;
+    disableHeartbeat();                 /* the gate tells it, not disconnected() */
+    printf("rollback: NO FIGHT -- %s (here \"%s\", there \"%s\")\n", name[why],
+           g_my_rules, g_their_rules);
+    fflush(stdout);
+    return 1;
+}
+
+int rb_online_gate(long *c1, long *c2, long *level)
+{
+    switch (g_gate) {
+    case 0:
+        g_swap = 0;
+        g_refusal = 0;
+        g_gate_wait = 0;
+        send_hello();                   /* theirs may be in already */
+        g_gate = 1;
+        /* fall through */
+    case 1:
+        if (!g_hello) {
+            if (!isMPConnected())
+                return refuse(4);
+            if (++g_gate_wait < RB_GATE_WAIT)
+                return 1;
+            return refuse(3);
+        }
+        if (g_their_version != RB_VERSION)
+            return refuse(2);
+        if (strcmp(g_my_rules, g_their_rules))
+            return refuse(1);
+        {
+            online_rules r;
+            int drawn = g_my_rules[0] && rules_decode(g_my_rules, &r) && !r.host_adv;
+
+            if (drawn && (classic() || !g_their_rollback)) {
+                printf("rollback: HOST ADVANTAGE OFF needs rollback on both sides: "
+                       "the host's side and stage\n");
+                drawn = 0;
+            }
+            if (drawn) {
+                uint32_t host = seat() == 0 ? g_my_draw : g_their_draw;
+                uint32_t guest = seat() == 0 ? g_their_draw : g_my_draw;
+                uint32_t h = mix(host ^ mix(guest + 0x9e3779b9u));
+
+                g_swap = (int)(h >> 31);
+                *level = mpLevelList[(h & 0xffffu) % 14];
+                if (g_swap) {
+                    long t = *c1;
+                    *c1 = *c2;
+                    *c2 = t;
+                }
+                rules_series_swap(g_swap);
+                printf("rollback: HOST ADVANTAGE OFF -- drawn: the %s is player 1, "
+                       "level %ld\n", g_swap ? "guest" : "host", *level);
+                fflush(stdout);
+                g_gate = 3;
+                return 0;
+            }
+        }
+        rules_series_swap(0);
+        g_gate = 2;
+        g_gate_wait = 0;
+        /* fall through */
+    case 2:
+        if (isParent()) {
+            g_gate = 3;
+            return 0;
+        }
+        /* the guest: the host's level, a minute, and on while the host's
+         * STAGE SELECT is up (debug_menu.c, which the guest sees) */
+        if (!g_setup_in) {
+            if (!isMPConnected()) {
+                stage_menu_watch_end();
+                return refuse(4);
+            }
+            if (stage_menu_watch_frame() || ++g_gate_wait < RB_GATE_WAIT)
+                return 1;
+        }
+        stage_menu_watch_end();
+        if (g_setup_in && *level != g_their_setup[2]) {
+            printf("rollback: the host's level %d, not %ld\n",
+                   (int)g_their_setup[2], *level);
+            *level = g_their_setup[2];
+        } else if (!g_setup_in)
+            printf("rollback: no setup from the host in a minute\n");
+        g_gate = 3;
         return 0;
-    /* a minute, and on while the host's STAGE SELECT is up (debug_menu.c,
-     * which the guest sees) */
-    if (!g_hello && (stage_menu_watch_frame() || ++waited < 3600))
-        return 1;
-    stage_menu_watch_end();
-    if (g_hello && *level != g_their_setup[2]) {
-        printf("rollback: the host's level %d, not %ld\n",
-               (int)g_their_setup[2], *level);
-        *level = g_their_setup[2];
-    } else if (!g_hello)
-        printf("rollback: no hello from the host in a minute\n");
-    waited = 0;
-    return 0;
+    case 4:
+        /* a moment for the hello to reach the other side, then away */
+        if (++g_gate_wait < RB_REFUSE_SHOW && isMPConnected())
+            return 1;
+        rb_gate_reset();
+        return 2;
+    default:
+        return 0;
+    }
+}
+
+int rb_refusal(void)   { return g_refusal; }
+int rb_gate_busy(void) { return g_gate == 1 || g_gate == 2 || g_gate == 4; }
+
+void rb_gate_reset(void)
+{
+    g_gate = 0;
+    g_hello = 0;
+    g_their_rules[0] = 0;
+    g_setup_in = 0;
+    g_swap = 0;
+}
+
+int rb_local_p1(void)
+{
+    return (isParent() != 0) ^ g_swap;
 }
 
 void rb_online_begin(int c1, int c2, int level)
@@ -594,18 +789,18 @@ void rb_online_begin(int c1, int c2, int level)
     uint32_t seed;
 
     mods_online(1);                     /* the game's own fight (mods.c) */
-    if (getenv("UMK3_NETCODE") && !strcmp(getenv("UMK3_NETCODE"), "classic")) {
+    if (classic()) {
         printf("rollback: off (UMK3_NETCODE=classic)\n");
-        g_me = isParent() ? 0 : 1;      /* the hello still says the level */
+        g_me = seat();                  /* the setup still says the level */
         g_setup[0] = c1;
         g_setup[1] = c2;
         g_setup[2] = level;
-        send_hello();
+        send_setup();
         return;
     }
     g_on = 1;
     g_started = 0;
-    g_me = isParent() ? 0 : 1;
+    g_me = seat() ^ g_swap;             /* the draw may put the host on the right */
     g_delay = RB_DELAY;
     g_delay_fixed = e && *e >= '0' && *e <= '6';
     if (g_delay_fixed)
@@ -637,7 +832,7 @@ void rb_online_begin(int c1, int c2, int level)
          ^ (uint32_t)level * 0x27d4eb2fu;
     umk3_rand_seed = seed;
     rand_seed = (int32_t)(seed >> 1);
-    send_hello();
+    send_setup();
     printf("rollback: online fight, player %d, %d vs %d on %d\n", g_me + 1,
            c1, c2, level);
 }
@@ -645,8 +840,12 @@ void rb_online_begin(int c1, int c2, int level)
 void rb_online_end(void)
 {
     mods_online(0);
+    g_gate = 0;                         /* the next fight says hello again */
+    g_setup_in = 0;
+    g_swap = 0;
     if (!g_on) {
         g_hello = 0;                    /* the classic netcode's */
+        g_their_rules[0] = 0;
         return;
     }
     if (g_started)
@@ -655,6 +854,7 @@ void rb_online_end(void)
     g_on = 0;
     g_started = 0;
     g_hello = 0;
+    g_their_rules[0] = 0;
     g_linger = RB_LINGER;
 }
 

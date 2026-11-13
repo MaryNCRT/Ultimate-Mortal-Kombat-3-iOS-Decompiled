@@ -58,6 +58,9 @@ void rules_clear_active(void);
  * (rules_use_mode, from Task_GameInit), none elsewhere. */
 const online_rules *rules_active(void);
 void rules_use_mode(int game_mode);
+/* The online block (the lobby's), whatever the mode: what an online
+ * fight's hello carries (rollback.c), NULL none. */
+const online_rules *rules_online(void);
 /* The local versus's block (VS RULES, SELECT on its select screen;
  * umk3.ini vs_rules=), NULL for the game's own rules. */
 void rules_set_local(const online_rules *r);
@@ -83,5 +86,10 @@ void rules_series_won(int side);
 int  rules_series_score(int *p1, int *p2);
 int  rules_series_needed(void);         /* fights to win it, 0 no series */
 void rules_series_reset(void);
+/* Online, HOST ADVANTAGE OFF: 1 when this fight's draw put the host on the
+ * right (rollback.c's gate). The series is counted by player -- host and
+ * guest -- not by side, so a series whose fights draw the sides anew
+ * still adds each win to whoever took it; the calls above stay in sides. */
+void rules_series_swap(int swapped);
 
 #endif

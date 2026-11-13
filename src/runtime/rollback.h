@@ -11,6 +11,7 @@
 #define RB_PKT_HASH   22                /* reliable, once a second */
 #define PORT_PKT_PALETTE 23             /* reliable: a side's colour pick (FrontEnd.c) */
 #define PORT_PKT_STAGE   24             /* the host's STAGE SELECT, for the guest (debug_menu.c) */
+#define RB_PKT_SETUP  25                /* reliable, once a fight: the fighters and the level */
 
 /* 1 from an online fight's Task_GameInit to its Task_GameDestroy: both
  * machines run the fight engine, from both players' inputs. */
@@ -26,9 +27,27 @@ int  rb_stats(char *out, int n);
 /* 1 while a frame is run again after a rollback: nothing drawn. */
 int  rb_nodraw(void);
 
-/* Task_GameInit, state 0, of an online fight: the two fighters and the
- * level, which also seed the two generators. */
-int  rb_host_level(long *level);
+/* Task_GameInit, state 0, of an online fight, before STAGE SELECT: the
+ * hellos -- each side's rules block and a random number -- traded and
+ * checked. 1 while waiting; 2 when the fight is refused (other rules,
+ * another version, no answer, the link gone): the caller goes back to the
+ * ONLINE screen (rb_refusal says why). 0 to go on: with HOST ADVANTAGE OFF
+ * the side and the level are drawn (c1 / c2 swapped, *level set); with it
+ * ON the guest has waited for the host's level. */
+int  rb_online_gate(long *c1, long *c2, long *level);
+/* why the last fight was refused: 1 other rules, 2 another version,
+ * 3 no answer, 4 the link gone; 0 none */
+int  rb_refusal(void);
+/* 1 while the gate runs: a link lost then is the gate's to tell
+ * (limeMPGameSpecific.c disconnected) */
+int  rb_gate_busy(void);
+/* host's STAGE SELECT cancelled: the next fight says hello again */
+void rb_gate_reset(void);
+/* GameMode 1: 1 if this machine plays player one -- the host, unless the
+ * draw put it on the right (HOST ADVANTAGE OFF), until Task_GameDestroy */
+int  rb_local_p1(void);
+/* Then, the two fighters and the level, which also seed the two
+ * generators. */
 void rb_online_begin(int c1, int c2, int level);
 /* Task_GameDestroy */
 void rb_online_end(void);

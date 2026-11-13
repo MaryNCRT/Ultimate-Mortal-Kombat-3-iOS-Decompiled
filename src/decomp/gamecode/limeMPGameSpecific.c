@@ -654,8 +654,19 @@ void heartbeatSend(void)
  * (a tbb over 2..9): the menus push the disconnected screen (0x2c) unless
  * they are the lobby already; a fight (6) or its end (7) pushes it and
  * leaves the fight, saving the stats first when a finisher was on. */
+int rb_gate_busy(void);                 /* runtime/rollback.c, port */
+
 void disconnected(void)
 {
+    /* Port, not in the binary: in an online fight's hellos (before
+     * anything loads) the gate tells a lost link itself and goes back to
+     * the ONLINE screen; the fight's way out (task 7) would free what was
+     * never loaded */
+    if (rb_gate_busy()) {
+        NSLog("disconnected: told by the hellos' gate");
+        disableHeartbeat();
+        return;
+    }
     NSLog("################## at disconnected()");
     EASDK_LogEvent(0x7558, 0, 0, 0, 0);
     disconnectedFromCharacterSelect = 0;
@@ -1055,6 +1066,7 @@ void processPacket(const void *payload, long len, long type)
     case RB_PKT_INPUT:                  /* port: rollback netcode */
     case RB_PKT_HELLO:
     case RB_PKT_HASH:
+    case RB_PKT_SETUP:
         rb_net(type, w, len);
         break;
     case 13:

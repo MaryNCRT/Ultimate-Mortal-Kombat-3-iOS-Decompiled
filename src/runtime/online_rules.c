@@ -145,7 +145,13 @@ void rules_clear_active(void)
 
 /* ---- the series of fights ---- */
 
-static int g_series[2];
+static int g_series[2];                 /* by player: [0] the host's (player one locally) */
+static int g_series_swap;               /* this fight: the host on the right */
+
+void rules_series_swap(int swapped)
+{
+    g_series_swap = swapped != 0;
+}
 
 int rules_series_needed(void)
 {
@@ -162,11 +168,13 @@ int rules_series_score(int *p1, int *p2)
 {
     int need = rules_series_needed();
 
-    if (p1) *p1 = g_series[0];
-    if (p2) *p2 = g_series[1];
+    int a = g_series[g_series_swap], b = g_series[g_series_swap ^ 1];
+
+    if (p1) *p1 = a;
+    if (p2) *p2 = b;
     if (!need)
         return -1;
-    return g_series[0] >= need ? 0 : g_series[1] >= need ? 1 : -1;
+    return a >= need ? 0 : b >= need ? 1 : -1;
 }
 
 void rules_series_won(int side)
@@ -177,8 +185,9 @@ void rules_series_won(int side)
         return;
     if (g_series[0] >= need || g_series[1] >= need)
         rules_series_reset();           /* the last one was over: a new series */
-    g_series[side]++;
-    printf("online rules: series %d - %d (first to %d)\n", g_series[0], g_series[1], need);
+    g_series[side ^ g_series_swap]++;
+    printf("online rules: series %d - %d (first to %d)%s\n", g_series[0], g_series[1], need,
+           g_series_swap ? ", the host on the right" : "");
 }
 
 const online_rules *rules_active(void)
@@ -213,7 +222,15 @@ void rules_use_mode(int game_mode)
 
     if (use != g_use)
         rules_series_reset();           /* another kind of fight: a new series */
+    if (use != 1)
+        g_series_swap = 0;              /* sides drawn online only */
     g_use = use;
+}
+
+const online_rules *rules_online(void)
+{
+    rules_active();                     /* UMK3_RULES read */
+    return g_on ? &g_active : NULL;
 }
 
 void rules_set_local(const online_rules *r)
