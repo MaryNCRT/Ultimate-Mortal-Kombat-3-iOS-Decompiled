@@ -10,6 +10,8 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## After 0.4.8 (not released yet)
 
+- **Scorpion's colour 5 is golden yellow** (Mary: it looked red; it was
+  orange, hue 20 -- now 50).
 - **Colours 3 to 6 further apart** (Mary): Sektor's and Cyrax's were the
   wrong way round -- Sektor now has only reds and pinks (wine, bright red,
   pale pink, crimson magenta), Cyrax yellows (bright yellow, olive, bronze,

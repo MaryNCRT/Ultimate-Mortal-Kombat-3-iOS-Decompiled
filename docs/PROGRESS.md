@@ -123,6 +123,13 @@ palettes.bak`) so it compiles palettes.c and writes the colours after a
 build; `launcher/bin/resources/src` and its palettes.ini synced too. Not
 checked: adding a colour to an outfit in the viewer.
 
+### 2026-11-13 -- Scorpion's colour 5 yellow
+
+Mary: Scorpion 5 was red (orange, hue 20). palettes.ini SCORPION 5 =
+50 1.60 1.10 (golden yellow, clothes' mean 49/.87/.75); the nearest of his
+other colours is 1 at delta-E 22. Test folder: his 9 colour-5 files
+rewritten (vanilla and HD). Not played in a fight.
+
 ### 2026-11-13 -- Colours 3-6 told apart (Sektor and Cyrax swapped)
 
 Mary: Sektor's extra colours were Cyrax's (yellows) and the other way
