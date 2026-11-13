@@ -14,6 +14,8 @@ const path = require('path');
 const ini = require('../lib/ini');
 const mods = require('../lib/mods');
 const hub = require('../lib/hub');
+const artwork = require('../lib/artwork');
+const steamsync = require('../lib/steamsync');
 
 const root = path.resolve(process.argv[2] || '.');
 const port = Number(process.argv[3]) || 5178;
@@ -21,6 +23,18 @@ const dir = path.join(__dirname, '..', 'renderer');
 const editFile = id => path.join(root, 'stage edits', id + '.json');
 
 let g_hub = [];
+/* STEAM: the real Steam folders, or UMK3_HARNESS_STEAM=<a Steam folder> (a
+ * copy to try ADD / REMOVE on), UMK3_HARNESS_STEAM_RUNNING=1|0 to say
+ * whether Steam is open; images from data/steam-artwork under /art/ */
+const steamOpts = process.env.UMK3_HARNESS_STEAM
+    ? { candidates: [{ path: process.env.UMK3_HARNESS_STEAM, kind: process.platform === 'win32' ? 'windows' : 'native' }] } : {};
+if (process.env.UMK3_HARNESS_STEAM_RUNNING) steamOpts.running = process.env.UMK3_HARNESS_STEAM_RUNNING === '1';
+const artLib = () => {
+    const l = artwork.library(root);
+    l.items.forEach(i => { i.src = '/art/' + i.file + '?' + i.sha1; });
+    return l;
+};
+const synced = async r => { if (r && r.ok) r.sync = await steamsync.syncIfAdded(root, steamOpts); return r; };
 const calls = {
     root: () => ({ root, ready: true, builtAt: 0, version: 'harness', both: false, any: true }),
     loadConfig: () => Object.assign(ini.load(path.join(root, 'umk3.ini')),
@@ -52,6 +66,20 @@ const calls = {
     stageEditsLoad: id => { try { return JSON.parse(fs.readFileSync(editFile(id), 'utf8')); } catch { return null; } },
     stageEditsSave: (id, json) => { fs.mkdirSync(path.dirname(editFile(id)), { recursive: true }); fs.writeFileSync(editFile(id), json); return true; },
     listPads: () => [], listMonitors: () => [], glyphs: () => ({}), replaysList: () => [],
+    'steam.status': () => steamsync.status(root, steamOpts),
+    'steam.account': ref => steamsync.chooseAccount(root, ref),
+    'steam.add': ref => steamsync.add(root, ref, Object.assign({ closeSteam: true, shutdown: async () => true, start: () => true }, steamOpts)),
+    'steam.remove': ref => steamsync.remove(root, ref, Object.assign({ closeSteam: true, shutdown: async () => true, start: () => true }, steamOpts)),
+    'steam.apply': ref => steamsync.apply(root, ref, steamOpts),
+    'steam.auto': () => steamsync.autoAll(root, steamOpts),
+    'art.setKey': key => artwork.setApiKey(root, key),
+    'art.browse': (kind, page, shape) => artwork.browse(root, kind, Number(page) || 0, shape),
+    'art.download': item => artwork.download(root, item),
+    'art.select': async item => synced(await artwork.select(root, item)),
+    'art.unselect': slot => synced(artwork.unselect(root, slot)),
+    'art.remove': (key, confirm) => synced(artwork.remove(root, key, !!confirm)),
+    'art.library': () => artLib(),
+    'art.open': () => true, 'art.site': () => true,
     hubList: async () => { g_hub = await hub.fetchIndex(fetch); return { ok: true, mods: await hub.check(fetch, root, g_hub) }; },
     hubInstall: async id => { const m = g_hub.find(x => x.id === id); return m ? Object.assign(await hub.get(fetch, root, m), { mods: await hub.check(fetch, root, g_hub) }) : { ok: false, error: 'not in the hub' }; },
 };
@@ -68,13 +96,13 @@ const shim = `<script>
     const ns = pre => new Proxy({}, {
         get: (t, k) => (typeof k === 'string' && k.startsWith('on') ? () => {} : (...a) => call(pre + k, a)),
     });
-    window.umk3 = new Proxy({ platform: 'win32', account: ns('account.') }, {
+    window.umk3 = new Proxy({ platform: 'win32', account: ns('account.'), steam: ns('steam.'), art: ns('art.') }, {
         get: (t, k) => (k in t ? t[k] : typeof k === 'string' && k.startsWith('on') ? () => {} : (...a) => call(k, a)),
     });
 })();
 </script>`;
 
-const types = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.mp3': 'audio/mpeg' };
+const types = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon', '.svg': 'image/svg+xml', '.json': 'application/json', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.mp3': 'audio/mpeg' };
 
 http.createServer((req, res) => {
     const u = decodeURIComponent(req.url.split('?')[0]);
@@ -91,6 +119,13 @@ http.createServer((req, res) => {
             res.writeHead(200, { 'content-type': 'application/json' });
             res.end(JSON.stringify(out === undefined ? null : out));
         });
+        return;
+    }
+    if (u.startsWith('/art/')) {
+        const b = artwork.base(root), f = path.join(b, u.slice(5));
+        if (!f.startsWith(b) || !fs.existsSync(f)) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'content-type': types[path.extname(f)] || 'application/octet-stream' });
+        res.end(fs.readFileSync(f));
         return;
     }
     let p = path.join(dir, u === '/' ? 'index.html' : u);

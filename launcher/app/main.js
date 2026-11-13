@@ -24,6 +24,9 @@ const hub = require('./lib/hub');
 const replays = require('./lib/replays');
 const account = require('./lib/account');
 account.setVault(safeStorage);          /* the session token sealed by the system */
+const artwork = require('./lib/artwork');
+const steamsync = require('./lib/steamsync');
+artwork.setVault(safeStorage);          /* the SteamGridDB key, the same way */
 
 let g_win = null;
 let g_root = null;
@@ -902,6 +905,50 @@ ipcMain.handle('replays:play', (_ev, folder, name) => {
         return { ok: false, rebuild: true };
     stepAside(bld.play(g_root, ini.gameExe(arch()), ['--replay', `replays/${folder}/${name}`]));
     return { ok: true };
+});
+
+/* -------------------------------------------------------------- steam --
+ * STEAM (lib/steamsync.js, lib/steam.js, lib/artwork.js): the launcher as a
+ * non-Steam game, and SteamGridDB's artwork for it downloaded into the game
+ * folder and copied into Steam.  A local image goes to the page as a file://
+ * URL (the page is a file:// page itself). */
+
+const { pathToFileURL } = require('url');
+const withUrl = lib => Object.assign(lib, { items: lib.items.map(i => Object.assign(i, { src: pathToFileURL(i.path).href })) });
+/* a choice changed: Steam gets it when the shortcut is there */
+async function artChanged(r) {
+    if (r && r.ok) {
+        try { r.sync = await steamsync.syncIfAdded(g_root); } catch (e) { r.sync = { synced: false, error: String(e.message || e) }; }
+    }
+    return r;
+}
+
+ipcMain.handle('steam:status', () => steamsync.status(g_root));
+ipcMain.handle('steam:account', (_ev, ref) => steamsync.chooseAccount(g_root, ref));
+/* the button closes Steam itself when it is open, and opens it again after */
+ipcMain.handle('steam:add', (_ev, ref) => steamsync.add(g_root, ref, { closeSteam: true }));
+ipcMain.handle('steam:remove', (_ev, ref) => steamsync.remove(g_root, ref, { closeSteam: true }));
+ipcMain.handle('steam:apply', (_ev, ref) => steamsync.apply(g_root, ref));
+ipcMain.handle('steam:auto', () => steamsync.autoAll(g_root));
+ipcMain.handle('art:setKey', (_ev, key) => artwork.setApiKey(g_root, key));
+ipcMain.handle('art:browse', (_ev, kind, page, shape) => artwork.browse(g_root, kind, Number(page) || 0, shape));
+ipcMain.handle('art:download', async (_ev, item) => artwork.download(g_root, item));
+ipcMain.handle('art:select', async (_ev, item) => artChanged(await artwork.select(g_root, item)));
+ipcMain.handle('art:unselect', (_ev, slot) => artChanged(artwork.unselect(g_root, slot)));
+ipcMain.handle('art:remove', (_ev, key, confirm) => artChanged(artwork.remove(g_root, key, !!confirm)));
+ipcMain.handle('art:library', () => withUrl(artwork.library(g_root)));
+ipcMain.handle('art:open', () => {
+    const p = artwork.base(g_root);
+    fs.mkdirSync(p, { recursive: true });
+    shell.openPath(p);
+    return true;
+});
+/* SteamGridDB's own pages, nothing else */
+ipcMain.handle('art:site', (_ev, which) => {
+    const url = which === 'key' ? 'https://www.steamgriddb.com/profile/preferences/api'
+              : `https://www.steamgriddb.com/game/${artwork.GAME_ID}`;
+    shell.openExternal(url);
+    return true;
 });
 
 /* --------------------------------------------------------------- mods --

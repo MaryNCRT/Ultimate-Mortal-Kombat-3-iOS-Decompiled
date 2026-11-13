@@ -99,4 +99,23 @@ contextBridge.exposeInMainWorld('umk3', {
     replaysExport: (folder, name) => ipcRenderer.invoke('replays:export', folder, name),
     replaysOpen: () => ipcRenderer.invoke('replays:open'),
     replaysPlay: (folder, name) => ipcRenderer.invoke('replays:play', folder, name),
+    steam: {
+        status: () => ipcRenderer.invoke('steam:status'),
+        account: ref => ipcRenderer.invoke('steam:account', ref),
+        add: ref => ipcRenderer.invoke('steam:add', ref),
+        remove: ref => ipcRenderer.invoke('steam:remove', ref),
+        apply: ref => ipcRenderer.invoke('steam:apply', ref),
+        auto: () => ipcRenderer.invoke('steam:auto'),
+    },
+    art: {
+        setKey: key => ipcRenderer.invoke('art:setKey', key),
+        browse: (kind, page, shape) => ipcRenderer.invoke('art:browse', kind, page, shape),
+        download: item => ipcRenderer.invoke('art:download', item),
+        select: item => ipcRenderer.invoke('art:select', item),
+        unselect: slot => ipcRenderer.invoke('art:unselect', slot),
+        remove: (key, confirm) => ipcRenderer.invoke('art:remove', key, confirm),
+        library: () => ipcRenderer.invoke('art:library'),
+        open: () => ipcRenderer.invoke('art:open'),
+        site: which => ipcRenderer.invoke('art:site', which),
+    },
 });
