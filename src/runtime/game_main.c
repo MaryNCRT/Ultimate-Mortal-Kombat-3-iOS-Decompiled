@@ -1228,6 +1228,10 @@ static void read_config(const char *dir)
             dbg_replay_pct = atoi(v) < 50 ? 50 : atoi(v) > 200 ? 200 : atoi(v);
         else if (strcmp(line, "skip_intro") == 0)
             g_cfg_skip_intro = atoi(v) != 0;
+        else if (strcmp(line, "discord") == 0) {   /* Discord Rich Presence (discord_presence.h) */
+            void discord_presence_enable(int on);
+            discord_presence_enable(atoi(v) != 0);
+        }
         else if (strcmp(line, "aspect") == 0) {
             g_aspect = parse_aspect(v);
             snprintf(g_cfg_aspect, sizeof g_cfg_aspect, "%s",
@@ -4179,6 +4183,11 @@ int main(int argc, char **argv)
             break;
         }
         mem_log();
+        {   /* Discord Rich Presence: the game's state, sent when it changes;
+             * never waits (discord_presence.c) */
+            void presence_game_tick(double now);
+            presence_game_tick(plat_time());
+        }
         pace_work_end();
         port_smooth_frame();
         fflush(stdout);         /* the session log, once a frame */
@@ -4187,6 +4196,10 @@ int main(int argc, char **argv)
         pace_frame();
     }
 
+    {
+        void discord_presence_shutdown(void);
+        discord_presence_shutdown();
+    }
     plat_close();
     return 0;
 }

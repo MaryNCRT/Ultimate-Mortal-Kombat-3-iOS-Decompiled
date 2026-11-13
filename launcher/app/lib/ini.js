@@ -22,6 +22,7 @@
  *     render_width=1920  render_height=1280   (the 3D resolution; absent =
  *       the window's size)
  *     language=ES    ui=EN           ipa=C:\x\UMK3.ipa
+ *     discord=1         (0: no Discord Rich Presence; runtime/discord_presence.h)
  *     debug_keys=1   skip_intro=1   key_up=87 ... key_moves=77   key_special=72
  *     marco=C:\x\picture.png   (the picture behind the bars in fullscreen)
  *     buttons=5|6    key5_p=85 key5_b=79 key5_k=74 key5_r=76
@@ -165,6 +166,7 @@ function defaultConfig() {
         widescreen: false,           /* native: widen the 3D view, no stretch */
         debug: false,
         skipIntro: false,            /* skip_intro=1: no publisher logos */
+        discord: true,               /* discord=1: Discord Rich Presence */
         compileShaders: false,       /* compile_shaders=1: PLAY runs --compile-shaders first */
         replays: true,               /* replays=1: the game keeps the last fights (REPLAYS) */
         hideControls: true,          /* hide_controls=1: no on-screen stick and buttons (hidden by default since 0.4.4) */
@@ -247,6 +249,7 @@ function load(p) {
         else if (key === 'aspect') cfg.aspect = ['3:2', '4:3', '16:9', '21:9'].includes(val) ? val : '3:2';
         else if (key === 'debug_keys') cfg.debug = num === 1;
         else if (key === 'skip_intro') cfg.skipIntro = num === 1;
+        else if (key === 'discord') cfg.discord = num !== 0;
         else if (key === 'compile_shaders') cfg.compileShaders = num === 1;
         else if (key === 'replays') cfg.replays = num !== 0;
         else if (key === 'hide_controls') cfg.hideControls = num === 1;
@@ -366,6 +369,7 @@ function save(p, cfg) {
         'seen_version=' + String(cfg.seenVersion || '').replace(/[^0-9A-Za-z.\-]/g, ''),
         'debug_keys=' + (cfg.debug ? 1 : 0),
         'skip_intro=' + (cfg.skipIntro ? 1 : 0),
+        'discord=' + (cfg.discord === false ? 0 : 1),
         'compile_shaders=' + (cfg.compileShaders ? 1 : 0),
         'replays=' + (cfg.replays ? 1 : 0),
         'hide_controls=' + (cfg.hideControls ? 1 : 0),
