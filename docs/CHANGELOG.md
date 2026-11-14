@@ -10,6 +10,8 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
+- **VS screen**: the announcer no longer says the fighters' names (Mary); only
+  a mod's `Vsfx.wav` and `Skversus.wav` play there.
 - **VS screen sounds a mod can add**: `res/audio/Vsfx.wav`, the effect as
   the screen comes up, and `res/audio/Skversus.wav`, "versus" between the
   names. The game ships neither (and the arcade's VS screen has no voice);
