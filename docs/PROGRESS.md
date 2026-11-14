@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-13 (outfits that add: `type=skin` mods, the SKIN box, the CHARACTER VIEWER's OUTFIT / COLOR) · 2026-11-12 (ONLINE stage 3: LOBBIES in the ONLINE screen, invites over P2P, the online select screen's banners; a second monitor's refresh) · before: 2026-11-12 (ONLINE stage 2: the EOS lobby core, `mplobby_*` in mp_eos.c, tested with two probes against the service) · before: 2026-11-12 (release 0.4.5 beta: TRAINING's own screen, DUELO against the CPU, the RULES button) · before: 2026-11-12 (the ONLINE phase's rules block and the local versus's VS RULES window with its kodes checklist, Mary confirmed) · before: 2026-11-12 (0.4.4 beta in the test folder: the Lost Treasures fixed from the binary, hidden controls ignore clicks, the first start's preset, WHAT'S NEW) · earlier: 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-14 (online: a MERCY no longer parts the two machines -- player one's buttons decoded with the host's count on both) · 2026-11-13 (outfits that add: `type=skin` mods, the SKIN box, the CHARACTER VIEWER's OUTFIT / COLOR) · 2026-11-12 (ONLINE stage 3: LOBBIES in the ONLINE screen, invites over P2P, the online select screen's banners; a second monitor's refresh) · before: 2026-11-12 (ONLINE stage 2: the EOS lobby core, `mplobby_*` in mp_eos.c, tested with two probes against the service) · before: 2026-11-12 (release 0.4.5 beta: TRAINING's own screen, DUELO against the CPU, the RULES button) · before: 2026-11-12 (the ONLINE phase's rules block and the local versus's VS RULES window with its kodes checklist, Mary confirmed) · before: 2026-11-12 (0.4.4 beta in the test folder: the Lost Treasures fixed from the binary, hidden controls ignore clicks, the first start's preset, WHAT'S NEW) · earlier: 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -102,6 +102,33 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+### 2026-11-14 -- Online: a MERCY no longer parts the two machines
+
+Mary's report (a match on another PC): online, a MERCY in the final round
+(round 3 of a best of three) left the fight stuck. The MERCY itself is the
+engine's and was right: a local versus with the debug keys (F9, F10, F9,
+then the menu's FINISHER 1 three seconds after FINISH HIM) granted it --
+`t_do_mercy` (0x525cc) checked against the disassembly, it only grants it
+while `mytc[2]` sits in `t_fatality_wait`, which a forced finisher at the
+first frame of FINISH HIM misses -- and the round played on to its end.
+
+The cause was online only. A rollback fight steps the engine on both
+machines from both inputs; `rb_game_buttons` sets player one's button
+count to the host's on both. `DrawControls` (GameCode.c, the binary's,
+0x1ca44) writes `Player1NumButtons = Settings[4]` every frame -- this
+machine's own count -- and `GetReal6ButtonJoyBits` decodes player one's
+input with it. With two players on different counts (4/5 against 6), the
+machine that is not player one read player one's presses through
+`FourButtonMoves` (or not), which leaves plain hits alone but changes RUN
+and the finishing inputs (the 0x2000 entries). A MERCY (RUN, final round)
+happened on one machine and not on the other; the fights parted, one ended
+and the other held for inputs that never came. Fix: that store is skipped
+while `rb_active()` (port line, marked); the touch layout still follows
+this machine's setting. Nothing changes outside an online fight.
+
+Tested: the build in the test folder; a local versus MERCY as above,
+unchanged. Mary confirmed the MERCY works online (2026-11-14).
 
 ### 2026-11-14 -- Release 0.5.1 beta
 

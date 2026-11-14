@@ -10770,7 +10770,18 @@ static void DrawControls_(void)
     joyKnobCol[0] = 1.0f; joyKnobCol[1] = 1.0f; joyKnobCol[2] = 1.0f;
     joyKnobCol[3] = 1.0f;
 
-    Player1NumButtons = Settings[4];
+    /* Port, not in the binary: in a rollback fight player one's buttons are
+     * the host's setting on BOTH machines (rb_game_buttons), and
+     * GetReal6ButtonJoyBits decodes player one's input with them. Written
+     * here every frame from this machine's own Settings[4], the machine that
+     * is not player one read that player's input with its own count: with 4
+     * or 5 buttons it goes through FourButtonMoves, which leaves plain hits
+     * alone but changes RUN and the finishing inputs -- so a MERCY (RUN, the
+     * final round) happened on one machine and not on the other, the fights
+     * parted, one ended and the other waited for its inputs for good (Mary,
+     * 2026-11-14). The layout below still follows this machine's setting. */
+    if (!rb_active())
+        Player1NumButtons = Settings[4];
 
     /* ---- rebuild the live layouts from the settings ---- */
     if (Settings[5] == 0) {
