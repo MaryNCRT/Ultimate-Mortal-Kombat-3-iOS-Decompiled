@@ -618,6 +618,13 @@ static void play_sound(long h, float v, float p, long f)
     /* Port diagnostic: every sound played, by its file -- to find the
      * screams Mary hears repeat where they should not (Liu Kang) */
     printf("sound: %s (%ld)\n", g_sound[h].name, h);
+    /* One voice a sound, as on the device: limePlaySound (0x65344) sends
+     * `play` to the sound's own Sound object, and -[Sound play] (0xada08)
+     * stops it first when it is still playing -- a sound asked for again
+     * starts over. The port mixed a new copy over the old each time: the
+     * flight of Reptile's orb (t_orb_calla, Reptproj every 3 ticks) stacked
+     * six copies and no longer sounded like the game (Mary, 0.5.3). */
+    plat_audio_stop_pcm(g_sound[h].pcm);
     plat_audio_play_at(g_sound[h].pcm, g_sound[h].frames, g_sound[h].rate,
                        v * (float)port_sfx_pct / 100.0f);      /* EFFECTS */
 }

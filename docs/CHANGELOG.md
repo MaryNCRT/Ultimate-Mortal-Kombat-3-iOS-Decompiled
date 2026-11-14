@@ -8,6 +8,16 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased
+
+- **Sounds asked for again start over, as on the device** (Mary: Reptile's
+  orb did not sound right): the iOS game gives each sound one voice and
+  `-[Sound play]` stops it before playing it again; the port mixed a new
+  copy over the old one. The orb's flight asks for its sound every three
+  frames, so six copies piled up. Checked against the binary
+  (limePlaySound 0x65344, -[Sound play] 0xada08, t_orb_calla 0x76534: the
+  orb's sound is the character's 0x12, `Reptproj`, not `Reptspit`).
+
 ## 0.5.2 beta (2026-11-14)
 
 Urgent patch. Built and played from a clean 0.5.1 release folder (the "other
