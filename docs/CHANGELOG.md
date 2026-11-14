@@ -10,6 +10,10 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
+- **VS screen sounds a mod can add**: `res/audio/Vsfx.wav`, the effect as
+  the screen comes up, and `res/audio/Skversus.wav`, "versus" between the
+  names. The game ships neither (and the arcade's VS screen has no voice);
+  a mod's files play, silence without them.
 - **VS screen's music, as the arcade's** (Mary; seen in MAME, docs/research/
   ARCADE-VS-SCREEN.md): the tune before it (STAGE SELECT's) plays on under
   the VS screen and fades out with it; the announcer's names stay (Mary).

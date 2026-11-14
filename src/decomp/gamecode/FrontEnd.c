@@ -11329,7 +11329,7 @@ int PortFightPalette(int side, long c1, long c2);   /* below */
  * "versus" voice (Mary: the screen wanted sound). These are the select
  * screen's voices (FELoad_LoadABit 28..39), loaded once for this. */
 long limeLoadSound(const char *name);
-static long g_vs_voice[3];
+static long g_vs_voice[4];
 static int  g_vs_voices;
 
 static void vs_announce(long ch)
@@ -11342,14 +11342,14 @@ static void vs_announce(long ch)
     };
     long h;
 
-    if (Settings[3] == 0 || (ch != -2 && (ch < 0 || ch >= 26 || !name[ch])))
+    if (Settings[3] == 0 || (ch >= -1 && (ch < 0 || ch >= 26 || !name[ch])) || ch < -3)
         return;
     /* loaded for this screen and let go when it ends (vs_quiet): a slot
      * kept would be another sound's once the front end loads again */
-    h = limeLoadSound(ch == -2 ? "Skversus" : name[ch]);
+    h = limeLoadSound(ch == -2 ? "Skversus" : ch == -3 ? "Vsfx" : name[ch]);
     if (h < 0)
         return;
-    if (g_vs_voices < 3)
+    if (g_vs_voices < 4)
         g_vs_voice[g_vs_voices++] = h;
     limePlaySound(h, MusicVol[Settings[3]] / 100.0f, 1.0f, 0);
 }
@@ -11386,18 +11386,22 @@ int PortVsGate(void)
         said = 0;
     }
 
-    /* player one's name as the two slide in, then "versus" -- res/audio/
-     * Skversus.wav, which the game has none of: a mod or a player's own
-     * file; silent without it -- then player two's */
-    if (said == 0 && VSWait > VS_HOLD_FRAMES) {
-        vs_announce(Character1);
+    /* the screen's effect as it comes up (res/audio/Vsfx.wav), player
+     * one's name as the two slide in, "versus" (res/audio/Skversus.wav),
+     * player two's. The game has neither Vsfx nor Skversus: a mod's, or a
+     * player's own files; silent without them */
+    if (said == 0 && VSWait > 20.0f) {
+        vs_announce(-3);
         said = 1;
-    } else if (said == 1 && VSWait > VS_HOLD_FRAMES + 40.0f) {
-        vs_announce(-2);
+    } else if (said == 1 && VSWait > VS_HOLD_FRAMES + 15.0f) {
+        vs_announce(Character1);
         said = 2;
-    } else if (said == 2 && VSWait > VS_HOLD_FRAMES + 80.0f) {
-        vs_announce(Character2);
+    } else if (said == 2 && VSWait > VS_HOLD_FRAMES + 55.0f) {
+        vs_announce(-2);
         said = 3;
+    } else if (said == 3 && VSWait > VS_HOLD_FRAMES + 95.0f) {
+        vs_announce(Character2);
+        said = 4;
     }
 
     limeEnableAlphaBlending_Basic();
