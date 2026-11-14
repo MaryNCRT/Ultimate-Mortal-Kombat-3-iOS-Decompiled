@@ -2,6 +2,18 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.5.3",
+      "date": "2026-11-14",
+      "ES": [
+        "MOD HUB: ya conecta en las redes donde GitHub no responde (usa otros servidores con los mismos archivos) y, si no puede, dice por qué en vez de quedarse esperando.",
+        "Los sonidos repetidos se reinician como en el original en lugar de superponerse (la bola de Reptile suena como debe)."
+      ],
+      "EN": [
+        "MOD HUB: it now connects on networks where GitHub does not answer (other servers with the same files) and, when it cannot, says why instead of waiting forever.",
+        "Repeated sounds start over as in the original instead of piling up (Reptile's orb sounds right)."
+      ]
+    },
+    {
       "version": "0.5.2",
       "date": "2026-11-14",
       "ES": [

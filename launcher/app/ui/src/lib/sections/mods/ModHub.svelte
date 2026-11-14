@@ -22,9 +22,9 @@
     async function load() {
         loading = true;
         fail = '';
-        const r = await api.hubList();
+        const r = await api.hubList().catch(e => ({ ok: false, error: e && e.message, mods: [] }));
         loading = false;
-        if (!r) return;
+        if (!r) { fail = '?'; return; }
         list = r.mods || [];
         if (!r.ok) fail = r.error || '?';
     }

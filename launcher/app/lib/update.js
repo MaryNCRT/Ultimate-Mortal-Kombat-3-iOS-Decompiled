@@ -101,13 +101,24 @@ async function check(fetchFn, current) {
 }
 
 /* Streams the zip to dir/<file>; resolves with its path. */
+/* a promise, or an error once `ms` pass with no answer (0.5.3: a download
+ * that stalled, a host that never answers on some networks, waited for
+ * ever with the MOD HUB or UPDATES showing nothing) */
+function stall(p, ms, what) {
+    let timer;
+    return Promise.race([p, new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(what + ': no answer in ' + Math.round(ms / 1000) + ' s')), ms);
+    })]).finally(() => clearTimeout(timer));
+}
+
 async function download(fetchFn, rel, dir, onProgress) {
     if (!/^[\w.\-]+\.(zip|tar\.gz)$/i.test(rel.file))
         throw new Error('unexpected file name');
     fs.mkdirSync(dir, { recursive: true });
     const out = path.join(dir, rel.file);
     const part = out + '.part';
-    const r = await fetchFn(rel.url, { headers: { 'User-Agent': 'UMK3-Launcher' } });
+    const r = await stall(fetchFn(rel.url, { headers: { 'User-Agent': 'UMK3-Launcher' } }), 30000,
+                          'download from ' + new URL(rel.url).host);
     if (!r.ok || !r.body)
         throw new Error('download: HTTP ' + r.status);
     const total = Number(r.headers.get('content-length')) || rel.size || 0;
@@ -117,7 +128,7 @@ async function download(fetchFn, rel, dir, onProgress) {
     try {
         const reader = r.body.getReader();
         for (;;) {
-            const { done, value } = await reader.read();
+            const { done, value } = await stall(reader.read(), 45000, 'download stalled');
             if (done) break;
             fs.writeSync(fd, value);
             hash.update(value);
