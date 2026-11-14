@@ -502,6 +502,13 @@ function applyPreset(cfg, name, screen, platform) {
         cfg.textureQuality = 'iphone';
     } else if (name === 'enhanced') {
         fitScreen(cfg, screen);
+        /* 0.5.2 (Mary): wide screen 16:9 (21:9 on a 21:9 monitor), the
+         * pad's or the keys' pictures following what is plugged in */
+        if (cfg.aspect !== '21:9')
+            cfg.aspect = '16:9';
+        cfg.widescreen = true;
+        cfg.padIcons = 'auto';
+        cfg.p2PadIcons = 'auto';
         cfg.rtShadows = true;
         if (cfg.renderer === 'opengl' || !cfg.renderer)
             cfg.renderer = (platform || process.platform) === 'win32' ? 'd3d12' : 'vulkan';

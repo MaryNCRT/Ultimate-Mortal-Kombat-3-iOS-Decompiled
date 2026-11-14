@@ -739,7 +739,7 @@ void *limeLoadFile(const char *path)
     double plat_time(void);
     double t0 = plat_time();
     void *r = load_file(path);
-    if (plat_time() - t0 > 0.1)         /* the slow ones, for the load times */
+    if (plat_time() - t0 > (getenv("UMK3_LOG_LOADS") ? atof(getenv("UMK3_LOG_LOADS")) / 1000.0 : 0.1))  /* the slow ones (UMK3_LOG_LOADS=<ms>: every one slower) */
         printf("load: file %s %.0f ms\n", path ? path : "", (plat_time() - t0) * 1000.0);
     port_prof_ms[2] += (plat_time() - t0) * 1000.0;
     return r;

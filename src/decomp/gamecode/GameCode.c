@@ -860,6 +860,8 @@ void LoadBGExtents(void)
  * ladder never reached the tower and every rung kept the image default,
  * character 16, on every cell.
  */
+void PopulateTower(void);                /* FrontEnd.c */
+
 void Load_Tower(void)
 {
     /* The loop walks a copy (`mov lr, r0`); r0, the pointer the loader
@@ -870,8 +872,15 @@ void Load_Tower(void)
     const long *src = file;
     int tier, i;
 
-    if (file == 0)
+    if (file == 0) {
+        /* Port, not in the binary: no "towerdata" yet (a new install) left
+         * the image's default table, character 16 on every rung of the
+         * first ladder, so the tower showed Jade over and over until an
+         * Arcade game was started (Mary, 0.5.2). A ladder is built as a new
+         * Arcade game builds it (PopulateTower, which also saves it). */
+        PopulateTower();
         return;
+    }
 
     for (tier = 0; tier < TOWER_TIERS; tier++) {
         for (i = 0; i < TOWER_PER_TIER; i++) {

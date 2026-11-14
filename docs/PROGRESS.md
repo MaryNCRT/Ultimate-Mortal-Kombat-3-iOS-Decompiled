@@ -91,6 +91,8 @@ added to her Steam library beside her other non-Steam game.
 | Slight slide in a kombo (issue #114) | **the original's rule**, checked instruction by instruction (`t_cc_*_punch` → `t_ccp3` → `t_separate_us`); nothing to fix |
 | Dynamic stage music, Genesis style (Soul Chamber first) | **research only**, nothing built: [research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md); waits for Mary's Genesis recording (WAV + GYM) |
 | Ambient occlusion and screen-space contact shadows (ENHANCED LIGHTING) | ambient occlusion **built** (0.3.0; the fighters are their own layer since after 0.3.1b); contact shadows research only: [research/CONTACT-SHADOWS.md](research/CONTACT-SHADOWS.md) |
+| MOD HUB empty or an error on other players' PCs (Mary, 2026-11-14) | **open**: the index, its pictures and the zips answer from here and the hub code lists all 4 mods against the test folder; the error text the HUB shows on an affected PC is needed |
+| Online: softlock on MERCY after round 2 with 2 rounds; player two cannot pick a fighter in the lobby after about 2 fights | **in progress** in its own session (2026-11-14) |
 | After CANCEL in STAGE SELECT the select screen came back silent once | fixed by never stopping the tune on the way; the log says `stage select: the tune ...` if it happens again |
 
 ### Where to look next
@@ -102,6 +104,48 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+### 2026-11-14 -- 0.5.2 beta: black after VS, loading, Jade's tower, glyphs, ENHANCED preset
+
+Checked first on a clean copy of the 0.5.1 release (`v0.5.1-beta` zip
+unpacked into a new folder, compiled with its own launcher from the .ipa):
+it compiles, and `aditional textures/` (glyphs included) and `lighting/`
+arrive beside the game, so ENHANCED LIGHTING's files reach a new install.
+
+- **The black after the VS screen** (`runtime/game_main.c`): the host's
+  catch-up loop ran up to 15 ticks a frame; the fight's init steps
+  (TASK_GAME_INIT 1-10, each a tick) ran back to back, one frame of
+  1.6-2.1 s with nothing presented. A tick longer than 150 ms now ends the
+  frame; LOADING and its percentage show (captured: 0%, 44%, 80%, 100%).
+- **The tune** (`platform/win32_audio.c`): the ACM decode of a stage's MP3
+  (1.1-1.4 s, measured as "sounds" in the slow-frame line) runs on a thread;
+  `music_update` starts it when ready; a request replaced by a later play or
+  a stop is dropped (state 0/1/2 by InterlockedCompareExchange).
+  `plat_music_playing` counts a tune being decoded as playing (PortKD waits
+  for the end of Shao Kahn's music). Linux's `sdl_audio.c` still decodes on
+  the game's thread.
+- **Loading** (`draw_gl.c`, `render/rgl_ff.c`): the boot's read-ahead list
+  was capped at 160 and was full with the HD mods; now 1024, with at most
+  128 pictures / 768 MB read and not taken (a 4096x4096 sheet is 64 MB), and
+  the game's thread may take a held-back picture to read itself. Even-sized
+  textures' mip levels by a loop without edge clamps (the same bytes).
+  Measured: a fight's load 2.9 s -> 1.08 s on the clean install; the boot in
+  the test folder with the HD mods ~3.9 s, most of it now the uploads of
+  4096x4096 sheets (levels ~1.1 s, the Direct3D 12 upload ~1.6 s in all).
+- **Jade over and over in the tower** (`gamecode/GameCode.c` Load_Tower):
+  `_OpponentTowerList`'s image default is character 16 on every rung of the
+  first ladder; with no `towerdata` saved the tower showed it until an
+  Arcade game ran PopulateTower. Port: Load_Tower with no file calls
+  PopulateTower (which saves it).
+- **Glyphs** (`platform/ui_alert.c`): `g_glyphs[128]` held misses too and
+  filled after the CONTROLS page showed several pads' sets; every later
+  glyph (the select screen's OUTFIT / COLOR keys) came back as none, so
+  nothing was drawn. 1024 slots, more than the folder's pictures.
+- **ENHANCED preset** (`launcher/app/lib/ini.js`): widescreen=1, aspect 16:9
+  (21:9 kept on a 21:9 monitor), pad_icons / p2pad_icons auto.
+- `UMK3_LOG_LOADS=<ms>`: every texture or file load slower than that, and
+  each texture upload's split.
+
 
 ### 2026-11-14 -- Release 0.5.1 beta
 

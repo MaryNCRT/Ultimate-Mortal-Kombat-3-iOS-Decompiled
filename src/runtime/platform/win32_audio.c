@@ -533,10 +533,69 @@ static void music_fill(short *out)
     g_mpos = at / g_mch;
 }
 
+/* 0.5.2 (Mary: a second of black, the game held, at a fight's start): the
+ * tune is decoded on a thread of its own -- a stage's MP3 took 1.1-1.4 s
+ * through the ACM codec, all of it on the game's thread in the fight's
+ * first frame. plat_music_play hands the file to the thread and returns;
+ * music_update starts the tune once it is ready. A request a later play or
+ * a stop has replaced is dropped: its state goes 0 (decoding) -> 1 (done,
+ * the game's thread frees it) or 2 (dropped, the thread frees it). */
+struct music_req {
+    unsigned char *mp3;
+    long           n;
+    int            loop;
+    short         *pcm;
+    int            rate, ch;
+    long           frames;
+    volatile LONG  state;
+};
+static struct music_req *g_mreq;
+
+static void music_start(short *pcm, int rate, int ch, long frames, int loop);
+
+static DWORD WINAPI music_decode_thread(LPVOID arg)
+{
+    struct music_req *r = (struct music_req *)arg;
+
+    r->pcm = mp3_decode(r->mp3, r->n, &r->rate, &r->ch, &r->frames);
+    free(r->mp3);
+    r->mp3 = NULL;
+    if (InterlockedCompareExchange(&r->state, 1, 0) != 0) {
+        free(r->pcm);                   /* dropped while it was decoded */
+        free(r);
+    }
+    return 0;
+}
+
+/* a request still decoding is left to its thread to free; a finished one
+ * is freed here */
+static void music_drop_request(void)
+{
+    struct music_req *r = g_mreq;
+
+    if (!r)
+        return;
+    g_mreq = NULL;
+    if (InterlockedCompareExchange(&r->state, 2, 0) == 1) {
+        free(r->pcm);
+        free(r);
+    }
+}
+
 static void music_update(void)
 {
     int spun = 0;
 
+    if (g_mreq && g_mreq->state == 1) {
+        struct music_req *r = g_mreq;
+
+        g_mreq = NULL;
+        if (r->pcm)
+            music_start(r->pcm, r->rate, r->ch, r->frames, r->loop);
+        else
+            fprintf(stderr, "music: cannot decode the tune\n");
+        free(r);
+    }
     if (!g_music)
         return;
     while (spun < MBUFFERS) {
@@ -555,13 +614,47 @@ static void music_update(void)
     }
 }
 
+static void music_start(short *pcm, int rate, int ch, long frames, int loop)
+{
+    WAVEFORMATEX wf;
+    int i;
+
+    memset(&wf, 0, sizeof wf);
+    wf.wFormatTag      = WAVE_FORMAT_PCM;
+    wf.nChannels       = (WORD)ch;
+    wf.nSamplesPerSec  = (DWORD)rate;
+    wf.wBitsPerSample  = 16;
+    wf.nBlockAlign     = (WORD)(ch * 2);
+    wf.nAvgBytesPerSec = (DWORD)rate * wf.nBlockAlign;
+    if (waveOutOpen(&g_mdev, audio_id(), &wf, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
+        free(pcm);
+        return;                         /* silent, as with no sound device */
+    }
+    g_mpcm    = pcm;
+    g_mframes = frames;
+
+    memset(g_mhdr, 0, sizeof g_mhdr);
+    for (i = 0; i < MBUFFERS; i++) {
+        g_mhdr[i].lpData         = (LPSTR)g_mbuf[i];
+        g_mhdr[i].dwBufferLength = (DWORD)(MBUF_FRAMES * ch * sizeof(short));
+        waveOutPrepareHeader(g_mdev, &g_mhdr[i], sizeof g_mhdr[i]);
+        g_mhdr[i].dwFlags |= WHDR_DONE;
+    }
+    g_mch   = ch;
+    g_mpos  = 0;
+    g_mloop = loop;
+    g_mnext = 0;
+    g_music = 1;
+    music_update();                     /* start now, not a frame later */
+}
+
 void plat_music_play(const char *path, int loop)
 {
     FILE *f;
     long n;
     unsigned char *mp3;
-    int rate, ch, i;
-    WAVEFORMATEX wf;
+    struct music_req *r;
+    HANDLE t;
 
     plat_music_stop();
 
@@ -581,39 +674,29 @@ void plat_music_play(const char *path, int loop)
     }
     fclose(f);
 
-    g_mpcm = mp3_decode(mp3, n, &rate, &ch, &g_mframes);
-    free(mp3);
-    if (!g_mpcm) {
-        fprintf(stderr, "music: cannot decode %s\n", path);
+    r = (struct music_req *)calloc(1, sizeof *r);
+    if (!r) {
+        free(mp3);
         return;
     }
-
-    memset(&wf, 0, sizeof wf);
-    wf.wFormatTag      = WAVE_FORMAT_PCM;
-    wf.nChannels       = (WORD)ch;
-    wf.nSamplesPerSec  = (DWORD)rate;
-    wf.wBitsPerSample  = 16;
-    wf.nBlockAlign     = (WORD)(ch * 2);
-    wf.nAvgBytesPerSec = (DWORD)rate * wf.nBlockAlign;
-    if (waveOutOpen(&g_mdev, audio_id(), &wf, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
-        free(g_mpcm);
-        g_mpcm = NULL;
-        return;                         /* silent, as with no sound device */
+    r->mp3  = mp3;
+    r->n    = n;
+    r->loop = loop;
+    g_mreq  = r;
+    t = CreateThread(NULL, 0, music_decode_thread, r, 0, NULL);
+    if (t) {
+        CloseHandle(t);
+        return;
     }
-
-    memset(g_mhdr, 0, sizeof g_mhdr);
-    for (i = 0; i < MBUFFERS; i++) {
-        g_mhdr[i].lpData         = (LPSTR)g_mbuf[i];
-        g_mhdr[i].dwBufferLength = (DWORD)(MBUF_FRAMES * ch * sizeof(short));
-        waveOutPrepareHeader(g_mdev, &g_mhdr[i], sizeof g_mhdr[i]);
-        g_mhdr[i].dwFlags |= WHDR_DONE;
-    }
-    g_mch   = ch;
-    g_mpos  = 0;
-    g_mloop = loop;
-    g_mnext = 0;
-    g_music = 1;
-    music_update();                     /* start now, not a frame later */
+    /* no thread: decoded here, as before */
+    g_mreq = NULL;
+    r->pcm = mp3_decode(mp3, n, &r->rate, &r->ch, &r->frames);
+    free(mp3);
+    if (r->pcm)
+        music_start(r->pcm, r->rate, r->ch, r->frames, loop);
+    else
+        fprintf(stderr, "music: cannot decode %s\n", path);
+    free(r);
 }
 
 /* Kept across tracks, as GBMusicTrack's gain is set once by limePlayTune and
@@ -628,12 +711,17 @@ void plat_music_volume(float gain)
 /* port: a tune that does not repeat counts as over once it has played out
  * (it was "playing" forever, filling silence; PortKD waits for the end of
  * Shao Kahn's music, GameCode.c) */
-int plat_music_playing(void) { return g_music && (g_mloop || g_mpos < g_mframes); }
+int plat_music_playing(void)
+{
+    return (g_mreq != NULL)             /* still being decoded: as playing */
+        || (g_music && (g_mloop || g_mpos < g_mframes));
+}
 
 void plat_music_stop(void)
 {
     int i;
 
+    music_drop_request();
     if (!g_music)
         return;
     waveOutReset(g_mdev);

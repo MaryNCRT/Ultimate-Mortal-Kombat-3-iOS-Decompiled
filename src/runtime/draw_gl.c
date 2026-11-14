@@ -694,7 +694,14 @@ static void tex_upload(GLuint name, LimeImage *img)
 #include <unistd.h>
 #endif
 
-#define PF_MAX 160
+/* 0.5.2: 160 filled with the HD mods' sheets (a boot asks for over a
+ * thousand), and the rest were read on the game's thread again. The
+ * threads keep at most PF_AHEAD pictures ahead of the last one taken and
+ * at most PF_BYTES of pixels read and not taken (a 4096x4096 HD sheet is
+ * 64 MB), so a long list does not hold gigabytes at once. */
+#define PF_MAX 1024
+#define PF_AHEAD 128
+#define PF_BYTES ((long long)768 << 20)
 static struct pf {
     char      path[96];
     LimeImage img;
@@ -703,6 +710,9 @@ static struct pf {
 } g_pf[PF_MAX];
 static int g_pf_n, g_pf_on;
 static volatile int g_pf_next;
+static volatile int g_pf_taken = -1;   /* the furthest one taken */
+static volatile int g_pf_stop;
+static volatile long long g_pf_bytes;  /* read ahead, not taken yet */
 static char g_pf_file[1200];
 static char g_pf_seen[PF_MAX][96];      /* this boot's slow ones, to write */
 static int g_pf_seen_n, g_pf_recording;
@@ -718,11 +728,32 @@ static void pf_work(void)
 
         if (i >= g_pf_n)
             return;
+        while ((i > __atomic_load_n(&g_pf_taken, __ATOMIC_ACQUIRE) + PF_AHEAD
+                || (__atomic_load_n(&g_pf_bytes, __ATOMIC_ACQUIRE) > PF_BYTES
+                    && i > __atomic_load_n(&g_pf_taken, __ATOMIC_ACQUIRE) + 1))
+               && !__atomic_load_n(&g_pf_stop, __ATOMIC_ACQUIRE)) {
+#ifdef _WIN32
+            Sleep(2);
+#else
+            usleep(2000);
+#endif
+        }
+        if (__atomic_load_n(&g_pf_stop, __ATOMIC_ACQUIRE))
+            return;
         p = &g_pf[i];
+        {   /* the game's thread may have taken it to read itself */
+            int want = 0;
+            if (!__atomic_compare_exchange_n(&p->state, &want, 1, 0,
+                                             __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+                continue;
+        }
         memset(&p->img, 0, sizeof p->img);
         p->ok = load_rgba(p->path, &p->img);
         if (p->ok && PortTextureQuality >= 2)
             upscale_small(&p->img);
+        if (p->ok)
+            __atomic_fetch_add(&g_pf_bytes, (long long)p->img.width * p->img.height * 4,
+                               __ATOMIC_SEQ_CST);
         __atomic_store_n(&p->state, 2, __ATOMIC_RELEASE);
     }
 }
@@ -791,12 +822,16 @@ static int pf_take(const char *path, LimeImage *img, int *ok)
     if (i == g_pf_n)
         return 0;
     while (__atomic_load_n(&g_pf[i].state, __ATOMIC_ACQUIRE) != 2) {
-        if (__atomic_load_n(&g_pf_next, __ATOMIC_SEQ_CST) <= i) {
-            /* not started: this thread reads it, and the threads skip it */
+        {
+            /* not started (or a thread holds it back, PF_AHEAD): this
+             * thread reads it, and the threads skip it */
             int want = 0;
             if (__atomic_compare_exchange_n(&g_pf[i].state, &want, 1, 0,
-                                            __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+                                            __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+                if (i > g_pf_taken)     /* the threads may go on past it */
+                    __atomic_store_n(&g_pf_taken, i, __ATOMIC_RELEASE);
                 return 0;
+            }
         }
 #ifdef _WIN32
         Sleep(0);
@@ -806,7 +841,12 @@ static int pf_take(const char *path, LimeImage *img, int *ok)
     }
     *img = g_pf[i].img;
     *ok = g_pf[i].ok;
+    if (*ok)
+        __atomic_fetch_sub(&g_pf_bytes, (long long)img->width * img->height * 4,
+                           __ATOMIC_SEQ_CST);
     g_pf[i].state = 3;
+    if (i > g_pf_taken)
+        __atomic_store_n(&g_pf_taken, i, __ATOMIC_RELEASE);
     return 1;
 }
 
@@ -835,6 +875,7 @@ void lime_tex_prefetch_end(void)
     if (!g_pf_recording)
         return;
     g_pf_recording = 0;
+    __atomic_store_n(&g_pf_stop, 1, __ATOMIC_RELEASE);
     for (i = 0; same && i < g_pf_n; i++)
         same = strcmp(g_pf_seen[i], g_pf[i].path) == 0;
     if (!same && g_pf_seen_n && (f = fopen(g_pf_file, "w")) != NULL) {
@@ -1764,7 +1805,7 @@ TEXTURE *limeLoadTexture(const char *path, int a, int b)
     double plat_time(void);
     double t0 = plat_time();
     TEXTURE *r = load_texture(path, a, b);
-    if (plat_time() - t0 > 0.1)         /* the slow ones, for the load times */
+    if (plat_time() - t0 > (getenv("UMK3_LOG_LOADS") ? atof(getenv("UMK3_LOG_LOADS")) / 1000.0 : 0.1))  /* the slow ones (UMK3_LOG_LOADS=<ms>: every one slower) */
         printf("load: texture %s %.0f ms\n", path ? path : "", (plat_time() - t0) * 1000.0);
     port_prof_ms[2] += (plat_time() - t0) * 1000.0;
     return r;
