@@ -925,17 +925,18 @@ typedef struct {
     volatile LONG xi;                   /* the XInput slot last read, or -1 */
     LONG          capid;                /* the WinMM pad `rng` is for, or -1 */
     UINT          rng[6][2];            /* X Y Z R U V: each axis' min, max */
+    unsigned char live[6];              /* axis seen at its middle since opened */
+    unsigned char pov_live;             /* the hat seen centred since opened */
+    DWORD         last_raw[7];          /* UMK3_LOG_PAD: X Y Z R U V POV */
 } PAD_SLOT;
 
 static PAD_SLOT g_slot[2] = {
-    { "auto", -1, 0, "", -1, -1, { { 0 } } },
-    { "auto", -1, 0, "", -1, -1, { { 0 } } },
+    { "auto", -1, 0, "", -1, -1, { { 0 } }, { 0 }, 0, { 0 } },
+    { "auto", -1, 0, "", -1, -1, { { 0 } }, { 0 }, 0, { 0 } },
 };
 
 /* An axis to 0..65535 by the range the pad gives for it (JOYCAPS): WinMM
- * returns each pad's own numbers, and 0..255 read as 0..65535 is a stick
- * held up and left -- an 8BitDo Ultimate 2 walked back and jumped by itself
- * (issue #222). An axis with no range is the middle. */
+ * returns each pad's own numbers. An axis with no range is the middle. */
 static DWORD axis_norm(const PAD_SLOT *ps, int a, DWORD v)
 {
     UINT lo = ps->rng[a][0], hi = ps->rng[a][1];
@@ -957,7 +958,21 @@ static void pad_ranges(PAD_SLOT *ps, LONG id)
     if (ps->capid == id)
         return;
     memset(ps->rng, 0, sizeof ps->rng);
+    memset(ps->live, 0, sizeof ps->live);
+    ps->pov_live = 0;
+    memset(ps->last_raw, 0xff, sizeof ps->last_raw);
     if (joyGetDevCapsA((UINT)id, &c, sizeof c) == JOYERR_NOERROR) {
+        /* issue #222: what the pad says it is, in the log, once -- with
+         * its resting values (pad_winmm), the layout a report needs */
+        printf("pad: WinMM %u \"%s\" %04x:%04x, %u axes, %u buttons, pov %s; "
+               "X %u..%u Y %u..%u Z %u..%u R %u..%u U %u..%u V %u..%u\n",
+               (unsigned)id, ps->name, (unsigned)c.wMid, (unsigned)c.wPid,
+               (unsigned)c.wNumAxes, (unsigned)c.wNumButtons,
+               (c.wCaps & JOYCAPS_HASPOV) ? "yes" : "no",
+               (unsigned)c.wXmin, (unsigned)c.wXmax, (unsigned)c.wYmin,
+               (unsigned)c.wYmax, (unsigned)c.wZmin, (unsigned)c.wZmax,
+               (unsigned)c.wRmin, (unsigned)c.wRmax, (unsigned)c.wUmin,
+               (unsigned)c.wUmax, (unsigned)c.wVmin, (unsigned)c.wVmax);
         ps->rng[0][0] = c.wXmin; ps->rng[0][1] = c.wXmax;
         ps->rng[1][0] = c.wYmin; ps->rng[1][1] = c.wYmax;
         if (c.wCaps & JOYCAPS_HASZ) { ps->rng[2][0] = c.wZmin; ps->rng[2][1] = c.wZmax; }
@@ -1131,11 +1146,55 @@ static int pad_winmm(PAD_SLOT *ps, PLAT_PAD *out)
     default:     map = g_map_generic; break;
     }
     pad_ranges(ps, id);
+    {
+        /* Issue #222 (8BitDo Ultimate 2: walking back and jumping by
+         * itself, in the menus too, untouched): an axis or the hat that
+         * rests away from its middle -- a trigger, an axis the driver
+         * maps differently, one that never centres -- read as a
+         * direction held for good. An axis counts only once it has been
+         * seen near its middle since the pad was opened, the hat once it
+         * has been seen centred: a real stick or cross starts there, so
+         * nothing changes for a pad that works; one resting at an end is
+         * left out instead of walking the fighter. */
+        DWORD raw[7];
+        int a;
+
+        raw[0] = j.dwXpos; raw[1] = j.dwYpos; raw[2] = j.dwZpos;
+        raw[3] = j.dwRpos; raw[4] = j.dwUpos; raw[5] = j.dwVpos;
+        raw[6] = j.dwPOV;
+        for (a = 0; a < 6; a++) {
+            DWORD n = axis_norm(ps, a, raw[a]);
+            if (!ps->live[a] && n > 22767 && n < 42767) {
+                ps->live[a] = 1;
+                printf("pad: axis %c centred (%lu), counted\n", "XYZRUV"[a],
+                       (unsigned long)raw[a]);
+            }
+        }
+        if (!ps->pov_live && raw[6] > 35900) {
+            ps->pov_live = 1;
+            printf("pad: hat centred, counted\n");
+        }
+        if (ps->last_raw[0] == 0xffffffffu)     /* the first read: at rest */
+            printf("pad: at rest X %lu Y %lu Z %lu R %lu U %lu V %lu "
+                   "pov %lu buttons %08lx\n",
+                   (unsigned long)raw[0], (unsigned long)raw[1],
+                   (unsigned long)raw[2], (unsigned long)raw[3],
+                   (unsigned long)raw[4], (unsigned long)raw[5],
+                   (unsigned long)raw[6], (unsigned long)j.dwButtons);
+        if (getenv("UMK3_LOG_PAD") && memcmp(raw, ps->last_raw, sizeof raw))
+            printf("pad raw: X %lu Y %lu Z %lu R %lu U %lu V %lu pov %lu "
+                   "buttons %08lx\n", (unsigned long)raw[0],
+                   (unsigned long)raw[1], (unsigned long)raw[2],
+                   (unsigned long)raw[3], (unsigned long)raw[4],
+                   (unsigned long)raw[5], (unsigned long)raw[6],
+                   (unsigned long)j.dwButtons);
+        memcpy(ps->last_raw, raw, sizeof raw);
+    }
     for (i = 0; i < PB_COUNT; i++)
         if (map[i] >= 0 && (j.dwButtons & (1u << map[i])))
             out->buttons |= 1u << i;
     pov = j.dwPOV;                              /* hundredths of a degree */
-    if (pov <= 35900) {
+    if (pov <= 35900 && ps->pov_live) {
         if (pov >= 31500 || pov <= 4500)  out->up = 1;
         if (pov >= 4500 && pov <= 13500)  out->right = 1;
         if (pov >= 13500 && pov <= 22500) out->down = 1;
@@ -1146,15 +1205,15 @@ static int pad_winmm(PAD_SLOT *ps, PLAT_PAD *out)
     {
         DWORD x = axis_norm(ps, 0, j.dwXpos), y = axis_norm(ps, 1, j.dwYpos);
 
-        if (y < 20000) out->up = 1;
-        if (y > 45535) out->down = 1;
-        if (x < 20000) out->left = 1;
-        if (x > 45535) out->right = 1;
+        if (ps->live[1] && y < 20000) out->up = 1;
+        if (ps->live[1] && y > 45535) out->down = 1;
+        if (ps->live[0] && x < 20000) out->left = 1;
+        if (ps->live[0] && x > 45535) out->right = 1;
     }
     {   /* the right stick across: Z on a Sony or 8BitDo pad, U elsewhere */
         int z = (ps->vidpid & 0xffff) == 0x054c || (ps->vidpid & 0xffff) == 0x2dc8;
         DWORD r = z ? axis_norm(ps, 2, j.dwZpos) : axis_norm(ps, 4, j.dwUpos);
-        out->rx = r < 12000 ? -1 : r > 53535 ? 1 : 0;
+        out->rx = !ps->live[z ? 2 : 4] ? 0 : r < 12000 ? -1 : r > 53535 ? 1 : 0;
     }
     snprintf(out->name, sizeof out->name, "%s", ps->name);
     out->kind = (ps->vidpid & 0xffff) == 0x054c                 /* Sony */
