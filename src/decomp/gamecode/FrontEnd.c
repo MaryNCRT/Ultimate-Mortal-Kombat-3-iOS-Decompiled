@@ -11386,22 +11386,16 @@ int PortVsGate(void)
         said = 0;
     }
 
-    /* the screen's effect as it comes up (res/audio/Vsfx.wav), player
-     * one's name as the two slide in, "versus" (res/audio/Skversus.wav),
-     * player two's. The game has neither Vsfx nor Skversus: a mod's, or a
-     * player's own files; silent without them */
+    /* the screen's effect as it comes up (res/audio/Vsfx.wav), then
+     * "versus" (res/audio/Skversus.wav) as the two slide in. The game has
+     * neither: a mod's, or a player's own files; silent without them. The
+     * fighters' names are no longer said (Mary) */
     if (said == 0 && VSWait > 20.0f) {
         vs_announce(-3);
         said = 1;
     } else if (said == 1 && VSWait > VS_HOLD_FRAMES + 15.0f) {
-        vs_announce(Character1);
-        said = 2;
-    } else if (said == 2 && VSWait > VS_HOLD_FRAMES + 55.0f) {
         vs_announce(-2);
-        said = 3;
-    } else if (said == 3 && VSWait > VS_HOLD_FRAMES + 95.0f) {
-        vs_announce(Character2);
-        said = 4;
+        said = 2;
     }
 
     limeEnableAlphaBlending_Basic();
