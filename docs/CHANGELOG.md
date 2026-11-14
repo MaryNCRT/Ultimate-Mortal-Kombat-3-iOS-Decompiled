@@ -8,6 +8,16 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased
+
+- **Pads that walk or jump by themselves (issue #222, 8BitDo Ultimate 2)**:
+  on Windows a pad read through WinMM (not XInput) has an axis or its hat
+  counted only once it has been seen at its middle since the pad was
+  opened; one resting at an end (a trigger read as a stick, an axis its
+  driver maps elsewhere) is left out instead of holding a direction. The
+  log names each pad, its axes' ranges and its values at rest. Not yet
+  confirmed on an 8BitDo.
+
 ## 0.5.0 beta (2026-11-14)
 
 Not yet played by Mary as a package (she played each build in the test folder).

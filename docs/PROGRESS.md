@@ -103,12 +103,37 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+### 2026-11-14 -- Issue #222 again: pads walking and jumping by themselves
+
+Reports after 0.4.10: the 8BitDo Ultimate 2 still walks the fighter back
+and jumps, in the menus too, untouched (Windows 11). The Windows build reads
+pads through XInput, else WinMM (`joyGetPosEx`) -- not SDL (SDL is the
+Linux build's, which already uses the GameController API with a dead
+zone). 0.4.10's fix took the axes' ranges from JOYCAPS on the guess that
+the pad reports 0..255; that was never seen on the device, and the
+reports say nothing changed.
+
+The symptom (up + back, held) is what any axis or hat resting at an end
+gives on the WinMM path. Fix (`win32_gl.c` pad_winmm): an axis counts only
+once it has been seen within 10,000 of its middle since the pad was opened,
+the hat once it has read centred; a working stick and cross start there,
+so nothing changes for them, and an axis resting at an end is left out.
+Seen here on a DualSense (054c:0ce6, WinMM): X Y Z R and the hat counted,
+U and V (its triggers) rest at 0 and are now ignored -- U was the right
+stick for pads of unknown make. The log now has, once per pad, its WinMM
+name, VID:PID, axes, buttons, hat, each axis' range and its resting values
+(and with UMK3_LOG_PAD=1 every raw change). Not tested on an 8BitDo, an
+Xbox pad, the 2.4 GHz receiver or a hot plug here: a reporter's log will
+tell the device's layout. No SDL change (the upstream SDL 8BitDo HIDAPI
+work does not reach this path).
+
 ### 2026-11-14 -- Release 0.5.0 beta and ESSENTIALS 1.0
 
 `v0.5.0-beta` (pre-release): Shao Kahn's death (entry below), the select
 screen's tune now stopped as the stage is picked (`debug_menu.c` st_close,
 `FrontEnd.c` PortVsGate; it used to play on under the VS screen and fade,
-Mary), the ESSENTIAL MODS box. Packages in `WORKelease-0.5.0`; built
+Mary), the ESSENTIAL MODS box. Packages in `WORK
+elease-0.5.0`; built
 without a steamgriddb key (as before).
 
 MOD HUB: `essentials` 1.0, `"essential": true` -- `Nomore.wav` (Mary's "No
