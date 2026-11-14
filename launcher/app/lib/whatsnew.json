@@ -2,6 +2,22 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.5.0",
+      "date": "2026-11-14",
+      "ES": [
+        "La muerte de Shao Kahn como en el arcade: el parpadeo en blanco y negro con siluetas, su muerte al instante, sus gritos, el temblor, los escenarios que pasan detrás de él, los destellos con explosiones y el escenario de lava, y los textos uno por uno.",
+        "MODS ESENCIALES: la casilla de COMPILAR (marcada por defecto) instala con el juego el mod ESENCIALES, con la canción del final de Shao Kahn y el \"versus\" de la pantalla VS.",
+        "Pantalla VS: la música de la selección se detiene al elegir escenario; el locutor ya no dice los nombres.",
+        "Los mods pueden traer sonidos .mp3 y canciones .wav."
+      ],
+      "EN": [
+        "Shao Kahn's death as in the arcade: the black and white strobe with silhouettes, his death at once, his screams, the shaking, the stages passing behind him, the flashes with blasts and the lava stage, and the lines one by one.",
+        "ESSENTIAL MODS: COMPILE's box (ticked by default) installs the ESSENTIALS mod with the game, with the music of Shao Kahn's end and the VS screen's \"versus\".",
+        "VS screen: the select screen's music stops when the stage is picked; the announcer no longer says the names.",
+        "Mods can bring .mp3 sounds and .wav tunes."
+      ]
+    },
+    {
       "version": "0.4.10",
       "date": "2026-11-13",
       "ES": [
