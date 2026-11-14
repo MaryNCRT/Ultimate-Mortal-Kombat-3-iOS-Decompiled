@@ -105,6 +105,30 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+### 2026-11-14 -- One voice a sound (Reptile's orb)
+
+Mary: Reptile's force ball "does not play the right sound" (a forum line:
+it is the spit's). Checked one by one in TRAINING (`UMK3_PRACTICE=1`,
+`UMK3_DBG_SPECIAL`, Reptile = character 0x13: special 0 t_do_spit, 1
+t_do_reptile_orb, 2 t_do_reptile_orb_fast) and in the binary:
+
+- `t_orb_calla` (0x76534): `a10` down by one each frame; at 0, `a10 = 3`
+  and `field1c = 3 + 0xf = 0x12`, `bl 0x57be4` (ochar_sound:
+  `MKEvent_Add(2, 3, (char << 8) + 0x12)`). The landing (t_orb_proc
+  0x7ba10, token 0x4df) asks for 5. For Reptile, `st_nj[0x12]` is
+  `Reptproj` (st_nj[5] empty); the spit asks for 8 (`Repthock`) and its
+  projectile `Reptspit`. The port plays the same names: the orb is
+  `Reptproj` in the binary as here, a different file from `Reptspit.wav`.
+- The difference was the playing: `limePlaySound` (0x65344) sends `play`
+  then `setGain:` to the sound's `Sound` object (limeLoadSound 0x65ad0:
+  `[[Sound alloc] initWithFile:]`), and `-[Sound play]` (0xada08) sends
+  `playing` and, when it is, `stop` before the source plays again: one
+  voice a sound, restarted. The port's `play_sound` (lime_menu.c) mixed a
+  new voice each time, so the orb's sound, asked for every 3 frames, piled
+  up six copies. Now `plat_audio_stop_pcm` first. Every sound asked for
+  again while playing is affected (as on the device).
+
+
 ### 2026-11-14 -- 0.5.2 beta: black after VS, loading, Jade's tower, glyphs, ENHANCED preset
 
 Checked first on a clean copy of the 0.5.1 release (`v0.5.1-beta` zip
