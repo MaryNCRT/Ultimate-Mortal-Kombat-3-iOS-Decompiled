@@ -10,6 +10,9 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
+- **A mod's sound may be .mp3**: with no `.wav` of a sound's name the game
+  reads the `.mp3` (Windows' ACM codec; Linux's libmpg123 build), as 8-bit
+  mono. Mary's own `Skversus.mp3` in a local mod plays on the VS screen.
 - **VS screen**: the announcer no longer says the fighters' names (Mary); only
   a mod's `Vsfx.wav` and `Skversus.wav` play there.
 - **VS screen sounds a mod can add**: `res/audio/Vsfx.wav`, the effect as

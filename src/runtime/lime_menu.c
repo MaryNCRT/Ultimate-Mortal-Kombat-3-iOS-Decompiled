@@ -531,6 +531,17 @@ static long load_sound(const char *name)
     snprintf(g_sound[i].name, sizeof g_sound[i].name, "%s", name);
     if (!wav_load_u8(full, &g_sound[i].pcm, &g_sound[i].frames, &g_sound[i].rate)) {
         g_sound[i].pcm = NULL;          /* as on device: the index, an empty slot */
+        /* port: a mod's sound may be an .mp3 of the same name (Mary: the
+         * VS screen's Skversus) */
+        snprintf(rel, sizeof rel, "res/audio/%s.mp3", name);
+        lime_platform_resolve(rel, full, sizeof full);
+        if (plat_mp3_load_u8(full, &g_sound[i].pcm, &g_sound[i].frames, &g_sound[i].rate)) {
+            if (getenv("UMK3_LOG_SOUND"))
+                printf("limeLoadSound: %s from its .mp3\n", name);
+        } else
+            g_sound[i].pcm = NULL;
+    }
+    if (!g_sound[i].pcm) {
         if (getenv("UMK3_LOG_SOUND"))
             printf("limeLoadSound: %s did not load (slot %ld)\n", name, i);
     }

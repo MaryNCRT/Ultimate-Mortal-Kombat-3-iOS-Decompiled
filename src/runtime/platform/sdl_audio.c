@@ -323,6 +323,13 @@ void plat_music_volume(float gain)
         Mix_VolumeMusic((int)(gain * MIX_MAX_VOLUME + 0.5f));
 }
 
+/* an .mp3 sound: not with SDL_mixer's build (the other has libmpg123) */
+int plat_mp3_load_u8(const char *path, unsigned char **pcm, int *frames, int *rate)
+{
+    (void)path; (void)pcm; (void)frames; (void)rate;
+    return 0;
+}
+
 #else /* UMK3_NO_SDL_MIXER */
 
 /* Without SDL2_mixer -- the Linux package, which needs no -dev packages and
@@ -679,6 +686,41 @@ void plat_music_volume(float gain)
     if (gain < 0.0f) gain = 0.0f;
     if (gain > 1.0f) gain = 1.0f;
     g_mus_gain = gain;
+}
+
+/* An .mp3 sound (a mod's: lime_menu.c load_sound) as the game's sounds
+ * are, 8-bit mono, through libmpg123 as the music. 0 if it cannot. */
+int plat_mp3_load_u8(const char *path, unsigned char **pcm, int *frames, int *rate)
+{
+    long r = 0;
+    int ch = 0, bytes = 0, n, i, k;
+    Sint16 *s;
+    unsigned char *o;
+
+    if (!path || !mpg_load())
+        return 0;
+    s = mpg_decode(path, &r, &ch, &bytes);
+    if (!s || ch < 1 || r <= 0 || bytes <= 0) {
+        free(s);
+        return 0;
+    }
+    n = bytes / (2 * ch);
+    o = (unsigned char *)malloc(n > 0 ? (size_t)n : 1);
+    if (!o) {
+        free(s);
+        return 0;
+    }
+    for (i = 0; i < n; i++) {
+        long acc = 0;
+        for (k = 0; k < ch; k++)
+            acc += s[i * ch + k];
+        o[i] = (unsigned char)((acc / ch >> 8) + 128);
+    }
+    free(s);
+    *pcm = o;
+    *frames = n;
+    *rate = (int)r;
+    return 1;
 }
 
 #endif /* UMK3_NO_SDL_MIXER */

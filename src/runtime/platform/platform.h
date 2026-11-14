@@ -367,6 +367,9 @@ int  plat_audio_play_at(const unsigned char *pcm, int frames, int rate,
 void plat_audio_stop_pcm(const unsigned char *pcm);
 /* Every voice off (a save state was loaded). */
 void plat_audio_stop_all(void);
+/* An .mp3 file as a sound: 8-bit mono, its rate. 0 if it cannot be read
+ * (a mod's sound may be .mp3: lime_menu.c load_sound). */
+int  plat_mp3_load_u8(const char *path, unsigned char **pcm, int *frames, int *rate);
 
 /* Reclaim finished one-shot sound buffers. Call once a frame. */
 void plat_audio_update(void);
