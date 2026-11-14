@@ -8,6 +8,48 @@ is git-ignored.
 Not used, and not to be used: any leaked source of the game (AGENTS.md §1).
 Links to such a repository were offered during this work and not opened.
 
+**Provenance boundary (2026-11-13).** Everything in this document -- the
+timeline, the sounds, the addresses -- was measured in MAME before the
+following happened: later in the same session, a summary of a leaked source
+file of the game's 3DO version describing this sequence was pasted into the
+conversation. That agent (Claude, session of 2026-11-13) therefore wrote **no
+code** for Kahn's death and handed the work back. Whoever implements it must
+work from this document, MAME and the iOS binary only, and must not have
+seen that summary or the leaked source.
+
+## Sounds identified (cross-correlation against the game's own .wav files)
+
+| t (s) | Sound (iOS `res/audio`) | Score | Note |
+|---|---|---|---|
+| 0 -- 0.55 | `Roldbig1.wav` | 0.53 -- 0.71 | every 0.146 s, five found, one per strobe cycle |
+| 1.14 | `Quake1.wav` | 0.75 | the rumble as the picture comes back |
+| 1.14, 6.69 | `Skdiemix.wav` | 0.61, 0.77 | his scream (the iOS plays it once, at event 3/65) |
+| 11.04, 11.30 | `Strtboom.wav` | 0.47, 0.57 | the final flashes' blasts |
+
+Scores are normalised cross-correlation of the iOS file against the MAME
+output over the same span (music under it lowers them); 0.25 -- 0.35 is the
+noise floor seen across the 525 files. The strobe's two picture kinds
+(Mary's screenshots from the arcade): black silhouettes on white, and white
+silhouettes on black.
+
+## How the port plays it today (captured 2026-11-13, F11 at the last rung)
+
+The final hit, two white flashes (~0.25 s apart), Kahn arms spread with the
+green beams from ~2.0 s to ~7.3 s (SK_ENDING), the stage back, the winner
+line sliding up at ~8.3 s and the three ending lines, then the treasure
+screen. Sound: `Skdiemix` once, then the winner's voice.
+
+## For the implementer (from the observations above only)
+
+- the strobe needs the fighters drawn flat in one colour: the shadow pass in
+  `Players.c RenderAnimatedCharacter` already draws the posed mesh with no
+  texture in a flat colour (`LIME_RenderMeshSingleIndexed(frame, 0, ...)`
+  after `glColor4f`), a path that works on every renderer;
+- `RenderGameView` (GameCode.c) is where the stage and the fighters are
+  drawn apart; `ShakeOffset` is the game's own (z-only) shake;
+- the final hit on Kahn: player two's health reaching 0 in the arcade's
+  last round with Character2 Shao Kahn (`0x19`).
+
 ## Reaching him, repeatably
 
 Scripts in `LABORATORIO MAME/` (kept there, with the ROM):
