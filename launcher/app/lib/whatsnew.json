@@ -2,6 +2,18 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.5.1",
+      "date": "2026-11-14",
+      "ES": [
+        "Mandos que caminaban o saltaban solos (8BitDo Ultimate 2 y otros, #222): un eje o la cruceta que en reposo queda en un extremo ya no mueve al luchador.",
+        "El log del juego anota cada mando, sus ejes y sus valores en reposo: si tu mando sigue fallando, comparte el log en el issue #222."
+      ],
+      "EN": [
+        "Pads that walked or jumped by themselves (8BitDo Ultimate 2 and others, #222): an axis or the cross resting at one end no longer moves the fighter.",
+        "The game's log names each pad, its axes and their resting values: if your pad still misbehaves, share the log on issue #222."
+      ]
+    },
+    {
       "version": "0.5.0",
       "date": "2026-11-14",
       "ES": [

@@ -8,7 +8,9 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased
+## 0.5.1 beta (2026-11-14)
+
+Not yet played by Mary as a package.
 
 - **Pads that walk or jump by themselves (issue #222, 8BitDo Ultimate 2)**:
   on Windows a pad read through WinMM (not XInput) has an axis or its hat
