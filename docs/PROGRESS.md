@@ -103,6 +103,23 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+### 2026-11-14 -- Release 0.5.0 beta and ESSENTIALS 1.0
+
+`v0.5.0-beta` (pre-release): Shao Kahn's death (entry below), the select
+screen's tune now stopped as the stage is picked (`debug_menu.c` st_close,
+`FrontEnd.c` PortVsGate; it used to play on under the VS screen and fade,
+Mary), the ESSENTIAL MODS box. Packages in `WORKelease-0.5.0`; built
+without a steamgriddb key (as before).
+
+MOD HUB: `essentials` 1.0, `"essential": true` -- `Nomore.wav` (Mary's "No
+More" track) and `Skversus.mp3` (her VS "versus"); published with
+`publish.js --essential` (release `essentials-v1.0`, index.json pushed).
+Mary chose to publish both tracks knowing they are arcade audio. Checked in
+the test folder installed as the launcher would (mods/Essentials, on in
+mods.ini, no Nomore.wav in res/audio): the fight held until the tune ended
+(tick 2026), so it plays from the mod. COMPILE's install of it from the hub
+was not run end to end.
+
 ### 2026-11-13 -- Shao Kahn's death as the arcade plays it (port addition)
 
 Worked from docs/research/ARCADE-KAHN-DEATH.md, two MAME runs (the second
