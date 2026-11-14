@@ -8,7 +8,9 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased
+## 0.5.0 beta (2026-11-14)
+
+Not yet played by Mary as a package (she played each build in the test folder).
 
 - **Shao Kahn's death as the arcade plays it** (Mary; measured in MAME,
   docs/research/ARCADE-KAHN-DEATH.md): the black and white strobe with the
@@ -30,16 +32,15 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
   the screen comes up, and `res/audio/Skversus.wav`, "versus" between the
   names. The game ships neither (and the arcade's VS screen has no voice);
   a mod's files play, silence without them.
-- **VS screen's music, as the arcade's** (Mary; seen in MAME, docs/research/
-  ARCADE-VS-SCREEN.md): the tune before it (STAGE SELECT's) plays on under
-  the VS screen and fades out with it; the announcer's names stay (Mary).
-  The arcade's short effect as its VS logo lights was not found among the
-  game's own sounds (cross-correlation, best 0.36), so none plays yet.
+- **VS screen without the select screen's music** (Mary): the tune stops
+  as the stage is picked; the VS screen comes up in silence but for its
+  own sounds. (The tune used to play on under it and fade.)
 - **ESSENTIAL MODS** (Mary): COMPILE has a box, ticked by default
   (`essentials=1` in umk3.ini), that installs the MOD HUB's essential mods
   with the game -- the modpack of the project's improvements. A hub entry is
   essential with `"essential": true` (`publish.js --essential`, or
-  `essential=1` in its mod.ini); none is published yet. A mod can add a
+  `essential=1` in its mod.ini). The first is ESSENTIALS: the music of Shao
+  Kahn's end ("No More") and the VS screen's "versus". A mod can add a
   sound the game does not have (`res/audio/Skversus.wav`, the VS screen's
   "versus") without replacing any.
 

@@ -2911,9 +2911,9 @@ static void st_close(int pick)
     g_st_back = pick < 0;
     g_st_open = 0;
     g_st_done = 1;
-    /* the local versus' VS screen next: its tune plays on under it and
-     * fades out there, as the arcade's does (FrontEnd.c PortVsGate) */
-    if (!g_st_back && !PortVsPending)
+    /* picked: the tune stops at once, the VS screen too comes up without
+     * it (Mary, 0.5.0) */
+    if (!g_st_back)
         st_music(0);
 }
 

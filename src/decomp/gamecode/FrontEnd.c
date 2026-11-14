@@ -11384,6 +11384,12 @@ int PortVsGate(void)
         fade = 0.0f;
         out = 0;
         said = 0;
+        /* the select screen's tune stops as the stage is picked and the
+         * VS screen comes up (Mary, 0.5.0); the fight's tune at full */
+        if (Settings[2] != 0) {
+            limeStopTune();
+            limeSetTuneVol((long)MusicVol[Settings[2]]);
+        }
     }
 
     /* the screen's effect as it comes up (res/audio/Vsfx.wav), then
@@ -11448,19 +11454,10 @@ int PortVsGate(void)
     fade += out ? -k : k;
     if (fade > 1.0f)
         fade = 1.0f;
-    /* the tune that played before (STAGE SELECT's, or the select screen's)
-     * goes on under the screen and fades out with it, as the arcade's VS
-     * screen does (docs/research/ARCADE-VS-SCREEN.md; Mary) */
-    if (out && Settings[2] != 0)
-        limeSetTuneVol((long)(MusicVol[Settings[2]] * (fade < 0.0f ? 0.0f : fade)));
     if (fade < 1.0f)
         limeFillRect(0.0f, 0.0f, (float)limeScreenWidth, (float)limeScreenHeight,
                      0.0f, 0.0f, 0.0f, fade < 0.0f ? 1.0f : 1.0f - fade);
     if (out && fade <= 0.0f) {
-        if (Settings[2] != 0) {
-            limeStopTune();
-            limeSetTuneVol((long)MusicVol[Settings[2]]);   /* the fight's tune at full */
-        }
         vs_quiet();
         PortVsOn = 0;
         VSWait = 0.0f;
