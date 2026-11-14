@@ -2631,6 +2631,44 @@ static void st_thumb(int level, float x, float y, float w, float h, float big)
  * end's units (`vw` wide, 320 high) and its name. */
 extern int mpLevelList[14];             /* gamecode_globals.c */
 
+/* Port: a stage's picture (st_thumb: STAGE_<SCENE>.PNG, its CS_BG sheet or
+ * the launcher's render of it) over the whole game view, the scene named
+ * as st_scene names it, `dy` units of 320 down; the depth not written. For
+ * the stages that flash behind Shao Kahn's death (GameCode.c PortKD).
+ * Returns 0, and draws nothing, when no level has that scene or it has no
+ * picture of its own (only the drawn stand-in). */
+int stage_picture_full(const char *scene, float dy)
+{
+    static unsigned char none[64];
+    char file[48];
+    int lv;
+    struct TEXTURE *r;
+
+    for (lv = 0; lv < 16; lv++)
+        if (strcmp(st_scene(lv), scene) == 0)
+            break;
+    if (lv == 16 || none[lv])
+        return 0;
+    snprintf(file, sizeof file, "STAGE_%s.PNG", scene);
+    if (!st_tex(file) && !(st_entry(lv) >= 0 && k_stages[st_entry(lv)].pic)) {
+        snprintf(file, sizeof file, "stages/%s.png", scene);
+        r = lime_load_extra_texture(file);
+        if (!r || !*(const unsigned *)((const char *)r + 0x40)) {
+            none[lv] = 1;
+            return 0;
+        }
+    }
+    begin_2d();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+    glDisable(GL_ALPHA_TEST);
+    st_thumb(lv, 0.0f, dy - 12.0f, g_ow, 344.0f, 0.0f);
+    glDepthMask(GL_TRUE);
+    end_2d();
+    return 1;
+}
+
 void stage_room_thumb(int place, float vw, float x, float y, float w, float h)
 {
     if (place < 0 || place >= 14)

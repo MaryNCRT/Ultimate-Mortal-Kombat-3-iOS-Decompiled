@@ -1042,6 +1042,11 @@ extern limeVECTOR3 *RenderVerts;
 int (*lime_port_mesh_parts)(const unsigned short *indices, long nfaces,
                             unsigned tex_name);
 
+/* Port, not in the binary: the grey an untextured mesh is drawn in. The
+ * binary's is always black (the shadow); the port's Shao Kahn death strobe
+ * sets it to draw white silhouettes (GameCode.c PortKD) and puts it back. */
+float LimePortFlatGrey = 0.0f;
+
 void LIME_RenderMeshSingleIndexed(void *rec, TEXTURE *tex, float alpha,
                                   const limeVECTOR3 *fade, long second)
 {
@@ -1082,7 +1087,10 @@ void LIME_RenderMeshSingleIndexed(void *rec, TEXTURE *tex, float alpha,
         glDisableClientState(GL_TEXTURE_COORD_ARRAY);
         glDisableClientState(GL_COLOR_ARRAY);
         glVertexPointer(3, GL_SHORT, 0, RenderVerts);
-        glColor4f(0.0f, 0.0f, 0.0f, 1.0f);
+        /* port: LimePortFlatGrey, 0 (the binary's black) unless the port's
+         * Shao Kahn death strobe draws a fighter flat in another grey
+         * (GameCode.c PortKD) */
+        glColor4f(LimePortFlatGrey, LimePortFlatGrey, LimePortFlatGrey, 1.0f);
         glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, (float)GL_REPLACE);
         glDisable(GL_TEXTURE_2D);
     } else {

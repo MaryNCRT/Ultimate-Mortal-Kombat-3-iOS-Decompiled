@@ -10,6 +10,17 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
+- **Shao Kahn's death as the arcade plays it** (Mary; measured in MAME,
+  docs/research/ARCADE-KAHN-DEATH.md): the black and white strobe with the
+  fighters as silhouettes and Roldbig1 at each cycle; then at once his
+  death (the iOS's beams, a second earlier than its own event), his scream
+  twice without the stage's music, the picture shaking harder and faster to
+  the end, the empty city, then every stage of the game flashing behind him (pictures of them), a black
+  frame, three white flashes with three blasts and the lava stage with its
+  sky lit, the burn, a mod's `Nomore.mp3` / `Nomore.wav`, and KITANA WINS /
+  SHAO KAHN IS NO MORE / YOU ARE THE ULTIMATE MK3 CHAMPION one by one at the
+  arcade's times; no HUD and no announcer through it, and the fight waits
+  for the music to end. The music player reads 16-bit `.wav` tunes too.
 - **A mod's sound may be .mp3**: with no `.wav` of a sound's name the game
   reads the `.mp3` (Windows' ACM codec; Linux's libmpg123 build), as 8-bit
   mono. Mary's own `Skversus.mp3` in a local mod plays on the VS screen.

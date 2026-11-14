@@ -387,6 +387,40 @@ static short *mp3_decode(const unsigned char *d, long n, int *rate, int *ch,
     long o = 0, pos, len = 0, cap;
     int kbps, sr, nch;
 
+    /* port: a 16-bit PCM .wav is taken as it is (a mod's tune; Mary's
+     * "No More" for Shao Kahn's death, GameCode.c PortKD) */
+    if (n > 44 && memcmp(d, "RIFF", 4) == 0 && memcmp(d + 8, "WAVE", 4) == 0) {
+        long p = 12, fch = 0, fbits = 0, frate = 0;
+        while (p + 8 <= n) {
+            long sz = (long)(d[p + 4] | d[p + 5] << 8 | d[p + 6] << 16
+                             | (unsigned long)d[p + 7] << 24);
+            if (sz < 0 || p + 8 + sz > n)
+                sz = n - p - 8;
+            if (memcmp(d + p, "fmt ", 4) == 0 && sz >= 16) {
+                if ((d[p + 8] | d[p + 9] << 8) != 1)
+                    return NULL;        /* not plain PCM */
+                fch   = d[p + 10] | d[p + 11] << 8;
+                frate = (long)(d[p + 12] | d[p + 13] << 8 | d[p + 14] << 16
+                               | (unsigned long)d[p + 15] << 24);
+                fbits = d[p + 22] | d[p + 23] << 8;
+            } else if (memcmp(d + p, "data", 4) == 0) {
+                short *pcm;
+                if (fbits != 16 || fch < 1 || fch > 2 || frate <= 0)
+                    return NULL;
+                *frames = sz / (2 * fch);
+                pcm = (short *)malloc((size_t)(*frames * fch) * sizeof(short));
+                if (!pcm)
+                    return NULL;
+                memcpy(pcm, d + p + 8, (size_t)(*frames * fch) * sizeof(short));
+                *rate = (int)frate;
+                *ch = (int)fch;
+                return pcm;
+            }
+            p += 8 + sz + (sz & 1);
+        }
+        return NULL;
+    }
+
     /* an ID3v2 tag first, then the first frame header */
     if (n > 10 && memcmp(d, "ID3", 3) == 0)
         o = 10 + ((d[6] & 0x7f) << 21 | (d[7] & 0x7f) << 14 |
@@ -591,7 +625,10 @@ void plat_music_volume(float gain)
     g_music_gain = gain;
 }
 
-int plat_music_playing(void) { return g_music; }
+/* port: a tune that does not repeat counts as over once it has played out
+ * (it was "playing" forever, filling silence; PortKD waits for the end of
+ * Shao Kahn's music, GameCode.c) */
+int plat_music_playing(void) { return g_music && (g_mloop || g_mpos < g_mframes); }
 
 void plat_music_stop(void)
 {
