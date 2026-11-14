@@ -8,7 +8,20 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased
+## 0.5.3 beta (2026-11-14)
+
+Not yet played by Mary as a package.
+
+- **The MOD HUB that never connected on other players' PCs** (no error,
+  nothing listed): `raw.githubusercontent.com` is blocked or silent on
+  some networks and providers, and the HUB's reads had no time limit. Each
+  read now gives up after 8 s, and the index and pictures come from the
+  first source that answers: GitHub's raw files, jsDelivr's copy of the
+  repository, GitHub's API (the same files of the hub's main branch); the
+  one that answered is tried first next time. Measured with raw blocked:
+  the list in 8 s. Downloads (the HUB's and UPDATES') stop with an error
+  after 30 s with no answer or 45 s stalled instead of waiting forever,
+  and the HUB says why it could not connect.
 
 - **Sounds asked for again start over, as on the device** (Mary: Reptile's
   orb did not sound right): the iOS game gives each sound one voice and

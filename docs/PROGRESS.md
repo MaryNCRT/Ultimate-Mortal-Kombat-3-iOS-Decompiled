@@ -91,8 +91,8 @@ added to her Steam library beside her other non-Steam game.
 | Slight slide in a kombo (issue #114) | **the original's rule**, checked instruction by instruction (`t_cc_*_punch` → `t_ccp3` → `t_separate_us`); nothing to fix |
 | Dynamic stage music, Genesis style (Soul Chamber first) | **research only**, nothing built: [research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md); waits for Mary's Genesis recording (WAV + GYM) |
 | Ambient occlusion and screen-space contact shadows (ENHANCED LIGHTING) | ambient occlusion **built** (0.3.0; the fighters are their own layer since after 0.3.1b); contact shadows research only: [research/CONTACT-SHADOWS.md](research/CONTACT-SHADOWS.md) |
-| MOD HUB empty or an error on other players' PCs (Mary, 2026-11-14) | **open**: the index, its pictures and the zips answer from here and the hub code lists all 4 mods against the test folder; the error text the HUB shows on an affected PC is needed |
-| Online: player two cannot pick a fighter in the lobby after about 2 fights (Mary, again) | **in progress** in its own session (2026-11-14); the MERCY softlock is fixed (entry below) |
+| MOD HUB never connecting on other players' PCs, no error (Mary, 2026-11-14) | **fixed in 0.5.3** (time limits, other sources for the index); not yet confirmed on an affected PC |
+| Online: player two cannot pick a fighter in the lobby after about 2 fights | **closed**: Mary says it is fixed (2026-11-14), with the MERCY fix |
 | After CANCEL in STAGE SELECT the select screen came back silent once | fixed by never stopping the tune on the way; the log says `stage select: the tune ...` if it happens again |
 
 ### Where to look next
@@ -104,6 +104,24 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+### 2026-11-14 -- 0.5.3 beta: the MOD HUB on networks that block GitHub's raw files
+
+Mary: on other players' PCs the HUB "simply does not connect", no error.
+From here the index, pictures and zips all answer, so the HUB was waiting:
+`fetchIndex` and `check` (lib/hub.js) and `download` (lib/update.js) had no
+time limit, and `raw.githubusercontent.com` is blocked or silent on some
+networks. Now: `timed()` gives every read 8 s (ranges 30 s);
+`fetchRepoFile()` takes the index and pictures from GitHub raw, jsDelivr
+(`cdn.jsdelivr.net/gh/<repo>@main/`, cached up to 12 h) or the GitHub API
+(`contents/<path>?ref=main`, `Accept: application/vnd.github.raw`), the
+one that answered first next time; `download` stops after 30 s without an
+answer or 45 s stalled. ModHub.svelte shows a failure instead of nothing.
+Tested with node and a fetch that never answers for the blocked hosts: no
+block 0.1 s; raw blocked 8.1 s; raw and jsDelivr blocked 17.5 s; all
+three blocked, the error naming each in 36 s. The release downloads
+themselves (github.com, objects.githubusercontent.com) have no mirror.
+
 
 ### 2026-11-14 -- One voice a sound (Reptile's orb)
 

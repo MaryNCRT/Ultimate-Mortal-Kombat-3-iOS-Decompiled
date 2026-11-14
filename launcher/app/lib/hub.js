@@ -37,6 +37,56 @@ const REPO = 'MaryNCRT/UMK3-IOS-Mod-Hub';
 const RAW = 'https://raw.githubusercontent.com/' + REPO + '/main/';
 const INDEX = RAW + 'index.json';
 const DL = 'https://github.com/' + REPO + '/releases/download/';
+
+/* 0.5.3 (Mary: on other players' PCs the HUB never connected, no error):
+ * raw.githubusercontent.com is blocked or never answers on some networks
+ * and providers, and nothing here had a time limit, so the page waited
+ * forever. Every read now has one, and the index and the pictures come
+ * from the first of these that answers -- the same files of the same
+ * repository's main branch: GitHub's raw files, jsDelivr's copy of the
+ * repository (cached up to 12 hours), GitHub's API. */
+const SOURCES = [
+    rel => RAW + rel,
+    rel => 'https://cdn.jsdelivr.net/gh/' + REPO + '@main/' + rel,
+    rel => 'https://api.github.com/repos/' + REPO + '/contents/' + rel + '?ref=main',
+];
+const TIME_LIMIT = 8000;                /* ms, a read that does not answer */
+let g_source = 0;                       /* the source that answered last, tried first */
+
+/* fetchFn with a time limit: rejects instead of waiting forever */
+function timed(fetchFn, url, opts, ms = TIME_LIMIT) {
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    let timer;
+    const limit = new Promise((_, reject) => {
+        timer = setTimeout(() => {
+            if (ctl) try { ctl.abort(); } catch { /* gone */ }
+            reject(new Error('no answer from ' + new URL(url).host + ' in ' + Math.round(ms / 1000) + ' s'));
+        }, ms);
+    });
+    const go = fetchFn(url, Object.assign({}, opts, ctl ? { signal: ctl.signal } : {}));
+    return Promise.race([go, limit]).finally(() => clearTimeout(timer));
+}
+
+/* one file of the hub repository's main branch, from the first source
+ * that answers; the errors of all of them when none does */
+async function fetchRepoFile(fetchFn, rel, asBuffer) {
+    const errs = [];
+    for (let k = 0; k < SOURCES.length; k++) {
+        const at = (g_source + k) % SOURCES.length;
+        const url = SOURCES[at](rel.split('/').map(encodeURIComponent).join('/'));
+        try {
+            const h = Object.assign({}, headers);
+            if (url.includes('api.github.com')) h.Accept = 'application/vnd.github.raw';
+            const r = await timed(fetchFn, url + (asBuffer || url.includes('?') ? '' : '?t=' + Date.now()), { headers: h });
+            if (!r.ok) throw new Error(new URL(url).host + ' answered ' + r.status);
+            g_source = at;
+            return asBuffer ? Buffer.from(await r.arrayBuffer()) : await r.text();
+        } catch (e) {
+            errs.push(e && e.message ? e.message : String(e));
+        }
+    }
+    throw new Error(errs.join('; '));
+}
 const CATEGORIES = ['textures', 'audio', 'music', 'models', 'mixed', 'skin'];
 
 const modsDir = root => path.join(root, 'mods');
@@ -144,7 +194,7 @@ function readIni(file) {
 /* bytes [a, b] of the mod's zip; throws when the server answers with the
  * whole file instead (no range support) */
 async function range(fetchFn, mod, a, b) {
-    const r = await fetchFn(mod.url, { headers: { 'User-Agent': 'UMK3-Launcher', Range: 'bytes=' + a + '-' + b } });
+    const r = await timed(fetchFn, mod.url, { headers: { 'User-Agent': 'UMK3-Launcher', Range: 'bytes=' + a + '-' + b } }, 30000);
     if (r.status !== 206) throw new Error('no range reads (HTTP ' + r.status + ')');
     return Buffer.from(await r.arrayBuffer());
 }
@@ -307,16 +357,12 @@ const headers = { 'User-Agent': 'UMK3-Launcher', 'Cache-Control': 'no-cache' };
 /* the index, with every mod's picture as a data: URL (the page loads
  * nothing from outside) */
 async function fetchIndex(fetchFn) {
-    const r = await fetchFn(INDEX + '?t=' + Date.now(), { headers });
-    if (!r.ok) throw new Error('GitHub ' + r.status);
-    const list = parseIndex(await r.text());
+    const list = parseIndex(await fetchRepoFile(fetchFn, 'index.json', false));
     await Promise.all(list.map(async m => {
         m.preview = null;
         if (!m.thumbnail) return;
         try {
-            const p = await fetchFn(RAW + m.thumbnail.split('/').map(encodeURIComponent).join('/'), { headers });
-            if (!p.ok) return;
-            const buf = Buffer.from(await p.arrayBuffer());
+            const buf = await fetchRepoFile(fetchFn, m.thumbnail, true);
             if (buf.length < 4 << 20)
                 m.preview = 'data:image/' + (/\.png$/i.test(m.thumbnail) ? 'png' : 'jpeg') + ';base64,' + buf.toString('base64');
         } catch { /* no picture */ }
