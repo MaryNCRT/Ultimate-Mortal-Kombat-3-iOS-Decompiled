@@ -2664,6 +2664,7 @@ static int eligible(void)
 }
 
 static void st_music(int on);
+extern int PortVsPending;               /* FrontEnd.c: the VS screen is next */
 static int  g_st_tune_check;        /* back: is the tune still on? */
 
 /* CANCEL: Task_FEDestroy has run (the front end's pictures and models are
@@ -2872,7 +2873,9 @@ static void st_close(int pick)
     g_st_back = pick < 0;
     g_st_open = 0;
     g_st_done = 1;
-    if (!g_st_back)
+    /* the local versus' VS screen next: its tune plays on under it and
+     * fades out there, as the arcade's does (FrontEnd.c PortVsGate) */
+    if (!g_st_back && !PortVsPending)
         st_music(0);
 }
 

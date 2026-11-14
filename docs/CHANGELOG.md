@@ -10,6 +10,11 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
+- **VS screen's music, as the arcade's** (Mary; seen in MAME, docs/research/
+  ARCADE-VS-SCREEN.md): the tune before it (STAGE SELECT's) plays on under
+  the VS screen and fades out with it; the announcer's names stay (Mary).
+  The arcade's short effect as its VS logo lights was not found among the
+  game's own sounds (cross-correlation, best 0.36), so none plays yet.
 - **ESSENTIAL MODS** (Mary): COMPILE has a box, ticked by default
   (`essentials=1` in umk3.ini), that installs the MOD HUB's essential mods
   with the game -- the modpack of the project's improvements. A hub entry is
