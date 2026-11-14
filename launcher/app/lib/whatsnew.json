@@ -2,6 +2,26 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.5.2",
+      "date": "2026-11-14",
+      "ES": [
+        "Ya no queda la pantalla negra uno o dos segundos tras la pantalla VS: se ve la pantalla de carga y la música del escenario ya no congela el juego.",
+        "Cargas más rápidas: un combate carga en la mitad de tiempo o menos.",
+        "La torre ya no muestra a Jade repetida en una instalación nueva.",
+        "Los iconos de teclas y botones ya no desaparecen (selección de traje y color, ayudas).",
+        "Online: el MERCY ya no deja el combate bloqueado.",
+        "Preset MEJORADO: panorámico 16:9, iconos según el mando o teclado conectado e ILUMINACIÓN MEJORADA."
+      ],
+      "EN": [
+        "No more black screen for a second or two after the VS screen: the loading screen shows, and the stage's music no longer holds the game.",
+        "Faster loading: a fight loads in half the time or less.",
+        "The tower no longer shows Jade over and over on a new install.",
+        "Key and button pictures no longer vanish (outfit and colour lists, hints).",
+        "Online: a MERCY no longer leaves the fight stuck.",
+        "ENHANCED preset: 16:9 widescreen, icons following the pad or keyboard plugged in, and ENHANCED LIGHTING."
+      ]
+    },
+    {
       "version": "0.5.1",
       "date": "2026-11-14",
       "ES": [

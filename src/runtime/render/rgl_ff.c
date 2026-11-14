@@ -689,6 +689,7 @@ void ff_glTexImage2D(GLenum t, GLint level, GLint internal, GLsizei w, GLsizei h
     (void)t; (void)internal; (void)border;
     if (!x || !B || level != 0 || w <= 0 || h <= 0)
         return;
+    double tp0 = rgl_now_ms(), tp1, tp2, tp3;
     lv[0] = to_rgba(w, h, f, type, p, g_unpack);
     if (!lv[0])
         return;
@@ -704,6 +705,27 @@ void ff_glTexImage2D(GLenum t, GLint level, GLint internal, GLsizei w, GLsizei h
             unsigned char *d = (unsigned char *)malloc((size_t)nw * nh * 4);
             if (!d)
                 break;
+            if (!(cw & 1) && !(ch & 1)) {
+                /* 0.5.2: even sizes (nearly all), with no edge clamps -- a
+                 * 4096x4096 HD sheet's levels took 59 ms through the
+                 * general loop below */
+                for (yy = 0; yy < nh; yy++) {
+                    const unsigned char *r0 = s + (size_t)(yy * 2) * cw * 4;
+                    const unsigned char *r1 = r0 + (size_t)cw * 4;
+                    unsigned char *o = d + (size_t)yy * nw * 4;
+                    for (xx = 0; xx < nw * 4; xx += 4) {
+                        const unsigned char *a = r0 + xx * 2, *c = r1 + xx * 2;
+                        o[xx]     = (unsigned char)((a[0] + a[4] + c[0] + c[4] + 2) >> 2);
+                        o[xx + 1] = (unsigned char)((a[1] + a[5] + c[1] + c[5] + 2) >> 2);
+                        o[xx + 2] = (unsigned char)((a[2] + a[6] + c[2] + c[6] + 2) >> 2);
+                        o[xx + 3] = (unsigned char)((a[3] + a[7] + c[3] + c[7] + 2) >> 2);
+                    }
+                }
+                lv[n++] = d;
+                cw = nw;
+                ch = nh;
+                continue;
+            }
             for (yy = 0; yy < nh; yy++)
                 for (xx = 0; xx < nw; xx++) {
                     int x0 = xx * 2 < cw ? xx * 2 : cw - 1, x1 = xx * 2 + 1 < cw ? xx * 2 + 1 : cw - 1;
@@ -718,15 +740,21 @@ void ff_glTexImage2D(GLenum t, GLint level, GLint internal, GLsizei w, GLsizei h
             ch = nh;
         }
     }
+    tp1 = rgl_now_ms();
     scene_flush();                      /* held draws see the texture as it was */
     if (!x->handle)
         x->handle = B->tex_new();
     B->tex_image(x->handle, w, h, n, (const unsigned char *const *)lv);
+    tp2 = rgl_now_ms();
     x->w = w;
     x->h = h;
     x->levels = n;
     x->bump = tex_bump(lv[0], w, h);
     tex_avg(lv[0], w, h, x->avg);
+    tp3 = rgl_now_ms();
+    if (getenv("UMK3_LOG_LOADS") && tp3 - tp0 > 5.0)
+        printf("upload %dx%d: levels %.0f ms, backend %.0f ms, bump %.0f ms\n",
+               w, h, tp1 - tp0, tp2 - tp1, tp3 - tp2);
     x->subbed = 0;
     for (i = 0; i < n; i++)
         free(lv[i]);

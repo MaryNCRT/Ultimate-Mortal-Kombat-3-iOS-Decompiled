@@ -8,14 +8,35 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased
+## 0.5.2 beta (2026-11-14)
 
-- **Online: a MERCY no longer freezes the fight** (Mary, a match on
-  another PC): with the two players on a different number of buttons, the
-  machine that was not player one read that player's RUN and finishing
-  inputs differently, so a MERCY in the final round happened on one
-  machine only and the fight stood still. Player one's buttons are now the
-  host's on both machines for the whole fight. Mary confirmed it.
+Urgent patch. Built and played from a clean 0.5.1 release folder (the "other
+PC" case); not yet played by Mary as a package.
+
+- **The black second after the VS screen**: the fight's loading steps ran
+  back to back in one frame (1.5-2 s with nothing shown); a tick that loads
+  is now shown before the next, so LOADING and its percentage are seen.
+  The stage's music is decoded on a thread of its own (it held the game
+  1.1-1.4 s in the fight's first frame).
+- **Loading times**: a fight's load 2.9 s -> 1.1 s on a clean install; the
+  textures read ahead at boot are no longer capped at 160 (1024, with a
+  memory budget), and the mip levels of even-sized textures are made about
+  three times faster.
+- **Jade over and over in the tower**: with no ladder saved yet (a new
+  install) the tower showed the binary's default table, Jade on every rung
+  of the first ladder; a ladder is now built as a new Arcade game builds it.
+- **Key and button pictures that vanished** (the OUTFIT / COLOR keys on the
+  select screen, the hints): the game kept at most 128 pictures, misses
+  included, and after the CONTROLS page had shown a few pads' sets every
+  later one came back as none; room for every picture in the folder.
+- **ENHANCED preset**: 16:9 widescreen (21:9 on a 21:9 monitor), the pad's
+  or the keys' pictures following what is plugged in, and ENHANCED LIGHTING.
+- **Online: a MERCY no longer leaves the fight stuck**: with the two players
+  on different button layouts the machines read player one's RUN
+  differently; a MERCY happened on one and not on the other (Mary confirmed
+  the fix).
+- `UMK3_LOG_LOADS=<ms>` logs every load slower than that, and each texture
+  upload's split (levels, backend, relief).
 
 ## 0.5.1 beta (2026-11-14)
 

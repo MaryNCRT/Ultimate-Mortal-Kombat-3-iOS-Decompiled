@@ -440,7 +440,11 @@ const char *lime_platform_asset_root(void);
 void lime_glyph_shadow(uint8_t *px, int w, int h); /* draw_gl.c */
 
 typedef struct { char name[64]; uint8_t *rgba; int w, h; } al_glyph;
-static al_glyph g_glyphs[128];
+/* 0.5.2: 128 filled once the CONTROLS page had shown a few pads' sets
+ * (misses are kept too), and every picture asked for after that -- the
+ * select screen's OUTFIT / COLOR keys, the hints -- came back as none.
+ * The glyphs folder holds under 300 pictures; room for all of them. */
+static al_glyph g_glyphs[1024];
 static int g_nglyphs;
 
 static const al_glyph *al_glyph_get(const char *name, int len)

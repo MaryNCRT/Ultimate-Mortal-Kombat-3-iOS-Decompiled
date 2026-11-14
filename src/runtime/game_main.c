@@ -3607,6 +3607,7 @@ int main(int argc, char **argv)
         rgl_game_ticks = 0;
         while (acc >= 1.0 / 60.0) {
             int i;
+            double tick_t0 = plat_time();
 
             rgl_game_ticks++;
             {
@@ -4302,6 +4303,14 @@ int main(int argc, char **argv)
             acc -= 1.0 / 60.0;
             ticks++;
             g_tick = ticks;
+            /* 0.5.2 (Mary: black for a second or two after the VS
+             * screen): a tick that loaded -- the fight's init steps, a
+             * stage, a menu's pictures -- is shown before the next one
+             * runs. The catch-up ran the loading steps back to back in one
+             * frame, 1.5-2 s with nothing presented. A fight's own ticks
+             * stay well under this. */
+            if (plat_time() - tick_t0 > 0.15)
+                break;
         }
         rgl_game_ms = plat_time() * 1000.0 - rgl_game_ms;
         plat_input_used();      /* the taps this frame's ticks have seen */
