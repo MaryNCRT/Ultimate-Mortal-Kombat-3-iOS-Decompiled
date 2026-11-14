@@ -8,7 +8,6 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-<<<<<<< HEAD
 ## 0.5.2 beta (2026-11-14)
 
 Urgent patch. Built and played from a clean 0.5.1 release folder (the "other
@@ -38,16 +37,6 @@ PC" case); not yet played by Mary as a package.
   the fix).
 - `UMK3_LOG_LOADS=<ms>` logs every load slower than that, and each texture
   upload's split (levels, backend, relief).
-=======
-## Unreleased
-
-- **Online: a MERCY no longer freezes the fight** (Mary, a match on
-  another PC): with the two players on a different number of buttons, the
-  machine that was not player one read that player's RUN and finishing
-  inputs differently, so a MERCY in the final round happened on one
-  machine only and the fight stood still. Player one's buttons are now the
-  host's on both machines for the whole fight. Mary confirmed it.
->>>>>>> origin/main
 
 ## 0.5.1 beta (2026-11-14)
 
