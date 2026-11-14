@@ -103,6 +103,12 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+### 2026-11-14 -- Release 0.5.1 beta
+
+`v0.5.1-beta` (pre-release): the WinMM pad fix for issue #222 (entry
+below). Packages in `WORK/release-0.5.1`. Not confirmed on an 8BitDo yet:
+the notes ask reporters for the log's `pad:` lines.
+
 ### 2026-11-14 -- Issue #222 again: pads walking and jumping by themselves
 
 Reports after 0.4.10: the 8BitDo Ultimate 2 still walks the fighter back
