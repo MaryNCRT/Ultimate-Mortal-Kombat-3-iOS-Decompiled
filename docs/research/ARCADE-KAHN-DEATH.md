@@ -103,3 +103,28 @@ stage is still (shift 0 from 11.6 on).
   CHAMPION at y 112, 144, 176.
 - No strobe, no shake, no change of stage: the arcade's are not in the iOS
   binary's sequence; adding them is a port addition.
+
+## Second run, frame by frame (2026-11-13)
+
+`kahn_death3.lua` (kept outside the repository): a snapshot every arcade
+frame for 3 s after the hit, then every 0.1 s to 32 s, with `-wavwrite`.
+
+- **The strobe**: four pictures, two arcade frames (0.0366 s) each, from
+  0.110 s: white silhouettes on black, pale silhouettes on white, black
+  silhouettes on white, black. From 1.060 black on white to 1.152; white
+  1.152, black 1.188, white 1.207; the scene at 1.225 s.
+- **The burn**: 1.225 -- 2.1 s, the stage brightened and fading.
+- **The stages** (backgrounds matched every 0.1 s, seconds after the beams
+  begin at ~2.1 s): waterfront 0 -- 1.82; then his arena with visits of
+  0.1 -- 0.6 s to the waterfront, the lava, Kahn's red kave and a dark one,
+  coming more often toward the end.
+- **The end**: one black frame; the lava stage with three white flashes;
+  the lines come up from below in ~0.4 s at 2.3 s (KITANA WINS), 5.7 s
+  (SHAO KAHN IS NO MORE) and 8.9 s (YOU ARE THE / ULTIMATE MK3 CHAMPION)
+  after the black frame; a fade to black 13.6 s after it and the treasure
+  screen.
+- The two runs disagree by up to ~0.7 s on when the beams' stages and the
+  black frame come; the sequence's inner timings agree.
+
+The port's version is GameCode.c PortKD (see its header for what came from
+MAME and what from Mary watching the arcade).

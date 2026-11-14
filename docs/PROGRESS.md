@@ -103,6 +103,43 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+### 2026-11-13 -- Shao Kahn's death as the arcade plays it (port addition)
+
+Worked from docs/research/ARCADE-KAHN-DEATH.md, two MAME runs (the second
+one frame per arcade frame through the strobe, every 0.1 s to the
+treasures, with sound) and the iOS decomp only; no leaked source or
+anything derived from it was read. Mary watched each build beside the
+arcade and corrected it; where her account and MAME differ, hers was taken
+(the stage's music stops at the hit; the scream twice, back to back;
+three blasts; the beams start at once after the strobe).
+
+`GameCode.c` PortKD (header comment there has the whole timeline): a clock
+from the hit that empties Kahn's energy in the match's last round
+(Health[1] -> 0, GameMode 0, Character2 0x19). The strobe draws the
+fighters flat through the shadow's untextured path (`Players.c`
+PortFlatGrey, `RenderMesh.c` LimePortFlatGrey, REAL-TIME SHADOWS off for
+those frames, the hammer and other attachments skipped); the shake is a
+screen-space shift in `LIMEDS_Set3dMode` (PortScreenShiftY); the other
+stages are their pictures (`debug_menu.c` stage_picture_full) -- the
+empty city first, drawn over him, then every stage of the game in turn; the burn and
+sky are additive fills; the end's flashes fill the screen after the HUD;
+the HUD is drawn with colour writes off; the end's lines are drawn by
+PortKD_Lines. `Blood.c`: PortKD_StartBeams starts SK_ENDING at the strobe's
+end, event 3/65 then leaves the scene and scream alone; event 2/0 sounds
+(the announcer) are skipped during it. `RoundSummaryUpdate` waits for
+PortKD_HoldRound. `lime_menu.c`: lime_port_sound (a sound by file name),
+lime_port_stop_sound, lime_port_tune_exists. `win32_audio.c`: 16-bit PCM
+`.wav` tunes; a non-repeating tune counts as over once played out.
+
+Verified by captures in the test folder (`UMK3_LOG_KD=1` logs every change
+of what is drawn, with its times): strobe pictures every 0.0366 s from
+0.11 s, beams at 1.23 s, whites at te 0.45 / 0.75 / 1.0, three Strtbooms,
+two Skdiemix, no Kitanawins, lines at te 2.3 / 5.7 / 8.9, the treasures
+at ~25 s after the music. Not done / open: the stage pictures are flat
+(no depth behind him); the arcade's own rumble under the beams is not
+identified among the game's sounds; the Linux (SDL/mpg123) music path does
+not read `.wav` tunes; Mary has not yet played the final build.
+
 ### 2026-11-13 -- ESSENTIAL MODS at compile
 
 Mary: the essential mods are the modpack of the project's improvements,

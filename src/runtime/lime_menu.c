@@ -550,6 +550,44 @@ static long load_sound(const char *name)
     return i;
 }
 
+/* Port, not in the binary: a sound by its file name -- the slot it is
+ * already in, or loaded into a new one the first time. For the port's own
+ * additions that play a file the iOS sound table does not list (Shao Kahn's
+ * death as the arcade plays it, GameCode.c PortKD). */
+long lime_port_sound(const char *name)
+{
+    long i;
+
+    for (i = 0; i < LIME_SOUNDS; i++)
+        if (g_sound[i].pcm && strcmp(g_sound[i].name, name) == 0)
+            return i;
+    return load_sound(name);
+}
+
+/* Port: a sound's voices stopped, the sound kept (PortKD's scream cut by
+ * the last blast) */
+void lime_port_stop_sound(long h)
+{
+    if (h >= 0 && h < LIME_SOUNDS && g_sound[h].pcm)
+        plat_audio_stop_pcm(g_sound[h].pcm);
+}
+
+/* Port: whether res/audio/<name> is there (a mod's tune), resolved the way
+ * limePlayTune resolves it. */
+int lime_port_tune_exists(const char *name)
+{
+    char rel[300], full[1400];
+    FILE *f;
+
+    snprintf(rel, sizeof rel, "res/audio/%s", name);
+    lime_platform_resolve(rel, full, sizeof full);
+    f = fopen(full, "rb");
+    if (!f)
+        return 0;
+    fclose(f);
+    return 1;
+}
+
 void limeDeleteSound(long h)
 {
     if (h < 0 || h >= LIME_SOUNDS)

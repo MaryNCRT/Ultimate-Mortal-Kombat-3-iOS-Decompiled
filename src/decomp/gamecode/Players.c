@@ -1481,6 +1481,15 @@ void LIME_GLAPI glPopMatrix(void);
  * The body colour is `(grey, grey, grey, 1)` from the caller -- one scalar for
  * all three channels, so a fighter can only be darkened, never tinted.
  */
+/* Port, not in the binary: Shao Kahn's death as the arcade plays it
+ * (GameCode.c PortKD). PortFlatGrey >= 0 draws the fighter flat in that grey,
+ * untextured, with no shadow -- the strobe's silhouettes -- through the same
+ * untextured path the shadow uses (LimePortFlatGrey, lime/RenderMesh.c).
+ * PortSkipFighter leaves a fighter posed but undrawn. */
+extern float PortFlatGrey;              /* GameCode.c; -1 off */
+extern int   PortSkipFighter;           /* GameCode.c, per object */
+extern float LimePortFlatGrey;          /* lime/RenderMesh.c */
+
 void RenderAnimatedCharacter(char *name, ANIMATEDCHARACTER *c,
                              long frameA, long frameB, float t,
                              float y, float grey, limeVECTOR3 *pos,
@@ -1500,6 +1509,29 @@ void RenderAnimatedCharacter(char *name, ANIMATEDCHARACTER *c,
     frame = (char *)(uintptr_t)(unsigned long)a[1]
             + idxA * ANIMCHAR_FRAME_STRIDE;
     f = (const long *)frame;
+
+    if (PortSkipFighter)                /* port: PortKD, not drawn */
+        vis = 0;
+    if (PortFlatGrey >= 0.0f && vis) {  /* port: PortKD, a silhouette */
+        glEnable(GL_DEPTH_TEST);
+        glPushMatrix();
+        if (f[0x18 / 4] == 1) {
+            GenerateFrameVertsBySkinning(c, idxA, idxB, t, RenderVerts);
+            LimePortFlatGrey = PortFlatGrey;
+            LIME_RenderMeshSingleIndexed(frame, 0, grey, pos, 0);
+        }
+        glPopMatrix();
+        glPushMatrix();
+        if (*(void *P32 *)(uintptr_t)(unsigned long)a[0x30 / 4] != 0
+            && (f[0x28 / 4] == 1 || (idxA == 365 && a[2] == 6))) {
+            GenerateFrameVertsBySkinningSKIN2(c, idxA, idxB, t, RenderVerts);
+            LimePortFlatGrey = PortFlatGrey;
+            LIME_RenderMeshSingleIndexed(frame, 0, grey, pos, 1);
+        }
+        glPopMatrix();
+        LimePortFlatGrey = 0.0f;
+        return;
+    }
 
     glColor4f(grey, grey, grey, 1.0f);
     glEnable(GL_DEPTH_TEST);

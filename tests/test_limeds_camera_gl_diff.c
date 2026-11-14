@@ -82,6 +82,7 @@ int   limeScreenWidth;
 int   limeScreenHeight;
 
 void limePortDisplayRotation(void) { }  /* port only; see the header */
+float PortScreenShiftY;                  /* port only: 0, no shift (GameCode.c PortKD) */
 
 void LIMEDS_Set3dMode(void);
 void LIMEDS_SetCameraOrientation(float eyeX, float eyeY, float eyeZ,

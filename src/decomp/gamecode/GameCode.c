@@ -8,6 +8,8 @@
  */
 
 #include <stdint.h>
+#include <stdio.h>    /* port: PortKD's log */
+#include <stdlib.h>   /* port: getenv */
 #include "lime_glapi.h"   /* the GL calls' calling convention */
 #include <string.h>   /* memset, for clearSpriteListsAndEvents */
 int snprintf(char *buf, size_t n, const char *fmt, ...);  /* port: training */
@@ -1015,6 +1017,514 @@ void RenderExtras(void);
 void limeClearDepthBuffer(void);
 
 
+/* ===================================================================== PortKD
+ *
+ * **Port, not in the binary: Shao Kahn's death as the arcade plays it.**
+ *
+ * The iOS game's own sequence (Blood.c event 3/65, SK_ENDING; event 3/3 the
+ * winner) is kept, and what the arcade adds around it is drawn here. The
+ * times come from MAME (the user's ROM; frames and sound,
+ * docs/research/ARCADE-KAHN-DEATH.md) and from Mary watching the arcade
+ * beside this. None of it is in the iOS binary. `tk` is seconds from the
+ * hit that empties his energy (Health[1] reaching 0 in the arcade's last
+ * round, GameMode 0, Character2 Shao Kahn), `tb` from the beams' start, `te`
+ * from the end's black frame.
+ *
+ *   tk 0.11 -- 1.06  the strobe, frame by frame as MAME shows it: white
+ *               silhouettes on black, pale ones on white, black ones on
+ *               white, black -- 0.0366 s (two arcade frames) each. The
+ *               fighters drawn flat through the shadow's untextured path,
+ *               no lights or shadows on them, nothing hung on them (Kahn's
+ *               hammer). Roldbig1 at the first five cycles.
+ *   1.06 -- 1.225  black on white, white, black, white.
+ *   1.225       both fighters gone and his death at once (Mary): the iOS's
+ *               SK_ENDING started here (Blood.c PortKD_StartBeams) rather
+ *               than at its event a second later.
+ *   tb 0 -- 0.875  the stage burnt white and fading (MAME 1.225 -- 2.1 s).
+ *   1.14        Quake1; his scream (Skdiemix) twice, one after the other,
+ *               instead of the iOS's one (Mary).
+ *   tk 0        the stage's music stopped: his screams heard without it
+ *               (Mary).
+ *   beams       other stages behind him (k_kd_stages, MAME's times, coming
+ *               quicker toward the end); the picture shaken up and down,
+ *               light and slow at first, quicker and stronger to MAME's 3 --
+ *               10 px of 254 (Mary). Pictures of the stages, as the port
+ *               has only the fight's own loaded (debug_menu.c
+ *               stage_picture_full: STAGE_<SCENE>.PNG, CS_BG or the
+ *               launcher's render). The first, the city, is drawn over him
+ *               and the beams: empty (MAME; Mary).
+ *   te 0        one black frame, 0.45 s before the scene of the beams ends
+ *               (8.1 s), or at the iOS's winner event if that comes first.
+ *   +0.45, +0.75, +1.0   white 0.1 s, black 0.05 s, then the lava stage with
+ *               the impaled columns (LAIR's picture). Strtboom at +0.40,
+ *               +0.70, +0.95, one before each white (Mary: three thunders),
+ *               the sky lit with the last two (MAME); the last cuts the
+ *               scream. The shake stops.
+ *   +1.25 -- +2.1   the stage burnt white and fading, the sky brighter.
+ *   +2.0        Nomore.mp3 or Nomore.wav from res/audio (a mod's; Mary's
+ *               "No More"), when there is one.
+ *   +2.3, +5.7, +8.9   KITANA WINS; SHAO KAHN IS NO MORE; YOU ARE THE /
+ *               ULTIMATE MK3 CHAMPION, each up from below in 0.4 s (MAME).
+ *   +13.6       the fight let go to the treasures (MAME's fade), or when the
+ *               music has played out if later (Mary).
+ *   all         no HUD (MAME) and no announcer ("wins").
+ */
+extern int    GameMode;
+extern int    Health[2];
+extern long   Character2;
+extern long   RoundWins[2];
+extern long   WinsNeeded;
+extern long   DoingSKDeath;
+extern float  ScorpionFlash;
+extern float  SKDeathMessageOffset;
+extern uint8_t WinnerMessage[0x80];
+extern long   GamePaused;
+extern long   LIME_Paused;
+extern float  limeFPSScaleFactor;
+extern int    Settings[10];
+extern float  MusicVol[];
+extern int    limeScreenWidth;
+extern int    limeScreenHeight;
+void limePlaySound(long id, float vol, float pan, long flags);
+void limePlayTune(const char *file, long vol, long arg);
+void limeStopTune(void);
+void limeSetTuneVol(long v);
+long lime_port_sound(const char *name);          /* runtime/lime_menu.c */
+void lime_port_stop_sound(long h);               /* runtime/lime_menu.c */
+int  lime_port_tune_exists(const char *name);    /* runtime/lime_menu.c */
+void limeSet2DDrawing(void);
+void limeFillRect(float x, float y, float w, float h,
+                  float r, float g, float b, float a);
+void limeEnableAlphaBlending_Basic(void);
+void limeEnableAlphaBlending_Additive(void);
+void limeFillRectGrad(float x, float y, float w, float h, const float *c);
+void limeEnableDepthTest(void);
+void limeDisableDepthTest(void);
+void limeSetColourMask(long r, long g, long b, long a);
+void LIME_GLAPI glClearColor(float r, float g, float b, float a);
+void LIME_GLAPI glClear(unsigned int mask);
+void LIME_GLAPI glMatrixMode(unsigned int m);
+void LIME_GLAPI glPushMatrix(void);
+void LIME_GLAPI glPopMatrix(void);
+int  stage_picture_full(const char *scene, float dy);   /* runtime/debug_menu.c */
+void rgl_shadow_camera(int on);                         /* render/rgl.h */
+
+#define PORTKD_KAHN        0x19
+#define PORTKD_STROBE0     0.11f        /* MAME: the strobe's first picture */
+#define PORTKD_STEP        0.0366f      /* MAME: two arcade frames a picture */
+#define PORTKD_CYCLE       0.146f       /* four pictures */
+#define PORTKD_BEAMS       8.1f         /* the iOS SK_ENDING's length */
+#define PORTKD_SCREAM      4.186f       /* Skdiemix.wav's length */
+#define PORTKD_TUNE_AT     2.0f         /* the music, before the first line */
+#define PORTKD_TUNE        "Nomore.mp3"
+#define PORTKD_TUNE_WAV    "Nomore.wav"
+
+float PortScreenShiftY;                 /* lime/LIMEDS_Misc.c */
+float PortFlatGrey = -1.0f;             /* gamecode/Players.c */
+int   PortSkipFighter;                  /* gamecode/Players.c */
+
+static struct {
+    int   prev_health;                  /* Health[1] last frame */
+    int   ko;                           /* the hit seen, its clock running */
+    int   beams;                        /* SK_ENDING started */
+    int   rold, quake, screams;
+    int   end;                          /* from the winner event */
+    float te;
+    int   booms, tune;
+    float shift, shift_left;
+    unsigned rng;
+    float tk;                           /* seconds from the hit, uncapped */
+    float tb;                           /* seconds from the beams' start */
+    /* this frame */
+    float bg;                           /* >= 0: the stage replaced by this grey */
+    float grey;                         /* the fighters flat in this grey */
+    int   hide;                         /* the fighters not drawn */
+    const char *stage;                  /* another stage's picture behind */
+    int   cover;                        /* ...or over him too: the empty city */
+    float burn;                         /* white added over the stage */
+    float sky;                          /* white added over its top third */
+    float fill;                         /* >= 0: the whole screen, after the HUD */
+    int   hud_off;
+} PortKD;                               /* zero; the frame's values set each frame */
+
+/* The stages behind him during the beams, as MAME shows them (each frame's
+ * background matched against his arena, the waterfront at night, the lava,
+ * Kahn's red kave and a dark one, every 0.1 s), in seconds from the start
+ * of the beams (MAME: 2.1 s after the hit): his own arena between them --
+ * here the fight's stage, drawn as it is -- and the others as pictures,
+ * coming quicker toward the end, each visit another of the game's stages
+ * (Mary: it goes through all of them; a stage with no picture shows his
+ * own). The arcade's last is the lava with the
+ * impaled columns, from the flashes on (LAIR is the port's picture of it).
+ * MAME's times scaled by 7.65 / 8.92: the port's beams to its black frame
+ * against the arcade's. First his death begins on his own stage, then the
+ * empty city a moment, then the rest (MAME frames 2.04 -- 3.92 s; Mary). */
+static const struct { float from, to; const char *scene; } k_kd_stages[] = {
+    { 0.62f, 1.56f, "WATERFRONT" },
+    { 2.33f, 2.85f, "LAIR" },
+    { 3.36f, 3.70f, "CAVE" },
+    { 4.13f, 4.31f, "BRIDGE" },
+    { 4.56f, 4.73f, "SCISLACBUSOREZ" },
+    { 4.82f, 4.99f, "STREET" },
+    { 5.08f, 5.25f, "JADESDESERT" },
+    { 5.33f, 5.51f, "BELLTOWER" },
+    { 5.59f, 5.76f, "ROOFTOP" },
+    { 5.85f, 5.93f, "GRAVEYARD" },
+    { 6.11f, 6.19f, "BALCONY" },
+    { 6.36f, 6.45f, "SOULCHAMBER" },
+    { 6.62f, 6.71f, "NOOBSDORFEN" },
+    { 6.88f, 6.96f, "SUBWAY" },
+    { 7.14f, 7.22f, "TEMPLE" },
+    { 7.39f, 7.48f, "SCISLAC" },
+};
+#define PORTKD_STAGES (int)(sizeof k_kd_stages / sizeof k_kd_stages[0])
+#define PORTKD_LAST   "LAIR"
+
+static void PortKD_Sound(const char *name)
+{
+    if (Settings[3] != 0)
+        limePlaySound(lime_port_sound(name), MusicVol[Settings[3]] / 100.0f,
+                      1.0f, 0);
+}
+
+void PortKD_StartBeams(void);           /* Blood.c: SK_ENDING, as event 3/65 */
+int  plat_music_playing(void);          /* runtime/platform */
+
+/* The lines of the end, each coming up from below the screen in 0.4 s at
+ * MAME's times from the black frame: KITANA WINS at 2.3 s, SHAO KAHN IS NO
+ * MORE at 5.7 s, YOU ARE THE / ULTIMATE MK3 CHAMPION at 8.9 s. 1 below the
+ * screen, 0 in place. */
+static float PortKD_TextOffset(int line)
+{
+    static const float at[3] = { 2.3f, 5.7f, 8.9f };
+    float k;
+
+    if (!PortKD.end)
+        return 1.0f;
+    k = (PortKD.te - at[line]) / 0.4f;
+    return k <= 0.0f ? 1.0f : k >= 1.0f ? 0.0f : 1.0f - k;
+}
+
+static unsigned PortKD_Rand(void)
+{
+    if (PortKD.rng == 0)
+        PortKD.rng = 0x2545f491u;
+    PortKD.rng = PortKD.rng * 1103515245u + 12345u;
+    return PortKD.rng >> 16;
+}
+
+static void PortKD_Update(void)
+{
+    float dt = (1.0f / 60.0f) / limeFPSScaleFactor;
+    int   live = GamePaused == 0 && LIME_Paused == 0;
+    int   kahn = GameMode == 0 && Character2 == PORTKD_KAHN;
+
+    PortKD.bg = -1.0f;
+    PortKD.grey = 0.0f;
+    PortKD.hide = 0;
+    PortKD.stage = NULL;
+    PortKD.cover = 0;
+    PortKD.burn = 0.0f;
+    PortKD.sky = 0.0f;
+    PortKD.fill = -1.0f;
+    PortKD.hud_off = 0;
+
+    if (!kahn || (Health[1] > 0 && !DoingSKDeath)) {
+        PortKD.ko = 0;
+        PortKD.end = 0;
+        PortKD.beams = 0;
+        PortKD.shift = 0.0f;
+        PortKD.prev_health = kahn ? Health[1] : 0;
+        return;
+    }
+
+    /* the hit that empties his energy, in the round that ends the match */
+    if (!PortKD.ko && !DoingSKDeath && Health[1] == 0 && PortKD.prev_health > 0
+        && WinsNeeded > 0 && RoundWins[0] >= WinsNeeded - 1) {
+        PortKD.ko = 1;
+        PortKD.tk = 0.0f;
+        PortKD.rold = 0;
+        PortKD.quake = 0;
+        PortKD.screams = 0;
+        PortKD.end = 0;
+        PortKD.beams = 0;
+        limeStopTune();                 /* the stage's music, at once (Mary) */
+    }
+    PortKD.prev_health = Health[1];
+
+    /* ---- the strobe (MAME, frame by frame: four pictures of two arcade
+     * frames each, 0.0366 s, from 0.11 s) ---- */
+    if (PortKD.ko && !PortKD.beams) {
+        float t = PortKD.tk;
+
+        ScorpionFlash = 0.0f;           /* the iOS's flashes, under it */
+        if (t >= PORTKD_STROBE0) {
+            if (t < 1.06f) {
+                switch ((int)((t - PORTKD_STROBE0) / PORTKD_STEP) & 3) {
+                case 0:  PortKD.bg = 0.0f; PortKD.grey = 0.9f;  break;
+                case 1:  PortKD.bg = 1.0f; PortKD.grey = 0.88f; break;
+                case 2:  PortKD.bg = 1.0f; PortKD.grey = 0.0f;  break;
+                default: PortKD.bg = 0.0f; PortKD.grey = 0.0f;  break;
+                }
+            } else if (t < 1.152f) {
+                PortKD.bg = 1.0f; PortKD.grey = 0.0f;       /* black on white */
+            } else if (t < 1.188f || (t >= 1.207f && t < 1.225f)) {
+                PortKD.bg = 1.0f; PortKD.grey = 1.0f;       /* white */
+            } else if (t < 1.207f) {
+                PortKD.bg = 0.0f; PortKD.grey = 0.0f;       /* black */
+            } else {
+                /* and at once his death: both fighters gone, the beams
+                 * (Mary) -- the iOS's SK_ENDING, started here rather than
+                 * a second later at its event 3/65 (Blood.c) */
+                PortKD.beams = 1;
+                PortKD.tb = 0.0f;
+                PortKD_StartBeams();
+            }
+            if (PortKD.rold < 5 && live
+                && t >= PORTKD_STROBE0 + (float)PortKD.rold * PORTKD_CYCLE) {
+                PortKD.rold++;
+                PortKD_Sound("Roldbig1");
+            }
+        }
+    }
+    if (PortKD.ko && !PortKD.quake && live && PortKD.tk >= 1.14f) {
+        PortKD.quake = 1;
+        PortKD_Sound("Quake1");
+    }
+
+    /* the beams without the hit seen (a time-out): from the iOS's event */
+    if (DoingSKDeath && !PortKD.beams) {
+        PortKD.beams = 1;
+        PortKD.tb = 0.0f;
+    }
+
+    /* ---- the beams ---- */
+    if (PortKD.beams && !PortKD.end) {
+        float tb = PortKD.tb;
+        int   i;
+
+        if (tb < 0.875f)                /* MAME: 1.225 -- 2.1 s */
+            PortKD.burn = 0.5f - 0.25f * tb / 0.875f;
+        for (i = 0; i < PORTKD_STAGES; i++)
+            if (tb >= k_kd_stages[i].from && tb < k_kd_stages[i].to)
+                PortKD.stage = k_kd_stages[i].scene;
+        /* the first, the city, empty: drawn over him and the beams too
+         * (MAME: no Kahn on it; Mary) -- then his stage, then the others */
+        if (PortKD.stage && tb < k_kd_stages[0].to)
+            PortKD.cover = 1;
+        /* the end: its black frame 0.45 s before the iOS scene of the
+         * beams ends (8.1 s after it starts), so the first white comes as
+         * they end, as in MAME; or at the iOS's winner event if first */
+        if (tb >= PORTKD_BEAMS - 0.45f || WinnerMessage[0] || WinnerMessage[1]) {
+            PortKD.end = 1;
+            PortKD.te = 0.0f;
+            PortKD.booms = 0;
+            PortKD.tune = Settings[2] == 0 ? -1
+                        : lime_port_tune_exists(PORTKD_TUNE) ? 0
+                        : lime_port_tune_exists(PORTKD_TUNE_WAV) ? 2 : -1;
+        }
+        if (live)
+            PortKD.tb += dt;
+    }
+
+    /* ---- the end: black, three white flashes with the lava stage between
+     * them, the burn, then the music and the lines one by one ---- */
+    if (PortKD.end) {
+        static const float white[3] = { 0.45f, 0.75f, 1.0f };
+        float te = PortKD.te;
+        int   i;
+
+        ScorpionFlash = 0.0f;           /* the iOS's one flash, replaced */
+        if (te < 0.05f)
+            PortKD.fill = 0.0f;
+        for (i = 0; i < 3; i++) {
+            if (te >= white[i] && te < white[i] + 0.10f)
+                PortKD.fill = 1.0f;
+            else if (te >= white[i] + 0.10f && te < white[i] + 0.15f)
+                PortKD.fill = 0.0f;
+        }
+        PortKD.stage = te >= 0.45f ? PORTKD_LAST : NULL;
+        if (te >= 1.25f && te < 2.1f)
+            PortKD.burn = 0.45f - 0.28f * (te - 1.25f) / 0.85f;
+        /* the lava stage's sky lit with each blast (MAME: the frame before
+         * the white), and kept brighter than the floor through the burn
+         * (MAME: 85 against 24) */
+        if ((te >= 0.65f && te < 0.75f) || (te >= 0.90f && te < 1.0f))
+            PortKD.sky = 0.6f;
+        else if (te >= 1.25f && te < 2.1f)
+            PortKD.sky = 0.3f;
+        /* three blasts, one before each white (Mary: three thunders;
+         * MAME: bursts 0.25 s apart) */
+        if (live && PortKD.booms < 3
+            && te >= (PortKD.booms == 0 ? 0.40f : PortKD.booms == 1 ? 0.70f : 0.95f)) {
+            PortKD.booms++;
+            PortKD_Sound("Strtboom");
+        }
+
+        if ((PortKD.tune == 0 || PortKD.tune == 2) && live
+            && te >= PORTKD_TUNE_AT) {
+            limeStopTune();
+            limePlayTune(PortKD.tune ? PORTKD_TUNE_WAV : PORTKD_TUNE,
+                         (long)MusicVol[Settings[2]], 0);
+            PortKD.tune = 1;
+        }
+        SKDeathMessageOffset = PortKD_TextOffset(0);    /* the winner line */
+        if (live && te < 60.0f)
+            PortKD.te += dt;
+    }
+
+    /* ---- his scream, twice, one right after the other, from 1.14 s
+     * (MAME), the last blast cutting it if it still plays (Mary) ---- */
+    if (PortKD.ko && live && PortKD.screams >= 0 && PortKD.screams < 2
+        && PortKD.tk >= 1.14f
+        && PortKD.tk >= 1.14f + (float)PortKD.screams * PORTKD_SCREAM
+        && !(PortKD.end && PortKD.te >= 0.95f)) {
+        PortKD.screams++;
+        PortKD_Sound("Skdiemix");
+    }
+    if (PortKD.end && PortKD.te >= 0.95f && PortKD.screams > 0) {
+        PortKD.screams = -1;
+        lime_port_stop_sound(lime_port_sound("Skdiemix"));
+    }
+    if (PortKD.ko && live)
+        PortKD.tk += dt;
+
+    /* the HUD, none from the strobe on (MAME); the end's lines are drawn
+     * over it by PortKD_Lines */
+    if (PortKD.ko && PortKD.tk >= PORTKD_STROBE0)
+        PortKD.hud_off = 1;
+
+    /* ---- the shake, through the beams to the last white: light and slow
+     * at first, faster and stronger to the end (Mary); MAME's 3 -- 10 px
+     * of 254 at the end ---- */
+    if (PortKD.beams && !(PortKD.end && PortKD.te >= 1.0f)) {
+        if (live) {
+            PortKD.shift_left -= dt;
+            if (PortKD.shift_left <= 0.0f) {
+                float k = PortKD.end ? 1.0f : PortKD.tb / PORTKD_BEAMS;
+                float px;
+
+                if (k > 1.0f) k = 1.0f;
+                px = 1.0f + k * 2.0f
+                   + (float)(PortKD_Rand() % 100) / 99.0f * (1.5f + k * 5.5f);
+                PortKD.shift = (PortKD.shift > 0.0f ? -px : px) * 2.0f / 254.0f;
+                PortKD.shift_left = 0.1f - 0.065f * k;
+            }
+        }
+    } else {
+        PortKD.shift = 0.0f;
+    }
+
+    {   /* UMK3_LOG_KD=1: what this draws, at each change (a test's check
+         * against the MAME timeline) */
+        static const char *last_stage;
+        static int last_kind = -2;
+        int kind = PortKD.bg >= 0.0f ? (int)(PortKD.bg * 2 + PortKD.grey * 4)
+                 : PortKD.fill >= 0.0f ? 10 + (int)PortKD.fill
+                 : PortKD.burn > 0.0f ? 20 : PortKD.hide ? 30 : -1;
+        if ((kind != last_kind || PortKD.stage != last_stage)
+            && getenv("UMK3_LOG_KD"))
+            printf("PortKD: t %.3f tb %.3f te %.3f kind %d stage %s\n",
+                   PortKD.tk, PortKD.beams ? PortKD.tb : -1.0f,
+                   PortKD.end ? PortKD.te : -1.0f,
+                   kind, PortKD.stage ? PortKD.stage : "-");
+        last_kind = kind;
+        last_stage = PortKD.stage;
+    }
+}
+
+/* The stage burnt white: white added over what is drawn so far. */
+static void PortKD_Burn(float a, float part)
+{
+    glMatrixMode(0x1701);               /* GL_PROJECTION */
+    glPushMatrix();
+    glMatrixMode(0x1700);               /* GL_MODELVIEW */
+    glPushMatrix();
+    limeSet2DDrawing();
+    limeDisableDepthTest();
+    limeEnableAlphaBlending_Additive();
+    if (part >= 1.0f) {
+        limeFillRect(0.0f, 0.0f, (float)limeScreenWidth,
+                     (float)limeScreenHeight, 1.0f, 1.0f, 1.0f, a);
+    } else {
+        /* the sky: strongest at the top, fading to nothing by `part` of
+         * the height -- no edge across the picture (Mary saw the line a
+         * plain band left) */
+        const float c[16] = { 1, 1, 1, a,  1, 1, 1, a,
+                              1, 1, 1, 0,  1, 1, 1, 0 };
+        limeFillRectGrad(0.0f, 0.0f, (float)limeScreenWidth,
+                         (float)limeScreenHeight * part, c);
+    }
+    limeEnableAlphaBlending_Basic();
+    limeEnableDepthTest();
+    glMatrixMode(0x1701);
+    glPopMatrix();
+    glMatrixMode(0x1700);
+    glPopMatrix();
+}
+
+/* Around DrawHUD (Task_GameMain): the HUD drawn with no colour while the
+ * strobe hides it -- its counters still run -- and the end's full-screen
+ * flashes over everything after it. */
+void PortKD_BeforeHUD(void)
+{
+    if (PortKD.hud_off)
+        limeSetColourMask(0, 0, 0, 0);
+}
+
+void PortKD_AfterHUD(void)
+{
+    if (PortKD.hud_off)
+        limeSetColourMask(1, 1, 1, 0);  /* as Task_GameMain sets it */
+    if (PortKD.fill >= 0.0f) {
+        limeSet2DDrawing();
+        limeDisableDepthTest();
+        limeEnableAlphaBlending_Basic();
+        limeFillRect(0.0f, 0.0f, (float)limeScreenWidth,
+                     (float)limeScreenHeight,
+                     PortKD.fill, PortKD.fill, PortKD.fill, 1.0f);
+    }
+}
+
+/* RenderLevelPlayers, per object: whether it is not drawn -- both, or
+ * the winner's side (player one's; Kahn is player two) */
+int PortKD_HideSide(long side)
+{
+    return PortKD.hide == 1 || (PortKD.hide == 2 && side == 0);
+}
+
+/* Blood.c: the iOS's scream (event 3/65) and announcer (2/0) left out
+ * while PortKD plays the death it saw start */
+int PortKD_Screams(void)
+{
+    return PortKD.ko;
+}
+
+/* Blood.c event 3/65: SK_ENDING already started by PortKD */
+int PortKD_Beams(void)
+{
+    return PortKD.ko && PortKD.beams;
+}
+
+/* DrawHUD: the end's lines by PortKD's times (1), or the iOS's (0) */
+int PortKD_Text(void)
+{
+    return PortKD.end;
+}
+
+/* RoundSummaryUpdate: the fight held until the lines are up, MAME's fade
+ * to the treasures (13.6 s from the black frame), and the music is over
+ * (Mary: the song must finish) */
+int PortKD_HoldRound(void)
+{
+    if (!PortKD.end)
+        return 0;
+    if (PortKD.te < 13.6f)
+        return 1;
+    return PortKD.tune == 1 && plat_music_playing() && PortKD.te < 40.0f;
+}
+
+
 /* ------------------------------------------------------------- RenderGameView
  *
  * armv7 0x000260d4, 140 bytes.  **Complete. This is the frame's 3D half.**
@@ -1059,18 +1569,47 @@ void RenderGameView(void)
 {
     float eye[3];
 
+    PortKD_Update();                        /* port: Shao Kahn's death */
+    PortScreenShiftY = PortKD.shift;
     LIMEDS_Set3dMode();
+    PortScreenShiftY = 0.0f;
 
     eye[0] = Camera[0] + ShakeOffset[0];
     eye[1] = Camera[1] + ShakeOffset[1];
     eye[2] = Camera[2] + ShakeOffset[2];    /* the shake is z-only */
     SetToUseCamera(eye);
 
+    if (PortKD.bg >= 0.0f) {
+        /* port: the strobe of Shao Kahn's death -- a flat background and
+         * the fighters flat over it, nothing else; no REAL-TIME SHADOWS or
+         * DYNAMIC LIGHTS on them, which would shade the flat colour */
+        rgl_shadow_camera(0);
+        glClearColor(PortKD.bg, PortKD.bg, PortKD.bg, 1.0f);
+        glClear(0x4000 | 0x0100);           /* colour and depth */
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        ClearedZBuffer = 0;
+        PortFlatGrey = PortKD.grey;
+        RenderLevelPlayers();
+        PortFlatGrey = -1.0f;
+        PortSkipFighter = 0;
+        KillIllegalWhirlwinds();
+        return;
+    }
+
     RenderLevelBG();
     LIME_RenderEvents(0);                   /* opaque pass */
+    if (PortKD.stage                        /* port: another stage behind */
+        && stage_picture_full(PortKD.stage,
+                              -PortKD.shift * 0.5f * 320.0f))
+        limeClearDepthBuffer();
+    if (PortKD.burn > 0.0f)
+        PortKD_Burn(PortKD.burn, 1.0f);     /* port: the stage burnt white */
+    if (PortKD.sky > 0.0f)
+        PortKD_Burn(PortKD.sky, 0.5f);      /* port: and its sky lit */
 
     ClearedZBuffer = 0;
     RenderLevelPlayers();                   /* which may set it */
+    PortSkipFighter = 0;                    /* port: PortKD, per object */
 
     if (ClearedZBuffer != 0 && *LevelSelectPtr == 2)
         limeClearDepthBuffer();
@@ -1079,6 +1618,10 @@ void RenderGameView(void)
     MaintainParticles();
     KillIllegalWhirlwinds();
     RenderExtras();
+    if (PortKD.cover                        /* port: the empty city, over all */
+        && stage_picture_full(PortKD.stage, -PortKD.shift * 0.5f * 320.0f)
+        && PortKD.burn > 0.0f)
+        PortKD_Burn(PortKD.burn, 1.0f);
 
     if (PortAfterScene != NULL)             /* port: the debug hitboxes */
         PortAfterScene();
@@ -9468,6 +10011,40 @@ static void RoundEndedAgainst(long loser)
         Stats[6]++;
 }
 
+/* Port: PortKD -- the end's four lines, drawn after the HUD (which it
+ * hides), each coming up at MAME's time (PortKD_TextOffset): the winner
+ * line where DrawHUD puts it, the other three at y 112, 144, 176. */
+static void PortKD_Lines(void)
+{
+    float o;
+
+    if (!PortKD_Text() || GameMode == 3)
+        return;
+    limeEnableAlphaBlending_Basic();
+    limeSet2DDrawing();
+    limeDisableDepthTest();
+    o = PortKD_TextOffset(0);
+    if (o < 1.0f && (WinnerMessage[0] || WinnerMessage[1]))
+        limeDrawFONT(&GameFont, limeUC((const char *)WinnerMessage),
+                     (float)(limeScreenWidth / 2),
+                     FE_HeightScale * (80.0f + 320.0f * o),
+                     1, FE_WidthScale, fontcol);
+    o = PortKD_TextOffset(1);
+    if (o < 1.0f)
+        limeDrawFONT(&GameFont, GameText(0x39c), (float)(limeScreenWidth / 2),
+                     FE_HeightScale * (112.0f + 320.0f * o),
+                     1, FE_WidthScale, fontcol);
+    o = PortKD_TextOffset(2);
+    if (o < 1.0f) {
+        limeDrawFONT(&GameFont, GameText(0x39d), (float)(limeScreenWidth / 2),
+                     FE_HeightScale * (144.0f + 320.0f * o),
+                     1, FE_WidthScale, fontcol);
+        limeDrawFONT(&GameFont, GameText(0x39e), (float)(limeScreenWidth / 2),
+                     FE_HeightScale * (176.0f + 320.0f * o),
+                     1, FE_WidthScale, fontcol);
+    }
+}
+
 void DrawHUD(void)
 {
     float s;
@@ -9723,7 +10300,10 @@ void DrawHUD(void)
          *      0x39d  YOU ARE THE              y 144
          *      0x39e  ULTIMATE MK3 CHAMPION    y 176
          * They were missing here. */
-        if (DoingSKDeath) {
+        if (DoingSKDeath && PortKD_Text()) {
+            /* port: PortKD draws the lines itself, at MAME's times, over
+             * the HUD it hides (PortKD_Lines) */
+        } else if (DoingSKDeath) {
             SKDeathMessageOffset += -0.016666668f / limeFPSScaleFactor;
             if (!(SKDeathMessageOffset > 0.0f)) {
                 SKDeathMessageOffset = 0.0f;
@@ -9872,6 +10452,8 @@ static void RoundSummaryUpdate(void)
         RoundSummaryTime = ROUND_SUMMARY_HOLD;
 
     if (RoundSummaryTime < ROUND_SUMMARY_HOLD || !RoundHasEnded)
+        return;
+    if (PortKD_HoldRound())             /* port: Shao Kahn's end, played out */
         return;
 
     if (!RoundHasEndedStatsUpdated) {
@@ -11815,7 +12397,10 @@ static void Task_GameMain_frame(void)
     if (DoSmokesEarthFatal != 0.0f)
         SmokeEarthFatalCutaway();
 
+    PortKD_BeforeHUD();                 /* port: Shao Kahn's death */
     DrawHUD();
+    PortKD_AfterHUD();
+    PortKD_Lines();
     if (GameMode == 6 && PortPractice && GamePaused == 0)
         PortTrainDraw();                /* Port: training's window */
 
@@ -12205,6 +12790,7 @@ void RenderLevelPlayers(void)
             }
 
             ArcadePosTo3dPos(obj, &pf[0x5c8 / 4], &os[GOBJ_CHR]);
+            PortSkipFighter = PortKD_HideSide(side);    /* port: PortKD */
             /* Port, not in the binary: a babality's baby stood on the floor.
              * t_turn_into_a_baby (mkstat.c) puts it at the floor less its
              * frame's box height, the arcade sprite's -- 44 for Sub-Zero,
@@ -12478,7 +13064,10 @@ void RenderLevelPlayers(void)
                 glMultMatrixf(&pf[0x548 / 4]);
                 glCullFace(w[0x540 / 4] ? GL_FRONT : GL_BACK);
 
-                if (slot <= 1) {
+                /* port: PortKD -- what hangs on a fighter (Kahn's hammer)
+                 * not drawn while he is a silhouette or hidden */
+                if (PortSkipFighter || PortFlatGrey >= 0.0f) {
+                } else if (slot <= 1) {
                     SkipFrame86 = 0;
                     if (oi[GOBJ_FRAME / 2] == FRAME_SKIP86)
                         SkipFrame86 = 1;

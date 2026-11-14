@@ -373,6 +373,7 @@ extern int   limeScreenWidth;
 extern int   limeScreenHeight;
 
 void limePortDisplayRotation(void);
+extern float PortScreenShiftY;              /* port: GameCode.c PortKD */
 
 void LIMEDS_Set3dMode(void)
 {
@@ -383,6 +384,12 @@ void LIMEDS_Set3dMode(void)
     glLoadIdentity();
     glMatrixMode(GL_PROJECTION);        /* 0x1701 */
     glLoadIdentity();
+    /* port only: the whole picture moved up or down, in screen units (the
+     * arcade's shake during Shao Kahn's death, GameCode.c PortKD). Applied
+     * first, so after the projection and the turn: a flat shift of the
+     * frame, the same for the stage and the fighters. 0 everywhere else. */
+    if (PortScreenShiftY != 0.0f)
+        glTranslatef(0.0f, PortScreenShiftY, 0.0f);
     limePortDisplayRotation();          /* port only -- not in the binary */
 
     {

@@ -203,6 +203,9 @@ void CalcShakeOffset(long magnitude);
 long get_tsound(long id);
 void limePlaySound(long id, float vol, float pan, long flags);
 void limeSetVibrate(void);
+int  PortKD_Screams(void);              /* port: GameCode.c */
+int  PortKD_Beams(void);                /* port: GameCode.c */
+extern long DoingSKDeath;
 
 
 /* ------------------------------------------------------------- RunGameEvents
@@ -644,6 +647,23 @@ static void BeginEffectMatrix(void)
     limeScaleMatrix(m, 1.0f / WorldScaleAdjust);
 }
 
+/* Port, not in the binary: what event 3/65 starts for Shao Kahn -- his
+ * death, the SK_ENDING scene at the camera -- started by GameCode.c PortKD
+ * at the end of the strobe it adds (the arcade's), a second before the
+ * event; the event then leaves the scene alone (PortKD_Beams). */
+void PortKD_StartBeams(void)
+{
+    if (Character2 != SHAO_KAHN || DoingSKDeath)
+        return;
+    DoingSKDeath         = 1;
+    SKDeathMessageOffset = 1.0f;
+    BeginEffectMatrix();
+    m[M_Z] = ShadowOffset;
+    m[M_X] = Camera[0];
+    m[M_Y] = 0.0f;
+    LIME_PlayFBXAtPos(m, 0, SKEffectScene, 1);
+}
+
 /* The sound tail. Every lookup in the function converges here, and every one is
  * gated on the sound-effects setting before the lookup even happens. */
 static void PlaySoundId(long id)
@@ -747,7 +767,9 @@ void AddNewGameEvents(void)
                 /* four of the ids double as the round announcement */
                 if ((unsigned long)(arg - 0x11) <= 3)
                     RoundMessage = arg - 0x10;
-                if (Settings[3])
+                /* port: not the announcer over Shao Kahn's death when
+                 * PortKD plays it (MAME: no "wins" there) */
+                if (Settings[3] && !(DoingSKDeath && PortKD_Screams()))
                     PlaySoundId(get_tsound(arg));
                 break;
             case 1:
@@ -1154,12 +1176,18 @@ void AddNewGameEvents(void)
                     SaveUnclaimedTreasure(1);
                     DoingSKDeath         = 1;
                     SKDeathMessageOffset = 1.0f;
-                    BeginEffectMatrix();
-                    m[M_Z] = ShadowOffset;
-                    m[M_X] = Camera[0];
-                    m[M_Y] = 0.0f;
-                    LIME_PlayFBXAtPos(m, 0, SKEffectScene, 1);
-                    if (Settings[3])
+                    /* port: PortKD_Beams -- already started by GameCode.c
+                     * PortKD, at the strobe's end */
+                    if (!PortKD_Beams()) {
+                        BeginEffectMatrix();
+                        m[M_Z] = ShadowOffset;
+                        m[M_X] = Camera[0];
+                        m[M_Y] = 0.0f;
+                        LIME_PlayFBXAtPos(m, 0, SKEffectScene, 1);
+                    }
+                    /* port: PortKD_Screams -- GameCode.c plays the
+                     * arcade's two screams instead, when it saw the hit */
+                    if (Settings[3] && !PortKD_Screams())
                         PlaySoundId(get_tsound(0x88));
                 }
                 break;
