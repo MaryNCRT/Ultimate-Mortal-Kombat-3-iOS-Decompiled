@@ -608,3 +608,49 @@ void plat_music_stop(void)
     g_mpcm = NULL;
     g_music = 0;
 }
+
+/* An .mp3 sound (a mod's: lime_menu.c load_sound) as the game's sounds
+ * are, 8-bit mono, through the ACM codec as the music. 0 if it cannot. */
+int plat_mp3_load_u8(const char *path, unsigned char **pcm, int *frames, int *rate)
+{
+    FILE *f;
+    long n, fr = 0, i;
+    unsigned char *mp3, *o;
+    short *s;
+    int r = 0, ch = 0, k;
+
+    if (!path || !(f = fopen(path, "rb")))
+        return 0;
+    fseek(f, 0, SEEK_END);
+    n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    mp3 = n > 0 ? (unsigned char *)malloc((size_t)n) : NULL;
+    if (!mp3 || fread(mp3, 1, (size_t)n, f) != (size_t)n) {
+        fclose(f);
+        free(mp3);
+        return 0;
+    }
+    fclose(f);
+    s = mp3_decode(mp3, n, &r, &ch, &fr);
+    free(mp3);
+    if (!s || ch < 1 || r <= 0 || fr <= 0) {
+        free(s);
+        return 0;
+    }
+    o = (unsigned char *)malloc((size_t)fr);
+    if (!o) {
+        free(s);
+        return 0;
+    }
+    for (i = 0; i < fr; i++) {
+        long acc = 0;
+        for (k = 0; k < ch; k++)
+            acc += s[i * ch + k];
+        o[i] = (unsigned char)((acc / ch >> 8) + 128);
+    }
+    free(s);
+    *pcm = o;
+    *frames = (int)fr;
+    *rate = r;
+    return 1;
+}
