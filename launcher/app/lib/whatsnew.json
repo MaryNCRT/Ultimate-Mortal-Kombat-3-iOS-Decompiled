@@ -2,6 +2,26 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.5.4",
+      "date": "2026-11-19",
+      "ES": [
+        "En línea: los dos jugadores pelean en el mismo escenario (el anfitrión ya no carga uno al azar encima del elegido).",
+        "En línea: se acabaron los bloqueos al terminar un round o en la segunda pelea; un clic en el resumen del round ya no separa las dos partidas.",
+        "En línea: menos tirones (el juego se frena mucho menos para esperar al rival) y una pelea sin respuesta del rival por 15 s vuelve al lobby en vez de quedarse congelada.",
+        "Steam Deck y Linux: el esquema de 6 botones funciona en las peleas, y START / SELECT también.",
+        "Más mandos reconocidos: unos 870 en Windows (PlayStation, Switch, 8BitDo, sticks arcade, genéricos) gracias a SDL_GameControllerDB; en Linux, el mando del jugador 2.",
+        "KOMBO SLIDE en NO: tampoco empujan las patadas del kombo, y VS RULES ya no lo vuelve a activar."
+      ],
+      "EN": [
+        "Online: both players fight on the same stage (the host no longer loads a random one over the chosen one).",
+        "Online: no more softlocks at the end of a round or in the second fight; a click on the round's summary no longer parts the two games.",
+        "Online: less stutter (the game holds far less often to wait for the other player), and a fight whose other side stops answering for 15 s goes back to the lobby instead of freezing.",
+        "Steam Deck and Linux: the 6-button layout works in fights, and so do START / SELECT.",
+        "More pads understood: about 870 on Windows (PlayStation, Switch, 8BitDo, arcade sticks, generic pads) through SDL_GameControllerDB; on Linux, player two's pad.",
+        "KOMBO SLIDE OFF: a kombo's kicks no longer push either, and VS RULES no longer turn it back on."
+      ]
+    },
+    {
       "version": "0.5.3",
       "date": "2026-11-14",
       "ES": [
