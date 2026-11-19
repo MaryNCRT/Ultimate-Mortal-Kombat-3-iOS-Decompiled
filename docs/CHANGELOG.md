@@ -12,6 +12,24 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 Built into the test folder; not yet played by Mary.
 
+- **Online: both players on the same stage.** The host loaded a random
+  stage over the one the room, STAGE SELECT or the draw had chosen, and the
+  guest followed only if the host's message came in time: with lag, two
+  fights on two stages. The chosen stage now holds on both.
+- **Online: no more softlock at the end of a round.** A click or a tap on
+  the round's summary skipped its wait on that machine only, so it began the
+  next round before the other. Online the summary now runs its own time on
+  both. Checked: best of 3 with 120 ms of ping and 10% of the packets lost,
+  no desync, both ending on the same frame.
+- **Steam Deck / Linux: the 6-button layout works in fights** (issues #171,
+  #253). On 64-bit Linux the port read some of the game's numbers as 8 bytes
+  instead of 4, so the fight always used the 5-button table (X and Y high
+  punch, A and B high kick) and START / SELECT could do nothing. Not yet
+  tried on a Deck.
+- Test aids for online: a bad line on purpose (`UMK3_NET_LOSS`,
+  `UMK3_NET_LAG`, `UMK3_NET_JITTER`), a sync test and a memory dump that
+  name what differs between two games.
+
 - **Online: softlocks after a fight or a round.** The second fight of a
   session started each machine's engine on a different step phase (the
   55.93 Hz step's accumulator was never reset between fights), so the two

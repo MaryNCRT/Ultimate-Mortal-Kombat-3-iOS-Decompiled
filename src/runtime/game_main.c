@@ -307,19 +307,19 @@ void  lime_app_become_active(void);
 
 extern char Language[10];
 extern int  CurrentTask;
-extern long SplashCount;                /* Task_LoadSplashScreen's frame */
+extern umk3_long SplashCount;                /* Task_LoadSplashScreen's frame */
 extern float StaticMeshAmbient[3];      /* CreateFadedRGBS's offset */
 extern int  FE_CurrentTask;
 extern int  PortPractice;             /* FrontEnd.c: training */
-extern long PLAYER1MODEL, PLAYER2MODEL, Character1, Character2, LevelSelect,
+extern umk3_long PLAYER1MODEL, PLAYER2MODEL, Character1, Character2, LevelSelect,
             Character2Override;
 extern const char *CharacterNames[26];
 
 extern float limeTouchScreenX[10], limeTouchScreenY[10];
 extern void *G;                         /* GAMESTATE *, the fight engine's state */
-extern long  Player1NumButtons;        /* 5 or 6, Settings[4] */
-extern long  Player2NumButtons;
-extern long  GameMode;
+extern umk3_long  Player1NumButtons;        /* 5 or 6, Settings[4] */
+extern umk3_long  Player2NumButtons;
+extern umk3_long  GameMode;
 extern int   PortKeyButtonsP2[7], PortKeyDialP2;
 extern int   Settings[10];
 
@@ -1375,7 +1375,7 @@ static void read_config(const char *dir)
  * t_clock4 polls both for <= 0 every tick and goes to t_round_is_over, so the
  * round ends through the game's own path -- plus the HUD's Health[], which
  * DrawHUD's round-end test reads. */
-extern long RoundWins[2], WinsNeeded;
+extern umk3_long RoundWins[2], WinsNeeded;
 extern char *H;                         /* the fight engine's state, 0x0038c674 */
 extern int  Health[2];
 
@@ -1386,7 +1386,7 @@ extern int  Health[2];
  *      P   not paused: top right (pause)   menu open: RESUME   list: CANCEL
  *      M   not paused: top left (list)     list open: CANCEL
  */
-extern long GamePaused;
+extern umk3_long GamePaused;
 
 extern int limeScreenWidth;
 float FE_X(float v);
@@ -1702,7 +1702,7 @@ static void hud_keys(void)
  * fight -- the fight's intro (DoIntro, GameCode.c) and Arcade's tower
  * (FE_Task_Tower, 28) -- with the same three-tick tap, high in the middle
  * of the screen, where nothing else is touched. */
-extern long DoIntro;
+extern umk3_long DoIntro;
 
 static void pad_skip(void)
 {
@@ -1733,7 +1733,7 @@ static void pad_skip(void)
  * a pad, else the keyboard's. In DUELO it shows the player who paused, both
  * when it was opened with a click or a tap; elsewhere player one. With the
  * on-screen controls showing it keeps the letters. */
-extern long Player1NumButtons, Player2NumButtons;
+extern umk3_long Player1NumButtons, Player2NumButtons;
 
 /* Who opened the moves list, for its fighter (GameCode.c MovesList): 2
  * player two, in VS. Port only. */
@@ -1855,7 +1855,7 @@ int PortStartGlyph(char *out, int n)
 
 /* The picture for atlas value `value` (6..14, a button) for player p (0 or
  * 1), as a file under "aditional textures/" in `out`; 0 when there is none. */
-int PortMoveGlyph(long value, int p, char *out, int n)
+int PortMoveGlyph(umk3_long value, int p, char *out, int n)
 {
     /* the atlas's buttons: 6-button pad action and key, 5-button ones */
     static const struct { int a6, k6, a5, k5; } m[9] = {
@@ -1907,7 +1907,7 @@ int PortMoveGlyph(long value, int p, char *out, int n)
  * finisher on, not paused. The debug keys only act then -- pressed during
  * a round's end they ended it a second time, with the other fighter, and
  * both got the round. */
-extern long DoIntro, IsInFinishing, RoundSummary;
+extern umk3_long DoIntro, IsInFinishing, RoundSummary;
 int dbg_round_live(void)
 {
     /* RoundSummary is 1 from a round's end to the next round's fade-in and
@@ -1918,7 +1918,7 @@ int dbg_round_live(void)
 }
 
 /* Arcade, with a ladder chosen: GameMode 0 and Destiny 0..3. */
-extern long GameMode, Destiny;
+extern umk3_long GameMode, Destiny;
 extern int  Stage;
 int dbg_in_arcade(void)
 {
@@ -2242,7 +2242,7 @@ static void debug_keys(void)
 extern const char *FETaskNames[DBG_SCREENS];
 extern int   PendingPush, FE_TaskStackPointer;
 extern float FE_FadeAdd;
-extern long  DontQuitAfterFade, RoundSummary;
+extern umk3_long  DontQuitAfterFade, RoundSummary;
 extern float FE_Fade;
 void PushFETaskDeferred(int task);
 
@@ -2448,7 +2448,7 @@ static struct hb_off hb_offset(const char *o)
 
 /* A strike's boxes: from the floor, without a character's posOffsetX (at
  * most 0.24 of a unit, 15 arcade pixels) -- the hook does not say whose. */
-static void hb_strike(const void *attack, const void *target, long hit)
+static void hb_strike(const void *attack, const void *target, umk3_long hit)
 {
     g_hb[g_hb_next].atk = *(const struct hb_box *)attack;
     g_hb[g_hb_next].tgt = *(const struct hb_box *)target;
@@ -2635,7 +2635,7 @@ static void palette_sync(void)
 static void hb_update(void)
 {
     extern void (*PortAfterScene)(void);
-    extern void (*PortStrikeHook)(const void *, const void *, long);
+    extern void (*PortStrikeHook)(const void *, const void *, umk3_long);
     int on = (g_cfg_debug_keys && dbg_hitboxes_on())
              || getenv("UMK3_DBG_HITBOX");
 
@@ -2676,7 +2676,7 @@ static double fight_speed(void)
 static void dbg_taint_watch(void)
 {
     extern int PortDbgClock, PortDbgHealth;
-    extern long SurvivalStage;
+    extern umk3_long SurvivalStage;
     static long mode = -1;
     static int task = -1;
 
@@ -3054,7 +3054,7 @@ void port_gfx_set(const struct port_gfx *g, int display)
         SetupFEScale();                 /* UseLOWAssets follows the quality */
     if (g->texq != texq_was) {
         /* every texture so far again, at the new quality (draw_gl.c) */
-        extern long UseLOWAssets;
+        extern umk3_long UseLOWAssets;
         void lime_textures_requality(int use_low);
         lime_textures_requality(UseLOWAssets != 0);
     }
@@ -3432,7 +3432,7 @@ int main(int argc, char **argv)
      * current frame (a hard cut every tick). The front end and the intro
      * borrow their own window (40, 20) around each call and put this back. */
     {
-        extern long AnimSmoothWindowSize;
+        extern umk3_long AnimSmoothWindowSize;
         AnimSmoothWindowSize = 0;
     }
 
@@ -4256,9 +4256,9 @@ int main(int argc, char **argv)
             if (getenv("UMK3_LOG_P1") && CurrentTask == 6 && G) {
                 extern char Players[];
                 static long last_fr = -1, last_bits = -1;
-                long fr = *(long *)(Players + 0x14);
-                long bits = *(long *)((char *)G + 0x1c);
-                extern long ButtonStates[7], JoystickState;
+                long fr = *(umk3_long *)(Players + 0x14);
+                long bits = *(umk3_long *)((char *)G + 0x1c);
+                extern umk3_long ButtonStates[7], JoystickState;
                 if (fr != last_fr || bits != last_bits)
                     printf("tick %ld: p1 frame %ld bits %06lx btn %ld%ld%ld%ld%ld%ld%ld dial %ld keys %ld\n",
                            ticks, fr, bits, ButtonStates[0], ButtonStates[1],

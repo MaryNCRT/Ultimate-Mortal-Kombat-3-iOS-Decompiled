@@ -388,6 +388,23 @@ static int state_sections(uint8_t **p, uint32_t *n, int max)
     return k;
 }
 
+/* The game's state sections, for a test's dump (rollback.c): .umkstd,
+ * .umkstb, .umkntd, .umkntb, as many as there are. */
+int st_sections(uint8_t **p, uint32_t *n, int max)
+{
+    return state_sections(p, n, max);
+}
+
+/* The arena and how much of it is in use (rollback.c's dump). */
+int st_arena(uint8_t **p, uint32_t *n)
+{
+    if (!g_base)
+        return 0;
+    *p = g_base;
+    *n = head()->top;
+    return 1;
+}
+
 /* The menu's slots, then the rollback probe's own (rollback_probe.c). */
 #define ST_PROBE_SLOTS 3
 
@@ -797,6 +814,41 @@ unsigned long st_probe_diff(int k, void (*page)(int r, uint32_t off, void *ctx),
     return count;
 }
 
+/* Every 4-byte word of the live state that differs from probe slot k: the
+ * four sections (.umkstd, .umkstb, then the machine's .umkntd, .umkntb, which
+ * a rollback does not put back) and the arena, in the slot's own order.
+ * `word` gets the live address, the value now and the slot's; it returns 0
+ * to stop. Returns how many differ (rollback.c's sync test). */
+unsigned long st_probe_words(int k, int (*word)(const void *at, uint32_t now, uint32_t was,
+                                                int section, void *ctx), void *ctx)
+{
+    uint8_t *p[4];
+    uint32_t n[4], i, at = 0, a, b;
+    unsigned long count = 0;
+    int ns, r, go = 1;
+
+    if (k < 0 || k >= ST_PROBE_SLOTS || !g_slot[ST_SLOTS + k].used || !st_available())
+        return 0;
+    ns = state_sections(p, n, 4);
+    p[ns] = g_base;
+    n[ns] = g_slot[ST_SLOTS + k].arena < head()->top ? g_slot[ST_SLOTS + k].arena
+                                                      : head()->top;
+    for (r = 0; r <= ns; r++) {
+        const uint8_t *q = g_slot[ST_SLOTS + k].buf + at;
+        for (i = 0; i + 4 <= n[r]; i += 4) {
+            memcpy(&a, p[r] + i, 4);
+            memcpy(&b, q + i, 4);
+            if (a != b) {
+                count++;
+                if (go && word)
+                    go = word(p[r] + i, a, b, r == ns ? 4 : r, ctx);
+            }
+        }
+        at += n[r];
+    }
+    return count;
+}
+
 /* A hash of each 4 KB page of live region r, at most `max`; how many. */
 unsigned long st_probe_page_hashes(int r, uint64_t *out, unsigned long max)
 {
@@ -859,11 +911,16 @@ int   st_save(int slot, const char **why)
 { (void)slot; *why = "save states need the Windows build"; return -1; }
 int   st_load(int slot, const char **why)
 { (void)slot; *why = "save states need the Windows build"; return -1; }
+int   st_sections(uint8_t **p, uint32_t *n, int max) { (void)p; (void)n; (void)max; return 0; }
+int   st_arena(uint8_t **p, uint32_t *n) { (void)p; (void)n; return 0; }
 int   st_probe_save(int k)                 { (void)k; return -1; }
 int   st_probe_load(int k)                 { (void)k; return -1; }
 unsigned long st_probe_region_size(int r) { (void)r; return 0; }
 unsigned long st_probe_diff(int k, void (*page)(int, uint32_t, void *), void *ctx)
 { (void)k; (void)page; (void)ctx; return 0; }
+unsigned long st_probe_words(int k, int (*word)(const void *, uint32_t, uint32_t, int, void *),
+                             void *ctx)
+{ (void)k; (void)word; (void)ctx; return 0; }
 uint64_t st_probe_hash(void)              { return 0; }
 unsigned long st_probe_page_hashes(int r, uint64_t *out, unsigned long max)
 { (void)r; (void)out; (void)max; return 0; }

@@ -17,7 +17,7 @@ int  mpnet_am_server(void);             /* mpAmIServer */
 int  mpnet_is_working(void);            /* mpIsWorking */
 /* mpSendPacket / mpSendPacketUnreliable: the 4-byte type goes first, big
  * endian, as the original put it on the wire. */
-void mpnet_send(long type, const void *data, int len, int reliable);
+void mpnet_send(umk3_long type, const void *data, int len, int reliable);
 /* the Bluetooth lobby's list (FE_Task_Multiplayer): always empty here */
 int  mpnet_peer_count(void);
 

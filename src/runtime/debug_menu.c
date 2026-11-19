@@ -313,10 +313,10 @@ enum {
  * hidden fighters, the ten treasures and the 23 endings, as the save keeps
  * them (GameCode.c Write_SaveData: 1 = won), then written to `savedata`.
  * Write_SaveData only writes in GameMode 0, so the mode is lent for it. */
-extern long ClassicSubZeroUnlocked, ErmacUnlocked, MileenaUnlocked, JadeUnlocked;
+extern umk3_long ClassicSubZeroUnlocked, ErmacUnlocked, MileenaUnlocked, JadeUnlocked;
 extern int  TreasureGained[10];
-extern long EndingsGained[23];
-extern long GameMode;
+extern umk3_long EndingsGained[23];
+extern umk3_long GameMode;
 void Write_SaveData(void);
 static int g_unlocked;                  /* done this session: the row says so */
 
@@ -2444,7 +2444,7 @@ void dbg_replay_loading(const char *title)
  * (960x640 on a 1024 sheet), or STAGE_<SCENE>.PNG when one is added; a
  * stage with neither gets one drawn (st_thumb). A debug
  * fight and a replay go straight on, with their own stage. */
-extern long GameMode;
+extern umk3_long GameMode;
 long isParent(void);
 struct TEXTURE;
 struct TEXTURE *limeLoadTexture(const char *path, int a, int b);
@@ -2860,7 +2860,7 @@ void limeSetTuneVol(long vol);
 int  plat_music_playing(void);
 extern int Settings[10];
 extern float MusicVol[];
-extern long FETuneSelection;
+extern umk3_long FETuneSelection;
 
 static void st_tune_on(const char *why)
 {

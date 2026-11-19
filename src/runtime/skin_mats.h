@@ -21,7 +21,7 @@ int  port_skin_mats_has(const void *skin);
 void port_skin_mats_use(const void *skin, int ice, const void *tex);
 /* LIME_RenderMeshSingleIndexed: draws the triangles part by part, each with
  * its own texture, and returns 1; 0 when the block has no parts */
-int  port_skin_mats_draw(const unsigned short *indices, long nfaces,
+int  port_skin_mats_draw(const unsigned short *indices, umk3_long nfaces,
                          unsigned tex_name);
 
 /* The proportion trick (<skin>.bones): LoadAnimatedCharacter, after the

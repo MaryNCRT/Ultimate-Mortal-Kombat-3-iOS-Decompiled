@@ -43,6 +43,7 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <dbghelp.h>
 #endif
 
 #include "savestate.h"
@@ -68,7 +69,7 @@ void     disableHeartbeat(void);        /* limeMPGameSpecific.c */
 long     isMPConnected(void);           /* limeMPGameSpecific.c */
 extern int mpLevelList[14];             /* gamecode_globals.c: the binary's online stages */
 extern float FrameCompensation;         /* GameCode.c: the engine's 55.93 Hz step */
-extern long  SpeedNormal;               /* GameCode.c: 0 slow motion */
+extern umk3_long  SpeedNormal;               /* GameCode.c: 0 slow motion */
 void     disconnected(void);            /* limeMPGameSpecific.c */
 void     endMP(void);                   /* limeMPGameSpecific.c */
 
@@ -347,7 +348,7 @@ static uint32_t g_snd_frame[RB_RING];
 static int g_snd_n[RB_RING], g_in_run, g_holding;
 static uint32_t g_run_frame;
 
-int rb_sound_ok(long h)
+int rb_sound_ok(umk3_long h)
 {
     uint32_t s = g_run_frame % RB_RING;
     int i;
@@ -380,6 +381,289 @@ static int run(void (*frame)(void), uint32_t f)
     g_hash[f % RB_RING] = rb_game_hash();
     g_hash_frame[f % RB_RING] = f;
     return CurrentTask == RB_FIGHT_TASK;
+}
+
+/* ------------------------------------------------------------ sync test
+ *
+ * UMK3_RB_SYNCTEST=1 (a test aid, Windows): every frame of an online fight
+ * runs twice from the same snapshot -- first as a rollback runs it again
+ * (silent, undrawn), then for real -- and every 4-byte word of the game's
+ * memory the two runs left different goes to the log by name (dbghelp and
+ * the exe's .pdb). What a run again leaves different from the first run is
+ * what parts two machines once one of them rolls back: state the snapshot
+ * does not hold, or logic that hangs on drawing or sound. */
+static int g_synctest = -1;
+static unsigned g_st_frames, g_st_bad;
+#define ST_NAMES 400
+static struct { char name[64]; unsigned words, frames, last; int sect; uint64_t lo, hi; } g_st_name[ST_NAMES];
+static int g_st_n;
+
+#ifdef _WIN32
+typedef BOOL (WINAPI *sym_init_fn)(HANDLE, PCSTR, BOOL);
+typedef BOOL (WINAPI *sym_from_fn)(HANDLE, DWORD64, PDWORD64, PSYMBOL_INFO);
+static sym_from_fn g_sym_from;
+
+static uint64_t g_sym_off;
+
+static void sym_name(const void *at, char *out, int n)
+{
+    static int tried;
+    union { SYMBOL_INFO s; char b[sizeof(SYMBOL_INFO) + 256]; } u;
+    DWORD64 off = 0;
+
+    if (!tried) {
+        HMODULE h = LoadLibraryA("dbghelp.dll");
+        sym_init_fn init = h ? (sym_init_fn)(void *)GetProcAddress(h, "SymInitialize") : NULL;
+        tried = 1;
+        if (init && init(GetCurrentProcess(), NULL, TRUE))
+            g_sym_from = (sym_from_fn)(void *)GetProcAddress(h, "SymFromAddr");
+    }
+    {
+        /* the last symbol found, for the words that follow inside it */
+        static uintptr_t c_lo, c_hi;
+        static char c_name[64];
+        uintptr_t a = (uintptr_t)at;
+
+        if (c_hi && a >= c_lo && a < c_hi) {
+            snprintf(out, (size_t)n, "%s", c_name);
+            g_sym_off = a - c_lo;
+            return;
+        }
+        memset(&u, 0, sizeof u);
+        u.s.SizeOfStruct = sizeof(SYMBOL_INFO);
+        u.s.MaxNameLen = 255;
+        g_sym_off = 0;
+        if (g_sym_from && g_sym_from(GetCurrentProcess(), (DWORD64)a, &off, &u.s)) {
+            snprintf(out, (size_t)n, "%s", u.s.Name);
+            snprintf(c_name, sizeof c_name, "%s", u.s.Name);
+            g_sym_off = off;
+            c_lo = a - (uintptr_t)off;
+            c_hi = u.s.Size ? c_lo + u.s.Size : a + 4;
+        } else
+            snprintf(out, (size_t)n, "?");
+    }
+}
+#else
+static uint64_t g_sym_off;
+static void sym_name(const void *at, char *out, int n) { (void)at; g_sym_off = 0; snprintf(out, (size_t)n, "?"); }
+#endif
+
+static int st_word(const void *at, uint32_t now, uint32_t was, int sect, void *ctx)
+{
+    char nm[64];
+    int i;
+
+    (void)ctx;
+    {
+        /* the loaded fighters' block, which the drawing writes into every
+         * frame (its own skinning scratch) and the snapshot leaves out */
+        extern char PreloadedCharacters[41148][0x5f4];
+        if ((const char *)at >= &PreloadedCharacters[0][0]
+            && (const char *)at < &PreloadedCharacters[0][0] + sizeof PreloadedCharacters)
+            return 1;
+    }
+    if (sect == 4)
+        snprintf(nm, sizeof nm, "arena+0x%x", (unsigned)(((uintptr_t)at >> 12) << 12) & 0xfffffff);
+    else
+        sym_name(at, nm, sizeof nm);
+    for (i = 0; i < g_st_n; i++)
+        if (!strcmp(g_st_name[i].name, nm))
+            break;
+    if (i == g_st_n) {
+        if (g_st_n == ST_NAMES)
+            return 1;
+        snprintf(g_st_name[i].name, sizeof g_st_name[i].name, "%s", nm);
+        g_st_name[i].sect = sect;
+        g_st_name[i].lo = g_st_name[i].hi = g_sym_off;
+        g_st_n++;
+        printf("rollback sync test: frame %u, NEW %s (%s) %p: run again %08x, real %08x\n",
+               g_frame, nm, sect == 0 ? ".umkstd" : sect == 1 ? ".umkstb" : sect == 2 ? ".umkntd"
+               : sect == 3 ? ".umkntb" : "arena", at, was, now);
+    }
+    g_st_name[i].words++;
+    if (g_sym_off < g_st_name[i].lo) g_st_name[i].lo = g_sym_off;
+    if (g_sym_off > g_st_name[i].hi) g_st_name[i].hi = g_sym_off;
+    if (g_st_name[i].last != g_frame + 1) {
+        g_st_name[i].last = g_frame + 1;
+        g_st_name[i].frames++;
+    }
+    return 1;
+}
+
+static void synctest_report(void)
+{
+    int i;
+
+    if (g_synctest <= 0 || !g_st_frames)
+        return;
+    printf("rollback sync test: %u frames, %u with differences, %d names\n", g_st_frames,
+           g_st_bad, g_st_n);
+    for (i = 0; i < g_st_n; i++)
+        printf("rollback sync test:   %-40s %-7s %u frames, %u words, +0x%llx..+0x%llx\n",
+               g_st_name[i].name,
+               g_st_name[i].sect == 4 ? "arena" : g_st_name[i].sect >= 2 ? "machine" : "game",
+               g_st_name[i].frames, g_st_name[i].words,
+               (unsigned long long)g_st_name[i].lo, (unsigned long long)g_st_name[i].hi);
+    fflush(stdout);
+}
+
+/* UMK3_RB_DUMP=<frame> (a test aid, two games on one PC): both machines
+ * stop at that frame until the other's input for it is in, run it, and write
+ * the game's sections (.umkstd, .umkstb) to logs/rbdump-<player>.bin; the
+ * one that writes second compares the two, word by word, and names in the
+ * log what differs -- the same exe on one PC puts both at the same
+ * addresses. */
+static long g_dump_at = -2;
+
+static void dump_compare(int me)
+{
+    uint8_t *p[2];
+    uint32_t n[2], i, at = 0, a, b, count = 0;
+    char path[64];
+    FILE *f;
+    int r, shown = 0;
+    uint8_t *other;
+    long len;
+
+    snprintf(path, sizeof path, "logs/rbdump-%d.bin", me ^ 1);
+    f = fopen(path, "rb");
+    if (!f)
+        return;
+    fseek(f, 0, SEEK_END);
+    len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    other = (uint8_t *)malloc((size_t)len);
+    if (!other || fread(other, 1, (size_t)len, f) != (size_t)len) {
+        fclose(f);
+        free(other);
+        return;
+    }
+    fclose(f);
+    if (st_sections(p, n, 2) != 2 || (long)(n[0] + n[1]) > len) {
+        printf("rollback dump: the other's dump is another size\n");
+        free(other);
+        return;
+    }
+    {
+        /* the arena: the words that differ, by 4 KB page, the first ones
+         * shown with where GameObjects (the fighters' sprite list) points */
+        uint8_t *ap;
+        uint32_t an, on, j, pages = 0, last = 0xffffffffu, shownw = 0, diffw = 0;
+        uint64_t obase;
+        extern void **GameObjects;
+        const uint8_t *oa = other + n[0] + n[1];
+
+        if ((long)(n[0] + n[1] + 12) <= len && st_arena(&ap, &an)) {
+            memcpy(&obase, oa, 8);
+            memcpy(&on, oa + 8, 4);
+            oa += 12;
+            printf("rollback dump: arena here %p, %u bytes; there %llx, %u bytes; "
+                   "GameObjects at +0x%llx\n", (void *)ap, an, (unsigned long long)obase, on,
+                   (unsigned long long)((uint8_t *)(void *)GameObjects - ap));
+            for (j = 0; j + 4 <= an && j + 4 <= on && n[0] + n[1] + 12 + j + 4 <= (uint32_t)len;
+                 j += 4) {
+                uint32_t x, y;
+                memcpy(&x, ap + j, 4);
+                memcpy(&y, oa + j, 4);
+                if (x != y) {
+                    diffw++;
+                    if (j / 4096 != last) {
+                        last = j / 4096;
+                        pages++;
+                    }
+                    if (shownw++ < 60)
+                        printf("rollback dump: arena +0x%08x: here %08x, there %08x\n", j, x, y);
+                }
+            }
+            printf("rollback dump: arena, %u words differ in %u pages\n", diffw, pages);
+        }
+    }
+    g_st_n = 0;
+    for (r = 0; r < 2; r++) {
+        for (i = 0; i + 4 <= n[r]; i += 4) {
+            memcpy(&a, p[r] + i, 4);
+            memcpy(&b, other + at + i, 4);
+            if (a != b) {
+                char nm[64];
+                int k;
+
+                count++;
+                sym_name(p[r] + i, nm, sizeof nm);
+                for (k = 0; k < g_st_n; k++)
+                    if (!strcmp(g_st_name[k].name, nm))
+                        break;
+                if (k == g_st_n && g_st_n < ST_NAMES) {
+                    snprintf(g_st_name[k].name, sizeof g_st_name[k].name, "%s", nm);
+                    g_st_name[k].words = 0;
+                    g_st_name[k].lo = g_st_name[k].hi = g_sym_off;
+                    g_st_n++;
+                    if (shown++ < 80)
+                        printf("rollback dump: frame %ld, %s+0x%llx: here %08x, there %08x\n",
+                               g_dump_at, nm, (unsigned long long)g_sym_off, a, b);
+                }
+                if (k < g_st_n) {
+                    g_st_name[k].words++;
+                    if (g_sym_off > g_st_name[k].hi) g_st_name[k].hi = g_sym_off;
+                }
+            }
+        }
+        at += n[r];
+    }
+    printf("rollback dump: frame %ld, %u words differ in %d names\n", g_dump_at, count, g_st_n);
+    for (r = 0; r < g_st_n; r++)
+        printf("rollback dump:   %-40s %u words, +0x%llx..+0x%llx\n", g_st_name[r].name,
+               g_st_name[r].words, (unsigned long long)g_st_name[r].lo,
+               (unsigned long long)g_st_name[r].hi);
+    fflush(stdout);
+    g_st_n = 0;
+    free(other);
+}
+
+static void dump_write(void)
+{
+    uint8_t *p[2];
+    uint32_t n[2];
+    char path[64];
+    FILE *f;
+
+    if (st_sections(p, n, 2) != 2)
+        return;
+    {
+        int rb_game_hash_words(uint32_t *w);   /* GameCode.c */
+        extern void **GameObjects;
+        uint32_t w[32];
+        int i;
+
+        rb_game_hash_words(w);
+        printf("rollback dump: frame %ld hash %08x, GameObjects %p, words", g_dump_at,
+               g_hash[g_frame % RB_RING], (void *)GameObjects);
+        for (i = 0; i < 32; i++)
+            printf(" %08x", w[i]);
+        printf("\n");
+    }
+    snprintf(path, sizeof path, "logs/rbdump-%d.bin", g_me);
+    f = fopen(path, "wb");
+    if (!f)
+        return;
+    fwrite(p[0], 1, n[0], f);
+    fwrite(p[1], 1, n[1], f);
+    {
+        /* then the arena: its address, its size, its bytes */
+        uint8_t *ap;
+        uint32_t an;
+        uint64_t base;
+
+        if (st_arena(&ap, &an)) {
+            base = (uint64_t)(uintptr_t)ap;
+            fwrite(&base, 8, 1, f);
+            fwrite(&an, 4, 1, f);
+            fwrite(ap, 1, an, f);
+        }
+    }
+    fclose(f);
+    printf("rollback dump: frame %ld written (%u bytes)\n", g_dump_at, n[0] + n[1]);
+    fflush(stdout);
+    dump_compare(g_me);
 }
 
 /* Back to the frame that ran on a wrong guess, and forward again. */
@@ -569,17 +853,47 @@ void rb_frame(void (*frame)(void))
     take_input();
     send_inputs();
 
+    if (g_dump_at == -2) {
+        const char *d = getenv("UMK3_RB_DUMP");
+        g_dump_at = d ? atol(d) : -1;
+    }
+    if (g_dump_at >= 0 && g_frame == (uint32_t)g_dump_at && g_frame >= g_remote_upto) {
+        send_inputs();                  /* the dump's frame: its real input first */
+        hold(frame);
+        return;
+    }
     save_slot(slot_of(g_frame));
+    if (g_synctest < 0)
+        g_synctest = getenv("UMK3_RB_SYNCTEST") != NULL;
+    if (g_synctest > 0) {
+        /* the run a rollback makes, kept aside, then the snapshot back */
+        g_quiet = g_nodraw = 1;
+        run(frame, g_frame);
+        g_quiet = g_nodraw = 0;
+        st_probe_save(2);
+        st_rb_load(slot_of(g_frame));
+        if (CurrentTask != RB_FIGHT_TASK)
+            CurrentTask = RB_FIGHT_TASK;
+    }
     if (!run(frame, g_frame) && g_frame >= g_remote_upto) {
         /* the fight ended on a guess: not yet */
         st_rb_load(slot_of(g_frame));
         g_waiting = 1;
         return;
     }
+    if (g_synctest > 0) {
+        g_st_frames++;
+        if (st_probe_words(2, st_word, NULL))
+            g_st_bad++;
+    }
+    if (g_dump_at >= 0 && g_frame == (uint32_t)g_dump_at)
+        dump_write();
     g_frame++;
     send_hash();
-    if (g_frame % RB_REPORT == 0)
+    if (g_frame % RB_REPORT == 0) {
         report();
+        synctest_report();
+    }
 }
 
 void rb_inputs(uint16_t *p1, uint16_t *p2)
@@ -627,7 +941,7 @@ static void got_inputs(const unsigned char *b, long len)
     }
 }
 
-void rb_net(long type, const void *data, long len)
+void rb_net(umk3_long type, const void *data, umk3_long len)
 {
     const unsigned char *b = (const unsigned char *)data;
 
@@ -904,6 +1218,11 @@ void rb_online_begin(int c1, int c2, int level)
     g_desyncs = g_rollbacks = g_resims = g_deepest = g_holds = 0;
     g_ahead = 0;
     g_last_input_ms = now_ms();
+    if (getenv("UMK3_RB_DUMP")) {       /* a test's dump: this side's old one away */
+        char path[64];
+        snprintf(path, sizeof path, "logs/rbdump-%d.bin", g_me);
+        remove(path);
+    }
 
     /* both machines know the fighters and the level, so both seed the
      * engine's generators from them, before anything loads */
@@ -931,8 +1250,12 @@ void rb_online_end(void)
         g_their_rules[0] = 0;
         return;
     }
-    if (g_started)
+    if (g_started) {
         report();
+        synctest_report();
+    }
+    g_st_n = 0;
+    g_st_frames = g_st_bad = 0;
     st_rb_end();
     g_on = 0;
     g_started = 0;

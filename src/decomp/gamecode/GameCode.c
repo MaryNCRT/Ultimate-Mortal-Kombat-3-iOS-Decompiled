@@ -8136,8 +8136,11 @@ long GameInit_LoadABit(long step)
         return 0;
 
     case 1:
-        /* In a network game only one end runs the engine's own init. */
-        if (GameMode == 1 && !isParentBasedOnSpeed())
+        /* In a network game only one end runs the engine's own init.
+         * Port, not in the binary: with rollback both ends run the engine,
+         * so both init it -- the guest began a fight on what the last one
+         * had left in the engine. */
+        if (GameMode == 1 && !isParentBasedOnSpeed() && !rb_active())
             return 0;
         mk3_init_game();
         return 0;
@@ -10461,8 +10464,13 @@ static void RoundSummaryUpdate(void)
     RoundSummaryTime = (float)((double)RoundSummaryTime
                        + (IsInFinishing ? 0.7 : 1.25) / (double)limeFPSScaleFactor);
 
-    /* A tap above the bottom band skips the rest of the wait. */
-    if (GameMode != 4 && !IsInFinishing
+    /* A tap above the bottom band skips the rest of the wait.
+     * Port, not in the binary: not in a rollback fight -- the tap is this
+     * machine's alone (a click, the pad's highlight), not one of the inputs
+     * both run the fight from: the side that tapped began the next round
+     * early, the other did not, and the fights parted (the softlock after a
+     * round online). */
+    if (GameMode != 4 && !IsInFinishing && !rb_active()
         && limeLastTouchScreenX[0] == -1.0f
         && limeTouchScreenY[0] != -1.0f
         && limeTouchScreenY[0] < (float)limeScreenHeight + FE_HeightScale * -64.0f
@@ -11991,7 +11999,8 @@ void IntroRender(void)
 
     /* ---- the fade owns the frame while it is running ---- */
     if (FE_FadeAdd != 0.0f) {
-        if (areAchievementsViewing())
+        /* port: not in a rollback fight -- the overlay is one machine's */
+        if (areAchievementsViewing() && !rb_active())
             FE_Fade += FE_FadeAdd / 10.0f * limeFPSScaleFactor;
         else
             FE_Fade += FE_FadeAdd / limeFPSScaleFactor;
@@ -12304,6 +12313,25 @@ void rb_game_buttons(int p1, int p2)
 
 /* What the two machines compare: the sprite list without its links, the
  * health and the fighters' positions, words that hold no address. */
+/* The words rb_game_hash hashes, 32 of them (a test's dump, rollback.c). */
+int rb_game_hash_words(uint32_t *w)
+{
+    const unsigned char *o = (const unsigned char *)(void *)GameObjects;
+    int n = 0, i;
+
+    memset(w, 0, 32 * 4);
+    if (o)
+        for (i = 0; i < 8; i++, n += 3)
+            memcpy(w + n, o + i * 16 + 4, 12);
+    else
+        n += 24;
+    w[n++] = (uint32_t)Health[0];
+    w[n++] = (uint32_t)Health[1];
+    memcpy(w + n, Player1Pos, 12);
+    memcpy(w + n + 3, Player2Pos, 12);
+    return 32;
+}
+
 uint32_t rb_game_hash(void)
 {
     const unsigned char *o = (const unsigned char *)(void *)GameObjects;
@@ -12454,7 +12482,8 @@ static void Task_GameMain_frame(void)
 
     /* ---- the fade, and what it ends ---- */
     if (FE_FadeAdd != 0.0f) {
-        if (areAchievementsViewing())
+        /* port: not in a rollback fight -- the overlay is one machine's */
+        if (areAchievementsViewing() && !rb_active())
             FE_Fade += FE_FadeAdd / 10.0f * limeFPSScaleFactor;
         else
             FE_Fade += FE_FadeAdd / limeFPSScaleFactor;

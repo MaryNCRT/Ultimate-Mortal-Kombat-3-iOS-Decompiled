@@ -202,12 +202,70 @@ static void send_in(const struct sockaddr_in *a, const void *p, int n)
                sizeof *a);
 }
 
-static void send_to(const struct paddr *a, const void *p, int n)
+static void send_now(const struct paddr *a, const void *p, int n)
 {
     if (a->eos)
         mpeos_send(a->who, p, n);
     else
         send_in(&a->in, p, n);
+}
+
+/* A test aid (port): a bad line, on the sending side. UMK3_NET_LOSS=<0..90>
+ * drops that percent of the packets, UMK3_NET_LAG=<ms> holds each one that
+ * long (UMK3_NET_JITTER=<ms> adds up to that much more, at random). Both
+ * games of a test get them for a line bad both ways. */
+#define LAG_SLOTS 512
+static struct lagged { unsigned at; int n; struct paddr a; unsigned char b[MAX_PACKET + 16]; }
+    *g_lag;
+static int g_lag_n, g_net_loss = -1, g_net_lag, g_net_jitter;
+
+static void lag_release(void)
+{
+    unsigned t;
+    int i;
+
+    if (!g_lag_n)
+        return;
+    t = now_ms();
+    for (i = 0; i < LAG_SLOTS; i++)
+        if (g_lag[i].n && (int)(t - g_lag[i].at) >= 0) {
+            send_now(&g_lag[i].a, g_lag[i].b, g_lag[i].n);
+            g_lag[i].n = 0;
+            g_lag_n--;
+        }
+}
+
+static void send_to(const struct paddr *a, const void *p, int n)
+{
+    if (g_net_loss < 0) {
+        const char *l = getenv("UMK3_NET_LOSS"), *d = getenv("UMK3_NET_LAG"),
+                   *j = getenv("UMK3_NET_JITTER");
+        g_net_loss = l ? atoi(l) : 0;
+        g_net_lag = d ? atoi(d) : 0;
+        g_net_jitter = j ? atoi(j) : 0;
+        if (g_net_loss > 90) g_net_loss = 90;
+        if (g_net_loss || g_net_lag || g_net_jitter)
+            printf("online: test line, %d%% lost, %d ms late (+%d)\n", g_net_loss,
+                   g_net_lag, g_net_jitter);
+    }
+    if (g_net_loss > 0 && rand() % 100 < g_net_loss)
+        return;
+    if ((g_net_lag > 0 || g_net_jitter > 0) && n <= MAX_PACKET + 16) {
+        int i;
+        if (!g_lag)
+            g_lag = (struct lagged *)calloc(LAG_SLOTS, sizeof *g_lag);
+        for (i = 0; g_lag && i < LAG_SLOTS; i++)
+            if (!g_lag[i].n) {
+                g_lag[i].at = now_ms() + (unsigned)g_net_lag
+                            + (g_net_jitter > 0 ? (unsigned)(rand() % (g_net_jitter + 1)) : 0u);
+                g_lag[i].n = n;
+                g_lag[i].a = *a;
+                memcpy(g_lag[i].b, p, (size_t)n);
+                g_lag_n++;
+                return;
+            }
+    }
+    send_now(a, p, n);
 }
 
 static void send_peer(const void *p, int n) { send_to(&g_peer_addr, p, n); }
@@ -508,7 +566,7 @@ int mpnet_is_working(void)       { return g_session && g_want[0] != 0; }
 int mpnet_peer_count(void)       { return g_session && g_lan_only ? g_nlobby : 0; }
 int mpnet_internet(void)         { return mpeos_state(); }
 
-void mpnet_send(long type, const void *data, int len, int reliable)
+void mpnet_send(umk3_long type, const void *data, int len, int reliable)
 {
     unsigned char b[MAX_PACKET];
     int n;
@@ -772,6 +830,7 @@ static void on_packet(const unsigned char *b, int n, const struct paddr *a)
 
 void mpnet_flush(void)
 {
+    lag_release();
     if (g_connected)
         mpeos_tick();
 }
@@ -783,6 +842,7 @@ void mpnet_poll(void)
     unsigned t;
     int n, i;
 
+    lag_release();
     mpeos_tick();
     if (!g_session)
         return;

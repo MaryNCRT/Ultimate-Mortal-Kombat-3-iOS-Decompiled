@@ -254,7 +254,7 @@ static void part(const Part *pt, const unsigned short *indices, long nfaces,
                    indices + first * 3);
 }
 
-int port_skin_mats_draw(const unsigned short *indices, long nfaces,
+int port_skin_mats_draw(const unsigned short *indices, umk3_long nfaces,
                         unsigned tex_name)
 {
     Mats *m = (Mats *)g_use;

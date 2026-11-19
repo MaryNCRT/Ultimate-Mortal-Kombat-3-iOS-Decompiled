@@ -337,7 +337,7 @@ static void close_menu(void)
  * frames while the other plays on. */
 static int online_now(void)
 {
-    extern long GameMode;
+    extern umk3_long GameMode;
     int mpnet_session_exists(void);
     return GameMode == 1 || mpnet_session_exists();
 }
