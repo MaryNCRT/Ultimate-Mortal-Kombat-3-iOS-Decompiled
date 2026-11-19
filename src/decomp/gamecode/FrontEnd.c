@@ -7379,6 +7379,7 @@ void FE_Task_Character_Select(void)
  */
 
 #define BTNCFG_BUTTONS_LOW    5
+extern int PortButtonsChosen;           /* runtime/game_main.c, port */
 #define BTNCFG_BUTTONS_HIGH   6
 #define BTNCFG_TASK_EDIT      0x30
 #define BTNCFG_LAYOUT_ROWS    0x78      /* six entries of five words */
@@ -7451,6 +7452,7 @@ void FE_Task_Button_Config(void)
         Settings[4]++;
         if (Settings[4] <= 4 || Settings[4] > BTNCFG_BUTTONS_HIGH)
             Settings[4] = BTNCFG_BUTTONS_LOW;
+        PortButtonsChosen = 1;          /* Port: the player's (game_main.c) */
         break;
     case 2:
         Settings[5]++;

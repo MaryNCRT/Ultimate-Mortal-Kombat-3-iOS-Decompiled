@@ -93,14 +93,15 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 - The VS screen's announcer says the two names; the game has no "versus" voice (a mod's `res/audio/Skversus.wav` plays between them). The 8BitDo fix (axes read in each pad's range, its D-input buttons) not tried on an 8BitDo pad here.
 - Colours 3 to 6: the VERSUS art (the endings') of Sonya, Jax and Liu Kang keeps colour 1 or 2 -- their art is named apart from their sheets. Not tried online between two PCs. The profile pictures in colours 3..6 not tried in the launcher's window yet.
 - Outfits that add: not yet tried online between two PCs.
-- Online, a lobby's room: in one test the second fight of a session counted desyncs (the first fights none); being looked at.
+- Online, the second fight of a session desynced and could leave one side waiting (a softlock): fixed after 0.5.3 (the engine's step phase now starts each fight from 0); checked with two games on one PC, two fights in a row with no desync, not yet between two machines. An online fight whose other side stops sending for 15 s now goes back to the lobby as a lost link instead of freezing.
 
 - Online: 0.2.1's fixes (the rollback off one boot in two, fights drifting apart) were checked with two games on one PC, not yet between two machines. Both players need 0.2.1, built fresh.
 - Joining online, a pad's X glyph showed over START (Mary); not reproduced yet.
 - Some stages still pause up to ~1.3 s on their first frames (THE STREET), as their events load. A round's start can still show a slow frame or two.
 - With ENHANCED LIGHTING, the first frames after starting can stall a second or more while the driver finishes the shader (Direct3D 12); shorter since 0.3.0, not gone.
 - ENHANCED LIGHTING and AMBIENT OCCLUSION are Vulkan and DirectX 12 only; OpenGL draws as before.
-- Steam Deck: the fight played the 5-button layout whatever was chosen (#171); 0.2.0 changed how the choice is kept, not yet checked on a Deck.
+- Steam Deck: the fight played the 5-button layout whatever was chosen (#171, again #253). After 0.5.3 the layout chosen in the launcher or the game's menus is the only one kept; anything else that changes it is put back and named in the log (`buttons: ... set outside the menus`). Not yet checked on a Deck.
+- KOMBO SLIDE OFF (#252): after 0.5.3 it also drops the push of a kombo's kicks, and VS RULES no longer turn it back on in versus and training. Not yet played by Mary.
 
 ## Building from source
 

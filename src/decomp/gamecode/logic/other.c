@@ -2348,11 +2348,18 @@ void away_x_vel(MK3OBJ *obj)
 {
     /* Port, not in the binary (issue #114): a hit's push away inside a
      * chain -- the second hit on, his punch count (field4c, inc_p_block)
-     * at 2 or more -- logged, and dropped when KOMBO SLIDE is off. */
-    if (obj->field00 && obj->field00->field4c >= 2 && obj->field1c) {
-        printf("kombo push: character %u, speed %d, punches %u%s\n",
+     * at 2 or more -- logged, and dropped when KOMBO SLIDE is off.
+     * Issue #252: kicks too. Only punches count in field4c, so a kombo's
+     * kicks still pushed him away with the option off; p_hit counts every
+     * hit taken without getting back to normal (reaction_start_chores
+     * inc_p_hit, already counting this one), so 2 is the kombo's second
+     * hit of any kind. */
+    if (obj->field00 && (obj->field00->field4c >= 2 || obj->field00->p_hit >= 2)
+        && obj->field1c) {
+        printf("kombo push: character %u, speed %d, punches %u, hits %u%s\n",
                (unsigned)obj->field08->field24, (int)obj->field1c >> 16,
-               (unsigned)obj->field00->field4c, PortNoKomboSlide ? ", dropped" : "");
+               (unsigned)obj->field00->field4c, (unsigned)obj->field00->p_hit,
+               PortNoKomboSlide ? ", dropped" : "");
         if (PortNoKomboSlide)
             obj->field1c = 0;
     }

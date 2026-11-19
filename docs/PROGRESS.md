@@ -92,6 +92,10 @@ added to her Steam library beside her other non-Steam game.
 | Dynamic stage music, Genesis style (Soul Chamber first) | **research only**, nothing built: [research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md); waits for Mary's Genesis recording (WAV + GYM) |
 | Ambient occlusion and screen-space contact shadows (ENHANCED LIGHTING) | ambient occlusion **built** (0.3.0; the fighters are their own layer since after 0.3.1b); contact shadows research only: [research/CONTACT-SHADOWS.md](research/CONTACT-SHADOWS.md) |
 | MOD HUB never connecting on other players' PCs, no error (Mary, 2026-11-14) | **fixed in 0.5.3** (time limits, other sources for the index); not yet confirmed on an affected PC |
+| Online: the second fight of a session desynced; one side could wait for good (softlock) | **fixed after 0.5.3** (FrameCompensation reset, inputs resent oldest first, 15 s stall leaves the fight); two fights on one PC with 0 desyncs, not yet between two machines |
+| Online stutter: holds every 10 frames on noisy numbers | **fixed after 0.5.3** (averaged, at most one every 30 frames) |
+| KOMBO SLIDE OFF not enough (issue #252) | **changed after 0.5.3**: kicks too, VS RULES no longer override OFF; not played yet |
+| Steam Deck: 5-button layout in fights (issues #171, #253) | **changed after 0.5.3**: only the menus set the layout, others put back and logged; not checked on a Deck |
 | Online: player two cannot pick a fighter in the lobby after about 2 fights | **closed**: Mary says it is fixed (2026-11-14), with the MERCY fix |
 | After CANCEL in STAGE SELECT the select screen came back silent once | fixed by never stopping the tune on the way; the log says `stage select: the tune ...` if it happens again |
 
@@ -104,6 +108,72 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+### 2026-11-19 -- Online softlocks and stutter; issues #252 and #253
+
+Port changes; nothing in the decompiled engine's logic changes outside the
+marked port lines.
+
+- **Second fight desync (the "known problem" of 2026-11-13) and the
+  softlocks after a fight or a round.** `FrameCompensation` (GameCode.c,
+  0x0014e1f0) carries the 0.9322 of an engine step each 60 Hz tick
+  (Task_GameMain). The binary never resets it, so a run's second fight
+  began with what the first left -- different on each machine (the other
+  player may not have fought, or fought a different length). The engine
+  stepped on other ticks on each side, the hashes differed from frame 60
+  on, and the fights parted: one ended, the other held for inputs for good.
+  Now `rb_setup` (Task_GameInit, every fight) and `start()` (rollback.c,
+  the first online frame) set it to 0, and `start()` seeds both
+  generators again (the loading in between runs a different number of
+  frames on each side) and sets `SpeedNormal` 1.
+- **send_inputs** sent the newest 32 inputs when more than 32 were
+  unacknowledged; `got_inputs` takes them only in order, so the gap was
+  never filled and both sides held for good. It sends the oldest now.
+- **A fight with nothing from the other side for 15 s** (`RB_STALL_MS`,
+  while holding) ends as a lost link (`disconnected()`, `endMP()`): the
+  log says `rollback: nothing from the other side ...`.
+- **Holds for being ahead** (the stutter): the rule held a frame whenever
+  the raw `adv - g_remote_adv` reached 3, every 10 frames, and the two
+  sides took turns (75 holds in 600 frames in an old one-PC test). Now
+  half that difference averaged over ~32 frames (`g_ahead`), a hold only
+  past 1.25 frames and at most every `RB_SYNC_GAP` (30) frames. The
+  window-full hold is unchanged. `fight_speed()` is 1 in a rollback fight.
+- **Tested** with two games on one PC (host `UMK3_LOBBY_TEST=host`,
+  `UMK3_LOBBY_RULES=r2;b1;m1;t30;k0;s1;h1`, `UMK3_LOBBY_ROOM=o0;n1;e1;p4`;
+  guest `join` with `UMK3_EOS_NEW_DEVICE=1`, its own save folder and
+  `profiles_j.ini`; the select screen's fighter and PLAY tapped by
+  `UMK3_TAPS`), two fights in one run: fight 1 ended on frame 1350 on
+  both, fight 2 on 1435 on both, 0 desyncs, 0 rollbacks, holds 4 / 13 on
+  the host and 0 on the guest, ping ~17 ms. No inputs were played (the
+  taps only picked the fighter), so the fights were time-outs. Not yet
+  between two machines. The old build was not run on the same script, so
+  the desync is not shown gone by a before/after on this test.
+  Seen on the way: `UMK3_LOBBY_TEST`'s fighter auto-pick (FrontEnd.c,
+  15 s) did not fire on the online select screen (front-end task 42);
+  taps were used instead. Not looked into.
+- **Issue #252, KOMBO SLIDE OFF "does nothing"** (VanDammage87): OFF
+  dropped a hit's push (`away_x_vel`, other.c) only once the punch count
+  (`field4c`, punches only) reached 2, so a kombo's kicks still pushed the
+  opponent away. It now also uses `p_hit` (every hit taken without getting
+  back to normal, `reaction_start_chores` -> `inc_p_hit`): from the second
+  hit of any kind. In GameMode 6 the VS RULES' KOMBO SLIDE (ON by default)
+  overrode the settings menu's OFF; now either one's OFF turns it off.
+  Online the rules alone decide, as before. Not played yet; the
+  `kombo push:` log line now shows `hits`.
+- **Issue #253, Steam Deck, buttons=6 played with five** (also #171): the
+  game adopted any change of `Settings[4]` after boot as the player's and
+  wrote it into umk3.ini (`port_ini_put_buttons`), so whatever else set it
+  -- a replay's recorded settings (`rb_setup`) is one -- became the layout
+  for good. Now only `PortButtonsChosen` (set by OPTIONS' NUMBER OF
+  BUTTONS, FrontEnd.c, and the pause menu's, GameCode.c) or the settings
+  menu (`port_buttons_set`) change it; anything else is put back to the
+  chosen layout and logged (`buttons: N set outside the menus (task T)`).
+  Checked here: buttons=6 in umk3.ini, a scripted fight, `keys 6`
+  (`UMK3_LOG_P1`). The Deck's own cause is not known; a log from the
+  reporter with the new build will name it if it was another writer.
+- Lag seen in Mary's 2026-11-14 log on the select screen (100-130 ms each
+  time the fighter changed) did not show in a scripted run here (four
+  fighters, no slow frame after the first); not changed.
 
 ### 2026-11-14 -- 0.5.3 beta: the MOD HUB on networks that block GitHub's raw files
 

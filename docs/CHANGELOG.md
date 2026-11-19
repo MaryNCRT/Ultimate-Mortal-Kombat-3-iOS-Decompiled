@@ -8,6 +8,39 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## After 0.5.3 (unreleased)
+
+Built into the test folder; not yet played by Mary.
+
+- **Online: softlocks after a fight or a round.** The second fight of a
+  session started each machine's engine on a different step phase (the
+  55.93 Hz step's accumulator was never reset between fights), so the two
+  games drifted apart from the first second: one ended its fight and the
+  other waited for inputs that never came. Each fight now starts it from
+  0, and the generators are seeded again at the fight's first frame.
+  Checked with two games on one PC: two fights in a row, 0 desyncs, both
+  ending on the same frame.
+- **Online: a gap of lost inputs could freeze both games for good.** Once
+  more than 32 inputs were unacknowledged, the oldest were never sent
+  again; now the oldest go first.
+- **Online: no more frozen fight.** When the other side sends nothing for
+  15 s mid-fight, the fight ends as a lost link and goes back to the lobby.
+- **Online: stutter.** A side ahead of the other held a frame on the raw,
+  noisy numbers every 10 frames, and the two took turns: 75 held frames in
+  600 in an old test. Now on a half-second average, at most one every 30
+  frames: 4 and 13 in the test's two fights (~1,400 frames each). FIGHT SPEED from the debug
+  menu never applies online.
+- **KOMBO SLIDE OFF** (issue #252): the kicks of a kombo no longer push
+  the opponent away either (only punches counted before); VS RULES'
+  KOMBO SLIDE ON no longer hides the settings menu's OFF in versus and
+  training.
+- **Buttons layout** (issue #253, Steam Deck): only the launcher's choice
+  and the game's own menus set the 5 / 6 layout; anything else that
+  changes it (a replay's settings, for one, which used to be written into
+  umk3.ini as the player's) is put back and named in the log.
+- Replays: every fight starts the engine's step phase from 0, so a replay
+  of a run's second fight plays as recorded.
+
 ## 0.5.3 beta (2026-11-14)
 
 Not yet played by Mary as a package.

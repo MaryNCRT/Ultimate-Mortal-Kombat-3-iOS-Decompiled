@@ -67,6 +67,10 @@ void     rb_game_buttons(int p1, int p2);   /* GameCode.c */
 void     disableHeartbeat(void);        /* limeMPGameSpecific.c */
 long     isMPConnected(void);           /* limeMPGameSpecific.c */
 extern int mpLevelList[14];             /* gamecode_globals.c: the binary's online stages */
+extern float FrameCompensation;         /* GameCode.c: the engine's 55.93 Hz step */
+extern long  SpeedNormal;               /* GameCode.c: 0 slow motion */
+void     disconnected(void);            /* limeMPGameSpecific.c */
+void     endMP(void);                   /* limeMPGameSpecific.c */
 
 #define RB_VERSION      3               /* 2: the hello carries the rules and a draw's number;
                                          * 3: and a lobby room's stage */
@@ -81,6 +85,10 @@ extern int mpLevelList[14];             /* gamecode_globals.c: the binary's onli
 #define RB_REPORT       600
 #define RB_LINGER       180             /* frames of sending after a fight */
 #define RB_FIGHT_TASK   6
+#define RB_SYNC_GAP     30              /* frames between two holds for being ahead */
+#define RB_STALL_MS     15000.0         /* no new input from the other side that long:
+                                         * the fight is over for it (it left, or the
+                                         * two games parted): leave it here too */
 
 #define NONE            0xffffffffu
 
@@ -98,6 +106,9 @@ static uint32_t g_last_hold;
 static int      g_waiting;              /* the fight ended on a guess: hold */
 static uint16_t g_cur[2];               /* the frame being run */
 static int      g_linger;
+static uint32_t g_seed;                 /* the fight's, from the fighters and level */
+static double   g_ahead;                /* frames ahead of the other side, averaged */
+static double   g_last_input_ms;        /* when the other side's inputs last moved on */
 
 /* the round trip: when each local input was first sent, until acknowledged */
 static double   g_sent_ms[RB_RING];
@@ -193,11 +204,16 @@ static void send_inputs(void)
     unsigned char b[20 + 2 * RB_SEND_MAX];
     uint32_t first = g_acked, n, i;
 
-    if (g_local_upto > RB_SEND_MAX && first < g_local_upto - RB_SEND_MAX)
-        first = g_local_upto - RB_SEND_MAX;
+    /* From the first the other side does not have, at most RB_SEND_MAX:
+     * the other side takes inputs only in order (got_inputs), so sending the
+     * NEWEST 32 once more than 32 were unacknowledged -- a burst of lost
+     * packets, a stall on one side -- left a gap nothing ever filled, and
+     * both games held for good (an online softlock). */
     if (first > g_local_upto)
         first = g_local_upto;
     n = g_local_upto - first;
+    if (n > RB_SEND_MAX)
+        n = RB_SEND_MAX;
     put32(b, first);
     put32(b + 4, n);
     put32(b + 8, g_frame);
@@ -453,6 +469,20 @@ static void start(void)
     int mine = Settings[4], theirs = g_their_buttons;
 
     g_started = 1;
+    /* The first frame of the fight, the same moment on both machines: the
+     * engine's step phase and its generators from the fight alone.
+     * FrameCompensation (GameCode.c, 0.9322 of a step a tick) was never
+     * reset between fights, so a second fight in one run began on each
+     * machine with what its last fight had left: the engine stepped on
+     * other ticks over there, every hash differed from the first second
+     * and the fights parted -- one ended, the other waited (softlocks
+     * after a fight or a round). The generators were seeded before the
+     * loading, which runs a different number of frames on each side. */
+    FrameCompensation = 0.0f;
+    SpeedNormal = 1;
+    umk3_rand_seed = g_seed;
+    rand_seed = (int32_t)(g_seed >> 1);
+    g_last_input_ms = now_ms();
     st_rb_skip(PreloadedCharacters, sizeof PreloadedCharacters);
     if (st_rb_begin(RB_SLOTS) != 0)
         printf("rollback: NO SNAPSHOTS -- save states are off in this build\n");
@@ -484,6 +514,21 @@ void rb_frame(void (*frame)(void))
     if (CurrentTask != RB_FIGHT_TASK)
         return;
 
+    /* nothing from the other side for RB_STALL_MS while this one waits on
+     * it: its fight is over (it left, or the two parted). Out to the lobby
+     * as a lost link, not frozen for good. */
+    if (g_frame + 1 >= g_remote_upto + RB_WINDOW || g_waiting) {
+        if (now_ms() - g_last_input_ms > RB_STALL_MS) {
+            printf("rollback: nothing from the other side for %.0f s at frame %u "
+                   "(inputs to %u) -- the fight is left\n",
+                   RB_STALL_MS / 1000.0, g_frame, g_remote_upto);
+            fflush(stdout);
+            disconnected();
+            endMP();
+            return;
+        }
+    }
+
     /* the fight ended on a guess: hold until the input comes */
     if (g_waiting) {
         if (g_frame >= g_remote_upto) {
@@ -494,11 +539,27 @@ void rb_frame(void (*frame)(void))
         g_waiting = 0;
     }
 
-    /* too far past the other side's inputs, or ahead of it on average */
+    /* Ahead of the other side: adv is how far this side's frame is past the
+     * last frame the other reported, g_remote_adv the same seen from there;
+     * half their difference is how many frames this side runs ahead. Both
+     * are a packet's worth of noise each, so it is averaged over about half
+     * a second, and one frame is held at most every RB_SYNC_GAP frames, only
+     * once the average is past one frame and a quarter. Held on the raw
+     * numbers every 10 frames, as before, both sides took turns holding --
+     * 75 held frames in 600 in a test on one PC: the stutter online. */
     adv = (int32_t)g_frame - g_remote_frame;
-    if ((int32_t)(g_frame - g_remote_upto) + 1 >= RB_WINDOW
-        || (adv - g_remote_adv >= 3 && g_frame - g_last_hold > 10)) {
+    g_ahead += ((double)(adv - g_remote_adv) / 2.0 - g_ahead) / 32.0;
+
+    /* too far past the other side's inputs: the window is full */
+    if ((int32_t)(g_frame - g_remote_upto) + 1 >= RB_WINDOW) {
         g_last_hold = g_frame;
+        send_inputs();
+        hold(frame);
+        return;
+    }
+    if (g_ahead >= 1.25 && g_frame - g_last_hold >= RB_SYNC_GAP) {
+        g_last_hold = g_frame;
+        g_ahead -= 1.0;                 /* this hold's frame, before they hear of it */
         send_inputs();
         hold(frame);
         return;
@@ -562,6 +623,7 @@ static void got_inputs(const unsigned char *b, long len)
         if (f < g_frame && g_used[f % RB_RING] != v && f < g_rollback)
             g_rollback = f;
         g_remote_upto++;
+        g_last_input_ms = now_ms();
     }
 }
 
@@ -840,6 +902,8 @@ void rb_online_begin(int c1, int c2, int level)
     g_next_hash = RB_HASH_EVERY;
     g_my_hash_frame = g_their_hash_frame = NONE;
     g_desyncs = g_rollbacks = g_resims = g_deepest = g_holds = 0;
+    g_ahead = 0;
+    g_last_input_ms = now_ms();
 
     /* both machines know the fighters and the level, so both seed the
      * engine's generators from them, before anything loads */
@@ -848,6 +912,7 @@ void rb_online_begin(int c1, int c2, int level)
     g_setup[2] = level;
     seed = 0x9e3779b9u ^ (uint32_t)c1 * 0x85ebca6bu ^ (uint32_t)c2 * 0xc2b2ae35u
          ^ (uint32_t)level * 0x27d4eb2fu;
+    g_seed = seed;
     umk3_rand_seed = seed;
     rand_seed = (int32_t)(seed >> 1);
     send_setup();
