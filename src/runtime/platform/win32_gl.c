@@ -890,6 +890,7 @@ void plat_wait_until(double t)
  * while none is found, so a pad plugged in later is picked up. A missing
  * driver reads as no pad, never as a crash. Port only. */
 #include <mmsystem.h>
+#include "pad_db.h"
 
 #define XI_A       0x1000
 #define XI_B       0x2000
@@ -928,12 +929,43 @@ typedef struct {
     unsigned char live[6];              /* axis seen at its middle since opened */
     unsigned char pov_live;             /* the hat seen centred since opened */
     DWORD         last_raw[7];          /* UMK3_LOG_PAD: X Y Z R U V POV */
+    unsigned      map_vp;               /* the pad `map` was looked up for */
+    int           has_map;              /* gamecontrollerdb.txt has its line */
+    PDB_MAP       map;
+    unsigned char low[6];               /* axis seen in its lower quarter */
 } PAD_SLOT;
 
 static PAD_SLOT g_slot[2] = {
-    { "auto", -1, 0, "", -1, -1, { { 0 } }, { 0 }, 0, { 0 } },
-    { "auto", -1, 0, "", -1, -1, { { 0 } }, { 0 }, 0, { 0 } },
+    { "auto", -1, 0, "", -1, -1, { { 0 } }, { 0 }, 0, { 0 }, 0, 0, { { { 0 } } }, { 0 } },
+    { "auto", -1, 0, "", -1, -1, { { 0 } }, { 0 }, 0, { 0 }, 0, 0, { { { 0 } } }, { 0 } },
 };
+
+/* The pad's line in gamecontrollerdb.txt (pad_db.h), looked up once a pad:
+ * the files are read the first time, from the game's folder. */
+static void pad_lookup(PAD_SLOT *ps)
+{
+    if (ps->map_vp == ps->vidpid)
+        return;
+    ps->map_vp = ps->vidpid;
+    if (!pdb_text) {
+        char dir[MAX_PATH + 2];
+        DWORD n = GetModuleFileNameA(NULL, dir, MAX_PATH);
+        char *slash = n > 0 && n < MAX_PATH ? strrchr(dir, '\\') : NULL;
+        if (slash)
+            slash[1] = 0;
+        else
+            dir[0] = 0;
+        pdb_load(dir);
+    }
+    memset(ps->low, 0, sizeof ps->low);
+    ps->has_map = pdb_find("Windows", ps->vidpid & 0xffff, ps->vidpid >> 16, &ps->map);
+    if (ps->has_map)
+        printf("pad: %04x:%04x laid out as \"%s\" (gamecontrollerdb.txt)\n",
+               ps->vidpid & 0xffff, ps->vidpid >> 16, ps->map.name);
+    else
+        printf("pad: %04x:%04x not in gamecontrollerdb.txt, the vendor's layout\n",
+               ps->vidpid & 0xffff, ps->vidpid >> 16);
+}
 
 /* An axis to 0..65535 by the range the pad gives for it (JOYCAPS): WinMM
  * returns each pad's own numbers. An axis with no range is the middle. */
@@ -1190,9 +1222,56 @@ static int pad_winmm(PAD_SLOT *ps, PLAT_PAD *out)
                    (unsigned long)j.dwButtons);
         memcpy(ps->last_raw, raw, sizeof raw);
     }
-    for (i = 0; i < PB_COUNT; i++)
-        if (map[i] >= 0 && (j.dwButtons & (1u << map[i])))
-            out->buttons |= 1u << i;
+    pad_lookup(ps);
+    if (ps->has_map) {
+        /* the layout from gamecontrollerdb.txt: SDL's DirectInput axes
+         * a0..a5 are X Y Z Rx Ry Rz, which WinMM gives as X Y Z U V R */
+        static const int ax[6] = { 0, 1, 2, 4, 5, 3 };
+        DWORD n6[6];
+        int a;
+
+        n6[0] = axis_norm(ps, 0, j.dwXpos); n6[1] = axis_norm(ps, 1, j.dwYpos);
+        n6[2] = axis_norm(ps, 2, j.dwZpos); n6[3] = axis_norm(ps, 3, j.dwRpos);
+        n6[4] = axis_norm(ps, 4, j.dwUpos); n6[5] = axis_norm(ps, 5, j.dwVpos);
+        for (a = 0; a < 6; a++)
+            if (n6[a] < 16384)
+                ps->low[a] = 1;
+        for (i = 0; i < PB_COUNT + 4; i++) {
+            const PDB_SRC *src = i < PB_COUNT ? &ps->map.b[i]
+                               : i == PB_COUNT ? &ps->map.up : i == PB_COUNT + 1 ? &ps->map.down
+                               : i == PB_COUNT + 2 ? &ps->map.left : &ps->map.right;
+            int on = 0;
+
+            if (src->kind == PDB_BUTTON && src->idx >= 0 && src->idx < 32)
+                on = (j.dwButtons >> src->idx) & 1;
+            else if (src->kind == PDB_HAT && src->idx == 0 && j.dwPOV <= 35900 && ps->pov_live) {
+                DWORD p = j.dwPOV;
+                unsigned h = (p >= 31500 || p <= 4500 ? 1u : 0u) | (p >= 4500 && p <= 13500 ? 2u : 0u)
+                           | (p >= 13500 && p <= 22500 ? 4u : 0u) | (p >= 22500 && p <= 31500 ? 8u : 0u);
+                on = (h & src->hat) != 0;
+            } else if (src->kind == PDB_AXIS && src->idx >= 0 && src->idx < 6) {
+                int w = ax[src->idx];
+                DWORD v = src->inv ? 65535 - n6[w] : n6[w];
+                /* a trigger: pressed past three quarters, once it has been
+                 * seen let go (low), so one resting at its end is not held */
+                on = src->half > 0 ? v > 45535 && ps->live[w]
+                   : src->half < 0 ? v < 20000 && ps->live[w]
+                   : v > 49151 && (ps->low[w] || ps->live[w]);
+            }
+            if (!on)
+                continue;
+            if (i < PB_COUNT)
+                out->buttons |= 1u << i;
+            else if (i == PB_COUNT)     out->up = 1;
+            else if (i == PB_COUNT + 1) out->down = 1;
+            else if (i == PB_COUNT + 2) out->left = 1;
+            else                        out->right = 1;
+        }
+    } else {
+        for (i = 0; i < PB_COUNT; i++)
+            if (map[i] >= 0 && (j.dwButtons & (1u << map[i])))
+                out->buttons |= 1u << i;
+    }
     pov = j.dwPOV;                              /* hundredths of a degree */
     if (pov <= 35900 && ps->pov_live) {
         if (pov >= 31500 || pov <= 4500)  out->up = 1;
@@ -1210,7 +1289,13 @@ static int pad_winmm(PAD_SLOT *ps, PLAT_PAD *out)
         if (ps->live[0] && x < 20000) out->left = 1;
         if (ps->live[0] && x > 45535) out->right = 1;
     }
-    {   /* the right stick across: Z on a Sony or 8BitDo pad, U elsewhere */
+    if (ps->has_map && ps->map.rx.kind == PDB_AXIS && ps->map.rx.idx >= 0 && ps->map.rx.idx < 6) {
+        static const int ax[6] = { 0, 1, 2, 4, 5, 3 };
+        int w = ax[ps->map.rx.idx];
+        DWORD r = axis_norm(ps, w, w == 0 ? j.dwXpos : w == 1 ? j.dwYpos : w == 2 ? j.dwZpos
+                                       : w == 3 ? j.dwRpos : w == 4 ? j.dwUpos : j.dwVpos);
+        out->rx = !ps->live[w] ? 0 : r < 12000 ? -1 : r > 53535 ? 1 : 0;
+    } else {   /* the right stick across: Z on a Sony or 8BitDo pad, U elsewhere */
         int z = (ps->vidpid & 0xffff) == 0x054c || (ps->vidpid & 0xffff) == 0x2dc8;
         DWORD r = z ? axis_norm(ps, 2, j.dwZpos) : axis_norm(ps, 4, j.dwUpos);
         out->rx = !ps->live[z ? 2 : 4] ? 0 : r < 12000 ? -1 : r > 53535 ? 1 : 0;

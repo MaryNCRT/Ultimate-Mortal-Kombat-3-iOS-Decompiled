@@ -101,6 +101,7 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 - With ENHANCED LIGHTING, the first frames after starting can stall a second or more while the driver finishes the shader (Direct3D 12); shorter since 0.3.0, not gone.
 - ENHANCED LIGHTING and AMBIENT OCCLUSION are Vulkan and DirectX 12 only; OpenGL draws as before.
 - Steam Deck: the fight played the 5-button layout whatever was chosen (#171, #253): on 64-bit Linux the port read some game numbers as 8 bytes. Fixed after 0.5.3, not yet tried on a Deck.
+- Pads from SDL_GameControllerDB (Windows WinMM pads, Linux through SDL) and player two's pad on Linux: after 0.5.3, not yet tried with such a pad.
 - KOMBO SLIDE OFF (#252): after 0.5.3 it also drops the push of a kombo's kicks, and VS RULES no longer turn it back on in versus and training. Not yet played by Mary.
 
 ## Building from source

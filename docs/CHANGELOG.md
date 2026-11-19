@@ -12,6 +12,16 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 Built into the test folder; not yet played by Mary.
 
+- **More pads understood**: the community's pad database (SDL_GameControllerDB,
+  some 870 pads on Windows and 750 on Linux) now decides the buttons of pads
+  that are not Xbox-type on Windows (PlayStation, Switch, 8BitDo, arcade
+  sticks, generic USB pads) and is given to SDL on Linux. A
+  `gamecontrollerdb.txt` of your own beside the game (made with the SDL2
+  Gamepad Tool) is read first.
+- **Linux / Steam Deck**: player two's pad works on Linux; a chosen pad is
+  found among all those connected; Steam's virtual pad is preferred, and the
+  pad you press becomes player one's when the other is idle.
+
 - **Online: both players on the same stage.** The host loaded a random
   stage over the one the room, STAGE SELECT or the draw had chosen, and the
   guest followed only if the host's message came in time: with lag, two

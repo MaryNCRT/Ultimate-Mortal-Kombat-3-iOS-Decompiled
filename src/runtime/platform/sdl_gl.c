@@ -32,13 +32,16 @@
 #include <emscripten.h>
 #endif
 
+#include <unistd.h>                     /* readlink: the game's folder */
+static void pads_load_maps(void);       /* the pads, below */
+static void pads_open_all(void);
+static void pads_removed(SDL_JoystickID id);
 static SDL_Window   *g_wnd;
 static SDL_GLContext g_ctx;
 static bool          g_quit;
 static bool          g_focused = true;
 static int           g_wheel;           /* notches not yet taken */
 static Uint64        g_start, g_freq;
-static SDL_GameController *g_controller;
 /* Typed text for plat_text_take, one character (UTF-8) per entry, with
  * Backspace, Enter, Esc and Ctrl+V as 8, 13, 27 and 22, as Windows' WM_CHAR
  * gives them. Port, not in the binary. */
@@ -307,16 +310,11 @@ bool plat_poll(void)
         default:
             break;
         }
-        if (ev.type == SDL_CONTROLLERDEVICEADDED && !g_controller &&
-            SDL_IsGameController(ev.cdevice.which))
-            g_controller = SDL_GameControllerOpen(ev.cdevice.which);
-        else if (ev.type == SDL_CONTROLLERDEVICEREMOVED && g_controller &&
-                 SDL_JoystickInstanceID(
-                     SDL_GameControllerGetJoystick(g_controller)) ==
-                     ev.cdevice.which) {
-            SDL_GameControllerClose(g_controller);
-            g_controller = NULL;
-        }
+        if (ev.type == SDL_CONTROLLERDEVICEADDED) {
+            pads_load_maps();
+            pads_open_all();
+        } else if (ev.type == SDL_CONTROLLERDEVICEREMOVED)
+            pads_removed(ev.cdevice.which);
     }
 #ifdef __EMSCRIPTEN__
     emscripten_sleep(16);
@@ -611,83 +609,6 @@ void plat_wait_until(double t)
         ;
 }
 
-int plat_pad(int which)
-{
-    SDL_GameController *pad = g_controller;
-    Sint16 x, y, trigger;
-    int bits = 0;
-
-    if (which != 0)
-        return -1;
-    if (!pad) {
-        int i;
-        for (i = 0; i < SDL_NumJoysticks(); i++) {
-            if (SDL_IsGameController(i)) {
-                pad = SDL_GameControllerOpen(i);
-                if (pad) {
-                    g_controller = pad;
-                    break;
-                }
-            }
-        }
-    }
-    if (!pad || !SDL_GameControllerGetAttached(pad))
-        return -1;
-
-    x = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX);
-    y = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTY);
-    trigger = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT);
-    if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_UP) ||
-        y < -10000)
-        bits |= 1 << 0;
-    if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN) ||
-        y > 10000)
-        bits |= 1 << 1;
-    if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT) ||
-        x < -10000)
-        bits |= 1 << 2;
-    if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT) ||
-        x > 10000)
-        bits |= 1 << 3;
-    if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_X))
-        bits |= 1 << 4;
-    if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_A))
-        bits |= 1 << 5;
-    if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER))
-        bits |= 1 << 6;
-    if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_Y))
-        bits |= 1 << 7;
-    if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_B))
-        bits |= 1 << 8;
-    if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSHOULDER) ||
-        trigger > 8000)
-        bits |= 1 << 9;
-    return bits;
-}
-
-/* The PLAT_PAD read through SDL's game controller layer, which already names
- * the face buttons by position (SDL's A is the south one on every pad).
- * pad= picks "off" or a vendor:product; anything else takes the first pad. */
-static char g_pad_want[32] = "auto";
-
-void plat_pad_select(const char *which)
-{
-    snprintf(g_pad_want, sizeof g_pad_want, "%s",
-             which && *which ? which : "auto");
-}
-
-/* Player two's pad: none on this backend (port). */
-void plat_pad2_select(const char *which)
-{
-    (void)which;
-}
-
-int plat_pad2_read(PLAT_PAD *out)
-{
-    memset(out, 0, sizeof *out);
-    return 0;
-}
-
 void plat_pad_list(void)
 {
     int i;
@@ -708,7 +629,171 @@ void plat_pad_list(void)
     fflush(stdout);
 }
 
-int plat_pad_read(PLAT_PAD *out)
+/* The pads, through SDL's game controller layer, which names the face
+ * buttons by position (SDL's A is the south one on every pad) once it knows
+ * the pad: SDL's own list, SDL_GAMECONTROLLERCONFIG (Steam sets it for the
+ * pads it shows a game), and gamecontrollerdb.txt (pad_db.h) -- the
+ * package's, then a player's file beside the game, which wins.
+ *
+ * Up to eight pads are open at once; player one and player two each hold
+ * one (pad= / p2pad=: auto, off, keyboard, or a vendor:product). "auto"
+ * takes Steam's virtual pad first (28de:11ff: on a Steam Deck in Game Mode
+ * the built-in controls arrive through it, the raw device stays silent),
+ * then any other; and while player one's pad is idle, a press on another
+ * free pad makes that one player one's (issue #253: the Deck, two devices
+ * for one set of controls). Port, not in the binary. */
+#define SDL_PADS 8
+static SDL_GameController *g_pads[SDL_PADS];
+static char g_pad_want[2][32] = { "auto", "auto" };
+static int  g_pad_of[2] = { -1, -1 };   /* index in g_pads, or -1 */
+static int  g_maps_loaded;
+
+static void pads_load_maps(void)
+{
+    static const char *const where[] = {
+        "src/runtime/platform/gamecontrollerdb.txt",            /* the package's */
+        "resources/src/runtime/platform/gamecontrollerdb.txt",  /* Linux's */
+        "gamecontrollerdb.txt",                                 /* the player's, last: wins */
+    };
+    char dir[4096], path[4200];
+    ssize_t len;
+    int i, n;
+
+    if (g_maps_loaded)
+        return;
+    g_maps_loaded = 1;
+    dir[0] = 0;
+    len = readlink("/proc/self/exe", dir, sizeof dir - 1);
+    if (len > 0) {
+        char *slash;
+        dir[len] = 0;
+        slash = strrchr(dir, '/');
+        if (slash)
+            slash[1] = 0;
+    } else
+        dir[0] = 0;
+    for (i = 0; i < (int)(sizeof where / sizeof where[0]); i++) {
+        snprintf(path, sizeof path, "%s%s", dir, where[i]);
+        n = SDL_GameControllerAddMappingsFromFile(path);
+        if (n > 0)
+            printf("pad: %d mappings from %s\n", n, path);
+    }
+}
+
+static void pads_open_all(void)
+{
+    int i, k;
+
+    for (i = 0; i < SDL_NumJoysticks(); i++) {
+        SDL_JoystickID id;
+        int have = 0;
+
+        if (!SDL_IsGameController(i))
+            continue;
+        id = SDL_JoystickGetDeviceInstanceID(i);
+        for (k = 0; k < SDL_PADS; k++)
+            if (g_pads[k] && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(g_pads[k])) == id)
+                have = 1;
+        if (have)
+            continue;
+        for (k = 0; k < SDL_PADS && g_pads[k]; k++)
+            ;
+        if (k == SDL_PADS)
+            break;
+        g_pads[k] = SDL_GameControllerOpen(i);
+        if (g_pads[k]) {
+            char guid[40];
+            SDL_JoystickGetGUIDString(SDL_JoystickGetGUID(SDL_GameControllerGetJoystick(g_pads[k])),
+                                      guid, sizeof guid);
+            printf("pad: open %d \"%s\" %04x:%04x %s\n", k,
+                   SDL_GameControllerName(g_pads[k]) ? SDL_GameControllerName(g_pads[k]) : "pad",
+                   SDL_GameControllerGetVendor(g_pads[k]), SDL_GameControllerGetProduct(g_pads[k]),
+                   guid);
+        }
+    }
+}
+
+static void pads_removed(SDL_JoystickID id)
+{
+    int k, s;
+
+    for (k = 0; k < SDL_PADS; k++)
+        if (g_pads[k] && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(g_pads[k])) == id) {
+            printf("pad: closed %d\n", k);
+            SDL_GameControllerClose(g_pads[k]);
+            g_pads[k] = NULL;
+            for (s = 0; s < 2; s++)
+                if (g_pad_of[s] == k)
+                    g_pad_of[s] = -1;
+        }
+}
+
+static int pad_any(SDL_GameController *c)
+{
+    int b;
+
+    for (b = 0; b < SDL_CONTROLLER_BUTTON_MAX; b++)
+        if (SDL_GameControllerGetButton(c, (SDL_GameControllerButton)b))
+            return 1;
+    return SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 8000
+        || SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 8000;
+}
+
+static int pad_wanted(int s, SDL_GameController *c)
+{
+    unsigned v, p;
+
+    if (sscanf(g_pad_want[s], "%x:%x", &v, &p) == 2)
+        return SDL_GameControllerGetVendor(c) == v && SDL_GameControllerGetProduct(c) == p;
+    return 1;
+}
+
+/* Player s's pad: the one it holds if still there, else a new pick. */
+static SDL_GameController *pad_for(int s)
+{
+    int o = s ^ 1, k, best = -1;
+
+    if (strcmp(g_pad_want[s], "off") == 0 || strcmp(g_pad_want[s], "keyboard") == 0)
+        return NULL;
+    if (SDL_WasInit(SDL_INIT_GAMECONTROLLER) == 0)
+        return NULL;
+    pads_load_maps();
+    if (!g_pads[0] && !g_pads[1])
+        pads_open_all();
+    if (g_pad_of[s] >= 0 && g_pads[g_pad_of[s]]
+        && SDL_GameControllerGetAttached(g_pads[g_pad_of[s]])) {
+        /* auto: a press on another free pad while this one is idle */
+        if (s == 0 && strcmp(g_pad_want[0], "auto") == 0
+            && !pad_any(g_pads[g_pad_of[0]])) {
+            for (k = 0; k < SDL_PADS; k++)
+                if (k != g_pad_of[0] && k != g_pad_of[o] && g_pads[k] && pad_any(g_pads[k])) {
+                    printf("pad: player one now on pad %d \"%s\"\n", k,
+                           SDL_GameControllerName(g_pads[k]) ? SDL_GameControllerName(g_pads[k]) : "pad");
+                    g_pad_of[0] = k;
+                    break;
+                }
+        }
+        return g_pads[g_pad_of[s]];
+    }
+    for (k = 0; k < SDL_PADS; k++) {
+        if (!g_pads[k] || k == g_pad_of[o] || !pad_wanted(s, g_pads[k]))
+            continue;
+        if (SDL_GameControllerGetVendor(g_pads[k]) == 0x28de
+            && SDL_GameControllerGetProduct(g_pads[k]) == 0x11ff) {
+            best = k;                   /* Steam's virtual pad first */
+            break;
+        }
+        if (best < 0)
+            best = k;
+    }
+    g_pad_of[s] = best;
+    if (best >= 0)
+        printf("pad: player %d on pad %d \"%s\"\n", s + 1, best,
+               SDL_GameControllerName(g_pads[best]) ? SDL_GameControllerName(g_pads[best]) : "pad");
+    return best >= 0 ? g_pads[best] : NULL;
+}
+
+static int pad_fill(SDL_GameController *pad, PLAT_PAD *out)
 {
     static const SDL_GameControllerButton b[PB_COUNT] = {
         SDL_CONTROLLER_BUTTON_A, SDL_CONTROLLER_BUTTON_B,
@@ -719,35 +804,28 @@ int plat_pad_read(PLAT_PAD *out)
         SDL_CONTROLLER_BUTTON_LEFTSTICK, SDL_CONTROLLER_BUTTON_RIGHTSTICK,
         SDL_CONTROLLER_BUTTON_GUIDE,
     };
-    SDL_GameController *pad;
-    unsigned v, p;
+    Sint16 x, y;
+    unsigned v;
     int i;
 
     memset(out, 0, sizeof *out);
-    if (strcmp(g_pad_want, "off") == 0 || strcmp(g_pad_want, "keyboard") == 0)
-        return 0;
-    if (plat_pad(0) < 0)                /* opens the first pad if needed */
-        return 0;
-    pad = g_controller;
-    if (sscanf(g_pad_want, "%x:%x", &v, &p) == 2
-        && (SDL_GameControllerGetVendor(pad) != v
-            || SDL_GameControllerGetProduct(pad) != p))
+    if (!pad)
         return 0;
     for (i = 0; i < PB_COUNT; i++)
-        if (b[i] != SDL_CONTROLLER_BUTTON_INVALID
-            && SDL_GameControllerGetButton(pad, b[i]))
+        if (b[i] != SDL_CONTROLLER_BUTTON_INVALID && SDL_GameControllerGetButton(pad, b[i]))
             out->buttons |= 1u << i;
     if (SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 8000)
         out->buttons |= 1u << PB_L2;
     if (SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 8000)
         out->buttons |= 1u << PB_R2;
+    x = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX);
+    y = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTY);
+    out->up = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_UP) || y < -10000;
+    out->down = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN) || y > 10000;
+    out->left = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT) || x < -10000;
+    out->right = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT) || x > 10000;
     i = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_RIGHTX);
     out->rx = i < -20000 ? -1 : i > 20000 ? 1 : 0;
-    i = plat_pad(0);
-    out->up = (i >> 0) & 1;
-    out->down = (i >> 1) & 1;
-    out->left = (i >> 2) & 1;
-    out->right = (i >> 3) & 1;
     snprintf(out->name, sizeof out->name, "%s",
              SDL_GameControllerName(pad) ? SDL_GameControllerName(pad) : "pad");
     v = SDL_GameControllerGetVendor(pad);       /* the pictures to show */
@@ -755,6 +833,39 @@ int plat_pad_read(PLAT_PAD *out)
               : v == 0x057e ? 3 : 1;
     return out->connected = 1;
 }
+
+/* The old ten-bit read: player one's pad. */
+int plat_pad(int which)
+{
+    PLAT_PAD p;
+    int bits = 0;
+
+    if (which != 0 || !pad_fill(pad_for(0), &p))
+        return -1;
+    if (p.up)    bits |= 1 << 0;
+    if (p.down)  bits |= 1 << 1;
+    if (p.left)  bits |= 1 << 2;
+    if (p.right) bits |= 1 << 3;
+    if (p.buttons & (1u << PB_WEST))  bits |= 1 << 4;
+    if (p.buttons & (1u << PB_SOUTH)) bits |= 1 << 5;
+    if (p.buttons & (1u << PB_R1))    bits |= 1 << 6;
+    if (p.buttons & (1u << PB_NORTH)) bits |= 1 << 7;
+    if (p.buttons & (1u << PB_EAST))  bits |= 1 << 8;
+    if (p.buttons & ((1u << PB_L1) | (1u << PB_R2))) bits |= 1 << 9;
+    return bits;
+}
+
+static void pad_want(int s, const char *which)
+{
+    snprintf(g_pad_want[s], sizeof g_pad_want[s], "%s", which && *which ? which : "auto");
+    g_pad_of[s] = -1;                   /* pick again */
+}
+
+void plat_pad_select(const char *which)  { pad_want(0, which); }
+void plat_pad2_select(const char *which) { pad_want(1, which); }
+
+int plat_pad_read(PLAT_PAD *out)  { return pad_fill(pad_for(0), out); }
+int plat_pad2_read(PLAT_PAD *out) { return pad_fill(pad_for(1), out); }
 
 double plat_time(void)
 {
@@ -764,9 +875,13 @@ double plat_time(void)
 
 void plat_close(void)
 {
-    if (g_controller) {
-        SDL_GameControllerClose(g_controller);
-        g_controller = NULL;
+    {
+        int k;
+        for (k = 0; k < SDL_PADS; k++)
+            if (g_pads[k]) {
+                SDL_GameControllerClose(g_pads[k]);
+                g_pads[k] = NULL;
+            }
     }
     rgl_close();
     if (g_ctx) { SDL_GL_DeleteContext(g_ctx); g_ctx = NULL; }

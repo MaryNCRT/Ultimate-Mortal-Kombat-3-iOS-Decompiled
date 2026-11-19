@@ -111,6 +111,46 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+### 2026-11-19 (later) -- Pads: SDL_GameControllerDB, two pads on Linux, the Steam Deck
+
+Asked by Mary with three links: SDL_GameControllerDB, the SDL2 Gamepad Tool
+and Steam's ISteamInput.
+
+- **gamecontrollerdb.txt** (SDL_GameControllerDB, zlib licence, in
+  `src/runtime/platform/` with `gamecontrollerdb-LICENSE.txt`; every package
+  carries src/): about 870 pads' layouts for Windows, 750 for Linux, the
+  Steam Deck's own controls (28de:1205) among them.
+- **Windows** (win32_gl.c, `pad_db.h`): a WinMM pad -- anything XInput does
+  not cover: PlayStation, Switch, 8BitDo in D-input, arcade sticks, generic
+  USB pads -- is read through its vendor:product's line when there is one
+  (buttons, the hat, triggers that are axes, the right stick; SDL's
+  DirectInput axes a0..a5 = X Y Z Rx Ry Rz taken as WinMM's X Y Z U V R),
+  else through the vendor tables as before. The log says which
+  (`pad: 054c:05c4 laid out as "PS4 Controller" (gamecontrollerdb.txt)`).
+  XInput pads are as before. Not tried with a WinMM pad here (none on this
+  machine); `tests/pad_db_test.c` checks the reader against the file
+  (DualShock 4 on Windows, the Steam Deck on Linux, an 8BitDo, no line, the
+  wrong platform: all pass).
+- **Linux** (sdl_gl.c): SDL is given the package's file, then a
+  `gamecontrollerdb.txt` beside the game (the player's, the SDL2 Gamepad
+  Tool's output; the last wins); SDL_GAMECONTROLLERCONFIG, which Steam sets
+  for the pads it shows a game, SDL reads itself. Up to eight pads open at
+  once; **player two's pad now works on Linux** (`p2pad=`, it read nothing
+  before); `pad=` / `p2pad=` with a vendor:product find that pad among all
+  (before, only the first pad was looked at). "auto" takes Steam's virtual
+  pad (28de:11ff) first -- on a Deck in Game Mode the built-in controls
+  arrive through it -- and while player one's pad is idle a press on another
+  free pad makes that one player one's, so the Deck's two devices for one
+  set of controls no longer matter. Each pad opened is logged with its name,
+  vendor:product and GUID. Compiled for Linux here; not run on Linux.
+- **ISteamInput** is not used: it needs the Steamworks SDK and the game's
+  own AppID on Steam; this game is added as a non-Steam game, for which
+  Steam Input gives a virtual pad and SDL_GAMECONTROLLERCONFIG, both read now.
+- CI's Linux check (`tools/ci_compile_linux.py`) compiles as the launcher
+  does: `UMK3_STATE_FILE` on the game's files, `UMK3_NO_LONG_REMAP` on
+  text.c. Without them it read `long` as 8 bytes where the build reads 4, and
+  failed on a declaration the real build accepts.
+
 ### 2026-11-19 (later) -- Online: two stages, the round's end, Linux buttons; test aids
 
 All port changes, each marked in the source. Checked with two games on one
