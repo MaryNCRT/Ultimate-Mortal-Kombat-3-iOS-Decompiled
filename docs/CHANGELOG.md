@@ -8,9 +8,11 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## After 0.5.3 (unreleased)
+## 0.5.4 beta (2026-11-19)
 
-Built into the test folder; not yet played by Mary.
+Not yet played by Mary as a package. The online fixes were played by scripts
+with two games on one PC over a bad line made on purpose; not yet between two
+machines, on a Steam Deck, or with a non-Xbox pad.
 
 - **More pads understood**: the community's pad database (SDL_GameControllerDB,
   some 870 pads on Windows and 750 on Linux) now decides the buttons of pads

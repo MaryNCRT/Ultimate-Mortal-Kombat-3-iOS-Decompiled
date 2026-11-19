@@ -32,7 +32,7 @@ The only source of truth is the binary. Nothing enters the tree that is not deri
 |---|---|---|
 | **Decompilation** (`src/decomp/`) | **2,572 / 2,572 (100%)** | LIME 3D engine (109), front end & scenes (291), arcade fight engine (2,172). |
 | **Verification** (`tools/decomp/`) | **100%** | Differential tests against the `armrecomp` ARM→C oracle; 229 data tables checked at build time (`ctest`). |
-| **PC port** (`src/runtime/`) | **Playable — v0.5.3 beta** | OpenGL, Vulkan, Direct3D 12; Windows and Linux; 3:2 / 4:3 / 16:9 / 21:9; keyboard and pads; local 2 players, LAN (MULTIPLAYER, Radmin VPN too) and online with rollback; replays; mods. |
+| **PC port** (`src/runtime/`) | **Playable — v0.5.4 beta** | OpenGL, Vulkan, Direct3D 12; Windows and Linux; 3:2 / 4:3 / 16:9 / 21:9; keyboard and pads (about 870 pads known through SDL_GameControllerDB); local 2 players, LAN (MULTIPLAYER, Radmin VPN too) and online with rollback; replays; mods. |
 | **Launcher** (`launcher/`) | Windows and Linux | Compiles the game with a bundled `zig cc` (nothing to install), updates itself, MODS tools, PROFILE with ACCOUNT (optional; progress in the cloud, the game's leaderboards live) and FRIENDS, STEAM (adds the launcher to the Steam library as a non-Steam game with SteamGridDB artwork). |
 
 Every release is tested by the project's tester, Mary, before the next one builds on it; the [Changelog](docs/CHANGELOG.md) says for each change whether she has played it yet.
@@ -88,21 +88,19 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 - **TEXTURES:** every texture of the game by where it belongs, replaced into a mod.
 - **EXPORT:** fighters, stages, models and textures as FBX, GLB, USD (USDA/USDC/USDZ) or OBJ with PNG textures.
 
-## Known problems (0.5.3 beta)
+## Known problems (0.5.4 beta)
 
-- The VS screen's announcer says the two names; the game has no "versus" voice (a mod's `res/audio/Skversus.wav` plays between them). The 8BitDo fix (axes read in each pad's range, its D-input buttons) not tried on an 8BitDo pad here.
-- Colours 3 to 6: the VERSUS art (the endings') of Sonya, Jax and Liu Kang keeps colour 1 or 2 -- their art is named apart from their sheets. Not tried online between two PCs. The profile pictures in colours 3..6 not tried in the launcher's window yet.
-- Outfits that add: not yet tried online between two PCs.
-- Online, the two players could fight on two different stages, and a click on a round's summary parted the two games (the softlock after a round): both fixed after 0.5.3 (best of 3 with 120 ms of ping and 10% lost, no desync, two games on one PC). The second fight of a session desynced too (the engine's step phase now starts each fight from 0); checked with two games on one PC, two fights in a row with no desync, not yet between two machines. An online fight whose other side stops sending for 15 s now goes back to the lobby as a lost link instead of freezing.
-
-- Online: 0.2.1's fixes (the rollback off one boot in two, fights drifting apart) were checked with two games on one PC, not yet between two machines. Both players need 0.2.1, built fresh.
-- Joining online, a pad's X glyph showed over START (Mary); not reproduced yet.
-- Some stages still pause up to ~1.3 s on their first frames (THE STREET), as their events load. A round's start can still show a slow frame or two.
-- With ENHANCED LIGHTING, the first frames after starting can stall a second or more while the driver finishes the shader (Direct3D 12); shorter since 0.3.0, not gone.
+- Online: 0.5.4's fixes (both players on one stage, no softlock at a round's end, no desync in a session's second fight) were checked with two games on one PC over a line made bad on purpose (120 ms of ping, 10% of the packets lost): no desync over a best of 3 and over two fights in a row. Not yet played between two machines. Both players need 0.5.4.
+- Steam Deck / Linux: the 6-button fix (#171, #253), player two's pad and the choice of Steam's virtual pad were compiled and checked in the generated code, not yet run on a Deck.
+- Pads read through SDL_GameControllerDB on Windows (PlayStation, Switch, 8BitDo in D-input, arcade sticks, generic USB pads): not yet tried with such a pad here. A pad with no line in the database keeps the vendor's layout, as before.
+- The VS screen's announcer says the two names; the game has no "versus" voice (a mod's `res/audio/Skversus.wav` plays between them).
+- Colours 3 to 6: the VERSUS art (the endings') of Sonya, Jax and Liu Kang keeps colour 1 or 2 -- their art is named apart from their sheets. Colours and outfits that add are not yet tried online between two PCs.
+- Joining online, a pad's X glyph showed over START once (Mary); not reproduced yet.
+- Some stages still pause up to ~1.3 s on their first frames (THE STREET), as their events load.
+- With ENHANCED LIGHTING, the first frames after starting can stall a second or more while the driver finishes the shader (Direct3D 12).
 - ENHANCED LIGHTING and AMBIENT OCCLUSION are Vulkan and DirectX 12 only; OpenGL draws as before.
-- Steam Deck: the fight played the 5-button layout whatever was chosen (#171, #253): on 64-bit Linux the port read some game numbers as 8 bytes. Fixed after 0.5.3, not yet tried on a Deck.
-- Pads from SDL_GameControllerDB (Windows WinMM pads, Linux through SDL) and player two's pad on Linux: after 0.5.3, not yet tried with such a pad.
-- KOMBO SLIDE OFF (#252): after 0.5.3 it also drops the push of a kombo's kicks, and VS RULES no longer turn it back on in versus and training. Not yet played by Mary.
+- On Linux the stage's music is still decoded on the game's thread (Windows decodes it on a thread of its own).
+- MOD HUB: the mods' downloads come from GitHub releases; a network that blocks those cannot download mods.
 
 ## Building from source
 

@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-14 (online: a MERCY no longer parts the two machines -- player one's buttons decoded with the host's count on both) · 2026-11-13 (outfits that add: `type=skin` mods, the SKIN box, the CHARACTER VIEWER's OUTFIT / COLOR) · 2026-11-12 (ONLINE stage 3: LOBBIES in the ONLINE screen, invites over P2P, the online select screen's banners; a second monitor's refresh) · before: 2026-11-12 (ONLINE stage 2: the EOS lobby core, `mplobby_*` in mp_eos.c, tested with two probes against the service) · before: 2026-11-12 (release 0.4.5 beta: TRAINING's own screen, DUELO against the CPU, the RULES button) · before: 2026-11-12 (the ONLINE phase's rules block and the local versus's VS RULES window with its kodes checklist, Mary confirmed) · before: 2026-11-12 (0.4.4 beta in the test folder: the Lost Treasures fixed from the binary, hidden controls ignore clicks, the first start's preset, WHAT'S NEW) · earlier: 2026-11-06 (release 0.3.1b beta: AO in the intros, frames back under 16.7 ms, LOW LATENCY, Sindel's smooth idle, the moves list's mod portrait -- published as the pre-release `v0.3.1-beta.b`) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-19 (release 0.5.4 beta: online -- one stage on both sides, no softlock at a round's end, no desync in a session's second fight, less stutter, no frozen fight; the Steam Deck's 6 buttons on Linux; pads from SDL_GameControllerDB; KOMBO SLIDE OFF with kicks) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -69,37 +69,28 @@ itself to do it.
 
 ### What the tester has and has not played
 
-Mary plays every build in a test folder (`WORK\release-0.1.12\Test`
-on her machine) before it is released. **Played and confirmed:** everything
-up to 0.1.10b (the Linux package, the Vulkan and Direct3D 12 renderers),
-REAL-TIME SHADOWS' note on its own row in 0.1.13. **Not yet played as a whole:** 0.1.11 to
-0.1.18; she has tried pieces of them as she reported problems (STAGE
-SELECT's music and CANCEL, the 4:3 menus, the stage editor, the MOD HUB,
-the kombo branch and the KOMBOS page, Noob Saibot on the roster, EXPORT ALL and the settings categories, which she confirmed work), each
-marked in the log below. **STEAM** (2026-11-12): Mary confirmed the game
-added to her Steam library beside her other non-Steam game.
+Mary plays every build in a test folder (`WORK\release-0.1.12\Test` on her
+machine) before it is released, and reports by GitHub issues, messages and
+logs; the [CHANGELOG](CHANGELOG.md) says for each release whether she has
+played it. 0.5.4's online fixes were played by scripts with two games on one
+PC (no second machine yet); she watched those windows. Not on a Steam Deck
+or with a non-Xbox pad yet.
 
 ### Open problems
 
+Closed problems are in the detailed log and the CHANGELOG, not here.
+
 | Problem | State |
 |---|---|
-| A fight intro can drop a frame when smoothing two fighters takes more than a tick | **closed**: Mary no longer sees it (0.1.18) |
-| Friendships and animalities can repeat a death scream | **closed**: Mary no longer sees it (0.1.18); the `death scream:` log line still names the handler |
-| A fighter cannot be duplicated into a new slot | **closed** from the list by Mary (0.1.18); not built |
-| Losing to Motaro from the debug menu softlocks | **closed**: Mary no longer sees it (0.1.18) |
-| The stage editor's SCULPT showed "500 Internal Error" once | **closed**: Mary no longer sees it (0.1.18); the guards stay |
-| Slight slide in a kombo (issue #114) | **the original's rule**, checked instruction by instruction (`t_cc_*_punch` → `t_ccp3` → `t_separate_us`); nothing to fix |
+| Online between two machines | 0.5.4's fixes (one stage, the round's end, the second fight, holds) checked with two games on one PC over a bad line made on purpose (`UMK3_NET_LOSS/LAG/JITTER`): 0 desyncs; **waits for a match between two PCs** |
+| Steam Deck: the fight's 5-button layout (issues #171, #253) | **fixed in 0.5.4** (Linux read `long` game globals as 8 bytes in the port's files, `umk3_long`); waits for a Deck |
+| Pads through SDL_GameControllerDB (WinMM on Windows, SDL on Linux), player two's pad on Linux | **built in 0.5.4**, `tests/pad_db_test.c` passes; waits for such a pad |
+| KOMBO SLIDE OFF not enough (issue #252) | **changed in 0.5.4** (kicks too; VS RULES no longer override OFF); checked by script in training, waits for the reporter |
+| MOD HUB never connecting on other players' PCs, no error | **fixed in 0.5.3** (time limits, other sources for the index); waits for an affected PC |
 | Dynamic stage music, Genesis style (Soul Chamber first) | **research only**, nothing built: [research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md); waits for Mary's Genesis recording (WAV + GYM) |
-| Ambient occlusion and screen-space contact shadows (ENHANCED LIGHTING) | ambient occlusion **built** (0.3.0; the fighters are their own layer since after 0.3.1b); contact shadows research only: [research/CONTACT-SHADOWS.md](research/CONTACT-SHADOWS.md) |
-| MOD HUB never connecting on other players' PCs, no error (Mary, 2026-11-14) | **fixed in 0.5.3** (time limits, other sources for the index); not yet confirmed on an affected PC |
-| Online: the two players on two stages (the host's random level over the gate's) | **fixed after 0.5.3** (2026-11-19), checked with two games on one PC |
-| Online: softlock after a round (a local tap ended the round summary on one side) | **fixed after 0.5.3** (2026-11-19): best of 3 with 120 ms and 10% lost, 0 desyncs |
-| Online: the second fight of a session desynced; one side could wait for good (softlock) | **fixed after 0.5.3** (FrameCompensation reset, inputs resent oldest first, 15 s stall leaves the fight); two fights on one PC with 0 desyncs, not yet between two machines |
-| Online stutter: holds every 10 frames on noisy numbers | **fixed after 0.5.3** (averaged, at most one every 30 frames) |
-| KOMBO SLIDE OFF not enough (issue #252) | **changed after 0.5.3**: kicks too, VS RULES no longer override OFF; not played yet |
-| Steam Deck: 5-button layout in fights (issues #171, #253) | **fixed after 0.5.3**: Linux read `long` game globals as 8 bytes in the port's files (umk3_long); not yet tried on a Deck |
-| Online: player two cannot pick a fighter in the lobby after about 2 fights | **closed**: Mary says it is fixed (2026-11-14), with the MERCY fix |
-| After CANCEL in STAGE SELECT the select screen came back silent once | fixed by never stopping the tune on the way; the log says `stage select: the tune ...` if it happens again |
+| Screen-space contact shadows (ENHANCED LIGHTING) | research only: [research/CONTACT-SHADOWS.md](research/CONTACT-SHADOWS.md) (ambient occlusion is built) |
+| A pad's X glyph over START when joining online (Mary, once) | not reproduced |
+| THE STREET and other stages pause up to ~1.3 s on their first frames | open: their events load then |
 
 ### Where to look next
 

@@ -32,7 +32,7 @@ La única fuente de verdad es el binario. Nada entra al árbol si no se deriva d
 |---|---|---|
 | **Decompilación** (`src/decomp/`) | **2.572 / 2.572 (100%)** | Motor 3D LIME (109), menús y escenas (291), motor de combate arcade (2.172). |
 | **Verificación** (`tools/decomp/`) | **100%** | Tests diferenciales contra el oráculo ARM→C `armrecomp`; 229 tablas de datos comprobadas al compilar (`ctest`). |
-| **Port a PC** (`src/runtime/`) | **Jugable — v0.4.5 beta** | OpenGL, Vulkan, Direct3D 12; Windows y Linux; 3:2 / 4:3 / 16:9 / 21:9; teclado y mandos; 2 jugadores local, LAN y en línea con rollback; repeticiones; mods. |
+| **Port a PC** (`src/runtime/`) | **Jugable — v0.5.4 beta** | OpenGL, Vulkan, Direct3D 12; Windows y Linux; 3:2 / 4:3 / 16:9 / 21:9; teclado y mandos (unos 870 mandos conocidos gracias a SDL_GameControllerDB); 2 jugadores local, LAN (MULTIJUGADOR, también Radmin VPN) y en línea con rollback; repeticiones; mods. |
 | **Launcher** (`launcher/`) | Windows y Linux | Compila el juego con un `zig cc` incluido (nada que instalar), se actualiza solo, herramientas de MODS. |
 
 Cada versión la prueba la tester del proyecto, Mary, antes de que la siguiente se construya encima; el [registro de cambios](docs/CHANGELOG.md) dice en cada cambio si ya lo jugó.
@@ -86,15 +86,19 @@ Todos se pueden cambiar en el launcher (CONTROLES) o en el juego (`Esc`).
 - **TEXTURAS:** todas las texturas del juego según a qué pertenecen, reemplazadas en un mod.
 - **EXPORTAR:** luchadores, escenarios, modelos y texturas en FBX, GLB, USD (USDA/USDC/USDZ) u OBJ con texturas PNG.
 
-## Problemas conocidos (0.4.5 beta)
+## Problemas conocidos (0.5.4 beta)
 
-- En línea: las correcciones de 0.2.1 (el rollback apagado una vez de cada dos, peleas que se separaban) se comprobaron con dos juegos en un PC, todavía no entre dos máquinas.
-- Al unirse en línea, el glifo X del mando apareció sobre START (Mary); sin reproducir aún.
+- En línea: las correcciones de 0.5.4 (los dos jugadores en el mismo escenario, sin bloqueo al terminar un round, sin desincronización en la segunda pelea de una sesión) se comprobaron con dos juegos en un PC y una conexión mala a propósito (120 ms de ping, 10 % de paquetes perdidos): sin desincronización en un mejor de 3 ni en dos peleas seguidas. Todavía no entre dos máquinas. Los dos jugadores necesitan la 0.5.4.
+- Steam Deck / Linux: la corrección de los 6 botones (#171, #253), el mando del jugador 2 y la preferencia por el mando virtual de Steam se compilaron y comprobaron en el código generado, sin probar aún en un Deck.
+- Mandos leídos con SDL_GameControllerDB en Windows (PlayStation, Switch, 8BitDo en modo D-input, sticks arcade, mandos USB genéricos): sin probar aún con uno de esos mandos. Un mando que no está en la base de datos conserva el esquema de su fabricante, como antes.
+- La pantalla VS dice los dos nombres; el juego no tiene voz de "versus" (la de un mod, `res/audio/Skversus.wav`, suena entre ellos).
+- Colores 3 a 6: el arte VERSUS (el de los finales) de Sonya, Jax y Liu Kang conserva el color 1 o 2. Colores y trajes añadidos sin probar aún en línea entre dos PCs.
+- Al unirse en línea, el glifo X del mando apareció una vez sobre START (Mary); sin reproducir aún.
 - Algunos escenarios todavía se pausan hasta ~1,3 s en sus primeros cuadros (THE STREET) mientras cargan sus eventos.
 - Con ILUMINACIÓN MEJORADA, los primeros cuadros pueden congelarse un segundo o más mientras el driver termina el shader (Direct3D 12).
 - ILUMINACIÓN MEJORADA y OCLUSIÓN AMBIENTAL son solo Vulkan y DirectX 12; OpenGL dibuja como antes.
-- Steam Deck: la pelea usaba el esquema de 5 botones elegido lo que se eligiera (#171); 0.2.0 cambió cómo se guarda, sin comprobar aún en un Deck.
-- En un kombo, el golpeado retrocede un poco tras varios puñetazos (issue #114): es una regla del propio juego original, comprobada contra el binario.
+- En Linux la música del escenario todavía se decodifica en el hilo del juego (Windows lo hace en un hilo propio).
+- MOD HUB: las descargas de los mods vienen de las releases de GitHub; una red que las bloquee no puede descargar mods.
 
 ## Compilar desde el código
 
