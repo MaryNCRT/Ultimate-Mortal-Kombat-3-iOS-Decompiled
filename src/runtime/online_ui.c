@@ -25,7 +25,7 @@
 
 extern int  CurrentTask;
 extern int  FE_CurrentTask;
-extern long GameMode;
+extern umk3_long GameMode;
 
 #define ICON_PX 96
 #define PIC_PX  192                     /* the ONLINE screen's portraits */

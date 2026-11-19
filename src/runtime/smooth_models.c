@@ -57,7 +57,7 @@ void lime_port_edge_restore(int clamped);
 int  rb_nodraw(void);
 int  rgl_shadow_active(void);           /* render/rgl.h, REAL-TIME SHADOWS */
 void rgl_shadow_proxy(int mode);
-extern long limeRenderedPolyCount;
+extern umk3_long limeRenderedPolyCount;
 static long g_frame_tris;               /* smoothed triangles this frame */
 /* 1 for a frame that waits for the builds the frame before started: a
  * fight's second frame (game_main.c), so every fighter is smoothed from the
@@ -812,7 +812,7 @@ static int smooth_draw(const void *skin, const void *rec, long second,
         cover_repose(skin);             /* the hat where it is this frame */
     if (!port_smooth_models) {
         if (!second)                    /* what the bones carry covers the body */
-            tuck(skin, (int)*(const long *)r);
+            tuck(skin, (int)*(const umk3_long *)r);
         return 0;
     }
     if (port_skin_mats_has(skin))       /* parts with their own textures */
@@ -830,13 +830,13 @@ static int smooth_draw(const void *skin, const void *rec, long second,
      * 1 GB sent, ~900 ms frames). */
     if (g_frame_tris > SMOOTH_FRAME_TRIS || port_tick_unseen) {
         if (!second)
-            tuck(skin, (int)*(const long *)r);
+            tuck(skin, (int)*(const umk3_long *)r);
         return 0;
     }
 
     /* LIME_RenderMeshSingleIndexed's own reads */
-    nverts = *(const long *)(r + (second ? 0x08 : 0x00));
-    nfaces = *(const long *)(r + (second ? 0x0c : 0x04));
+    nverts = *(const umk3_long *)(r + (second ? 0x08 : 0x00));
+    nfaces = *(const umk3_long *)(r + (second ? 0x0c : 0x04));
     idx    = *(const uint16_t *P32 const *)(r + (second ? 0x2c : 0x1c));
     ruv    = *(const float *P32 const *)(r + (second ? 0x30 : 0x20));
     light  = *(const uint8_t *P32 const *)(r + (second ? 0x34 : 0x24));
@@ -887,7 +887,7 @@ static int smooth_draw(const void *skin, const void *rec, long second,
 
 
 /* port: its time, for the slow-frame line (rgl_front.c) */
-int port_smooth_draw(const void *skin, const void *rec, long second,
+int port_smooth_draw(const void *skin, const void *rec, umk3_long second,
                      void *tex_p, float alpha, const void *fade_p)
 {
     extern double port_prof_ms[5];

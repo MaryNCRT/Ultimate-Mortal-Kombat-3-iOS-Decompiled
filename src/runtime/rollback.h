@@ -22,7 +22,7 @@ int  rb_quiet(void);
 /* limePlaySound's sound h: 1 to play it. A frame run again plays the sounds
  * it did not play the first time -- the other side's late press -- and not
  * the ones it did. */
-int  rb_sound_ok(long h);
+int  rb_sound_ok(umk3_long h);
 /* the rollback's numbers on one line, 0 when no rollback fight is on */
 int  rb_stats(char *out, int n);
 /* 1 while a frame is run again after a rollback: nothing drawn. */
@@ -60,7 +60,7 @@ void rb_frame(void (*frame)(void));
 /* Inside the frame: the two players' inputs for it (rb_game_* packing). */
 void rb_inputs(uint16_t *p1, uint16_t *p2);
 /* processPacket, types RB_PKT_* */
-void rb_net(long type, const void *data, long len);
+void rb_net(umk3_long type, const void *data, umk3_long len);
 /* game_main.c, every frame: the last inputs go on being sent for a while
  * after a fight, so the other side can finish it. */
 void rb_poll(void);

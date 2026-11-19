@@ -1041,6 +1041,10 @@ void processPacket(const void *payload, long len, long type)
     case 9:
         if (len != 4)
             return;
+        /* Port, not in the binary: not over a rollback fight's stage, which
+         * the hellos settled on both sides (achievements.c) */
+        if (rb_active())
+            break;
         LevelSelect = w[0];
         break;
     case 10: {

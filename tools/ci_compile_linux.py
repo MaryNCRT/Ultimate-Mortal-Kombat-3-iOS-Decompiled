@@ -56,6 +56,18 @@ def flags():
             "-idirafter", inc, "-idirafter", os.path.join(inc, "SDL2")]
 
 
+# compile.js isStateFile: the game's files, whose `long` is `int` on 64-bit
+# Linux (savestate.h) -- the build does it, so the check does too
+STATE_RUNTIME = ["gamecode_globals.c", "gamecode_globals64.c", "gamecode_stubs.c", "lime_menu.c",
+                 "lime_platform.c", "lime_app.c", "wav.c", "fight_runtime.c"]
+
+
+def state_file(src):
+    n = src.replace("\\", "/")
+    return ("/src/decomp/" in n or "/src/runtime/lime/" in n
+            or ("/src/runtime/" in n and os.path.basename(n) in STATE_RUNTIME))
+
+
 def main():
     srcs = sources()
     fl = flags()
@@ -64,6 +76,10 @@ def main():
             i, src = i_src
             extra = (["-I", BLENDER, "-I", os.path.join(BLENDER, "shim"), "-fopenmp"]
                      if os.path.normpath(os.path.dirname(src)) == os.path.normpath(BLENDER) else [])
+            if state_file(src):
+                extra = extra + ["-DUMK3_STATE_FILE"]
+            if os.path.basename(src) == "text.c":      # compile.js: its own long
+                extra = extra + ["-DUMK3_NO_LONG_REMAP"]
             r = subprocess.run(CC + fl + extra + ["-c", src, "-o", os.path.join(tmp, "%d.o" % i)],
                                capture_output=True, text=True)
             return src, r.returncode, r.stderr

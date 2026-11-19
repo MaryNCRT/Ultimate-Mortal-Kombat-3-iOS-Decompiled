@@ -13,7 +13,7 @@ extern float port_sharp_angle, port_sharp_strength;   /* degrees, 0..1 */
  * and 1 the second skin, or 2 for the shadow, which reuses the last smoothed
  * body. Returns 0 when it drew nothing and the caller should draw the
  * original. */
-int  port_smooth_draw(const void *skin, const void *rec, long second,
+int  port_smooth_draw(const void *skin, const void *rec, umk3_long second,
                       void *tex, float alpha, const void *fade);
 
 /* A frame on the screen: its budget of smoothed triangles starts again. */

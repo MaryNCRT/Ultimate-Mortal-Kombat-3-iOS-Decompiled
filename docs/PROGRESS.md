@@ -92,10 +92,12 @@ added to her Steam library beside her other non-Steam game.
 | Dynamic stage music, Genesis style (Soul Chamber first) | **research only**, nothing built: [research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md); waits for Mary's Genesis recording (WAV + GYM) |
 | Ambient occlusion and screen-space contact shadows (ENHANCED LIGHTING) | ambient occlusion **built** (0.3.0; the fighters are their own layer since after 0.3.1b); contact shadows research only: [research/CONTACT-SHADOWS.md](research/CONTACT-SHADOWS.md) |
 | MOD HUB never connecting on other players' PCs, no error (Mary, 2026-11-14) | **fixed in 0.5.3** (time limits, other sources for the index); not yet confirmed on an affected PC |
+| Online: the two players on two stages (the host's random level over the gate's) | **fixed after 0.5.3** (2026-11-19), checked with two games on one PC |
+| Online: softlock after a round (a local tap ended the round summary on one side) | **fixed after 0.5.3** (2026-11-19): best of 3 with 120 ms and 10% lost, 0 desyncs |
 | Online: the second fight of a session desynced; one side could wait for good (softlock) | **fixed after 0.5.3** (FrameCompensation reset, inputs resent oldest first, 15 s stall leaves the fight); two fights on one PC with 0 desyncs, not yet between two machines |
 | Online stutter: holds every 10 frames on noisy numbers | **fixed after 0.5.3** (averaged, at most one every 30 frames) |
 | KOMBO SLIDE OFF not enough (issue #252) | **changed after 0.5.3**: kicks too, VS RULES no longer override OFF; not played yet |
-| Steam Deck: 5-button layout in fights (issues #171, #253) | **changed after 0.5.3**: only the menus set the layout, others put back and logged; not checked on a Deck |
+| Steam Deck: 5-button layout in fights (issues #171, #253) | **fixed after 0.5.3**: Linux read `long` game globals as 8 bytes in the port's files (umk3_long); not yet tried on a Deck |
 | Online: player two cannot pick a fighter in the lobby after about 2 fights | **closed**: Mary says it is fixed (2026-11-14), with the MERCY fix |
 | After CANCEL in STAGE SELECT the select screen came back silent once | fixed by never stopping the tune on the way; the log says `stage select: the tune ...` if it happens again |
 
@@ -108,6 +110,114 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+### 2026-11-19 (later) -- Pads: SDL_GameControllerDB, two pads on Linux, the Steam Deck
+
+Asked by Mary with three links: SDL_GameControllerDB, the SDL2 Gamepad Tool
+and Steam's ISteamInput.
+
+- **gamecontrollerdb.txt** (SDL_GameControllerDB, zlib licence, in
+  `src/runtime/platform/` with `gamecontrollerdb-LICENSE.txt`; every package
+  carries src/): about 870 pads' layouts for Windows, 750 for Linux, the
+  Steam Deck's own controls (28de:1205) among them.
+- **Windows** (win32_gl.c, `pad_db.h`): a WinMM pad -- anything XInput does
+  not cover: PlayStation, Switch, 8BitDo in D-input, arcade sticks, generic
+  USB pads -- is read through its vendor:product's line when there is one
+  (buttons, the hat, triggers that are axes, the right stick; SDL's
+  DirectInput axes a0..a5 = X Y Z Rx Ry Rz taken as WinMM's X Y Z U V R),
+  else through the vendor tables as before. The log says which
+  (`pad: 054c:05c4 laid out as "PS4 Controller" (gamecontrollerdb.txt)`).
+  XInput pads are as before. Not tried with a WinMM pad here (none on this
+  machine); `tests/pad_db_test.c` checks the reader against the file
+  (DualShock 4 on Windows, the Steam Deck on Linux, an 8BitDo, no line, the
+  wrong platform: all pass).
+- **Linux** (sdl_gl.c): SDL is given the package's file, then a
+  `gamecontrollerdb.txt` beside the game (the player's, the SDL2 Gamepad
+  Tool's output; the last wins); SDL_GAMECONTROLLERCONFIG, which Steam sets
+  for the pads it shows a game, SDL reads itself. Up to eight pads open at
+  once; **player two's pad now works on Linux** (`p2pad=`, it read nothing
+  before); `pad=` / `p2pad=` with a vendor:product find that pad among all
+  (before, only the first pad was looked at). "auto" takes Steam's virtual
+  pad (28de:11ff) first -- on a Deck in Game Mode the built-in controls
+  arrive through it -- and while player one's pad is idle a press on another
+  free pad makes that one player one's, so the Deck's two devices for one
+  set of controls no longer matter. Each pad opened is logged with its name,
+  vendor:product and GUID. Compiled for Linux here; not run on Linux.
+- **ISteamInput** is not used: it needs the Steamworks SDK and the game's
+  own AppID on Steam; this game is added as a non-Steam game, for which
+  Steam Input gives a virtual pad and SDL_GAMECONTROLLERCONFIG, both read now.
+- CI's Linux check (`tools/ci_compile_linux.py`) compiles as the launcher
+  does: `UMK3_STATE_FILE` on the game's files, `UMK3_NO_LONG_REMAP` on
+  text.c. Without them it read `long` as 8 bytes where the build reads 4, and
+  failed on a declaration the real build accepts.
+
+### 2026-11-19 (later) -- Online: two stages, the round's end, Linux buttons; test aids
+
+All port changes, each marked in the source. Checked with two games on one
+PC over an EOS lobby and a bad line made on purpose (`UMK3_NET_LOSS=10`,
+`UMK3_NET_LAG=40`, `UMK3_NET_JITTER=20` on both: ~120 ms ping, 10% lost),
+scripted inputs on both sides (`UMK3_KEYS`, a random walk with punches,
+kicks, blocks and runs), best of 3 rounds of 30 s.
+
+- **The two players on two stages** (Mary saw it in the windows; the log
+  said level 5 on both). `GameInit_LoadABit` step 0 runs
+  `preprocessPreloadKode` (achievements.c), where the host puts
+  `*requestedLevel` -- a random stage from `getRandomLevel`, picked in the
+  front end -- over `LevelSelect` and sends it in packet 9. With rollback
+  the hellos' gate had already settled the stage (the room's, the host's
+  STAGE SELECT, or the draw); the host loaded the random one, and the guest
+  took the packet only when it came before its own loading. Now, in a
+  rollback fight, the host keeps the gate's stage and packet 9 is ignored
+  (limeMPGameSpecific.c); a kode that picks a stage still does, the same on
+  both. So the room's stage and the host's STAGE SELECT now hold online,
+  which the random level used to replace.
+- **The softlock after a round.** Every test desynced at frame 2760, the end
+  of round 1 (a draw on time): the guest's hash the same in every run, the
+  host's not. The round summary (RoundSummaryUpdate, GameCode.c) ends its
+  wait early on a tap above the bottom band -- a touch of this machine, which
+  the mouse and the pad's highlight make too, not one of the inputs both run
+  the fight from. The side that tapped began round 2 sooner and the fights
+  parted for good. Not in a rollback fight now. For the same reason the fade
+  no longer runs ten times slower while this machine's achievements overlay
+  is up (two places), in a rollback fight.
+- **Steam Deck / Linux: the fight always took the 5-button layout (issues
+  #171, #253).** The game's files are compiled with `long` as `int` on 64-bit
+  Linux (savestate.h, UMK3_STATE_FILE); the port's own files are not, and
+  `game_main.c` said `extern long Player1NumButtons`: an 8-byte read of a
+  4-byte variable, so `Player1NumButtons == 6` was never true and the keys
+  and pad always went through the 5-button table (X and Y high punch, A and
+  B high kick, word for word the report); writes clobbered the next
+  variable. Shown in the assembly from `zig cc -target x86_64-linux-gnu`:
+  `movq (%rax),%rax` before, `movl (%rax),%eax` after. `umk3_long`
+  (savestate.h: `int` there, `long` elsewhere) is now the type of every game
+  global the port's files name (game_main.c, debug_menu.c, online_ui.c,
+  presence_game.c, rollback.c, settings_menu.c, smooth_models.c,
+  fight_headless.c) and of the port functions the game calls with a `long`
+  (mpnet_send, rb_net, rb_sound_ok, port_skin_mats_draw, port_smooth_draw,
+  PortMoveGlyph, the strike hook). GameMode and GamePaused were read the same
+  wrong way on Linux (START and SELECT did nothing in a fight, #171). The
+  Windows build is unchanged (`long` is 4 bytes there). Not yet tried on a
+  Deck.
+- `mk3_init_game` (loading step 1) runs on both machines in a rollback fight
+  (it already did: isParentBasedOnSpeed is 1 on both; now said there too).
+- Results: best of 3 with 120 ms and 10% lost, 0 desyncs, both ending on
+  frame 4305 (it desynced at 2760 before); two fights in one session with
+  inputs and the bad line, 0 desyncs, both ending on the same frame; the
+  guest closed mid-fight: the host back on the ONLINE screen ("the link was
+  lost") in about 40 s. KOMBO SLIDE in training (`UMK3_PRACTICE=1`, the
+  5-button keys): OFF drops a kick's push at the kombo's second hit
+  (`punches 0, hits 2, dropped`); ORIGINAL keeps them and `separate us`.
+- **Test aids** (rollback.c, mp_net.c, savestate.c): `UMK3_NET_LOSS`,
+  `UMK3_NET_LAG`, `UMK3_NET_JITTER` (a bad line, on the sending side);
+  `UMK3_RB_SYNCTEST=1` (each online frame run twice from one snapshot, as a
+  rollback and for real, every differing word named by dbghelp from the
+  .pdb; slow); `UMK3_RB_DUMP=<frame>` (both games stop at that frame, write
+  their sections and arena to `logs/rbdump-<player>.bin`, the second names
+  every differing variable and prints the words the desync hash reads).
+  Also found by them: the drawing writes about 1.2 MB a frame inside
+  `PreloadedCharacters` (skinning scratch, outside the snapshot, harmless)
+  and SMOOTH ANIMATIONS writes `Players+0x520` (the pose shown, each
+  machine its own).
 
 ### 2026-11-19 -- Online softlocks and stutter; issues #252 and #253
 

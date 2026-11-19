@@ -28,6 +28,19 @@
 #ifndef UMK3_SAVESTATE_H
 #define UMK3_SAVESTATE_H
 
+/* A game global's `long`, as the port's own files must name it: the game's
+ * files (UMK3_STATE_FILE) are compiled with `long` as `int` on 64-bit Linux
+ * (below), the others are not. A port file that said `extern long GameMode`
+ * read and wrote 8 bytes of a 4-byte variable there -- its neighbour too:
+ * on Linux `Player1NumButtons == 6` was never true, so a fight always took
+ * the 5-button keys and pad (issues #171, #253, a Steam Deck), and GameMode
+ * or GamePaused compared wrong. 4 bytes everywhere: on Windows `long` is. */
+#if defined(UMK3_LOW32) && !defined(_WIN32)
+typedef int  umk3_long;
+#else
+typedef long umk3_long;
+#endif
+
 /* the library's declarations first, so the macros below never rename them */
 #include <stdlib.h>
 #include <string.h>
@@ -132,6 +145,10 @@ unsigned long st_probe_region_size(int r);
 unsigned long st_probe_diff(int k, void (*page)(int r, uint32_t off, void *ctx),
                             void *ctx);
 uint64_t st_probe_hash(void);
+int  st_sections(uint8_t **p, uint32_t *n, int max);
+int  st_arena(uint8_t **p, uint32_t *n);
+unsigned long st_probe_words(int k, int (*word)(const void *at, uint32_t now, uint32_t was,
+                                                int section, void *ctx), void *ctx);
 unsigned long st_probe_page_hashes(int r, uint64_t *out, unsigned long max);
 
 /* Rollback netcode's snapshots (rollback.c): .umkstd and .umkstb only, and

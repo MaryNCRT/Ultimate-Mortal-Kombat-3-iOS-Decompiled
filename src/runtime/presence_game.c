@@ -24,9 +24,9 @@
 
 extern int  CurrentTask;
 extern int  FE_CurrentTask;
-extern long GameMode;
+extern umk3_long GameMode;
 extern int  PortPractice;
-extern long Character1, Character2;
+extern umk3_long Character1, Character2;
 extern char Language[10];
 extern const char *CharacterNames[26];
 long isMPConnected(void);

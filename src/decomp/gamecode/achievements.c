@@ -400,6 +400,7 @@ void checkIfKode(void)
 
 extern long  LevelSelect;               /* pointer slot -> 0x000ff7f8 */
 extern long *requestedLevel;            /* pointer slot -> 0x0010deb0 */
+int rb_active(void);                    /* runtime/rollback.c, port */
 
 extern long GameMode;                   /* 0x0014faa4 */
 
@@ -464,6 +465,15 @@ void preprocessPreloadKode(void)
         return;
 
     if (!isParent())
+        return;
+
+    /* Port, not in the binary: with rollback the hellos' gate has already
+     * settled the stage on both machines (the room's, the host's STAGE
+     * SELECT, or the draw) before this, the first loading step. The host
+     * put its random requestedLevel over it and told the guest by a packet
+     * that came after the guest had loaded when the line was slow: two
+     * fights on two stages, parting at once (runtime/rollback.c). */
+    if (rb_active())
         return;
 
     LevelSelect = *requestedLevel;     /* the host has the last word */

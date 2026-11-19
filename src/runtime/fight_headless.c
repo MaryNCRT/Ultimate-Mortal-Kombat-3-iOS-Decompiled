@@ -25,7 +25,7 @@
 
 #include "fight_runtime.h"
 
-extern long *RoundParam;
+extern umk3_long *RoundParam;
 int PortIPadTall;
 int PortPractice;
 
