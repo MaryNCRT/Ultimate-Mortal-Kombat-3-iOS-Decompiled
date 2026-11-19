@@ -6759,6 +6759,15 @@ static void rb_setup(void)
     /* training in bit 0; DUELO against the CPU, its level in bits 8.. (port,
      * so the word count and older replays stay as they were) */
     v[17] = PortPractice | (PortVsCpu ? PortVsCpuLevel << 8 : 0);
+    {
+        /* Port, not in the binary: every fight starts the engine's 55.93 Hz
+         * step (Task_GameMain, FrameCompensation) from 0. The binary never
+         * resets it, so a fight began where the last one left it: a replay
+         * of a run's second fight, played on its own, stepped on other
+         * ticks than when it was recorded (rollback.c resets it online). */
+        extern float FrameCompensation;
+        FrameCompensation = 0.0f;
+    }
     if (!rb_fight_setup(v, 18))
         return;
     if (GameMode != 1 && v[6] != 1) {
@@ -13350,6 +13359,7 @@ void RenderLevelPlayers(void)
 #define PAUSE_SFX_CLICK      (0x68 / 4)
 #define PAUSE_BUTTONS_WRAP   7         /* 7 wraps back to 5 */
 #define PAUSE_BUTTONS_LOW    5
+extern int PortButtonsChosen;           /* runtime/game_main.c, port */
 
 #define TXT_PAUSE_TITLE      0xf9
 #define TXT_EXIT             9
@@ -13880,6 +13890,7 @@ static void UpdateInGamePauseMenu_(void)
         Settings[4]++;
         if (Settings[4] == PAUSE_BUTTONS_WRAP)
             Settings[4] = PAUSE_BUTTONS_LOW;
+        PortButtonsChosen = 1;          /* Port: the player's (game_main.c) */
 
         EASDK_LogEventEnumEnumString(EV_PAUSE_SETTING, 15,
                                      "INGAME PAUSE MENU",

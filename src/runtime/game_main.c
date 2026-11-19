@@ -548,6 +548,9 @@ static void save_shot_as(const char *name, int w, int h)
 }
 
 static int  g_cfg_buttons;            /* buttons=5|6: the launcher's layout */
+/* 1 for a tick when one of the game's menus changed Settings[4] (FrontEnd.c
+ * OPTIONS, GameCode.c the pause menu): the player's choice (issue #253) */
+int PortButtonsChosen;
 int port_tick_unseen;                   /* this tick's picture is not shown (smooth_models.c) */
 /* KOMBO SLIDE (umk3.ini kombo_slide=, the settings menu's GAME): 1 the
  * original's push apart mid-kombo, 0 none -- offline only (mkreact.c) */
@@ -2656,7 +2659,9 @@ static double fight_speed(void)
     int pct = getenv("UMK3_DBG_SPEED") ? atoi(getenv("UMK3_DBG_SPEED"))
             : g_cfg_debug_keys ? dbg_speed_percent() : 100;
 
-    if (CurrentTask != 6 || dbg_menu_is_open() || pct <= 0)
+    /* never online: the other machine runs at 60 and would hold for this
+     * one (or this one for it) all fight */
+    if (CurrentTask != 6 || dbg_menu_is_open() || pct <= 0 || rb_active())
         return 1.0;
     return pct / 100.0;
 }
@@ -3616,9 +3621,15 @@ int main(int argc, char **argv)
                 PortNoKomboSlide = !port_kombo_slide && !rb_active()
                                    && !rp_playing() && GameMode != 1;
                 /* an online fight's KOMBO SLIDE rule (online_rules.h),
-                 * the same on both machines */
-                if ((GameMode == 1 || GameMode == 6) && rules_active())
+                 * the same on both machines; a local versus' VS RULES
+                 * turn it off as well, but never back on over the
+                 * settings menu's OFF (issue #252: VS RULES, ON by
+                 * default, hid the settings menu's choice in versus and
+                 * training) */
+                if (GameMode == 1 && rules_active())
                     PortNoKomboSlide = !rules_kombo_slide(1);
+                else if (GameMode == 6 && rules_active() && !rules_kombo_slide(1))
+                    PortNoKomboSlide = 1;
             }
             /* another tick follows in this frame: this one's picture is
              * cleared unseen, so its models are drawn as made, not smoothed
@@ -4275,11 +4286,33 @@ int main(int argc, char **argv)
                  * menu) change it: theirs is the layout from then on,
                  * kept in umk3.ini, and never put back by the launcher's
                  * (it was, at every loading screen: 5 and 6 swapped back) */
-                if (booted && (Settings[4] == 5 || Settings[4] == 6)
-                    && Settings[4] != g_cfg_buttons) {
-                    g_cfg_buttons = (int)Settings[4];
-                    port_ini_put_buttons(g_cfg_buttons);
+                /* Issue #253 (a Steam Deck: buttons=6, fights with five,
+                 * the launcher's choice lost): only the menus' change is
+                 * the player's (PortButtonsChosen, set by OPTIONS'
+                 * NUMBER OF BUTTONS and the pause menu's). Anything else
+                 * that leaves another count -- a replay's own settings
+                 * (rb_setup), a settings file loaded again -- is put back
+                 * to the layout chosen, and named in the log, instead of
+                 * being written into umk3.ini as the player's. */
+                extern int PortButtonsChosen;
+                if (booted && !rp_playing() && (Settings[4] == 5 || Settings[4] == 6)
+                    && Settings[4] != g_cfg_buttons
+                    && (g_cfg_buttons == 5 || g_cfg_buttons == 6)) {
+                    if (PortButtonsChosen) {
+                        g_cfg_buttons = (int)Settings[4];
+                        port_ini_put_buttons(g_cfg_buttons);
+                    } else {
+                        void mk3_set_four_button(long side, long four);
+                        printf("buttons: %d set outside the menus (task %d), the layout "
+                               "stays %d\n", (int)Settings[4], CurrentTask, g_cfg_buttons);
+                        Settings[4] = g_cfg_buttons;
+                        if (CurrentTask == 6 && !rb_active()) {
+                            Player1NumButtons = g_cfg_buttons;
+                            mk3_set_four_button(0, g_cfg_buttons != 6);
+                        }
+                    }
                 }
+                PortButtonsChosen = 0;
             }
             /* UMK3_LOG_FADE=1: every start of a screen fade, for finding
              * who starts one. FE_FadeAdd < 0 fades out, > 0 back in. */
