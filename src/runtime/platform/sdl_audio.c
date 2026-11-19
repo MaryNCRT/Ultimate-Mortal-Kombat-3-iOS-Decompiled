@@ -304,6 +304,17 @@ void plat_music_play(const char *path, int loop)
 
 int plat_music_playing(void) { return g_music != NULL && Mix_PlayingMusic(); }
 
+/* SDL2_mixer seeks but has no end bound: the section's end is not kept
+ * (the tune plays on, or to its end once). */
+void plat_music_section(double start_s, double end_s, int loop)
+{
+    (void)end_s;
+    if (g_music == NULL)
+        return;
+    if (Mix_PlayMusic(g_music, loop ? -1 : 0) == 0)
+        Mix_SetMusicPosition(start_s < 0.0 ? 0.0 : start_s);
+}
+
 void plat_music_stop(void)
 {
     if (g_music == NULL)
@@ -360,6 +371,7 @@ static int    g_rate = 16000;
 static nvoice g_v[VOICES];
 static Sint16 *g_mus;                   /* the whole song, stereo, MIX_RATE */
 static int    g_mus_frames, g_mus_pos, g_mus_loop;
+static int    g_mus_from, g_mus_to;     /* port: the section, plat_music_section */
 static float  g_mus_gain = 1.0f;
 
 static void mix(void *ud, Uint8 *out, int len)
@@ -380,9 +392,11 @@ static void mix(void *ud, Uint8 *out, int len)
             v->pos++;
         }
         if (g_mus && g_mus_frames > 0) {
-            if (g_mus_pos >= g_mus_frames && g_mus_loop)
-                g_mus_pos = 0;
-            if (g_mus_pos < g_mus_frames) {
+            int end = g_mus_to > 0 && g_mus_to < g_mus_frames ? g_mus_to
+                                                                : g_mus_frames;
+            if (g_mus_pos >= end && g_mus_loop)
+                g_mus_pos = g_mus_from;
+            if (g_mus_pos < end) {
                 l += (int)(g_mus[g_mus_pos * 2] * g_mus_gain);
                 r += (int)(g_mus[g_mus_pos * 2 + 1] * g_mus_gain);
                 g_mus_pos++;
@@ -659,10 +673,35 @@ void plat_music_play(const char *path, int loop)
     g_mus_frames = frames;
     g_mus_pos = 0;
     g_mus_loop = loop;
+    g_mus_from = g_mus_to = 0;
     SDL_UnlockAudioDevice(g_dev);
 }
 
-int plat_music_playing(void) { return g_mus != NULL; }
+/* as on Windows: a tune that does not repeat is over once it played out */
+int plat_music_playing(void)
+{
+    int end = g_mus_to > 0 && g_mus_to < g_mus_frames ? g_mus_to : g_mus_frames;
+    return g_mus != NULL && (g_mus_loop || g_mus_pos < end);
+}
+
+void plat_music_section(double start_s, double end_s, int loop)
+{
+    int from, to;
+
+    if (!g_dev || g_mus == NULL)
+        return;
+    from = (int)(start_s * MIX_RATE);
+    to   = end_s > 0.0 ? (int)(end_s * MIX_RATE) : 0;
+    SDL_LockAudioDevice(g_dev);
+    if (from < 0) from = 0;
+    if (from >= g_mus_frames) from = g_mus_frames > 0 ? g_mus_frames - 1 : 0;
+    if (to > g_mus_frames || (to != 0 && to <= from)) to = 0;
+    g_mus_from = from;
+    g_mus_to   = to;
+    g_mus_pos  = from;
+    g_mus_loop = loop;
+    SDL_UnlockAudioDevice(g_dev);
+}
 
 void plat_music_stop(void)
 {

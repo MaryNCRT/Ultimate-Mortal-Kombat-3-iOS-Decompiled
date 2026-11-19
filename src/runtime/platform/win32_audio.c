@@ -370,6 +370,11 @@ static int      g_mnext;
 static short   *g_mpcm;         /* the whole tune, interleaved */
 static long     g_mframes, g_mpos;
 static int      g_mch, g_mloop;
+/* port: the section played (plat_music_section): frames [g_mfrom, g_mto) */
+static long     g_mfrom, g_mto;
+static int      g_mrate;
+static double   g_sec_start = -1.0, g_sec_end;  /* asked before the tune was ready */
+static int      g_sec_loop;
 
 /* MP3 bytes -> 16-bit PCM. NULL if the codec or the stream is not usable. */
 static short *mp3_decode(const unsigned char *d, long n, int *rate, int *ch,
@@ -518,7 +523,7 @@ static void music_fill(short *out)
 {
     long i, n = (long)MBUF_FRAMES * g_mch;
     long at = g_mpos * g_mch;
-    long end = g_mframes * g_mch;
+    long end = (g_mto > 0 && g_mto < g_mframes ? g_mto : g_mframes) * g_mch;
 
     for (i = 0; i < n; i++) {
         if (at >= end) {
@@ -526,7 +531,7 @@ static void music_fill(short *out)
                 out[i] = 0;
                 continue;
             }
-            at = 0;
+            at = g_mfrom * g_mch;
         }
         out[i] = (short)((float)g_mpcm[at++] * g_music_gain);
     }
@@ -644,7 +649,16 @@ static void music_start(short *pcm, int rate, int ch, long frames, int loop)
     g_mpos  = 0;
     g_mloop = loop;
     g_mnext = 0;
+    g_mrate = rate;
+    g_mfrom = 0;
+    g_mto   = 0;
     g_music = 1;
+    if (g_sec_start >= 0.0) {           /* asked while it was decoded */
+        double s = g_sec_start;
+        g_sec_start = -1.0;
+        plat_music_section(s, g_sec_end, g_sec_loop);
+        return;
+    }
     music_update();                     /* start now, not a frame later */
 }
 
@@ -714,7 +728,39 @@ void plat_music_volume(float gain)
 int plat_music_playing(void)
 {
     return (g_mreq != NULL)             /* still being decoded: as playing */
-        || (g_music && (g_mloop || g_mpos < g_mframes));
+        || (g_music && (g_mloop || g_mpos < (g_mto > 0 && g_mto < g_mframes
+                                             ? g_mto : g_mframes)));
+}
+
+/* The buffers queued (about 0.37 s) are thrown away, so the jump is heard
+ * at once; the tune is in memory, so the jump costs nothing. */
+void plat_music_section(double start_s, double end_s, int loop)
+{
+    long from, to;
+    int i;
+
+    if (!g_music) {
+        if (g_mreq) {                   /* still decoding: when it starts */
+            g_sec_start = start_s < 0.0 ? 0.0 : start_s;
+            g_sec_end   = end_s;
+            g_sec_loop  = loop;
+        }
+        return;
+    }
+    from = (long)(start_s * g_mrate);
+    to   = end_s > 0.0 ? (long)(end_s * g_mrate) : 0;
+    if (from < 0) from = 0;
+    if (from >= g_mframes) from = g_mframes > 0 ? g_mframes - 1 : 0;
+    if (to > g_mframes || (to != 0 && to <= from)) to = 0;
+    waveOutReset(g_mdev);               /* every buffer comes back done */
+    for (i = 0; i < MBUFFERS; i++)
+        g_mhdr[i].dwFlags |= WHDR_DONE;
+    g_mfrom = from;
+    g_mto   = to;
+    g_mpos  = from;
+    g_mloop = loop;
+    g_mnext = 0;
+    music_update();
 }
 
 void plat_music_stop(void)
@@ -722,6 +768,7 @@ void plat_music_stop(void)
     int i;
 
     music_drop_request();
+    g_sec_start = -1.0;
     if (!g_music)
         return;
     waveOutReset(g_mdev);
