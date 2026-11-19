@@ -707,6 +707,13 @@ void AddNewGameEvents(void)
     long i;
     long sceneSide = -1;                /* carried across the loop; only 27 reads it */
 
+    /* Port, not in the binary: the dynamic stage music, once a frame
+     * (src/runtime/adaptive_music.c; reads the fight, writes nothing) */
+    {
+        extern void adaptive_music_tick(void);
+        adaptive_music_tick();
+    }
+
     if (q->count == 0)
         return;
 

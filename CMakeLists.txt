@@ -233,6 +233,7 @@ if(UMK3_BINARY)
                 src/runtime/game_main.c
                 src/runtime/debug_menu.c
                 src/runtime/settings_menu.c
+                src/runtime/adaptive_music.c
                 src/runtime/pad_nav.c
                 src/runtime/profiles.c
                 src/runtime/mods.c

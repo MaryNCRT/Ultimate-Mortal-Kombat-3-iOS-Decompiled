@@ -197,8 +197,12 @@ rules that go with it.
   places. A window behind another measures the machine, not the game.
 - **Lighting and research**: ENHANCED LIGHTING, point lights and AO are in;
   per-stage `lighting/<scene>.ini` files are tuned by Mary one by one.
-  Research only: contact shadows, dynamic stage music (waits for Mary's
-  Genesis recording) -- see `docs/research/`.
+  Research only: contact shadows -- see `docs/research/`.
+- **Dynamic stage music** (`src/runtime/adaptive_music.c`, umk3.ini
+  `dynamic_music=`, stretches in `music.ini` beside the game,
+  `docs/music.ini.example`): built, waits for Mary to hear it and tune the
+  stretches per tune. The log's `music:` lines name every change. It reads
+  the fight and writes nothing; keep it that way (online).
 - **Updates**: an installed update leaves `update\needs-build`; the game
   cannot be started from the launcher until a compile succeeds.
 - **Building into the test folder without `node_modules`**: the folder's

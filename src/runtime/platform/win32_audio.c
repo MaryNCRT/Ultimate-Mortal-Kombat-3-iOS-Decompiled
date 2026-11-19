@@ -373,8 +373,8 @@ static int      g_mch, g_mloop;
 /* port: the section played (plat_music_section): frames [g_mfrom, g_mto) */
 static long     g_mfrom, g_mto;
 static int      g_mrate;
-static double   g_sec_start = -1.0, g_sec_end;  /* asked before the tune was ready */
-static int      g_sec_loop;
+static double   g_sec_start, g_sec_end;  /* asked before the tune was ready */
+static int      g_sec_loop, g_sec_pending;
 
 /* MP3 bytes -> 16-bit PCM. NULL if the codec or the stream is not usable. */
 static short *mp3_decode(const unsigned char *d, long n, int *rate, int *ch,
@@ -653,9 +653,9 @@ static void music_start(short *pcm, int rate, int ch, long frames, int loop)
     g_mfrom = 0;
     g_mto   = 0;
     g_music = 1;
-    if (g_sec_start >= 0.0) {           /* asked while it was decoded */
+    if (g_sec_pending) {                /* asked while it was decoded */
         double s = g_sec_start;
-        g_sec_start = -1.0;
+        g_sec_pending = 0;
         plat_music_section(s, g_sec_end, g_sec_loop);
         return;
     }
@@ -741,7 +741,8 @@ void plat_music_section(double start_s, double end_s, int loop)
 
     if (!g_music) {
         if (g_mreq) {                   /* still decoding: when it starts */
-            g_sec_start = start_s < 0.0 ? 0.0 : start_s;
+            g_sec_start = start_s;
+            g_sec_pending = 1;
             g_sec_end   = end_s;
             g_sec_loop  = loop;
         }
@@ -749,6 +750,8 @@ void plat_music_section(double start_s, double end_s, int loop)
     }
     from = (long)(start_s * g_mrate);
     to   = end_s > 0.0 ? (long)(end_s * g_mrate) : 0;
+    if (start_s < 0.0) from += g_mframes;   /* back from the end */
+    if (end_s < 0.0)   to = g_mframes + (long)(end_s * g_mrate);
     if (from < 0) from = 0;
     if (from >= g_mframes) from = g_mframes > 0 ? g_mframes - 1 : 0;
     if (to > g_mframes || (to != 0 && to <= from)) to = 0;
@@ -768,7 +771,7 @@ void plat_music_stop(void)
     int i;
 
     music_drop_request();
-    g_sec_start = -1.0;
+    g_sec_pending = 0;
     if (!g_music)
         return;
     waveOutReset(g_mdev);

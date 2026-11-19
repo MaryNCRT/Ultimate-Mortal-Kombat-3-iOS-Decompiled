@@ -653,12 +653,21 @@ void port_volume_apply(void)
     plat_music_volume((float)g_tune_asked / 100.0f * (float)port_music_pct / 100.0f);
 }
 
+/* port: the last tune asked for and a count of the asks, for the dynamic
+ * stage music (adaptive_music.c) */
+static char     g_tune_name[64];
+static unsigned g_tune_serial;
+const char *limeTuneName(void)  { return g_tune_name; }
+unsigned    limeTuneSerial(void) { return g_tune_serial; }
+
 void limePlayTune(const char *name, long vol, long loop)
 {
     char rel[300];
 
     if (rb_quiet())                     /* port: a frame run again (rollback.c) */
         return;
+    snprintf(g_tune_name, sizeof g_tune_name, "%s", name);
+    g_tune_serial++;
     snprintf(rel, sizeof rel, "res/audio/%s", name);
     lime_platform_resolve(rel, g_tune_path, sizeof g_tune_path);
     g_tune_loop = loop;

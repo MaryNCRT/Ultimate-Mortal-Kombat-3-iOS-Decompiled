@@ -311,8 +311,17 @@ void plat_music_section(double start_s, double end_s, int loop)
     (void)end_s;
     if (g_music == NULL)
         return;
+    if (start_s < 0.0) {                /* back from the end */
+#if SDL_MIXER_VERSION_ATLEAST(2, 6, 0)
+        double len = Mix_MusicDuration(g_music);
+#else
+        double len = 0.0;               /* unknown: from the start */
+#endif
+        start_s = len > 0.0 ? len + start_s : 0.0;
+        if (start_s < 0.0) start_s = 0.0;
+    }
     if (Mix_PlayMusic(g_music, loop ? -1 : 0) == 0)
-        Mix_SetMusicPosition(start_s < 0.0 ? 0.0 : start_s);
+        Mix_SetMusicPosition(start_s);
 }
 
 void plat_music_stop(void)
@@ -693,6 +702,8 @@ void plat_music_section(double start_s, double end_s, int loop)
     from = (int)(start_s * MIX_RATE);
     to   = end_s > 0.0 ? (int)(end_s * MIX_RATE) : 0;
     SDL_LockAudioDevice(g_dev);
+    if (start_s < 0.0) from += g_mus_frames;    /* back from the end */
+    if (end_s < 0.0)   to = g_mus_frames + (int)(end_s * MIX_RATE);
     if (from < 0) from = 0;
     if (from >= g_mus_frames) from = g_mus_frames > 0 ? g_mus_frames - 1 : 0;
     if (to > g_mus_frames || (to != 0 && to <= from)) to = 0;

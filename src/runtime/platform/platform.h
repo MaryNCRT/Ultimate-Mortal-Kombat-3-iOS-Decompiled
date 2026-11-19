@@ -387,7 +387,9 @@ void plat_music_volume(float gain);
 /* Port (dynamic stage music, adaptive_music.c): plays the tune loaded now
  * from start_s seconds; at end_s (0 or less: the file's end) it goes back to
  * start_s when loop is set, else it falls silent and plat_music_playing()
- * turns 0. On a tune still being decoded it applies once the tune starts. */
+ * turns 0. A negative time counts back from the file's end (-6: six
+ * seconds before it). On a tune still being decoded it applies once the
+ * tune starts. */
 void plat_music_section(double start_s, double end_s, int loop);
 
 #endif
