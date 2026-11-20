@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <stdio.h>     /* port: the csound diagnostic */
+#include <stdlib.h>    /* port: getenv, the event diagnostic */
 
 /* `_GameEvents` — 0x00370e18.
  *
@@ -722,6 +723,16 @@ void AddNewGameEvents(void)
         long     p   = ev->player;
         long     arg = ev->param;
         float   *pos = p ? Player2Pos : Player1Pos;
+
+        /* port diagnostic: UMK3_LOG_EVENTS=1, every event as it is taken */
+        {
+            static int log_ev = -1;
+            if (log_ev < 0)
+                log_ev = getenv("UMK3_LOG_EVENTS") != NULL;
+            if (log_ev && ev->type != 0)
+                printf("event: type %d sub %d player %ld param %ld (0x%lx)\n",
+                       ev->type, ev->subtype, p, arg, (unsigned long)arg);
+        }
 
         switch (ev->type) {
 

@@ -277,8 +277,18 @@ void rgl_ff_stop(void)
 
 /* the end of a frame, before it is presented: what the scene held back
  * drawn, and the next frame's scene starts with no caster */
+static int g_had_scene;                 /* UMK3_LOG_SHADOW: a lit scene this frame */
+static unsigned g_frames_n;             /* frames presented, for the map's last place */
 void rgl_ff_frame(void)
 {
+    g_frames_n++;
+    if (getenv("UMK3_LOG_SHADOW")) {
+        static int last = -1;
+        if (g_had_scene != last)
+            printf("shadow: %s\n", g_had_scene ? "a lit 3D scene" : "no lit 3D scene this frame");
+        last = g_had_scene;
+        g_had_scene = 0;
+    }
     scene_flush();
     SH_end_frame();
 }
@@ -1307,6 +1317,7 @@ void rgl_shadow_camera(int on)
         }
         SH.inv_view = inv;
         SH.scene = 1;
+        g_had_scene = 1;
     } else
         SH.scene = 0;
 }
@@ -2219,6 +2230,7 @@ static void SH_end_frame(void)
 
 /* the held casters into the map, from a light fitted around the fighters,
  * for the held draws to sample: SH.valid when it was drawn */
+static int g_sh_why;                    /* UMK3_LOG_SHADOW: why no map */
 static void shadow_build(void)
 {
     static const float dir[3] = { 0.2316f, 0.4169f, -0.8789f };   /* (0.25, 0.45, -0.95) */
@@ -2244,6 +2256,7 @@ static void shadow_build(void)
         return;
     }
     SH.nw = 0;
+    g_sh_why = 1;                       /* no caster at all */
     if (n < 3) {
         SH.valid = 0;
         return;
@@ -2264,10 +2277,29 @@ static void shadow_build(void)
     r = sqrtf(r) * SHADOW_ROOM;
     if (r < SHADOW_MIN)
         r = SHADOW_MIN;                 /* the stage about them too */
+    /* No fighter among the casters: some finishers draw the fighters by
+     * another way (Scorpion's fire, a skeleton, a scene), and the whole of
+     * ENHANCED LIGHTING went off with the map until the fight came back
+     * (Mary). Within 10 s of the last map, the map stays where it was. */
+    {
+        static float last_c[3], last_r;
+        static unsigned last_at;
+        if (f_n >= 3 && r > 0.0f && r <= 1e6f) {
+            memcpy(last_c, c, sizeof last_c);
+            last_r = r;
+            last_at = g_frames_n;
+        } else if (f_n < 3 && last_r > 0.0f && g_frames_n - last_at < 600) {
+            memcpy(c, last_c, sizeof last_c);
+            r = last_r;
+            f_n = 3;
+        }
+    }
     if (f_n < 3 || !(r > 0.0f) || r > 1e6f) {
+        g_sh_why = f_n < 3 ? 2 : 3;     /* no fighter caster; a wild size */
         SH.valid = 0;
         return;
     }
+    g_sh_why = 0;
     /* steady: the size in eighths of its power of two, so it changes only
      * now and then, and the centre on a texel (below), so the texels do not
      * slide over the stage as the fighters move */
@@ -2805,6 +2837,14 @@ static void scene_flush(void)
     else {
         shadow_drop();
         SH.nw = 0;
+    }
+    if (getenv("UMK3_LOG_SHADOW")) {    /* when the map comes and goes, why */
+        static int last = -1;
+        if (g_sh_why != last)
+            printf("shadow: %s (held %d, scene %d)\n",
+                   g_sh_why == 0 ? "map" : g_sh_why == 1 ? "none: no caster"
+                   : g_sh_why == 2 ? "none: no fighter" : "none: size", g_nheld, SH.scene);
+        last = g_sh_why;
     }
     ao_passes();                        /* AMBIENT OCCLUSION: before the draws (and
                                          * while the casters' triangles are held) */

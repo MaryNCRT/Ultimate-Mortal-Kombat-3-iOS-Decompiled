@@ -2,6 +2,20 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.5.8",
+      "date": "2026-11-20",
+      "ES": [
+        "KOMBO SLIDE desactivado ya no es tan agresivo: en el aire los golpes empujan como en el original (se acabaron los malabares infinitos) y en el suelo empujan la mitad en vez de nada.",
+        "La ILUMINACI\u00d3N MEJORADA ya no se apaga en los remates que dibujan a los luchadores de otra forma (como el fuego de Scorpion).",
+        "PR\u00c1CTICA DE FATALITY: no se oye el \"round one, fight\" mientras prepara el FINISH HIM, se ve el letrero FATALITY (o ANIMALITY, BABALITY...) antes de salir, y vuelves directo a la pr\u00e1ctica, sin pasar por el men\u00fa principal."
+      ],
+      "EN": [
+        "KOMBO SLIDE off is no longer so aggressive: hits in the air push as in the original (no more infinite juggles) and hits on the ground push half as far instead of not at all.",
+        "ENHANCED LIGHTING no longer goes off in finishers that draw the fighters another way (Scorpion's fire, for one).",
+        "FATALITY TRAINER: no \"round one, fight\" while it sets up FINISH HIM, the FATALITY (or ANIMALITY, BABALITY...) sign shows before it leaves, and it goes straight back to the trainer, not by the main menu."
+      ]
+    },
+    {
       "version": "0.5.7",
       "date": "2026-11-20",
       "ES": [

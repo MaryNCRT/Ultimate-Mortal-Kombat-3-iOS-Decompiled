@@ -8,10 +8,22 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased
+## 0.5.8 beta (2026-11-20)
 
+Fixes after 0.5.7, from Mary and from players. Checked by scripted runs in
+the test folder (muted), not yet played by Mary.
+
+- **KOMBO SLIDE off** (players: "too aggressive", infinite juggles in the
+  air): the push of a kombo's hits is no longer dropped -- in the air it is
+  the original's, on the ground half of it. The slide apart at the kombo's
+  threshold (`t_ccp3`) is still what the option takes away.
+- **ENHANCED LIGHTING** went off during finishers that draw the fighters by
+  another way (no fighter among the shadow casters, the map dropped): the
+  map now stays where it last was, for up to ten seconds.
 - **FATALITY TRAINER:** no announcer on the way to FINISH HIM (no "round
-  one, fight"), and a finisher played goes straight back to the trainer's
+  one, fight"); the finisher's sign (FATALITY, ANIMALITY...), which comes at
+  the end of "X WINS", is shown before leaving (it left 120 frames after the
+  finisher, before the sign); and it goes straight back to the trainer's
   screen, not by the main menu.
 
 ## 0.5.7 beta (2026-11-20)
