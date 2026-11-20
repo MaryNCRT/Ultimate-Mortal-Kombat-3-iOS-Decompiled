@@ -450,11 +450,14 @@ static void keyboard_buttons(void)
           || g_pad.up);
     PortKeyDial = live ? dial[dy + 1][dx + 1] : 0;
 
+    /* port: in the FATALITY TRAINER's fight L2 turns to the next finisher
+     * (game_main ft_frame) and runs no more -- L1 still runs */
+    unsigned p1b = g_pad.buttons & (PortFT && CurrentTask == 6 ? ~(1u << PB_L2) : ~0u);
     for (b = 0; b < 7; b++)
         PortKeyButtons[b] = live && keys[b][0] >= 0
             && (plat_key(keys[b][0])
                 || (two && (plat_key(keys[b][1]) || (p2.buttons & padb2[b])))
-                || (g_pad.buttons & padb[b]));
+                || (p1b & padb[b]));
 
     dx = (plat_key(PK_P2_RIGHT) || p2.right) - (plat_key(PK_P2_LEFT) || p2.left);
     dy = (plat_key(PK_P2_DOWN) || p2.down) - (plat_key(PK_P2_UP) || p2.up);
@@ -2723,7 +2726,8 @@ static void dbg_taint_watch(void)
  *     itself a moment after a finisher has played -- the round, the timer,
  *     both fighters, everything of the fight as it was;
  *   - with ONE-BUTTON FATALITY, C / the pad's R3 does the chosen finisher
- *     through its own entry (ft_fire); T turns to the next finisher.
+ *     through its own entry (ft_fire); T / the pad's L2 turns to the next
+ *     finisher (L2 runs no more there; L1 does).
  *
  * Out of the fight by the pause menu, the trainer's screen comes back.
  * Without save states (the Linux build) a finished fight starts again. */
@@ -2808,7 +2812,8 @@ static void ft_frame(void)
         return;
     if (ft_edge(plat_key(PK_RULES) || pad_l3, &was_r))
         ft_restart();
-    if (ft_edge(plat_key(PK_OUTFIT), &was_t)) {
+    if (ft_edge(plat_key(PK_OUTFIT)
+                || (g_pad.connected && (g_pad.buttons & (1u << PB_L2))), &was_t)) {
         int n;
         ft_moves_of((int)PLAYER1MODEL, &n);
         if (n > 0)
@@ -2829,17 +2834,29 @@ static void ft_frame(void)
  * a pad is what is being used, else the keyboard's (PortPagesLine's way) */
 void PortFTHintLine(char *out, int n)
 {
+    static int pad_used;                /* what was used last: the pad or the keys */
     char r[160], t[160], c[160];
     int es = Language[0] == 'E' && Language[1] == 'S';
+    int k;
 
-    /* a pad connected: its buttons, in the icons the player chose
-     * (pad_icons=, BUTTON ICONS), whatever was touched last (Mary) */
-    if (g_pad.connected || g_pad2.connected) {
+    if (g_pad.connected && (g_pad.buttons || g_pad.up || g_pad.down || g_pad.left
+                            || g_pad.right))
+        pad_used = 1;
+    for (k = PK_UP; k <= PK_RUN; k++)
+        if (plat_key(k))
+            pad_used = 0;
+    if (plat_key(PK_SPECIAL) || plat_key(PK_RULES) || plat_key(PK_OUTFIT) || plat_key(PK_COLOR))
+        pad_used = 0;
+    if (!g_pad.connected && !g_pad2.connected)
+        pad_used = 0;
+    /* the pad's buttons in the icons the player chose (pad_icons=,
+     * BUTTON ICONS), or the keyboard's keys as bound (Mary) */
+    if (pad_used) {
         const PLAT_PAD *p = g_pad.connected ? &g_pad : &g_pad2;
         int kind = plat_pad_glyph_kind(p == &g_pad2, p->kind);
         plat_pad_glyph(kind, PB_L3, r, sizeof r);
+        plat_pad_glyph(kind, PB_L2, t, sizeof t);
         plat_pad_glyph(kind, PB_R3, c, sizeof c);
-        plat_key_glyph(PK_OUTFIT, t, sizeof t);
     } else {
         plat_key_glyph(PK_RULES, r, sizeof r);
         plat_key_glyph(PK_OUTFIT, t, sizeof t);
