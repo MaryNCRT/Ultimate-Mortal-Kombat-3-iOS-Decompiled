@@ -113,6 +113,7 @@ void mayhem_set_dir(const char *ini_path);     /* gamecode_stubs.c */
 #include "pad_nav.h"
 #include "render/rgl.h"
 #include "smooth_models.h"
+#include "fatal_trainer.h"
 #if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
 #include <unistd.h>                 /* readlink, setenv */
 #endif
@@ -2630,6 +2631,18 @@ static void palette_sync(void)
     }
 }
 
+/* What is drawn into the scene at its end: the hitboxes, the FATALITY
+ * TRAINER's floor marker (fatal_trainer.c). */
+static int g_hb_on;
+
+static void after_scene(void)
+{
+    if (g_hb_on)
+        hb_draw();
+    if (PortFT)
+        ft_draw3d();
+}
+
 /* On every tick: the hooks on while HITBOXES is (or UMK3_DBG_HITBOX=1). */
 
 static void hb_update(void)
@@ -2639,7 +2652,8 @@ static void hb_update(void)
     int on = (g_cfg_debug_keys && dbg_hitboxes_on())
              || getenv("UMK3_DBG_HITBOX");
 
-    PortAfterScene = on ? hb_draw : NULL;
+    g_hb_on = on;
+    PortAfterScene = on || PortFT ? after_scene : NULL;
     PortStrikeHook = on ? hb_strike : NULL;
     {
         /* the menu's cheats (logic/other.c); never in an online fight,
@@ -2649,6 +2663,8 @@ static void hb_update(void)
 
         PortDbgHealth = dbg ? dbg_health_mask() : 0;
         PortDbgClock = dbg ? dbg_clock_frozen() : 0;
+        if (PortFT && PortFTUnlimited)  /* the trainer's time without end */
+            PortDbgClock = 1;
     }
 }
 
@@ -2688,6 +2704,106 @@ static void dbg_taint_watch(void)
         PortDbgTainted = 1;
     mode = GameMode;
     task = CurrentTask;
+}
+
+/* ------------------------------------------------ the FATALITY TRAINER
+ *
+ * Port (fatal_trainer.c has the moves and the measuring). Its fight is a
+ * --fight in training (player two stands still); here it is put into the
+ * finishing window and kept there:
+ *
+ *   - once the round is live, the debug key F11 (fight_key 2): player one's
+ *     rounds one short of the match and player two's health to 0, so the
+ *     game's own FINISH HIM follows;
+ *   - the finishing window as it opens kept in the trainer's save state
+ *     (savestate.c), and put back: R / the pad's L3 at any time, and by
+ *     itself a moment after a finisher has played -- the round, the timer,
+ *     both fighters, everything of the fight as it was;
+ *   - with ONE-BUTTON FATALITY, C / the pad's R3 does the chosen finisher
+ *     through its own entry (ft_fire); T turns to the next finisher.
+ *
+ * Out of the fight by the pause menu, the trainer's screen comes back.
+ * Without save states (the Linux build) a finished fight starts again. */
+#define FT_SCREEN 52                    /* FrontEnd.c, after ONLINE's 51 */
+static int  g_ft_fought, g_ft_forced, g_ft_saved, g_ft_after, g_ft_paused;
+
+static void ft_restart(void)
+{
+    if (g_ft_saved != 1 || st_trainer_load() != 0)
+        return;
+    plat_audio_stop_all();
+    plat_music_stop();
+    limeRestartPlayTune();
+    g_ft_after = 0;
+    printf("trainer: back to the finishing window
+");
+}
+
+static int ft_edge(int down, int *was)
+{
+    int hit = down && !*was;
+    *was = down;
+    return hit;
+}
+
+static void ft_frame(void)
+{
+    static int was_r, was_c, was_t, was_fin;
+    const FT_MOVE *m;
+    int pad_l3 = g_pad.connected && (g_pad.buttons & (1u << PB_L3));
+    int pad_r3 = g_pad.connected && (g_pad.buttons & (1u << PB_R3));
+
+    if (!PortFT)
+        return;
+    if (CurrentTask != 6) {
+        if (g_ft_fought && CurrentTask == 3 && g_fight_p1 < 0 && !g_dbg_saved.on) {
+            /* out of the trainer's fight: by the pause menu, its screen
+             * again; a finished fight with no state to go back to, again */
+            g_ft_fought = 0;
+            g_ft_forced = g_ft_saved = g_ft_after = 0;
+            st_trainer_forget();
+            if (g_ft_paused) {
+                PortFT = 0;
+                g_screen_jump = FT_SCREEN;
+            } else
+                PortFTGo = 1;
+        }
+        return;
+    }
+    g_ft_fought = 1;
+    g_ft_paused = GamePaused != 0;
+    if (!g_ft_forced && dbg_round_live()) {
+        fight_key(2);                   /* the game's own FINISH HIM follows */
+        g_ft_forced = 1;
+    }
+    if (g_ft_forced && !g_ft_saved && dbg_finishing()) {
+        stop_him(Plyr);
+        g_ft_saved = st_trainer_save() == 0 ? 1 : -1;
+        printf("trainer: finishing window %s
+", g_ft_saved == 1 ? "kept" : "not kept (no save states)");
+    }
+    m = ft_selected();
+    ft_tick(m);
+    if (GamePaused)
+        return;
+    if (ft_edge(plat_key(PK_RULES) || pad_l3, &was_r))
+        ft_restart();
+    if (ft_edge(plat_key(PK_OUTFIT), &was_t)) {
+        int n;
+        ft_moves_of((int)PLAYER1MODEL, &n);
+        if (n > 0)
+            PortFTMove = (PortFTMove + 1) % n;
+    }
+    if (ft_edge(plat_key(PK_COLOR) || pad_r3, &was_c) && PortFTOneButton && dbg_finishing())
+        printf("trainer: one-button %s
+", ft_fire(m) ? "done" : "refused (distance or condition)");
+    /* a finisher played (the window closed with the fight still on): a
+     * moment for it to be seen, then the window again */
+    if (was_fin && !IsInFinishing && g_ft_saved == 1)
+        g_ft_after = 1;
+    was_fin = IsInFinishing != 0;
+    if (g_ft_after && ++g_ft_after > 150)
+        ft_restart();
 }
 
 static void debug_request(const struct dbg_request *rq)
@@ -4136,6 +4252,15 @@ int main(int argc, char **argv)
             else
                 set_menu_after_frame(vx, vy, vw, vh);
 
+            /* the FATALITY TRAINER's FIGHT!: its fight, as --fight goes */
+            if (PortFTGo && CurrentTask == 3 && g_fight_p1 < 0) {
+                PortFTGo = 0;
+                g_fight_p1 = PortFTP1;
+                g_fight_p2 = PortFTP2;
+                g_fight_stage = PortFTStage;
+            }
+            ft_frame();
+
             /* --fight: once the main menu is up, do what the select screen
              * and the tower would, and leave the front end. */
             {
@@ -4166,7 +4291,7 @@ int main(int argc, char **argv)
                        CharacterNames[g_fight_p1], CharacterNames[g_fight_p2],
                        g_fight_stage);
                 /* the debug menu's MODE: ARCADE, its first rung */
-                if (dbg_fight_mode() == 1 && !getenv("UMK3_ARCADE")) {
+                if (dbg_fight_mode() == 1 && !getenv("UMK3_ARCADE") && !PortFT) {
                     GameMode = 0;
                     Destiny = 0;
                     Stage = 0;
@@ -4181,7 +4306,7 @@ int main(int argc, char **argv)
                 }
                 /* UMK3_PRACTICE=1: the fight as TRAINING (player two
                  * stands still), so a test can land a kombo */
-                if (getenv("UMK3_PRACTICE") || dbg_fight_mode() == 2) {
+                if (getenv("UMK3_PRACTICE") || dbg_fight_mode() == 2 || PortFT) {
                     extern int PortPractice;
                     GameMode = 6;               /* PLAY_MODE_TWOUP */
                     PortPractice = 1;

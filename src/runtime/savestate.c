@@ -411,7 +411,8 @@ int st_arena(uint8_t **p, uint32_t *n)
 static struct {
     uint8_t *buf;
     uint32_t cap, used, arena;
-} g_slot[ST_SLOTS + ST_PROBE_SLOTS];
+} g_slot[ST_SLOTS + ST_PROBE_SLOTS + 1];   /* + the FATALITY TRAINER's */
+#define ST_TRAINER_SLOT (ST_SLOTS + ST_PROBE_SLOTS)
 
 /* The arena reserved now rather than at the first block: the 64-bit build
  * calls this first thing, before the graphics driver takes the low memory. */
@@ -443,6 +444,26 @@ unsigned long st_size(int slot)
 
 static int save_slot(int slot, const char **why);
 static int load_slot(int slot, const char **why);
+
+/* The FATALITY TRAINER's own copy (fatal_trainer.c, game_main.c): the
+ * finishing window as it opened, put back for its quick restart. Apart from
+ * the menu's four, which stay the player's. */
+int st_trainer_save(void)
+{
+    const char *why;
+    return save_slot(ST_TRAINER_SLOT, &why);
+}
+
+int st_trainer_load(void)
+{
+    const char *why;
+    return load_slot(ST_TRAINER_SLOT, &why);
+}
+
+void st_trainer_forget(void)
+{
+    g_slot[ST_TRAINER_SLOT].used = 0;
+}
 
 int st_save(int slot, const char **why)
 {
@@ -932,5 +953,8 @@ void  st_rb_skip(const void *p, unsigned long n) { (void)p; (void)n; }
 int   st_rb_running(void)                  { return 0; }
 int   st_owns(const void *p)               { (void)p; return 0; }
 unsigned long st_rb_size(void)            { return 0; }
+int   st_trainer_save(void)                { return -1; }
+int   st_trainer_load(void)                { return -1; }
+void  st_trainer_forget(void)              {}
 
 #endif

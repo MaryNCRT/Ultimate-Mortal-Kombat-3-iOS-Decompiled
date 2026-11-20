@@ -135,6 +135,10 @@ int  st_save(int slot, const char **why);
 int  st_load(int slot, const char **why);
 /* What a state holds, in bytes (for the menu and the log). */
 unsigned long st_size(int slot);
+/* the FATALITY TRAINER's slot (0 on success), apart from the menu's */
+int  st_trainer_save(void);
+int  st_trainer_load(void);
+void st_trainer_forget(void);
 
 /* The rollback probe's (rollback_probe.c): three slots of its own, the
  * live state's regions (0 .umkstd, 1 .umkstb, 2 the arena), the pages that

@@ -8560,6 +8560,11 @@ long t_play_1_round(MK3THREAD *thread)
  * registers into the same place.
  */
 
+/* Port, not in the binary: the FATALITY TRAINER's UNLIMITED FATALITY TIME
+ * (runtime/fatal_trainer.c) holds the countdown; the two halfwords still end
+ * the window as they do. */
+extern int PortFT, PortFTUnlimited;
+
 long t_fatality_wait(MK3THREAD *thread)
 {
     MK3OBJ  *obj   = (MK3OBJ *)thread->proc;
@@ -8586,7 +8591,8 @@ long t_fatality_wait(MK3THREAD *thread)
         if (b != 0) {
             next = (MK3THREADFUNC)t_fatal_no;           /* refused */
         } else {
-            obj->field48 = obj->field48 - 1;
+            if (!(PortFT && PortFTUnlimited))  /* port: the trainer's */
+                obj->field48 = obj->field48 - 1;
             next = ((int32_t)obj->field48 > 0)
                        ? (MK3THREADFUNC)t_fatality_wait /* keep waiting */
                        : (MK3THREADFUNC)t_fatal_no;     /* out of time */
