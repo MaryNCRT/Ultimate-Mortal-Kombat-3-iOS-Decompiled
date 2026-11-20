@@ -2262,10 +2262,14 @@ static int parse_screen(const char *s)
     /* 51 is the port's ONLINE screen, past the game's: the launcher's
      * invites open the game with --screen 51, which up to 0.2.0 read as no
      * screen ("debug: screen -1") */
-    if (s[0] >= '0' && s[0] <= '9')
+    if (s[0] >= '0' && s[0] <= '9' && atoi(s) != 52)
         return atoi(s) <= DBG_SCREENS ? atoi(s) : -1;
     if (_stricmp(s, "online") == 0)     /* the port's ONLINE screen */
         return 51;
+    if (s[0] >= '0' && s[0] <= '9' && atoi(s) == 52)
+        return 52;                      /* the FATALITY TRAINER's (FrontEnd.c) */
+    if (_stricmp(s, "trainer") == 0)
+        return 52;
     for (i = 0; i < DBG_SCREENS; i++)   /* "treasure" -> FE_Task_Treasure */
         if (_stricmp(FETaskNames[i] + 8, s) == 0
             || _stricmp(FETaskNames[i], s) == 0)
@@ -4460,6 +4464,10 @@ int main(int argc, char **argv)
                 && !PortPractice)
                 vs_rules_hint();        /* the RULES button, the local versus (port) */
             online_after_frame();   /* the ONLINE screens' badges (port) */
+            {
+                void PortOskLate(void);     /* FrontEnd.c: the pad's keys, over all */
+                PortOskLate();
+            }
             /* the front end's fade, last: over the pictures, banners,
              * frames and hints above too (FrontEnd.c PortFadeOnTop) */
             if (CurrentTask == 3 && FE_Fade < 1.0f)

@@ -32,7 +32,7 @@ La única fuente de verdad es el binario. Nada entra al árbol si no se deriva d
 |---|---|---|
 | **Decompilación** (`src/decomp/`) | **2.572 / 2.572 (100%)** | Motor 3D LIME (109), menús y escenas (291), motor de combate arcade (2.172). |
 | **Verificación** (`tools/decomp/`) | **100%** | Tests diferenciales contra el oráculo ARM→C `armrecomp`; 229 tablas de datos comprobadas al compilar (`ctest`). |
-| **Port a PC** (`src/runtime/`) | **Jugable — v0.5.6 beta** | OpenGL, Vulkan, Direct3D 12; Windows y Linux; 3:2 / 4:3 / 16:9 / 21:9; teclado y mandos (unos 870 mandos conocidos gracias a SDL_GameControllerDB); 2 jugadores local, LAN (MULTIJUGADOR, también Radmin VPN) y en línea con rollback; repeticiones; mods. |
+| **Port a PC** (`src/runtime/`) | **Jugable — v0.5.7 beta** | OpenGL, Vulkan, Direct3D 12; Windows y Linux; 3:2 / 4:3 / 16:9 / 21:9; teclado y mandos (unos 870 mandos conocidos gracias a SDL_GameControllerDB); 2 jugadores local, LAN (MULTIJUGADOR, también Radmin VPN) y en línea con rollback; repeticiones; mods. |
 | **Launcher** (`launcher/`) | Windows y Linux | Compila el juego con un `zig cc` incluido (nada que instalar), se actualiza solo, herramientas de MODS. |
 
 Cada versión la prueba la tester del proyecto, Mary, antes de que la siguiente se construya encima; el [registro de cambios](docs/CHANGELOG.md) dice en cada cambio si ya lo jugó.
@@ -89,7 +89,7 @@ Todos se pueden cambiar en el launcher (CONTROLES) o en el juego (`Esc`).
 - **TEXTURAS:** todas las texturas del juego según a qué pertenecen, reemplazadas en un mod.
 - **EXPORTAR:** luchadores, escenarios, modelos y texturas en FBX, GLB, USD (USDA/USDC/USDZ) u OBJ con texturas PNG.
 
-## Problemas conocidos (0.5.6 beta)
+## Problemas conocidos (0.5.7 beta)
 
 - Vulkan: en los remates que llenan la pantalla de cuerpos (el fatality 2 de Scorpion) los frames todavía esperan a la GPU (~50 ms); en Direct3D 12 van fluidos.
 - Una compilación en otro PC terminó con "EXIT CODE: -1" (0.5.4, tras haber compilado allí una versión vieja); todavía no se sabe la causa. La 0.5.5 nombra el archivo que falla y guarda `build\last-build.log`; la 0.5.6 arregla el "FileNotFound" del icono con el que se topó el REPARAR de la 0.5.5, y añade VERIFICAR, que dice qué falta o está dañado (REPARAR lo vuelve a bajar).

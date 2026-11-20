@@ -49,6 +49,10 @@ int  pad_nav_ok(float *x, float *y, float *w, float *h);
 int  pad_nav_on(void);
 /* What player one used last: 1 a pad, 2 the keyboard. */
 int  pad_nav_device(void);
+/* Player one's highlight put on this box (the surface's pixels): a window
+ * opens on its chosen entry, and closing it goes back to the row that
+ * opened it. */
+void PortNavPut(float x, float y, float w, float h);
 /* A click: the highlight hides until the pad is used again. */
 void pad_nav_hide(void);
 

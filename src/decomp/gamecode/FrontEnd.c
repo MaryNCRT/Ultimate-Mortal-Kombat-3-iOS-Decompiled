@@ -12621,7 +12621,8 @@ enum { OB_TAB0, OB_SUB0 = OB_TAB0 + OS_N, OB_COPY = OB_SUB0 + PS_N, OB_BOX, OB_F
        OB_LSTL = OB_LO_END, OB_LSTR, OB_LSTPICK, OB_LCLOSE, OB_LST0, OB_LCARD0 = OB_LST0 + 14,
        OB_LCARD_END = OB_LCARD0 + 8, OB_LVOTE, OB_LPUT, OB_LACCEPT, OB_LREJECT, OB_LPASS, OB_LCEDE, OB_LNOCEDE,
        OB_CARD0, OB_ACT0 = OB_CARD0 + PORT_ROWS, OB_ACT2 = OB_ACT0 + PORT_ROWS,
-       OB_FT0 = OB_ACT2 + PORT_ROWS, OB_FTPICK0 = OB_FT0 + 16, OB_N = OB_FTPICK0 + 56 };
+       OB_FT0 = OB_ACT2 + PORT_ROWS, OB_FTPICK0 = OB_FT0 + 16, OB_OSK0 = OB_FTPICK0 + 56,
+       OB_N = OB_OSK0 + 40 };
 static long  PortOnlineWas[OB_N];
 static float PortOnlineLit[OB_N];       /* each button's light, eased */
 
@@ -12645,6 +12646,13 @@ static float OnClamp(float v) { return v < 0.0f ? 0.0f : v > 1.0f ? 1.0f : v; }
  * gets 0 nothing, 1 under the mouse, 2 chosen with the keys or the pad, 3
  * pressed. 1 once, on the release that ends a press inside it. */
 static int PortNoInput;
+/* the pad's keyboard for a player ID (OnTextBox): while it shows, it alone
+ * takes the input -- set from the frame before, as it is drawn late */
+static int PortOskOn, PortOskNow, PortOskDrawing;
+static unsigned PortOskTick;
+int pad_nav_device(void);               /* pad_nav.c: 1 the pad was used last */
+int pad_nav_hover(float *x, float *y);  /* the pad's highlight showing (a click hides it) */
+static int PortOskBy;                   /* the box the pad opened: only it gets the keys */
 static int PortGradOpen;
 static int PortPickOpen;                /* the colour picker, over the gradient window */
 
@@ -12656,7 +12664,12 @@ static int OnArea(int id, float x, float y, float w, float h, int *state)
     int in_mouse = PortMouseX >= px && PortMouseX <= px + pw
                    && PortMouseY >= py && PortMouseY <= py + ph;
 
-    if (PortNoInput) {                  /* under the gradient's window */
+    if (PortOskTick != PortTick) {      /* a new frame: last one's keyboard */
+        PortOskTick = PortTick;
+        PortOskOn = PortOskNow;
+        PortOskNow = 0;
+    }
+    if (PortNoInput || (PortOskOn && !PortOskDrawing)) {    /* under a window */
         if (state)
             *state = 0;
         return 0;
@@ -13873,6 +13886,67 @@ static int OnBoxTakes(int kind, int c)
     }
 }
 
+/* The pad's keys for a player ID (OnTextBox): with late 0 they are
+ * buttons, tested and drawn in the screen's pass; with late 1 drawn again
+ * over everything -- the portraits online_ui.c puts over the frame
+ * included (Mary: the keyboard over every layer) -- by PortOskLate. */
+static float PortOskX, PortOskY;
+static int OnOskKeys(int late, char *buf, int r, float a)
+{
+    static const char keys[] = "1234567890QWERTYUIOPASDFGHJKLZXCVBNM";
+    static const float in_row[4] = { 0.0f, 0.0f, 0.5f, 0.0f };   /* the lower rows set in */
+    float kw = 24.0f, kh = 19.0f, g = 2.0f, px = PortOskX, py = PortOskY;
+    float pw = 10.0f * (kw + g) + 10.0f, ph = 4.0f * (kh + g) + 10.0f;
+    float ky = py + 5.0f + 3.0f * (kh + g);
+    int i;
+
+    OnPanel(px, py, pw, ph, a, 1);
+    for (i = 0; i < 38; i++) {
+        char t[2] = { i < 36 ? keys[i] : 0, 0 };
+        const char *lab = i < 36 ? t : i == 36 ? PortFrTx("BORRAR", "DEL") : "OK";
+        float kx, y, w = kw;
+        int kind = i == 37 ? BT_MAIN : BT_NORMAL;
+
+        if (i < 36) {                   /* rows of 10, 10, 9 and 7 */
+            int row = i < 10 ? 0 : i < 20 ? 1 : i < 29 ? 2 : 3;
+            int col = i - (row == 0 ? 0 : row == 1 ? 10 : row == 2 ? 20 : 29);
+            kx = px + 5.0f + ((float)col + in_row[row]) * (kw + g);
+            y = py + 5.0f + (float)row * (kh + g);
+        } else {
+            kx = px + 5.0f + (i == 36 ? 7.0f * (kw + g) : 8.5f * (kw + g) + g);
+            y = ky;
+            w = i == 36 ? kw * 1.5f : kw * 1.5f - g;
+        }
+        if (late) {
+            float lit = PortOnlineLit[OB_OSK0 + i];
+            OnButtonLook(lab, kx, y, w, kh, kind, lit > 0.5f ? 2 : 0, lit, a);
+        } else if (OnButton(OB_OSK0 + i, lab, kx, y, w, kh, kind, a)) {
+            size_t k = strlen(buf);
+            if (i < 36)
+                OnTypeCode(buf, keys[i]);
+            else if (i == 36 && k > 0) {
+                buf[--k] = 0;
+                if (k > 0 && buf[k - 1] == '-')
+                    buf[--k] = 0;
+            } else if (i == 37) {
+                PortOnlineEdit = 0;
+                r = 2;
+            }
+        }
+    }
+    return r;
+}
+
+/* game_main.c, after the frame's last layer: the pad's keys again, on top */
+void PortOskLate(void)
+{
+    if (!PortOskNow || CurrentTask != 3)
+        return;
+    limeEnableAlphaBlending_Basic();
+    limeSet2DDrawing();
+    OnOskKeys(1, NULL, 0, 1.0f);
+}
+
 /* A box to type in, of kind `code` (TB_*), `max` characters. A click gives
  * it the keys, Esc or Enter gives them back. 2 when Enter was pressed in
  * it. */
@@ -13883,8 +13957,13 @@ static int OnTextBox(int id, char *buf, int max, int code, float x, float y, flo
     int st, on, r = 0;
     char line[112];
 
-    if (OnArea(id, x, y, w, h, &st))
+    if (OnArea(id, x, y, w, h, &st)) {
+        float hx, hy;
         PortOnlineEdit = id;
+        /* the pad's keys only when the pad chose it; a click types on the
+         * keyboard (Mary) */
+        PortOskBy = pad_nav_hover(&hx, &hy) ? id : 0;
+    }
     on = PortOnlineEdit == id;
     OnVGrad(x, y, w, h, k0, k1, a);
     OnFill(x, y, w, 1.2f, 0.0f, 0.0f, 0.0f, 0.6f * a);              /* sunk: shade under its top */
@@ -13913,7 +13992,15 @@ static int OnTextBox(int id, char *buf, int max, int code, float x, float y, flo
                 if (plat_clipboard_text(clip, sizeof clip) > 0) {
                     if (code)
                         buf[0] = 0;
-                    for (i = 0; clip[i]; i++) {
+                    i = 0;
+                    if (code == TB_ID) {        /* "umk3:CODE", as the log has it */
+                        while (clip[i] == ' ')
+                            i++;
+                        if ((clip[i] | 32) == 'u' && (clip[i + 1] | 32) == 'm'
+                            && (clip[i + 2] | 32) == 'k' && clip[i + 3] == '3' && clip[i + 4] == ':')
+                            i += 5;
+                    }
+                    for (; clip[i]; i++) {
                         int c = OnBoxTakes(code, (unsigned char)clip[i]);
                         k = strlen(buf);
                         if (code == TB_ID)
@@ -13938,6 +14025,18 @@ static int OnTextBox(int id, char *buf, int max, int code, float x, float y, flo
         OnMetalFrame(x, y, w, h, 1.2f, MT_GOLD, a);
     else
         OnMetalFrame(x, y, w, h, 0.9f, MT_BRONZE, 0.9f * a);
+    /* With the pad, a player ID is typed on keys of its own (Mary: the
+     * online menus with a pad): letters and digits, DEL and OK -- OK
+     * searches, as Enter does; the pad's B closes it (FE_Task_Online). */
+    if (on && code == TB_ID && PortOskBy == id) {
+        float pw = 10.0f * 26.0f + 10.0f, ph = 4.0f * 21.0f + 10.0f;
+        PortOskX = x + (w - pw) * 0.5f;
+        PortOskY = y - ph - 4.0f >= 26.0f ? y - ph - 4.0f : y + h + 4.0f;
+        PortOskNow = 1;
+        PortOskDrawing = 1;
+        r = OnOskKeys(0, buf, r, a);
+        PortOskDrawing = 0;
+    }
     PortOnlineBlink += 0.025f / limeFPSScaleFactor;
     if (PortOnlineBlink > 2.0f)
         PortOnlineBlink -= 2.0f;
@@ -14090,7 +14189,9 @@ static void PortOnlineHome(float cx, float cw, float a, int searching, int nfr, 
               fw - 20.0f, a);
     OnText(PortOnlineWord(OT_OTHER), cx + fw * 0.5f, 195.0f, 1, 0.40f, fw - 20.0f, OnDim, a);
     if (OnTextBox(OB_BOX, PortOnlineCode, 14, 1, bx, 206.0f, bw, 26.0f,
-                  PortFrTx("HAZ CLIC PARA ESCRIBIR, O CTRL+V", "CLICK TO TYPE, OR CTRL+V"), a) == 2
+                  pad_nav_device() == 1
+                  ? PortFrTx("PULSA PARA ESCRIBIR CON EL MANDO", "PRESS TO TYPE WITH THE PAD")
+                  : PortFrTx("HAZ CLIC PARA ESCRIBIR, O CTRL+V", "CLICK TO TYPE, OR CTRL+V"), a) == 2
         && !searching)
         PortOnlineFind();
     OnText(PortOnlineEdit == OB_BOX ? PortOnlineWord(OT_HINT)
@@ -17462,7 +17563,10 @@ room_drawn:
     back = DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1);
     limeDrawFONT(&GameFont, GameText(7),
                  FE_X(423.0f), FE_Y(296.0f), 1, FE_WidthScale, fontcol);
-    if (back && in_room) {
+    if (back && PortOskOn) {
+        PortOnlineEdit = 0;             /* the pad's B: the keyboard shuts first */
+        PortOskOn = PortOskNow = 0;
+    } else if (back && in_room) {
         mplobby_leave();                /* the room's BACK: out of the lobby, to LOBBIES */
         PortLobbyReady = 0;
     } else if (back && !PortOnlineLeaving) {
@@ -21430,6 +21534,12 @@ static int ft_next(int v, int d, int n)
 }
 
 /* a row: its label and value, centred; 1 when pressed (*dir -1 or 1) */
+static int ft_put_tile;                 /* a window just opened: the pad on its choice */
+static float ft_row_at[4];              /* the row that opened it, to go back to */
+static int ft_row_back;                 /* ...on the frame after it shut, when the
+                                         * rows are buttons again */
+void PortNavPut(float x, float y, float w, float h);   /* pad_nav.c */
+
 static int ft_row_button(int id, const char *label, const char *value, float x, float y,
                          float w, int *dir)
 {
@@ -21439,6 +21549,13 @@ static int ft_row_button(int id, const char *label, const char *value, float x, 
 
     snprintf(line, sizeof line, "%s:  %s", label, value);
     hit = OnArea(id, x, y, w, 19.0f, &st);
+    if (hit) {                          /* it opens a window: come back here */
+        ft_row_at[0] = OnX(x);
+        ft_row_at[1] = OnY(y);
+        ft_row_at[2] = OnW(w);
+        ft_row_at[3] = OnH(19.0f);
+        ft_put_tile = 1;
+    }
     *lit += ((st ? 1.0f : 0.0f) - *lit) * 0.35f / limeFPSScaleFactor;
     OnButtonLook(line, x, y, w, 19.0f, BT_NORMAL, st, *lit, 1.0f);
     if (st && w > 0.0f)                 /* it opens a list */
@@ -21468,6 +21585,11 @@ static int ft_tile(int id, const char *name, long ch, int level, float x, float 
     int st = 0, hit = 0;
     float *lit = &PortOnlineLit[id];
     float ph = h - 9.0f;
+
+    if (chosen && ft_put_tile) {
+        ft_put_tile = 0;
+        PortNavPut(OnX(x), OnY(y), OnW(w), OnH(h));
+    }
 
     if (!off)
         hit = OnArea(id, x, y, w, h, &st);
@@ -21786,6 +21908,10 @@ void FE_Task_FatalTrainer(void)
         PortFTMove = 0;
 
     y = 38.0f;
+    if (ft_row_back && !ft_picking) {
+        ft_row_back = 0;
+        PortNavPut(ft_row_at[0], ft_row_at[1], ft_row_at[2], ft_row_at[3]);
+    }
     PortNoInput = ft_picking != 0;      /* the list's window has the input */
     if (ft_row_button(id++, es ? "LUCHADOR" : "FIGHTER", OnName(CharacterNames[PortFTP1]),
                       x, y, w, &d))
@@ -21838,7 +21964,7 @@ void FE_Task_FatalTrainer(void)
     if (OnButton(id++, es ? "CONTROLES" : "CONTROLS", x, y, w * 0.5f - 4.0f, 19.0f,
                  BT_NORMAL, a))
         set_menu_open_controls();
-    OnText(es ? "R REINICIA EN LA PELEA" : "R RESTARTS IN THE FIGHT", x + w * 0.75f, y + 4.0f, 1,
+    OnText(es ? "R / L3 REINICIA EN LA PELEA" : "R / L3 RESTARTS IN THE FIGHT", x + w * 0.75f, y + 4.0f, 1,
            0.36f, w * 0.5f - 4.0f, OnDim, a);
     y += 28.0f;
     if (OnButton(id++, "FIGHT!", vw * 0.5f - 70.0f, y, 140.0f, 30.0f,
@@ -21854,6 +21980,16 @@ void FE_Task_FatalTrainer(void)
     PortNoInput = 0;
     if (ft_picking)
         ft_pick_window(es);
+    {
+        /* the window shut: the pad's highlight back on the row that opened
+         * it, not wherever the nearest button was */
+        static int was;
+        if (was && !ft_picking && ft_row_at[2] > 0.0f)
+            ft_row_back = 1;
+        if (!ft_picking)
+            ft_put_tile = 0;
+        was = ft_picking;
+    }
 
     back = DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1);
     limeDrawFONT(&GameFont, GameText(7),

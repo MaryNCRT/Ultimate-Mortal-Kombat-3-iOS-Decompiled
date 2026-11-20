@@ -197,6 +197,13 @@ static char g_look_who[40];
 static void bucket_of(const char *code, char *out, int n)
 {
     int k = snprintf(out, (size_t)n, "umk3:");
+    /* the code as written: spaces, dashes, lower case, and "umk3:" in front
+     * as the log shows it -- all the same code */
+    while (*code == ' ')
+        code++;
+    if ((code[0] | 32) == 'u' && (code[1] | 32) == 'm' && (code[2] | 32) == 'k'
+        && code[3] == '3' && code[4] == ':')
+        code += 5;
     for (; *code && k < n - 1; code++) {
         int c = (unsigned char)*code;
         if (c >= 'a' && c <= 'z')
@@ -586,7 +593,7 @@ void mpeos_lookup(const char *code)
 
 int mpeos_lookup_result(char *who, int n)
 {
-    if (g_look_result == 1)
+    if (g_look_result == 1 && who && n > 0)
         snprintf(who, (size_t)n, "%s", g_look_who);
     return g_look_result;
 }

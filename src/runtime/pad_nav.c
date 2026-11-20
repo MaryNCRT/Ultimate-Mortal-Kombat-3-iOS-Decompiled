@@ -90,6 +90,18 @@ void PortNavTarget(float x, float y, float w, float h, int kind)
     g_n++;
 }
 
+void PortNavPut(float x, float y, float w, float h)
+{
+    NavC *c = &g_c[0];
+
+    c->fx = x + w * 0.5f;
+    c->fy = y + h * 0.5f;
+    c->hx = x;
+    c->hy = y;
+    c->hw = w;
+    c->hh = h;
+}
+
 void PortNavDual(void)
 {
     g_dual = 1;
@@ -263,6 +275,10 @@ static int run(NavC *c, int who, const PLAT_PAD *pa, const PLAT_PAD *pb,
     if (getenv("UMK3_LOG_NAV") && (hit || dir))
         printf("nav %d: %d targets, focus %.0f,%.0f %.0fx%.0f show %d\n", who,
                g_n, c->hx, c->hy, c->hw, c->hh, c->show);
+    if (getenv("UMK3_LOG_NAV") && (hit || dir) && getenv("UMK3_LOG_NAV")[0] == '2')
+        for (i = 0; i < g_n; i++)       /* UMK3_LOG_NAV=2: every button too */
+            printf("  target %d: %.0f,%.0f %.0fx%.0f kind %d\n", i, g_t[i].x, g_t[i].y,
+                   g_t[i].w, g_t[i].h, g_t[i].kind);
     if (hit & (1u << PB_SOUTH)) {       /* the highlighted one */
         *tx = c->fx;
         *ty = c->fy;

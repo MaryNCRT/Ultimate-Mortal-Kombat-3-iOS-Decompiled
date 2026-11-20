@@ -2,6 +2,24 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.5.7",
+      "date": "2026-11-20",
+      "ES": [
+        "Nuevo en EXTRAS: PR\u00c1CTICA DE FATALITY. Empieza directo en el FINISH HIM, con tiempo ilimitado, el comando del remate arriba y un recuadro en el suelo que marca exactamente d\u00f3nde funciona. Incluye todos los remates de cada luchador y una lista de remates hechos por luchador, que se guarda.",
+        "En la pr\u00e1ctica, la ANIMALITY va en dos pasos: primero el MERCY y luego la animality. Si haces otro remate o fallas, vuelves al FINISH HIM.",
+        "Mandos DualSense (PS5): L2 y R2 ya no est\u00e1n cambiados, y con Steam Input el mismo mando ya no se detecta dos veces.",
+        "En l\u00ednea: buscar por c\u00f3digo reintenta durante 20 segundos en vez de rendirse a la primera, y acepta el c\u00f3digo con espacios o con \"umk3:\" delante.",
+        "Los men\u00fas EN L\u00cdNEA y PR\u00c1CTICA DE FATALITY se usan bien con el mando: un teclado en pantalla para escribir el c\u00f3digo (solo si eliges la casilla con el mando), y al cerrar una ventana vuelves a la opci\u00f3n que la abri\u00f3."
+      ],
+      "EN": [
+        "New in EXTRAS: FATALITY TRAINER. It starts right at FINISH HIM, with unlimited time, the finisher's command on top and a frame on the floor showing exactly where it works. Every finisher of every fighter, and a checklist per fighter that is saved.",
+        "In the trainer the ANIMALITY is two steps: the MERCY first, then the animality. Another finisher or a failed try takes you back to FINISH HIM.",
+        "DualSense (PS5) pads: L2 and R2 are no longer swapped, and with Steam Input the same pad is no longer found twice.",
+        "Online: finding a player by code keeps asking for 20 seconds instead of giving up on the first try, and takes the code with spaces or \"umk3:\" in front.",
+        "The ONLINE and FATALITY TRAINER menus work with a pad: an on-screen keyboard for the code (only when the box is chosen with the pad), and closing a window goes back to the option that opened it."
+      ]
+    },
+    {
       "version": "0.5.6",
       "date": "2026-11-20",
       "ES": [

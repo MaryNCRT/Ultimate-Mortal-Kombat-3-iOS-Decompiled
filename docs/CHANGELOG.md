@@ -8,6 +8,43 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## 0.5.7 beta (2026-11-20)
+
+The FATALITY TRAINER, the DualSense's triggers, the online code search, and
+the online and trainer menus with a pad. Mary played the trainer through its
+builds (the last one -- MERCY as the animality's first step, the checklist
+through DoASpecial, the pad's keyboard -- checked by scripts and captures, not
+yet by her).
+
+- **FATALITY TRAINER** (EXTRAS): a fight that starts at FINISH HIM (no
+  intros, no health bars or clock), unlimited finishing time, the chosen
+  finisher's name and command (in the pad's or the keys' glyphs) on top, the
+  distance and the exact range on a panel, and a frame on the floor where it
+  works -- each range asked of the game's own predicate at every distance and
+  checked against the decompiled constants (84 of 84;
+  `tools/check_finisher_ranges.py`). Fighter, opponent (with colour and
+  outfit), stage, finisher and the switches in windows of their own; RESTART
+  (R / L3), NEXT FINISHER (T / R3), ONE-BUTTON (C / SELECT, when on); DISPLAY
+  INPUT shows what is physically pressed; only the chosen finisher counts
+  (another one, or a failed try, puts the window back); at the end, back to
+  the trainer's screen. A checklist per fighter (`save/fatality_trainer.txt`),
+  "N/M" under each portrait.
+- **ANIMALITY in two steps:** MERCY is off the list; the animality shows the
+  MERCY's command first (no floor frame: it only needs some distance), then
+  the second FINISH HIM and the animality. The MERCY needed both round
+  tallies set (the deciding round), which the trainer now sets.
+- **DualSense:** L2 and R2 were swapped through WinMM (Sony's triggers arrive
+  on V and U); pads Steam Input hides from games
+  (`SDL_GAMECONTROLLER_IGNORE_DEVICES`) are skipped.
+- **Online, FIND BY CODE:** the search asked EOS once; a lobby EOS had not
+  listed yet (it takes seconds) meant NOT FOUND after ten. It now asks again
+  every 2.5 s for 20 s; a code with spaces, dashes or "umk3:" in front works,
+  pasted too.
+- **Pad:** an on-screen keyboard for a player ID, opened only when the box
+  is chosen with the pad (a click types on the keyboard), drawn over every
+  layer; B closes it before leaving the screen. In the trainer a window opens
+  on its current choice and closing it goes back to its row.
+
 ## 0.5.6 beta (2026-11-20)
 
 A fix for 0.5.5's compile, VERIFY, and a REPAIR that repairs only what is
