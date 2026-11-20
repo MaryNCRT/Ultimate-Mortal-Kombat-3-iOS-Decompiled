@@ -2899,8 +2899,10 @@ static void ft_frame(void)
     if (getenv("UMK3_FT_FIRE") && m) {  /* t,t,...: an animality's two steps */
         const char *f = getenv("UMK3_FT_FIRE");
         for (; f && *f; f = strchr(f, ',') ? strchr(f, ',') + 1 : NULL)
-            if (g_tick == atol(f))
-                printf("trainer: scripted one-button %s\n", ft_fire(m) ? "done" : "refused");
+            if (g_tick == atol(f) && !g_ft_success) {   /* as C does: the success counts */
+                g_ft_success = ft_fire(m);
+                printf("trainer: scripted one-button %s\n", g_ft_success ? "done" : "refused");
+            }
     }
     if (GamePaused)
         return;
@@ -2943,7 +2945,16 @@ static void ft_frame(void)
     /* the chosen finisher played to its end (death_blow_complete marks G+0x450
      * -1): a moment for it to be seen, then the trainer's menu (Mary) */
     if (g_ft_success && *(int16_t *)((char *)G + 0x450) == -1) {
-        if (++g_ft_after > 120) {
+        /* ...until its sign has shown: FATALITY, ANIMALITY, BABALITY or
+         * FRIENDSHIP comes at the end of "X WINS" (t_bonus_count), some
+         * 150 frames after the finisher -- leaving at 120 the trainer
+         * never showed it. Two seconds of the sign, or 9 s at most. */
+        extern long FatalityMessage, AnimalityMessage, BabalityMessage, FriendshipMessage;
+        static int sign;
+        int on = FatalityMessage || AnimalityMessage || BabalityMessage || FriendshipMessage;
+        sign = on ? sign + 1 : 0;
+        if (++g_ft_after > 540 || sign > 120) {
+            sign = 0;
             printf("trainer: the finisher is over; back to the trainer's menu\n");
             g_ft_after = 0;
             g_ft_paused = 1;

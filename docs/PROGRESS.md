@@ -135,6 +135,48 @@ Not tested: a REPAIR that downloads on another PC, VERIFY offline.
 The FATALITY TRAINER (Mary's next request) is begun on its own branch,
 `claude/fatality-trainer`, not in this release.
 
+### 2026-11-20 -- 0.5.8 beta: KOMBO SLIDE gentler, the lighting through finishers, the trainer's sign
+
+- **KOMBO SLIDE off** (players, through Mary: "a bit too aggressive ... the
+  opponents don't move back at all when getting Kombo'd ... you can literally
+  infinite juggle punch someone in mid air"). other.c `away_x_vel` zeroed the
+  push of every hit from a kombo's second on (issues #114, #252), in the air
+  too. Now, with the option off, a hit on someone in the air (aborn4's test:
+  the GrObj's 0x12 against the proc's 0x40) keeps the original's push, and
+  one on the ground is halved. `t_ccp3`'s slide apart at the threshold is
+  still skipped. Not tested in a fight yet (no scripted kombo here).
+- **ENHANCED LIGHTING off in some finishers** (Mary). `UMK3_LOG_SHADOW=1`
+  (rgl_ff.c, new) logs when the shadow map comes and goes and why: during
+  Scorpion's FATALITY 2 the scene held no fighter caster ("none: no
+  fighter") -- the burning fighter is drawn another way -- and shadow_build
+  dropped the map. It now keeps the last map's centre and size for up to
+  600 frames. Checked: the log shows no drop through that fatality, and the
+  captures keep the lighting.
+- **The trainer's finisher sign** (Mary's replay of an Arcade fight, a
+  fatality "not done as it should"). The replay could not show it: Arcade
+  replays part from the recording (tick 410 there; tick 872 in a fresh
+  --fight with UMK3_ARCADE) -- the ladder's state is not in the setup words,
+  open. In the trainer, both of Scorpion's fatalities ended with no
+  FATALITY sign: the sign is `t_bonus_count`'s (mkbonus.c, after "X WINS",
+  `fatality_animations[G+0x458 - 1]` through create_fx -> event 4/22), some
+  150 frames after the finisher, and the trainer left after 120. It now
+  waits for the sign (two seconds of it, nine seconds at most). Scorpion's
+  FATALITY 1 (the Scorpions) fades to black on purpose (event 3/9,
+  ScorpionFade, `t_scorpion_hell`), as the binary does. What Mary saw in her
+  fight is still not known.
+- `UMK3_LOG_EVENTS=1` (Blood.c, new): every game event as AddNewGameEvents
+  takes it. `UMK3_FT_FIRE` now counts its success as C does (a scripted
+  finisher is no longer taken for a failed try).
+- **Spectators (stage 4c), the design** (not started in code): the
+  fighter who hosts keeps every confirmed input pair (both players' inputs
+  for a frame, `rb_frame` once `g_remote_upto` passes it) and sends them to
+  the room members who ask, over EOS P2P (`mpeos_send`, a new mp_net kind
+  outside the session); the spectator starts the fight as an online one
+  (GameMode 1) from the setup (fighters, level, buttons, rules, the seed is
+  derived from them) and runs rollback.c in a watch mode -- both inputs from
+  the stream, a frame held when the next has not arrived, no sending, no
+  hashes -- leaving to the room at the fight's last frame or on B.
+
 ### 2026-11-20 (after 0.5.7) -- the trainer says no rounds and ends on its own screen
 
 - Mary: the trainer's fight said the rounds, and its end showed the main

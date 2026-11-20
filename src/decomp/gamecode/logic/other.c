@@ -2354,14 +2354,22 @@ void away_x_vel(MK3OBJ *obj)
      * hit taken without getting back to normal (reaction_start_chores
      * inc_p_hit, already counting this one), so 2 is the kombo's second
      * hit of any kind. */
+    /* Players (2026-11-20): dropped outright it was too much -- he did not
+     * move back at all under a kombo, and in the air nothing pushed him,
+     * so a juggle of punches never ended. Now, with the option off, a hit
+     * in the air pushes as the original does (aborn4's test: his height
+     * off his ground), and one on the ground pushes half as far. */
     if (obj->field00 && (obj->field00->field4c >= 2 || obj->field00->p_hit >= 2)
         && obj->field1c) {
+        int air = obj->field08
+                  && (uint32_t)(int32_t)(int16_t)MK3_FIELD12(obj->field08) != obj->field00->field40;
+
         printf("kombo push: character %u, speed %d, punches %u, hits %u%s\n",
                (unsigned)obj->field08->field24, (int)obj->field1c >> 16,
                (unsigned)obj->field00->field4c, (unsigned)obj->field00->p_hit,
-               PortNoKomboSlide ? ", dropped" : "");
-        if (PortNoKomboSlide)
-            obj->field1c = 0;
+               !PortNoKomboSlide ? "" : air ? ", in the air: kept" : ", halved");
+        if (PortNoKomboSlide && !air)
+            obj->field1c = (uint32_t)((int32_t)obj->field1c / 2);
     }
     if (is_he_right(obj))
         obj->field1c = (uint32_t)(-(int32_t)obj->field1c);
