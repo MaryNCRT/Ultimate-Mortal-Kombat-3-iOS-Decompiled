@@ -635,6 +635,16 @@ static int dx_open(void *window, int width, int height)
     return 1;
 }
 
+/* 0.5.5: the textures' staging, one mapped buffer kept and reused, not a
+ * committed resource made and released for each texture -- up to 90 MB
+ * each for an HD sheet with its levels, made, zeroed by the system and
+ * released: 2.1 of the 3.6 s boot to the menus (measured 2026-11-20). A
+ * texture that does not fit in it takes the old way. */
+#define RING_BYTES ((UINT64)256 << 20)
+static ID3D12Resource *g_ring;
+static unsigned char  *g_ring_map;
+static UINT64          g_ring_off;
+
 static void dx_close(void)
 {
     int i;
@@ -656,6 +666,13 @@ static void dx_close(void)
         }
     free_window();
     upload_submit();
+    if (g_ring) {
+        ID3D12Resource_Unmap(g_ring, 0, NULL);
+        ID3D12Resource_Release(g_ring);
+    }
+    g_ring = NULL;
+    g_ring_map = NULL;
+    g_ring_off = 0;
     if (g_ulist) ID3D12GraphicsCommandList_Release(g_ulist);
     if (g_ualloc) ID3D12CommandAllocator_Release(g_ualloc);
     g_ulist = NULL;
@@ -718,6 +735,7 @@ static double g_diag_up_ms, g_diag_rel_ms;
 static UINT64 g_diag_up_bytes;
 static int g_diag_up_n, g_diag_up_lists;
 
+
 static void upload_submit(void)
 {
     ID3D12CommandList *one;
@@ -741,6 +759,7 @@ static void upload_submit(void)
     g_diag_rel_ms += rgl_now_ms() - t1;
     g_nubufs = 0;
     g_ubytes = 0;
+    g_ring_off = 0;                     /* the GPU is done with it (wait_gpu) */
 }
 
 static int upload_begin(UINT64 bytes)
@@ -791,12 +810,35 @@ static void upload(dx_res *r, int x, int y, int w, int h, int levels, const unsi
         lw = lw > 1 ? lw / 2 : 1;
         lh = lh > 1 ? lh / 2 : 1;
     }
-    if (!upload_begin(total))
-        return;
-    ub = buffer(total, D3D12_HEAP_TYPE_UPLOAD);
-    if (!ub || FAILED(ID3D12Resource_Map(ub, 0, NULL, (void **)&map))) {
-        if (ub) ID3D12Resource_Release(ub);
-        return;
+    if (total <= RING_BYTES && !g_ring) {
+        g_ring = buffer(RING_BYTES, D3D12_HEAP_TYPE_UPLOAD);
+        if (g_ring && FAILED(ID3D12Resource_Map(g_ring, 0, NULL, (void **)&g_ring_map))) {
+            ID3D12Resource_Release(g_ring);
+            g_ring = NULL;
+        }
+    }
+    if (total <= RING_BYTES && g_ring) {
+        UINT64 at = (g_ring_off + D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1)
+                  & ~(UINT64)(D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1);
+        if (at + total > RING_BYTES) {
+            upload_submit();            /* full: the copies so far run, then from the start */
+            at = 0;
+        }
+        if (!upload_begin(0))
+            return;
+        ub = g_ring;
+        map = g_ring_map;
+        for (l = 0; l < levels; l++)
+            fp[l].Offset += at;
+        g_ring_off = at + total;
+    } else {
+        if (!upload_begin(total))
+            return;
+        ub = buffer(total, D3D12_HEAP_TYPE_UPLOAD);
+        if (!ub || FAILED(ID3D12Resource_Map(ub, 0, NULL, (void **)&map))) {
+            if (ub) ID3D12Resource_Release(ub);
+            return;
+        }
     }
     for (l = 0; l < levels; l++) {
         int row;
@@ -804,6 +846,8 @@ static void upload(dx_res *r, int x, int y, int w, int h, int levels, const unsi
             memcpy(map + fp[l].Offset + (UINT64)row * fp[l].Footprint.RowPitch,
                    rgba[l] + (size_t)row * fp[l].Footprint.Width * 4, (size_t)fp[l].Footprint.Width * 4);
     }
+    if (ub == g_ring)
+        goto copies;
     ID3D12Resource_Unmap(ub, 0, NULL);
     if (g_nubufs == g_cubufs) {
         int n = g_cubufs ? g_cubufs * 2 : 256;
@@ -816,6 +860,7 @@ static void upload(dx_res *r, int x, int y, int w, int h, int levels, const unsi
         g_cubufs = n;
     }
     g_ubufs[g_nubufs++] = ub;
+copies:
     g_ubytes += total;
     g_list = g_ulist;
     to_state(r, D3D12_RESOURCE_STATE_COPY_DEST);

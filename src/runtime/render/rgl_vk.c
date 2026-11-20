@@ -1208,6 +1208,15 @@ static int vk_open(void *window, int width, int height)
     return 1;
 }
 
+/* 0.5.5: the textures' staging, one mapped buffer kept and reused instead
+ * of a buffer made and freed for each texture (rgl_d3d12.c's, the same) */
+#define RING_BYTES ((VkDeviceSize)256 << 20)
+static VkBuffer       g_ring;
+static VkDeviceMemory g_ring_mem;
+static unsigned char *g_ring_map;
+static VkDeviceSize   g_ring_off;
+static int            g_ring_tried;
+
 static void vk_close(void)
 {
     int i;
@@ -1244,6 +1253,13 @@ static void vk_close(void)
         g_nretired--;
         free_buffer(g_retired[g_nretired].b, g_retired[g_nretired].m);
     }
+    if (g_ring)
+        free_buffer(g_ring, g_ring_mem);
+    g_ring = VK_NULL_HANDLE;
+    g_ring_mem = VK_NULL_HANDLE;
+    g_ring_map = NULL;
+    g_ring_off = 0;
+    g_ring_tried = 0;
     free_buffer(g_vbuf, g_vmem);
     free_buffer(g_lbuf, g_lmem);
     g_lbuf = VK_NULL_HANDLE;
@@ -1294,6 +1310,7 @@ static int vk_tex_new(void)
  * on a fence of its own: one wait per texture, hundreds in a load. The
  * frame's commands that came before keep the texture as it was only if they
  * already ran, so those run first when they used it (before_write). */
+
 static void upload_submit(void)
 {
     VkSubmitInfo si;
@@ -1314,6 +1331,7 @@ static void upload_submit(void)
         free_buffer(g_ustage[i].b, g_ustage[i].m);
     g_nustage = 0;
     g_ubytes = 0;
+    g_ring_off = 0;                     /* the fence: the GPU is done with it */
 }
 
 static int upload_begin(VkDeviceSize bytes)
@@ -1369,10 +1387,31 @@ static void upload(vk_image *im, int x, int y, int w, int h, int levels, const u
         lw = lw > 1 ? lw / 2 : 1;
         lh = lh > 1 ? lh / 2 : 1;
     }
-    if (!upload_begin(total))
-        return;
-    if (!make_buffer(total, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &sb, &sm, (void **)&map))
-        return;
+    if (total <= RING_BYTES && !g_ring_tried) {
+        g_ring_tried = 1;
+        if (!make_buffer(RING_BYTES, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &g_ring, &g_ring_mem,
+                         (void **)&g_ring_map))
+            g_ring = VK_NULL_HANDLE;
+    }
+    if (total <= RING_BYTES && g_ring) {
+        VkDeviceSize at = (g_ring_off + 15) & ~(VkDeviceSize)15;
+        if (at + total > RING_BYTES) {
+            upload_submit();            /* full: the copies so far run, then from the start */
+            at = 0;
+        }
+        if (!upload_begin(0))
+            return;
+        sb = g_ring;
+        sm = VK_NULL_HANDLE;
+        map = g_ring_map;
+        off = at;
+        g_ring_off = at + total;
+    } else {
+        if (!upload_begin(total))
+            return;
+        if (!make_buffer(total, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &sb, &sm, (void **)&map))
+            return;
+    }
     lw = w;
     lh = h;
     memset(cp, 0, sizeof cp);
@@ -1391,9 +1430,11 @@ static void upload(vk_image *im, int x, int y, int w, int h, int levels, const u
         lw = lw > 1 ? lw / 2 : 1;
         lh = lh > 1 ? lh / 2 : 1;
     }
-    g_ustage[g_nustage].b = sb;
-    g_ustage[g_nustage].m = sm;
-    g_nustage++;
+    if (sb != g_ring) {
+        g_ustage[g_nustage].b = sb;
+        g_ustage[g_nustage].m = sm;
+        g_nustage++;
+    }
     g_ubytes += total;
     g_cmd = g_ucb;
     to_layout(im, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);

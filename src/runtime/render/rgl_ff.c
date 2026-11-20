@@ -575,6 +575,7 @@ static unsigned char *to_rgba(int w, int h, GLenum f, GLenum type, const void *p
     row = w * bpp;
     if (align > 1)
         row = (row + align - 1) / align * align;
+#pragma omp parallel for private(x) if ((long long)w * h > 262144)
     for (y = 0; y < h; y++) {
         const unsigned char *r = s + (size_t)y * row;
         unsigned char *d = o + (size_t)y * w * 4;
@@ -709,6 +710,7 @@ void ff_glTexImage2D(GLenum t, GLint level, GLint internal, GLsizei w, GLsizei h
                 /* 0.5.2: even sizes (nearly all), with no edge clamps -- a
                  * 4096x4096 HD sheet's levels took 59 ms through the
                  * general loop below */
+#pragma omp parallel for private(xx) if ((long long)nw * nh > 65536)
                 for (yy = 0; yy < nh; yy++) {
                     const unsigned char *r0 = s + (size_t)(yy * 2) * cw * 4;
                     const unsigned char *r1 = r0 + (size_t)cw * 4;
