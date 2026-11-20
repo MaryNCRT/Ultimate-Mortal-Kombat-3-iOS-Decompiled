@@ -1,7 +1,7 @@
 <script>
     /* COMPILE YOUR .IPA: the player's .ipa, which build, the compile with
      * its bar and log, and the updates from GitHub with the latest notes. */
-    import { app, tx, ARCH, save, refreshRoot, startBuild, browseIpa, checkUpdate, installUpdate } from '#lib/app.svelte.js';
+    import { app, tx, ARCH, save, refreshRoot, startBuild, verifyBuild, browseIpa, checkUpdate, installUpdate } from '#lib/app.svelte.js';
     import { api, isWin } from '#lib/platform.js';
     import { selectBlip, hoverBlip } from '#lib/sound.js';
     import Page from '#lib/components/Page.svelte';
@@ -48,6 +48,8 @@
                 onclick={() => startBuild(false)}>{tx(app.ready ? 'rebuild' : 'build')}</button>
         <button class="btn" disabled={app.build.on || app.upd.busy} title={tx('repairTip')} onpointerenter={hoverBlip}
                 onclick={() => startBuild(true)}>{tx('repair')}</button>
+        <button class="btn" disabled={app.build.on || app.upd.busy} title={tx('verifyTip')} onpointerenter={hoverBlip}
+                onclick={verifyBuild}>{tx('verify')}</button>
         {#if app.build.on}
             <button class="btn danger" onpointerenter={hoverBlip} onclick={() => api.cancelBuild()}>{tx('cancel')}</button>
         {/if}

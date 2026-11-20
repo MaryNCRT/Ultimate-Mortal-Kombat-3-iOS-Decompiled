@@ -474,6 +474,28 @@ export async function startBuild(repair) {
     }
 }
 
+/* VERIFY: what is missing or damaged, and whether REPAIR is needed */
+export async function verifyBuild() {
+    if (app.build.on) return;
+    selectBlip();
+    showBuildUI(true);
+    app.build.label = tx('verify');
+    const r = await api.verifyBuild();
+    showBuildUI(false);
+    app.build.show = true;
+    app.build.pct = 100;
+    if (r.need) {
+        app.build.fail = true;
+        logLine(tx('verifyNeed'));
+        setStatus('need', tx('verifyNeed'));
+        failChord();
+    } else {
+        logLine(tx(r.unchecked ? 'verifyPartial' : 'verifyOk'));
+        setStatus('ready', tx(r.unchecked ? 'verifyPartial' : 'verifyOk'));
+        doneChord();
+    }
+}
+
 export async function browseIpa() {
     const p = await api.browseIpa();
     if (p) await save({ ipa: p });

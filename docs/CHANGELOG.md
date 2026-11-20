@@ -8,10 +8,30 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## After 0.5.5 (unreleased)
+## 0.5.6 beta (2026-11-20)
 
-Built into the test folder; not yet seen by Mary.
+A fix for 0.5.5's compile, VERIFY, and a REPAIR that repairs only what is
+damaged. The hint line was built into Mary's test folder; the launcher's
+changes were checked by scripts and its screen by a capture, not yet by Mary
+as a package.
 
+- **Fixed: "icon: error: FileNotFound"** (a player's REPAIR on 0.5.5): 0.5.5
+  removes another version's build files, so the exe's icon was made again,
+  and `zig rc` -- which builds its resource compiler into zig's own cache on
+  first use -- failed on that PC and stopped the whole compile. Its folder is
+  made first, and when the icon still cannot be made the game is linked
+  without it (Windows' plain icon), the log saying why.
+- **VERIFY** (COMPILE YOUR .IPA, Mary): the game folder checked, nothing
+  changed. The sources a compile reads (`src/`, the extraction's scripts,
+  the launcher's aditional textures and lighting) against the repository at
+  the launcher's own tag, by their git hashes from GitHub's file list (kept in
+  `build/manifest-<version>.json`); broken build files; another version's;
+  the tables made from the .ipa; the exe. It ends saying whether REPAIR is
+  needed.
+- **REPAIR repairs only what is damaged**: what VERIFY finds -- missing or
+  damaged sources downloaded again from the repository and checked against
+  their hash, broken build files removed, textures and lighting copied only
+  where missing -- and with nothing damaged it changes nothing.
 - The hint line of the screens of pages (the moves list, the bios, the
   endings) with the on-screen controls off shows only the page buttons and
   PAGE; the way out (SELECT, circle, EXIT) is no longer named, the window's X

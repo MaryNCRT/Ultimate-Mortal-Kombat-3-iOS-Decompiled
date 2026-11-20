@@ -431,7 +431,26 @@ async function compileGame({
                     && (!fs.existsSync(ico) || fs.statSync(ico).mtimeMs <= made))
                     return;
             } catch (_) { /* not made yet */ }
-            execSync(`"${zigExe}" rc -- "${rcPath}" "${resObj}"`, { stdio: 'pipe' });
+            /* 0.5.5 (a player: "icon: error: FileNotFound", the whole compile
+             * stopped): zig rc builds its resource compiler on its first use,
+             * into zig's own cache, and answers FileNotFound for anything it
+             * cannot find or make there. The icon is only the exe's picture:
+             * without it the game is linked all the same, with Windows' plain
+             * one, and the log says why. */
+            try {
+                fs.mkdirSync(path.dirname(resObj), { recursive: true });
+                execSync(`"${zigExe}" rc -- "${rcPath}" "${resObj}"`,
+                         { stdio: 'pipe', cwd: path.dirname(rcPath) });
+            } catch (err) {
+                const why = String((err.stderr && err.stderr.toString()) || err.message || err)
+                    .split(/\r?\n/).filter(l => l.trim()).slice(0, 2).join(' / ');
+                fs.rmSync(resObj, { force: true });
+                const at = objFiles.indexOf(resObj);
+                if (at >= 0)
+                    objFiles.splice(at, 1);
+                onProgress({ phase: `Warning: the exe's icon was not made (${why}); the game is built without it`,
+                             pct: 42 });
+            }
         });
     }
 

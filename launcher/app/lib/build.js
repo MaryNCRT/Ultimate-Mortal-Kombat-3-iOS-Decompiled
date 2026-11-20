@@ -6,6 +6,7 @@ const { spawn } = require('child_process');
 const { ensureToolchain, describeError } = require('./toolchain');
 const { extractIpaPipeline } = require('./extract/ipa');
 const { compileGame } = require('./compile');
+const vfy = require('./verify');
 
 let g_isCancelled = false;
 
@@ -63,8 +64,8 @@ function cleanOtherVersion(buildDir, onData) {
  * without its response, stamp or dependency file, one of zero bytes, a
  * response file without its object, the link's list -- removed. The rest is
  * kept, so only what was broken compiles again. */
-function cleanBroken(buildDir, onData) {
-    let n = 0;
+function scanBroken(buildDir) {
+    const out = [];
     for (const d of ['obj', 'obj64']) {
         const dir = path.join(buildDir, d);
         let files;
@@ -72,24 +73,112 @@ function cleanBroken(buildDir, onData) {
         const have = new Set(files);
         for (const f of files) {
             const p = path.join(dir, f);
-            let bad = false;
             if (f.endsWith('.o')) {
                 let size = 0;
                 try { size = fs.statSync(p).size; } catch (_) { /* gone */ }
-                bad = size === 0 || !have.has(f + '.rsp') || !have.has(f + '.stamp') || !have.has(f + '.d');
-                if (bad)
+                if (size === 0 || !have.has(f + '.rsp') || !have.has(f + '.stamp') || !have.has(f + '.d'))
                     for (const x of ['', '.rsp', '.stamp', '.d'])
-                        fs.rmSync(p + x, { force: true });
-            } else if (/\.o\.(rsp|stamp|d)$/.test(f) && !have.has(f.replace(/\.(rsp|stamp|d)$/, ''))) {
-                bad = true;
-                fs.rmSync(p, { force: true });
-            }
-            if (bad)
-                n++;
+                        if (have.has(f + x))
+                            out.push(p + x);
+            } else if (/\.o\.(rsp|stamp|d)$/.test(f) && !have.has(f.replace(/\.(rsp|stamp|d)$/, '')))
+                out.push(p);
         }
     }
-    fs.rmSync(path.join(buildDir, 'link.rsp'), { force: true });
-    onData({ text: n ? `Repair: removed ${n} broken or orphaned build files` : 'Repair: no broken build files' });
+    return out;
+}
+
+function cleanBroken(buildDir, onData) {
+    const bad = scanBroken(buildDir);
+    for (const p of bad)
+        fs.rmSync(p, { force: true });
+    if (bad.length)
+        fs.rmSync(path.join(buildDir, 'link.rsp'), { force: true });
+    onData({ text: bad.length ? `Repair: removed ${bad.length} broken or orphaned build files`
+                              : 'Repair: no broken build files' });
+}
+
+/* A folder's files copied where they are missing (or of another size),
+ * the rest left alone */
+function copyMissing(from, to) {
+    let n = 0;
+    let list;
+    try { list = fs.readdirSync(from, { withFileTypes: true }); } catch (_) { return 0; }
+    for (const e of list) {
+        const a = path.join(from, e.name), b = path.join(to, e.name);
+        if (e.isDirectory())
+            n += copyMissing(a, b);
+        else {
+            let same = false;
+            try { same = fs.statSync(a).size === fs.statSync(b).size; } catch (_) { /* missing */ }
+            if (!same) {
+                fs.mkdirSync(to, { recursive: true });
+                fs.copyFileSync(a, b);
+                n++;
+            }
+        }
+    }
+    return n;
+}
+
+function exeName(arch) {
+    return process.platform === 'win32' ? (arch === 'x64' ? 'umk3-game64.exe' : 'umk3-game.exe')
+                                        : 'umk3-game';
+}
+
+function extractedOk(root, buildDir, isLow32) {
+    const have = f => fs.existsSync(path.join(buildDir, f));
+    return fs.existsSync(path.join(root, 'res', 'Info.plist'))
+        && have('logic_tables.c') && have('level_info.c') && have('seq_data.c')
+        && (!isLow32 || have('gamecode_globals64.c'));
+}
+
+/**
+ * VERIFY (Mary, 0.5.6): what in the game folder is missing or damaged, told
+ * line by line, nothing changed. { need, sources, srcError, broken,
+ * otherVersion, extracted, exe, lines }. `need`: REPAIR has something to do.
+ */
+async function verifyFolder(root, arch, fetchFn, onText = () => {}) {
+    const buildDir = path.join(root, 'build');
+    const srcRoot = resolveSourceRoot(root);
+    const isLow32 = arch === 'x64';
+    const r = { sources: null, srcError: '', broken: [], otherVersion: '', extracted: true,
+                exe: true, lines: [] };
+    const say = t => { r.lines.push(t); onText(t); };
+
+    say(`Verify: launcher ${VERSION}, game folder ${root}`);
+    try {
+        const list = await vfy.manifest(fetchFn, buildDir, VERSION);
+        r.sources = vfy.scanSources(srcRoot, list);
+        const bad = r.sources.missing.length + r.sources.damaged.length;
+        say(bad ? `Sources: ${r.sources.missing.length} missing, ${r.sources.damaged.length} damaged, of ${list.length}`
+                : `Sources: all ${list.length} files match the repository`);
+        for (const e of r.sources.missing.slice(0, 20))
+            say(`  missing  ${e.path}`);
+        for (const e of r.sources.damaged.slice(0, 20))
+            say(`  damaged  ${e.path}`);
+    } catch (err) {
+        r.srcError = err.message;
+        say(`Sources: not checked (${err.message})`);
+    }
+    r.broken = scanBroken(buildDir);
+    say(r.broken.length ? `Build files: ${r.broken.length} broken or orphaned` : 'Build files: none broken');
+    {
+        let was = '';
+        try { was = fs.readFileSync(path.join(buildDir, 'built-by.txt'), 'utf8').trim(); } catch (_) { /* never */ }
+        const objs = ['obj', 'obj64'].some(d => fs.existsSync(path.join(buildDir, d)));
+        if (objs && was !== VERSION) {
+            r.otherVersion = was || 'an older version';
+            say(`Build files: left by ${was ? 'version ' + was : 'an older version'}; they are compiled again`);
+        }
+    }
+    r.extracted = extractedOk(root, buildDir, isLow32);
+    say(r.extracted ? "The .ipa's files: there" : "The .ipa's files: missing (REPAIR extracts the .ipa again)");
+    r.exe = fs.existsSync(path.join(root, exeName(arch)));
+    say(r.exe ? `The game: ${exeName(arch)} is there` : `The game: ${exeName(arch)} is missing`);
+    r.need = !!((r.sources && (r.sources.missing.length || r.sources.damaged.length))
+                || r.broken.length || r.otherVersion || !r.extracted || !r.exe);
+    say(r.need ? 'Result: REPAIR is needed' : 'Result: everything is in order, nothing to repair');
+    return r;
 }
 
 /* The lines of a failure worth reading first: the compiler's "error:" lines
@@ -131,9 +220,29 @@ async function build(root, ipa, arch = 'x64', onDataIn = () => {}, opts = {}) {
     };
 
     try {
-        cleanOtherVersion(buildDir, onData);
-        if (opts.repair)
+        /* REPAIR: only what VERIFY finds -- the sources that are missing or
+         * damaged downloaded again, the broken build files removed -- and
+         * nothing compiled when nothing is wrong */
+        if (opts.repair) {
+            const v = await verifyFolder(root, arch, opts.fetch, t => onData({ text: t }));
+            const bad = v.sources ? v.sources.missing.concat(v.sources.damaged) : [];
+            if (bad.length) {
+                if (!opts.fetch)
+                    throw new Error('sources are missing and there is no network to download them');
+                onData({ text: `Repair: downloading ${bad.length} files from the repository (v${VERSION})`, pct: 3 });
+                const got = await vfy.restore(opts.fetch, resolveSourceRoot(root), VERSION, bad,
+                                              t => onData({ text: t }));
+                if (got.failed.length)
+                    throw new Error(`${got.failed.length} files could not be downloaded: ${got.failed.slice(0, 3).join(', ')}`);
+            }
+            if (!v.need) {
+                onData({ text: 'Repair: nothing is damaged; nothing was changed', step: 5, pct: 100 });
+                writeLog();
+                return 0;
+            }
             cleanBroken(buildDir, onData);
+        }
+        cleanOtherVersion(buildDir, onData);
 
         // Step 1: Ensure toolchain
         onData({
@@ -168,18 +277,13 @@ async function build(root, ipa, arch = 'x64', onDataIn = () => {}, opts = {}) {
 
         const isLow32 = arch === 'x64';
         /* REPAIR: the .ipa's files are taken as they are when all there */
-        const have = f => fs.existsSync(path.join(buildDir, f));
-        const extracted = fs.existsSync(path.join(root, 'res', 'Info.plist'))
-            && have('logic_tables.c') && have('level_info.c') && have('seq_data.c')
-            && (!isLow32 || have('gamecode_globals64.c'));
-        if (opts.repair && extracted) {
+        if (opts.repair && extractedOk(root, buildDir, isLow32)) {
             onData({ text: "Repair: the .ipa's files are all there; not extracted again", step: 3, pct: 42 });
-            const addSrc = path.join(srcRoot, 'launcher', 'aditional textures');
-            if (fs.existsSync(addSrc))
-                fs.cpSync(addSrc, path.join(root, 'aditional textures'), { recursive: true });
-            const litSrc = path.join(srcRoot, 'launcher', 'lighting');
-            if (fs.existsSync(litSrc))
-                fs.cpSync(litSrc, path.join(root, 'lighting'), { recursive: true });
+            const n = copyMissing(path.join(srcRoot, 'launcher', 'aditional textures'),
+                                  path.join(root, 'aditional textures'))
+                    + copyMissing(path.join(srcRoot, 'launcher', 'lighting'), path.join(root, 'lighting'));
+            if (n)
+                onData({ text: `Repair: ${n} textures and lighting files put back` });
         } else await extractIpaPipeline({
             ipaPath: ipa,
             destDir: root,
@@ -298,6 +402,7 @@ function play(root, exeName, args = [], env = null) {
 
 module.exports = {
     build,
+    verifyFolder,
     cancelBuild,
     play,
     STEPS,
