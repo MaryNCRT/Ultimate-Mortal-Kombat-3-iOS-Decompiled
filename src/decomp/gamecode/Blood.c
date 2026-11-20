@@ -769,6 +769,13 @@ void AddNewGameEvents(void)
 
         /* ---- 2: sound --------------------------------------------------- */
         case 2:
+            /* port: the FATALITY TRAINER's way to FINISH HIM, fast under a
+             * black screen, says nothing -- no "round one, fight" (Mary) */
+            {
+                extern int PortFT, PortFTSkipping;
+                if (PortFT && PortFTSkipping)
+                    break;
+            }
             switch (ev->subtype) {
             case 0:
                 /* four of the ids double as the round announcement */
