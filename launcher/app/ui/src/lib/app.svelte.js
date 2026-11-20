@@ -438,7 +438,7 @@ export function handleBuildData(m) {
     if (m.text) logLine(m.text);
 }
 
-export async function startBuild() {
+export async function startBuild(repair) {
     if (app.build.on) return;
     const ipa = app.cfg.ipa;
     if (!ipa || !ipa.trim()) {
@@ -449,7 +449,7 @@ export async function startBuild() {
     selectBlip();
     const wasLocked = app.locked;
     showBuildUI(true);
-    const r = await api.startBuild(ipa.trim(), app.cfg.essentials !== false);
+    const r = await api.startBuild(ipa.trim(), app.cfg.essentials !== false, repair === true);
     showBuildUI(false);
     app.build.show = true;
     await refreshRoot();
@@ -463,6 +463,12 @@ export async function startBuild() {
     } else {
         app.build.fail = true;
         logLine(r.code === -3 ? 'ERROR: ' + tx('notIpa') : 'EXIT CODE: ' + r.code);
+        /* what failed, last, where it is read: the other files' lines went
+         * on after it (a player saw only "EXIT CODE: -1") */
+        if (r.error)
+            logLine('ERROR: ' + r.error);
+        if (r.code !== -3)
+            logLine(tx('buildLogAt'));
         setStatus('need', r.code === -3 ? tx('notIpa') : tx('buildFail'));
         failChord();
     }
