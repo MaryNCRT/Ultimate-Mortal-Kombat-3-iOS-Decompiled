@@ -2,6 +2,22 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.5.6",
+      "date": "2026-11-20",
+      "ES": [
+        "Arreglado: compilar o REPARAR ya no se detiene con \"icon: error: FileNotFound\". Si no se puede hacer el icono del .exe, el juego se compila igual con el icono de Windows.",
+        "Nuevo botón VERIFICAR: revisa los archivos del juego sin cambiar nada y dice si hace falta reparar.",
+        "REPARAR ahora repara solo lo dañado: baja del repositorio los archivos que falten o estén dañados, quita los de compilación rotos y, si no hay nada dañado, no cambia nada.",
+        "Las pantallas de páginas (lista de movimientos, biografías, finales) muestran solo PÁGINA en la barra de ayuda."
+      ],
+      "EN": [
+        "Fixed: compiling or REPAIR no longer stops with \"icon: error: FileNotFound\". When the exe's icon cannot be made, the game is built all the same with Windows' icon.",
+        "New VERIFY button: checks the game files without changing anything and says whether a repair is needed.",
+        "REPAIR now repairs only what is damaged: it downloads missing or damaged files from the repository, removes broken build files, and with nothing damaged it changes nothing.",
+        "The screens of pages (moves list, bios, endings) show only PAGE in the hint line."
+      ]
+    },
+    {
       "version": "0.5.5",
       "date": "2026-11-20",
       "ES": [

@@ -108,6 +108,40 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+### 2026-11-20 (later) -- 0.5.6 beta: the icon's FileNotFound, VERIFY, REPAIR only what is damaged
+
+A player's REPAIR on 0.5.5 stopped with `icon: error: FileNotFound`. 0.5.5's
+`cleanOtherVersion` removes `build/obj64` when another version compiled
+there, so `umk3_game.res` -- until then never made again on an old folder --
+was compiled again, and `zig rc` failed on that PC. Reproduced here only as
+its missing-folder case (`zig rc` answers FileNotFound for an output folder
+that does not exist); on that PC the folder existed (compile.js makes it), so
+the likeliest cause is zig's first build of its resource compiler into its own
+cache. Fix (`launcher/app/lib/compile.js`): the folder made first, rc run from
+the .rc's folder, and a failure no longer fatal -- the .res left out of the
+link, a warning in the log.
+
+VERIFY and the new REPAIR (`launcher/app/lib/verify.js`, `build.js`
+`verifyFolder` / `scanBroken`): GitHub's tree at `v<version>` lists each file's
+git hash; a local file is hashed the same way (and again with LF line ends);
+missing or differing files are listed, and REPAIR downloads them from
+raw.githubusercontent.com and checks the hash before writing. Checked: the
+test folder (592 files: the one damaged was `game_main.c`, which carries the
+hint line not in 0.5.5 -- correct), a restore of two files into an empty
+folder (one with a space in its path), the launcher's tests (35 pass, 2
+skipped), the COMPILE YOUR .IPA screen captured with VERIFY beside REPAIR.
+Not tested: a REPAIR that downloads on another PC, VERIFY offline.
+
+The FATALITY TRAINER (Mary's next request) is begun on its own branch,
+`claude/fatality-trainer`, not in this release.
+
+### 2026-11-20 (later) -- The pages' hint line: PAGE alone
+
+Mary, from 0.5.5 with the Dreamcast icons ("C Z PAGINA SELECT B SALIR"): only
+the page part stays. `game_main.c` PortPagesLine builds `<L1><R1> PAGE`; its
+`with_sel` argument is kept for the callers (FrontEnd.c, GameCode.c). Built
+into the test folder; not yet seen by her.
+
 ### 2026-11-20 -- 0.5.5 beta: fatality lag, loads, Dreamcast icons, the launcher's compile
 
 **Scorpion's fatality lag (Mary: "el fatality de scorpion aun provoca lag").**

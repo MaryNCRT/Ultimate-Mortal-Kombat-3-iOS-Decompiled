@@ -32,7 +32,7 @@ The only source of truth is the binary. Nothing enters the tree that is not deri
 |---|---|---|
 | **Decompilation** (`src/decomp/`) | **2,572 / 2,572 (100%)** | LIME 3D engine (109), front end & scenes (291), arcade fight engine (2,172). |
 | **Verification** (`tools/decomp/`) | **100%** | Differential tests against the `armrecomp` ARM→C oracle; 229 data tables checked at build time (`ctest`). |
-| **PC port** (`src/runtime/`) | **Playable — v0.5.5 beta** | OpenGL, Vulkan, Direct3D 12; Windows and Linux; 3:2 / 4:3 / 16:9 / 21:9; keyboard and pads (about 870 pads known through SDL_GameControllerDB); local 2 players, LAN (MULTIPLAYER, Radmin VPN too) and online with rollback; replays; mods. |
+| **PC port** (`src/runtime/`) | **Playable — v0.5.6 beta** | OpenGL, Vulkan, Direct3D 12; Windows and Linux; 3:2 / 4:3 / 16:9 / 21:9; keyboard and pads (about 870 pads known through SDL_GameControllerDB); local 2 players, LAN (MULTIPLAYER, Radmin VPN too) and online with rollback; replays; mods. |
 | **Launcher** (`launcher/`) | Windows and Linux | Compiles the game with a bundled `zig cc` (nothing to install), updates itself, MODS tools, PROFILE with ACCOUNT (optional; progress in the cloud, the game's leaderboards live) and FRIENDS, STEAM (adds the launcher to the Steam library as a non-Steam game with SteamGridDB artwork). |
 
 Every release is tested by the project's tester, Mary, before the next one builds on it; the [Changelog](docs/CHANGELOG.md) says for each change whether she has played it yet.
@@ -91,10 +91,10 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 - **TEXTURES:** every texture of the game by where it belongs, replaced into a mod.
 - **EXPORT:** fighters, stages, models and textures as FBX, GLB, USD (USDA/USDC/USDZ) or OBJ with PNG textures.
 
-## Known problems (0.5.5 beta)
+## Known problems (0.5.6 beta)
 
 - Vulkan: in finishers that fill the screen with bodies (Scorpion's fatality 2) the frames still wait on the GPU (~50 ms); Direct3D 12 is smooth there.
-- A compile on another PC ended with "EXIT CODE: -1" (0.5.4, after an old version had been compiled there); the cause is not known yet. 0.5.5 names the file that fails, keeps `build\last-build.log`, removes another version's build files and has REPAIR.
+- A compile on another PC ended with "EXIT CODE: -1" (0.5.4, after an old version had been compiled there); the cause is not known yet. 0.5.5 names the file that fails and keeps `build\last-build.log`; 0.5.6 fixes the icon's "FileNotFound" that 0.5.5's REPAIR met, and adds VERIFY, which says what is missing or damaged (REPAIR downloads it again).
 - The SEGA DREAMCAST icons have not been seen in the game with a pad connected yet.
 
 - Online: 0.5.4's fixes (both players on one stage, no softlock at a round's end, no desync in a session's second fight) were checked with two games on one PC over a line made bad on purpose (120 ms of ping, 10% of the packets lost): no desync over a best of 3 and over two fights in a row. Not yet played between two machines. Both players need 0.5.4.

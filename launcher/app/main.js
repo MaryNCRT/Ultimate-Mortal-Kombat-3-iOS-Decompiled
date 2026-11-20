@@ -457,7 +457,7 @@ ipcMain.handle('build:start', async (_ev, ipa, essential, repair) => {
     if (!fs.existsSync(ipa))
         return { ok: false, code: -3 };
     const code = await bld.build(g_root, ipa, arch(), msg => send('build:data', msg),
-                                 { repair: repair === true });
+                                 { repair: repair === true, fetch: net.fetch });
     const ok = code === 0 && ini.gameReady(g_root, arch());
     if (ok)
         upd.builtAfterUpdate(g_root);   /* the update's game is the one now */
@@ -474,6 +474,18 @@ ipcMain.handle('build:start', async (_ev, ipa, essential, repair) => {
 });
 
 ipcMain.handle('build:cancel', () => bld.cancelBuild());
+
+/* VERIFY (0.5.6): the game folder checked, nothing changed; its lines go to
+ * the console as a compile's do. { need, error } */
+ipcMain.handle('build:verify', async () => {
+    try {
+        const r = await bld.verifyFolder(g_root, arch(), net.fetch, text => send('build:data', { text }));
+        return { need: r.need, unchecked: !!r.srcError };
+    } catch (err) {
+        send('build:data', { text: 'Verify failed: ' + err.message });
+        return { need: true, error: err.message };
+    }
+});
 
 /* ---------------------------------------------------------- updates ---- */
 
