@@ -2744,6 +2744,7 @@ static void dbg_taint_watch(void)
  * comes back. */
 #define FT_SCREEN 52                    /* FrontEnd.c, after ONLINE's 51 */
 static int  g_ft_fought, g_ft_forced, g_ft_saved, g_ft_after, g_ft_paused;
+static int  g_ft_success;               /* a finisher started this window */
 
 static void ft_restart(void)
 {
@@ -2753,6 +2754,7 @@ static void ft_restart(void)
     plat_music_stop();
     limeRestartPlayTune();
     g_ft_after = 0;
+    g_ft_success = 0;
     PortFTMatched = 0;
     printf("trainer: back to the finishing window\n");
 }
@@ -2763,6 +2765,8 @@ static int ft_edge(int down, int *was)
     *was = down;
     return hit;
 }
+
+static void ft_raw_input(void);         /* below: DISPLAY INPUT */
 
 static void ft_frame(void)
 {
@@ -2805,6 +2809,7 @@ static void ft_frame(void)
     }
     g_ft_fought = 1;
     g_ft_paused = GamePaused != 0;
+    ft_hook();
     if (!g_ft_forced && dbg_round_live()) {
         fight_key(2);                   /* the game's own FINISH HIM follows */
         g_ft_forced = 1;
@@ -2821,17 +2826,27 @@ static void ft_frame(void)
         stop_him(Plyr);
         PortFTMatched = 0;              /* the checklist: nothing typed yet */
         g_ft_saved = st_trainer_save() == 0 ? 1 : -1;
+        if (getenv("UMK3_FT_VERIFY"))
+            ft_verify_dump();
         printf("trainer: finishing window %s\n", g_ft_saved == 1 ? "kept" : "not kept (no save states)");
     }
     m = ft_selected();
     ft_tick(m);
+    if (!GamePaused)
+        ft_raw_input();                 /* DISPLAY INPUT, as pressed */
     {
         /* the checklist: a finisher starting that the player typed (the
          * search matched it; ONE BUTTON goes past the search) */
         static int was_playing;
         int playing = ft_live()->playing;
-        if (playing && !was_playing && PortFTMatched)
-            ft_mark_done((int)PLAYER1MODEL, ft_kind_of(PortFTMatched));
+        if (playing && !was_playing) {
+            printf("trainer: a finisher started, tick %ld: matched handler %08x, kind %d\n",
+                   g_tick, PortFTMatched, PortFTMatched ? ft_kind_of(PortFTMatched) : -1);
+            if (PortFTMatched) {
+                ft_mark_done((int)PLAYER1MODEL, ft_kind_of(PortFTMatched));
+                g_ft_success = 1;
+            }
+        }
         was_playing = playing;
     }
     if (getenv("UMK3_LOG_FT") && m) {
@@ -2848,6 +2863,31 @@ static void ft_frame(void)
         printf("trainer: scripted one-button %s\n", ft_fire(m) ? "done" : "refused");
     if (GamePaused)
         return;
+    /* a try that failed -- an attack in the window, the game's "no
+     * fatality" (G+0x452, t_fatality_wait) -- back to the same FINISH HIM,
+     * not on to another round or fight (Mary) */
+    if (g_ft_saved == 1 && *(uint16_t *)((char *)G + 0x452) != 0 && !g_ft_success) {
+        printf("trainer: the try failed (no fatality); the window again\n");
+        ft_restart();
+        return;
+    }
+    if (PortFTWrong) {                  /* another finisher typed: not done */
+        printf("trainer: finisher %d typed, not the chosen one; the window again\n",
+               PortFTWrong - 1);
+        PortFTWrong = 0;
+        ft_restart();
+        return;
+    }
+    /* the chosen finisher played to its end (death_blow_complete marks G+0x450
+     * -1): a moment for it to be seen, then the trainer's menu (Mary) */
+    if (g_ft_success && *(int16_t *)((char *)G + 0x450) == -1) {
+        if (++g_ft_after > 120) {
+            printf("trainer: the finisher is over; back to the trainer's menu\n");
+            g_ft_after = 0;
+            g_ft_paused = 1;
+            jump_screen(0);             /* out of the fight; its screen follows */
+        }
+    }
     if (ft_edge(plat_key(PK_RULES) || pad_l3, &was_r))
         ft_restart();
     if (ft_edge(plat_key(PK_OUTFIT)
@@ -2859,7 +2899,7 @@ static void ft_frame(void)
     }
     if (ft_edge(plat_key(PK_COLOR) || (g_pad.connected && (g_pad.buttons & (1u << PB_SELECT))), &was_c)
         && PortFTOneButton && dbg_finishing())
-        printf("trainer: one-button %s\n", ft_fire(m) ? "done" : "refused (distance or condition)");
+        printf("trainer: one-button %s\n", (g_ft_success = ft_fire(m)) ? "done" : "refused (distance or condition)");
     was_fin = IsInFinishing != 0;
 }
 
@@ -2899,6 +2939,90 @@ void PortFTHintLine(char *out, int n)
              r, es ? "REINICIAR" : "RESTART", t, es ? "SIGUIENTE REMATE" : "NEXT FINISHER",
              PortFTOneButton ? "     " : "", PortFTOneButton ? c : "",
              PortFTOneButton ? (es ? " UN BOT\xd3N" : " ONE BUTTON") : "");
+}
+
+/* DISPLAY INPUT, as pressed (Mary: "show what you press, invent
+ * nothing"): the pad's own buttons, or the keys, and the directions,
+ * before anything is made of them -- the five-button layout turns S and a
+ * direction into another button for the engine (GetArcadeJoyBits), and the
+ * engine's word showed buttons nobody pressed. One line a press, newest on
+ * top, with how many frames it was held. GameCode.c draws them. */
+#define FT_RAW 16
+static struct {
+    int dirs;                           /* 1 up 2 down 4 left 8 right */
+    unsigned held;                      /* what made the line (to count it) */
+    int n, frames;
+    char file[8][96];                   /* the buttons' pictures */
+} g_raw[FT_RAW];
+static int g_raw_n;
+
+static int raw_file(const char *tok, char *out, int n)
+{
+    const char *a = strchr(tok, 1), *z = a ? strchr(a + 1, 1) : NULL;
+    if (!z)
+        return 0;
+    snprintf(out, n, "glyphs/%.*s.png", (int)(z - a - 1), a + 1);
+    return 1;
+}
+
+static void ft_raw_input(void)
+{
+    static const int keys[] = { PK_HP, PK_LP, PK_BL, PK_HK, PK_LK, PK_RUN, PK_SPECIAL,
+                                PK_5_P, PK_5_B, PK_5_K, PK_5_R };
+    static unsigned was;
+    unsigned now = 0, fresh;
+    int dirs = 0, i, k;
+    int kind = g_pad.connected ? plat_pad_glyph_kind(0, g_pad.kind) : 0;
+
+    if (g_pad.connected) {
+        dirs |= g_pad.up | g_pad.down << 1 | g_pad.left << 2 | g_pad.right << 3;
+        now |= (g_pad.buttons & ~((1u << PB_START) | (1u << PB_HOME))) << 4;
+    }
+    dirs |= plat_key(PK_UP) | plat_key(PK_DOWN) << 1 | plat_key(PK_LEFT) << 2
+            | plat_key(PK_RIGHT) << 3;
+    for (k = 0; k < (int)(sizeof keys / sizeof keys[0]); k++)
+        if (plat_key(keys[k]))
+            now |= 1u << (20 + k);
+    now |= (unsigned)dirs;
+    fresh = now & ~was;
+    if (fresh) {
+        for (i = FT_RAW - 1; i > 0; i--)
+            g_raw[i] = g_raw[i - 1];
+        memset(&g_raw[0], 0, sizeof g_raw[0]);
+        g_raw[0].dirs = dirs;
+        g_raw[0].held = now;
+        g_raw[0].frames = 1;
+        for (k = 0; k < PB_COUNT && g_raw[0].n < 8; k++)
+            if (now >> (4 + k) & 1) {
+                char tok[160];
+                plat_pad_glyph(kind, k, tok, sizeof tok);
+                if (raw_file(tok, g_raw[0].file[g_raw[0].n], 96))
+                    g_raw[0].n++;
+            }
+        for (k = 0; k < (int)(sizeof keys / sizeof keys[0]) && g_raw[0].n < 8; k++)
+            if (now >> (20 + k) & 1) {
+                char tok[160];
+                plat_key_glyph(keys[k], tok, sizeof tok);
+                if (raw_file(tok, g_raw[0].file[g_raw[0].n], 96))
+                    g_raw[0].n++;
+            }
+        if (g_raw_n < FT_RAW)
+            g_raw_n++;
+    } else if (now && g_raw_n && g_raw[0].frames < 99 && (now & g_raw[0].held))
+        g_raw[0].frames++;
+    was = now;
+}
+
+int PortFTRawLines(void) { return g_raw_n; }
+
+const char *PortFTRawLine(int i, int *dirs, int *frames, int *n)
+{
+    if (i < 0 || i >= g_raw_n)
+        return NULL;
+    *dirs = g_raw[i].dirs;
+    *frames = g_raw[i].frames;
+    *n = g_raw[i].n;
+    return g_raw[i].file[0];
 }
 
 static void debug_request(const struct dbg_request *rq)

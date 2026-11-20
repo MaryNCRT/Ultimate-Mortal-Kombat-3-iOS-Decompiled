@@ -100,6 +100,11 @@ def main():
                 "} ft_map[] = {\n")
         for n, ts in rows:
             f.write("    { %s, { %s } },\n" % (n, ", ".join(ts)))
+        f.write("};\n\n")
+        f.write("/* the tables' names, for UMK3_FT_VERIFY's listing */\n")
+        f.write("static const struct { const uint32_t *tab; const char *name; } ft_map_names[] = {\n")
+        for t in tables:
+            f.write('    { %s, "%s" },\n' % (t, t))
         f.write("};\n")
     print("%d routines, %d tables -> %s" % (len(rows), len(tables), OUT))
 

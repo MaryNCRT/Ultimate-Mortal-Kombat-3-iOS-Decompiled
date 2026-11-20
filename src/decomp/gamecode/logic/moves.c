@@ -6605,6 +6605,10 @@ long stick_look_lr(MK3OBJ *obj, uint32_t other_w, uint32_t table_w,
  * matched, for the FATALITY TRAINER's checklist (runtime/fatal_trainer.c):
  * which finisher the player typed. Read, never acted on. */
 uint32_t PortFTMatched;
+/* and may refuse one: a finisher other than the one being practised does
+ * not start (Mary: "the one chosen must be the one done"); the trainer
+ * then puts the window back */
+int (*PortFTAllow)(uint32_t handler);
 
 long secret_move_search(MK3OBJ *obj, uint32_t arg, uint32_t *table)
 {
@@ -6630,6 +6634,8 @@ long secret_move_search(MK3OBJ *obj, uint32_t arg, uint32_t *table)
 
         /* four conditional stores of this same value precede the
          * unconditional one in the binary; see the note above */
+        if (PortFTAllow && !PortFTAllow(e[4]))  /* port: see above */
+            return 0;
         obj->field38 = e[4];
         PortFTMatched = e[4];                   /* port: see above */
         ((XFER_FN)xfer_types_table[e[2]])(obj, (MK3OBJ *)(uintptr_t)arg);

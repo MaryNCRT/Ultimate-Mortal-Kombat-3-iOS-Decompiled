@@ -6938,13 +6938,16 @@ void Task_GameInit(void)
 
     ResetFightData();
 
-    if (GameMode == 2) {
+    if (GameMode == 2 || PortFT) {
+        /* port: the FATALITY TRAINER has no intro either, as Training
+         * (Mary: "they are not needed") */
         DoIntro         = 0;
         IntroCount      = 0.0f;
         IntroCount2     = 0.0f;
         IntroCountTimer = 0.0f;
         IntroCamCount   = 0;
-        WinsNeeded      = GameMode;     /* 2, from the register the test used */
+        if (GameMode == 2)
+            WinsNeeded  = GameMode;     /* 2, from the register the test used */
     } else {
         DoIntro         = 1;
         IntroCount      = 0.0f;
@@ -7741,6 +7744,20 @@ static long PortMoveListGlyphs(long value, long cursor, int right, float y)
         }
     }
     return (long)((float)cursor + total + FE_WidthScale * 1.0f * PortMvScale);
+}
+
+static long DrawMoveListEntry(long value, long cursor, int right, float y, char *buf);
+
+/* an arrow of the atlas as it is, never a pad's picture (DISPLAY INPUT) */
+static long DrawMoveListEntryRaw(long value, long cursor, float y, char *buf)
+{
+    (void)buf;
+    if (!PortMvMeasure)
+        limeDrawSprite((TEXTURE *)MoveIconsTexture, (float)cursor,
+                       y + FE_HeightScale * -2.0f * PortMvScale,
+                       FE_WidthScale * 16.0f * PortMvScale, FE_HeightScale * 16.0f * PortMvScale,
+                       MoveIconUV[value][1], MoveIconUV[value][0], 0.25f, 0.25f, col);
+    return (long)((float)cursor + FE_WidthScale * 17.0f * PortMvScale);
 }
 
 /* Draw one entry and return the new cursor. The two directions differ only in
@@ -9546,14 +9563,66 @@ static void train_inputs(float x, float y, float w, float h)
     }
 }
 
-/* the input column alone (the FATALITY TRAINER's DISPLAY INPUT) */
+/* the FATALITY TRAINER's DISPLAY INPUT: what was pressed, as pressed --
+ * the directions as the moves list's arrows (left and right as they are on
+ * the screen), the buttons as the pad's or the keys' own pictures
+ * (game_main.c ft_raw_input), never the engine's word (Mary) */
+int PortFTRawLines(void);
+const char *PortFTRawLine(int i, int *dirs, int *frames, int *n);
+
 void PortTrainDrawInputs(void)
 {
-    float s = FE_HeightScale, W = (float)limeScreenWidth, iw = 64.0f * s;
+    float s = FE_HeightScale, W = (float)limeScreenWidth, iw = 70.0f * s;
+    float x = W - iw - 4.0f * s, y = 56.0f * s, line = 13.0f * s, save[4];
+    int i, n = PortFTRawLines();
 
+    if (n > 15)
+        n = 15;
+    if (n <= 0)
+        return;
     limeEnableAlphaBlending_Basic();
     limeSet2DDrawing();
-    train_inputs(W - iw - 4.0f * s, 56.0f * s, iw, 200.0f * s);
+    limeFillRect(x, y, iw, (float)n * line + 4.0f * s, 0.0f, 0.0f, 0.0f, 0.5f);
+    for (i = 0; i < n; i++) {
+        int dirs, frames, nb, v[4], k = 0, b;
+        const char *file = PortFTRawLine(i, &dirs, &frames, &nb);
+        float yy = y + 3.0f * s + (float)i * line, cx;
+        char t[8], buf[64];
+
+        snprintf(t, sizeof t, "%d", frames);
+        train_colour(0.7f, 0.7f, 0.7f, save);
+        train_text(t, x + 3.0f * s, yy + 1.0f * s, 0.3f, 12.0f * s);
+        train_colour_back(save);
+        /* the arrows: 0 right, 1 left, 2 up, 3 down, 4 down-right, 5
+         * down-left (the atlas's own; "forward" is drawn to the right) */
+        if ((dirs & 2) && (dirs & 8))      v[k++] = 4;
+        else if ((dirs & 2) && (dirs & 4)) v[k++] = 5;
+        else if (dirs & 2)                 v[k++] = 3;
+        else {
+            if (dirs & 1) v[k++] = 2;
+            if (dirs & 8) v[k++] = 0;
+            else if (dirs & 4) v[k++] = 1;
+        }
+        v[k] = -1;
+        cx = x + 15.0f * s;
+        PortMvScale = 0.65f;
+        for (b = 0; b < k; b++)
+            cx = (float)DrawMoveListEntryRaw(v[b], (long)cx, yy + 1.0f * s, buf);
+        PortMvScale = 1.0f;
+        for (b = 0; b < nb; b++) {
+            TEXTURE *g = lime_load_extra_texture(file + b * 96);
+            int gw, gh;
+            float h = 10.0f * s, w;
+            if (!g)
+                continue;
+            lime_extra_texture_size(g, &gw, &gh);
+            w = gh > 0 ? h * (float)gw / (float)gh : h;
+            if (cx + w > x + iw)
+                break;
+            limeDrawSprite(g, cx, yy, w, h, 0.0f, 0.0f, 1.0f, 1.0f, col);
+            cx += w + 1.0f * s;
+        }
+    }
 }
 
 /* Called after DrawHUD in a training fight, not while paused */
@@ -9758,6 +9827,10 @@ void PortFTDraw(void)
             sc = green;
         } else if (!L->window) {
             st = PortMvTx("ESPERA EL FINISH HIM", "WAIT FOR FINISH HIM");
+            sc = grey;
+        } else if (L->after_mercy) {    /* the range shown is the one after it */
+            st = PortMvTx("PRIMERO HAZ MERCY, LUEGO P\xd3NTE EN EL RECUADRO",
+                          "DO A MERCY FIRST, THEN STAND IN THE FRAME");
             sc = grey;
         } else if (L->lo < 0) {
             st = m->kind == FT_ANIMALITY && !L->mercy

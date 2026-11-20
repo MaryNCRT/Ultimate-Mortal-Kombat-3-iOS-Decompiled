@@ -213,7 +213,10 @@ void ft_tick(const FT_MOVE *m)
     g_live.side = side;
     g_live.lo = g_live.hi = -1;
     g_live.bound_lo = g_live.bound_hi = -1;
-    /* every distance, the runs of yes */
+    /* every distance, the runs of yes -- and for an animality with no mercy
+     * yet, asked again as if one had been given (G+0x45a, put back at
+     * once), so its place can be shown before the mercy is done */
+again:
     for (d = 0; d <= FT_DMAX; d++) {
         int y = ask(m->entry, d, side, &lo, &hi);
         if (lo != -1 && hi != -1 && g_live.bound_lo < 0) {
@@ -233,8 +236,19 @@ void ft_tick(const FT_MOVE *m)
     }
     if (inrun && g_live.hi < 0)
         g_live.hi = FT_DMAX;            /* no upper bound */
+    if (g_live.lo < 0 && m->kind == FT_ANIMALITY && !g_live.after_mercy
+        && *(uint16_t *)((char *)G + 0x45a) == 0) {
+        g_live.after_mercy = 1;
+        *(uint16_t *)((char *)G + 0x45a) = 1;
+        inrun = 0;
+        goto again;
+    }
+    if (g_live.after_mercy)
+        *(uint16_t *)((char *)G + 0x45a) = 0;
     g_live.any = g_live.lo == 0 && g_live.hi == FT_DMAX;
     g_live.now = ask(m->entry, -1, side, NULL, NULL);
+    if (g_live.after_mercy)
+        g_live.now = 0;                 /* not until the mercy is done */
     g_live.in = g_live.lo >= 0 && g_live.d >= g_live.lo && g_live.d <= g_live.hi;
     g_live.window = *(int16_t *)((char *)G + 0x45c) == 3;
     g_live.mercy = *(uint16_t *)((char *)G + 0x45a) != 0;
@@ -375,6 +389,38 @@ void ft_draw3d(void)
     glPopAttrib();
 }
 
+/* UMK3_FT_VERIFY=1 (game_main.c): every fighter's finishers with their
+ * table, entry, and the range the game accepted when asked at every
+ * distance, for checking against the predicates' own constants
+ * (tools/check_finisher_ranges.py). Asked in the trainer's window, with the
+ * fighters there. */
+void ft_verify_dump(void)
+{
+    FT_MOVE mv[FT_MOVES];
+    int ch, i, n;
+    size_t t;
+
+    for (ch = 0; ch < 24; ch++) {
+        n = ft_scan(ch, mv, FT_MOVES);
+        for (i = 0; i < n; i++) {
+            const char *name = "?";
+            long idx = -1;
+            for (t = 0; t < sizeof ft_map_names / sizeof ft_map_names[0]; t++) {
+                const uint32_t *e = ft_map_names[t].tab;
+                long k;
+                for (k = 0; e[0] != 0; e += 18, k++)
+                    if (e == mv[i].entry) {
+                        name = ft_map_names[t].name;
+                        idx = k;
+                    }
+            }
+            ft_tick(&mv[i]);
+            printf("verify: %d %d %s %ld range %d %d bound %d %d\n", ch, mv[i].kind, name, idx,
+                   g_live.lo, g_live.hi, g_live.bound_lo, g_live.bound_hi);
+        }
+    }
+}
+
 /* ------------------------------------------- the fighter's finishers, kept */
 
 extern umk3_long PLAYER1MODEL;
@@ -469,6 +515,34 @@ void ft_mark_done(int ch, int kind)
         if (g_done[i])
             fprintf(f, "%d %u\n", i, g_done[i]);
     fclose(f);
+}
+
+/* Only the chosen finisher starts (secret_move_search asks, logic/moves.c):
+ * another one typed is refused and marked, and game_main puts the window
+ * back. A MERCY passes when the chosen one is an animality, which needs it;
+ * what is not a finisher passes (the game itself ends the window on it). */
+extern int (*PortFTAllow)(uint32_t handler);
+int PortFTWrong;
+
+static int ft_allow(uint32_t h)
+{
+    const FT_MOVE *m;
+    int k = kind_of(h);
+
+    if (!PortFT || k < 0)
+        return 1;
+    m = ft_selected();
+    if (!m || h == m->entry[4] || k == m->kind)
+        return 1;
+    if (k == FT_MERCY && m->kind == FT_ANIMALITY)
+        return 1;
+    PortFTWrong = k + 1;
+    return 0;
+}
+
+void ft_hook(void)
+{
+    PortFTAllow = ft_allow;
 }
 
 /* the move chosen on the trainer's screen, for the fighter in the fight */
