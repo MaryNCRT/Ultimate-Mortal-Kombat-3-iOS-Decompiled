@@ -101,6 +101,20 @@ static const uint32_t *map_table(uint32_t fn, int k)
     return NULL;
 }
 
+static FT_MOVE g_mercy[26];             /* each fighter's MERCY entry */
+static int g_verifying;                 /* ft_verify_dump: each move as itself */
+
+const FT_MOVE *ft_mercy_of(int ch)
+{
+    FT_MOVE tmp[FT_MOVES];
+
+    if (ch < 0 || ch >= 26)
+        return NULL;
+    if (!g_mercy[ch].entry)
+        ft_scan(ch, tmp, FT_MOVES);
+    return g_mercy[ch].entry ? &g_mercy[ch] : NULL;
+}
+
 int ft_scan(int ch, FT_MOVE *out, int max)
 {
     int n = 0, b, k;
@@ -123,6 +137,16 @@ int ft_scan(int ch, FT_MOVE *out, int max)
 
                 if (kind < 0)
                     continue;
+                /* MERCY is not a finisher of its own on the list (Mary):
+                 * it is the ANIMALITY's first step, kept apart */
+                if (kind == FT_MERCY) {
+                    if (!g_mercy[ch].entry) {
+                        g_mercy[ch].kind = kind;
+                        g_mercy[ch].button = b;
+                        g_mercy[ch].entry = e;
+                    }
+                    continue;
+                }
                 for (j = 0; j < n; j++)
                     if (out[j].entry == e)
                         dup = 1;
@@ -213,10 +237,18 @@ void ft_tick(const FT_MOVE *m)
     g_live.side = side;
     g_live.lo = g_live.hi = -1;
     g_live.bound_lo = g_live.bound_hi = -1;
-    /* every distance, the runs of yes -- and for an animality with no mercy
-     * yet, asked again as if one had been given (G+0x45a, put back at
-     * once), so its place can be shown before the mercy is done */
-again:
+    /* an ANIMALITY needs a MERCY first (DoASpecial guards it with q_mercy):
+     * until one is given (G+0x45a) what is measured and shown is the
+     * MERCY -- step one of two (Mary) */
+    if (!g_verifying && m->kind == FT_ANIMALITY && *(uint16_t *)((char *)G + 0x45a) == 0) {
+        extern umk3_long PLAYER1MODEL;
+        const FT_MOVE *mm = ft_mercy_of((int)PLAYER1MODEL);
+        if (mm) {
+            m = mm;
+            g_live.after_mercy = 1;
+        }
+    }
+    /* every distance, the runs of yes */
     for (d = 0; d <= FT_DMAX; d++) {
         int y = ask(m->entry, d, side, &lo, &hi);
         if (lo != -1 && hi != -1 && g_live.bound_lo < 0) {
@@ -236,19 +268,8 @@ again:
     }
     if (inrun && g_live.hi < 0)
         g_live.hi = FT_DMAX;            /* no upper bound */
-    if (g_live.lo < 0 && m->kind == FT_ANIMALITY && !g_live.after_mercy
-        && *(uint16_t *)((char *)G + 0x45a) == 0) {
-        g_live.after_mercy = 1;
-        *(uint16_t *)((char *)G + 0x45a) = 1;
-        inrun = 0;
-        goto again;
-    }
-    if (g_live.after_mercy)
-        *(uint16_t *)((char *)G + 0x45a) = 0;
     g_live.any = g_live.lo == 0 && g_live.hi == FT_DMAX;
     g_live.now = ask(m->entry, -1, side, NULL, NULL);
-    if (g_live.after_mercy)
-        g_live.now = 0;                 /* not until the mercy is done */
     g_live.in = g_live.lo >= 0 && g_live.d >= g_live.lo && g_live.d <= g_live.hi;
     g_live.window = *(int16_t *)((char *)G + 0x45c) == 3;
     g_live.mercy = *(uint16_t *)((char *)G + 0x45a) != 0;
@@ -271,6 +292,12 @@ int ft_fire(const FT_MOVE *m)
 
     if (!m || !G || !Plyr || CurrentTask != 6)
         return 0;
+    if (m->kind == FT_ANIMALITY && *(uint16_t *)((char *)G + 0x45a) == 0) {
+        extern umk3_long PLAYER1MODEL;
+        const FT_MOVE *mm = ft_mercy_of((int)PLAYER1MODEL);
+        if (mm)
+            m = mm;                     /* step one: the MERCY */
+    }
     if (!ask(m->entry, -1, 1, NULL, NULL))
         return 0;
     *(uint32_t *)(g_copy + 0x38) = m->entry[4];
@@ -308,6 +335,7 @@ void ft_draw3d(void)
     int i, a, z1;
 
     if (!PortFT || !PortFTDistance || !g_live.on || g_live.playing || g_live.lo < 0
+        || g_live.after_mercy           /* the MERCY: no place to stand in (Mary) */
         || !fighters(&mp, &hp))
         return;
     memcpy(&depth, PlayerZPos, 4);
@@ -400,8 +428,11 @@ void ft_verify_dump(void)
     int ch, i, n;
     size_t t;
 
+    g_verifying = 1;
     for (ch = 0; ch < 24; ch++) {
         n = ft_scan(ch, mv, FT_MOVES);
+        if (ft_mercy_of(ch) && n < FT_MOVES)
+            mv[n++] = *ft_mercy_of(ch);         /* the MERCY too, as itself */
         for (i = 0; i < n; i++) {
             const char *name = "?";
             long idx = -1;
@@ -419,6 +450,7 @@ void ft_verify_dump(void)
                    g_live.lo, g_live.hi, g_live.bound_lo, g_live.bound_hi);
         }
     }
+    g_verifying = 0;
 }
 
 /* ------------------------------------------- the fighter's finishers, kept */
@@ -506,7 +538,7 @@ void ft_mark_done(int ch, int kind)
         return;
     g_done[ch] |= 1u << kind;
     printf("trainer: %d done for fighter %d (checklist)\n", kind, ch);
-    if (getenv("UMK3_SHOT") || getenv("UMK3_SHOTS"))
+    if ((getenv("UMK3_SHOT") || getenv("UMK3_SHOTS")) && !getenv("UMK3_FT_SAVE"))
         return;                             /* a script's run keeps nothing */
     port_save_path(path, sizeof path, "fatality_trainer.txt");
     if (!(f = fopen(path, "w")))

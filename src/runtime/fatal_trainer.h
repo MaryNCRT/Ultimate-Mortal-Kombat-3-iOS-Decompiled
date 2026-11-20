@@ -30,8 +30,8 @@ typedef struct {
     int now;                            /* the game would take it now */
     int window;                         /* the finishing window (G+0x45c 3) */
     int mercy;                          /* a mercy was given (G+0x45a) */
-    int after_mercy;                    /* lo..hi is what it takes once a mercy
-                                         * is given (an animality before it) */
+    int after_mercy;                    /* step one of an ANIMALITY: lo..hi,
+                                         * now and the command are the MERCY's */
     int playing;                        /* a finisher is playing, or has
                                          * played (G+0x450 set) */
 } FT_LIVE;
@@ -48,6 +48,7 @@ void ft_verify_dump(void);
 void ft_hook(void);
 extern int PortFTWrong;                 /* another finisher was typed: kind + 1 */
 const FT_MOVE *ft_moves_of(int ch, int *n);
+const FT_MOVE *ft_mercy_of(int ch);     /* the ANIMALITY's first step, off the list */
 int  ft_kind_of(uint32_t handler);
 /* the checklist: each fighter's finishers done by hand (not ONE BUTTON),
  * kept in save/fatality_trainer.txt */

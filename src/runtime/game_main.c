@@ -60,7 +60,7 @@
  *   UMK3_TWOUP=1               with --fight: two players on one PC, the clock running
  *   UMK3_FT="p1,p2,stage,n"    the FATALITY TRAINER's fight, finisher n of p1's
  *   UMK3_LOG_FT=1              its measuring, every change (distance, range, yes)
- *   UMK3_FT_FIRE=<tick>        its ONE-BUTTON at that tick (with UMK3_FT)
+ *   UMK3_FT_FIRE=<t,t,...>     its ONE-BUTTON at those ticks (with UMK3_FT)
  *   UMK3_VSRULES_PREVIEW=<tick>[:hint]  the local versus's VS RULES window at that tick
  *   UMK3_RULES=<block>         an online fight's rules for every versus fight
  *                              ("r1;b5;t30;k-1;s1;h1", online_rules.h)
@@ -2745,6 +2745,10 @@ static void dbg_taint_watch(void)
 #define FT_SCREEN 52                    /* FrontEnd.c, after ONLINE's 51 */
 static int  g_ft_fought, g_ft_forced, g_ft_saved, g_ft_after, g_ft_paused;
 static int  g_ft_success;               /* a finisher started this window */
+/* the ANIMALITY's two steps: 0 the MERCY to do, 1 given (the fight goes on
+ * until the second FINISH HIM, forced), 2 that window kept in place of the
+ * first -- RESTART then goes back to the animality, not the mercy */
+static int  g_ft_mercy, g_ft_mercy_wait;
 
 static void ft_restart(void)
 {
@@ -2756,6 +2760,9 @@ static void ft_restart(void)
     g_ft_after = 0;
     g_ft_success = 0;
     PortFTMatched = 0;
+    if (g_ft_mercy != 2)
+        g_ft_mercy = 0;
+    g_ft_mercy_wait = 0;
     printf("trainer: back to the finishing window\n");
 }
 
@@ -2783,6 +2790,7 @@ static void ft_frame(void)
              * fight by itself */
             g_ft_fought = 0;
             g_ft_forced = g_ft_saved = g_ft_after = 0;
+            g_ft_mercy = g_ft_mercy_wait = 0;
             st_trainer_forget();
             PortFT = 0;
             g_screen_jump = FT_SCREEN;
@@ -2812,7 +2820,14 @@ static void ft_frame(void)
     ft_hook();
     if (!g_ft_forced && dbg_round_live()) {
         fight_key(2);                   /* the game's own FINISH HIM follows */
+        /* ...and player two one round short as well: the deciding round,
+         * which a MERCY asks for (q_mercy_req: both of H's tallies set) */
+        if (WinsNeeded > 0) {
+            RoundWins[1] = WinsNeeded - 1;
+            ((unsigned int *)H)[1] = ((unsigned int *)H)[0];
+        }
         g_ft_forced = 1;
+        g_ft_mercy = g_ft_mercy_wait = 0;
         if (getenv("UMK3_LOG_FT")) {
             int n, i;
             const FT_MOVE *mm = ft_moves_of((int)PLAYER1MODEL, &n);
@@ -2842,7 +2857,9 @@ static void ft_frame(void)
         if (playing && !was_playing) {
             printf("trainer: a finisher started, tick %ld: matched handler %08x, kind %d\n",
                    g_tick, PortFTMatched, PortFTMatched ? ft_kind_of(PortFTMatched) : -1);
-            if (PortFTMatched) {
+            if (PortFTMatched && ft_kind_of(PortFTMatched) == FT_MERCY) {
+                PortFTMatched = 0;      /* step one: nothing to tick yet */
+            } else if (PortFTMatched) {
                 ft_mark_done((int)PLAYER1MODEL, ft_kind_of(PortFTMatched));
                 g_ft_success = 1;
             }
@@ -2859,8 +2876,12 @@ static void ft_frame(void)
                    g_tick, m->kind, L->d, L->lo, L->hi, L->in, L->now, L->window, L->mercy);
         }
     }
-    if (getenv("UMK3_FT_FIRE") && g_tick == atol(getenv("UMK3_FT_FIRE")) && m)
-        printf("trainer: scripted one-button %s\n", ft_fire(m) ? "done" : "refused");
+    if (getenv("UMK3_FT_FIRE") && m) {  /* t,t,...: an animality's two steps */
+        const char *f = getenv("UMK3_FT_FIRE");
+        for (; f && *f; f = strchr(f, ',') ? strchr(f, ',') + 1 : NULL)
+            if (g_tick == atol(f))
+                printf("trainer: scripted one-button %s\n", ft_fire(m) ? "done" : "refused");
+    }
     if (GamePaused)
         return;
     /* a try that failed -- an attack in the window, the game's "no
@@ -2870,6 +2891,27 @@ static void ft_frame(void)
         printf("trainer: the try failed (no fatality); the window again\n");
         ft_restart();
         return;
+    }
+    /* the MERCY given (t_do_mercy: G+0x45a 1): the fight goes on with his
+     * bit of health back -- once it is under way again, the second FINISH
+     * HIM, forced as the first, and that window kept (step two) */
+    if (g_ft_saved == 1 && g_ft_mercy == 0 && *(uint16_t *)((char *)G + 0x45a) != 0) {
+        printf("trainer: the mercy is given; step two, the animality\n");
+        g_ft_mercy = 1;
+        g_ft_mercy_wait = 0;
+    }
+    if (g_ft_mercy == 1 && g_ft_mercy_wait >= 0 && dbg_round_live() && !IsInFinishing
+        && ++g_ft_mercy_wait > 45) {
+        fight_key(2);
+        g_ft_mercy_wait = -1;
+    }
+    if (g_ft_mercy == 1 && g_ft_mercy_wait < 0 && dbg_finishing()) {
+        stop_him(Plyr);
+        PortFTMatched = 0;
+        g_ft_success = 0;
+        if (st_trainer_save() == 0)
+            g_ft_mercy = 2;
+        printf("trainer: the animality's window %s\n", g_ft_mercy == 2 ? "kept" : "not kept");
     }
     if (PortFTWrong) {                  /* another finisher typed: not done */
         printf("trainer: finisher %d typed, not the chosen one; the window again\n",

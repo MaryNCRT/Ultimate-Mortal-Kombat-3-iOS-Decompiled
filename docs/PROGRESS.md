@@ -135,6 +135,35 @@ Not tested: a REPAIR that downloads on another PC, VERIFY offline.
 The FATALITY TRAINER (Mary's next request) is begun on its own branch,
 `claude/fatality-trainer`, not in this release.
 
+### 2026-11-20 (trainer) -- MERCY as the ANIMALITY's first step; the checklist ticks
+
+Branch `claude/fatality-trainer`. Mary: the MERCY did not work and a
+FRIENDSHIP played instead; take MERCY off the list and make it the
+animality's first step; the checklist was never saved.
+
+- **Why the MERCY failed:** q_mercy_req (moves.c) wants both round tallies
+  `H[0]` and `H[1]` set -- the deciding round -- and d > 0x9f. The trainer's
+  F11 only set player one's. game_main.c now sets player two one round short
+  as well.
+- **Why a FRIENDSHIP played and nothing was ticked:** in the iOS 4/5-button
+  layouts the finishing inputs reach DoASpecial (DoSpecial, the G+8 table),
+  not secret_move_search, so `PortFTMatched` / `PortFTAllow` never saw them. A
+  port hook in DoASpecial's window-open path (after its predicate) reports the
+  window-shut handler of the same request. Scripted: `run+s` / `bl+s` (a
+  friendship) is now refused and the window restored; `r+s` gives the mercy.
+- **The two steps:** `ft_scan` keeps MERCY off the list (`ft_mercy_of`). With
+  ANIMALITY chosen and no mercy yet (G+0x45a 0), ft_tick measures the mercy
+  entry (`after_mercy`), the band says PASO 1/2 with the mercy's command, and
+  there is no floor frame or scale (Mary: the mercy has no place, only a
+  minimum). Once it is given, the fight goes on, the second FINISH HIM is
+  forced, that window replaces the saved one (RESTART goes back to the
+  animality), PASO 2/2.
+- Checked by script (Scorpion vs Kano, Subway): the typed mercy, then the
+  second window, then the typed animality at d 32..80, which played, ticked
+  (`save/fatality_trainer.txt` "18 8", written with `UMK3_FT_SAVE=1`) and returned to
+  the trainer's menu. Not seen by Mary yet; other fighters' mercy and
+  animality not run one by one.
+
 ### 2026-11-20 (later) -- The pages' hint line: PAGE alone
 
 Mary, from 0.5.5 with the Dreamcast icons ("C Z PAGINA SELECT B SALIR"): only

@@ -9770,10 +9770,20 @@ void PortFTDraw(void)
                   cx, by + 12.0f * s, 0.45f, white);
         return;
     }
-    if (ft_row(PLAYER1MODEL, m->kind, &nm, &seq))
-        ft_gtext_c(nm, cx, by + 1.0f * s, 0.4f, white);
-    else
-        ft_text_c(ft_kind_name(m->kind), cx, by + 1.0f * s, 0.4f, white);
+    {
+        /* an ANIMALITY is two steps (Mary): the MERCY's name and command
+         * first, the animality's once the mercy is given */
+        int bk = L->after_mercy ? FT_MERCY : m->kind;
+
+        if (ft_row(PLAYER1MODEL, bk, &nm, &seq))
+            ft_gtext_c(nm, cx, by + 1.0f * s, 0.4f, white);
+        else
+            ft_text_c(ft_kind_name(bk), cx, by + 1.0f * s, 0.4f, white);
+        if (m->kind == FT_ANIMALITY)
+            ft_text_c(L->after_mercy ? PortMvTx("PASO 1/2", "STEP 1/2")
+                                     : PortMvTx("PASO 2/2", "STEP 2/2"),
+                      cx - bw * 0.5f + 24.0f * s, by + 2.0f * s, 0.26f, gold);
+    }
     if (seq) {
         int v[16], n = 0, k;
         char buf[128];
@@ -9808,7 +9818,13 @@ void PortFTDraw(void)
         const char *st;
 
         limeFillRect(cx - pw * 0.5f, py, pw, ph, 0.0f, 0.0f, 0.0f, 0.6f);
-        if (L->lo < 0)
+        /* the MERCY has no place of its own to stand in (Mary): no frame,
+         * no scale -- only a word when he is too close for it (q_mercy_req
+         * refuses at 0x9f or nearer) */
+        if (L->after_mercy)
+            snprintf(line, sizeof line, "%s", PortMvTx("PRIMERO EL MERCY, DESPU\xc9S LA ANIMALITY",
+                                                       "FIRST THE MERCY, THEN THE ANIMALITY"));
+        else if (L->lo < 0)
             snprintf(line, sizeof line, PortMvTx("DISTANCIA %d", "DISTANCE %d"), L->d);
         else if (L->any)
             snprintf(line, sizeof line, PortMvTx("DISTANCIA %d   CUALQUIER DISTANCIA",
@@ -9823,14 +9839,11 @@ void PortFTDraw(void)
 
         /* what is missing, the game's own answer first */
         if (L->now && (L->in || L->lo < 0)) {
-            st = PortMvTx("DISTANCIA PERFECTA: \xa1HAZLO!", "PERFECT DISTANCE: DO IT!");
+            st = L->after_mercy ? PortMvTx("\xa1HAZ EL MERCY!", "DO THE MERCY!")
+                                : PortMvTx("DISTANCIA PERFECTA: \xa1HAZLO!", "PERFECT DISTANCE: DO IT!");
             sc = green;
         } else if (!L->window) {
             st = PortMvTx("ESPERA EL FINISH HIM", "WAIT FOR FINISH HIM");
-            sc = grey;
-        } else if (L->after_mercy) {    /* the range shown is the one after it */
-            st = PortMvTx("PRIMERO HAZ MERCY, LUEGO P\xd3NTE EN EL RECUADRO",
-                          "DO A MERCY FIRST, THEN STAND IN THE FRAME");
             sc = grey;
         } else if (L->lo < 0) {
             st = m->kind == FT_ANIMALITY && !L->mercy
@@ -9853,6 +9866,8 @@ void PortFTDraw(void)
         }
         ft_text_c(st, cx, py + 9.5f * s, 0.29f, sc);
 
+        if (L->after_mercy)
+            goto keys;
         /* the scale: 0 to a little past the farthest of the range and him */
         top = L->lo < 0 ? L->d : (L->hi >= FT_DMAX ? L->lo : L->hi);
         if (L->d > top)
@@ -9872,6 +9887,7 @@ void PortFTDraw(void)
         }
     }
 
+keys:
     /* ---- the keys, as the pad's or the keyboard's own pictures, large
      * (Mary): game_main.c builds the line, FrontEnd.c draws it ---- */
     limeFillRect(0.0f, 292.0f * s, W, 28.0f * s, 0.0f, 0.0f, 0.0f, 0.6f);
