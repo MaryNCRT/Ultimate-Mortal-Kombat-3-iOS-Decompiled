@@ -7,3 +7,10 @@ xb  XGamepad / Retro
 ps  P5Gamepad / Retro
 p4  P4Gamepad / Stylized
 ns  SGamepad / Default
+
+dc  Sega Dreamcast controller buttons, from StrategyWiki's
+    "Category:Sega Dreamcast controller buttons"
+    https://strategywiki.org/wiki/Category:Sega_Dreamcast_controller_buttons
+    (source given there: Kenney's Input Prompts, https://kenney.nl/assets/input-prompts)
+    License as StrategyWiki gives it: CC BY-SA. Rendered from the SVGs to PNG,
+    256 pixels tall; not otherwise changed.

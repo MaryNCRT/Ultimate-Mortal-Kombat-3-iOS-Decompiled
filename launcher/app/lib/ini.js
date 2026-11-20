@@ -118,7 +118,7 @@ const PAD_DEFAULTS = {
 };
 /* pad_icons= / p2pad_icons=: the pictures of a player's pad buttons, in the
  * game's menus and here (auto: the pad's own) */
-const PAD_ICONS = ['auto', 'xbox', 'ps5', 'ps4', 'nintendo'];
+const PAD_ICONS = ['auto', 'xbox', 'ps5', 'ps4', 'nintendo', 'dreamcast'];
 const PAD5_NAMES = ['p', 'b', 'k', 'r'];
 const PAD5_DEFAULTS = { p: 'WEST+NORTH', b: 'R1', k: 'SOUTH+EAST', r: 'L1+L2' };
 const PAD_VALUE = /^([A-Z0-9]+(\+[A-Z0-9]+)*)?$/i;
@@ -194,7 +194,7 @@ function defaultConfig() {
         pad: 'auto',                 /* pad=: auto, off, xinput or vvvv:pppp */
         padName: '',                 /* pad_name=: how the launcher showed it */
         padDbgMenu: 'L3+R3',
-        padIcons: 'auto',            /* pad_icons=: auto xbox ps5 ps4 nintendo */
+        padIcons: 'auto',            /* pad_icons=: auto xbox ps5 ps4 nintendo dreamcast */
         monitor: 0,                  /* monitor=: 0 automatic, 1..n */
         gpu: 'auto',                 /* gpu=: auto (the most powerful) or a card's name */
         audioDevice: 'auto',         /* audio_device=: auto (the system's) or a name */

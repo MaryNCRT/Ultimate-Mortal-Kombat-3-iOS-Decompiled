@@ -38,7 +38,7 @@
         : tx('padSeen'));
 
     /* the picture of the stick and d-pad */
-    const dirFiles = $derived(['Dpad', kind === 'xbox' || kind === 'nintendo' ? 'L' : 'L3']
+    const dirFiles = $derived(['Dpad', kind === 'xbox' || kind === 'nintendo' || kind === 'dreamcast' ? 'L' : 'L3']
         .map(f => app.glyphs[PAD_SETS[kind].dir + '/' + PAD_SETS[kind].extra[f]]).filter(Boolean));
 
     const padRowName = act => act === 'pause' ? tx('pads').start : act === 'moves' ? tx('pads').select

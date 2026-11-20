@@ -1258,7 +1258,8 @@ static void read_config(const char *dir)
             plat_pad_glyph_style(line[1] == '2', strcmp(v, "xbox") == 0 ? 1
                                  : strcmp(v, "ps5") == 0 ? 2
                                  : strcmp(v, "nintendo") == 0 ? 3
-                                 : strcmp(v, "ps4") == 0 ? 4 : 0);
+                                 : strcmp(v, "ps4") == 0 ? 4
+                                 : strcmp(v, "dreamcast") == 0 ? 5 : 0);
         else if (strncmp(line, "p2", 2) == 0)
             read_config_p2(line + 2, v);
         else if (strcmp(line, "pad_dbg_menu") == 0)

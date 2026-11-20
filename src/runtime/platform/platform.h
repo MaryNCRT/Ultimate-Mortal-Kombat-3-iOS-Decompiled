@@ -297,8 +297,9 @@ typedef struct {
 void plat_pad_glyph(int kind, int pb, char *out, int n);
 
 /* Which pictures a player's pad shows whatever the pad: 0 the pad's own
- * (auto), 1 Xbox, 2 PlayStation 5, 3 Nintendo, 4 PlayStation 4 -- umk3.ini
- * pad_icons= and p2pad_icons= (auto xbox ps5 nintendo ps4). A negative `style` only asks. Returns the style in force.
+ * (auto), 1 Xbox, 2 PlayStation 5, 3 Nintendo, 4 PlayStation 4, 5 Sega
+ * Dreamcast -- umk3.ini pad_icons= and p2pad_icons= (auto xbox ps5
+ * nintendo ps4 dreamcast). A negative `style` only asks. Returns the style in force.
  * Port only. */
 int plat_pad_glyph_style(int player, int style);
 
