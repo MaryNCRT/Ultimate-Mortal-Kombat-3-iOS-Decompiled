@@ -2779,6 +2779,21 @@ static int ft_edge(int down, int *was)
 
 static void ft_raw_input(void);         /* below: DISPLAY INPUT */
 
+/* Out of the trainer's fight onto its own screen, not the main menu first
+ * (Mary): the menus under it as EXTRAS put them, MAIN MENU then EXTRAS, so
+ * its BACK goes where it went before. */
+static void ft_leave(void)
+{
+    extern int FE_CurrentTaskStack[];
+    extern int FE_TaskStackPointer;
+
+    printf("debug: screen %d FE_Task_FatalTrainer\n", FT_SCREEN);
+    leave_fight(FT_SCREEN);
+    FE_CurrentTaskStack[0] = 0;         /* FE_Task_Main_Menu */
+    FE_CurrentTaskStack[1] = 6;         /* FE_Task_Extras */
+    FE_TaskStackPointer = 2;
+}
+
 static void ft_frame(void)
 {
     static int was_r, was_c, was_t, was_fin;
@@ -2797,7 +2812,8 @@ static void ft_frame(void)
             g_ft_mercy = g_ft_mercy_wait = 0;
             st_trainer_forget();
             PortFT = 0;
-            g_screen_jump = FT_SCREEN;
+            if (FE_CurrentTask != FT_SCREEN)    /* the pause menu's way out */
+                g_screen_jump = FT_SCREEN;
         }
         return;
     }
@@ -2931,7 +2947,7 @@ static void ft_frame(void)
             printf("trainer: the finisher is over; back to the trainer's menu\n");
             g_ft_after = 0;
             g_ft_paused = 1;
-            jump_screen(0);             /* out of the fight; its screen follows */
+            ft_leave();                 /* straight to its screen (Mary) */
         }
     }
     if (ft_edge(plat_key(PK_RULES) || pad_l3, &was_r))

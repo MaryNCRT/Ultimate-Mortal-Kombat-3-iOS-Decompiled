@@ -135,6 +135,21 @@ Not tested: a REPAIR that downloads on another PC, VERIFY offline.
 The FATALITY TRAINER (Mary's next request) is begun on its own branch,
 `claude/fatality-trainer`, not in this release.
 
+### 2026-11-20 (after 0.5.7) -- the trainer says no rounds and ends on its own screen
+
+- Mary: the trainer's fight said the rounds, and its end showed the main
+  menu for a moment before the trainer's screen. The way to FINISH HIM (ten
+  times as fast under the black screen, `PortFTSkipping`) played the game's
+  sound events, the announcer's "round one, fight" among them: Blood.c's
+  sound events (type 2) are skipped while it lasts. The end left the fight
+  for screen 0 and jumped to 52 thirty menu frames later (`g_screen_jump`);
+  now `ft_leave` (game_main.c) leaves the fight for 52 itself, with MAIN
+  MENU and EXTRAS under it on the task stack, so its BACK goes where it did.
+  The pause menu's way out still goes by the main menu (the game's own).
+- Checked in the Test folder (muted): a babality played (by Mary, on the pad,
+  while the script ran) went from the fight to front-end task 52 with no
+  task 0 between; no voice before the finishing window.
+
 ### 2026-11-20 -- 0.5.7 beta: the trainer merged; FIND BY CODE asked again; the pad's keyboard
 
 - **FIND BY CODE** (Mary: the code search did not work). mp_net.c asked EOS

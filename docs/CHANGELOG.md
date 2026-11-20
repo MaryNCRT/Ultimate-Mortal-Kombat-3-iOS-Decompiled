@@ -8,6 +8,12 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased
+
+- **FATALITY TRAINER:** no announcer on the way to FINISH HIM (no "round
+  one, fight"), and a finisher played goes straight back to the trainer's
+  screen, not by the main menu.
+
 ## 0.5.7 beta (2026-11-20)
 
 The FATALITY TRAINER, the DualSense's triggers, the online code search, and
