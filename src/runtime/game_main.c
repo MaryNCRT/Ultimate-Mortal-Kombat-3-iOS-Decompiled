@@ -58,6 +58,9 @@
  *   UMK3_ARCADE=<destiny,stage> with --fight: that rung of an Arcade ladder
  *   UMK3_PRACTICE=1            with --fight: as TRAINING, player two stands still
  *   UMK3_TWOUP=1               with --fight: two players on one PC, the clock running
+ *   UMK3_FT="p1,p2,stage,n"    the FATALITY TRAINER's fight, finisher n of p1's
+ *   UMK3_LOG_FT=1              its measuring, every change (distance, range, yes)
+ *   UMK3_FT_FIRE=<t,t,...>     its ONE-BUTTON at those ticks (with UMK3_FT)
  *   UMK3_VSRULES_PREVIEW=<tick>[:hint]  the local versus's VS RULES window at that tick
  *   UMK3_RULES=<block>         an online fight's rules for every versus fight
  *                              ("r1;b5;t30;k-1;s1;h1", online_rules.h)
@@ -113,6 +116,7 @@ void mayhem_set_dir(const char *ini_path);     /* gamecode_stubs.c */
 #include "pad_nav.h"
 #include "render/rgl.h"
 #include "smooth_models.h"
+#include "fatal_trainer.h"
 #if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
 #include <unistd.h>                 /* readlink, setenv */
 #endif
@@ -446,11 +450,12 @@ static void keyboard_buttons(void)
           || g_pad.up);
     PortKeyDial = live ? dial[dy + 1][dx + 1] : 0;
 
+    unsigned p1b = g_pad.buttons;
     for (b = 0; b < 7; b++)
         PortKeyButtons[b] = live && keys[b][0] >= 0
             && (plat_key(keys[b][0])
                 || (two && (plat_key(keys[b][1]) || (p2.buttons & padb2[b])))
-                || (g_pad.buttons & padb[b]));
+                || (p1b & padb[b]));
 
     dx = (plat_key(PK_P2_RIGHT) || p2.right) - (plat_key(PK_P2_LEFT) || p2.left);
     dy = (plat_key(PK_P2_DOWN) || p2.down) - (plat_key(PK_P2_UP) || p2.up);
@@ -1654,8 +1659,10 @@ static void hud_keys(void)
 
     for (k = 0; k < 2; k++) {
         /* the pad: start is P, select (Back / Share / Create) is M */
+        /* port: SELECT is the FATALITY TRAINER's ONE BUTTON when on */
+        unsigned moves1 = PortFT && PortFTOneButton && CurrentTask == 6 ? 0u : g_pad_moves;
         int down = plat_key(PK_PAUSE + k) || plat_key(PK_P2_PAUSE + k)
-                   || (g_pad.buttons & (k ? g_pad_moves : g_pad_pause))
+                   || (g_pad.buttons & (k ? moves1 : g_pad_pause))
                    || (g_pad2.buttons & (k ? g_p2pad_moves : g_p2pad_pause))
                    /* the moves list without NEXT (on-screen controls off):
                     * circle or Backspace close it, as select does */
@@ -2255,10 +2262,14 @@ static int parse_screen(const char *s)
     /* 51 is the port's ONLINE screen, past the game's: the launcher's
      * invites open the game with --screen 51, which up to 0.2.0 read as no
      * screen ("debug: screen -1") */
-    if (s[0] >= '0' && s[0] <= '9')
+    if (s[0] >= '0' && s[0] <= '9' && atoi(s) != 52)
         return atoi(s) <= DBG_SCREENS ? atoi(s) : -1;
     if (_stricmp(s, "online") == 0)     /* the port's ONLINE screen */
         return 51;
+    if (s[0] >= '0' && s[0] <= '9' && atoi(s) == 52)
+        return 52;                      /* the FATALITY TRAINER's (FrontEnd.c) */
+    if (_stricmp(s, "trainer") == 0)
+        return 52;
     for (i = 0; i < DBG_SCREENS; i++)   /* "treasure" -> FE_Task_Treasure */
         if (_stricmp(FETaskNames[i] + 8, s) == 0
             || _stricmp(FETaskNames[i], s) == 0)
@@ -2630,6 +2641,18 @@ static void palette_sync(void)
     }
 }
 
+/* What is drawn into the scene at its end: the hitboxes, the FATALITY
+ * TRAINER's floor marker (fatal_trainer.c). */
+static int g_hb_on;
+
+static void after_scene(void)
+{
+    if (g_hb_on)
+        hb_draw();
+    if (PortFT)
+        ft_draw3d();
+}
+
 /* On every tick: the hooks on while HITBOXES is (or UMK3_DBG_HITBOX=1). */
 
 static void hb_update(void)
@@ -2639,7 +2662,8 @@ static void hb_update(void)
     int on = (g_cfg_debug_keys && dbg_hitboxes_on())
              || getenv("UMK3_DBG_HITBOX");
 
-    PortAfterScene = on ? hb_draw : NULL;
+    g_hb_on = on;
+    PortAfterScene = on || PortFT ? after_scene : NULL;
     PortStrikeHook = on ? hb_strike : NULL;
     {
         /* the menu's cheats (logic/other.c); never in an online fight,
@@ -2649,11 +2673,18 @@ static void hb_update(void)
 
         PortDbgHealth = dbg ? dbg_health_mask() : 0;
         PortDbgClock = dbg ? dbg_clock_frozen() : 0;
+        if (PortFT && PortFTUnlimited)  /* the trainer's time without end */
+            PortDbgClock = 1;
     }
 }
 
 /* The fight's speed, from FIGHT SPEED (or UMK3_DBG_SPEED=<percent>): the
  * clock that feeds the ticks runs that much faster or slower. */
+/* the FATALITY TRAINER (below): until its finishing window opens, the
+ * fight runs ten times as fast, under a black screen (PortFTSkipping), so
+ * the mode starts at FINISH HIM (Mary) */
+int PortFTSkipping;
+
 static double fight_speed(void)
 {
     int pct = getenv("UMK3_DBG_SPEED") ? atoi(getenv("UMK3_DBG_SPEED"))
@@ -2661,6 +2692,8 @@ static double fight_speed(void)
 
     /* never online: the other machine runs at 60 and would hold for this
      * one (or this one for it) all fight */
+    if (CurrentTask == 6 && PortFT && PortFTSkipping)
+        return 10.0;
     if (CurrentTask != 6 || dbg_menu_is_open() || pct <= 0 || rb_active())
         return 1.0;
     return pct / 100.0;
@@ -2688,6 +2721,354 @@ static void dbg_taint_watch(void)
         PortDbgTainted = 1;
     mode = GameMode;
     task = CurrentTask;
+}
+
+/* ------------------------------------------------ the FATALITY TRAINER
+ *
+ * Port (fatal_trainer.c has the moves and the measuring). Its fight is a
+ * --fight in training (player two stands still); here it is put into the
+ * finishing window and kept there:
+ *
+ *   - once the round is live, the debug key F11 (fight_key 2): player one's
+ *     rounds one short of the match and player two's health to 0, so the
+ *     game's own FINISH HIM follows;
+ *   - until then the fight runs fast under a black screen (fight_speed,
+ *     PortFTSkipping): the mode is seen to start at FINISH HIM;
+ *   - the finishing window as it opens kept in the trainer's save state
+ *     (savestate.c), and put back with R / the pad's L3 -- the round, the
+ *     timer, both fighters, everything of the fight as it was. Nothing
+ *     starts again by itself (Mary: no loop): a finisher played, the match
+ *     ends as the game ends it and the trainer's screen comes back;
+ *   - with ONE-BUTTON FATALITY, C / the pad's R3 does the chosen finisher
+ *     through its own entry (ft_fire) -- SELECT opens no moves list then;
+ *     L2 stays RUN, which finishers use (Mary) -- and T / the pad's R3
+ *     turns to the next finisher.
+ *
+ * Out of the fight, by the pause menu or at its end, the trainer's screen
+ * comes back. */
+#define FT_SCREEN 52                    /* FrontEnd.c, after ONLINE's 51 */
+static int  g_ft_fought, g_ft_forced, g_ft_saved, g_ft_after, g_ft_paused;
+static int  g_ft_success;               /* a finisher started this window */
+/* the ANIMALITY's two steps: 0 the MERCY to do, 1 given (the fight goes on
+ * until the second FINISH HIM, forced), 2 that window kept in place of the
+ * first -- RESTART then goes back to the animality, not the mercy */
+static int  g_ft_mercy, g_ft_mercy_wait;
+
+static void ft_restart(void)
+{
+    if (g_ft_saved != 1 || st_trainer_load() != 0)
+        return;
+    plat_audio_stop_all();
+    plat_music_stop();
+    limeRestartPlayTune();
+    g_ft_after = 0;
+    g_ft_success = 0;
+    PortFTMatched = 0;
+    if (g_ft_mercy != 2)
+        g_ft_mercy = 0;
+    g_ft_mercy_wait = 0;
+    printf("trainer: back to the finishing window\n");
+}
+
+static int ft_edge(int down, int *was)
+{
+    int hit = down && !*was;
+    *was = down;
+    return hit;
+}
+
+static void ft_raw_input(void);         /* below: DISPLAY INPUT */
+
+static void ft_frame(void)
+{
+    static int was_r, was_c, was_t, was_fin;
+    const FT_MOVE *m;
+    int pad_l3 = g_pad.connected && (g_pad.buttons & (1u << PB_L3));
+
+    if (!PortFT)
+        return;
+    if (CurrentTask != 6) {
+        PortFTSkipping = 0;
+        if (g_ft_fought && CurrentTask == 3 && g_fight_p1 < 0 && !g_dbg_saved.on) {
+            /* out of the trainer's fight: its screen again, never another
+             * fight by itself */
+            g_ft_fought = 0;
+            g_ft_forced = g_ft_saved = g_ft_after = 0;
+            g_ft_mercy = g_ft_mercy_wait = 0;
+            st_trainer_forget();
+            PortFT = 0;
+            g_screen_jump = FT_SCREEN;
+        }
+        return;
+    }
+    /* the pad's buttons as the game reads them, every change, in the log:
+     * what each press is (Mary: L2 and R2) */
+    {
+        static unsigned was_b = ~0u;
+        if (g_pad.connected && g_pad.buttons != was_b) {
+            static const char *const nm[PB_COUNT] = { "SOUTH", "EAST", "WEST", "NORTH",
+                "L1", "R1", "L2", "R2", "SELECT", "START", "L3", "R3", "HOME" };
+            char line[160] = "";
+            int b;
+            for (b = 0; b < PB_COUNT; b++)
+                if (g_pad.buttons & (1u << b)) {
+                    strcat(line, " ");
+                    strcat(line, nm[b]);
+                }
+            printf("trainer: pad%s\n", line[0] ? line : " (none)");
+            was_b = g_pad.buttons;
+        }
+    }
+    g_ft_fought = 1;
+    g_ft_paused = GamePaused != 0;
+    ft_hook();
+    if (!g_ft_forced && dbg_round_live()) {
+        fight_key(2);                   /* the game's own FINISH HIM follows */
+        /* ...and player two one round short as well: the deciding round,
+         * which a MERCY asks for (q_mercy_req: both of H's tallies set) */
+        if (WinsNeeded > 0) {
+            RoundWins[1] = WinsNeeded - 1;
+            ((unsigned int *)H)[1] = ((unsigned int *)H)[0];
+        }
+        g_ft_forced = 1;
+        g_ft_mercy = g_ft_mercy_wait = 0;
+        if (getenv("UMK3_LOG_FT")) {
+            int n, i;
+            const FT_MOVE *mm = ft_moves_of((int)PLAYER1MODEL, &n);
+            for (i = 0; i < n; i++)
+                printf("trainer: %s finisher %d: kind %d button %d\n",
+                       CharacterNames[PLAYER1MODEL % 26], i, mm[i].kind, mm[i].button);
+        }
+    }
+    PortFTSkipping = !(g_ft_forced && dbg_finishing()) && !g_ft_saved;
+    if (g_ft_forced && !g_ft_saved && dbg_finishing()) {
+        stop_him(Plyr);
+        PortFTMatched = 0;              /* the checklist: nothing typed yet */
+        g_ft_saved = st_trainer_save() == 0 ? 1 : -1;
+        if (getenv("UMK3_FT_VERIFY"))
+            ft_verify_dump();
+        printf("trainer: finishing window %s\n", g_ft_saved == 1 ? "kept" : "not kept (no save states)");
+    }
+    m = ft_selected();
+    ft_tick(m);
+    if (!GamePaused)
+        ft_raw_input();                 /* DISPLAY INPUT, as pressed */
+    {
+        /* the checklist: a finisher starting that the player typed (the
+         * search matched it; ONE BUTTON goes past the search) */
+        static int was_playing;
+        int playing = ft_live()->playing;
+        if (playing && !was_playing) {
+            printf("trainer: a finisher started, tick %ld: matched handler %08x, kind %d\n",
+                   g_tick, PortFTMatched, PortFTMatched ? ft_kind_of(PortFTMatched) : -1);
+            if (PortFTMatched && ft_kind_of(PortFTMatched) == FT_MERCY) {
+                PortFTMatched = 0;      /* step one: nothing to tick yet */
+            } else if (PortFTMatched) {
+                ft_mark_done((int)PLAYER1MODEL, ft_kind_of(PortFTMatched));
+                g_ft_success = 1;
+            }
+        }
+        was_playing = playing;
+    }
+    if (getenv("UMK3_LOG_FT") && m) {
+        static int last[6] = { -9, -9, -9, -9, -9, -9 };
+        const FT_LIVE *L = ft_live();
+        int now[6] = { L->d, L->lo, L->hi, L->now, L->window, m->kind };
+        if (memcmp(now, last, sizeof now)) {
+            memcpy(last, now, sizeof now);
+            printf("trainer: tick %ld kind %d d %d range %d..%d in %d now %d window %d mercy %d\n",
+                   g_tick, m->kind, L->d, L->lo, L->hi, L->in, L->now, L->window, L->mercy);
+        }
+    }
+    if (getenv("UMK3_FT_FIRE") && m) {  /* t,t,...: an animality's two steps */
+        const char *f = getenv("UMK3_FT_FIRE");
+        for (; f && *f; f = strchr(f, ',') ? strchr(f, ',') + 1 : NULL)
+            if (g_tick == atol(f))
+                printf("trainer: scripted one-button %s\n", ft_fire(m) ? "done" : "refused");
+    }
+    if (GamePaused)
+        return;
+    /* a try that failed -- an attack in the window, the game's "no
+     * fatality" (G+0x452, t_fatality_wait) -- back to the same FINISH HIM,
+     * not on to another round or fight (Mary) */
+    if (g_ft_saved == 1 && *(uint16_t *)((char *)G + 0x452) != 0 && !g_ft_success) {
+        printf("trainer: the try failed (no fatality); the window again\n");
+        ft_restart();
+        return;
+    }
+    /* the MERCY given (t_do_mercy: G+0x45a 1): the fight goes on with his
+     * bit of health back -- once it is under way again, the second FINISH
+     * HIM, forced as the first, and that window kept (step two) */
+    if (g_ft_saved == 1 && g_ft_mercy == 0 && *(uint16_t *)((char *)G + 0x45a) != 0) {
+        printf("trainer: the mercy is given; step two, the animality\n");
+        g_ft_mercy = 1;
+        g_ft_mercy_wait = 0;
+    }
+    if (g_ft_mercy == 1 && g_ft_mercy_wait >= 0 && dbg_round_live() && !IsInFinishing
+        && ++g_ft_mercy_wait > 45) {
+        fight_key(2);
+        g_ft_mercy_wait = -1;
+    }
+    if (g_ft_mercy == 1 && g_ft_mercy_wait < 0 && dbg_finishing()) {
+        stop_him(Plyr);
+        PortFTMatched = 0;
+        g_ft_success = 0;
+        if (st_trainer_save() == 0)
+            g_ft_mercy = 2;
+        printf("trainer: the animality's window %s\n", g_ft_mercy == 2 ? "kept" : "not kept");
+    }
+    if (PortFTWrong) {                  /* another finisher typed: not done */
+        printf("trainer: finisher %d typed, not the chosen one; the window again\n",
+               PortFTWrong - 1);
+        PortFTWrong = 0;
+        ft_restart();
+        return;
+    }
+    /* the chosen finisher played to its end (death_blow_complete marks G+0x450
+     * -1): a moment for it to be seen, then the trainer's menu (Mary) */
+    if (g_ft_success && *(int16_t *)((char *)G + 0x450) == -1) {
+        if (++g_ft_after > 120) {
+            printf("trainer: the finisher is over; back to the trainer's menu\n");
+            g_ft_after = 0;
+            g_ft_paused = 1;
+            jump_screen(0);             /* out of the fight; its screen follows */
+        }
+    }
+    if (ft_edge(plat_key(PK_RULES) || pad_l3, &was_r))
+        ft_restart();
+    if (ft_edge(plat_key(PK_OUTFIT)
+                || (g_pad.connected && (g_pad.buttons & (1u << PB_R3))), &was_t)) {
+        int n;
+        ft_moves_of((int)PLAYER1MODEL, &n);
+        if (n > 0)
+            PortFTMove = (PortFTMove + 1) % n;
+    }
+    if (ft_edge(plat_key(PK_COLOR) || (g_pad.connected && (g_pad.buttons & (1u << PB_SELECT))), &was_c)
+        && PortFTOneButton && dbg_finishing())
+        printf("trainer: one-button %s\n", (g_ft_success = ft_fire(m)) ? "done" : "refused (distance or condition)");
+    was_fin = IsInFinishing != 0;
+}
+
+/* The trainer's keys as one line with the buttons' pictures, the pad's when
+ * a pad is what is being used, else the keyboard's (PortPagesLine's way) */
+void PortFTHintLine(char *out, int n)
+{
+    static int pad_used;                /* what was used last: the pad or the keys */
+    char r[160], t[160], c[160];
+    int es = Language[0] == 'E' && Language[1] == 'S';
+    int k;
+
+    if (g_pad.connected && (g_pad.buttons || g_pad.up || g_pad.down || g_pad.left
+                            || g_pad.right))
+        pad_used = 1;
+    for (k = PK_UP; k <= PK_RUN; k++)
+        if (plat_key(k))
+            pad_used = 0;
+    if (plat_key(PK_SPECIAL) || plat_key(PK_RULES) || plat_key(PK_OUTFIT) || plat_key(PK_COLOR))
+        pad_used = 0;
+    if (!g_pad.connected && !g_pad2.connected)
+        pad_used = 0;
+    /* the pad's buttons in the icons the player chose (pad_icons=,
+     * BUTTON ICONS), or the keyboard's keys as bound (Mary) */
+    if (pad_used) {
+        const PLAT_PAD *p = g_pad.connected ? &g_pad : &g_pad2;
+        int kind = plat_pad_glyph_kind(p == &g_pad2, p->kind);
+        plat_pad_glyph(kind, PB_L3, r, sizeof r);
+        plat_pad_glyph(kind, PB_R3, t, sizeof t);    /* NEXT FINISHER (Mary) */
+        plat_pad_glyph(kind, PB_SELECT, c, sizeof c);    /* ONE BUTTON: L2 runs (Mary) */
+    } else {
+        plat_key_glyph(PK_RULES, r, sizeof r);
+        plat_key_glyph(PK_OUTFIT, t, sizeof t);
+        plat_key_glyph(PK_COLOR, c, sizeof c);
+    }
+    snprintf(out, n, "%s %s     %s %s%s%s%s",
+             r, es ? "REINICIAR" : "RESTART", t, es ? "SIGUIENTE REMATE" : "NEXT FINISHER",
+             PortFTOneButton ? "     " : "", PortFTOneButton ? c : "",
+             PortFTOneButton ? (es ? " UN BOT\xd3N" : " ONE BUTTON") : "");
+}
+
+/* DISPLAY INPUT, as pressed (Mary: "show what you press, invent
+ * nothing"): the pad's own buttons, or the keys, and the directions,
+ * before anything is made of them -- the five-button layout turns S and a
+ * direction into another button for the engine (GetArcadeJoyBits), and the
+ * engine's word showed buttons nobody pressed. One line a press, newest on
+ * top, with how many frames it was held. GameCode.c draws them. */
+#define FT_RAW 16
+static struct {
+    int dirs;                           /* 1 up 2 down 4 left 8 right */
+    unsigned held;                      /* what made the line (to count it) */
+    int n, frames;
+    char file[8][96];                   /* the buttons' pictures */
+} g_raw[FT_RAW];
+static int g_raw_n;
+
+static int raw_file(const char *tok, char *out, int n)
+{
+    const char *a = strchr(tok, 1), *z = a ? strchr(a + 1, 1) : NULL;
+    if (!z)
+        return 0;
+    snprintf(out, n, "glyphs/%.*s.png", (int)(z - a - 1), a + 1);
+    return 1;
+}
+
+static void ft_raw_input(void)
+{
+    static const int keys[] = { PK_HP, PK_LP, PK_BL, PK_HK, PK_LK, PK_RUN, PK_SPECIAL,
+                                PK_5_P, PK_5_B, PK_5_K, PK_5_R };
+    static unsigned was;
+    unsigned now = 0, fresh;
+    int dirs = 0, i, k;
+    int kind = g_pad.connected ? plat_pad_glyph_kind(0, g_pad.kind) : 0;
+
+    if (g_pad.connected) {
+        dirs |= g_pad.up | g_pad.down << 1 | g_pad.left << 2 | g_pad.right << 3;
+        now |= (g_pad.buttons & ~((1u << PB_START) | (1u << PB_HOME))) << 4;
+    }
+    dirs |= plat_key(PK_UP) | plat_key(PK_DOWN) << 1 | plat_key(PK_LEFT) << 2
+            | plat_key(PK_RIGHT) << 3;
+    for (k = 0; k < (int)(sizeof keys / sizeof keys[0]); k++)
+        if (plat_key(keys[k]))
+            now |= 1u << (20 + k);
+    now |= (unsigned)dirs;
+    fresh = now & ~was;
+    if (fresh) {
+        for (i = FT_RAW - 1; i > 0; i--)
+            g_raw[i] = g_raw[i - 1];
+        memset(&g_raw[0], 0, sizeof g_raw[0]);
+        g_raw[0].dirs = dirs;
+        g_raw[0].held = now;
+        g_raw[0].frames = 1;
+        for (k = 0; k < PB_COUNT && g_raw[0].n < 8; k++)
+            if (now >> (4 + k) & 1) {
+                char tok[160];
+                plat_pad_glyph(kind, k, tok, sizeof tok);
+                if (raw_file(tok, g_raw[0].file[g_raw[0].n], 96))
+                    g_raw[0].n++;
+            }
+        for (k = 0; k < (int)(sizeof keys / sizeof keys[0]) && g_raw[0].n < 8; k++)
+            if (now >> (20 + k) & 1) {
+                char tok[160];
+                plat_key_glyph(keys[k], tok, sizeof tok);
+                if (raw_file(tok, g_raw[0].file[g_raw[0].n], 96))
+                    g_raw[0].n++;
+            }
+        if (g_raw_n < FT_RAW)
+            g_raw_n++;
+    } else if (now && g_raw_n && g_raw[0].frames < 99 && (now & g_raw[0].held))
+        g_raw[0].frames++;
+    was = now;
+}
+
+int PortFTRawLines(void) { return g_raw_n; }
+
+const char *PortFTRawLine(int i, int *dirs, int *frames, int *n)
+{
+    if (i < 0 || i >= g_raw_n)
+        return NULL;
+    *dirs = g_raw[i].dirs;
+    *frames = g_raw[i].frames;
+    *n = g_raw[i].n;
+    return g_raw[i].file[0];
 }
 
 static void debug_request(const struct dbg_request *rq)
@@ -3351,6 +3732,23 @@ int main(int argc, char **argv)
                 }
                 break;
             }
+        /* UMK3_FT="p1,p2,stage,finisher": the FATALITY TRAINER's fight
+         * started by script (the fighters by name or number) */
+        if (getenv("UMK3_FT")) {
+            char buf[128], *q[4] = { 0 };
+            int k = 0;
+            snprintf(buf, sizeof buf, "%s", getenv("UMK3_FT"));
+            q[0] = strtok(buf, ",");
+            while (q[k] && k < 3)
+                q[++k] = strtok(NULL, ",");
+            if (q[0] && q[1]) {
+                PortFTP1 = fighter_id(q[0]);
+                PortFTP2 = fighter_id(q[1]);
+                PortFTStage = q[2] ? atoi(q[2]) : 0;
+                PortFTMove = q[3] ? atoi(q[3]) : 0;
+                PortFT = PortFTGo = PortFTP1 >= 0 && PortFTP2 >= 0;
+            }
+        }
         if (g_fight_p1 < 0 && getenv("UMK3_FIGHT")) {
             char buf[128], *a, *b, *c;
             snprintf(buf, sizeof buf, "%s", getenv("UMK3_FIGHT"));
@@ -4066,6 +4464,10 @@ int main(int argc, char **argv)
                 && !PortPractice)
                 vs_rules_hint();        /* the RULES button, the local versus (port) */
             online_after_frame();   /* the ONLINE screens' badges (port) */
+            {
+                void PortOskLate(void);     /* FrontEnd.c: the pad's keys, over all */
+                PortOskLate();
+            }
             /* the front end's fade, last: over the pictures, banners,
              * frames and hints above too (FrontEnd.c PortFadeOnTop) */
             if (CurrentTask == 3 && FE_Fade < 1.0f)
@@ -4136,6 +4538,15 @@ int main(int argc, char **argv)
             else
                 set_menu_after_frame(vx, vy, vw, vh);
 
+            /* the FATALITY TRAINER's FIGHT!: its fight, as --fight goes */
+            if (PortFTGo && CurrentTask == 3 && g_fight_p1 < 0) {
+                PortFTGo = 0;
+                g_fight_p1 = PortFTP1;
+                g_fight_p2 = PortFTP2;
+                g_fight_stage = PortFTStage;
+            }
+            ft_frame();
+
             /* --fight: once the main menu is up, do what the select screen
              * and the tower would, and leave the front end. */
             {
@@ -4166,7 +4577,7 @@ int main(int argc, char **argv)
                        CharacterNames[g_fight_p1], CharacterNames[g_fight_p2],
                        g_fight_stage);
                 /* the debug menu's MODE: ARCADE, its first rung */
-                if (dbg_fight_mode() == 1 && !getenv("UMK3_ARCADE")) {
+                if (dbg_fight_mode() == 1 && !getenv("UMK3_ARCADE") && !PortFT) {
                     GameMode = 0;
                     Destiny = 0;
                     Stage = 0;
@@ -4181,7 +4592,7 @@ int main(int argc, char **argv)
                 }
                 /* UMK3_PRACTICE=1: the fight as TRAINING (player two
                  * stands still), so a test can land a kombo */
-                if (getenv("UMK3_PRACTICE") || dbg_fight_mode() == 2) {
+                if (getenv("UMK3_PRACTICE") || dbg_fight_mode() == 2 || PortFT) {
                     extern int PortPractice;
                     GameMode = 6;               /* PLAY_MODE_TWOUP */
                     PortPractice = 1;

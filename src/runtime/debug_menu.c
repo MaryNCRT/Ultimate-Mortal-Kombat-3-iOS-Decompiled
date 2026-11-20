@@ -479,6 +479,12 @@ static const char *stage_name(int i)
     return buf;
 }
 
+/* the stage's name, for the FATALITY TRAINER's screen (FrontEnd.c) */
+const char *PortStageName(int i)
+{
+    return i >= 0 && i <= 15 ? stage_name(i) : "?";
+}
+
 /* A fight or a screen picked while the game is still loading waits for the
  * main menu (game_main.c queues it), so only the fight keys ever grey out. */
 static int row_enabled(int row)
@@ -2667,6 +2673,22 @@ int stage_picture_full(const char *scene, float dy)
     glDepthMask(GL_TRUE);
     end_2d();
     return 1;
+}
+
+/* Port: a level's picture and its name, for the FATALITY TRAINER's stage
+ * list (FrontEnd.c), in the front end's units as stage_room_thumb */
+void stage_level_thumb(int level, float vw, float x, float y, float w, float h)
+{
+    if (level < 0 || level > 15)
+        return;
+    begin_2d_w(vw);
+    st_thumb(level, x, y, w, h, 1.0f);
+    end_2d();
+}
+
+const char *stage_level_title(int level)
+{
+    return level >= 0 && level <= 15 ? st_name(level) : "?";
 }
 
 void stage_room_thumb(int place, float vw, float x, float y, float w, float h)

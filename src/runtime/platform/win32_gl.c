@@ -1057,6 +1057,27 @@ static void pad_name(unsigned vp, const char *fallback, char *out, int n)
 }
 
 /* Joystick id `id`: attached? Its vendor | product << 16 and name. */
+/* Steam Input: a pad Steam drives is shown to the game as Steam's own
+ * virtual pad (an Xbox one, read here through XInput), and the real one
+ * stays visible to WinMM -- the same DualSense taken twice, by both players.
+ * Steam names the real ones in SDL_GAMECONTROLLER_IGNORE_DEVICES
+ * ("0x054c/0x0ce6,..."), which SDL itself obeys (the Linux build); WinMM
+ * obeys it here. */
+static int steam_ignores(unsigned vp)
+{
+    const char *e = getenv("SDL_GAMECONTROLLER_IGNORE_DEVICES");
+    unsigned v, p;
+
+    while (e && *e) {
+        if (sscanf(e, "%x/%x", &v, &p) == 2 && v == (vp & 0xffff) && p == vp >> 16)
+            return 1;
+        e = strchr(e, ',');
+        if (e)
+            e++;
+    }
+    return 0;
+}
+
 static int joy_probe(UINT id, unsigned *vp, char *name, int n)
 {
     JOYINFOEX j;
@@ -1070,6 +1091,8 @@ static int joy_probe(UINT id, unsigned *vp, char *name, int n)
     if (joyGetDevCapsA(id, &c, sizeof c) != JOYERR_NOERROR)
         return 0;
     *vp = (unsigned)c.wMid | (unsigned)c.wPid << 16;
+    if (steam_ignores(*vp))
+        return 0;                       /* Steam's: its virtual pad is the one */
     if (name)
         pad_name(*vp, c.szPname, name, n);
     return 1;
@@ -1251,6 +1274,12 @@ static int pad_winmm(PAD_SLOT *ps, PLAT_PAD *out)
                 on = (h & src->hat) != 0;
             } else if (src->kind == PDB_AXIS && src->idx >= 0 && src->idx < 6) {
                 int w = ax[src->idx];
+                /* a Sony pad (DualShock 4, DualSense) through WinMM gives
+                 * its triggers as U = R2 and V = L2, the other way round
+                 * from Rx / Ry: L2 was read as R2 and R2 as L2 (Mary, a
+                 * DualSense, 054c:0ce6) */
+                if ((ps->vidpid & 0xffff) == 0x054c && (w == 4 || w == 5))
+                    w = 9 - w;
                 DWORD v = src->inv ? 65535 - n6[w] : n6[w];
                 /* a trigger: pressed past three quarters, once it has been
                  * seen let go (low), so one resting at its end is not held */

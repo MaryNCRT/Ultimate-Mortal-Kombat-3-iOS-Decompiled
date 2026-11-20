@@ -84,6 +84,10 @@ void endMP(void);
 #define RESEND_MS     120
 #define JOIN_MS       400
 #define FIND_MS       10000             /* "not found" after ten seconds */
+#define FIND_NET_MS   20000             /* ...twenty with the internet: EOS's
+                                         * search sees a lobby a few seconds
+                                         * after it is made */
+#define LOOK_MS        2500             /* the code asked of EOS again */
 #define FIND_EOS_MS   30000             /* found over the internet: thirty */
 #define KEEP_MS       1000
 #define LINK_LOST_MS  15000
@@ -109,7 +113,7 @@ static struct paddr g_peer_addr;
 static char     g_eos_target[40];       /* the code's owner, from the lobby search */
 static struct mpnet_peer g_peer;
 static char     g_want[16];             /* the code FIND MATCH asked for */
-static unsigned g_find_start, g_join_last, g_keep_last, g_heard;
+static unsigned g_find_start, g_join_last, g_keep_last, g_heard, g_look_last;
 
 /* reliable channel */
 struct pend { int used; uint32_t seq; unsigned sent; int len;
@@ -610,11 +614,29 @@ void mpnet_find(const char *code)
         mpnet_session_create();
     if (!g_session || g_connected)
         return;
-    snprintf(g_want, sizeof g_want, "%s", code);
+    {
+        /* the code as the player wrote it: spaces, dashes, lower case, and
+         * "umk3:" in front as the log shows it -- the code alone kept */
+        int k = 0;
+        while (*code == ' ')
+            code++;
+        if ((code[0] | 32) == 'u' && (code[1] | 32) == 'm' && (code[2] | 32) == 'k'
+            && code[3] == '3' && code[4] == ':')
+            code += 5;
+        for (; *code && k < (int)sizeof g_want - 1; code++) {
+            int c = (unsigned char)*code;
+            if (c >= 'a' && c <= 'z')
+                c -= 32;
+            if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'))
+                g_want[k++] = (char)c;
+        }
+        g_want[k] = 0;
+        code = g_want;
+    }
     g_eos_target[0] = 0;
     if (!g_lan_only)
         mpeos_lookup(code);
-    g_find_start = now_ms();
+    g_find_start = g_look_last = now_ms();
     g_join_last = 0;
     g_status = MPNET_SEARCHING;
 }
@@ -877,8 +899,18 @@ void mpnet_poll(void)
     if (!g_connected && g_want[0] && !g_eos_target[0]
         && mpeos_lookup_result(g_eos_target, sizeof g_eos_target) == 1)
         g_join_last = 0;                /* found over the internet: ask now */
+    /* not there (yet): asked again -- one search alone, made the moment
+     * the other player opened ONLINE or before EOS had listed their lobby,
+     * was the whole try and ended in NOT FOUND (Mary: the code search did
+     * not work) */
+    if (!g_connected && g_want[0] && !g_eos_target[0] && !g_lan_only
+        && mpeos_lookup_result(NULL, 0) == -1 && t - g_look_last > LOOK_MS) {
+        g_look_last = t;
+        mpeos_lookup(g_want);
+    }
     if (!g_connected && g_want[0]) {
-        if (t - g_find_start > (g_eos_target[0] ? FIND_EOS_MS : FIND_MS)) {
+        if (t - g_find_start > (g_eos_target[0] ? FIND_EOS_MS
+                                : g_lan_only ? FIND_MS : FIND_NET_MS)) {
             g_want[0] = 0;
             g_status = MPNET_NOT_FOUND;
         } else if (!g_join_last || t - g_join_last > JOIN_MS) {

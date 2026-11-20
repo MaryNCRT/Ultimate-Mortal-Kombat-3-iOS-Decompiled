@@ -6601,6 +6601,15 @@ long stick_look_lr(MK3OBJ *obj, uint32_t other_w, uint32_t table_w,
  *
  * A zero handler is not a hit: 0x38 is cleared and the search stops without
  * calling anything. */
+/* Port, not in the binary: the handler of the last entry the search
+ * matched, for the FATALITY TRAINER's checklist (runtime/fatal_trainer.c):
+ * which finisher the player typed. Read, never acted on. */
+uint32_t PortFTMatched;
+/* and may refuse one: a finisher other than the one being practised does
+ * not start (Mary: "the one chosen must be the one done"); the trainer
+ * then puts the window back */
+int (*PortFTAllow)(uint32_t handler);
+
 long secret_move_search(MK3OBJ *obj, uint32_t arg, uint32_t *table)
 {
     uint32_t *e;
@@ -6625,7 +6634,10 @@ long secret_move_search(MK3OBJ *obj, uint32_t arg, uint32_t *table)
 
         /* four conditional stores of this same value precede the
          * unconditional one in the binary; see the note above */
+        if (PortFTAllow && !PortFTAllow(e[4]))  /* port: see above */
+            return 0;
         obj->field38 = e[4];
+        PortFTMatched = e[4];                   /* port: see above */
         ((XFER_FN)xfer_types_table[e[2]])(obj, (MK3OBJ *)(uintptr_t)arg);
         return 0;
     }
@@ -7280,6 +7292,32 @@ void DoASpecial(MK3OBJ *obj, uint32_t which)
             handler = (MK3THREADFUNC)t_drone_friendship;
             xfer    = mercy_xfer_void;
             break;
+        }
+
+        /* Port, not in the binary: the FATALITY TRAINER sees a finisher
+         * that arrives here too -- the iOS layouts' finishing inputs come
+         * through DoSpecial, not secret_move_search -- by the window-shut
+         * handler of the same request, which is what the search would have
+         * matched: the checklist ticks it, and the trainer may refuse a
+         * finisher other than the one practised (see PortFTMatched) */
+        {
+            MK3THREADFUNC f;
+            uint32_t h;
+
+            switch (which) {            /* a switch: no table of pointers */
+            case 0xd:  f = (MK3THREADFUNC)t_do_pit_fatality; break;
+            case 0xe:  f = (MK3THREADFUNC)t_do_mercy;        break;
+            case 0xf:  f = (MK3THREADFUNC)t_do_fatality_1;   break;
+            case 0x10: f = (MK3THREADFUNC)t_do_fatality_2;   break;
+            case 0x11: f = (MK3THREADFUNC)t_do_animality;    break;
+            case 0x12: f = (MK3THREADFUNC)t_do_baby;         break;
+            default:   f = (MK3THREADFUNC)t_do_friendship;   break;
+            }
+            h = (uint32_t)(uintptr_t)f;
+
+            if (PortFTAllow && !PortFTAllow(h))
+                return;
+            PortFTMatched = h;
         }
 
         *(uint16_t *)((char *)proc + 0x80) = 1;

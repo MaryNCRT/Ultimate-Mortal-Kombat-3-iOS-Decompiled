@@ -135,6 +135,62 @@ Not tested: a REPAIR that downloads on another PC, VERIFY offline.
 The FATALITY TRAINER (Mary's next request) is begun on its own branch,
 `claude/fatality-trainer`, not in this release.
 
+### 2026-11-20 -- 0.5.7 beta: the trainer merged; FIND BY CODE asked again; the pad's keyboard
+
+- **FIND BY CODE** (Mary: the code search did not work). mp_net.c asked EOS
+  for the code's lobby once (`mpeos_lookup`); EOS's lobby search lists a new
+  lobby seconds after it is made, so a search made as the other player opened
+  ONLINE found nothing, and nothing asked again -- NOT FOUND after ten
+  seconds. Now `mpnet_poll` asks again every 2.5 s while the answer is "none",
+  for 20 s with the internet (10 on the LAN alone). The code is kept as
+  letters and digits only (`mpnet_find`; spaces, dashes, a leading "umk3:"
+  dropped -- comparisons were already dash-blind, `same_code`), and a paste
+  into a player-ID box drops "umk3:" too. Not tested between two machines
+  here (one PC is one EOS user, and a lobby of one's own is skipped).
+- **The pad's keyboard** (FrontEnd.c `OnOskKeys`): a player-ID box chosen
+  with the pad (the highlight showing when it was pressed; a click hides it,
+  `pad_nav_hide`) opens keys of its own; while they show, every other button
+  is out of the input (`PortOskOn`, from the frame before) and B closes them
+  before BACK leaves ONLINE. They are drawn twice: as buttons in the screen's
+  pass, and again after `online_after_frame` (`PortOskLate`), over the
+  portraits online_ui.c draws on top (Mary: over every layer).
+- **The trainer with a pad:** `PortNavPut` (pad_nav.c) puts the highlight on
+  a box: a window opens on its current tile, and the frame after it shuts the
+  highlight goes back to the row that opened it. `UMK3_SCREENS` takes 52
+  ("trainer"). `UMK3_LOG_NAV=2` lists every target.
+- Checked by scripted pad runs and captures (Test folder, muted): the trainer's
+  rows and stage window, B in a window, ONLINE's HOME down to the code box,
+  typing on the keys, B closing them, the keys over the portrait.
+
+### 2026-11-20 (trainer) -- MERCY as the ANIMALITY's first step; the checklist ticks
+
+Branch `claude/fatality-trainer`. Mary: the MERCY did not work and a
+FRIENDSHIP played instead; take MERCY off the list and make it the
+animality's first step; the checklist was never saved.
+
+- **Why the MERCY failed:** q_mercy_req (moves.c) wants both round tallies
+  `H[0]` and `H[1]` set -- the deciding round -- and d > 0x9f. The trainer's
+  F11 only set player one's. game_main.c now sets player two one round short
+  as well.
+- **Why a FRIENDSHIP played and nothing was ticked:** in the iOS 4/5-button
+  layouts the finishing inputs reach DoASpecial (DoSpecial, the G+8 table),
+  not secret_move_search, so `PortFTMatched` / `PortFTAllow` never saw them. A
+  port hook in DoASpecial's window-open path (after its predicate) reports the
+  window-shut handler of the same request. Scripted: `run+s` / `bl+s` (a
+  friendship) is now refused and the window restored; `r+s` gives the mercy.
+- **The two steps:** `ft_scan` keeps MERCY off the list (`ft_mercy_of`). With
+  ANIMALITY chosen and no mercy yet (G+0x45a 0), ft_tick measures the mercy
+  entry (`after_mercy`), the band says PASO 1/2 with the mercy's command, and
+  there is no floor frame or scale (Mary: the mercy has no place, only a
+  minimum). Once it is given, the fight goes on, the second FINISH HIM is
+  forced, that window replaces the saved one (RESTART goes back to the
+  animality), PASO 2/2.
+- Checked by script (Scorpion vs Kano, Subway): the typed mercy, then the
+  second window, then the typed animality at d 32..80, which played, ticked
+  (`save/fatality_trainer.txt` "18 8", written with `UMK3_FT_SAVE=1`) and returned to
+  the trainer's menu. Not seen by Mary yet; other fighters' mercy and
+  animality not run one by one.
+
 ### 2026-11-20 (later) -- The pages' hint line: PAGE alone
 
 Mary, from 0.5.5 with the Dreamcast icons ("C Z PAGINA SELECT B SALIR"): only

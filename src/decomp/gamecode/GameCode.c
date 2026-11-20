@@ -13,7 +13,8 @@
 #include "lime_glapi.h"   /* the GL calls' calling convention */
 #include <string.h>   /* memset, for clearSpriteListsAndEvents */
 int snprintf(char *buf, size_t n, const char *fmt, ...);  /* port: training */
-#include "../../runtime/smooth_models.h"   /* port: SMOOTH MODELS, what covers a skin */
+#include "../../runtime/smooth_models.h"
+#include "../../runtime/fatal_trainer.h"      /* port: the FATALITY TRAINER */   /* port: SMOOTH MODELS, what covers a skin */
 void rgl_shadow_caster(int on);         /* port: REAL-TIME SHADOWS, render/rgl.h */
 
 extern int PortTextureQuality;          /* runtime/draw_gl.c, port only */
@@ -5079,6 +5080,8 @@ int PortVsCpuLevel = 5;
 void PortTrainReset(void);
 void PortTrainInput(long bits);
 void PortTrainDraw(void);
+void PortTrainDrawInputs(void);
+void PortFTDraw(void);
 void PortTrainSave(void);
 extern int PortTrainMoves, PortTrainInputs;
 extern int PortPractice;                /* FrontEnd.c, port: training */
@@ -6935,13 +6938,16 @@ void Task_GameInit(void)
 
     ResetFightData();
 
-    if (GameMode == 2) {
+    if (GameMode == 2 || PortFT) {
+        /* port: the FATALITY TRAINER has no intro either, as Training
+         * (Mary: "they are not needed") */
         DoIntro         = 0;
         IntroCount      = 0.0f;
         IntroCount2     = 0.0f;
         IntroCountTimer = 0.0f;
         IntroCamCount   = 0;
-        WinsNeeded      = GameMode;     /* 2, from the register the test used */
+        if (GameMode == 2)
+            WinsNeeded  = GameMode;     /* 2, from the register the test used */
     } else {
         DoIntro         = 1;
         IntroCount      = 0.0f;
@@ -7738,6 +7744,20 @@ static long PortMoveListGlyphs(long value, long cursor, int right, float y)
         }
     }
     return (long)((float)cursor + total + FE_WidthScale * 1.0f * PortMvScale);
+}
+
+static long DrawMoveListEntry(long value, long cursor, int right, float y, char *buf);
+
+/* an arrow of the atlas as it is, never a pad's picture (DISPLAY INPUT) */
+static long DrawMoveListEntryRaw(long value, long cursor, float y, char *buf)
+{
+    (void)buf;
+    if (!PortMvMeasure)
+        limeDrawSprite((TEXTURE *)MoveIconsTexture, (float)cursor,
+                       y + FE_HeightScale * -2.0f * PortMvScale,
+                       FE_WidthScale * 16.0f * PortMvScale, FE_HeightScale * 16.0f * PortMvScale,
+                       MoveIconUV[value][1], MoveIconUV[value][0], 0.25f, 0.25f, col);
+    return (long)((float)cursor + FE_WidthScale * 17.0f * PortMvScale);
 }
 
 /* Draw one entry and return the new cursor. The two directions differ only in
@@ -8956,6 +8976,12 @@ static TEXTURE *PortMvPortraitTexture(long character)
     return lime_load_res_picture(name);
 }
 
+/* the same portrait for the FATALITY TRAINER's lists (FrontEnd.c) */
+TEXTURE *PortFighterPortrait(long character)
+{
+    return PortMvPortraitTexture(character);
+}
+
 void PortMvPreloadPortraits(void)
 {
     (void)PortMvPortraitTexture(PLAYER1MODEL);
@@ -9279,6 +9305,17 @@ void PortTrainInput(long bits)
     long k = bits & (0x01 | 0x02 | 0x3f0 | 0x400 | 0x800 | 0x1000);
     int i;
 
+    /* the five-button layout: a direction and S reach the engine as S and
+     * the six-button button GetArcadeJoyBits makes of them -- shown, that
+     * was two buttons for one press (Mary). What was pressed is S. */
+    {
+        static long synth;              /* those buttons, while they stay */
+        synth &= k;
+        if (Player1NumButtons != 6 && (k & 0x400))
+            synth |= k & 0x3f0;
+        k &= ~synth;
+    }
+
     if (k & ~TrainPrev) {
         for (i = TRAIN_LOG - 1; i > 0; i--) {
             TrainLogBits[i] = TrainLogBits[i - 1];
@@ -9526,6 +9563,68 @@ static void train_inputs(float x, float y, float w, float h)
     }
 }
 
+/* the FATALITY TRAINER's DISPLAY INPUT: what was pressed, as pressed --
+ * the directions as the moves list's arrows (left and right as they are on
+ * the screen), the buttons as the pad's or the keys' own pictures
+ * (game_main.c ft_raw_input), never the engine's word (Mary) */
+int PortFTRawLines(void);
+const char *PortFTRawLine(int i, int *dirs, int *frames, int *n);
+
+void PortTrainDrawInputs(void)
+{
+    float s = FE_HeightScale, W = (float)limeScreenWidth, iw = 70.0f * s;
+    float x = W - iw - 4.0f * s, y = 56.0f * s, line = 13.0f * s, save[4];
+    int i, n = PortFTRawLines();
+
+    if (n > 15)
+        n = 15;
+    if (n <= 0)
+        return;
+    limeEnableAlphaBlending_Basic();
+    limeSet2DDrawing();
+    limeFillRect(x, y, iw, (float)n * line + 4.0f * s, 0.0f, 0.0f, 0.0f, 0.5f);
+    for (i = 0; i < n; i++) {
+        int dirs, frames, nb, v[4], k = 0, b;
+        const char *file = PortFTRawLine(i, &dirs, &frames, &nb);
+        float yy = y + 3.0f * s + (float)i * line, cx;
+        char t[8], buf[64];
+
+        snprintf(t, sizeof t, "%d", frames);
+        train_colour(0.7f, 0.7f, 0.7f, save);
+        train_text(t, x + 3.0f * s, yy + 1.0f * s, 0.3f, 12.0f * s);
+        train_colour_back(save);
+        /* the arrows: 0 right, 1 left, 2 up, 3 down, 4 down-right, 5
+         * down-left (the atlas's own; "forward" is drawn to the right) */
+        if ((dirs & 2) && (dirs & 8))      v[k++] = 4;
+        else if ((dirs & 2) && (dirs & 4)) v[k++] = 5;
+        else if (dirs & 2)                 v[k++] = 3;
+        else {
+            if (dirs & 1) v[k++] = 2;
+            if (dirs & 8) v[k++] = 0;
+            else if (dirs & 4) v[k++] = 1;
+        }
+        v[k] = -1;
+        cx = x + 15.0f * s;
+        PortMvScale = 0.65f;
+        for (b = 0; b < k; b++)
+            cx = (float)DrawMoveListEntryRaw(v[b], (long)cx, yy + 1.0f * s, buf);
+        PortMvScale = 1.0f;
+        for (b = 0; b < nb; b++) {
+            TEXTURE *g = lime_load_extra_texture(file + b * 96);
+            int gw, gh;
+            float h = 10.0f * s, w;
+            if (!g)
+                continue;
+            lime_extra_texture_size(g, &gw, &gh);
+            w = gh > 0 ? h * (float)gw / (float)gh : h;
+            if (cx + w > x + iw)
+                break;
+            limeDrawSprite(g, cx, yy, w, h, 0.0f, 0.0f, 1.0f, 1.0f, col);
+            cx += w + 1.0f * s;
+        }
+    }
+}
+
 /* Called after DrawHUD in a training fight, not while paused */
 void PortTrainDraw(void)
 {
@@ -9546,6 +9645,260 @@ void PortTrainDraw(void)
         train_inputs(W - iw - 4.0f * s, py, iw, ph);
 }
 
+
+/* Port, not in the binary: the FATALITY TRAINER's window in the fight
+ * (runtime/fatal_trainer.c measures; Mary's references, MKX and MK11): at
+ * the top a band with the chosen finisher's name and its command -- the moves
+ * list's own row and icons for the fighter and the button layout, the arrows
+ * turned when the fighter faces left -- and under it the distance: where
+ * they stand, the range the game accepts, a scale with that range on it, and
+ * what is missing. The floor's frame is drawn in the scene (ft_draw3d). */
+
+/* A game text (UTF-16) as upper-case ASCII, for telling the rows apart */
+static void ft_ascii(const char *ucs, char *out, int n)
+{
+    const unsigned char *p = (const unsigned char *)ucs;
+    int i = 0;
+
+    if (p && p[0] == 0xff && p[1] == 0xfe)
+        p += 2;
+    while (p && (p[0] || p[1]) && i < n - 1) {
+        unsigned c = p[0] | p[1] << 8;
+        out[i++] = c >= 'a' && c <= 'z' ? (char)(c - 32) : c < 128 ? (char)c : '?';
+        p += 2;
+    }
+    out[i] = 0;
+}
+
+/* The moves list's FINISHING MOVES row for a kind: its name and its icons */
+static int ft_row(long ch, int kind, const char **name, const int **seq)
+{
+    const MOVESLISTENTRY *e;
+    const long *table;
+    long r, base;
+    int fat = 0, six = Player1NumButtons != 5;
+
+    if (ch < 0 || ch >= 26)
+        return 0;
+    e = &MovesListTab[ch];
+    table = six ? e->section[0].moves6 : e->section[0].moves5;
+    base = e->section[0].rows;
+    for (r = 0; r < e->section[1].rows; r++) {
+        const char *nm = GameTextNoHeader(e->section[1].nameId + r);
+        char a[64];
+        int k;
+
+        ft_ascii(nm, a, sizeof a);
+        if (strstr(a, "ANIMAL"))
+            k = FT_ANIMALITY;
+        else if (strstr(a, "BABAL") || strstr(a, "BEBE"))
+            k = FT_BABALITY;
+        else if (strstr(a, "FRIEND") || strstr(a, "AMIST"))
+            k = FT_FRIENDSHIP;
+        else if (strstr(a, "MERCY") || strstr(a, "PIEDAD") || strstr(a, "CLEMEN"))
+            k = FT_MERCY;
+        else if (strstr(a, "STAGE") || strstr(a, "PIT") || strstr(a, "ESCEN")
+                 || strstr(a, "BACKGROUND") || strstr(a, "FONDO"))
+            k = FT_STAGE;
+        else if (strstr(a, "FATAL"))
+            k = fat++ ? FT_FATALITY2 : FT_FATALITY1;
+        else
+            continue;
+        if (k == kind) {
+            *name = nm;
+            *seq = (const int *)((const char *)table + (base + r) * 0x40);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static const char *ft_kind_name(int k)
+{
+    switch (k) {
+    case FT_FATALITY1:  return "FATALITY 1";
+    case FT_FATALITY2:  return "FATALITY 2";
+    case FT_STAGE:      return PortMvTx("FATALITY DE ESCENARIO", "STAGE FATALITY");
+    case FT_ANIMALITY:  return "ANIMALITY";
+    case FT_MERCY:      return "MERCY";
+    case FT_FRIENDSHIP: return "FRIENDSHIP";
+    default:            return "BABALITY";
+    }
+}
+
+/* text centred at x (ASCII) */
+static void ft_text_c(const char *ascii, float x, float y, float scale, const float *rgb)
+{
+    char buf[256];
+    float c[4] = { rgb[0], rgb[1], rgb[2], 1.0f };
+
+    usprintf(buf, UC(ascii));
+    limeDrawFONT(&GameFont, limeUC(buf), x, y, 1, scale * FE_WidthScale, c);
+}
+
+static void ft_gtext_c(const char *ucs, float x, float y, float scale, const float *rgb)
+{
+    char buf[256];
+    float c[4] = { rgb[0], rgb[1], rgb[2], 1.0f };
+
+    usprintf(buf, UC("%s"), ucs);
+    limeDrawFONT(&GameFont, limeUC(buf), x, y, 1, scale * FE_WidthScale, c);
+}
+
+void PortFTDraw(void)
+{
+    static const float gold[3] = { 1.0f, 0.78f, 0.2f }, white[3] = { 0.95f, 0.93f, 0.88f };
+    static const float green[3] = { 0.4f, 1.0f, 0.45f }, red[3] = { 1.0f, 0.3f, 0.22f };
+    static const float grey[3] = { 0.72f, 0.72f, 0.7f };
+    const FT_MOVE *m = ft_selected();
+    const FT_LIVE *L = ft_live();
+    float s = FE_HeightScale, W = (float)limeScreenWidth, cx = W * 0.5f;
+    float bw = 230.0f * s, by = 8.0f * s, bh = 26.0f * s;   /* where the plates were: above the heads (Mary) */
+    const char *nm = NULL;
+    const int *seq = NULL;
+    char line[160];
+
+    limeEnableAlphaBlending_Basic();
+    limeSet2DDrawing();
+
+    /* ---- the band: name and command ---- */
+    limeFillRect(cx - bw * 0.5f, by, bw, bh, 0.20f, 0.02f, 0.02f, 0.82f);
+    limeFillRect(cx - bw * 0.5f, by, bw, 1.0f * s, gold[0], gold[1], gold[2], 0.9f);
+    limeFillRect(cx - bw * 0.5f, by + bh - 1.0f * s, bw, 1.0f * s, gold[0], gold[1], gold[2], 0.6f);
+    if (!m) {
+        ft_text_c(PortMvTx("ESTE LUCHADOR NO TIENE REMATES", "THIS FIGHTER HAS NO FINISHERS"),
+                  cx, by + 12.0f * s, 0.45f, white);
+        return;
+    }
+    {
+        /* an ANIMALITY is two steps (Mary): the MERCY's name and command
+         * first, the animality's once the mercy is given */
+        int bk = L->after_mercy ? FT_MERCY : m->kind;
+
+        if (ft_row(PLAYER1MODEL, bk, &nm, &seq))
+            ft_gtext_c(nm, cx, by + 1.0f * s, 0.4f, white);
+        else
+            ft_text_c(ft_kind_name(bk), cx, by + 1.0f * s, 0.4f, white);
+        if (m->kind == FT_ANIMALITY)
+            ft_text_c(L->after_mercy ? PortMvTx("PASO 1/2", "STEP 1/2")
+                                     : PortMvTx("PASO 2/2", "STEP 2/2"),
+                      cx - bw * 0.5f + 24.0f * s, by + 2.0f * s, 0.26f, gold);
+    }
+    if (seq) {
+        int v[16], n = 0, k;
+        char buf[128];
+        long cursor = 0;
+
+        while (n < 15 && seq[n] != -1) {
+            k = seq[n];
+            if (L->on && L->side > 0) {         /* facing left: the arrows turn */
+                if (k == 0) k = 1; else if (k == 1) k = 0;
+                else if (k == 4) k = 5; else if (k == 5) k = 4;
+            }
+            v[n++] = k;
+        }
+        v[n] = -1;
+        PortMvScale = 0.55f;
+        PortMvMeasure = 1;
+        for (k = 0; k < n; k++)
+            cursor = DrawMoveListEntry(v[k], cursor, 0, by + 12.0f * s, buf);
+        PortMvMeasure = 0;
+        cursor = (long)(cx - (float)cursor * 0.5f);
+        for (k = 0; k < n; k++)
+            cursor = DrawMoveListEntry(v[k], cursor, 0, by + 12.0f * s, buf);
+        PortMvScale = 1.0f;
+    }
+
+    /* ---- the distance ---- */
+    if (PortFTDistance && L->on) {
+        float py = by + bh + 1.0f * s, pw = 230.0f * s, ph = 26.0f * s;
+        float bx = cx - 110.0f * s, bwid = 220.0f * s, bar = py + 19.0f * s;
+        int top;
+        const float *sc;
+        const char *st;
+
+        limeFillRect(cx - pw * 0.5f, py, pw, ph, 0.0f, 0.0f, 0.0f, 0.6f);
+        /* the MERCY has no place of its own to stand in (Mary): no frame,
+         * no scale -- only a word when he is too close for it (q_mercy_req
+         * refuses at 0x9f or nearer) */
+        if (L->after_mercy)
+            snprintf(line, sizeof line, "%s", PortMvTx("PRIMERO EL MERCY, DESPU\xc9S LA ANIMALITY",
+                                                       "FIRST THE MERCY, THEN THE ANIMALITY"));
+        else if (L->lo < 0)
+            snprintf(line, sizeof line, PortMvTx("DISTANCIA %d", "DISTANCE %d"), L->d);
+        else if (L->any)
+            snprintf(line, sizeof line, PortMvTx("DISTANCIA %d   CUALQUIER DISTANCIA",
+                                                 "DISTANCE %d   ANY DISTANCE"), L->d);
+        else if (L->hi >= FT_DMAX)
+            snprintf(line, sizeof line, PortMvTx("DISTANCIA %d   REQUERIDA %d O M\xc1S",
+                                                 "DISTANCE %d   REQUIRED %d OR MORE"), L->d, L->lo);
+        else
+            snprintf(line, sizeof line, PortMvTx("DISTANCIA %d   REQUERIDA %d - %d",
+                                                 "DISTANCE %d   REQUIRED %d - %d"), L->d, L->lo, L->hi);
+        ft_text_c(line, cx, py + 1.0f * s, 0.32f, white);
+
+        /* what is missing, the game's own answer first */
+        if (L->now && (L->in || L->lo < 0)) {
+            st = L->after_mercy ? PortMvTx("\xa1HAZ EL MERCY!", "DO THE MERCY!")
+                                : PortMvTx("DISTANCIA PERFECTA: \xa1HAZLO!", "PERFECT DISTANCE: DO IT!");
+            sc = green;
+        } else if (!L->window) {
+            st = PortMvTx("ESPERA EL FINISH HIM", "WAIT FOR FINISH HIM");
+            sc = grey;
+        } else if (L->lo < 0) {
+            st = m->kind == FT_ANIMALITY && !L->mercy
+                 ? PortMvTx("PRIMERO HAZ MERCY", "DO A MERCY FIRST")
+                 : PortMvTx("EL JUEGO NO LO PERMITE AHORA", "THE GAME DOES NOT ALLOW IT NOW");
+            sc = red;
+        } else if (L->d < L->lo) {
+            snprintf(line, sizeof line, PortMvTx("MUY CERCA: AL\xc9JATE %d", "TOO CLOSE: BACK OFF %d"),
+                     L->lo - L->d);
+            st = line;
+            sc = red;
+        } else if (L->d > L->hi) {
+            snprintf(line, sizeof line, PortMvTx("MUY LEJOS: AC\xc9RCATE %d", "TOO FAR: GET CLOSER %d"),
+                     L->d - L->hi);
+            st = line;
+            sc = red;
+        } else {
+            st = PortMvTx("EN RANGO, PERO EL JUEGO A\xdaN NO LO ACEPTA", "IN RANGE, BUT THE GAME DOES NOT ACCEPT IT YET");
+            sc = grey;
+        }
+        ft_text_c(st, cx, py + 9.5f * s, 0.29f, sc);
+
+        if (L->after_mercy)
+            goto keys;
+        /* the scale: 0 to a little past the farthest of the range and him */
+        top = L->lo < 0 ? L->d : (L->hi >= FT_DMAX ? L->lo : L->hi);
+        if (L->d > top)
+            top = L->d;
+        top = top + top / 4 + 8;
+        limeFillRect(bx, bar, bwid, 4.0f * s, 0.25f, 0.25f, 0.25f, 0.9f);
+        if (L->lo >= 0) {
+            float a = bx + bwid * (float)L->lo / (float)top;
+            float b = L->hi >= FT_DMAX ? bx + bwid : bx + bwid * (float)L->hi / (float)top;
+            if (b - a < 2.0f * s)
+                b = a + 2.0f * s;
+            limeFillRect(a, bar, b - a, 4.0f * s, 0.25f, 0.9f, 0.3f, 0.95f);
+        }
+        {
+            float x = bx + bwid * (float)(L->d > top ? top : L->d) / (float)top;
+            limeFillRect(x - 1.0f * s, bar - 2.0f * s, 2.0f * s, 8.0f * s, 1.0f, 1.0f, 1.0f, 1.0f);
+        }
+    }
+
+keys:
+    /* ---- the keys, as the pad's or the keyboard's own pictures, large
+     * (Mary): game_main.c builds the line, FrontEnd.c draws it ---- */
+    limeFillRect(0.0f, 292.0f * s, W, 28.0f * s, 0.0f, 0.0f, 0.0f, 0.6f);
+    {
+        void PortFTHintLine(char *out, int n);         /* game_main.c */
+        void PortNavDrawLineC(const char *s, float y, float scale);   /* FrontEnd.c */
+        char hint[800];
+        PortFTHintLine(hint, sizeof hint);
+        PortNavDrawLineC(hint, 296.0f * s, 1.25f);
+    }
+}
 
 /* `C.175` in DrawHUD, 0x000de07c: white, alpha replaced per frame. */
 static const float DrawHUD_PulseColour[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
@@ -10165,7 +10518,8 @@ void DrawHUD(void)
     /* Karnage skips player one's plate too (0x284ec: GameMode 3 jumps past
      * the whole plate block to the streak line); drawn here, it covered
      * the score at (8, 32). */
-    if (GameMode != 3) {
+    /* port: the FATALITY TRAINER shows neither (Mary) */
+    if (GameMode != 3 && !PortFT) {
         if (*theKode != 0x11 && !rules_kode_on(0x11))  /* port: or the rules' */
             DrawPlayerPlate(0);
         DrawRoundWinCoins(0);
@@ -10186,7 +10540,7 @@ void DrawHUD(void)
                        0.0f, 0.0f, 1.0f, 1.0f, col);
 
     /* Karnage is the one mode that never shows player 2's plate. */
-    if (*theKode != 0x11 && !rules_kode_on(0x11) && GameMode != 3) {   /* port: the rules' */
+    if (*theKode != 0x11 && !rules_kode_on(0x11) && GameMode != 3 && !PortFT) {   /* port */
         DrawPlayerPlate(1);
         DrawRoundWinCoins(1);
     }
@@ -10298,9 +10652,11 @@ void DrawHUD(void)
     corners_done:;
     }
 
-    sprintf(strBuf, "%d", (int)GameTime);
-    limeDrawFONT(&CountDownFont, strBuf, (float)(limeScreenWidth / 2),
-                 s * 20.0f, 1, s, fontcol);
+    if (!PortFT) {                      /* port: the FATALITY TRAINER has no clock (Mary) */
+        sprintf(strBuf, "%d", (int)GameTime);
+        limeDrawFONT(&CountDownFont, strBuf, (float)(limeScreenWidth / 2),
+                     s * 20.0f, 1, s, fontcol);
+    }
 
     /* ---- who won ---- */
     if (WinnerMessage[0] || WinnerMessage[1]) {
@@ -12458,8 +12814,26 @@ static void Task_GameMain_frame(void)
     DrawHUD();
     PortKD_AfterHUD();
     PortKD_Lines();
-    if (GameMode == 6 && PortPractice && GamePaused == 0)
-        PortTrainDraw();                /* Port: training's window */
+    if (GameMode == 6 && PortPractice && GamePaused == 0) {
+        extern int PortFTSkipping;      /* game_main.c */
+        if (PortFT && PortFTSkipping) {
+            /* on the way to FINISH HIM, fast and unseen (Mary) */
+            float W = (float)limeScreenWidth, H = (float)limeScreenHeight;
+            static const float grey[3] = { 0.8f, 0.8f, 0.78f };
+            limeEnableAlphaBlending_Basic();
+            limeSet2DDrawing();
+            limeFillRect(0.0f, 0.0f, W, H, 0.0f, 0.0f, 0.0f, 1.0f);
+            ft_text_c(PortMvTx("PREPARANDO EL FINISH HIM...", "SETTING UP FINISH HIM..."),
+                      W * 0.5f, H * 0.5f - 8.0f * FE_HeightScale, 0.5f, grey);
+        } else if (PortFT) {            /* Port: the FATALITY TRAINER's */
+            if (!ft_live()->playing) {  /* nothing over a finisher (Mary) */
+                PortFTDraw();
+                if (PortFTInput)
+                    PortTrainDrawInputs();
+            }
+        } else
+            PortTrainDraw();            /* Port: training's window */
+    }
 
     /* ---- karnage: top the bars up and bank what was taken off them ---- */
     if (GameMode == 3) {
