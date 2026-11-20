@@ -88,6 +88,12 @@ renderers), and Mary's eyes on the build.
    Goal: under 1 ms a frame for two fighters, no spike on a new pose. Test:
    the stencil result against `umk_subsurf_eval` on every fighter, to float
    rounding.
+1b. **Done 2026-11-20 (0.5.5).** **Fighters drawn indexed** (`draw_indexed`)
+   and the scene's passes (point faces, key map, receivers, occlusion depth,
+   shadow triangles) on omp_lite's threads: Scorpion's fatality 2, ~150 frames
+   of 70-90 ms -> one of 69 ms on Direct3D 12. Vulkan still waits ~22 ms on
+   the GPU there. Textures staged through one kept 256 MB buffer and their
+   levels on every core: the menus' load 3.6 -> 1.55 s (step 3's cost, mostly).
 2. **Two frames in flight** on Vulkan and Direct3D 12 (`rgl_vk.c`,
    `rgl_d3d12.c`). Risk: resources freed while the GPU still reads them.
    Test: rgl_test on both, a fight and a fatality with the validation layers.

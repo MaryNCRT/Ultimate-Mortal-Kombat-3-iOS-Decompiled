@@ -2,6 +2,24 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.5.5",
+      "date": "2026-11-20",
+      "ES": [
+        "Se acabó el lag del fatality de Scorpion y de los remates que llenan la pantalla de cuerpos (Direct3D 12): los luchadores van a la GPU de forma más eficiente y las sombras usan todos los núcleos.",
+        "Cargas más cortas: el arranque hasta los menús pasa de 3,6 a 1,55 s con packs HD, y una pelea carga en 0,8 s.",
+        "Música dinámica: con FINISH HIM la música cambia de tramo, y al subir a otro escenario en plena pelea suena la música del nuevo escenario.",
+        "Nuevos iconos de botones SEGA DREAMCAST (ICONOS DE BOTONES).",
+        "Launcher: botón REPARAR, el error de compilación dice qué archivo falló (y se guarda en build\\last-build.log), se borran los restos de versiones viejas, la compilación en dos columnas, y la ventana se queda como la dejaste (también en pantalla completa)."
+      ],
+      "EN": [
+        "No more lag in Scorpion's fatality and finishers that fill the screen with bodies (Direct3D 12): fighters go to the GPU more efficiently and the shadows use every core.",
+        "Shorter loads: the boot to the menus goes from 3.6 to 1.55 s with HD packs, and a fight loads in 0.8 s.",
+        "Dynamic music: at FINISH HIM the music changes stretch, and going up to another stage mid-fight plays the new stage's music.",
+        "New SEGA DREAMCAST button icons (BUTTON ICONS).",
+        "Launcher: a REPAIR button, a compile error names the file that failed (kept in build\\last-build.log), old versions' leftovers are removed, the compile page has two columns, and the window stays as you left it (fullscreen too)."
+      ]
+    },
+    {
       "version": "0.5.4",
       "date": "2026-11-19",
       "ES": [
