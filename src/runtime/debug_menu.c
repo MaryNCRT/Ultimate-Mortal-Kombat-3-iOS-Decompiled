@@ -479,6 +479,12 @@ static const char *stage_name(int i)
     return buf;
 }
 
+/* the stage's name, for the FATALITY TRAINER's screen (FrontEnd.c) */
+const char *PortStageName(int i)
+{
+    return i >= 0 && i <= 15 ? stage_name(i) : "?";
+}
+
 /* A fight or a screen picked while the game is still loading waits for the
  * main menu (game_main.c queues it), so only the fight keys ever grey out. */
 static int row_enabled(int row)

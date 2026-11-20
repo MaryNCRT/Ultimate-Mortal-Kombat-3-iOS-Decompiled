@@ -302,7 +302,7 @@ void ft_draw3d(void)
     }
     if (!g_live.now && !g_live.in) { r = 1.0f; g = 0.18f; b = 0.12f; }
     else if (!g_live.now)          { r = 0.9f; g = 0.9f;  b = 0.85f; }
-    else                           { r = 0.25f; g = 1.0f; b = 0.3f; }
+    else                           { r = 0.15f; g = 1.0f; b = 0.2f; }   /* MK11's green */
 
     glPushAttrib(GL_ALL_ATTRIB_BITS);
     for (i = 0; i < 3; i++) {
@@ -324,23 +324,37 @@ void ft_draw3d(void)
     /* the frame: x across, depth into the screen around the fighters' line,
      * on the floor (z 0, a hair over it) */
     {
-        float d0 = depth - 0.55f, d1 = depth + 0.55f;
+        float d0 = depth - 0.75f, d1 = depth + 0.45f;   /* clear of the keys below */
         v[0] = x0; v[1] = d0; v[2] = z;
         v[3] = x1; v[4] = d0; v[5] = z;
         v[6] = x1; v[7] = d1; v[8] = z;
         v[9] = x0; v[10] = d1; v[11] = z;
         glVertexPointer(3, GL_FLOAT, 0, v);
-        glColor4f(r, g, b, 0.10f);
+        glColor4f(r, g, b, 0.035f);    /* barely tinted inside, as MK11's */
         glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-        for (i = 0; i < 3; i++) {       /* a thick bright line, three strokes */
-            float k = 0.012f * (float)i;
-            v[0] = x0 - k; v[1] = d0 - k;
-            v[3] = x1 + k; v[4] = d0 - k;
-            v[6] = x1 + k; v[7] = d1 + k;
-            v[9] = x0 - k; v[10] = d1 + k;
-            glLineWidth(3.0f);
-            glColor4f(r, g, b, i ? 0.35f : 0.95f);
-            glDrawArrays(GL_LINE_LOOP, 0, 4);
+        /* the edges as bands on the floor -- a soft wide glow, then the
+         * bright core -- as the consoles' marker (a GL line is one pixel
+         * wide on Direct3D 12 and Vulkan) */
+        for (i = 0; i < 4; i++) {       /* a neon tube: three glows, the core */
+            static const float th[4] = { 0.16f, 0.09f, 0.045f, 0.018f };
+            static const float al[4] = { 0.08f, 0.16f, 0.35f, 1.0f };
+            float t = th[i];
+            float q[4][4] = {               /* x0 d0 x1 d1 of each edge */
+                { x0 - t, d0 - t, x1 + t, d0 + t }, { x0 - t, d1 - t, x1 + t, d1 + t },
+                { x0 - t, d0 - t, x0 + t, d1 + t }, { x1 - t, d0 - t, x1 + t, d1 + t },
+            };
+            int e;
+            if (i == 3)                 /* the core nearly white-hot */
+                glColor4f(0.6f + 0.4f * r, 0.6f + 0.4f * g, 0.6f + 0.4f * b, al[i]);
+            else
+                glColor4f(r, g, b, al[i]);
+            for (e = 0; e < 4; e++) {
+                v[0] = q[e][0]; v[1] = q[e][1]; v[2] = z;
+                v[3] = q[e][2]; v[4] = q[e][1]; v[5] = z;
+                v[6] = q[e][2]; v[7] = q[e][3]; v[8] = z;
+                v[9] = q[e][0]; v[10] = q[e][3]; v[11] = z;
+                glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+            }
         }
     }
 
