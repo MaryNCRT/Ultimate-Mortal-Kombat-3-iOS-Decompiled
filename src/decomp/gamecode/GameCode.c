@@ -9282,6 +9282,17 @@ void PortTrainInput(long bits)
     long k = bits & (0x01 | 0x02 | 0x3f0 | 0x400 | 0x800 | 0x1000);
     int i;
 
+    /* the five-button layout: a direction and S reach the engine as S and
+     * the six-button button GetArcadeJoyBits makes of them -- shown, that
+     * was two buttons for one press (Mary). What was pressed is S. */
+    {
+        static long synth;              /* those buttons, while they stay */
+        synth &= k;
+        if (Player1NumButtons != 6 && (k & 0x400))
+            synth |= k & 0x3f0;
+        k &= ~synth;
+    }
+
     if (k & ~TrainPrev) {
         for (i = TRAIN_LOG - 1; i > 0; i--) {
             TrainLogBits[i] = TrainLogBits[i - 1];
@@ -12710,9 +12721,11 @@ static void Task_GameMain_frame(void)
     PortKD_Lines();
     if (GameMode == 6 && PortPractice && GamePaused == 0) {
         if (PortFT) {                   /* Port: the FATALITY TRAINER's */
-            PortFTDraw();
-            if (PortFTInput)
-                PortTrainDrawInputs();
+            if (!ft_live()->playing) {  /* nothing over a finisher (Mary) */
+                PortFTDraw();
+                if (PortFTInput)
+                    PortTrainDrawInputs();
+            }
         } else
             PortTrainDraw();            /* Port: training's window */
     }

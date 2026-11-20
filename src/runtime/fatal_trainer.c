@@ -235,6 +235,10 @@ void ft_tick(const FT_MOVE *m)
     g_live.in = g_live.lo >= 0 && g_live.d >= g_live.lo && g_live.d <= g_live.hi;
     g_live.window = *(int16_t *)((char *)G + 0x45c) == 3;
     g_live.mercy = *(uint16_t *)((char *)G + 0x45a) != 0;
+    /* the finisher under way: G+0x450, which the finisher sets and
+     * death_blow_complete marks -1 once taken (mkfatal.c) -- the trainer
+     * draws nothing then, so it is seen whole (Mary) */
+    g_live.playing = *(int16_t *)((char *)G + 0x450) != 0;
 }
 
 const FT_LIVE *ft_live(void) { return &g_live; }
@@ -286,7 +290,8 @@ void ft_draw3d(void)
     uint32_t c;
     int i, a, z1;
 
-    if (!PortFT || !PortFTDistance || !g_live.on || g_live.lo < 0 || !fighters(&mp, &hp))
+    if (!PortFT || !PortFTDistance || !g_live.on || g_live.playing || g_live.lo < 0
+        || !fighters(&mp, &hp))
         return;
     memcpy(&depth, PlayerZPos, 4);
     c = rd32(mp, 0x24);

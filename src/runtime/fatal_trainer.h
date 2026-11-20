@@ -30,6 +30,8 @@ typedef struct {
     int now;                            /* the game would take it now */
     int window;                         /* the finishing window (G+0x45c 3) */
     int mercy;                          /* a mercy was given (G+0x45a) */
+    int playing;                        /* a finisher is playing, or has
+                                         * played (G+0x450 set) */
 } FT_LIVE;
 
 extern int PortFT, PortFTP1, PortFTP2, PortFTStage, PortFTMove;
