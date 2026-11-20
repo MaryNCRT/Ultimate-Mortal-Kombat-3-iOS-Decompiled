@@ -76,7 +76,10 @@ int PortFTUnlimited = 1, PortFTDistance = 1, PortFTOneButton = 0, PortFTInput = 
 
 static FT_LIVE g_live;
 
-static int kind_of(uint32_t h)
+int ft_kind_of(uint32_t h);
+#define kind_of ft_kind_of
+
+int ft_kind_of(uint32_t h)
 {
     if (h == (uint32_t)(uintptr_t)t_do_fatality_1)  return FT_FATALITY1;
     if (h == (uint32_t)(uintptr_t)t_do_fatality_2)  return FT_FATALITY2;
@@ -388,6 +391,84 @@ const FT_MOVE *ft_moves_of(int ch, int *n)
     }
     *n = g_nmoves;
     return g_moves;
+}
+
+/* ------------------------------------------------------- the checklist
+ *
+ * Mary: each fighter's finishers, ticked once done properly -- typed, the
+ * game's own search matching it (PortFTMatched, logic/moves.c), not by ONE
+ * BUTTON -- and how many under the fighter's name. One line a fighter in
+ * save/fatality_trainer.txt: "<fighter> <mask of kinds>". */
+void port_save_path(char *out, size_t n, const char *file);
+static unsigned g_done[26];
+static int g_done_read;
+
+static void done_read(void)
+{
+    char path[1100];
+    FILE *f;
+    int c;
+    unsigned m;
+
+    if (g_done_read)
+        return;
+    g_done_read = 1;
+    port_save_path(path, sizeof path, "fatality_trainer.txt");
+    if (!(f = fopen(path, "r")))
+        return;
+    while (fscanf(f, "%d %u", &c, &m) == 2)
+        if (c >= 0 && c < 26)
+            g_done[c] = m;
+    fclose(f);
+}
+
+int ft_done(int ch, int kind)
+{
+    done_read();
+    return ch >= 0 && ch < 26 && kind >= 0 && kind < FT_KINDS && (g_done[ch] >> kind & 1);
+}
+
+int ft_done_count(int ch, int *total)
+{
+    int n, i, k = 0;
+    const FT_MOVE *m = ft_moves_of(ch, &n);
+    unsigned seen = 0;
+
+    done_read();
+    for (i = 0; i < n; i++)
+        if (!(seen >> m[i].kind & 1)) {     /* a kind once, however many entries */
+            seen |= 1u << m[i].kind;
+            k += ft_done(ch, m[i].kind);
+        }
+    if (total) {
+        int t = 0;
+        for (i = 0; i < FT_KINDS; i++)
+            t += seen >> i & 1;
+        *total = t;
+    }
+    return k;
+}
+
+void ft_mark_done(int ch, int kind)
+{
+    char path[1100];
+    FILE *f;
+    int i;
+
+    done_read();
+    if (ch < 0 || ch >= 26 || kind < 0 || kind >= FT_KINDS || ft_done(ch, kind))
+        return;
+    g_done[ch] |= 1u << kind;
+    printf("trainer: %d done for fighter %d (checklist)\n", kind, ch);
+    if (getenv("UMK3_SHOT") || getenv("UMK3_SHOTS"))
+        return;                             /* a script's run keeps nothing */
+    port_save_path(path, sizeof path, "fatality_trainer.txt");
+    if (!(f = fopen(path, "w")))
+        return;
+    for (i = 0; i < 26; i++)
+        if (g_done[i])
+            fprintf(f, "%d %u\n", i, g_done[i]);
+    fclose(f);
 }
 
 /* the move chosen on the trainer's screen, for the fighter in the fight */

@@ -12621,7 +12621,7 @@ enum { OB_TAB0, OB_SUB0 = OB_TAB0 + OS_N, OB_COPY = OB_SUB0 + PS_N, OB_BOX, OB_F
        OB_LSTL = OB_LO_END, OB_LSTR, OB_LSTPICK, OB_LCLOSE, OB_LST0, OB_LCARD0 = OB_LST0 + 14,
        OB_LCARD_END = OB_LCARD0 + 8, OB_LVOTE, OB_LPUT, OB_LACCEPT, OB_LREJECT, OB_LPASS, OB_LCEDE, OB_LNOCEDE,
        OB_CARD0, OB_ACT0 = OB_CARD0 + PORT_ROWS, OB_ACT2 = OB_ACT0 + PORT_ROWS,
-       OB_FT0 = OB_ACT2 + PORT_ROWS, OB_FTPICK0 = OB_FT0 + 16, OB_N = OB_FTPICK0 + 28 };
+       OB_FT0 = OB_ACT2 + PORT_ROWS, OB_FTPICK0 = OB_FT0 + 16, OB_N = OB_FTPICK0 + 56 };
 static long  PortOnlineWas[OB_N];
 static float PortOnlineLit[OB_N];       /* each button's light, eased */
 
@@ -21441,55 +21441,303 @@ static int ft_row_button(int id, const char *label, const char *value, float x, 
     hit = OnArea(id, x, y, w, 19.0f, &st);
     *lit += ((st ? 1.0f : 0.0f) - *lit) * 0.35f / limeFPSScaleFactor;
     OnButtonLook(line, x, y, w, 19.0f, BT_NORMAL, st, *lit, 1.0f);
-    if (st && w > 0.0f) {               /* the arrows either side */
-        OnText("<", x + 8.0f, y + 3.0f, 1, 0.46f, 0.0f, OnAmber, 0.9f);
-        OnText(">", x + w - 8.0f, y + 3.0f, 1, 0.46f, 0.0f, OnAmber, 0.9f);
-    }
+    if (st && w > 0.0f)                 /* it opens a list */
+        OnText("...", x + w - 12.0f, y + 3.0f, 1, 0.46f, 0.0f, OnAmber, 0.9f);
     *dir = 1;
-    if (hit && limeLastTouchScreenX[0] >= 0.0f && limeLastTouchScreenX[0] < OnX(x + w / 3.0f)
-        && !PortNavHover)
-        *dir = -1;
     return hit;
 }
 
-/* The list of fighters, in a window of its own over the screen (Mary):
- * `which` 1 the fighter, 2 the opponent. The fighter's list leaves out
- * those with no finisher. 1 when one was chosen or it was closed. */
+/* Every option in a window of its own over the screen (Mary): `ft_picking`
+ * 1 the fighter, 2 the opponent -- their portraits, and the colour and
+ * outfit each fights in -- 3 the stage, with its picture, 4 the finisher,
+ * 5..8 the four switches. The fighter's list leaves out those with no
+ * finisher. A choice closes it, as CLOSE and BACK do. */
 static int ft_picking;
+int PortFTPal[2];                       /* 0 the game's rule, 1..n (DbgPalette) */
+extern int DbgPalette[2];
+TEXTURE *PortFighterPortrait(long character);   /* GameCode.c */
+void stage_level_thumb(int level, float vw, float x, float y, float w, float h);
+const char *stage_level_title(int level);
+TEXTURE *lime_load_extra_texture(const char *file);
+
+/* a tile: a picture (a portrait, or a stage by stage_level_thumb) and a
+ * name under it, framed in gold when chosen; 1 when pressed */
+static int ft_tile(int id, const char *name, long ch, int level, float x, float y,
+                   float w, float h, int chosen, int off)
+{
+    int st = 0, hit = 0;
+    float *lit = &PortOnlineLit[id];
+    float ph = h - 9.0f;
+
+    if (!off)
+        hit = OnArea(id, x, y, w, h, &st);
+    *lit += ((st ? 1.0f : 0.0f) - *lit) * 0.35f / limeFPSScaleFactor;
+    OnShadow(x, y, w, h, 0.6f);
+    OnFill(x, y, w, h, 0.02f, 0.02f, 0.02f, 0.9f);
+    if (ch >= 0) {
+        TEXTURE *t = PortFighterPortrait(ch);
+        if (t) {
+            int tw, th;
+            float pw, k;
+            lime_extra_texture_size(t, &tw, &th);
+            k = th > 0 ? (float)tw / (float)th : 1.0f;
+            pw = ph * k;
+            if (pw > w - 2.0f)
+                pw = w - 2.0f;
+            limeDrawSprite(t, OnX(x + (w - pw) * 0.5f), OnY(y + 1.0f), OnW(pw), OnH(ph - 1.0f),
+                           0.0f, 0.0f, 1.0f, 1.0f, col);
+            limeEnableAlphaBlending_Basic();
+            limeSet2DDrawing();
+        }
+    } else if (level >= 0) {
+        stage_level_thumb(level, OnVW(), x + 1.0f, y + 1.0f, w - 2.0f, ph - 1.0f);
+        limeEnableAlphaBlending_Basic();
+        limeSet2DDrawing();
+    }
+    if (off)
+        OnFill(x, y, w, h, 0.0f, 0.0f, 0.0f, 0.65f);
+    else if (*lit > 0.01f)
+        OnFill(x, y, w, h, 1.0f, 0.85f, 0.5f, 0.12f * *lit);
+    OnFill(x, y + h - 9.0f, w, 9.0f, 0.0f, 0.0f, 0.0f, 0.75f);
+    OnText(name, x + w * 0.5f, y + h - 8.6f, 1, 0.30f, w - 3.0f,
+           chosen ? OnGold : off ? OnDim : OnWhite, 1.0f);
+    if (chosen)
+        OnMetalFrame(x, y, w, h, 1.2f, MT_GOLD, 1.0f);
+    else if (st)
+        OnMetalFrame(x, y, w, h, 0.9f, MT_GOLD, 0.8f);
+    else
+        OnFrame(x, y, w, h, 0.5f, 0.55f, 0.42f, 0.22f, 0.8f);
+    return hit;
+}
 
 static void ft_pick_window(int es)
 {
-    float vw = OnVW(), cols = 4.0f, bw = 100.0f, bh = 19.0f, gap = 4.0f;
-    float w = cols * bw + (cols - 1.0f) * gap + 24.0f, h = 6.0f * (bh + gap) + 52.0f;
-    float x = (vw - w) * 0.5f, y = 36.0f, a = 1.0f;
-    int *v = ft_picking == 1 ? &PortFTP1 : &PortFTP2;
-    int i, k = 0;
+    static const char *const kind_es[FT_KINDS] = { "FATALITY 1", "FATALITY 2",
+        "FATALITY DE ESCENARIO", "ANIMALITY", "MERCY", "FRIENDSHIP", "BABALITY" };
+    static const char *const kind_en[FT_KINDS] = { "FATALITY 1", "FATALITY 2",
+        "STAGE FATALITY", "ANIMALITY", "MERCY", "FRIENDSHIP", "BABALITY" };
+    float vw = OnVW(), a = 1.0f, w, h, x, y;
+    int id = OB_FTPICK0, i;
+    const char *title;
 
-    OnFill(0.0f, 0.0f, vw, 320.0f, 0.0f, 0.0f, 0.0f, 0.55f);
-    OnPanel(x, y, w, h, a, 1);
-    OnText(ft_picking == 1 ? (es ? "ELIGE TU LUCHADOR" : "CHOOSE YOUR FIGHTER")
-                           : (es ? "ELIGE EL RIVAL" : "CHOOSE THE OPPONENT"),
-           vw * 0.5f, y + 6.0f, 1, 0.6f, w - 20.0f, OnAmber, a);
-    for (i = 0; i < 24; i++) {
-        int n = 1;
-        float bx, by;
+    OnFill(0.0f, 0.0f, vw, 320.0f, 0.0f, 0.0f, 0.0f, 0.6f);
 
-        if (ft_picking == 1)
-            ft_moves_of(i, &n);
-        bx = x + 12.0f + (float)(k % 4) * (bw + gap);
-        by = y + 26.0f + (float)(k / 4) * (bh + gap);
-        k++;
-        if (OnButton(OB_FTPICK0 + i, OnName(CharacterNames[i]), bx, by, bw, bh,
-                     n == 0 ? BT_OFF : i == *v ? BT_MAIN : BT_NORMAL, a)) {
-            *v = i;
-            if (ft_picking == 1)
-                PortFTMove = 0;
+    if (ft_picking == 1 || ft_picking == 2) {
+        int side = ft_picking - 1, *v = side ? &PortFTP2 : &PortFTP1;
+        float tw = 46.0f, th = 62.0f, gap = 3.0f;
+        int ids[SKINS_MAX], nsk, ncol, skin;
+
+        {
+            /* the tiles as wide as the portraits are (Mary): the frame fits
+             * the picture, the name under it */
+            TEXTURE *pt = PortFighterPortrait(0);
+            int pw, ph;
+            if (pt) {
+                lime_extra_texture_size(pt, &pw, &ph);
+                if (ph > 0)
+                    tw = (th - 9.0f) * (float)pw / (float)ph;
+            }
+            if (tw > 52.0f)
+                tw = 52.0f;
+            if (tw < 30.0f)
+                tw = 30.0f;
+        }
+
+        w = 8.0f * tw + 7.0f * gap + 20.0f;
+        h = 3.0f * (th + gap) + 104.0f;
+        x = (vw - w) * 0.5f;
+        y = (320.0f - h) * 0.5f - 6.0f;
+        OnPanel(x, y, w, h, a, 1);
+        title = side ? (es ? "ELIGE EL RIVAL" : "CHOOSE THE OPPONENT")
+                     : (es ? "ELIGE TU LUCHADOR" : "CHOOSE YOUR FIGHTER");
+        OnText(title, vw * 0.5f, y + 5.0f, 1, 0.6f, w - 20.0f, OnAmber, a);
+        for (i = 0; i < 24; i++) {
+            int n = 1;
+            if (!side)
+                ft_moves_of(i, &n);
+            float tx = x + 10.0f + (float)(i % 8) * (tw + gap);
+            float ty = y + 22.0f + (float)(i / 8) * (th + gap);
+            if (ft_tile(id + i, OnName(CharacterNames[i]), i, -1, tx, ty, tw, th - 8.0f,
+                        i == *v, n == 0)) {
+                if (*v != i)
+                    PortFTPal[side] = 0;
+                *v = i;
+                if (!side)
+                    PortFTMove = 0;
+            }
+            if (n > 0) {                /* under the name: how many done (Mary) */
+                int tot, k = ft_done_count(i, &tot);
+                char c[16];
+                snprintf(c, sizeof c, "%d/%d", k, tot);
+                OnText(c, tx + tw * 0.5f, ty + th - 7.6f, 1, 0.30f, tw,
+                       tot && k == tot ? OnGreen : k ? OnGold : OnDim, 1.0f);
+            }
+        }
+        id += 24;
+        /* the colour and the outfit, as the select screen's lists have them */
+        y += 22.0f + 3.0f * (th + gap) + 4.0f;
+        nsk = skins_of(*v, ids);
+        skin = PortSkinPick[side][*v];
+        if (skin < 0 || skin > nsk)
+            skin = PortSkinPick[side][*v] = 0;
+        ncol = skin ? mods_skin_colors(ids[skin - 1])
+                    : pal_count(PlayerDefs[*v == 0x17 ? 0 : *v].texBase);
+        if (ncol > 6)
+            ncol = 6;
+        if (PortFTPal[side] > ncol)
+            PortFTPal[side] = 0;
+        OnText(es ? "PALETA" : "COLOR", x + 14.0f, y + 4.0f, 0, 0.42f, 60.0f, OnAmber, a);
+        {
+            float bx = x + 74.0f, bw2 = (w - 88.0f - (float)ncol * 3.0f) / (float)(ncol + 1);
+            char nm[16];
+            if (OnButton(id, "AUTO", bx, y, bw2, 17.0f, PortFTPal[side] == 0 ? BT_MAIN : BT_NORMAL, a))
+                PortFTPal[side] = 0;
+            for (i = 1; i <= ncol; i++) {
+                snprintf(nm, sizeof nm, "%d", i);
+                if (OnButton(id + i, nm, bx + (float)i * (bw2 + 3.0f), y, bw2, 17.0f,
+                             PortFTPal[side] == i ? BT_MAIN : BT_NORMAL, a))
+                    PortFTPal[side] = i;
+            }
+        }
+        id += 7;
+        y += 21.0f;
+        OnText(es ? "TRAJE" : "OUTFIT", x + 14.0f, y + 4.0f, 0, 0.42f, 60.0f, OnAmber, a);
+        {
+            int nb = nsk + 1 > 6 ? 6 : nsk + 1;
+            float bx = x + 74.0f, bw2 = (w - 88.0f - (float)(nb - 1) * 3.0f) / (float)nb;
+            if (bw2 > 110.0f)
+                bw2 = 110.0f;           /* ORIGINAL alone: the note fits beside it */
+            for (i = 0; i < nb; i++) {
+                char nm[32];
+                if (i == 0)
+                    snprintf(nm, sizeof nm, "ORIGINAL");
+                else
+                    snprintf(nm, sizeof nm, "%s", OnName(mods_skin_title(ids[i - 1])));
+                if (OnButton(id + i, nm, bx + (float)i * (bw2 + 3.0f), y, bw2, 17.0f,
+                             skin == i ? BT_MAIN : BT_NORMAL, a))
+                    PortSkinPick[side][*v] = i;
+            }
+            if (!nsk)
+                OnText(es ? "(NO HAY TRAJES A\xc3\x91" "ADIDOS)" : "(NO ADDED OUTFITS)",
+                       bx + bw2 + 8.0f, y + 4.0f, 0, 0.34f,
+                       x + w - 16.0f - (bx + bw2 + 8.0f), OnDim, a);   /* inside (Mary) */
+        }
+        id += 7;
+        y += 24.0f;
+        if (OnButton(id, es ? "LISTO" : "DONE", vw * 0.5f - 50.0f, y, 100.0f, 18.0f, BT_MAIN, a))
+            ft_picking = 0;
+        return;
+    }
+
+    if (ft_picking == 3) {
+        float tw = 92.0f, th = 58.0f, gap = 4.0f;
+
+        w = 4.0f * tw + 3.0f * gap + 20.0f;
+        h = 4.0f * (th + gap) + 50.0f;
+        x = (vw - w) * 0.5f;
+        y = (320.0f - h) * 0.5f - 6.0f;
+        OnPanel(x, y, w, h, a, 1);
+        OnText(es ? "ELIGE EL ESCENARIO" : "CHOOSE THE STAGE", vw * 0.5f, y + 5.0f, 1, 0.6f,
+               w - 20.0f, OnAmber, a);
+        for (i = 0; i < 16; i++)
+            if (ft_tile(id + i, OnName(stage_level_title(i)), -1, i,
+                        x + 10.0f + (float)(i % 4) * (tw + gap),
+                        y + 22.0f + (float)(i / 4) * (th + gap), tw, th, i == PortFTStage, 0)) {
+                PortFTStage = i;
+                ft_picking = 0;
+            }
+        if (OnButton(id + 16, es ? "CERRAR" : "CLOSE", vw * 0.5f - 50.0f, y + h - 23.0f, 100.0f,
+                     18.0f, BT_NORMAL, a))
+            ft_picking = 0;
+        return;
+    }
+
+    if (ft_picking == 4) {
+        int n;
+        const FT_MOVE *mv = ft_moves_of(PortFTP1, &n);
+
+        w = 240.0f;
+        h = (float)n * 22.0f + 70.0f;
+        x = (vw - w) * 0.5f;
+        y = (320.0f - h) * 0.5f;
+        OnPanel(x, y, w, h, a, 1);
+        OnText(es ? "ELIGE EL REMATE" : "CHOOSE THE FINISHER", vw * 0.5f, y + 5.0f, 1, 0.6f,
+               w - 20.0f, OnAmber, a);
+        {
+            int tot, k = ft_done_count(PortFTP1, &tot);
+            char c[48];
+            snprintf(c, sizeof c, es ? "%s: %d DE %d HECHOS" : "%s: %d OF %d DONE",
+                     OnName(CharacterNames[PortFTP1]), k, tot);
+            OnText(c, vw * 0.5f, y + h - 44.0f, 1, 0.38f, w - 20.0f,
+                   tot && k == tot ? OnGreen : OnPale, a);
+        }
+        for (i = 0; i < n; i++) {
+            float ry = y + 22.0f + (float)i * 22.0f;
+            int done = ft_done(PortFTP1, mv[i].kind);
+            if (OnButton(id + i, es ? kind_es[mv[i].kind] : kind_en[mv[i].kind], x + 12.0f,
+                         ry, w - 24.0f, 19.0f, i == PortFTMove ? BT_MAIN : BT_NORMAL, a)) {
+                PortFTMove = i;
+                ft_picking = 0;
+            }
+            /* the checklist's box: lit green once done by hand (Mary) */
+            OnFill(x + 17.0f, ry + 5.0f, 9.0f, 9.0f, 0.0f, 0.0f, 0.0f, 0.8f);
+            OnFrame(x + 17.0f, ry + 5.0f, 9.0f, 9.0f, 0.6f, 0.84f, 0.66f, 0.34f, 1.0f);
+            if (done) {
+                OnFill(x + 18.5f, ry + 6.5f, 6.0f, 6.0f, 0.30f, 0.95f, 0.35f, 1.0f);
+                OnText(es ? "HECHO" : "DONE", x + w - 18.0f, ry + 4.5f, 2, 0.32f, 50.0f,
+                       OnGreen, a);
+            }
+        }
+        if (OnButton(id + 20, es ? "CERRAR" : "CLOSE", vw * 0.5f - 50.0f, y + h - 25.0f, 100.0f,
+                     18.0f, BT_NORMAL, a))
+            ft_picking = 0;
+        return;
+    }
+
+    /* 5..8: a switch, what it does and ON / OFF */
+    {
+        static const char *const t_es[4] = { "TIEMPO DE FATALITY ILIMITADO", "DISTANCIA DE FATALITY",
+            "FATALITY DE UN BOT\xc3\x93N", "MOSTRAR ENTRADAS" };
+        static const char *const t_en[4] = { "UNLIMITED FATALITY TIME", "FATALITY DISTANCE",
+            "ONE-BUTTON FATALITY", "DISPLAY INPUT" };
+        static const char *const d_es[4] = {
+            "EL FINISH HIM NO SE ACABA: PRACTICA SIN PRISA.",
+            "LA DISTANCIA ARRIBA Y EL RECT\xc3\x81NGULO EN EL SUELO.",
+            "C O SELECT HACE EL REMATE ELEGIDO SI LA DISTANCIA ES LA CORRECTA.",
+            "LA COLUMNA DE LO QUE PULSAS, A LA DERECHA." };
+        static const char *const d_en[4] = {
+            "FINISH HIM NEVER RUNS OUT: PRACTISE WITHOUT HURRY.",
+            "THE DISTANCE AT THE TOP AND THE FRAME ON THE FLOOR.",
+            "C OR SELECT DOES THE CHOSEN FINISHER WHEN THE DISTANCE IS RIGHT.",
+            "THE COLUMN OF WHAT YOU PRESS, ON THE RIGHT." };
+        int *vals[4] = { &PortFTUnlimited, &PortFTDistance, &PortFTOneButton, &PortFTInput };
+        int k = ft_picking - 5;
+
+        if (k < 0 || k > 3) {
+            ft_picking = 0;
+            return;
+        }
+        w = 300.0f;
+        h = 104.0f;
+        x = (vw - w) * 0.5f;
+        y = (320.0f - h) * 0.5f;
+        OnPanel(x, y, w, h, a, 1);
+        OnText(es ? t_es[k] : t_en[k], vw * 0.5f, y + 5.0f, 1, 0.55f, w - 20.0f, OnAmber, a);
+        OnText(es ? d_es[k] : d_en[k], vw * 0.5f, y + 26.0f, 1, 0.36f, w - 20.0f, OnPale, a);
+        if (OnButton(id, es ? "S\xc3\x8d" : "ON", vw * 0.5f - 104.0f, y + 46.0f, 100.0f, 20.0f,
+                     *vals[k] ? BT_MAIN : BT_NORMAL, a)) {
+            *vals[k] = 1;
             ft_picking = 0;
         }
+        if (OnButton(id + 1, es ? "NO" : "OFF", vw * 0.5f + 4.0f, y + 46.0f, 100.0f, 20.0f,
+                     *vals[k] ? BT_NORMAL : BT_MAIN, a)) {
+            *vals[k] = 0;
+            ft_picking = 0;
+        }
+        if (OnButton(id + 2, es ? "CERRAR" : "CLOSE", vw * 0.5f - 50.0f, y + h - 26.0f, 100.0f,
+                     18.0f, BT_NORMAL, a))
+            ft_picking = 0;
     }
-    if (OnButton(OB_FTPICK0 + 24, es ? "CERRAR" : "CLOSE", vw * 0.5f - 50.0f,
-                 y + h - 24.0f, 100.0f, 18.0f, BT_NORMAL, a))
-        ft_picking = 0;
 }
 
 void FE_Task_FatalTrainer(void)
@@ -21547,9 +21795,9 @@ void FE_Task_FatalTrainer(void)
                       x, y, w, &d))
         ft_picking = 2;
     y += 22.0f;
-    if (ft_row_button(id++, es ? "ESCENARIO" : "STAGE", OnName(PortStageName(PortFTStage)),
+    if (ft_row_button(id++, es ? "ESCENARIO" : "STAGE", OnName(stage_level_title(PortFTStage)),
                       x, y, w, &d))
-        PortFTStage = ft_next(PortFTStage, d, 16);
+        ft_picking = 3;
     y += 22.0f;
     mv = ft_moves_of(PortFTP1, &n);
     if (n > 0) {
@@ -21569,7 +21817,7 @@ void FE_Task_FatalTrainer(void)
     } else
         snprintf(val, sizeof val, "%s", es ? "NINGUNO" : "NONE");
     if (ft_row_button(id++, es ? "REMATE" : "FINISHER", val, x, y, w, &d) && n > 0)
-        PortFTMove = ft_next(PortFTMove, d, n);
+        ft_picking = 4;
     y += 26.0f;
     OnRule(x, y - 3.0f, w, a);
     {
@@ -21583,7 +21831,7 @@ void FE_Task_FatalTrainer(void)
             if (ft_row_button(id++, es ? sw[i].es : sw[i].en,
                               *sw[i].v ? (es ? "S\xc3\x8d" : "ON") : (es ? "NO" : "OFF"),
                               x, y, w, &d))
-                *sw[i].v = !*sw[i].v;
+                ft_picking = 5 + i;     /* a window of its own (Mary) */
             y += 22.0f;
         }
     }
@@ -21597,6 +21845,8 @@ void FE_Task_FatalTrainer(void)
                  n > 0 ? BT_MAIN : BT_OFF, a)) {
         PortFT = 1;
         PortFTGo = 1;
+        DbgPalette[0] = PortFTPal[0];   /* the colours picked; a --fight's (Players.c) */
+        DbgPalette[1] = PortFTPal[1];
         printf("trainer: %s vs %s, stage %d, finisher %d\n", CharacterNames[PortFTP1],
                CharacterNames[PortFTP2], PortFTStage, PortFTMove);
     }

@@ -8959,6 +8959,12 @@ static TEXTURE *PortMvPortraitTexture(long character)
     return lime_load_res_picture(name);
 }
 
+/* the same portrait for the FATALITY TRAINER's lists (FrontEnd.c) */
+TEXTURE *PortFighterPortrait(long character)
+{
+    return PortMvPortraitTexture(character);
+}
+
 void PortMvPreloadPortraits(void)
 {
     (void)PortMvPortraitTexture(PLAYER1MODEL);
@@ -12720,7 +12726,17 @@ static void Task_GameMain_frame(void)
     PortKD_AfterHUD();
     PortKD_Lines();
     if (GameMode == 6 && PortPractice && GamePaused == 0) {
-        if (PortFT) {                   /* Port: the FATALITY TRAINER's */
+        extern int PortFTSkipping;      /* game_main.c */
+        if (PortFT && PortFTSkipping) {
+            /* on the way to FINISH HIM, fast and unseen (Mary) */
+            float W = (float)limeScreenWidth, H = (float)limeScreenHeight;
+            static const float grey[3] = { 0.8f, 0.8f, 0.78f };
+            limeEnableAlphaBlending_Basic();
+            limeSet2DDrawing();
+            limeFillRect(0.0f, 0.0f, W, H, 0.0f, 0.0f, 0.0f, 1.0f);
+            ft_text_c(PortMvTx("PREPARANDO EL FINISH HIM...", "SETTING UP FINISH HIM..."),
+                      W * 0.5f, H * 0.5f - 8.0f * FE_HeightScale, 0.5f, grey);
+        } else if (PortFT) {            /* Port: the FATALITY TRAINER's */
             if (!ft_live()->playing) {  /* nothing over a finisher (Mary) */
                 PortFTDraw();
                 if (PortFTInput)

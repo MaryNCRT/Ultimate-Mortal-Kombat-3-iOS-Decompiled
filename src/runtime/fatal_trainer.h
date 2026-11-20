@@ -43,6 +43,13 @@ const FT_LIVE *ft_live(void);
 int  ft_fire(const FT_MOVE *m);
 void ft_draw3d(void);
 const FT_MOVE *ft_moves_of(int ch, int *n);
+int  ft_kind_of(uint32_t handler);
+/* the checklist: each fighter's finishers done by hand (not ONE BUTTON),
+ * kept in save/fatality_trainer.txt */
+int  ft_done(int ch, int kind);
+int  ft_done_count(int ch, int *total);
+void ft_mark_done(int ch, int kind);
+extern uint32_t PortFTMatched;          /* logic/moves.c secret_move_search */
 const FT_MOVE *ft_selected(void);
 extern int PortFTGo;
 

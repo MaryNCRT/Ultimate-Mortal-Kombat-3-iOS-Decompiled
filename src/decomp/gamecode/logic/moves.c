@@ -6601,6 +6601,11 @@ long stick_look_lr(MK3OBJ *obj, uint32_t other_w, uint32_t table_w,
  *
  * A zero handler is not a hit: 0x38 is cleared and the search stops without
  * calling anything. */
+/* Port, not in the binary: the handler of the last entry the search
+ * matched, for the FATALITY TRAINER's checklist (runtime/fatal_trainer.c):
+ * which finisher the player typed. Read, never acted on. */
+uint32_t PortFTMatched;
+
 long secret_move_search(MK3OBJ *obj, uint32_t arg, uint32_t *table)
 {
     uint32_t *e;
@@ -6626,6 +6631,7 @@ long secret_move_search(MK3OBJ *obj, uint32_t arg, uint32_t *table)
         /* four conditional stores of this same value precede the
          * unconditional one in the binary; see the note above */
         obj->field38 = e[4];
+        PortFTMatched = e[4];                   /* port: see above */
         ((XFER_FN)xfer_types_table[e[2]])(obj, (MK3OBJ *)(uintptr_t)arg);
         return 0;
     }

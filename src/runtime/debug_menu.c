@@ -2675,6 +2675,22 @@ int stage_picture_full(const char *scene, float dy)
     return 1;
 }
 
+/* Port: a level's picture and its name, for the FATALITY TRAINER's stage
+ * list (FrontEnd.c), in the front end's units as stage_room_thumb */
+void stage_level_thumb(int level, float vw, float x, float y, float w, float h)
+{
+    if (level < 0 || level > 15)
+        return;
+    begin_2d_w(vw);
+    st_thumb(level, x, y, w, h, 1.0f);
+    end_2d();
+}
+
+const char *stage_level_title(int level)
+{
+    return level >= 0 && level <= 15 ? st_name(level) : "?";
+}
+
 void stage_room_thumb(int place, float vw, float x, float y, float w, float h)
 {
     if (place < 0 || place >= 14)
