@@ -1,8 +1,11 @@
 # Research: dynamic / adaptive stage music (Genesis style)
 
-**Status: investigation only, nothing implemented.** Written 2026-10-30,
-filed 2026-11-05 so it is not lost. Paused until Mary records the Genesis
-version (see section I).
+**Status: built 2026-11-19** (`src/runtime/adaptive_music.c`, see
+PROGRESS.md's entry of that day), at Mary's request, on the iOS tunes
+without the Genesis recording: the stretches are counted from each tune's
+end and tuned per tune in `music.ini`; the fatality stinger keeps iOS's
+place and the ending stretch follows it (question I.4). Written
+2026-10-30, filed 2026-11-05.
 
 Each finding is marked **[F]** (fact checked in the repo or the files),
 **[D]** (deduction) or **[?]** (hypothesis, not verified).

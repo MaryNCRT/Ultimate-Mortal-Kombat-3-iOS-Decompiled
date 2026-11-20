@@ -8,6 +8,26 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## After 0.5.4 (unreleased)
+
+Built into the test folder and checked by scripted fights with the sound off;
+not yet heard by Mary.
+
+- **Dynamic stage music** (`dynamic_music=1` in umk3.ini, on by default; 0
+  is the iOS game's music unchanged). At FINISH HIM/HER the stage tune jumps
+  to a "critical" stretch and repeats it; when the winner is named it plays
+  an "ending" stretch once and falls silent; a finisher's own tune still cuts
+  in and the ending follows it; the next round starts the tune from its
+  beginning. The stretches are the iOS tunes' own, counted from each file's
+  end (critical 13 s to 6 s before it, ending the last 6 s) and can be
+  changed per tune in `music.ini` beside the game
+  ([music.ini.example](music.ini.example)).
+- **A stage change mid-fight changes the music**: an uppercut through the
+  ceiling on the Subway (to the Street), the Soul Chamber (to the Balcony)
+  or Scorpion's Lair (to Kahn's Kave) switches to the tune of the stage
+  above (Old.mp3, Pit.mp3, Slow.mp3: the tunes those stages have on their
+  own).
+
 ## 0.5.4 beta (2026-11-19)
 
 Not yet played by Mary as a package. The online fixes were played by scripts

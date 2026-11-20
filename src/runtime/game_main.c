@@ -1145,6 +1145,10 @@ static void read_config(const char *dir)
             int pc = atoi(v) < 0 ? 0 : atoi(v) > 100 ? 100 : atoi(v);
             if (line[0] == 'm') port_music_pct = pc; else port_sfx_pct = pc;
         }
+        else if (strcmp(line, "dynamic_music") == 0) {  /* port: adaptive_music.c */
+            extern int port_dynamic_music;
+            port_dynamic_music = atoi(v) != 0;
+        }
         else if (strcmp(line, "monitor") == 0)     /* port: 0 auto, 1..n */
             plat_monitor_select(atoi(v));
         else if (strcmp(line, "antialiasing") == 0)

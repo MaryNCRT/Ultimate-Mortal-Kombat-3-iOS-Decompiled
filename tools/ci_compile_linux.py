@@ -22,7 +22,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CC = sys.argv[1:] or ["clang"]          # the compiler, with any leading arguments
 
 # launcher/app/lib/compile.js, the Linux 64-bit build
-RUNTIME = ["game_main.c", "debug_menu.c", "settings_menu.c", "pad_nav.c", "profiles.c", "mods.c",
+RUNTIME = ["game_main.c", "debug_menu.c", "settings_menu.c", "adaptive_music.c", "pad_nav.c", "profiles.c", "mods.c",
            "draw_gl.c", "gamecode_stubs.c", "mp_net.c", "mp_eos.c", "online_ui.c", "lime_menu.c",
            "lime_platform.c", "lime_app.c", "wav.c", "fight_runtime.c", "savestate.c",
            "rollback_probe.c", "rollback.c", "smooth_models.c", "skin_mats.c",

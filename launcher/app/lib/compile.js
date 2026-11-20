@@ -237,6 +237,7 @@ async function compileGame({
         path.join(rootDir, 'src/runtime/game_main.c'),
         path.join(rootDir, 'src/runtime/debug_menu.c'),
         path.join(rootDir, 'src/runtime/settings_menu.c'),
+        path.join(rootDir, 'src/runtime/adaptive_music.c'),
         path.join(rootDir, 'src/runtime/pad_nav.c'),
         path.join(rootDir, 'src/runtime/profiles.c'),
         path.join(rootDir, 'src/runtime/mods.c'),

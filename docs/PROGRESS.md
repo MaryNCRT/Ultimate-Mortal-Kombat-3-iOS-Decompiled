@@ -87,7 +87,7 @@ Closed problems are in the detailed log and the CHANGELOG, not here.
 | Pads through SDL_GameControllerDB (WinMM on Windows, SDL on Linux), player two's pad on Linux | **built in 0.5.4**, `tests/pad_db_test.c` passes; waits for such a pad |
 | KOMBO SLIDE OFF not enough (issue #252) | **changed in 0.5.4** (kicks too; VS RULES no longer override OFF); checked by script in training, waits for the reporter |
 | MOD HUB never connecting on other players' PCs, no error | **fixed in 0.5.3** (time limits, other sources for the index); waits for an affected PC |
-| Dynamic stage music, Genesis style (Soul Chamber first) | **research only**, nothing built: [research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md); waits for Mary's Genesis recording (WAV + GYM) |
+| Dynamic stage music (critical / ending stretches; the music follows a mid-fight stage change) | **built after 0.5.4** (`adaptive_music.c`), checked by scripted fights: FINISH HER with no finisher, a fatality, an uppercut from the Subway to the Street; waits for Mary to hear it and tune the stretches (`music.ini`) |
 | Screen-space contact shadows (ENHANCED LIGHTING) | research only: [research/CONTACT-SHADOWS.md](research/CONTACT-SHADOWS.md) (ambient occlusion is built) |
 | A pad's X glyph over START when joining online (Mary, once) | not reproduced |
 | THE STREET and other stages pause up to ~1.3 s on their first frames | open: their events load then |
@@ -101,6 +101,52 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+### 2026-11-19 (later) -- Dynamic stage music; the music follows a stage change
+
+Mary asked for the researched dynamic music ([research/DYNAMIC-STAGE-MUSIC.md](research/DYNAMIC-STAGE-MUSIC.md),
+design A + D), on the iOS tunes, and for the music to change when a fight
+moves to another stage.
+
+- `plat_music_section(start, end, loop)` (platform.h): plays the tune in
+  memory from `start` seconds, back to `start` at `end` when looping, else
+  silent and `plat_music_playing()` 0 once played out. Negative times count
+  back from the file's end. Win32 throws the queued buffers away
+  (`waveOutReset`) so the jump is heard at once, and applies a section asked
+  while the tune is still being decoded once it starts; the libmpg123 SDL
+  build moves `g_mus_pos` between bounds (and `plat_music_playing` there now
+  ends a tune that does not repeat, as on Windows); the SDL2_mixer build
+  only seeks (no end bound).
+- `src/runtime/adaptive_music.c`: called once a frame from the top of
+  `AddNewGameEvents` (Blood.c, a port block before the early return). It
+  reads FinishHimHer, IsInFinishing, WinnerMessage, MercyMessage,
+  CurrentScene and the last tune asked for (`limeTuneName` /
+  `limeTuneSerial`, lime_menu.c), writes no game state, and does nothing
+  while rollback runs a frame again (`rb_quiet`) or with the game's music
+  off (Settings[2] 0). States: normal -> critical (FINISH HIM/HER) ->
+  ending (winner named, or after a finisher's tune) -> done; any of them
+  back to normal, the tune from its start, once ResetFightData clears
+  FinishHimHer and WinnerMessage. Mercy keeps iOS's restart of the stage
+  tune. One `music:` line per change in the log.
+- Stretches: `[default]` critical -13..-6 s, ending -6..end, from each
+  tune's end -- Mary's Soul Chamber proposal (2:03-2:10, 2:10-2:16 of a
+  ~2:16 tune) moved onto the iOS files, which differ in length; `music.ini`
+  beside the game changes them per tune (`docs/music.ini.example`).
+- Stage change: a two-scene level starts in its lower scene
+  (CurrentScene 1); any uppercut there blasts to the upper one
+  (`t_rup3`: RoundParam+8 != 0 -> `t_blast_through_anything`;
+  `MaintainLevelScenes` sets CurrentScene 0). The tune becomes that of the
+  level whose first scene is the same file and has no second one, found in
+  LEVEL_INFO: level 4 Subway -> Street (level 5, Old.mp3), 10 Soul Chamber
+  -> Balcony (0, Pit.mp3), 11 Lair -> Kave (Slow.mp3). The log names it at
+  each fight's start.
+- Checked with the sound off (`--fight`, `UMK3_DBG_KEY`, `UMK3_DBG_FIN`,
+  `UMK3_KEYS`): Soul Chamber, F11 then no finisher -> critical, ending,
+  done; Subway, F11 and a fatality -> critical, finisher (Fatal1.mp3),
+  ending, done; Subway, a scripted run of uppercuts against the CPU ->
+  `the fight moved to another scene, Train.mp3 -> Old.mp3`, later FINISH HIM
+  and a fatality on Old.mp3. Not checked: how the stretches sound (Mary),
+  Linux, online, Mercy, a draw.
 
 ### 2026-11-19 (later) -- Pads: SDL_GameControllerDB, two pads on Linux, the Steam Deck
 

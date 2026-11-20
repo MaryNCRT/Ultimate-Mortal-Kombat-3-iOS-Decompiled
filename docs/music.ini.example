@@ -1,0 +1,22 @@
+; music.ini -- the dynamic stage music's stretches (src/runtime/adaptive_music.c).
+; Copy beside the game as music.ini. Without it the [default] below is used.
+; Turn the whole feature off with dynamic_music=0 in umk3.ini.
+;
+; Times in seconds. Negative: back from the tune's end (-6 = six seconds
+; before it). An end of 0: the tune's end.
+;   critical = the stretch repeated from FINISH HIM/HER until the winner
+;   ending   = played once after a finisher's tune or when the winner is
+;              named, then silence until the next round
+;   critical=off leaves that tune as on iOS.
+
+[default]
+critical=-13,-6
+ending=-6,0
+
+; The iOS stage tunes (res/audio): Pit 1:54, Church 1:51, Grave 1:57,
+; Train 1:56, Old 2:21, Frenzy 1:19, Coolt 1:46, Tongue 2:06.77 (the Soul
+; Chamber), Wacker 1:59, Slow 2:16. One section per tune, for example:
+;
+; [Tongue.mp3]
+; critical=113.5,120.5
+; ending=120.5,0
