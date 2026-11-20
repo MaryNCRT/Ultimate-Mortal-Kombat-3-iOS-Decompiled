@@ -32,7 +32,7 @@ The only source of truth is the binary. Nothing enters the tree that is not deri
 |---|---|---|
 | **Decompilation** (`src/decomp/`) | **2,572 / 2,572 (100%)** | LIME 3D engine (109), front end & scenes (291), arcade fight engine (2,172). |
 | **Verification** (`tools/decomp/`) | **100%** | Differential tests against the `armrecomp` ARM→C oracle; 229 data tables checked at build time (`ctest`). |
-| **PC port** (`src/runtime/`) | **Playable — v0.5.4 beta** | OpenGL, Vulkan, Direct3D 12; Windows and Linux; 3:2 / 4:3 / 16:9 / 21:9; keyboard and pads (about 870 pads known through SDL_GameControllerDB); local 2 players, LAN (MULTIPLAYER, Radmin VPN too) and online with rollback; replays; mods. |
+| **PC port** (`src/runtime/`) | **Playable — v0.5.5 beta** | OpenGL, Vulkan, Direct3D 12; Windows and Linux; 3:2 / 4:3 / 16:9 / 21:9; keyboard and pads (about 870 pads known through SDL_GameControllerDB); local 2 players, LAN (MULTIPLAYER, Radmin VPN too) and online with rollback; replays; mods. |
 | **Launcher** (`launcher/`) | Windows and Linux | Compiles the game with a bundled `zig cc` (nothing to install), updates itself, MODS tools, PROFILE with ACCOUNT (optional; progress in the cloud, the game's leaderboards live) and FRIENDS, STEAM (adds the launcher to the Steam library as a non-Steam game with SteamGridDB artwork). |
 
 Every release is tested by the project's tester, Mary, before the next one builds on it; the [Changelog](docs/CHANGELOG.md) says for each change whether she has played it yet.
@@ -71,6 +71,8 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 - **SMOOTH ANIMATIONS** (frames between the game's frames) and **SMOOTH MODELS** (Blender's weld + Catmull-Clark subdivision, with sharp-edge controls).
 - **TRAINING's screen** (0.4.5): the fighter's moves in the left corner and every input pressed in the right one, with the pad's own buttons; the pause menu turns them. **DUEL against the CPU** (0.4.5): beside OK, PLAYER 2 or CPU and its level; player two joins with START.
 - **Dynamic stage music** (port, `dynamic_music=0` in umk3.ini turns it off): FINISH HIM jumps the stage tune to a critical stretch, the winner gets an ending one, and an uppercut through the ceiling to another stage switches to that stage's tune.
+- **PC performance** (0.5.5): fighters go to the GPU indexed and the scene's shadow, occlusion and light passes use every core (finishers that fill the screen with bodies no longer lag on Direct3D 12); textures upload through one buffer kept for the session and their mip levels are made on every core (the boot to the menus 3.6 -> 1.55 s with HD packs).
+- **Button icons** of Xbox, PlayStation 5 / 4, Nintendo and SEGA DREAMCAST (0.5.5) pads, in the game and the launcher.
 - **STAGE SELECT** before VS, training and online fights, with a picture of every stage; the select screen's music plays on through it.
 - **Online** over LAN or the internet (Epic Online Services), rollback netcode with an input delay that follows the ping; online fights always use the game's own data (only models and textures from mods).
 - **The ONLINE screen** (0.4.0): HOME, PROFILE, LOBBIES, QUICK MATCH and PARTY; PROFILE edits the player's banner (name, fighter, favourite, gradient) and holds the friends and friend requests; players online counted; the main menu's banner and OPTIONS > EDIT PROFILE open it. LOBBIES came in 0.4.6; since then both games check they have the lobby's same rules before a fight (no fight, and a notice, when not), HOST ADVANTAGE OFF draws the side and the stage, and a fight ends back in the lobby. Since then a lobby opens its own room page: 1 VS 1 or ROTATION, a line the leader orders, the stage picked in the room (the leader, a vote, the fighters, the loser), joining on request, fights until the room is closed; a second fight in one session has shown desyncs once (open). QUICK MATCH and PARTY are still to come; their rules (rounds, a series of fights, time, kodes, kombo slide) are built and already used by the local versus, where SELECT on the select screen opens them. 0.4.1 gives it the MK Deception / Armageddon finish (aged gold, bronze, stone, ornaments) over each section's own UMK3 stage, steel Player Banners, and AUDIO > MENU CLICK SOUND. 0.4.2 renews the launcher in the same family (dark blued steel, gold, red), rebuilds its PROFILE around the Player Banner, makes the icon the favourite fighter, and draws STAGE SELECT in the ONLINE skin.
@@ -89,7 +91,11 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 - **TEXTURES:** every texture of the game by where it belongs, replaced into a mod.
 - **EXPORT:** fighters, stages, models and textures as FBX, GLB, USD (USDA/USDC/USDZ) or OBJ with PNG textures.
 
-## Known problems (0.5.4 beta)
+## Known problems (0.5.5 beta)
+
+- Vulkan: in finishers that fill the screen with bodies (Scorpion's fatality 2) the frames still wait on the GPU (~50 ms); Direct3D 12 is smooth there.
+- A compile on another PC ended with "EXIT CODE: -1" (0.5.4, after an old version had been compiled there); the cause is not known yet. 0.5.5 names the file that fails, keeps `build\last-build.log`, removes another version's build files and has REPAIR.
+- The SEGA DREAMCAST icons have not been seen in the game with a pad connected yet.
 
 - Online: 0.5.4's fixes (both players on one stage, no softlock at a round's end, no desync in a session's second fight) were checked with two games on one PC over a line made bad on purpose (120 ms of ping, 10% of the packets lost): no desync over a best of 3 and over two fights in a row. Not yet played between two machines. Both players need 0.5.4.
 - Steam Deck / Linux: the 6-button fix (#171, #253), player two's pad and the choice of Steam's virtual pad were compiled and checked in the generated code, not yet run on a Deck.

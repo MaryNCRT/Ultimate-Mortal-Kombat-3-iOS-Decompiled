@@ -856,8 +856,8 @@ pad:
             add(R_DEVICE, 0, tx("MANDO", "GAMEPAD"), "< %s > %.24s", v,
                 p->connected ? p->name : tx("(NO CONECTADO)", "(NOT CONNECTED)"));
         {
-            static const char *const st_es[5] = { "AUTO (LAS DEL MANDO)", "XBOX", "PLAYSTATION 5", "NINTENDO", "PLAYSTATION 4" };
-            static const char *const st_en[5] = { "AUTO (THE PAD'S OWN)", "XBOX", "PLAYSTATION 5", "NINTENDO", "PLAYSTATION 4" };
+            static const char *const st_es[6] = { "AUTO (LAS DEL MANDO)", "XBOX", "PLAYSTATION 5", "NINTENDO", "PLAYSTATION 4", "SEGA DREAMCAST" };
+            static const char *const st_en[6] = { "AUTO (THE PAD'S OWN)", "XBOX", "PLAYSTATION 5", "NINTENDO", "PLAYSTATION 4", "SEGA DREAMCAST" };
             int st = plat_pad_glyph_style(g_player, -1);
             add(R_PICONS, 0, tx("ICONOS DE BOTONES", "BUTTON ICONS"), "< %s >",
                 tx(st_es[st], st_en[st]));
@@ -1118,13 +1118,13 @@ static void change(int kind, int d)
     }
     case R_PICONS:
         {
-            /* in the order the row shows them: auto, Xbox, PS5, PS4, Nintendo */
-            static const int order[5] = { 0, 1, 2, 4, 3 };
+            /* in the order the row shows them: auto, Xbox, PS5, PS4, Nintendo, Dreamcast */
+            static const int order[6] = { 0, 1, 2, 4, 3, 5 };
             int st = plat_pad_glyph_style(g_player, -1), at = 0;
-            for (i = 0; i < 5; i++)
+            for (i = 0; i < 6; i++)
                 if (order[i] == st)
                     at = i;
-            plat_pad_glyph_style(g_player, order[wrap(at + d, 5)]);
+            plat_pad_glyph_style(g_player, order[wrap(at + d, 6)]);
         }
         g_dirty = 1;
         return;
@@ -1328,9 +1328,9 @@ static int drop_fill(int kind)
     static const char *mode_en[3] = { "WINDOW", "BORDERLESS", "FULLSCREEN" };
     static const char *tq_es[3] = { "IPHONE", "IPAD", "SIN LIMITE" };
     static const char *tq_en[3] = { "IPHONE", "IPAD", "NO LIMIT" };
-    static const char *ic_es[5] = { "AUTO (LAS DEL MANDO)", "XBOX", "PLAYSTATION 5", "PLAYSTATION 4", "NINTENDO" };
-    static const char *ic_en[5] = { "AUTO (THE PAD'S OWN)", "XBOX", "PLAYSTATION 5", "PLAYSTATION 4", "NINTENDO" };
-    static const int ic_order[5] = { 0, 1, 2, 4, 3 };
+    static const char *ic_es[6] = { "AUTO (LAS DEL MANDO)", "XBOX", "PLAYSTATION 5", "PLAYSTATION 4", "NINTENDO", "SEGA DREAMCAST" };
+    static const char *ic_en[6] = { "AUTO (THE PAD'S OWN)", "XBOX", "PLAYSTATION 5", "PLAYSTATION 4", "NINTENDO", "SEGA DREAMCAST" };
+    static const int ic_order[6] = { 0, 1, 2, 4, 3, 5 };
     struct profile *p = prof_get();
     char (*L)[48] = g_drop_lab;
     int n = 0, i;
@@ -1516,7 +1516,7 @@ static int drop_fill(int kind)
     }
     case R_PICONS: {
         int st = plat_pad_glyph_style(g_player, -1);
-        for (n = 0; n < 5; n++) {
+        for (n = 0; n < 6; n++) {
             snprintf(L[n], 48, "%s", tx(ic_es[n], ic_en[n]));
             if (ic_order[n] == st)
                 g_drop_cur = n;
@@ -2442,7 +2442,7 @@ static void save_ini(void)
     put("replay_scale", "%d", dbg_replay_pct);
     put("buttons", "%d", port_buttons());
     {
-        static const char *const st[5] = { "auto", "xbox", "ps5", "nintendo", "ps4" };
+        static const char *const st[6] = { "auto", "xbox", "ps5", "nintendo", "ps4", "dreamcast" };
         put("pad_icons", "%s", st[plat_pad_glyph_style(0, -1)]);
         put("p2pad_icons", "%s", st[plat_pad_glyph_style(1, -1)]);
     }

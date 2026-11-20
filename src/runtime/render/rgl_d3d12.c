@@ -635,6 +635,16 @@ static int dx_open(void *window, int width, int height)
     return 1;
 }
 
+/* 0.5.5: the textures' staging, one mapped buffer kept and reused, not a
+ * committed resource made and released for each texture -- up to 90 MB
+ * each for an HD sheet with its levels, made, zeroed by the system and
+ * released: 2.1 of the 3.6 s boot to the menus (measured 2026-11-20). A
+ * texture that does not fit in it takes the old way. */
+#define RING_BYTES ((UINT64)256 << 20)
+static ID3D12Resource *g_ring;
+static unsigned char  *g_ring_map;
+static UINT64          g_ring_off;
+
 static void dx_close(void)
 {
     int i;
@@ -656,6 +666,13 @@ static void dx_close(void)
         }
     free_window();
     upload_submit();
+    if (g_ring) {
+        ID3D12Resource_Unmap(g_ring, 0, NULL);
+        ID3D12Resource_Release(g_ring);
+    }
+    g_ring = NULL;
+    g_ring_map = NULL;
+    g_ring_off = 0;
     if (g_ulist) ID3D12GraphicsCommandList_Release(g_ulist);
     if (g_ualloc) ID3D12CommandAllocator_Release(g_ualloc);
     g_ulist = NULL;
@@ -718,6 +735,7 @@ static double g_diag_up_ms, g_diag_rel_ms;
 static UINT64 g_diag_up_bytes;
 static int g_diag_up_n, g_diag_up_lists;
 
+
 static void upload_submit(void)
 {
     ID3D12CommandList *one;
@@ -741,6 +759,7 @@ static void upload_submit(void)
     g_diag_rel_ms += rgl_now_ms() - t1;
     g_nubufs = 0;
     g_ubytes = 0;
+    g_ring_off = 0;                     /* the GPU is done with it (wait_gpu) */
 }
 
 static int upload_begin(UINT64 bytes)
@@ -791,12 +810,35 @@ static void upload(dx_res *r, int x, int y, int w, int h, int levels, const unsi
         lw = lw > 1 ? lw / 2 : 1;
         lh = lh > 1 ? lh / 2 : 1;
     }
-    if (!upload_begin(total))
-        return;
-    ub = buffer(total, D3D12_HEAP_TYPE_UPLOAD);
-    if (!ub || FAILED(ID3D12Resource_Map(ub, 0, NULL, (void **)&map))) {
-        if (ub) ID3D12Resource_Release(ub);
-        return;
+    if (total <= RING_BYTES && !g_ring) {
+        g_ring = buffer(RING_BYTES, D3D12_HEAP_TYPE_UPLOAD);
+        if (g_ring && FAILED(ID3D12Resource_Map(g_ring, 0, NULL, (void **)&g_ring_map))) {
+            ID3D12Resource_Release(g_ring);
+            g_ring = NULL;
+        }
+    }
+    if (total <= RING_BYTES && g_ring) {
+        UINT64 at = (g_ring_off + D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1)
+                  & ~(UINT64)(D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1);
+        if (at + total > RING_BYTES) {
+            upload_submit();            /* full: the copies so far run, then from the start */
+            at = 0;
+        }
+        if (!upload_begin(0))
+            return;
+        ub = g_ring;
+        map = g_ring_map;
+        for (l = 0; l < levels; l++)
+            fp[l].Offset += at;
+        g_ring_off = at + total;
+    } else {
+        if (!upload_begin(total))
+            return;
+        ub = buffer(total, D3D12_HEAP_TYPE_UPLOAD);
+        if (!ub || FAILED(ID3D12Resource_Map(ub, 0, NULL, (void **)&map))) {
+            if (ub) ID3D12Resource_Release(ub);
+            return;
+        }
     }
     for (l = 0; l < levels; l++) {
         int row;
@@ -804,6 +846,8 @@ static void upload(dx_res *r, int x, int y, int w, int h, int levels, const unsi
             memcpy(map + fp[l].Offset + (UINT64)row * fp[l].Footprint.RowPitch,
                    rgba[l] + (size_t)row * fp[l].Footprint.Width * 4, (size_t)fp[l].Footprint.Width * 4);
     }
+    if (ub == g_ring)
+        goto copies;
     ID3D12Resource_Unmap(ub, 0, NULL);
     if (g_nubufs == g_cubufs) {
         int n = g_cubufs ? g_cubufs * 2 : 256;
@@ -816,6 +860,7 @@ static void upload(dx_res *r, int x, int y, int w, int h, int levels, const unsi
         g_cubufs = n;
     }
     g_ubufs[g_nubufs++] = ub;
+copies:
     g_ubytes += total;
     g_list = g_ulist;
     to_state(r, D3D12_RESOURCE_STATE_COPY_DEST);
@@ -1269,13 +1314,21 @@ static void dx_lights(const void *block, int bytes)
     g_ldirty = 1;
 }
 
+/* dx_draw_indexed's indices for the put() it makes, NULL otherwise */
+static const unsigned *g_put_idx;
+static int g_put_ni;
+
 static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, int srv_ms,
                 const rgl_samp *s, const D3D12_VIEWPORT *vp, const D3D12_RECT *sc,
                 const rgl_vtx *v, int n)
 {
+    const unsigned *idx = g_put_idx;
+    const int ni = g_put_ni;
+    const UINT64 ibytes = idx ? ((UINT64)ni * 4 + 255) & ~(UINT64)255 : 0;
     /* room for the lights' block too, whether or not it is written: a
-     * flush below makes it due again */
-    UINT64 bytes = (UINT64)n * sizeof *v + LBYTES;
+     * flush below makes it due again; and for the indices after the
+     * vertices */
+    UINT64 bytes = (UINT64)n * sizeof *v + 256 + ibytes + LBYTES;
     const UINT64 vbytes = (UINT64)n * sizeof *v;
     ID3D12PipelineState *p;
     D3D12_SHADER_RESOURCE_VIEW_DESC sd;
@@ -1364,6 +1417,15 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     vb.SizeInBytes = (UINT)bytes;
     vb.StrideInBytes = sizeof *v;
     g_voff += (bytes + 255) & ~(UINT64)255;
+    if (idx) {
+        D3D12_INDEX_BUFFER_VIEW ib;
+        memcpy(g_vmap + g_voff, idx, (size_t)ni * 4);
+        ib.BufferLocation = ID3D12Resource_GetGPUVirtualAddress(g_vbuf) + g_voff;
+        ib.SizeInBytes = (UINT)ni * 4;
+        ib.Format = DXGI_FORMAT_R32_UINT;
+        ID3D12GraphicsCommandList_IASetIndexBuffer(g_list, &ib);
+        g_voff += ibytes;
+    }
 
     ID3D12GraphicsCommandList_SetPipelineState(g_list, p);
     ID3D12GraphicsCommandList_RSSetViewports(g_list, 1, vp);
@@ -1375,7 +1437,10 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     ID3D12GraphicsCommandList_IASetPrimitiveTopology(g_list, k->topo == RGL_LINES ? D3D_PRIMITIVE_TOPOLOGY_LINELIST
                                                                                   : D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     ID3D12GraphicsCommandList_IASetVertexBuffers(g_list, 0, 1, &vb);
-    ID3D12GraphicsCommandList_DrawInstanced(g_list, (UINT)n, 1, 0, 0);
+    if (idx)
+        ID3D12GraphicsCommandList_DrawIndexedInstanced(g_list, (UINT)ni, 1, 0, 0, 0);
+    else
+        ID3D12GraphicsCommandList_DrawInstanced(g_list, (UINT)n, 1, 0, 0);
     g_srv_next += 4;
 }
 
@@ -1416,6 +1481,19 @@ static void dx_draw(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_sam
     if (sc.right <= sc.left || sc.bottom <= sc.top || vp.Width <= 0 || vp.Height <= 0)
         return;
     put(k, f, g_tex[tex].r.res, 0, s, &vp, &sc, v, n);
+}
+
+static void dx_draw_indexed(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_samp *s,
+                            const rgl_rect *viewport, const rgl_rect *scissor,
+                            const rgl_vtx *v, int nv, const unsigned *idx, int ni)
+{
+    if (ni <= 0 || nv <= 0)
+        return;
+    g_put_idx = idx;
+    g_put_ni = ni;
+    dx_draw(k, f, tex, s, viewport, scissor, v, nv);
+    g_put_idx = NULL;
+    g_put_ni = 0;
 }
 
 /* --------------------------------------------------- blits and reads */
@@ -1626,7 +1704,7 @@ rgl_backend rgl_d3d12 = {
     dx_tex_new, dx_tex_image, dx_tex_sub, dx_tex_free,
     dx_target_new, dx_target_free, dx_target_use, dx_target_size,
     dx_clear, dx_draw, dx_blit, dx_read, dx_present, dx_finish, dx_shadow_map,
-    dx_lights, dx_shadow_map2, dx_screen_map,
+    dx_lights, dx_shadow_map2, dx_screen_map, dx_draw_indexed,
 };
 
 #endif

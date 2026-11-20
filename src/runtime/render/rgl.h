@@ -180,6 +180,14 @@ typedef struct rgl_backend {
      * samples as the screen map (the scene's depth for the occlusion pass,
      * the occlusion for the scene); 0 none */
     void (*screen_map)(int target);
+    /* as draw, triangles only: `nv` vertices once each and `ni` indices
+     * into them, three a triangle -- a fighter's mesh as the GPU takes it,
+     * not three copies of every vertex (each copied and sent every frame
+     * by the CPU: Scorpion's fatality, a dozen bodies, 80 ms frames).
+     * NULL: rgl_ff expands them and calls draw */
+    void (*draw_indexed)(const rgl_pipe *p, const rgl_frag *f, int tex, const rgl_samp *s,
+                         const rgl_rect *viewport, const rgl_rect *scissor,
+                         const rgl_vtx *v, int nv, const unsigned *idx, int ni);
 } rgl_backend;
 
 /* DYNAMIC LIGHTS (ENHANCED LIGHTING, rgl_ff.c): point, spot and directional

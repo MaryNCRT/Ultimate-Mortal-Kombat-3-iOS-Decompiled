@@ -33,8 +33,9 @@ Playable from start to end on Windows and Linux. What the port provides
 around the decompiled game:
 
 - **Renderers:** OpenGL, Vulkan, Direct3D 12 (`src/runtime/render/`; Vulkan and
-  Direct3D 12 through one fixed-function layer, `rgl_ff.c`), HD textures, MSAA,
-  real-time shadows, VSYNC, pipeline caches.
+  Direct3D 12 through one fixed-function layer, `rgl_ff.c`, fighters drawn
+  indexed since 0.5.5), HD textures, MSAA, real-time shadows, VSYNC, pipeline
+  caches.
 - **Screens:** 3:2 (the iPhone's), 4:3 (the iPad build's layout), 16:9,
   21:9; the port's own menus (settings, debug, STAGE SELECT, online,
   replays) fit each.
@@ -74,7 +75,8 @@ machine) before it is released, and reports by GitHub issues, messages and
 logs; the [CHANGELOG](CHANGELOG.md) says for each release whether she has
 played it. 0.5.4's online fixes were played by scripts with two games on one
 PC (no second machine yet); she watched those windows. Not on a Steam Deck
-or with a non-Xbox pad yet.
+or with a non-Xbox pad yet. In 0.5.5's test folder she saw the dynamic music
+and Scorpion's fatality without its lag.
 
 ### Open problems
 
@@ -87,7 +89,11 @@ Closed problems are in the detailed log and the CHANGELOG, not here.
 | Pads through SDL_GameControllerDB (WinMM on Windows, SDL on Linux), player two's pad on Linux | **built in 0.5.4**, `tests/pad_db_test.c` passes; waits for such a pad |
 | KOMBO SLIDE OFF not enough (issue #252) | **changed in 0.5.4** (kicks too; VS RULES no longer override OFF); checked by script in training, waits for the reporter |
 | MOD HUB never connecting on other players' PCs, no error | **fixed in 0.5.3** (time limits, other sources for the index); waits for an affected PC |
-| Dynamic stage music (critical / ending stretches; the music follows a mid-fight stage change) | **built after 0.5.4** (`adaptive_music.c`), checked by scripted fights: FINISH HER with no finisher, a fatality, an uppercut from the Subway to the Street; waits for Mary to hear it and tune the stretches (`music.ini`) |
+| Dynamic stage music (critical / ending stretches; the music follows a mid-fight stage change) | **in 0.5.5** (`adaptive_music.c`); Mary saw it working in the test folder; the stretches per tune (`music.ini`) wait for her ear |
+| Scorpion's fatality lag (and finishers with many bodies) | **fixed in 0.5.5** on Direct3D 12 (indexed fighters, the scene's passes on every core): Mary saw the lag gone in the test folder. **Vulkan**: the CPU side 45 -> 14 ms, but the frames still wait ~22 ms on the GPU there; open |
+| A compile on another PC ending "EXIT CODE: -1" after omp_lite.c (an old version compiled there before) | cause not known (the failed file's error was lost among the others' lines); 0.5.5 names it, keeps `build\last-build.log`, cleans another version's objects and has REPAIR. Waits for that player's log |
+| SEGA DREAMCAST button icons | **in 0.5.5**; the game's pictures not yet seen with a pad connected (no pad on the test machine) |
+| `tests/rgl_test.c`: 5 shadow checks fail on Vulkan and Direct3D 12 | the expected values predate ENHANCED LIGHTING's shading (the same 5 fail on the code before 0.5.5); the test needs new values |
 | Screen-space contact shadows (ENHANCED LIGHTING) | research only: [research/CONTACT-SHADOWS.md](research/CONTACT-SHADOWS.md) (ambient occlusion is built) |
 | A pad's X glyph over START when joining online (Mary, once) | not reproduced |
 | THE STREET and other stages pause up to ~1.3 s on their first frames | open: their events load then |
@@ -101,6 +107,83 @@ traced to the binary's own mechanism before anything is changed.
 ---
 
 ## Detailed log (newest first)
+
+### 2026-11-20 -- 0.5.5 beta: fatality lag, loads, Dreamcast icons, the launcher's compile
+
+**Scorpion's fatality lag (Mary: "el fatality de scorpion aun provoca lag").**
+Scripted (`--fight scorpion kano 5`, `UMK3_TWOUP=1`, `UMK3_DBG_KEY=400:0;1100:0`,
+`UMK3_DBG_FIN=400:2`, Direct3D 12): ~150 frames of 70-90 ms, ~50 ms of them in
+`scene_flush`. Split by temporary timers: the point lights' twelve faces
+19-25 ms, occlusion 10, the receivers' light coordinates 5, the backend's copies
+9, and before the flush `tris_indexed` 8 and `submit` 7 -- 1.1 million vertices
+a frame, each fighter expanded to three vertices a triangle (68 bytes each) and
+copied, transformed and sent by the CPU for every pass. Changes (`rgl_ff.c`,
+`rgl_d3d12.c`, `rgl_vk.c`, `rgl.h`):
+- `rgl_backend.draw_indexed` (DrawIndexedInstanced / vkCmdDrawIndexed, the
+  indices after the vertices in the frame's upload buffer). `tris_indexed`
+  sends a fighter's mesh (cast or receiving, not a glow, the scene held) as its
+  vertices once and the indices; `hold_draw` keeps the indices
+  (`g_hi`), `scene_flush` and the occlusion depth draw them indexed,
+  `shadow_cast_idx` copies the shadow triangles by index. The smoothed bodies
+  come with `rgl_shadow_proxy(2)` (receive only): the first version left them
+  out and changed nothing. Held vertices 1.1 M -> 120 k a frame.
+  `UMK3_NO_INDEXED=1` turns it off.
+- On omp_lite's threads: the point faces (16 runs a face, each its own draw),
+  the key light's map, the receivers, the occlusion depth's fighters, a
+  fighter's shadow triangles. A triangle wholly past a point light's far plane
+  is dropped (the GPU clips it anyway).
+Result: one 69 ms frame as the copies appear, the rest under the slow-frame
+threshold. Pictures: two runs of the new path identical (`UMK3_SHOT=330`); the
+old path differs from itself run to run (223,499 pixels: SMOOTH ANIMATIONS'
+timing), and from the new by less (62,661), the same scene. Vulkan renders the
+same; its fatality's CPU flush 45 -> 14 ms but `presenting` ~22 ms (the GPU):
+still ~50 ms frames, open. `rgl_test`: OpenGL 0 failed; Vulkan and Direct3D 12
+5 shadow checks fail, the same 5 as the code before (stale expected values).
+Linux compile 86/86. Mary, after trying it: "ya parece haberse ido el lag".
+
+**Loads (Mary: "acaba con los tiempos de carga").** `UMK3_LOG_LOADS=3`: the
+menus' 3.6 s were 2.1 s in the backend's texture upload (a committed upload
+resource made, zeroed and released per texture, up to 90 MB with its levels)
+and 1.0 s making the levels on one core; decoding was already read ahead
+(`draw_gl.c` pf_*, umk3-preload.txt). A second read-ahead per load was tried
+and dropped (it duplicated that one). Now one mapped 256 MB staging buffer per
+session (D3D12 and Vulkan, reset when the upload list's wait is done, freed at
+close), levels and pixel conversion on omp_lite's threads, and
+`lime_pvr_load` reads the 52-byte header before the file. Menus 3.6 -> 1.55 s,
+fight 1.07 -> 0.82 s; what is left of a fight is decoding its HD PNGs (Kano's
+132 ms).
+
+**SEGA DREAMCAST icons.** The 29 SVGs of StrategyWiki's "Category:Sega
+Dreamcast controller buttons" (its MediaWiki API; the page itself refuses
+scripts), CC BY-SA (source given there: Kenney's input prompts), rendered by
+headless Edge at 256 px tall into `launcher/aditional textures/glyphs/dc`.
+Style 5 in `ui_alert.c` (`plat_pad_glyph`, by position: A B X Y, C Z on
+L1 R1, L R on L2 R2, Start), umk3.ini `pad_icons=dreamcast`, the settings
+menu's row and list, the launcher's CONTROLS (`glyphs.js`, `ini.js`,
+`i18n.js`). Not yet seen in the game with a pad connected.
+
+**The launcher's compile (a player on another PC: "EXIT CODE: -1" after
+omp_lite.c, an old version compiled there before).** The first failed file
+rejected `runWithPool` while the other compiles went on reporting, so the
+failure's text was not where the player looked; which file failed is not
+known. Now `runWithPool` returns every failure, each is compiled again alone,
+and one that stays is named after EXIT CODE with its `error:` lines
+(`build.lastError`); every line goes to `build\last-build.log`.
+`build\built-by.txt`: another version's objects are removed before compiling
+(1,113 in the test folder; the full compile after it 15 s). Compiles at once:
+cores, and total memory / 1.5 GB. REPAIR (`build(..., { repair: true })`):
+objects without their .rsp/.stamp/.d or of zero bytes and orphaned files
+removed, the .ipa not extracted when its files are there, `aditional textures`
+and `lighting` copied again, the incremental compile (3.8 s with two broken
+objects). COMPILE YOUR .IPA in two columns.
+
+**The launcher's window and start.** `window.json` beside `root.json`: size,
+place (only if a screen still shows it), maximized, fullscreen; saved on close
+and before `app.exit` (relaunch, update). The start measured with the shot aid:
+the window at ~0.43 s, the page's start 115 -> 58 ms (the settings 80 -> 18 ms)
+with `glyphs:all`, `logo:get` and `hero:get` reading in parallel without
+blocking; a cold first start had waited 3.1 s for the settings behind the
+synchronous picture reads.
 
 ### 2026-11-19 (later) -- Dynamic stage music; the music follows a stage change
 

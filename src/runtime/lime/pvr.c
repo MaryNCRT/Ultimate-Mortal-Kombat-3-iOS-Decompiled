@@ -344,6 +344,18 @@ bool lime_pvr_load(const char *path, LimeImage *out)
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
     if (size < PVR_HEADER) { fclose(f); return false; }
+    /* port: the header before the whole file -- a PNG (the bundle's .PNG
+     * names, a mod's pictures) was read whole here only to be refused,
+     * then read again by the PNG loader */
+    {
+        uint8_t hd[PVR_HEADER];
+        if (fread(hd, 1, PVR_HEADER, f) != PVR_HEADER
+            || rd_u32(hd + 44) != PVR_TAG || rd_u32(hd + 0) != PVR_HEADER) {
+            fclose(f);
+            return false;
+        }
+        fseek(f, 0, SEEK_SET);
+    }
 
     uint8_t *raw = malloc((size_t)size);
     if (!raw) { fclose(f); return false; }

@@ -1,6 +1,6 @@
 # Handoff: how to pick up the work
 
-**Last updated:** 2026-11-19 (release 0.5.4 beta: online -- one stage on both sides, no softlock at a round's end, no desync in a session's second fight, holds averaged, a 15 s stall leaves the fight; Linux's `long` in the port's files (the Steam Deck's 6 buttons, #171/#253); pads from SDL_GameControllerDB (`pad_db.h`), player two's pad on Linux; KOMBO SLIDE OFF with kicks (#252); CI's Linux check compiles as the launcher). What each release changed: [CHANGELOG.md](CHANGELOG.md).
+**Last updated:** 2026-11-20 (release 0.5.5 beta: fighters drawn indexed and the scene's passes on every core -- Scorpion's fatality lag; textures staged through one kept buffer -- shorter loads; SEGA DREAMCAST icons; the launcher's REPAIR, a failed file named, another version's objects cleaned, two columns, the window kept; dynamic stage music. Before that, release 0.5.4 beta: online -- one stage on both sides, no softlock at a round's end, no desync in a session's second fight, holds averaged, a 15 s stall leaves the fight; Linux's `long` in the port's files (the Steam Deck's 6 buttons, #171/#253); pads from SDL_GameControllerDB (`pad_db.h`), player two's pad on Linux; KOMBO SLIDE OFF with kicks (#252); CI's Linux check compiles as the launcher). What each release changed: [CHANGELOG.md](CHANGELOG.md).
 
 This is for whoever continues the project — a person or an AI agent — with
 no context. It says what to read, how the pieces are built and checked,
@@ -97,6 +97,8 @@ and answers the preload's calls over HTTP.
 | Online, two games on one PC | the host `UMK3_LOBBY_TEST=host` (with `UMK3_LOBBY_RULES`, `UMK3_LOBBY_ROOM`), the guest `UMK3_LOBBY_TEST=join` with `UMK3_EOS_NEW_DEVICE=1`, its own `UMK3_SAVE_DIR` and `UMK3_PROFILES=profiles_j.ini`; the online select screen's fighter and PLAY tapped by `UMK3_TAPS` (portrait 235,62, PLAY 240,303); scripted inputs `UMK3_KEYS`; a bad line `UMK3_NET_LOSS` / `UMK3_NET_LAG` / `UMK3_NET_JITTER`. A desync: `UMK3_RB_SYNCTEST=1` (a frame run twice from one snapshot, the differing words named) and `UMK3_RB_DUMP=<frame>` (both games' memory at one frame, compared by name). Run test games with the sound off (`music_volume=0`, `sfx_volume=0` in umk3.ini). |
 | Pad layouts | `tests/pad_db_test.c` (pad_db.h against `src/runtime/platform/gamecontrollerdb.txt`) |
 | Linux compile, as the launcher does | `python3 tools/ci_compile_linux.py <cc> [args]` (zig works: `zig cc -target x86_64-linux-gnu`) |
+| A heavy fatality, timed | `--fight scorpion kano 5` with `UMK3_TWOUP=1` (a two-player fight: FINISH HIM comes in the last round), `UMK3_DBG_KEY=400:0;1100:0`, `UMK3_DBG_FIN=400:2` (fatality 2's row); the log's `slow frame:` lines. Loads: `UMK3_LOG_LOADS=<ms>` and its `upload ...` lines |
+| The launcher's start | `UMK3_ROOT=<game folder> UMK3_LAUNCHER_SHOT=<png>` on the test folder's `launcher\bin\UMK3-Launcher.exe` (the new code packed into its `app.asar`, above): `<png>.main.log` has the times |
 
 ## 5. Releasing
 
@@ -200,9 +202,18 @@ rules that go with it.
   Research only: contact shadows -- see `docs/research/`.
 - **Dynamic stage music** (`src/runtime/adaptive_music.c`, umk3.ini
   `dynamic_music=`, stretches in `music.ini` beside the game,
-  `docs/music.ini.example`): built, waits for Mary to hear it and tune the
-  stretches per tune. The log's `music:` lines name every change. It reads
+  `docs/music.ini.example`): in 0.5.5, Mary saw it work; the stretches per
+  tune wait for her ear. The log's `music:` lines name every change. It reads
   the fight and writes nothing; keep it that way (online).
+- **Fighters drawn indexed** (`rgl_ff.c` tris_indexed, `draw_indexed` in
+  `rgl_d3d12.c` / `rgl_vk.c`): only fighters' meshes (`SH.caster`), never the
+  stage or a glow, whose lights and notes read each corner. `UMK3_NO_INDEXED=1`
+  compares. Vulkan's fatality still waits ~22 ms a frame on the GPU (open);
+  `tests/rgl_test.c`'s 5 shadow checks need values for ENHANCED LIGHTING.
+- **The launcher's compile**: `build\last-build.log` and the summary after
+  EXIT CODE say which file failed; ask a player for that log. REPAIR keeps
+  the .ipa's files. The player whose compile ended "EXIT CODE: -1" after
+  omp_lite.c (0.5.4, an old version compiled before) has not sent a log.
 - **Updates**: an installed update leaves `update\needs-build`; the game
   cannot be started from the launcher until a compile succeeds.
 - **Building into the test folder without `node_modules`**: the folder's

@@ -39,7 +39,7 @@ export function vkLabel(vk) {
 
 /* The game's PB_* buttons, by position, and each make's pictures. */
 export const PB = ['SOUTH', 'EAST', 'WEST', 'NORTH', 'L1', 'R1', 'L2', 'R2', 'SELECT', 'START', 'L3', 'R3', 'HOME'];
-export const PAD_ICON_NAMES = ['auto', 'xbox', 'ps5', 'ps4', 'nintendo'];
+export const PAD_ICON_NAMES = ['auto', 'xbox', 'ps5', 'ps4', 'nintendo', 'dreamcast'];
 export const PAD_SETS = {
     xbox: { dir: 'xb', files: ['T_X_A_Color_Retro', 'T_X_B_Color_Retro', 'T_X_X_Color_Retro',
         'T_X_Y_Color_Retro', 'T_X_LB_Retro', 'T_X_RB_Retro', 'T_X_LT_Retro', 'T_X_RT_Retro',
@@ -59,6 +59,13 @@ export const PAD_SETS = {
     nintendo: { dir: 'ns', files: ['T_S_B', 'T_S_A', 'T_S_Y', 'T_S_X', 'T_S_LB', 'T_S_RB',
         'T_S_LT', 'T_S_RT', 'T_S_Minus', 'T_S_Plus', 'T_S_L', 'T_S_R', 'T_S_Home'],
         names: {}, extra: { Dpad: 'T_S_Dpad', L: 'T_S_L' } },
+    /* the Sega Dreamcast's (StrategyWiki, CC BY-SA), by position as the game
+     * draws them (ui_alert.c): L1 / R1 the arcade stick's C and Z, L2 / R2
+     * the triggers */
+    dreamcast: { dir: 'dc', files: ['Dc-Button-A', 'Dc-Button-B', 'Dc-Button-X', 'Dc-Button-Y',
+        'Dc-Button-C', 'Dc-Button-Z', 'Dc-Button-L', 'Dc-Button-R', null, 'Dc-Button-Start',
+        null, null, null],
+        names: {}, extra: { Dpad: 'Dc-Dpad-Neutral', L: 'Dc-Analog-Neutral' } },
 };
 
 /* A pad= value's make: 054c Sony (the DualShock 4's products apart), 057e

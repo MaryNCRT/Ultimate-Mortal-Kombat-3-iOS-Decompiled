@@ -171,23 +171,28 @@ function compileSingleFile(zigExe, args, rspPath, objPath) {
 /**
  * Runs tasks with a concurrency pool.
  */
+/* 0.5.5: every task runs to its end and the failures are returned, not
+ * thrown at the first: the first used to end the compile while the others
+ * went on reporting, so the log's last lines were other files' and the
+ * error was lost among them (a player: "EXIT CODE: -1" after omp_lite.c,
+ * nothing else). The caller tries each failure again on its own. */
 async function runWithPool(tasks, concurrency, onItemComplete) {
     let index = 0;
     const running = new Set();
-    const results = [];
+    const failed = [];
 
     async function next() {
         if (index >= tasks.length) return;
         const currentIdx = index++;
         const task = tasks[currentIdx];
-        const promise = task().then(
+        const promise = Promise.resolve().then(task).then(
             res => {
                 onItemComplete(currentIdx, null);
                 return res;
             },
             err => {
+                failed.push({ idx: currentIdx, err });
                 onItemComplete(currentIdx, err);
-                throw err;
             }
         );
 
@@ -212,6 +217,7 @@ async function runWithPool(tasks, concurrency, onItemComplete) {
             next();
         }
     }
+    return failed;
 }
 
 /**
@@ -431,7 +437,11 @@ async function compileGame({
 
     const totalTasks = tasks.length;
     let completedCount = 0;
-    const concurrency = Math.max(1, os.cpus().length);
+    /* a compile at a time per core, and per 1.5 GB of the machine's memory:
+     * gamecode_globals64.c alone takes over a gigabyte, and a machine with
+     * many cores and little memory ran out with every core compiling */
+    const concurrency = Math.max(1, Math.min(os.cpus().length,
+                                             Math.floor(os.totalmem() / (1536 * 1048576))));
 
     onProgress({
         phase: `Compiling game code (0/${totalTasks})`,
@@ -440,20 +450,35 @@ async function compileGame({
         total: totalTasks,
     });
 
-    await runWithPool(tasks, concurrency, (idx, err) => {
-        if (!err) {
-            completedCount++;
-            const pct = Math.round(42 + (completedCount / totalTasks) * 48);
-            const fileName = path.basename(sources[idx] || 'icon');
-            onProgress({
-                phase: `Compiling [${completedCount}/${totalTasks}] ${fileName}`,
-                pct,
-                done: completedCount,
-                total: totalTasks,
-                file: fileName,
-            });
-        }
+    const progress = idx => {
+        completedCount++;
+        const pct = Math.round(42 + (completedCount / totalTasks) * 48);
+        const fileName = path.basename(sources[idx] || 'icon');
+        onProgress({
+            phase: `Compiling [${completedCount}/${totalTasks}] ${fileName}`,
+            pct,
+            done: completedCount,
+            total: totalTasks,
+            file: fileName,
+        });
+    };
+    const failed = await runWithPool(tasks, concurrency, (idx, err) => {
+        if (!err)
+            progress(idx);
     });
+    /* each failure once more, alone: a file held by an antivirus, a compile
+     * that ran out of memory beside the others */
+    for (const f of failed) {
+        const fileName = path.basename(sources[f.idx] || 'icon');
+        onProgress({ phase: `${fileName} failed; compiling it again on its own`, pct: 90 });
+        try {
+            await tasks[f.idx]();
+            progress(f.idx);
+        } catch (err) {
+            err.file = fileName;
+            throw err;
+        }
+    }
 
     // 3. Linking
     onProgress({ phase: 'Linking final executable...', pct: 92 });

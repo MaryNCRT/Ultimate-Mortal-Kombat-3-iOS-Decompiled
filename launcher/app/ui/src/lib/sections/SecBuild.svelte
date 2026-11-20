@@ -25,6 +25,9 @@
 </script>
 
 <Page>
+  <!-- two columns (Mary): the compile on the left, the updates on the right -->
+  <div class="cols">
+   <div class="col">
     <div class="state {app.ready ? 'ok' : 'need'}">{app.ready ? tx('builtAt') + ' — ' + when : tx('notBuilt')}</div>
     <label class="lbl" for="ipa">{tx('ipaLbl')}</label>
     <div class="row">
@@ -42,7 +45,9 @@
             onchange={e => { selectBlip(); save({ essentials: e.currentTarget.checked }); }}><span>{tx('essLbl')}</span></label>
     <div class="row">
         <button class="btn hot" disabled={app.build.on || app.upd.busy} onpointerenter={hoverBlip}
-                onclick={startBuild}>{tx(app.ready ? 'rebuild' : 'build')}</button>
+                onclick={() => startBuild(false)}>{tx(app.ready ? 'rebuild' : 'build')}</button>
+        <button class="btn" disabled={app.build.on || app.upd.busy} title={tx('repairTip')} onpointerenter={hoverBlip}
+                onclick={() => startBuild(true)}>{tx('repair')}</button>
         {#if app.build.on}
             <button class="btn danger" onpointerenter={hoverBlip} onclick={() => api.cancelBuild()}>{tx('cancel')}</button>
         {/if}
@@ -54,7 +59,8 @@
         {/if}
     </div>
     {#if app.build.console}<pre class="console" bind:this={log}>{app.build.log}</pre>{/if}
-
+   </div>
+   <div class="col">
     <h3>{tx('gUpdates')}</h3>
     <div class="updrow">
         <div class="state {app.upd.cls}">{app.upd.text}</div>
@@ -74,9 +80,16 @@
     {/if}
     <span class="lbl notes-lbl">{tx('notesLbl')}{app.upd.notesLbl ? ' — ' + app.upd.notesLbl : ''}</span>
     <Notes md={app.upd.notes} />
+   </div>
+  </div>
 </Page>
 
 <style>
+    .cols { display: flex; gap: calc(var(--u) * 2.4); flex: 1 1 auto; min-height: 0; }
+    .col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+    .col h3:first-child { margin-top: 0; }
+    .col .updrow { flex-wrap: wrap; }
+    .col .updrow .state { flex: 1 1 100%; }
     .progress { flex: 1; display: flex; gap: calc(var(--u) * 1); align-items: center; }
     .progress.upd { flex: none; margin-top: calc(var(--u) * .8); }
     .plbl { color: var(--dim); font-size: calc(var(--t) * 1.5); }

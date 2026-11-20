@@ -8,10 +8,40 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## After 0.5.4 (unreleased)
+## 0.5.5 beta (2026-11-20)
 
-Built into the test folder and checked by scripted fights with the sound off;
-not yet heard by Mary.
+Built into Mary's test folder first. She saw the dynamic music in the game and
+said Scorpion's fatality lag was gone there; the rest (the loads, the launcher's
+REPAIR and two columns, the window kept, the Dreamcast icons) was checked by
+scripts and not yet by her as a package.
+
+- **Fatality lag** (Scorpion's fatality 2 and every finisher that fills the
+  screen with bodies): ~150 frames of 70-90 ms became one 69 ms frame as the
+  copies appear (Direct3D 12). A fighter's mesh now goes to the GPU as its
+  vertices once and its triangles' indices, not three copies of every vertex
+  sent by the CPU for each shadow, the occlusion and the scene (Direct3D 12
+  and Vulkan, `draw_indexed`); the shadows', occlusion's and lights' work runs
+  on every core. On Vulkan the frames still wait on the GPU in that fatality
+  (open).
+- **Shorter loads**: the boot to the menus 3.6 -> 1.55 s and a fight 1.07 ->
+  0.82 s with Mary's HD packs. The textures go to the GPU through one buffer
+  kept for the session instead of one made and freed per texture, their mip
+  levels are made on every core, and a PNG is no longer read twice to find it
+  is not a PVR.
+- **SEGA DREAMCAST button icons** (BUTTON ICONS, game and launcher,
+  `pad_icons=dreamcast`): StrategyWiki's Dreamcast buttons (CC BY-SA), A B X Y,
+  L / R on the triggers, C / Z on L1 / R1 (the arcade stick's pair), Start.
+- **Launcher, compiling**: a failed file no longer disappears among the
+  others' lines (a player on another PC saw only "EXIT CODE: -1"): every file
+  finishes, a failure is compiled again on its own, and one that stays is
+  named after EXIT CODE with its errors; the whole log is kept in
+  `build\last-build.log`. Objects another launcher version compiled are
+  removed first. Compiles at once follow the PC's memory too. **REPAIR**
+  removes broken build files and compiles only what is needed, without
+  extracting the .ipa again. COMPILE YOUR .IPA is in two columns (the
+  compile, the updates).
+- **Launcher**: the window comes back as it was closed (size, place,
+  maximized, fullscreen), and starts faster (its pictures read in parallel).
 
 - **Dynamic stage music** (`dynamic_music=1` in umk3.ini, on by default; 0
   is the iOS game's music unchanged). At FINISH HIM/HER the stage tune jumps

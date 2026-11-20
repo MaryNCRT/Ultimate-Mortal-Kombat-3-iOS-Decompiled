@@ -123,12 +123,51 @@ function send(channel, data) {
         g_win.webContents.send(channel, data);
 }
 
+/* 0.5.5 (Mary): the window as it was when the launcher closed -- its size
+ * and place, maximized, fullscreen -- in window.json beside root.json (the
+ * roaming profile). A place no screen shows any more is not taken. */
+function windowFile() {
+    return path.join(app.getPath('appData'), 'umk3-launcher', 'window.json');
+}
+function savedWindow() {
+    try {
+        const w = JSON.parse(fs.readFileSync(windowFile(), 'utf8'));
+        if (!w || !(w.width >= 640 && w.height >= 480))
+            return null;
+        if (Number.isFinite(w.x) && Number.isFinite(w.y)) {
+            const seen = screen.getAllDisplays().some(d => {
+                const a = d.workArea;
+                return w.x + 100 > a.x && w.y + 40 > a.y && w.x < a.x + a.width - 100 && w.y < a.y + a.height - 40;
+            });
+            if (!seen) { delete w.x; delete w.y; }
+        }
+        return w;
+    } catch (err) {
+        return null;
+    }
+}
+function saveWindow() {
+    if (!g_win || g_win.isDestroyed())
+        return;
+    try {
+        const b = g_win.getNormalBounds();
+        fs.mkdirSync(path.dirname(windowFile()), { recursive: true });
+        fs.writeFileSync(windowFile(), JSON.stringify({
+            x: b.x, y: b.y, width: b.width, height: b.height,
+            maximized: g_win.isMaximized(), fullscreen: g_win.isFullScreen(),
+        }));
+    } catch (err) { /* not kept */ }
+}
+
 function createWindow() {
+    const sw = process.env.UMK3_LAUNCHER_SIZE ? null : savedWindow();
     g_win = new BrowserWindow({
         /* 4:3 by default; the page scales with the window (styles.css --u),
-         * any size or fullscreen (F11). UMK3_LAUNCHER_SIZE=WxH: dev aid. */
-        width: Number((process.env.UMK3_LAUNCHER_SIZE || '').split('x')[0]) || 1280,
-        height: Number((process.env.UMK3_LAUNCHER_SIZE || '').split('x')[1]) || 768,
+         * any size or fullscreen (F11), as it was last (window.json).
+         * UMK3_LAUNCHER_SIZE=WxH: dev aid. */
+        width: Number((process.env.UMK3_LAUNCHER_SIZE || '').split('x')[0]) || (sw && sw.width) || 1280,
+        height: Number((process.env.UMK3_LAUNCHER_SIZE || '').split('x')[1]) || (sw && sw.height) || 768,
+        ...(sw && Number.isFinite(sw.x) ? { x: sw.x, y: sw.y } : {}),
         minWidth: 640,
         minHeight: 480,
         useContentSize: true,
@@ -173,7 +212,17 @@ function createWindow() {
     g_win.webContents.once('did-finish-load', () => dbg('did-finish-load'));
     /* the shot aid shows the window without taking the focus from
      * whatever the person at the computer is doing */
-    g_win.once('ready-to-show', () => (process.env.UMK3_LAUNCHER_SHOT ? g_win.showInactive() : g_win.show()));
+    g_win.once('ready-to-show', () => {
+        if (sw && sw.maximized)
+            g_win.maximize();
+        if (sw && sw.fullscreen)
+            g_win.setFullScreen(true);
+        if (process.env.UMK3_LAUNCHER_SHOT)
+            g_win.showInactive();
+        else
+            g_win.show();
+    });
+    g_win.on('close', saveWindow);
     g_win.on('closed', () => { g_win = null; });
 }
 
@@ -182,10 +231,13 @@ function createWindow() {
 /* The title logo ships inside the launcher (renderer/logo.png), so it is
  * there the moment the window opens; logo.png in the game folder, if the
  * player put one there, replaces it. */
-ipcMain.handle('logo:get', () => {
+/* 0.5.5: the start's pictures read without holding the main process (its
+ * reads one after another, synchronous, kept the settings' answer waiting:
+ * 3.1 s of a cold start) */
+ipcMain.handle('logo:get', async () => {
     try {
         const p = path.join(g_root, 'logo.png');
-        return 'data:image/png;base64,' + fs.readFileSync(p).toString('base64');
+        return 'data:image/png;base64,' + (await fs.promises.readFile(p)).toString('base64');
     } catch (err) {
         return null;
     }
@@ -196,7 +248,7 @@ ipcMain.handle('logo:get', () => {
  * (the compile copies it there, and the player may replace it), else the
  * one the release carries under launcher/ (Linux: in resources/), so it is
  * there before the first compile. None: an empty ring. */
-ipcMain.handle('hero:get', () => {
+ipcMain.handle('hero:get', async () => {
     const dirs = [path.join(g_root, 'aditional textures'),
                   path.join(g_root, 'launcher', 'aditional textures')];
     if (process.resourcesPath)
@@ -206,7 +258,7 @@ ipcMain.handle('hero:get', () => {
         for (const n of ['image.png', 'image.jpg']) {
             try {
                 return 'data:image/' + (n.endsWith('png') ? 'png' : 'jpeg') + ';base64,'
-                       + fs.readFileSync(path.join(d, n)).toString('base64');
+                       + (await fs.promises.readFile(path.join(d, n))).toString('base64');
             } catch (err) { /* the next */ }
         }
     }
@@ -238,6 +290,7 @@ ipcMain.handle('root:get', () =>
 
 /* The first compile done: the launcher opens again with the whole menu. */
 ipcMain.handle('app:relaunch', () => {
+    saveWindow();
     app.relaunch();
     app.exit(0);
 });
@@ -395,12 +448,16 @@ ipcMain.handle('frame:browse', async () => {
     return r.filePaths[0];
 });
 
-ipcMain.handle('build:start', async (_ev, ipa, essential) => {
+/* COMPILE, or REPAIR (`repair`): the broken build files removed, the
+ * .ipa's files kept when they are all there, only what needs it compiled
+ * (lib/build.js). A failure answers with its summary (`error`). */
+ipcMain.handle('build:start', async (_ev, ipa, essential, repair) => {
     if (!ipa || typeof ipa !== 'string')
         return { ok: false, code: -2 };
     if (!fs.existsSync(ipa))
         return { ok: false, code: -3 };
-    const code = await bld.build(g_root, ipa, arch(), msg => send('build:data', msg));
+    const code = await bld.build(g_root, ipa, arch(), msg => send('build:data', msg),
+                                 { repair: repair === true });
     const ok = code === 0 && ini.gameReady(g_root, arch());
     if (ok)
         upd.builtAfterUpdate(g_root);   /* the update's game is the one now */
@@ -413,7 +470,7 @@ ipcMain.handle('build:start', async (_ev, ipa, essential) => {
             send('build:data', { text: 'essential mods: the hub could not be read (' + err.message + ')' });
         }
     }
-    return { ok, code };
+    return { ok, code, error: ok ? '' : (bld.build.lastError || '') };
 });
 
 ipcMain.handle('build:cancel', () => bld.cancelBuild());
@@ -459,6 +516,7 @@ ipcMain.handle('update:install', async () => {
     if (g_child) {
         try { g_child.kill(); } catch (_) { /* gone already */ }
     }
+    saveWindow();
     setTimeout(() => app.exit(0), 400);
     return { ok: true };
 });
@@ -761,7 +819,7 @@ ipcMain.handle('profile:iconCol', (_ev, i, n) => prof.iconColData(g_root, Number
  * same the game's menus draw: "aditional textures/glyphs/<set>/<file>.png"
  * beside the game, or the launcher's own copy before the first compile.
  * Every one at once, as data: URLs by "<set>/<file>". */
-ipcMain.handle('glyphs:all', () => {
+ipcMain.handle('glyphs:all', async () => {
     const dirs = [path.join(g_root || '', 'aditional textures', 'glyphs'),
                   path.join(g_root || '', 'launcher', 'aditional textures', 'glyphs'),
                   process.resourcesPath ? path.join(process.resourcesPath, 'launcher', 'aditional textures', 'glyphs') : '',
@@ -769,15 +827,22 @@ ipcMain.handle('glyphs:all', () => {
     const out = {};
     for (const d of dirs) {
         let sets;
-        try { sets = fs.readdirSync(d); } catch (err) { continue; }
+        try { sets = await fs.promises.readdir(d); } catch (err) { continue; }
+        const jobs = [];
         for (const set of sets) {
             let files;
-            try { files = fs.readdirSync(path.join(d, set)); } catch (err) { continue; }
-            for (const f of files)
-                if (f.toLowerCase().endsWith('.png') && !out[set + '/' + f.slice(0, -4)])
-                    out[set + '/' + f.slice(0, -4)] = 'data:image/png;base64,' +
-                        fs.readFileSync(path.join(d, set, f)).toString('base64');
+            try { files = await fs.promises.readdir(path.join(d, set)); } catch (err) { continue; }
+            for (const f of files) {
+                const key = set + '/' + f.slice(0, -4);
+                if (f.toLowerCase().endsWith('.png') && !out[key]) {
+                    out[key] = '';
+                    jobs.push(fs.promises.readFile(path.join(d, set, f)).then(
+                        b => { out[key] = 'data:image/png;base64,' + b.toString('base64'); },
+                        () => { delete out[key]; }));
+                }
+            }
         }
+        await Promise.all(jobs);        /* every file at once */
         if (Object.keys(out).length) break;
     }
     return out;

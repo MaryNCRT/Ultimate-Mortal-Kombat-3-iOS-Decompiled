@@ -34,7 +34,7 @@ int plat_pad_sony_kind(unsigned product)
 int plat_pad_glyph_style(int player, int style)
 {
     player = player ? 1 : 0;
-    if (style >= 0 && style <= 4)
+    if (style >= 0 && style <= 5)
         g_glyph_style[player] = style;
     return g_glyph_style[player];
 }
@@ -45,7 +45,8 @@ int plat_pad_glyph_kind(int player, int kind)
     return st ? st : kind;
 }
 
-/* Free Input Prompts' Retro pads (aditional textures/glyphs/xb, ps, ns). */
+/* Free Input Prompts' Retro pads (aditional textures/glyphs/xb, ps, ns, p4),
+ * and the Sega Dreamcast's (glyphs/dc, StrategyWiki's, CC BY-SA). */
 void plat_pad_glyph(int kind, int pb, char *out, int n)
 {
     static const char *const xb[PB_COUNT] = {
@@ -74,8 +75,16 @@ void plat_pad_glyph(int kind, int pb, char *out, int n)
         "T_P4_R2_Stylized", "T_P4_Share_Stylized", "T_P4_Options_Stylized",
         "T_P4_L3_Stylized", "T_P4_R3_Stylized", NULL,
     };
-    static const char *const *const sets[5] = { xb, xb, ps, ns, p4 };
-    static const char *const dir[5] = { "xb", "xb", "ps", "ns", "p4" };
+    /* by position too: A B X Y as the Dreamcast pad has them; L1 / R1 its
+     * arcade stick's C and Z (the six-button pair), L2 / R2 its triggers L
+     * and R; no SELECT, stick clicks or HOME (their names show) */
+    static const char *const dc[PB_COUNT] = {
+        "Dc-Button-A", "Dc-Button-B", "Dc-Button-X", "Dc-Button-Y", "Dc-Button-C",
+        "Dc-Button-Z", "Dc-Button-L", "Dc-Button-R", NULL, "Dc-Button-Start",
+        NULL, NULL, NULL,
+    };
+    static const char *const *const sets[6] = { xb, xb, ps, ns, p4, dc };
+    static const char *const dir[6] = { "xb", "xb", "ps", "ns", "p4", "dc" };
     static const char *const names[PB_COUNT] = {
         "SOUTH", "EAST", "WEST", "NORTH", "L1", "R1", "L2", "R2",
         "SELECT", "START", "L3", "R3", "HOME",
@@ -89,7 +98,7 @@ void plat_pad_glyph(int kind, int pb, char *out, int n)
         out[0] = 0;
         return;
     }
-    if (kind < 0 || kind > 4)
+    if (kind < 0 || kind > 5)
         kind = 0;
     f = sets[kind][pb];
     if (f) {

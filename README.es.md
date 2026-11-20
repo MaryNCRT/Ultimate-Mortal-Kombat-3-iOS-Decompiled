@@ -32,7 +32,7 @@ La única fuente de verdad es el binario. Nada entra al árbol si no se deriva d
 |---|---|---|
 | **Decompilación** (`src/decomp/`) | **2.572 / 2.572 (100%)** | Motor 3D LIME (109), menús y escenas (291), motor de combate arcade (2.172). |
 | **Verificación** (`tools/decomp/`) | **100%** | Tests diferenciales contra el oráculo ARM→C `armrecomp`; 229 tablas de datos comprobadas al compilar (`ctest`). |
-| **Port a PC** (`src/runtime/`) | **Jugable — v0.5.4 beta** | OpenGL, Vulkan, Direct3D 12; Windows y Linux; 3:2 / 4:3 / 16:9 / 21:9; teclado y mandos (unos 870 mandos conocidos gracias a SDL_GameControllerDB); 2 jugadores local, LAN (MULTIJUGADOR, también Radmin VPN) y en línea con rollback; repeticiones; mods. |
+| **Port a PC** (`src/runtime/`) | **Jugable — v0.5.5 beta** | OpenGL, Vulkan, Direct3D 12; Windows y Linux; 3:2 / 4:3 / 16:9 / 21:9; teclado y mandos (unos 870 mandos conocidos gracias a SDL_GameControllerDB); 2 jugadores local, LAN (MULTIJUGADOR, también Radmin VPN) y en línea con rollback; repeticiones; mods. |
 | **Launcher** (`launcher/`) | Windows y Linux | Compila el juego con un `zig cc` incluido (nada que instalar), se actualiza solo, herramientas de MODS. |
 
 Cada versión la prueba la tester del proyecto, Mary, antes de que la siguiente se construya encima; el [registro de cambios](docs/CHANGELOG.md) dice en cada cambio si ya lo jugó.
@@ -70,6 +70,8 @@ Todos se pueden cambiar en el launcher (CONTROLES) o en el juego (`Esc`).
 - **Pantallas:** 3:2, 4:3, 16:9 y 21:9; menús y paneles adaptados a cada una.
 - **ANIMACIONES SUAVES** (cuadros entre los cuadros del juego) y **SUAVIZAR MODELOS** (el weld y la subdivisión Catmull-Clark de Blender, con control de bordes afilados).
 - **Música dinámica de escenario** (del port; `dynamic_music=0` en umk3.ini la quita): con FINISH HIM la música salta a un tramo crítico, al anunciar al ganador suena un tramo final, y un uppercut que atraviesa el techo hacia otro escenario cambia a la música de ese escenario.
+- **Rendimiento en PC** (0.5.5): los luchadores van a la GPU indexados y las sombras, la oclusión y las luces usan todos los núcleos (los remates que llenan la pantalla de cuerpos ya no dan tirones en Direct3D 12); las texturas suben por un único búfer que dura toda la sesión y sus niveles se hacen en todos los núcleos (el arranque hasta los menús pasa de 3,6 a 1,55 s con packs HD).
+- **Iconos de botones** de mandos Xbox, PlayStation 5 / 4, Nintendo y SEGA DREAMCAST (0.5.5), en el juego y en el launcher.
 - **ELEGIR ESCENARIO** antes de las peleas VS, de entrenamiento y en línea, con imagen de cada escenario; la música de la selección sigue sonando en él.
 - **En línea** por LAN o internet (Epic Online Services), netcode con rollback y un retardo de entrada que sigue al ping; las peleas en línea usan siempre los datos del juego (de los mods solo modelos y texturas).
 - **ENTRENAMIENTO** (0.4.5): los movimientos de tu luchador en la esquina izquierda y los botones que pulsas en la derecha, con los botones de tu mando; el menú de pausa los quita y pone. **DUELO contra la CPU** (0.4.5): al lado de OK, JUGADOR 2 o CPU y su nivel; el jugador 2 se une con START.
@@ -87,7 +89,11 @@ Todos se pueden cambiar en el launcher (CONTROLES) o en el juego (`Esc`).
 - **TEXTURAS:** todas las texturas del juego según a qué pertenecen, reemplazadas en un mod.
 - **EXPORTAR:** luchadores, escenarios, modelos y texturas en FBX, GLB, USD (USDA/USDC/USDZ) u OBJ con texturas PNG.
 
-## Problemas conocidos (0.5.4 beta)
+## Problemas conocidos (0.5.5 beta)
+
+- Vulkan: en los remates que llenan la pantalla de cuerpos (el fatality 2 de Scorpion) los frames todavía esperan a la GPU (~50 ms); en Direct3D 12 van fluidos.
+- Una compilación en otro PC terminó con "EXIT CODE: -1" (0.5.4, tras haber compilado allí una versión vieja); todavía no se sabe la causa. La 0.5.5 nombra el archivo que falla, guarda `build\last-build.log`, borra los archivos de compilación de otras versiones y tiene REPARAR.
+- Los iconos de SEGA DREAMCAST todavía no se han visto en el juego con un mando conectado.
 
 - En línea: las correcciones de 0.5.4 (los dos jugadores en el mismo escenario, sin bloqueo al terminar un round, sin desincronización en la segunda pelea de una sesión) se comprobaron con dos juegos en un PC y una conexión mala a propósito (120 ms de ping, 10 % de paquetes perdidos): sin desincronización en un mejor de 3 ni en dos peleas seguidas. Todavía no entre dos máquinas. Los dos jugadores necesitan la 0.5.4.
 - Steam Deck / Linux: la corrección de los 6 botones (#171, #253), el mando del jugador 2 y la preferencia por el mando virtual de Steam se compilaron y comprobaron en el código generado, sin probar aún en un Deck.
