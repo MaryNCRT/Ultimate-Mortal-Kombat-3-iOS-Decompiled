@@ -108,6 +108,13 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+### 2026-11-20 (later) -- The pages' hint line: PAGE alone
+
+Mary, from 0.5.5 with the Dreamcast icons ("C Z PAGINA SELECT B SALIR"): only
+the page part stays. `game_main.c` PortPagesLine builds `<L1><R1> PAGE`; its
+`with_sel` argument is kept for the callers (FrontEnd.c, GameCode.c). Built
+into the test folder; not yet seen by her.
+
 ### 2026-11-20 -- 0.5.5 beta: fatality lag, loads, Dreamcast icons, the launcher's compile
 
 **Scorpion's fatality lag (Mary: "el fatality de scorpion aun provoca lag").**

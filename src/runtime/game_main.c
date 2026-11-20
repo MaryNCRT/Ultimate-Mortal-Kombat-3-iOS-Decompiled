@@ -1594,32 +1594,27 @@ static void nav_hints(void)
 
 /* Port, not in the binary: the hints of a screen of pages with the
  * on-screen controls off -- the moves list, the bios, the endings: its
- * pages (L1 R1, Q E) and the way out (select or circle, M or Backspace),
- * with the pad's pictures or the keys'. */
+ * pages (L1 R1, Q E), with the pad's pictures or the keys'. The way out
+ * (select or circle, M or Backspace) is no longer named: the window's X and
+ * every screen's BACK say it (Mary, 0.5.6). `with_sel` is kept for the
+ * callers. */
 void PortPagesLine(char *line, int n, int with_sel)
 {
-    {
-        char l1[128], r1[128], sel[128], east[128];
+    char l1[128], r1[128];
 
-        if (pad_nav_device() == 1 && (g_pad.connected || g_pad2.connected)) {
-            const PLAT_PAD *p = g_pad.connected ? &g_pad : &g_pad2;
-            int kind = plat_pad_glyph_kind(p == &g_pad2, p->kind);
+    (void)with_sel;
+    if (pad_nav_device() == 1 && (g_pad.connected || g_pad2.connected)) {
+        const PLAT_PAD *p = g_pad.connected ? &g_pad : &g_pad2;
+        int kind = plat_pad_glyph_kind(p == &g_pad2, p->kind);
 
-            plat_pad_glyph(kind, PB_L1, l1, sizeof l1);
-            plat_pad_glyph(kind, PB_R1, r1, sizeof r1);
-            plat_pad_glyph(kind, PB_SELECT, sel, sizeof sel);
-            plat_pad_glyph(kind, PB_EAST, east, sizeof east);
-        } else {
-            plat_key_glyph(PK_DBG_PAGE_PREV, l1, sizeof l1);
-            plat_key_glyph(PK_DBG_PAGE_NEXT, r1, sizeof r1);
-            plat_key_glyph(PK_MOVES, sel, sizeof sel);
-            snprintf(east, sizeof east, "\001kb/T_BackSpace_Key_Vintage\001");
-        }
-        snprintf(line, n, "%s%s %s   %s%s %s", l1, r1,
-                 Language[0] == 'E' && Language[1] == 'S' ? "P\xc1GINA" : "PAGE",
-                 with_sel ? sel : "", east,
-                 Language[0] == 'E' && Language[1] == 'S' ? "SALIR" : "EXIT");
+        plat_pad_glyph(kind, PB_L1, l1, sizeof l1);
+        plat_pad_glyph(kind, PB_R1, r1, sizeof r1);
+    } else {
+        plat_key_glyph(PK_DBG_PAGE_PREV, l1, sizeof l1);
+        plat_key_glyph(PK_DBG_PAGE_NEXT, r1, sizeof r1);
     }
+    snprintf(line, n, "%s%s %s", l1, r1,
+             Language[0] == 'E' && Language[1] == 'S' ? "P\xc1GINA" : "PAGE");
 }
 
 /* Port, not in the binary: the way out alone -- circle or Backspace and

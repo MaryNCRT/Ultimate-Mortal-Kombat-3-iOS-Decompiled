@@ -8,6 +8,15 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## After 0.5.5 (unreleased)
+
+Built into the test folder; not yet seen by Mary.
+
+- The hint line of the screens of pages (the moves list, the bios, the
+  endings) with the on-screen controls off shows only the page buttons and
+  PAGE; the way out (SELECT, circle, EXIT) is no longer named, the window's X
+  and each screen's BACK say it (Mary).
+
 ## 0.5.5 beta (2026-11-20)
 
 Built into Mary's test folder first. She saw the dynamic music in the game and
