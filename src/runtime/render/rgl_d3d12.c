@@ -1269,13 +1269,21 @@ static void dx_lights(const void *block, int bytes)
     g_ldirty = 1;
 }
 
+/* dx_draw_indexed's indices for the put() it makes, NULL otherwise */
+static const unsigned *g_put_idx;
+static int g_put_ni;
+
 static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, int srv_ms,
                 const rgl_samp *s, const D3D12_VIEWPORT *vp, const D3D12_RECT *sc,
                 const rgl_vtx *v, int n)
 {
+    const unsigned *idx = g_put_idx;
+    const int ni = g_put_ni;
+    const UINT64 ibytes = idx ? ((UINT64)ni * 4 + 255) & ~(UINT64)255 : 0;
     /* room for the lights' block too, whether or not it is written: a
-     * flush below makes it due again */
-    UINT64 bytes = (UINT64)n * sizeof *v + LBYTES;
+     * flush below makes it due again; and for the indices after the
+     * vertices */
+    UINT64 bytes = (UINT64)n * sizeof *v + 256 + ibytes + LBYTES;
     const UINT64 vbytes = (UINT64)n * sizeof *v;
     ID3D12PipelineState *p;
     D3D12_SHADER_RESOURCE_VIEW_DESC sd;
@@ -1364,6 +1372,15 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     vb.SizeInBytes = (UINT)bytes;
     vb.StrideInBytes = sizeof *v;
     g_voff += (bytes + 255) & ~(UINT64)255;
+    if (idx) {
+        D3D12_INDEX_BUFFER_VIEW ib;
+        memcpy(g_vmap + g_voff, idx, (size_t)ni * 4);
+        ib.BufferLocation = ID3D12Resource_GetGPUVirtualAddress(g_vbuf) + g_voff;
+        ib.SizeInBytes = (UINT)ni * 4;
+        ib.Format = DXGI_FORMAT_R32_UINT;
+        ID3D12GraphicsCommandList_IASetIndexBuffer(g_list, &ib);
+        g_voff += ibytes;
+    }
 
     ID3D12GraphicsCommandList_SetPipelineState(g_list, p);
     ID3D12GraphicsCommandList_RSSetViewports(g_list, 1, vp);
@@ -1375,7 +1392,10 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     ID3D12GraphicsCommandList_IASetPrimitiveTopology(g_list, k->topo == RGL_LINES ? D3D_PRIMITIVE_TOPOLOGY_LINELIST
                                                                                   : D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     ID3D12GraphicsCommandList_IASetVertexBuffers(g_list, 0, 1, &vb);
-    ID3D12GraphicsCommandList_DrawInstanced(g_list, (UINT)n, 1, 0, 0);
+    if (idx)
+        ID3D12GraphicsCommandList_DrawIndexedInstanced(g_list, (UINT)ni, 1, 0, 0, 0);
+    else
+        ID3D12GraphicsCommandList_DrawInstanced(g_list, (UINT)n, 1, 0, 0);
     g_srv_next += 4;
 }
 
@@ -1416,6 +1436,19 @@ static void dx_draw(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_sam
     if (sc.right <= sc.left || sc.bottom <= sc.top || vp.Width <= 0 || vp.Height <= 0)
         return;
     put(k, f, g_tex[tex].r.res, 0, s, &vp, &sc, v, n);
+}
+
+static void dx_draw_indexed(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_samp *s,
+                            const rgl_rect *viewport, const rgl_rect *scissor,
+                            const rgl_vtx *v, int nv, const unsigned *idx, int ni)
+{
+    if (ni <= 0 || nv <= 0)
+        return;
+    g_put_idx = idx;
+    g_put_ni = ni;
+    dx_draw(k, f, tex, s, viewport, scissor, v, nv);
+    g_put_idx = NULL;
+    g_put_ni = 0;
 }
 
 /* --------------------------------------------------- blits and reads */
@@ -1626,7 +1659,7 @@ rgl_backend rgl_d3d12 = {
     dx_tex_new, dx_tex_image, dx_tex_sub, dx_tex_free,
     dx_target_new, dx_target_free, dx_target_use, dx_target_size,
     dx_clear, dx_draw, dx_blit, dx_read, dx_present, dx_finish, dx_shadow_map,
-    dx_lights, dx_shadow_map2, dx_screen_map,
+    dx_lights, dx_shadow_map2, dx_screen_map, dx_draw_indexed,
 };
 
 #endif

@@ -88,7 +88,7 @@ VKF(vkCreateFence); VKF(vkDestroyFence); VKF(vkWaitForFences); VKF(vkResetFences
 VKF(vkCreateSemaphore); VKF(vkDestroySemaphore);
 VKF(vkCmdBeginRenderPass); VKF(vkCmdEndRenderPass); VKF(vkCmdBindPipeline);
 VKF(vkCmdSetViewport); VKF(vkCmdSetScissor); VKF(vkCmdPushConstants);
-VKF(vkCmdBindDescriptorSets); VKF(vkCmdBindVertexBuffers); VKF(vkCmdDraw);
+VKF(vkCmdBindDescriptorSets); VKF(vkCmdBindVertexBuffers); VKF(vkCmdDraw); VKF(vkCmdBindIndexBuffer); VKF(vkCmdDrawIndexed);
 VKF(vkCmdClearAttachments); VKF(vkCmdPipelineBarrier); VKF(vkCmdCopyBufferToImage);
 VKF(vkCmdCopyImageToBuffer); VKF(vkCmdBlitImage); VKF(vkCmdResolveImage);
 
@@ -1075,7 +1075,7 @@ static int vk_open(void *window, int width, int height)
     LOAD_D(vkCreateSemaphore); LOAD_D(vkDestroySemaphore);
     LOAD_D(vkCmdBeginRenderPass); LOAD_D(vkCmdEndRenderPass); LOAD_D(vkCmdBindPipeline);
     LOAD_D(vkCmdSetViewport); LOAD_D(vkCmdSetScissor); LOAD_D(vkCmdPushConstants);
-    LOAD_D(vkCmdBindDescriptorSets); LOAD_D(vkCmdBindVertexBuffers); LOAD_D(vkCmdDraw);
+    LOAD_D(vkCmdBindDescriptorSets); LOAD_D(vkCmdBindVertexBuffers); LOAD_D(vkCmdDraw); LOAD_D(vkCmdBindIndexBuffer); LOAD_D(vkCmdDrawIndexed);
     LOAD_D(vkCmdClearAttachments); LOAD_D(vkCmdPipelineBarrier); LOAD_D(vkCmdCopyBufferToImage);
     LOAD_D(vkCmdCopyImageToBuffer); LOAD_D(vkCmdBlitImage); LOAD_D(vkCmdResolveImage);
     vkGetDeviceQueue(g_dev, g_family, 0, &g_queue);
@@ -1172,7 +1172,7 @@ static int vk_open(void *window, int width, int height)
     g_vs = shader(k_vk_vs, sizeof k_vk_vs);
     g_fs = shader(k_vk_fs, sizeof k_vk_fs);
     g_vsize = 4u << 20;
-    if (!make_buffer(g_vsize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &g_vbuf, &g_vmem, (void **)&g_vmap))
+    if (!make_buffer(g_vsize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, &g_vbuf, &g_vmem, (void **)&g_vmap))
         return 0;
     {
         VkDeviceSize a = g_props.limits.minUniformBufferOffsetAlignment;
@@ -1865,10 +1865,17 @@ static VkDescriptorSet get_set(int tex, const rgl_samp *s, VkImageView shadow, V
     return set;
 }
 
+/* vk_draw_indexed's indices for the vk_draw it makes, NULL otherwise */
+static const unsigned *g_put_idx;
+static int g_put_ni;
+
 static void vk_draw(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_samp *s,
                     const rgl_rect *viewport, const rgl_rect *scissor, const rgl_vtx *v, int n)
 {
-    VkDeviceSize bytes = (VkDeviceSize)n * sizeof *v, off;
+    const unsigned *idx = g_put_idx;
+    const int ni = g_put_ni;
+    const VkDeviceSize vbytes = ((VkDeviceSize)n * sizeof *v + 15) & ~(VkDeviceSize)15;
+    VkDeviceSize bytes = vbytes + (idx ? ((VkDeviceSize)ni * 4 + 15) & ~(VkDeviceSize)15 : 0), off;
     VkPipeline p;
     VkViewport vp;
     VkRect2D sc;
@@ -1894,7 +1901,7 @@ static void vk_draw(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_sam
         while (size < want)
             size *= 2;
         if (g_nretired < (int)(sizeof g_retired / sizeof *g_retired)
-            && make_buffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &nb, &nm, &nmap)) {
+            && make_buffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, &nb, &nm, &nmap)) {
             g_retired[g_nretired].b = g_vbuf;
             g_retired[g_nretired++].m = g_vmem;
             g_vbuf = nb;
@@ -1962,7 +1969,9 @@ static void vk_draw(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_sam
     if (!set)
         return;
     off = g_voff;
-    memcpy(g_vmap + off, v, (size_t)bytes);
+    memcpy(g_vmap + off, v, (size_t)n * sizeof *v);
+    if (idx)
+        memcpy(g_vmap + off + vbytes, idx, (size_t)ni * 4);
     g_voff += (bytes + 15) & ~(VkDeviceSize)15;
 
     tsize(g_cur_target, &w, &h);
@@ -1987,7 +1996,11 @@ static void vk_draw(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_sam
     vkCmdPushConstants(g_cmd, g_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof *f, f);
     vkCmdBindDescriptorSets(g_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, g_layout, 0, 1, &set, 1, &g_lcur);
     vkCmdBindVertexBuffers(g_cmd, 0, 1, &g_vbuf, &off);
-    vkCmdDraw(g_cmd, (unsigned)n, 1, 0, 0);
+    if (idx) {
+        vkCmdBindIndexBuffer(g_cmd, g_vbuf, off + vbytes, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(g_cmd, (unsigned)ni, 1, 0, 0, 0);
+    } else
+        vkCmdDraw(g_cmd, (unsigned)n, 1, 0, 0);
 }
 
 /* ---------------------------------------------------- blits and reads */
@@ -2127,10 +2140,23 @@ static void vk_lights(const void *block, int bytes)
     memcpy(g_lmap + g_lcur, block, (size_t)bytes);
 }
 
+static void vk_draw_indexed(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_samp *s,
+                            const rgl_rect *viewport, const rgl_rect *scissor,
+                            const rgl_vtx *v, int nv, const unsigned *idx, int ni)
+{
+    if (ni <= 0 || nv <= 0)
+        return;
+    g_put_idx = idx;
+    g_put_ni = ni;
+    vk_draw(k, f, tex, s, viewport, scissor, v, nv);
+    g_put_idx = NULL;
+    g_put_ni = 0;
+}
+
 rgl_backend rgl_vk = {
     "Vulkan", vk_open, vk_close, vk_device, 4096, 1,
     vk_tex_new, vk_tex_image, vk_tex_sub, vk_tex_free,
     vk_target_new, vk_target_free, vk_target_use, vk_target_size,
     vk_clear, vk_draw, vk_blit, vk_read, vk_present, vk_finish, vk_shadow_map,
-    vk_lights, vk_shadow_map2, vk_screen_map,
+    vk_lights, vk_shadow_map2, vk_screen_map, vk_draw_indexed,
 };

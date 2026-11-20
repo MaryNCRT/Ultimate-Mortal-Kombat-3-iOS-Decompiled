@@ -1226,6 +1226,7 @@ typedef struct {
     rgl_samp sm;
     rgl_rect vp, sc;
     int tex, has_sc, first, n;
+    int ifirst, ni;                     /* an indexed draw's: n vertices, ni indices */
     int clear, color, depth;            /* a clear: what it clears */
     float rgba[4];
 } held;
@@ -1233,6 +1234,10 @@ static held *g_held;
 static int g_nheld, g_cheld;
 static rgl_vtx *g_hv;                   /* their vertices, s in world space */
 static int g_nhv, g_chv;
+static unsigned *g_hi;                  /* the indexed ones' indices */
+static int g_nhi, g_chi;
+static const unsigned *g_sub_idx;       /* submit()'s draw is indexed: these, */
+static int g_sub_ni;                    /* this many, into its n vertices */
 static int g_sh_proxy;                  /* rgl_shadow_proxy: 1 casts only, 2 never casts */
 static mat4 g_shm;                      /* this draw: rgl_vtx.s from the vertex */
 static rgl_vtx *g_shv;                  /* the map's vertices */
@@ -1357,6 +1362,21 @@ static void shadow_cast(const rgl_vtx *v, int n, int id)
         SH.w = p;
         SH.cw = c;
     }
+    if (id || !SH.lit) {                /* every triangle kept: copied, every core */
+        int nt = n / 3, t;
+        float *dst = SH.w + SH.nw;
+#pragma omp parallel for if (nt > 4096)
+        for (t = 0; t < nt; t++) {
+            int q;
+            for (q = 0; q < 3; q++) {
+                const rgl_vtx *o = &v[t * 3 + q];
+                float *d = dst + (t * 3 + q) * 4;
+                d[0] = o->s[0]; d[1] = o->s[1]; d[2] = o->s[2]; d[3] = (float)id;
+            }
+        }
+        SH.nw += nt * 12;
+        return;
+    }
     for (i = 0; i + 2 < n; i += 3) {
         float w[3][3];
         unsigned out = 0x3f;
@@ -1390,6 +1410,43 @@ static void shadow_cast(const rgl_vtx *v, int n, int id)
             SH.w[SH.nw++] = (float)id;
         }
     }
+}
+
+/* shadow_cast for an indexed draw (a fighter's: every triangle kept, the
+ * stage's cull is for id 0), each index's corner, every core */
+static void shadow_cast_idx(const rgl_vtx *v, const unsigned *idx, int ni, int id)
+{
+    int nt = ni / 3, t;
+    float *dst;
+
+    if (!id && SH.lit) {                /* not used so; expanded, as before */
+        int i;
+        rgl_vtx tri[3];
+        for (i = 0; i + 2 < ni; i += 3) {
+            tri[0] = v[idx[i]]; tri[1] = v[idx[i + 1]]; tri[2] = v[idx[i + 2]];
+            shadow_cast(tri, 3, id);
+        }
+        return;
+    }
+    if (SH.nw + nt * 12 > SH.cw) {
+        int c = (SH.nw + nt * 12) * 2;
+        float *p = (float *)realloc(SH.w, (size_t)c * sizeof *p);
+        if (!p)
+            return;
+        SH.w = p;
+        SH.cw = c;
+    }
+    dst = SH.w + SH.nw;
+#pragma omp parallel for if (nt > 4096)
+    for (t = 0; t < nt; t++) {
+        int q;
+        for (q = 0; q < 3; q++) {
+            const rgl_vtx *o = &v[idx[t * 3 + q]];
+            float *d = dst + (t * 3 + q) * 4;
+            d[0] = o->s[0]; d[1] = o->s[1]; d[2] = o->s[2]; d[3] = (float)id;
+        }
+    }
+    SH.nw += nt * 12;
 }
 
 static void shadow_drop(void)
@@ -1473,6 +1530,7 @@ static void emit_note(const ff_tex *t, const rgl_vtx *v, int n)
 #define PS_TILE 512
 #define PS_NEAR 0.05f
 #define PS_FOV 1.05f                    /* tan of half a face's view */
+#define PS_CHUNKS 16                    /* runs of triangles, a core each */
 
 static int g_ps_target;
 static float *g_psw;                    /* the fighters' triangles, world xyz and id */
@@ -1571,11 +1629,22 @@ static void point_shadows(rgl_light_block *b)
             /* only the triangles this face sees: a fighter falls in one or
              * two of the six, and sending all of him six times a light
              * cost the frame its 60 (Mary: stutters with SMOOTH ANIMATIONS) */
+            /* every core, a run of triangles each (into its own part of
+             * g_psv, drawn as its own draw: depth only, so the order is
+             * nobody's); a triangle wholly past the far plane goes too,
+             * as the GPU would clip it */
             {
-                int nout = 0, t2;
-                for (i = 0; i + 2 < nv; i += 3) {
-                    rgl_vtx *o = &g_psv[nout];
-                    int out_l = 0, out_r = 0, out_b = 0, out_t = 0, out_n = 0;
+                int nt = nv / 3, c;
+                static int cn[PS_CHUNKS];
+#pragma omp parallel for if (nt > 4096)
+                for (c = 0; c < PS_CHUNKS; c++) {
+                  int i, k, t2, nout = 0;
+                  int lo = (int)((long long)nt * c / PS_CHUNKS) * 3;
+                  int hi = (int)((long long)nt * (c + 1) / PS_CHUNKS) * 3;
+                  rgl_vtx *base = g_psv + lo;
+                  for (i = lo; i < hi; i += 3) {
+                    rgl_vtx *o = &base[nout];
+                    int out_l = 0, out_r = 0, out_b = 0, out_t = 0, out_n = 0, out_f = 0;
                     for (t2 = 0; t2 < 3; t2++) {
                         const float *w = g_psw + (i + t2) * 4;
                         float d[3], x, y, z;
@@ -1585,6 +1654,7 @@ static void point_shadows(rgl_light_block *b)
                         y = d[0] * U[0] + d[1] * U[1] + d[2] * U[2];
                         z = d[0] * F[0] + d[1] * F[1] + d[2] * F[2];
                         out_n += z < PS_NEAR;
+                        out_f += z > fr;
                         out_l += x < -z * PS_FOV;
                         out_r += x > z * PS_FOV;
                         out_b += y < -z * PS_FOV;
@@ -1597,16 +1667,20 @@ static void point_shadows(rgl_light_block *b)
                         o[t2].rgba[0] = o[t2].rgba[1] = o[t2].rgba[2] = o[t2].rgba[3] = 255;
                         o[t2].s[0] = w[3];  /* the caster's id, into the texel's A */
                     }
-                    if (out_n == 3 || out_l == 3 || out_r == 3 || out_b == 3 || out_t == 3)
+                    if (out_n == 3 || out_l == 3 || out_r == 3 || out_b == 3 || out_t == 3
+                        || out_f == 3)
                         continue;       /* wholly outside this face: dropped */
                     nout += 3;
+                  }
+                  cn[c] = nout;
                 }
-                if (!nout)
-                    continue;
                 vp.x = (fc % 3) * PS_TILE;
                 vp.y = (j * 2 + fc / 3) * PS_TILE;
                 vp.w = vp.h = PS_TILE;
-                B->draw(&p, &f, 0, &sm, &vp, &vp, g_psv, nout);
+                for (c = 0; c < PS_CHUNKS; c++)
+                    if (cn[c])
+                        B->draw(&p, &f, 0, &sm, &vp, &vp,
+                                g_psv + (int)((long long)nt * c / PS_CHUNKS) * 3, cn[c]);
             }
         }
         l->cone[2] = (float)(j + 1);    /* its tiles, for the shaders */
@@ -2130,7 +2204,7 @@ static void shadow_forget(void)
     SH.target = 0;
     SH.valid = SH.lit = SH.scene = SH.caster = SH.ids = 0;
     SH.nw = 0;
-    g_nheld = g_nhv = 0;
+    g_nheld = g_nhv = g_nhi = 0;
 }
 
 static void SH_end_frame(void)
@@ -2255,6 +2329,7 @@ static void shadow_build(void)
     }
     v = g_shv;
     memset(v, 0, (size_t)n * sizeof *v);
+#pragma omp parallel for if (n > 8192)
     for (i = 0; i < n; i++) {
         const float x = SH.w[i * 4], y = SH.w[i * 4 + 1], z = SH.w[i * 4 + 2];
         const float *m = SH.light.m;
@@ -2318,6 +2393,22 @@ static int hold_draw(const rgl_pipe *p, const rgl_frag *f, int tex, const rgl_sa
     if (sc) {
         h->sc = *sc;
         h->has_sc = 1;
+    }
+    if (g_sub_idx) {
+        if (g_nhi + g_sub_ni > g_chi) {
+            int c = (g_nhi + g_sub_ni) * 2;
+            unsigned *a = (unsigned *)realloc(g_hi, (size_t)c * sizeof *a);
+            if (!a) {
+                g_nheld--;
+                return 0;
+            }
+            g_hi = a;
+            g_chi = c;
+        }
+        h->ifirst = g_nhi;
+        h->ni = g_sub_ni;
+        memcpy(g_hi + g_nhi, g_sub_idx, (size_t)g_sub_ni * sizeof *g_hi);
+        g_nhi += g_sub_ni;
     }
     h->tex = tex;
     h->first = g_nhv;
@@ -2499,6 +2590,9 @@ static void ao_quad(int mode, int w, int h)
 }
 
 /* 1-3, before the held draws go; 4 is theirs (the screen map left set) */
+#define AO_CHUNKS 16
+static int ao_cn[AO_CHUNKS];  /* each run's vertices (ao_passes) */
+
 static void ao_passes(void)
 {
     static const float white[4] = { 1.0f, 1.0f, 1.0f, 0.0f };  /* far; A 0: not a fighter */
@@ -2581,7 +2675,11 @@ static void ao_passes(void)
         vp.y = AO.vp.h ? (int)((float)(hd->vp.y - AO.vp.y) * h / AO.vp.h + 0.5f) : 0;
         vp.w = AO.vp.w ? (int)((float)hd->vp.w * w / AO.vp.w + 0.5f) : w;
         vp.h = AO.vp.h ? (int)((float)hd->vp.h * h / AO.vp.h + 0.5f) : h;
-        B->draw(&p, &f, hd->tex, &hd->sm, &vp, NULL, g_hv + hd->first, hd->n);
+        if (hd->ni)
+            B->draw_indexed(&p, &f, hd->tex, &hd->sm, &vp, NULL, g_hv + hd->first, hd->n,
+                            g_hi + hd->ifirst, hd->ni);
+        else
+            B->draw(&p, &f, hd->tex, &hd->sm, &vp, NULL, g_hv + hd->first, hd->n);
     }
     /* the fighters into the depth from the triangles held for the key
      * light's map (their base meshes, an id each), not their held draws: the
@@ -2599,14 +2697,23 @@ static void ao_passes(void)
                     AO.cfv = n * 2;
                 }
             }
-            if (AO.fv && n <= AO.cfv)
-                for (i = 0; i + 2 < n; i += 3) {
+            /* every core, a run of triangles each into its own part of
+             * AO.fv, each run its own draw (depth only: order is nobody's) */
+            if (AO.fv && n <= AO.cfv) {
+              int nt = n / 3, c;
+#pragma omp parallel for if (nt > 4096)
+              for (c = 0; c < AO_CHUNKS; c++) {
+                int lo = (int)((long long)nt * c / AO_CHUNKS) * 3;
+                int hi = (int)((long long)nt * (c + 1) / AO_CHUNKS) * 3;
+                int ii, cnt = 0;
+                rgl_vtx *base = AO.fv + lo;
+                for (ii = lo; ii < hi; ii += 3) {
                     int k2;
-                    if (SH.w[i * 4 + 3] == 0.0f)
+                    if (SH.w[ii * 4 + 3] == 0.0f)
                         continue;       /* the stage's: drawn above */
                     for (k2 = 0; k2 < 3; k2++) {
-                        const float *wp = SH.w + (i + k2) * 4, *m = vp_m.m;
-                        rgl_vtx *o = &AO.fv[nv++];
+                        const float *wp = SH.w + (ii + k2) * 4, *m = vp_m.m;
+                        rgl_vtx *o = &base[cnt++];
                         memset(o, 0, sizeof *o);
                         o->x = m[0] * wp[0] + m[4] * wp[1] + m[8] * wp[2] + m[12];
                         o->y = m[1] * wp[0] + m[5] * wp[1] + m[9] * wp[2] + m[13];
@@ -2615,6 +2722,11 @@ static void ao_passes(void)
                         o->rgba[0] = o->rgba[1] = o->rgba[2] = o->rgba[3] = 255;
                     }
                 }
+                ao_cn[c] = cnt;
+              }
+              for (c = 0; c < AO_CHUNKS; c++)
+                  nv += ao_cn[c];
+            }
         }
         if (nv) {
             rgl_frag f;
@@ -2634,7 +2746,13 @@ static void ao_passes(void)
             vp.x = vp.y = 0;
             vp.w = w;
             vp.h = h;
-            B->draw(&p, &f, 0, &sm, &vp, NULL, AO.fv, nv);
+            {
+                int c, nt = n / 3;
+                for (c = 0; c < AO_CHUNKS; c++)
+                    if (ao_cn[c])
+                        B->draw(&p, &f, 0, &sm, &vp, NULL,
+                                AO.fv + (int)((long long)nt * c / AO_CHUNKS) * 3, ao_cn[c]);
+            }
         }
     }
     if (rgl_ao_debug == 3 || rgl_ao_debug == 4) {   /* the depth itself, to look at */
@@ -2700,6 +2818,7 @@ static void scene_flush(void)
         if ((h->f.shadow & 15) == RGL_SHADOW_RECEIVE) {
             if (SH.valid) {
                 const float *m = SH.light.m;
+#pragma omp parallel for if (h->n > 8192)
                 for (k = 0; k < h->n; k++) {
                     const float x = v[k].s[0], y = v[k].s[1], z = v[k].s[2], w = v[k].s[3];
                     v[k].s[0] = m[0] * x + m[4] * y + m[8] * z + m[12] * w;
@@ -2710,9 +2829,13 @@ static void scene_flush(void)
             } else
                 h->f.shadow = RGL_SHADOW_NONE;
         }
-        B->draw(&h->p, &h->f, h->tex, &h->sm, &h->vp, h->has_sc ? &h->sc : NULL, v, h->n);
+        if (h->ni)
+            B->draw_indexed(&h->p, &h->f, h->tex, &h->sm, &h->vp, h->has_sc ? &h->sc : NULL,
+                            v, h->n, g_hi + h->ifirst, h->ni);
+        else
+            B->draw(&h->p, &h->f, h->tex, &h->sm, &h->vp, h->has_sc ? &h->sc : NULL, v, h->n);
     }
-    g_nheld = g_nhv = 0;
+    g_nheld = g_nhv = g_nhi = 0;
     if (AO.valid)                       /* AMBIENT OCCLUSION: done with it */
         B->screen_map(0);
     AO.valid = AO.have = AO.fighter_own = 0;
@@ -2839,8 +2962,12 @@ static void submit(int topo, rgl_vtx *v, int n)
     f.tex_mode = !handle ? RGL_TEX_NONE : S.env == E_REPLACE ? RGL_TEX_REPLACE : RGL_TEX_MODULATE;
     f.alpha_func = S.alpha_test ? (int)S.alpha_func : 0;
     f.alpha_ref = S.alpha_ref;
-    if (g_sh_on == 2 && topo == RGL_TRIS)
-        shadow_cast(v, n, SH.caster);
+    if (g_sh_on == 2 && topo == RGL_TRIS) {
+        if (g_sub_idx)
+            shadow_cast_idx(v, g_sub_idx, g_sub_ni, SH.caster);
+        else
+            shadow_cast(v, n, SH.caster);
+    }
     if (g_sh_proxy == 1)
         return;                         /* a stand-in, cast and not drawn */
     /* a receiver's own caster id above the mode: its texels are skipped */
@@ -2907,7 +3034,11 @@ static void submit(int topo, rgl_vtx *v, int n)
     if (hold_draw(&p, &f, handle, &sm, &vp, draw_rect(&sc) ? &sc : NULL, v, n))
         return;
     scene_flush();
-    B->draw(&p, &f, handle, &sm, &vp, draw_rect(&sc) ? &sc : NULL, v, n);
+    if (g_sub_idx)
+        B->draw_indexed(&p, &f, handle, &sm, &vp, draw_rect(&sc) ? &sc : NULL, v, n,
+                        g_sub_idx, g_sub_ni);
+    else
+        B->draw(&p, &f, handle, &sm, &vp, draw_rect(&sc) ? &sc : NULL, v, n);
 }
 
 /* DYNAMIC LIGHTS: a mesh past this many triangles is given no smooth
@@ -3018,6 +3149,15 @@ static int elem_index(GLenum t, const void *idx, int i)
  * them for every part cost the model's vertex count times its parts, each
  * frame (Mary: custom models dropped frames). A stamp a vertex says which
  * are done this draw. */
+/* UMK3_NO_INDEXED=1: the fighters expanded as before (a test's comparison) */
+static int no_indexed(void)
+{
+    static int v = -1;
+    if (v < 0)
+        v = getenv("UMK3_NO_INDEXED") != NULL;
+    return v;
+}
+
 static int tris_indexed(int count, GLenum t, const void *idx)
 {
     static rgl_vtx *cache;
@@ -3109,8 +3249,50 @@ static int tris_indexed(int count, GLenum t, const void *idx)
             q[0] *= l; q[1] *= l; q[2] *= l;
         }
     }
-    need_out(count + 16);
     n = count / 3 * 3;
+    /* a fighter's mesh (cast, not a glow), the scene held: its vertices
+     * once and the indices, to the backend as they are (draw_indexed). The
+     * same triangles from the same vertices: the same picture, a fifth of
+     * the copying (a smoothed body is ~180,000 indices over ~32,000
+     * vertices). The stage and the glows keep the expanded path: their
+     * lights and notes read each corner */
+    if (B && B->draw_indexed && !no_indexed() && n >= 3 && g_sh_on && SH.caster && SH.scene
+        && !(S.blend && bf(S.dst) == RGL_BF_ONE)
+        && !(S.cull && S.cull_mode == E_FRONT_AND_BACK)) {
+        static unsigned *local, *oidx;
+        static int lcap, icap;
+        if (ccap > lcap) {
+            unsigned *a = (unsigned *)realloc(local, (size_t)ccap * sizeof *a);
+            if (!a)
+                goto expand;
+            local = a;
+            lcap = ccap;
+        }
+        if (n > icap) {
+            unsigned *a = (unsigned *)realloc(oidx, (size_t)n * 2 * sizeof *a);
+            if (!a)
+                goto expand;
+            oidx = a;
+            icap = n * 2;
+        }
+        need_out(nu + 16);
+#pragma omp parallel for if (nu > 8192)
+        for (i = 0; i < nu; i++) {
+            g_out[i] = cache[used[i]];
+            local[used[i]] = (unsigned)i;
+        }
+#pragma omp parallel for if (n > 12288)
+        for (i = 0; i < n; i++)
+            oidx[i] = local[elem_index(t, idx, i)];
+        g_sub_idx = oidx;
+        g_sub_ni = n;
+        submit(RGL_TRIS, g_out, nu);
+        g_sub_idx = NULL;
+        g_sub_ni = 0;
+        return 1;
+    }
+expand:
+    need_out(count + 16);
 #pragma omp parallel for if (n > 12288)
     for (i = 0; i < n; i++)
         g_out[i] = cache[elem_index(t, idx, i)];
