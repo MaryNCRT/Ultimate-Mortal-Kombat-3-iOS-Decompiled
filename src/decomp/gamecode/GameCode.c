@@ -11682,11 +11682,24 @@ static void rb_sim_end(void)
     rb_step_end(w, n);
 }
 
+/* Port, not in the binary: the special button's press (0x400, set on the
+ * frame it goes down only -- GetReal6ButtonJoyBits) kept for the next step
+ * of the engine when this frame takes none. The engine steps 0.9322 times a
+ * frame, so about one frame in fifteen steps nothing, and a press of S on
+ * that frame was lost: a finisher typed right that did not happen, now and
+ * then (Mary). A global, so rollback's snapshots keep it. */
+int PortSpecialCarry[2];
+
 void UpdateArcadeCode(int *joy1, int *joy2)
 {
     long i;
+    int stepped_any = 0;
 
     (void)joy2;                         /* the second pointer is never read */
+
+    joy1[0] |= PortSpecialCarry[0];
+    joy1[1] |= PortSpecialCarry[1];
+    PortSpecialCarry[0] = PortSpecialCarry[1] = 0;
 
     gameCnt++;
 
@@ -11839,6 +11852,14 @@ void UpdateArcadeCode(int *joy1, int *joy2)
         }
 
         FrameCompensation -= 1.0f;
+        /* Port: the press went into this step: not into a second one */
+        joy1[0] &= ~0x400;
+        joy1[1] &= ~0x400;
+        stepped_any = 1;
+    }
+    if (!stepped_any) {                 /* Port: no step this frame -- see above */
+        PortSpecialCarry[0] = joy1[0] & 0x400;
+        PortSpecialCarry[1] = joy1[1] & 0x400;
     }
 
     /* ---- and the stick goes out, but only when it changed ---- */

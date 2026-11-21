@@ -135,6 +135,21 @@ Not tested: a REPAIR that downloads on another PC, VERIFY offline.
 The FATALITY TRAINER (Mary's next request) is begun on its own branch,
 `claude/fatality-trainer`, not in this release.
 
+### 2026-11-21 -- the special button lost one press in fifteen (finishers that did not happen)
+
+- Mary: a fatality typed right sometimes does not happen, at random, in a
+  fight. The special button (S, 0x400) is the one bit
+  `GetReal6ButtonJoyBits` sets on the frame it goes down only, and the
+  engine steps 0.9322 times a frame (UpdateArcadeCode's FrameCompensation):
+  about one frame in fifteen takes no step, and an S pressed then never
+  reached the engine. The iOS layouts' finishers go through S (DoSpecial).
+  Now `PortSpecialCarry` (GameCode.c, a global so rollback's snapshots keep
+  it) holds the press for the next step when a frame takes none, and a
+  frame with two steps gives it to the first only.
+- Measured with `UMK3_KEYS`, forty one-frame presses of S in a training
+  fight, counted in `UMK3_LOG_P1`'s engine word: 38 of 40 before, 40 of 40
+  after.
+
 ### 2026-11-20 -- 0.5.8 beta: KOMBO SLIDE gentler, the lighting through finishers, the trainer's sign
 
 - **KOMBO SLIDE off** (players, through Mary: "a bit too aggressive ... the
