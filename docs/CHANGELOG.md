@@ -8,6 +8,13 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased
+
+- **Finishers that did not happen, now and then:** a press of the special
+  button (S) on a frame where the engine took no step (one in fifteen) was
+  lost. It is now kept for the next step (38 of 40 presses before, 40 of 40
+  after).
+
 ## 0.5.8 beta (2026-11-20)
 
 Fixes after 0.5.7, from Mary and from players. Checked by scripted runs in
