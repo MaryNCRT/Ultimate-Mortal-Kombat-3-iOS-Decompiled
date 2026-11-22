@@ -46,6 +46,24 @@
         : c.rtShadows && c.ao && c.contactShadows && c.bloom === 30 && c.tonemap ? 'enhanced' : 'custom');
     const bloomIdx = $derived(BLOOMS.reduce((b, v, i) => Math.abs(v - (c.bloom || 0)) < Math.abs(BLOOMS[b] - (c.bloom || 0)) ? i : b, 0));
 
+    /* DLSS 5 (lib/dlss5.js, the game's neural_mod.c): what the game says
+     * stands in the way, asked when the GRAPHICS page opens and after an
+     * import; the player's NVIDIA files and consumer add-on imported */
+    let dl = $state(null);
+    let dlMsgs = $state([]);
+    async function dlRefresh() {
+        try { dl = (await api.dlss5Status?.()) || null; } catch { dl = null; }
+    }
+    $effect(() => { if (app.gfxTab === 'gfx') dlRefresh(); });
+    async function dlImport() {
+        selectBlip();
+        const r = await api.dlss5Import?.();
+        if (r && !r.canceled) {
+            dlMsgs = r.results;
+            await dlRefresh();
+        }
+    }
+
     async function frame() {
         const p = await api.browseFrame();
         if (p) await save({ marco: p });
@@ -175,6 +193,28 @@
             </div>
         </div>
         <p class="note">{tx('rendNote')}</p>
+
+        <h3>DLSS 5</h3>
+        <div class="fields">
+            <label class="chk wide"><input type="checkbox" checked={!!c.dlss5}
+                disabled={dl && (dl.status === 'need_nvidia_gpu' || dl.status === 'not_installed')}
+                onchange={e => save({ dlss5: e.currentTarget.checked })}><span>{tx('dlss5On')}</span></label>
+            <div class="field wide">
+                <span class="lbl">{tx('dlss5State')}</span>
+                <div class="row">
+                    <input class="edt" readonly value={dl ? (tx('dlss5St')[dl.status] || dl.text) : '...'}>
+                    <button class="btn" onpointerenter={hoverBlip} onclick={dlImport}>{tx('dlss5Add')}</button>
+                    <button class="btn" onpointerenter={hoverBlip} onclick={() => { selectBlip(); api.dlss5Open?.(); }}>{tx('dlss5Folder')}</button>
+                </div>
+            </div>
+        </div>
+        {#if dl && dl.files}
+            <p class="note">nvngx_dlss.dll: {dl.files.dlss ? '✓' : '✗'} &nbsp; nvngx_dlssnr.dll: {dl.files.dlssnr ? '✓' : '✗'} &nbsp; {tx('dlss5Consumer')}: {dl.files.consumer || '✗'}</p>
+        {/if}
+        {#each dlMsgs as m}
+            <p class="note">{m.ok ? '✓' : '✗'} {m.name}: {m.why}</p>
+        {/each}
+        <p class="note">{tx('dlss5Note')}</p>
     {:else if app.gfxTab === 'tex'}
         <div class="fields">
             <div class="field">

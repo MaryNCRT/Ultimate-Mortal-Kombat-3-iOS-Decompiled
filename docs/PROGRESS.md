@@ -80,6 +80,18 @@ and Scorpion's fatality without its lag.
 
 ### Open problems
 
+- **Training: the input column shows no sideways movement** (Mary,
+  2026-11-22, a screenshot): only the up and down arrows appear, with their
+  frame counts; left and right are not listed. Not investigated yet; the
+  column is the port's `PortTrainInput` / `PortTrainDrawInputs`.
+- **DLSS 5, the neural pass:** seen working on 2026-11-22 with the
+  DLSS5 ReShade AIO add-on (standalone-dlssnr 2.2.4, Apache-2.0) in place of
+  the feeder: "CreateFeature(feature=18) = Success", NR=Success every frame,
+  60 fps, NR 5.4 ms + DLSS SR 2.0 ms of GPU, in a 1600x900 window. It does
+  not start in the borderless 1920x1081 window (it waits "for stability"
+  forever). Mary saw it work and reports a strange flicker. Still to do:
+  the HUD and menus left untouched (only the 3D fight processed), and a
+  separate layer for the fighters.
 Closed problems are in the detailed log and the CHANGELOG, not here.
 
 | Problem | State |
@@ -115,6 +127,41 @@ built and checked in Direct3D 12 only; see the log entry below. Phase 3
 ---
 
 ## Detailed log (newest first)
+
+### 2026-11-22 (later) -- DLSS 5 built in, not a mod
+
+Mary: "it no longer needs to be a mod; put DLSS 5 in an update".
+- `neural_mod.c`: `dlss5=` (GRAPHICS > DLSS 5) loads the chain from
+  `<game>\graphics\dlss5`. A type=dlss5 mod still works when it is off.
+  `check()` returns NEURAL_* (neural_mod.h); `neural_dlss5_status()` asks
+  quietly for the menu, and `umk3-game --dlss5-status` asks for the launcher.
+- `settings_menu.c`: a DLSS 5 row at the end of GRAPHICS, with the reason
+  under it. The check runs about once a second, not on every layout.
+- Launcher: `lib/dlss5.js` (status, ADD NVIDIA FILES: Authenticode through
+  PowerShell's Get-AuthenticodeSignature, one consumer, `.old` for anything
+  replaced), IPC `dlss5:*`, a DLSS 5 block in VIDEO > GRAPHICS, `dlss5=` in
+  `lib/ini.js`, `test/dlss5.test.js`. `node --test test/*.js`: 41 pass,
+  0 fail.
+- Shipping: `tools/neural/stage_dlss5.py` builds ReShade, takes the feeder's
+  official zip (SHA-256 matches the published fa41fe2c...62584) and
+  ReShade.fxh (pinned commit, SHA-256), and stages them into `launcher/dlss5`
+  (git-ignored). `make_release.py copy_dlss5` packs them, refuses without
+  them (UMK3_NO_DLSS5=1) and refuses NVIDIA's files. `lib/build.js` copies
+  `launcher/dlss5` to `graphics/dlss5` at every compile, copy-only, so the
+  player's files survive updates.
+- Antialiasing: Mary asked that DLSS 5 work with her antialiasing, so the
+  MSAA-off from the morning is gone. With MSAA the feeder warns that it
+  cannot read the multisampled depth and works without it.
+
+Checked in `WORK\dlss5-test` (muted, D3D12, RTX 5070): the compile put the
+7 files in graphics\dlss5; `--dlss5-status` printed "6 needs NVIDIA's
+files 0"; with dlss5=1 and UMK3_DLSS5_PROBE=1 ReShade loaded from
+graphics\dlss5, the feeder found its technique and opened the same-device
+session, and MSAA x8 was kept. The NVIDIA driver (621.24) has no
+nvngx_dlss.dll or nvngx_dlssnr.dll (DriverStore has only nvngx_dlssg and
+ngx-builtins
+vngx_dlssd). **Not checked:** the neural pass, the GRAPHICS row
+seen on screen, and the launcher's panel seen in the app.
 
 ### 2026-11-22 (morning) -- the DLSS 5 mod in the game: our ReShade, the feed
 

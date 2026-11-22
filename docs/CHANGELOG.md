@@ -10,6 +10,16 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
+- **DLSS 5 built in** (experimental): the package brings our ReShade 6.8.0
+  build and DLSS5-Feeder 2.0.0 (`launcher\dlss5`, copied to
+  `graphics\dlss5` at every compile without touching what the player added).
+  GRAPHICS > DLSS 5 in the game and VIDEO > GRAPHICS > DLSS 5 in the launcher
+  turn it on for the next start, and say what is missing. The launcher's ADD
+  NVIDIA FILES imports `nvngx_dlss.dll` / `nvngx_dlssnr.dll` (only signed by
+  NVIDIA) and the consumer add-on. Antialiasing stays as set (Mary). The
+  neural pass itself is unconfirmed: NVIDIA's DLLs and a consumer were not on
+  the test machine.
+
 - **DLSS 5 mod, in the game:** our own build of ReShade 6.8.0
   (`tools/neural/build_reshade.py`, no banner) loads DLSS5-Feeder 2.0.0 from
   the mod's folder. The feeder gets the game's colour and depth and starts

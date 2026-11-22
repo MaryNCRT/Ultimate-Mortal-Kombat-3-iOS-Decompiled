@@ -15,6 +15,7 @@ const { app, BrowserWindow, ipcMain, dialog, nativeImage, net, Notification, she
 const path = require('path');
 const fs = require('fs');
 const ini = require('./lib/ini');
+const dlss5 = require('./lib/dlss5');
 const rootm = require('./lib/root');
 const bld = require('./lib/build');
 const upd = require('./lib/update');
@@ -602,6 +603,25 @@ function listNames(flag) {
 }
 ipcMain.handle('gpus:list', () => listNames('--list-gpus'));
 ipcMain.handle('audio:list', () => listNames('--list-audio'));
+
+/* VIDEO > DLSS 5 (lib/dlss5.js): what the game says stands in the way, the
+ * player's NVIDIA files and consumer add-on imported, the folder opened */
+ipcMain.handle('dlss5:status', () => dlss5.status(g_root, anyExe()));
+ipcMain.handle('dlss5:import', async () => {
+    const picked = await dialog.showOpenDialog(g_win, {
+        title: 'DLSS 5: nvngx_dlss.dll, nvngx_dlssnr.dll, renodx-dlss5 / deep-fried-chicken .addon64',
+        properties: ['openFile', 'multiSelections'],
+        filters: [{ name: 'DLSS 5', extensions: ['dll', 'addon64'] }],
+    });
+    if (picked.canceled || !picked.filePaths.length)
+        return { canceled: true, results: [] };
+    return { canceled: false, results: await dlss5.importFiles(g_root, picked.filePaths) };
+});
+ipcMain.handle('dlss5:open', () => {
+    const p = path.join(g_root, dlss5.DIR);
+    fs.mkdirSync(p, { recursive: true });
+    shell.openPath(p);
+});
 
 /* The player's profile (lib/profiles.js): profiles.ini beside the game,
  * which the game's settings menu edits too. One per installation; its id is

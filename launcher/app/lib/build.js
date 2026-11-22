@@ -315,6 +315,16 @@ async function build(root, ipa, arch = 'x64', onDataIn = () => {}, opts = {}) {
             return -1;
         }
 
+        /* DLSS 5 (src/runtime/neural_mod.c): what the package brings in
+         * launcher/dlss5 -- our ReShade, DLSS5-Feeder -- beside the game in
+         * graphics/dlss5. Only copied over, never deleted: NVIDIA's files and
+         * the consumer the player added there stay through every update */
+        {
+            const n = copyMissing(path.join(srcRoot, 'launcher', 'dlss5'), path.join(root, 'graphics', 'dlss5'));
+            if (n)
+                onData({ text: `DLSS 5: ${n} files put in graphics\\dlss5` });
+        }
+
         // Step 4 & 5: Compile & Link
         onData({
             text: '== 4/5 Compiling sources in parallel...',
