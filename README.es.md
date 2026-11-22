@@ -78,6 +78,7 @@ Todos se pueden cambiar en el launcher (CONTROLES) o en el juego (`Esc`).
 - **REGLAS DEL VERSUS** (0.4.5): en la selección del versus local, SELECT abre las reglas -- rondas (1/3/5), una serie de peleas (una, al mejor de 3, al mejor de 5), tiempo (30/60/99/infinito), kodes marcados en una lista, kombo slide. Son las mismas que usarán los lobbies en línea.
 - **REPETICIONES:** cada pelea local se graba y se reproduce en el juego con un reproductor completo (pausa, cuadro a cuadro, salto, velocidad).
 - **Mods:** una carpeta por mod en `mods\`; los archivos con el nombre de uno del juego lo reemplazan; datos de las tablas de combate (`data.ini`).
+- **DLSS 5 como mod** (experimental, sin publicar): una carpeta de `mods\` con `type=dlss5` que contiene la cadena comunitaria DLSS5-Feeder y los runtimes de NVIDIA, que pone el jugador. El juego la comprueba (Direct3D 12, tarjeta NVIDIA, todos los archivos presentes, DLL de NVIDIA firmadas) y carga ReShade desde esa carpeta. No se copia nada junto al exe ([docs/DLSS5-MOD.md](docs/DLSS5-MOD.md)).
 - **Trajes que se añaden** (0.4.8): un mod cuyo `mod.ini` dice `type=skin` no reemplaza nada: es otro traje para un luchador, con su propio modelo y sus propios COLOR 1, COLOR 2 y congelado (con cualquier nombre de archivo; `skin=`, `model=`, `color1=`, `color2=`, `ice=`), junto al original. En la selección se elige en la lista TRAJE (el gi de la esquina de arriba, o triángulo / Y, o T); la lista COLOR está debajo. En línea, el otro jugador lo ve solo si tiene el mismo traje; si no, ve el original.
 - **Menú de depuración** (`F2`): cualquier luchador incluidos los jefes, escenario, ronda, hitboxes, estados guardados.
 
@@ -106,6 +107,7 @@ Todos se pueden cambiar en el launcher (CONTROLES) o en el juego (`Esc`).
 - ILUMINACIÓN MEJORADA y OCLUSIÓN AMBIENTAL son solo Vulkan y DirectX 12; OpenGL dibuja como antes.
 - En Linux la música del escenario todavía se decodifica en el hilo del juego (Windows lo hace en un hilo propio).
 - MOD HUB: las descargas de los mods vienen de las releases de GitHub; una red que las bloquee no puede descargar mods.
+- Mod de DLSS 5: la parte del juego está probada (detecta, comprueba y rechaza el mod como debe), pero todavía no se ha confirmado una partida con todos los componentes presentes. El HUD se procesa junto con la escena.
 
 ## Compilar desde el código
 

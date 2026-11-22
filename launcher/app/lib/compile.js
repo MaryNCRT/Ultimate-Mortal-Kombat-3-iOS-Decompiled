@@ -249,6 +249,7 @@ async function compileGame({
         path.join(rootDir, 'src/runtime/pad_nav.c'),
         path.join(rootDir, 'src/runtime/profiles.c'),
         path.join(rootDir, 'src/runtime/mods.c'),
+        path.join(rootDir, 'src/runtime/neural_mod.c'),
         path.join(rootDir, 'src/runtime/draw_gl.c'),
         path.join(rootDir, 'src/runtime/gamecode_stubs.c'),
         path.join(rootDir, 'src/runtime/mp_net.c'),

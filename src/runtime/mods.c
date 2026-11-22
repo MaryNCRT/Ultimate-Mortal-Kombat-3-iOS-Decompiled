@@ -767,6 +767,39 @@ static void mod_ini(const char *dir, char *name, size_t nn, int *pack, int *esse
         *pack = 0;
 }
 
+/* mod.ini's type= (lower case, "" none): "skin" adds an outfit, "dlss5" is
+ * the DLSS 5 layer (neural_mod.c) -- neither replaces game files */
+static void mod_type(const char *dir, char *out, size_t n)
+{
+    char path[PATH_MAX_], line[512];
+    FILE *f;
+
+    out[0] = 0;
+    snprintf(path, sizeof(path), "%s/mod.ini", dir);
+    if (!(f = fopen(path, "r")))
+        return;
+    while (fgets(line, sizeof(line), f)) {
+        char *v = strchr(line, '=');
+        if (!v)
+            continue;
+        *v++ = 0;
+        trim(line);
+        lower(line);
+        trim(v);
+        lower(v);
+        if (strcmp(line, "type") == 0)
+            snprintf(out, n, "%s", v);
+    }
+    fclose(f);
+}
+
+static int mod_is_dlss5(const char *dir)
+{
+    char t[32];
+    mod_type(dir, t, sizeof t);
+    return strcmp(t, "dlss5") == 0;
+}
+
 static int mod_essential(const char *root, const char *folder)
 {
     char dir[PATH_MAX_];
@@ -852,6 +885,8 @@ int mods_list(MODS_ITEM *out, int max)
         mod_card(dir, m);
         if (m->skin)
             snprintf(m->category, sizeof(m->category), "skin");
+        else if (mod_is_dlss5(dir))
+            snprintf(m->category, sizeof(m->category), "dlss5");
         if (!m->name[0])
             snprintf(m->name, sizeof(m->name), "%s", names[i]);
         m->on = on[i] || m->essential;
@@ -945,6 +980,8 @@ void mods_init(const char *res_root)
         snprintf(path, sizeof(path), "%s/%s", root, named[i] + 1);
         if (skin_take(path, named[i] + 1))
             continue;                   /* a skin that adds, not replaces */
+        if (mod_is_dlss5(path))
+            continue;                   /* the DLSS 5 layer: no game files (neural_mod.c) */
         walk(path, 1, 0);
         snprintf(g_on[g_mods_on++], PATH_MAX_, "%s", path);
     }
@@ -958,6 +995,8 @@ void mods_init(const char *res_root)
             continue;
         snprintf(path, sizeof(path), "%s/%s", root, dirs[i]);
         if (skin_take(path, dirs[i]))
+            continue;
+        if (mod_is_dlss5(path))
             continue;
         walk(path, 1, 0);
         if (g_mods_on < MOD_MAX)
@@ -1167,4 +1206,31 @@ void mods_online(int on)
                    (unsigned)g_nold);
     } else if (g_nold)
         mods_apply_data();
+}
+
+/* The first mod that is on with mod.ini type=<type>, in mods.ini's order,
+ * from <game_dir>mods -- before mods_init has run (neural_mod.c asks before
+ * the window opens). 1 and its folder in `out`. */
+int mods_find_typed(const char *game_dir, const char *type, char *out, size_t n)
+{
+    static char names[MOD_MAX][NAME_MAX_];
+    static int on[MOD_MAX];
+    char keep[PATH_MAX_], dir[PATH_MAX_], t[32];
+    int k, i, hit = 0;
+
+    snprintf(keep, sizeof(keep), "%s", g_root);
+    snprintf(g_root, sizeof(g_root), "%smods", game_dir);
+    k = mods_order(names, on, MOD_MAX);
+    for (i = 0; i < k && !hit; i++) {
+        if (!on[i])
+            continue;
+        snprintf(dir, sizeof(dir), "%s/%s", g_root, names[i]);
+        mod_type(dir, t, sizeof t);
+        if (strcmp(t, type) == 0) {
+            snprintf(out, n, "%s", dir);
+            hit = 1;
+        }
+    }
+    snprintf(g_root, sizeof(g_root), "%s", keep);
+    return hit;
 }

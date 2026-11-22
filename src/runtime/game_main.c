@@ -1200,6 +1200,10 @@ static void read_config(const char *dir)
             extern int port_noob_saibot;
             port_noob_saibot = atoi(v) == 1;
         }
+        else if (strcmp(line, "dlss5_mod") == 0) {     /* neural_mod.c */
+            extern int neural_mod_enabled;
+            neural_mod_enabled = atoi(v) != 0;
+        }
         else if (strcmp(line, "rt_shadows") == 0)      /* render/rgl.h */
             rgl_shadows = atoi(v) == 1;
         /* AMBIENT OCCLUSION (render/rgl.h, research/AMBIENT-OCCLUSION.md) */
