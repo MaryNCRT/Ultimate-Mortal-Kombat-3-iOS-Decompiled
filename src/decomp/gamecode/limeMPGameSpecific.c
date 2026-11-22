@@ -683,6 +683,13 @@ void disconnected(void)
         return;
     }
     NSLog("################## at disconnected()");
+    {
+        /* Port, not in the binary: a spectator (rollback.c) has no session;
+         * nothing of the binary's link may end the fight it watches */
+        int rb_watching(void);
+        if (rb_watching())
+            return;
+    }
     EASDK_LogEvent(0x7558, 0, 0, 0, 0);
     disconnectedFromCharacterSelect = 0;
     disableHeartbeat();

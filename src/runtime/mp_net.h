@@ -52,6 +52,8 @@ void mpnet_poll(void);
 /* Puts what was just sent on the wire now: EOS only sends in its tick, which
  * mpnet_poll does at the start of the next frame (rollback.c's inputs). */
 void mpnet_flush(void);
+/* Spectators (rollback.c): a packet to any EOS user, with a session or not. */
+void mpnet_spec_send(const char *who, const void *p, int n);
 
 /* ---- MULTIPLAYER: the local network alone ---- */
 

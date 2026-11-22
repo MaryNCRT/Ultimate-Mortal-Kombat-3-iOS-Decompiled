@@ -15394,6 +15394,10 @@ static int   PortLobbyRulesOn;          /* the lobby's rules made the online blo
  * may be the leader: a new one picks it all up from the lobby's
  * attributes. The fight is the first two's, the first hosting. */
 static void PortLobbySay(const char *s);
+/* rollback.c: SPECTATORS (ONLINE stage 4c) */
+void rb_watch_begin(const char *host);
+void rb_watch_stop(void);
+int  rb_watch_state(void);
 static int   PortRoomView;              /* the right panel: 0 the lobby, 1 the options */
 static float PortRoomSure;              /* DISSOLVE pressed once: seconds to press again */
 static int   PortRoomPrimed;            /* the leader's: the wants there before, not acted on */
@@ -16449,6 +16453,14 @@ static void PortRoomCallNext(const struct mplobby_member *m, int n, const lq_lin
     }
     st = lq_stage(o, l, (const char (*)[LQ_ID])who, votes, n, l->id[0], l->id[1],
                   (unsigned)rand() ^ ((unsigned)PortTick * 2654435761u));
+    if (st < 0) {
+        /* the fight's own way was the host's STAGE SELECT after the VS
+         * screen; a room's stage is chosen in the room (Mary): drawn now */
+        lq_opts r = *o;
+        r.stage = LQ_STAGE_RANDOM;
+        st = lq_stage(&r, l, (const char (*)[LQ_ID])who, votes, n, l->id[0], l->id[1],
+                      (unsigned)rand() ^ ((unsigned)PortTick * 2246822519u));
+    }
     if (st >= 0)
         printf("online: room: the stage %s (%s)\n", stage_room_name(st), PortRoomStageWho(o->stage));
     mplobby_call(l->id[0], l->id[1], st);
@@ -16595,8 +16607,8 @@ static void PortRoomOptionsWin(const struct mplobby_info *in, lq_opts *cur, int 
            : o.line == LQ_LINE_INOUT ? PortFrTx("CADA UNO ENTRA O SALE DE LA FILA", "EACH JOINS OR LEAVES THE LINE")
                                      : PortFrTx("CADA UNO ENTRA, SALE, SUBE O BAJA", "EACH JOINS, LEAVES, MOVES UP OR DOWN"),
            lx, yy, 0, 0.30f, hw, OnDim, a);
-    OnText(o.stage == LQ_STAGE_FIGHT ? PortFrTx("ESCENARIO: EL ANFITRI\xc3\x93N DE LA PELEA, O AL AZAR",
-                                                "STAGE: THE FIGHT'S HOST, OR DRAWN")
+    OnText(o.stage == LQ_STAGE_FIGHT ? PortFrTx("ESCENARIO: AL AZAR AL LLAMAR LA PELEA",
+                                                "STAGE: DRAWN WHEN THE FIGHT IS CALLED")
            : o.stage == LQ_STAGE_FIGHTERS ? PortFrTx("SI ELIGEN DISTINTO, UNO DE LOS DOS AL AZAR",
                                                      "IF THEY DIFFER, ONE OF THE TWO, DRAWN")
            : o.stage == LQ_STAGE_VOTE ? PortFrTx("EL M\xc3\x81S VOTADO; UN EMPATE, AL AZAR", "THE MOST VOTED; A TIE, DRAWN")
@@ -16855,11 +16867,34 @@ static void PortRoomPage(float vw, float a)
         /* READY is the two who fight next's alone (Mary); one who goes back
          * to wait is not ready any more */
         int up = mine && lq_find(&l, mine) >= 0 && lq_find(&l, mine) < 2;
+        /* SPECTATORS (ONLINE stage 4c): one not in the fight on watches it
+         * live, from the fight's host -- the call's A (rollback.c) */
+        int watch = busy && ga[0] && mine && strcmp(mine, ga) && strcmp(mine, gb);
         if (!up && PortLobbyReady && !getenv("UMK3_LOBBY_TEST")) {
             PortLobbyReady = 0;
             mplobby_set_ready(0);
         }
-        if (OnButton(OB_LREADY, !up ? PortFrTx("ESPERA TU TURNO", "WAIT YOUR TURN")
+        if (watch) {
+            int ws = rb_watch_state();
+            static int tested;          /* a test aid: UMK3_LOBBY_WATCH=1 presses it */
+            if (getenv("UMK3_LOBBY_WATCH") && ws == 0 && !tested) {
+                tested = 1;
+                printf("lobby test: watching the fight\n");
+                rb_watch_begin(ga);
+            }
+            if (OnButton(OB_LREADY, ws == 1 ? PortFrTx("CONECTANDO...", "CONNECTING...")
+                                    : PortFrTx("VER LA PELEA", "WATCH THE FIGHT"),
+                         x1 + 8.0f, top + ph - 30.0f, colw - 16.0f, 24.0f,
+                         ws == 1 ? BT_OFF : BT_MAIN, a) && ws != 1) {
+                rb_watch_begin(ga);
+                PortLobbySay(PortFrTx("PIDIENDO LA PELEA AL ANFITRI\xc3\x93N...",
+                                      "ASKING THE HOST FOR THE FIGHT..."));
+            }
+            if (ws == -1) {
+                PortLobbySay(PortFrTx("NO HAY PELEA QUE VER AHORA", "NO FIGHT TO WATCH NOW"));
+                rb_watch_stop();
+            }
+        } else if (OnButton(OB_LREADY, !up ? PortFrTx("ESPERA TU TURNO", "WAIT YOUR TURN")
                                 : PortLobbyReady ? PortFrTx("NO LISTO", "NOT READY") : PortFrTx("LISTO", "READY"),
                      x1 + 8.0f, top + ph - 30.0f, colw - 16.0f, 24.0f,
                      !up ? BT_OFF : PortLobbyReady ? BT_NORMAL : BT_MAIN, a) && up) {

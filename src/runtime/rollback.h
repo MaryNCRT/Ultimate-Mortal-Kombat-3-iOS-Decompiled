@@ -64,6 +64,18 @@ void rb_net(umk3_long type, const void *data, umk3_long len);
 /* game_main.c, every frame: the last inputs go on being sent for a while
  * after a fight, so the other side can finish it. */
 void rb_poll(void);
+/* SPECTATORS (ONLINE stage 4c): watch the fight the host (an EOS user, the
+ * room call's A) has on. rb_watch_poll, every frame: 1 = start the fight now
+ * (*c1, *c2, *level), -1 = the host is gone, 0 otherwise. rb_watch_state:
+ * 0 off, 1 asking, 2..3 watching, -1 the host had no fight. rb_watch_over:
+ * the fight's last frame reached, back to the room. */
+void rb_watch_begin(const char *host);
+void rb_watch_stop(void);
+int  rb_watch_poll(int *c1, int *c2, int *level);
+int  rb_watching(void);
+int  rb_watch_state(void);
+int  rb_watch_over(void);
+
 /* The replay player's frames: no sound, nothing drawn. */
 void rb_silent(int quiet, int nodraw);
 
