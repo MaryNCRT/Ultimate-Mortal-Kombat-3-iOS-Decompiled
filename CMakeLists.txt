@@ -238,6 +238,7 @@ if(UMK3_BINARY)
                 src/runtime/adaptive_music.c
                 src/runtime/fatal_trainer.c
                 src/runtime/photo_mode.c
+                src/runtime/gfx_preset.c
                 src/runtime/pad_nav.c
                 src/runtime/profiles.c
                 src/runtime/mods.c

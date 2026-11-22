@@ -10,6 +10,22 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
+- **GRAPHICS QUALITY** (Settings > GRAPHICS, and the launcher's GRAPHICS
+  page): ORIGINAL or ENHANCED sets the graphics switches together; moving
+  one by hand shows CUSTOM. ENHANCED is ENHANCED LIGHTING, AMBIENT
+  OCCLUSION, the new CONTACT SHADOWS, BLOOM and TONEMAPPING. New switches of
+  their own: CONTACT SHADOWS (short sharp shadows on the stage, a foot on the
+  floor; Vulkan and Direct3D 12 with the lighting and the occlusion on),
+  BLOOM (off / low / medium / high) and TONEMAPPING (the bright parts roll
+  off instead of clipping). BLOOM and TONEMAPPING work in every renderer, are
+  drawn over the fight only, and never touch the HUD. umk3.ini:
+  `graphics_preset=`, `contact_shadows=`, `bloom=`, `tonemap=`. Checked in
+  scripted D3D12 fights on three stages. A first version stippled the
+  fighters' arms and chests with contact shadows (Mary); the fighters no
+  longer receive them. Vulkan and OpenGL were not shot before the tests were
+  stopped, frame times were not measured, and Mary has not played the final
+  build yet. RTX and RTX + DLSS 5 are planned, not in this build.
+
 - **DLSS 5 as a mod** (experimental): a folder in `mods\` whose mod.ini
   says `type=dlss5` holds ReShade, DLSS5-Feeder, a neural consumer and
   NVIDIA's two runtimes, which the player supplies. With RENDERER Direct3D 12

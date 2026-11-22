@@ -119,6 +119,7 @@ void mayhem_set_dir(const char *ini_path);     /* gamecode_stubs.c */
 #include "smooth_models.h"
 #include "fatal_trainer.h"
 #include "photo_mode.h"
+#include "gfx_preset.h"
 #if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
 #include <unistd.h>                 /* readlink, setenv */
 #endif
@@ -1041,6 +1042,8 @@ extern int PortHideControls;           /* GameCode.c: hide_controls=1 */
  *     language=ES
  *     renderer=opengl    (vulkan, d3d12: render/rgl.h; from the next start)
  *     rt_shadows=0       (1: REAL-TIME SHADOWS, experimental, render/rgl.h)
+ *     graphics_preset=original  (enhanced, custom: gfx_preset.c; bloom=, tonemap=,
+ *                        contact_shadows= the switches it sets)
  *
  *     render_width=960
  *     render_height=640
@@ -1131,6 +1134,8 @@ static void read_config(const char *dir)
 {
     char path[1100], line[128];
     FILE *f;
+    int preset = -1, own = 0;           /* GRAPHICS QUALITY (gfx_preset.c): the key, and
+                                         * whether a switch it sets was given too */
 
     snprintf(path, sizeof path, "%s%s", dir, "umk3.ini");
     snprintf(g_ini_path, sizeof g_ini_path, "%s", path);
@@ -1205,7 +1210,17 @@ static void read_config(const char *dir)
             neural_mod_enabled = atoi(v) != 0;
         }
         else if (strcmp(line, "rt_shadows") == 0)      /* render/rgl.h */
-            rgl_shadows = atoi(v) == 1;
+            rgl_shadows = atoi(v) == 1, own = 1;
+        /* GRAPHICS QUALITY (gfx_preset.c): the preset, and the switches of
+         * its own (the rest, rt_shadows and ao, are above and below) */
+        else if (strcmp(line, "graphics_preset") == 0)
+            preset = gfx_preset_parse(v);
+        else if (strcmp(line, "bloom") == 0)            /* percent */
+            gfx_bloom = atoi(v) < 0 ? 0 : atoi(v) > 100 ? 100 : atoi(v), own = 1;
+        else if (strcmp(line, "tonemap") == 0)
+            gfx_tonemap = atoi(v) != 0, own = 1;
+        else if (strcmp(line, "contact_shadows") == 0)  /* render/rgl.h */
+            rgl_contact_shadows = atoi(v) != 0, own = 1;
         /* AMBIENT OCCLUSION (render/rgl.h, research/AMBIENT-OCCLUSION.md) */
         else if (strcmp(line, "ao") == 0)              /* 0 off, 1 Crytek, 2 HBAO, 3 Alchemy */
             rgl_ao = atoi(v) < 0 ? 0 : atoi(v) > 3 ? 3 : atoi(v);
@@ -1391,6 +1406,10 @@ static void read_config(const char *dir)
         }
     }
     fclose(f);
+    /* GRAPHICS QUALITY: the switches are what is drawn; a preset given with
+     * none of them (a hand-written umk3.ini) sets them */
+    if (!own && gfx_preset_selectable(preset))
+        gfx_preset_set(preset);
 }
 
 /* Fight debug keys, a test aid and not part of the game -- off unless

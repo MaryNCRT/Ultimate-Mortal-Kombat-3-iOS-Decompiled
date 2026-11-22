@@ -48,6 +48,7 @@
 #include "settings_menu.h"
 #include "profiles.h"
 #include "render/rgl.h"
+#include "gfx_preset.h"
 
 extern char Language[10];
 
@@ -129,8 +130,33 @@ enum {
     R_CLICKS,                           /* AUDIO: the menus' click sound (lime_menu.c) */
     R_SLIDE,                            /* KOMBO SLIDE (mkreact.c t_ccp3) */
     R_MUSIC, R_SFX,                     /* AUDIO's bars (lime_menu.c) */
-    R_AUDIODEV, R_GPU                   /* SOUND OUTPUT, GRAPHICS CARD: at the next start */
+    R_AUDIODEV, R_GPU,                  /* SOUND OUTPUT, GRAPHICS CARD: at the next start */
+    R_GQ,                               /* GRAPHICS QUALITY's preset (gfx_preset.c) */
+    R_CONTACT, R_BLOOM, R_TONEMAP       /* and three of the switches it sets */
 };
+
+/* BLOOM's steps, percent (gfx_preset.h gfx_bloom): ENHANCED sets the third */
+static const int k_bloom[4] = { 0, 15, 30, 50 };
+static int bloom_index(void)
+{
+    int i, b = 0;
+    for (i = 1; i < 4; i++)
+        if (abs(k_bloom[i] - gfx_bloom) < abs(k_bloom[b] - gfx_bloom))
+            b = i;
+    return b;
+}
+static const char *bloom_name(int i)
+{
+    static const char *const es[4] = { "DESACTIVADO", "BAJO", "MEDIO", "ALTO" };
+    static const char *const en[4] = { "OFF", "LOW", "MEDIUM", "HIGH" };
+    return tx(es[i], en[i]);
+}
+static const char *gq_name(int p)
+{
+    return p == GFX_ORIGINAL ? tx("ORIGINAL", "ORIGINAL")
+         : p == GFX_ENHANCED ? tx("MEJORADA", "ENHANCED")
+         : tx("PERSONALIZADA", "CUSTOM");
+}
 
 /* The bars: a value 0..1 shown as a slider (ui_alert.c), set by a click or
  * a drag along it and by left / right a step at a time */
@@ -710,6 +736,9 @@ static void build(void)
         }
         if (all || g_page == PAGE_GFX) {
         head(tx("GRAFICOS", "GRAPHICS"));
+        /* GRAPHICS QUALITY (gfx_preset.c): ORIGINAL or ENHANCED sets the
+         * switches below; moving one by hand shows CUSTOM */
+        add(R_GQ, 0, tx("CALIDAD GRAFICA", "GRAPHICS QUALITY"), "< %s >", gq_name(gfx_preset()));
         if (g_gfx.aa)
             add(R_AA, 0, "ANTIALIASING", "< X%d >", g_gfx.aa);
         else
@@ -749,11 +778,26 @@ static void build(void)
         add(R_AO, 0, tx("OCLUSION AMBIENTAL", "AMBIENT OCCLUSION"), "< %s >",
             rgl_ao ? tx("ACTIVADA", "ON") : tx("DESACTIVADA", "OFF"));
         g_rows[g_n - 1].en = rgl_shadows != 0;
+        /* CONTACT SHADOWS march through the occlusion's distances: on
+         * with both (render/rgl.h rgl_contact_shadows) */
+        add(R_CONTACT, 0, tx("SOMBRAS DE CONTACTO", "CONTACT SHADOWS"), "< %s >",
+            rgl_contact_shadows ? tx("ACTIVADAS", "ON") : tx("DESACTIVADAS", "OFF"));
+        g_rows[g_n - 1].en = rgl_shadows && rgl_ao;
         /* its debug views are in the debug menu (debug_menu.c ROW_AODBG) */
         add(R_HEAD, 0, rgl_renderer == RGL_OPENGL
                            ? tx("  SOLO CON VULKAN O DIRECT3D 12", "  ONLY WITH VULKAN OR DIRECT3D 12")
                            : tx("  EXPERIMENTALES", "  EXPERIMENTAL"), "");
         g_rows[g_n - 1].en = 0;
+        /* the picture's pass over the fight, the HUD left out: every
+         * renderer (gfx_preset.c gfx_scene_post) */
+        add(R_BLOOM, 0, "BLOOM", "< %s >", bloom_name(bloom_index()));
+        add(R_TONEMAP, 0, tx("MAPEO DE TONOS", "TONEMAPPING"), "< %s >",
+            gfx_tonemap ? tx("ACTIVADO", "ON") : tx("DESACTIVADO", "OFF"));
+        if (!rgl_post_available()) {
+            g_rows[g_n - 1].en = g_rows[g_n - 2].en = 0;
+            add(R_HEAD, 0, tx("  NO DISPONIBLES CON ESTE CONTROLADOR", "  NOT AVAILABLE WITH THIS DRIVER"), "");
+            g_rows[g_n - 1].en = 0;
+        }
         }
         if (all || g_page == PAGE_TEX) {
         head(tx("TEXTURAS", "TEXTURES"));
@@ -918,6 +962,7 @@ static int has_value(int kind)
     switch (kind) {
     case R_DISPLAY: case R_MONITOR: case R_RES: case R_RRES: case R_AA: case R_TEXQ:
     case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_SMOOTH: case R_SMODEL: case R_VSYNC: case R_LOWLAT: case R_NOOB: case R_CORNER: case R_CLICKS: case R_SLIDE: case R_AUDIODEV: case R_GPU: case R_PLAYER: case R_LAYOUT:
+    case R_GQ: case R_CONTACT: case R_BLOOM: case R_TONEMAP:
     case R_RTSHADOW: case R_AO: case R_AODBG: case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE: case R_PCOLOR2:
     case R_PICONS:
         return 1;
@@ -1239,6 +1284,23 @@ static void change(int kind, int d)
     case R_AODBG:                       /* at once; not saved: a look, not a setting */
         rgl_ao_debug = wrap(rgl_ao_debug + d, 6);
         return;
+    case R_GQ:                          /* at once: ORIGINAL / ENHANCED (CUSTOM from the first) */
+        i = gfx_preset();
+        gfx_preset_set(wrap((i == GFX_ENHANCED ? 1 : 0) + d, 2) ? GFX_ENHANCED : GFX_ORIGINAL);
+        g_dirty = 1;
+        return;
+    case R_CONTACT:
+        rgl_contact_shadows = !rgl_contact_shadows;
+        g_dirty = 1;
+        return;
+    case R_BLOOM:
+        gfx_bloom = k_bloom[wrap(bloom_index() + d, 4)];
+        g_dirty = 1;
+        return;
+    case R_TONEMAP:
+        gfx_tonemap = !gfx_tonemap;
+        g_dirty = 1;
+        return;
     case R_SHARPA:                      /* at once, at the next frame drawn */
         port_sharp_angle += 5.0f * (float)d;
         port_sharp_angle = port_sharp_angle < 0 ? 0 : port_sharp_angle > 180 ? 180 : port_sharp_angle;
@@ -1470,6 +1532,29 @@ static int drop_fill(int kind)
         snprintf(L[1], 48, "%s", tx("ACTIVADA", "ON"));
         n = 2;
         g_drop_cur = rgl_ao ? 1 : 0;
+        break;
+    case R_GQ:                          /* CUSTOM is none of them */
+        snprintf(L[0], 48, "%s", gq_name(GFX_ORIGINAL));
+        snprintf(L[1], 48, "%s", gq_name(GFX_ENHANCED));
+        n = 2;
+        g_drop_cur = gfx_preset() == GFX_ORIGINAL ? 0 : gfx_preset() == GFX_ENHANCED ? 1 : -1;
+        break;
+    case R_CONTACT:
+        snprintf(L[0], 48, "%s", tx("DESACTIVADAS", "OFF"));
+        snprintf(L[1], 48, "%s", tx("ACTIVADAS", "ON"));
+        n = 2;
+        g_drop_cur = rgl_contact_shadows ? 1 : 0;
+        break;
+    case R_BLOOM:
+        for (n = 0; n < 4; n++)
+            snprintf(L[n], 48, "%s", bloom_name(n));
+        g_drop_cur = bloom_index();
+        break;
+    case R_TONEMAP:
+        snprintf(L[0], 48, "%s", tx("DESACTIVADO", "OFF"));
+        snprintf(L[1], 48, "%s", tx("ACTIVADO", "ON"));
+        n = 2;
+        g_drop_cur = gfx_tonemap ? 1 : 0;
         break;
     case R_AODBG:
         snprintf(L[0], 48, "%s", tx("DESACTIVADA", "OFF"));
@@ -2439,6 +2524,10 @@ static void save_ini(void)
     put("sharp_edge_strength", "%d", (int)(port_sharp_strength * 100.0f + 0.5f));
     put("rt_shadows", "%d", rgl_shadows);
     put("ao", "%d", rgl_ao);
+    put("contact_shadows", "%d", rgl_contact_shadows);
+    put("bloom", "%d", gfx_bloom);
+    put("tonemap", "%d", gfx_tonemap);
+    put("graphics_preset", "%s", gfx_preset_key(gfx_preset()));
     put("replay_scale", "%d", dbg_replay_pct);
     put("buttons", "%d", port_buttons());
     {

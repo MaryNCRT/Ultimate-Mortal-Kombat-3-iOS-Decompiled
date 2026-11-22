@@ -106,14 +106,63 @@ traced to the binary's own mechanism before anything is changed.
 
 **Graphics overhaul (asked 2026-11-22):** phase 1, the audit and the
 architecture, is in [research/GRAPHICS-OVERHAUL.md](research/GRAPHICS-OVERHAUL.md).
-No code changed yet. Two licence questions block phases 3-5 as asked (NVIDIA
-SDKs inside a GPL program; NVIDIA's neural model is not redistributable)
-and wait on Mary.
+Two licence questions block phases 3-5 as asked (NVIDIA SDKs inside a GPL
+program; NVIDIA's neural model is not redistributable) and wait on Mary.
+Phase 2 (GRAPHICS QUALITY: presets, bloom, tonemap, contact shadows) is
+built and checked in Direct3D 12 only; see the log entry below. Phase 3
+(ray tracing) has not started.
 
 ---
 
 ## Detailed log (newest first)
 
+### 2026-11-22 (later) -- graphics overhaul, phase 2: GRAPHICS QUALITY
+
+What was built (all port code):
+
+- `src/runtime/gfx_preset.c/.h`: `graphics_preset=original|enhanced|custom`.
+  A preset sets the existing switches (`rgl_shadows`, `rgl_ao`, the new
+  `rgl_contact_shadows`, `gfx_bloom`, `gfx_tonemap`); the preset shown is
+  the one they match, CUSTOM otherwise. `read_config` applies the key only
+  when the file gives none of the switches. RTX / RTX_DLSS5 are reserved
+  values, not selectable.
+- Play-time BLOOM and TONEMAPPING: `gfx_scene_post`, called from
+  GameCode.c Task_GameMain_frame (a port line) after the 3D scene and
+  before `DrawHUD`, runs PHOTO MODE's pass (`rgl_post_apply`). So the HUD
+  is never processed. It does not run while PHOTO MODE is up (photo_post
+  does then) or outside fights.
+- The tonemap: a slot of the pass's settings (l1.pos w), the same in
+  `ff.frag`, `ff.hlsl` and `rgl_post.c`. A first ACES curve with a
+  mid-grey anchor crushed the dark stages to black (seen in the first
+  D3D12 shot of THE PIT 3). It is now a shoulder: below 0.6 linear nothing
+  changes; 0.6..1.4 eases into 1; the hue kept.
+- CONTACT SHADOWS: `contact_at` in both shaders. 12 steps towards the
+  shadow map's light, through the blurred occlusion map's distances (G, B).
+  The light's direction in camera space comes from `ao_block` (rgl_ff.c,
+  `SH.sun` from `shadow_build`) in `aodbg.yzw`. Needs ENHANCED LIGHTING and
+  AMBIENT OCCLUSION. Mary saw a stipple on Scorpion's arms and chest with
+  the first version: the march hit the fighter's own curved surface in the
+  half-size map, and the per-pixel jitter made it dots. Now the fighters do
+  not receive contact shadows, there is no jitter, the map's own texels
+  about the start are skipped, and the bias is larger. The shot after the
+  fix is clean.
+- Settings menu: GRAPHICS QUALITY, CONTACT SHADOWS, BLOOM, TONEMAPPING;
+  saved to umk3.ini. Launcher: `lib/ini.js` keys plus
+  `graphicsPreset`/`setGraphicsPreset` (the first-start presets set them
+  too), the GRAPHICS page's selectors, and a test in `test/ini.test.js`.
+- `tests/rgl_test.c` did not link since PHOTO MODE (no `plat_gl_proc`); it
+  now does. It was compiled, not run.
+
+Checked: built with the launcher's CLI into a private folder
+(`WORK\phase2-test`, because the shared test folder was in use by the
+DLSS 5 session at the same time). Scripted D3D12 fights (muted) on stages
+0, 3 and 7, ORIGINAL / lighting only / ENHANCED. The launcher's tests pass
+(36, 2 skipped), and the word check passes.
+
+Not checked: the Vulkan and OpenGL shots and the frame-time runs (Mary
+stopped the tests), `rgl_test` on the three renderers, and the menus by hand.
+Mary noted that the ENHANCED shots look close to the lighting-only ones:
+bloom at 30% and a shoulder-only tonemap are subtle on these dark stages.
 ### 2026-11-22 (night) -- the DLSS 5 mod (game side)
 
 Asked by Mary: DLSS 5 usable as a mod. `src/runtime/neural_mod.c` (new)

@@ -186,3 +186,27 @@ test('presets: original, enhanced, kept, and preset=/seen_version= round trip (0
     assert.equal(back.seenVersion, '0.4.4');
     assert.equal(ini.load(tmpIni()).preset, '');  /* not asked yet */
 });
+
+test('GRAPHICS QUALITY: graphics_preset follows the switches, bloom/tonemap/contact_shadows round trip', () => {
+    const p = tmpIni();
+    const c = ini.defaultConfig();
+    assert.equal(ini.graphicsPreset(c), 'original');
+    ini.setGraphicsPreset(c, 'enhanced');
+    assert.equal(ini.graphicsPreset(c), 'enhanced');
+    ini.save(p, c);
+    const txt = fs.readFileSync(p, 'utf8');
+    assert.match(txt, /^graphics_preset=enhanced$/m);
+    assert.match(txt, /^bloom=30$/m);
+    assert.match(txt, /^tonemap=1$/m);
+    assert.match(txt, /^contact_shadows=1$/m);
+    const back = ini.load(p);
+    assert.equal(back.bloom, 30);
+    assert.equal(back.tonemap, true);
+    assert.equal(back.contactShadows, true);
+    back.bloom = 15;
+    assert.equal(ini.graphicsPreset(back), 'custom');
+    ini.setGraphicsPreset(back, 'original');
+    assert.equal(ini.graphicsPreset(back), 'original');
+    const e = ini.applyPreset(ini.defaultConfig(), 'enhanced', { w: 1920, h: 1080 }, 'win32');
+    assert.equal(ini.graphicsPreset(e), 'enhanced');
+});

@@ -66,7 +66,7 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 **The game, as on the device.** Every mode of the iOS game (arcade tower, VS, training, survival, karnage, treasures, kodes), its menus, HUD, finishers, sounds and music, from the decompiled code. The iPad build's layout is used on 4:3.
 
 **Added by the port:**
-- **Renderers:** OpenGL, Vulkan and Direct3D 12 (`src/runtime/render/`), HD textures, antialiasing, ENHANCED LIGHTING (real-time shadows, relief and specular on every texture, mipmaps, every glow a coloured light, each stage lit by its sky, per-stage lighting files, ambient occlusion), VSYNC, LOW LATENCY (at most one frame queued between the keys and the screen), pipeline caches compiled ahead of play.
+- **Renderers:** OpenGL, Vulkan and Direct3D 12 (`src/runtime/render/`), HD textures, antialiasing, ENHANCED LIGHTING (real-time shadows, relief and specular on every texture, mipmaps, every glow a coloured light, each stage lit by its sky, per-stage lighting files, ambient occlusion, contact shadows), GRAPHICS QUALITY presets (ORIGINAL / ENHANCED) with bloom and tonemapping over the fight that leave the HUD alone, VSYNC, LOW LATENCY (at most one frame queued between the keys and the screen), pipeline caches compiled ahead of play.
 - **Screens:** 3:2, 4:3, 16:9 and 21:9; menus and panels laid out for each.
 - **SMOOTH ANIMATIONS** (frames between the game's frames) and **SMOOTH MODELS** (Blender's weld + Catmull-Clark subdivision, with sharp-edge controls).
 - **TRAINING's screen** (0.4.5): the fighter's moves in the left corner and every input pressed in the right one, with the pad's own buttons; the pause menu turns them. **DUEL against the CPU** (0.4.5): beside OK, PLAYER 2 or CPU and its level; player two joins with START.
@@ -106,7 +106,8 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 - Joining online, a pad's X glyph showed over START once (Mary); not reproduced yet.
 - Some stages still pause up to ~1.3 s on their first frames (THE STREET), as their events load.
 - With ENHANCED LIGHTING, the first frames after starting can stall a second or more while the driver finishes the shader (Direct3D 12).
-- ENHANCED LIGHTING and AMBIENT OCCLUSION are Vulkan and DirectX 12 only; OpenGL draws as before.
+- ENHANCED LIGHTING, AMBIENT OCCLUSION and CONTACT SHADOWS are Vulkan and DirectX 12 only; with OpenGL the GRAPHICS QUALITY preset gives only BLOOM and TONEMAPPING.
+- GRAPHICS QUALITY (unreleased): checked in Direct3D 12 only; Vulkan and OpenGL not yet shot, frame times not yet measured. The RTX presets are planned, not built.
 - On Linux the stage's music is still decoded on the game's thread (Windows decodes it on a thread of its own).
 - MOD HUB: the mods' downloads come from GitHub releases; a network that blocks those cannot download mods.
 - DLSS 5 mod: the game side is tested (it detects, checks and refuses the mod as it should), but a run with every component present has not been confirmed yet. The HUD is processed with the scene.

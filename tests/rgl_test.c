@@ -76,6 +76,10 @@ static void *proc(const char *n)
     return (void *)wglGetProcAddress(n);
 }
 
+/* the platform's, which render/rgl_post.c (PHOTO MODE's and GRAPHICS
+ * QUALITY's OpenGL pass) asks for its GLSL entry points */
+void *plat_gl_proc(const char *name) { return (void *)wglGetProcAddress(name); }
+
 static void frame(void)
 {
     if (rgl_renderer != RGL_OPENGL)
