@@ -2890,6 +2890,68 @@ static void ao_passes(void)
  * post_fx over it, the settings in the light block's first two lights and
  * the scene's distance as the shadow map when the depth pass kept it this
  * frame. The shadow map and the screen map are put back after. */
+/* DLSS 5's interface mask made whole (rgl.h rgl_ff_layer_fix): the window
+ * copied, then one full-screen draw writing its alpha alone -- 1 wherever
+ * the interface touched the 3x3 about a pixel (shader mode RGL_LAYER_FIX) */
+static struct { int color, w, h; } LF;
+
+void rgl_ff_layer_fix(void)
+{
+    static const float q[6][2] = { { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, -1 }, { 1, 1 }, { -1, 1 } };
+    rgl_light_block b;
+    rgl_vtx v[6];
+    rgl_pipe p;
+    rgl_frag f;
+    rgl_samp sm;
+    rgl_rect vp, to;
+    int tw, th, i;
+
+    if (!B || !B->screen_map || !B->lights || !rgl_layers)
+        return;
+    scene_flush();
+    target_size(0, &tw, &th);
+    if (tw <= 0 || th <= 0)
+        return;
+    if (!LF.color || LF.w != tw || LF.h != th) {
+        if (LF.color)
+            B->target_free(LF.color);
+        LF.color = B->target_new(tw, th, 1, 0);
+        LF.w = tw;
+        LF.h = th;
+        if (!LF.color)
+            return;
+    }
+    vp.x = vp.y = 0;
+    vp.w = tw;
+    vp.h = th;
+    to = vp;
+    B->blit(0, &vp, LF.color, &to, 0);
+    B->target_use(0);
+    memset(&b, 0, sizeof b);
+    b.aovp[2] = (float)tw;
+    b.aovp[3] = (float)th;
+    B->lights(&b, (int)sizeof b);
+    B->screen_map(LF.color);
+    memset(v, 0, sizeof v);
+    for (i = 0; i < 6; i++) {
+        v[i].x = q[i][0];
+        v[i].y = q[i][1];
+        v[i].w = 1.0f;
+        v[i].rgba[0] = v[i].rgba[1] = v[i].rgba[2] = v[i].rgba[3] = 255;
+    }
+    memset(&p, 0, sizeof p);
+    p.topo = RGL_TRIS;
+    p.cull = RGL_CULL_NONE;
+    p.mask = 8;                         /* the alpha alone */
+    memset(&f, 0, sizeof f);
+    f.tex_mode = RGL_TEX_NONE;
+    f.shadow = RGL_LAYER_FIX;
+    memset(&sm, 0, sizeof sm);
+    sm.aniso = 1;
+    B->draw(&p, &f, 0, &sm, &vp, NULL, v, 6);
+    B->screen_map(0);
+}
+
 int rgl_ff_post(const float *prm)
 {
     static const float q[6][2] = { { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, -1 }, { 1, 1 }, { -1, 1 } };

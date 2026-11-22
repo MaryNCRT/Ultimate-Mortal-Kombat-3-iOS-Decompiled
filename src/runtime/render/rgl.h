@@ -105,7 +105,8 @@ enum { RGL_SHADOW_NONE, RGL_SHADOW_RECEIVE, RGL_SHADOW_DEPTH,
        RGL_AO_DEPTH,                       /* AMBIENT OCCLUSION: the scene's distance, packed */
        RGL_AO_PASS,                        /* the occlusion from it (a full-screen draw) */
        RGL_AO_BLUR,                        /* and that blurred, edges kept */
-       RGL_POST };                         /* PHOTO MODE's effects over the picture */
+       RGL_POST,                           /* PHOTO MODE's effects over the picture */
+       RGL_LAYER_FIX };                    /* DLSS 5's interface mask made whole (rgl_ff_layer_fix) */
 typedef struct {
     int   tex_mode;                        /* RGL_TEX_* */
     int   alpha_func;                      /* 0 none, else the GL compare enum */
@@ -319,6 +320,10 @@ int  rgl_post_available(void);
 int  rgl_post_apply(const float *prm);
 void rgl_post_scene(void);
 int  rgl_ff_post(const float *prm);         /* rgl_ff.c, Vulkan and Direct3D 12 */
+/* DLSS 5's interface mask, before each present (rgl_front.c): any pixel the
+ * interface touched -- a letter's soft edge too -- and the pixel round it
+ * marked whole, the alpha alone written */
+void rgl_ff_layer_fix(void);
 
 /* rgl_ff.c */
 void rgl_ff_start(const rgl_backend *b, int width, int height);

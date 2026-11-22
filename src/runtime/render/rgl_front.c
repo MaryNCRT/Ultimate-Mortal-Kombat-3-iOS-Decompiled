@@ -336,6 +336,8 @@ void rgl_present(void)
         double t0, t1;
 
         rgl_ff_frame();                 /* what the scene held back, drawn */
+        if (rgl_layers)
+            rgl_ff_layer_fix();         /* DLSS 5: the interface's soft edges kept too */
         if (rgl_layers && getenv("UMK3_LAYER_PROBE")) {
             /* port diagnostic: DLSS 5's layer codes as the picture holds
              * them (rgl.h rgl_layers), every 300 frames -- the share of
