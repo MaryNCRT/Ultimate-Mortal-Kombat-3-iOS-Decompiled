@@ -10,6 +10,9 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
+- **GRAPHICS > DLSS 5 > NEURAL RENDERING** on or off: off keeps DLSS 5's DLAA alone
+  (`dlss5_neural=`).
+
 - **DLSS 5 never touches the interface:** the HUD, texts, the photo mode's
   panel and every menu are drawn on top of the neural pass and DLAA, as the
   game drew them, while the stage and fighters get the full neural effect

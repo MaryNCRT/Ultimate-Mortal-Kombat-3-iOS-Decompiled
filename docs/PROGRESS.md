@@ -80,6 +80,13 @@ and Scorpion's fatality without its lag.
 
 ### Open problems
 
+- **PHOTO MODE: a fighter behind the other drawn over it** (Mary, 2026-11-22, a
+  screenshot): with the free camera behind the fighters, Sindel, further
+  from the camera, shows over Scorpion. The fighters' draw order or depth
+  test, not looked at yet (GameCode.c RenderLevelPlayers).
+- **PHOTO MODE: no camera up / down** (Mary): the camera has height (Q / E)
+  but no movement straight up or down in the free camera's own frame; to check
+  what she means and add it.
 - **Training: the input column shows no sideways movement** (Mary,
   2026-11-22, a screenshot): only the up and down arrows appear, with their
   frame counts; left and right are not listed. Not investigated yet; the
