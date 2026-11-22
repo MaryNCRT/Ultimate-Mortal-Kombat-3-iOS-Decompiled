@@ -10,6 +10,9 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
+- PHOTO MODE's HIDE MENU / MENU button shows the key's picture (or the pad's
+  north button while a pad is in use) instead of "(H)" (Mary). Compiled; not
+  yet seen in the game.
 - **GRAPHICS QUALITY** (Settings > GRAPHICS, and the launcher's GRAPHICS
   page): ORIGINAL or ENHANCED sets the graphics switches together; moving
   one by hand shows CUSTOM. ENHANCED is ENHANCED LIGHTING, AMBIENT

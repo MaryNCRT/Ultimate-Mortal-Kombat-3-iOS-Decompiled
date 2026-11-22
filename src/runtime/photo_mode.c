@@ -1293,6 +1293,7 @@ static void text(const char *s, float x, float y, int align, float scale, const 
  * and words (FrontEnd.c PortNavDrawLineC). The mouse has no picture: it is
  * named. */
 void PortNavDrawLineC(const char *s, float y, float scale);    /* FrontEnd.c */
+void PortNavDrawLineAt(const char *s, float cx, float y, float scale, const float rgb[3]);
 
 static char *g_kb(int pk)               /* a key's picture, by its binding */
 {
@@ -1510,15 +1511,16 @@ void photo_draw(void)
         /* HIDE MENU, or the MENU tab while it is hidden; its key named */
         float bx, by, bw, bh, mx = PortMouseX, my = PortMouseY;
         int on;
-        char lb[64], key[16];
-        plat_key_label(PK_PH_HIDE, key, sizeof key);
+        char lb[160];
         hide_btn(&p, &bx, &by, &bw, &bh);
         on = mx >= bx && mx < bx + bw && my >= by && my < by + bh;
         limeFillRect(bx, by, bw, bh, on ? 0.30f : 0.10f, on ? 0.20f : 0.09f, on ? 0.10f : 0.08f, 0.92f);
         limeFillRect(bx, by, bw, 1.0f * s, 0.85f, 0.60f, 0.29f, on ? 1.0f : 0.6f);
-        snprintf(lb, sizeof lb, g_panel_hidden ? tx("MENU (%s)", "MENU (%s)")
-                                               : tx("OCULTAR MENU (%s)", "HIDE MENU (%s)"), key);
-        text(lb, bx + bw * 0.5f, by + 3.0f * s, 1, 0.24f, on ? C_BONE : C_BRONZE);
+        /* the key's picture, or the pad button's while a pad is in use, as
+         * the hint line has them (Mary: it read "MENU (H)") */
+        snprintf(lb, sizeof lb, "%s %s", g_pad_last ? g_pb(PB_NORTH) : g_kb(PK_PH_HIDE),
+                 g_panel_hidden ? "MENU" : tx("OCULTAR MENU", "HIDE MENU"));
+        PortNavDrawLineAt(lb, bx + bw * 0.5f, by + 3.0f * s, 0.45f, on ? C_BONE : C_BRONZE);
     }
 
     if (g_toast_t > 0) {
