@@ -1206,10 +1206,10 @@ static void read_config(const char *dir)
             extern int port_noob_saibot;
             port_noob_saibot = atoi(v) == 1;
         }
-        else if (strcmp(line, "dlss5_mod") == 0) {     /* neural_mod.c */
-            extern int neural_mod_enabled;
+        else if (strcmp(line, "dlss5_mod") == 0)       /* neural_mod.c */
             neural_mod_enabled = atoi(v) != 0;
-        }
+        else if (strcmp(line, "dlss5") == 0)           /* neural_mod.c: GRAPHICS > DLSS 5 */
+            neural_dlss5 = atoi(v) != 0;
         else if (strcmp(line, "rt_shadows") == 0)      /* render/rgl.h */
             rgl_shadows = atoi(v) == 1, own = 1;
         /* GRAPHICS QUALITY (gfx_preset.c): the preset, and the switches of
@@ -2053,13 +2053,12 @@ static void render_init(void)
         if (g_rs_samples < 2)
             g_rs_samples = 0;
     }
-    if (g_rs_samples && neural_mod_loaded()) {
-        /* port: the DLSS 5 mod reads the scene's depth, which a
-         * multisampled buffer hides from it; DLSS antialiases instead.
-         * umk3.ini keeps the player's antialiasing for when it is off */
-        printf("antialiasing: off while the DLSS 5 mod is loaded (DLSS antialiases)\n");
-        g_rs_samples = 0;
-    }
+    if (g_rs_samples && neural_mod_loaded())
+        /* port: the player's antialiasing is kept with DLSS 5 (Mary). The
+         * feeder cannot read a multisampled depth buffer, so its motion
+         * estimator works from the picture alone */
+        printf("antialiasing x%d kept with DLSS 5: the feeder works without the scene's depth\n",
+               g_rs_samples);
     printf("antialiasing x%d (asked x%d, the card allows x%d)\n",
            g_rs_samples, g_cfg_aa, (int)max);
     g_rs_on = 1;
@@ -3491,8 +3490,6 @@ static void render_reconfig(void)
         if (g_rs_samples < 2)
             g_rs_samples = 0;
     }
-    if (neural_mod_loaded())
-        g_rs_samples = 0;               /* port: as render_init, the DLSS 5 mod */
     g_rs_on = 1;
     g_rs_w = 0;                         /* remade at the next clear_frame */
 }
@@ -3758,6 +3755,17 @@ int main(int argc, char **argv)
             root = exe_res;
         }
     }
+    /* --dlss5-status: the launcher's VIDEO > DLSS 5 -- "dlss5<TAB>status
+     * number<TAB>its name<TAB>dlss5= on" (neural_mod.h NEURAL_*), umk3.ini read */
+    for (int a = 1; a < argc; a++)
+        if (strcmp(argv[a], "--dlss5-status") == 0) {
+            printf("dlss5\t%d\t%s\t%d\n",
+                   neural_dlss5_status(rgl_dir, rgl_renderer == RGL_D3D12),
+                   neural_status_name(neural_dlss5_status(rgl_dir, rgl_renderer == RGL_D3D12)),
+                   neural_dlss5);
+            fflush(stdout);
+            return 0;
+        }
     if (g_cfg_lang[0] && !getenv("UMK3_LANG")) {
         static char env[24];
         snprintf(env, sizeof env, "UMK3_LANG=%s", g_cfg_lang);

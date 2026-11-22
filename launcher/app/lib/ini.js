@@ -188,6 +188,7 @@ function defaultConfig() {
         contactShadows: false,       /* contact_shadows=1: CONTACT SHADOWS */
         bloom: 0,                    /* bloom=: percent, 0..100 */
         tonemap: false,              /* tonemap=1 */
+        dlss5: false,                /* dlss5=1: DLSS 5 at the next start (neural_mod.c) */
         noobSaibot: false,           /* noob_saibot=1: Noob Saibot on the select grid (offline only) */
         komboSlide: true,            /* kombo_slide=0: no push apart mid-kombo (offline only) */
         language: 0,                 /* "" = follow Windows */
@@ -275,6 +276,7 @@ function load(p) {
         else if (key === 'contact_shadows') cfg.contactShadows = num === 1;
         else if (key === 'bloom') cfg.bloom = clampInt(num, 0, 100, 0);
         else if (key === 'tonemap') cfg.tonemap = num === 1;
+        else if (key === 'dlss5') cfg.dlss5 = num === 1;
         else if (key === 'noob_saibot') cfg.noobSaibot = num === 1;
         else if (key === 'kombo_slide') cfg.komboSlide = num !== 0;
         else if (key === 'language') {
@@ -399,6 +401,7 @@ function save(p, cfg) {
         'contact_shadows=' + (cfg.contactShadows ? 1 : 0),
         'bloom=' + clampInt(cfg.bloom, 0, 100, 0),
         'tonemap=' + (cfg.tonemap ? 1 : 0),
+        'dlss5=' + (cfg.dlss5 ? 1 : 0),
         'graphics_preset=' + graphicsPreset(cfg),
         'noob_saibot=' + (cfg.noobSaibot ? 1 : 0),
         'kombo_slide=' + (cfg.komboSlide === false ? 0 : 1),

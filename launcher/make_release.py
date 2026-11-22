@@ -104,6 +104,31 @@ def eos_dir():
                      "(E:/MK3 PROJECT/TOOLS/eos), or UMK3_NO_EOS=1 for a package without internet play")
 
 
+def copy_dlss5(out):
+    """DLSS 5 (src/runtime/neural_mod.c): our ReShade build and DLSS5-Feeder,
+    staged by tools/neural/stage_dlss5.py into launcher/dlss5, to
+    launcher/dlss5 in the release; the compile copies them to graphics/dlss5
+    (launcher/app/lib/build.js). Never NVIDIA's files. Refuses without them
+    (UMK3_NO_DLSS5=1 makes such a package on purpose)."""
+    src = os.path.join(ROOT, "launcher", "dlss5")
+    need = ["ReShade64.dll", "ReShade-LICENSE.md", "dlss5-feed.addon64", "DLSS5-Feeder-LICENSE.txt",
+            os.path.join("reshade-shaders", "Shaders", "DLSS5_Feed.fx"),
+            os.path.join("reshade-shaders", "Shaders", "ReShade.fxh")]
+    missing = [n for n in need if not os.path.exists(os.path.join(src, n))]
+    if missing:
+        if os.environ.get("UMK3_NO_DLSS5") == "1":
+            print("no DLSS 5 files (UMK3_NO_DLSS5=1): the package has no DLSS 5")
+            return
+        raise SystemExit("DLSS 5 files missing from launcher/dlss5 (%s): run "
+                         "python tools/neural/stage_dlss5.py <work folder>, or UMK3_NO_DLSS5=1"
+                         % ", ".join(missing))
+    for bad in ("nvngx_dlss.dll", "nvngx_dlssnr.dll"):
+        if os.path.exists(os.path.join(src, bad)):
+            raise SystemExit("launcher/dlss5 holds %s: NVIDIA's files may not be shipped" % bad)
+    shutil.copytree(src, os.path.join(out, "launcher", "dlss5"))
+    print("DLSS 5: ReShade and DLSS5-Feeder from launcher/dlss5")
+
+
 def find_eos_ini():
     """The product's eos.ini: UMK3_EOS_INI, else the SDK folder's. Exits
     when there is none, as eos_dir does."""
@@ -192,6 +217,7 @@ def main(argv):
     # the game the same way
     shutil.copytree(os.path.join(ROOT, "launcher", "lighting"),
                     os.path.join(out, "launcher", "lighting"))
+    copy_dlss5(out)
     build_stub(os.path.join(out, "UMK3-Launcher.exe"))
     copy_eos(out)
     copy_sgdb_key(out)

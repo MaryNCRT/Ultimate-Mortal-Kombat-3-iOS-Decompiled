@@ -138,3 +138,7 @@ steamgriddb.key
 
 # the MAME lab: the arcade ROM and its tools never go in the repository
 LABORATORIO MAME/
+
+# DLSS 5's shipped files (our ReShade build, DLSS5-Feeder), staged for a
+# release by tools/neural/stage_dlss5.py: binaries, never committed
+launcher/dlss5/

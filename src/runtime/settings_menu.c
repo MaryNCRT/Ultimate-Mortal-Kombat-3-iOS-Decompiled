@@ -49,6 +49,7 @@
 #include "profiles.h"
 #include "render/rgl.h"
 #include "gfx_preset.h"
+#include "neural_mod.h"
 
 extern char Language[10];
 
@@ -132,7 +133,8 @@ enum {
     R_MUSIC, R_SFX,                     /* AUDIO's bars (lime_menu.c) */
     R_AUDIODEV, R_GPU,                  /* SOUND OUTPUT, GRAPHICS CARD: at the next start */
     R_GQ,                               /* GRAPHICS QUALITY's preset (gfx_preset.c) */
-    R_CONTACT, R_BLOOM, R_TONEMAP       /* and three of the switches it sets */
+    R_CONTACT, R_BLOOM, R_TONEMAP,      /* and three of the switches it sets */
+    R_DLSS5                             /* DLSS 5 at the next start (neural_mod.c) */
 };
 
 /* BLOOM's steps, percent (gfx_preset.h gfx_bloom): ENHANCED sets the third */
@@ -145,6 +147,29 @@ static int bloom_index(void)
             b = i;
     return b;
 }
+/* the line under DLSS 5: what it needs, or that it is on (neural_mod.h) */
+static const char *dlss5_note(int st)
+{
+    switch (st) {
+    case NEURAL_ACTIVE:
+        return tx("  EN USO (PROCESAMIENTO NEURONAL)", "  RUNNING (NEURAL RENDERING)");
+    case NEURAL_READY:
+        return neural_dlss5 ? tx("  AL REINICIAR", "  AT THE NEXT START")
+                            : tx("  LISTO: NVIDIA RTX 50", "  READY: NVIDIA RTX 50");
+    case NEURAL_NEED_D3D12:
+        return tx("  NECESITA RENDERIZADOR DIRECT3D 12", "  NEEDS RENDERER DIRECT3D 12");
+    case NEURAL_NEED_NVIDIA_GPU:
+        return tx("  NECESITA UNA TARJETA NVIDIA RTX 50", "  NEEDS AN NVIDIA RTX 50 CARD");
+    case NEURAL_CONFLICT:
+        return tx("  HAY OTRO RESHADE JUNTO AL JUEGO", "  ANOTHER RESHADE IS BESIDE THE GAME");
+    case NEURAL_READY_DLAA:
+        return tx("  SOLO DLAA: FALTA NVNGX_DLSSNR.DLL (NEURONAL)", "  DLAA ONLY: NVNGX_DLSSNR.DLL (NEURAL) MISSING");
+    case NEURAL_NOT_INSTALLED:
+        return tx("  NO INSTALADO: REPARAR EN EL LAUNCHER", "  NOT INSTALLED: REPAIR IN THE LAUNCHER");
+    }
+    return tx("  FALTAN ARCHIVOS DE NVIDIA: LAUNCHER > VIDEO", "  NVIDIA FILES MISSING: LAUNCHER > VIDEO");
+}
+
 static const char *bloom_name(int i)
 {
     static const char *const es[4] = { "DESACTIVADO", "BAJO", "MEDIO", "ALTO" };
@@ -798,6 +823,23 @@ static void build(void)
             add(R_HEAD, 0, tx("  NO DISPONIBLES CON ESTE CONTROLADOR", "  NOT AVAILABLE WITH THIS DRIVER"), "");
             g_rows[g_n - 1].en = 0;
         }
+        /* DLSS 5 (neural_mod.c): at the next start; what stands in its way
+         * said under it, read quietly from graphics\dlss5 */
+        {
+            /* the check enumerates the adapters and verifies signatures:
+             * once a second or so, and when the renderer changes, not
+             * every time the rows are laid out */
+            static int st = -1, st_rend = -1;
+            static unsigned st_age;
+            if (st < 0 || st_rend != port_renderer() || ++st_age % 60 == 0) {
+                st_rend = port_renderer();
+                st = neural_dlss5_status(rgl_dir, st_rend == RGL_D3D12);
+            }
+            add(R_DLSS5, 0, "DLSS 5", "< %s >",
+                neural_dlss5 ? tx("ACTIVADO", "ON") : tx("DESACTIVADO", "OFF"));
+            add(R_HEAD, 0, dlss5_note(st), "");
+            g_rows[g_n - 1].en = 0;
+        }
         }
         if (all || g_page == PAGE_TEX) {
         head(tx("TEXTURAS", "TEXTURES"));
@@ -962,7 +1004,7 @@ static int has_value(int kind)
     switch (kind) {
     case R_DISPLAY: case R_MONITOR: case R_RES: case R_RRES: case R_AA: case R_TEXQ:
     case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_SMOOTH: case R_SMODEL: case R_VSYNC: case R_LOWLAT: case R_NOOB: case R_CORNER: case R_CLICKS: case R_SLIDE: case R_AUDIODEV: case R_GPU: case R_PLAYER: case R_LAYOUT:
-    case R_GQ: case R_CONTACT: case R_BLOOM: case R_TONEMAP:
+    case R_GQ: case R_CONTACT: case R_BLOOM: case R_TONEMAP: case R_DLSS5:
     case R_RTSHADOW: case R_AO: case R_AODBG: case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE: case R_PCOLOR2:
     case R_PICONS:
         return 1;
@@ -1284,6 +1326,10 @@ static void change(int kind, int d)
     case R_AODBG:                       /* at once; not saved: a look, not a setting */
         rgl_ao_debug = wrap(rgl_ao_debug + d, 6);
         return;
+    case R_DLSS5:                       /* umk3.ini, for the next start */
+        neural_dlss5 = !neural_dlss5;
+        g_dirty = 1;
+        return;
     case R_GQ:                          /* at once: ORIGINAL / ENHANCED (CUSTOM from the first) */
         i = gfx_preset();
         gfx_preset_set(wrap((i == GFX_ENHANCED ? 1 : 0) + d, 2) ? GFX_ENHANCED : GFX_ORIGINAL);
@@ -1544,6 +1590,12 @@ static int drop_fill(int kind)
         snprintf(L[1], 48, "%s", tx("ACTIVADAS", "ON"));
         n = 2;
         g_drop_cur = rgl_contact_shadows ? 1 : 0;
+        break;
+    case R_DLSS5:
+        snprintf(L[0], 48, "%s", tx("DESACTIVADO", "OFF"));
+        snprintf(L[1], 48, "%s", tx("ACTIVADO", "ON"));
+        n = 2;
+        g_drop_cur = neural_dlss5 ? 1 : 0;
         break;
     case R_BLOOM:
         for (n = 0; n < 4; n++)
@@ -2528,6 +2580,7 @@ static void save_ini(void)
     put("bloom", "%d", gfx_bloom);
     put("tonemap", "%d", gfx_tonemap);
     put("graphics_preset", "%s", gfx_preset_key(gfx_preset()));
+    put("dlss5", "%d", neural_dlss5);
     put("replay_scale", "%d", dbg_replay_pct);
     put("buttons", "%d", port_buttons());
     {
