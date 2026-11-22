@@ -25,6 +25,33 @@ Port, not in the binary. `src/runtime/photo_mode.c`.
 - **Replays**: PHOTO MODE holds the replay; its FREE CAMERA
   (`photo_free_toggle`) moves the camera while the replay plays on.
 
+## The effects
+
+One pass over the game's area after the scene, before the panel
+(`photo_post`, GameCode.c Task_GameMain_frame), only while a setting is not
+at rest. 32 floats of settings (`photo_mode.c photo_post`, the order in the
+shaders' comment).
+
+- **Vulkan, Direct3D 12** (`rgl_ff.c rgl_ff_post`): the scene drawn out, the
+  viewport blitted into a target of its own (the screen map), one
+  full-screen draw of fragment mode `RGL_POST` (6) -- `post_fx` in
+  `shaders/ff.frag` and `ff.hlsl` -- the settings in the light block's first
+  two lights. The depth of field reads the distance AMBIENT OCCLUSION's depth
+  pass packs, copied each frame while it is asked for
+  (`rgl_post_want_depth`), bound as the shadow map (the backends bind it for
+  `RGL_POST` as for a receiver). That pass needs ENHANCED LIGHTING.
+- **OpenGL** (`render/rgl_post.c`): a GLSL 1.20 program of its own, the
+  same effects line for line; the viewport blitted into a framebuffer with
+  colour and depth textures (the window's depth copied when the formats do
+  not agree), the depth turned into a distance with the scene's projection
+  (`rgl_post_scene`, RenderGameView).
+- **Depth of field**: the focus is the distance at the middle of the view
+  (where the camera looks, its orbit's point) times FOCUS DISTANCE; the blur
+  grows with the distance from it, times the aperture, up to 10 pixels, 24
+  taps on a spiral.
+- The shaders are compiled by `render/shaders/build.py` (glslang 16.6,
+  fxc 5.1) into `rgl_shaders_vk.h` / `rgl_shaders_d3d12.h`.
+
 ## Controls
 
 | | Keyboard and mouse | Pad |
@@ -42,9 +69,10 @@ Port, not in the binary. `src/runtime/photo_mode.c`.
 
 1. **Done (0.5.9):** freeze, camera, zoom, roll, focus on a fighter, HUD
    hidden, grid, PNG at the game's resolution, pause menu entry, replays.
-2. **Next:** the effects as shaders in each renderer (OpenGL GLSL, Vulkan,
-   Direct3D 12): exposure, contrast, saturation, temperature, gamma,
-   vignette, grain, chromatic aberration, filters, depth of field.
+2. **Done (after 0.5.9):** IMAGE and EFFECTS -- exposure, brightness,
+   contrast, saturation, temperature, tint, gamma, sharpness, highlights,
+   shadows; depth of field, bloom, vignette, chromatic aberration, grain,
+   nine filters. See "The effects" below.
 3. A fighter turned or moved for the picture, poses if the animation frames
    allow it (expressions are not possible: the models have no face rig).
 4. 1440p / 4K and supersampling, presets, settings saved.

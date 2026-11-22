@@ -112,8 +112,23 @@ static int   g_shots_saved;
 static long  g_ticks;                   /* photo_tick's calls, for the log */
 static int   g_via_key;                 /* photo_open: from the shortcut */
 
-enum { CAT_CAMERA, CAT_SCENE, CAT_CAPTURE, CAT_N };
-static const int g_rows_base[CAT_N] = { 7, 2, 3 };
+enum { CAT_CAMERA, CAT_IMAGE, CAT_EFFECTS, CAT_SCENE, CAT_CAPTURE, CAT_N };
+static const int g_rows_base[CAT_N] = { 7, 11, 9, 2, 3 };
+
+/* IMAGE and EFFECTS (phase 2): the settings of the pass over the picture
+ * (render/rgl.h rgl_post_apply, the shaders' post_fx) */
+typedef struct {
+    float ev, bri, con, sat, temp, tint, gamma, sharp, hi, sh;  /* IMAGE */
+    float vig, grain, ca, bloom, focus, aperture;               /* EFFECTS */
+    int   filter, dof;
+} FX;
+static const FX k_fx0 = { 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+                          0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 0, 0 };
+static FX  g_fx = { 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+                    0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 0, 0 };
+static int g_fx_depth;                  /* the last pass had the scene's depth */
+#define FILTERS 9
+static int fx_dof_possible(void);
 #define ROWS(c) (g_rows_base[c])
 
 #define DEG(r) ((r) * (float)(180.0 / M_PI))
@@ -320,8 +335,8 @@ void photo_close(void)
 
 static const char *cat_name(int c)
 {
-    static const char *const n_es[CAT_N] = { "CAMARA", "ESCENA", "CAPTURA" };
-    static const char *const n_en[CAT_N] = { "CAMERA", "SCENE", "CAPTURE" };
+    static const char *const n_es[CAT_N] = { "CAMARA", "IMAGEN", "EFECTOS", "ESCENA", "CAPTURA" };
+    static const char *const n_en[CAT_N] = { "CAMERA", "IMAGE", "EFFECTS", "SCENE", "CAPTURE" };
     return es() ? n_es[c] : n_en[c];
 }
 
@@ -363,6 +378,57 @@ static void row_text(int c, int r, char *label, char *value, int n)
     case CAT_CAMERA * 16 + 6:
         snprintf(label, n, "%s", tx("RESTABLECER CAMARA", "RESET CAMERA"));
         break;
+    case CAT_IMAGE * 16 + 0: snprintf(label, n, "%s", tx("EXPOSICION", "EXPOSURE"));
+        snprintf(value, n, "%+.1f EV", g_fx.ev); break;
+    case CAT_IMAGE * 16 + 1: snprintf(label, n, "%s", tx("BRILLO", "BRIGHTNESS"));
+        snprintf(value, n, "%+.0f", g_fx.bri * 100.0f); break;
+    case CAT_IMAGE * 16 + 2: snprintf(label, n, "%s", tx("CONTRASTE", "CONTRAST"));
+        snprintf(value, n, "%.0f%%", g_fx.con * 100.0f); break;
+    case CAT_IMAGE * 16 + 3: snprintf(label, n, "%s", tx("SATURACION", "SATURATION"));
+        snprintf(value, n, "%.0f%%", g_fx.sat * 100.0f); break;
+    case CAT_IMAGE * 16 + 4: snprintf(label, n, "%s", tx("TEMPERATURA", "TEMPERATURE"));
+        snprintf(value, n, "%+.0f", g_fx.temp * 100.0f); break;
+    case CAT_IMAGE * 16 + 5: snprintf(label, n, "%s", tx("TINTE", "TINT"));
+        snprintf(value, n, "%+.0f", g_fx.tint * 100.0f); break;
+    case CAT_IMAGE * 16 + 6: snprintf(label, n, "%s", "GAMMA");
+        snprintf(value, n, "%.2f", g_fx.gamma); break;
+    case CAT_IMAGE * 16 + 7: snprintf(label, n, "%s", tx("NITIDEZ", "SHARPNESS"));
+        snprintf(value, n, "%.0f%%", g_fx.sharp * 50.0f); break;
+    case CAT_IMAGE * 16 + 8: snprintf(label, n, "%s", tx("LUCES", "HIGHLIGHTS"));
+        snprintf(value, n, "%+.0f", g_fx.hi * 100.0f); break;
+    case CAT_IMAGE * 16 + 9: snprintf(label, n, "%s", tx("SOMBRAS", "SHADOWS"));
+        snprintf(value, n, "%+.0f", g_fx.sh * 100.0f); break;
+    case CAT_IMAGE * 16 + 10: snprintf(label, n, "%s", tx("RESTABLECER IMAGEN", "RESET IMAGE")); break;
+    case CAT_EFFECTS * 16 + 0: snprintf(label, n, "%s", tx("PROFUNDIDAD DE CAMPO", "DEPTH OF FIELD"));
+        if (!fx_dof_possible())
+            snprintf(value, n, "%s", tx("NECESITA ILUM. MEJORADA", "NEEDS ENH. LIGHTING"));
+        else if (g_fx.dof && !g_fx_depth)
+            snprintf(value, n, "%s", tx("SIN PROFUNDIDAD", "NO DEPTH"));
+        else
+            snprintf(value, n, "%s", g_fx.dof ? tx("SI", "ON") : tx("NO", "OFF"));
+        break;
+    case CAT_EFFECTS * 16 + 1: snprintf(label, n, "%s", tx("DISTANCIA DE FOCO", "FOCUS DISTANCE"));
+        snprintf(value, n, "%.0f%%", g_fx.focus * 100.0f); break;
+    case CAT_EFFECTS * 16 + 2: snprintf(label, n, "%s", tx("APERTURA", "APERTURE"));
+        snprintf(value, n, "F/%.1f", 5.6f / g_fx.aperture); break;
+    case CAT_EFFECTS * 16 + 3: snprintf(label, n, "%s", "BLOOM");
+        snprintf(value, n, "%.0f%%", g_fx.bloom * 100.0f); break;
+    case CAT_EFFECTS * 16 + 4: snprintf(label, n, "%s", tx("VINETA", "VIGNETTE"));
+        snprintf(value, n, "%.0f%%", g_fx.vig * 100.0f); break;
+    case CAT_EFFECTS * 16 + 5: snprintf(label, n, "%s", tx("ABERRACION CROMATICA", "CHROMATIC ABERRATION"));
+        snprintf(value, n, "%.0f%%", g_fx.ca * 100.0f); break;
+    case CAT_EFFECTS * 16 + 6: snprintf(label, n, "%s", tx("GRANO", "FILM GRAIN"));
+        snprintf(value, n, "%.0f%%", g_fx.grain * 100.0f); break;
+    case CAT_EFFECTS * 16 + 7: {
+        static const char *const f_es[FILTERS] = { "NINGUNO", "BLANCO Y NEGRO", "SEPIA", "FRIO", "CALIDO",
+                                                   "SANGRE", "OUTWORLD", "NOIR", "ANTIGUO" };
+        static const char *const f_en[FILTERS] = { "NONE", "BLACK AND WHITE", "SEPIA", "COLD", "WARM",
+                                                   "BLOOD", "OUTWORLD", "NOIR", "VINTAGE" };
+        snprintf(label, n, "%s", tx("FILTRO", "FILTER"));
+        snprintf(value, n, "%s", es() ? f_es[g_fx.filter] : f_en[g_fx.filter]);
+        break;
+    }
+    case CAT_EFFECTS * 16 + 8: snprintf(label, n, "%s", tx("RESTABLECER EFECTOS", "RESET EFFECTS")); break;
     case CAT_SCENE * 16 + 0:
         snprintf(label, n, "%s", "HUD");
         snprintf(value, n, "%s", g_show_hud ? tx("VISIBLE", "SHOWN") : tx("OCULTO", "HIDDEN"));
@@ -451,6 +517,42 @@ static void row_act(int d)
     case CAT_CAMERA * 16 + 4: g_zoom += 0.1f * (float)d; break;
     case CAT_CAMERA * 16 + 5: g_roll += RAD(2.0f) * (float)d; break;
     case CAT_CAMERA * 16 + 6: if (!d) cam_reset(); break;
+#define STEP(v, st, lo, hi) (v) = clampf((v) + (st) * (float)d, (lo), (hi))
+    case CAT_IMAGE * 16 + 0:  STEP(g_fx.ev, 0.1f, -2.0f, 2.0f); break;
+    case CAT_IMAGE * 16 + 1:  STEP(g_fx.bri, 0.02f, -0.3f, 0.3f); break;
+    case CAT_IMAGE * 16 + 2:  STEP(g_fx.con, 0.05f, 0.5f, 1.8f); break;
+    case CAT_IMAGE * 16 + 3:  STEP(g_fx.sat, 0.05f, 0.0f, 2.0f); break;
+    case CAT_IMAGE * 16 + 4:  STEP(g_fx.temp, 0.05f, -1.0f, 1.0f); break;
+    case CAT_IMAGE * 16 + 5:  STEP(g_fx.tint, 0.05f, -1.0f, 1.0f); break;
+    case CAT_IMAGE * 16 + 6:  STEP(g_fx.gamma, 0.05f, 0.6f, 1.6f); break;
+    case CAT_IMAGE * 16 + 7:  STEP(g_fx.sharp, 0.1f, 0.0f, 2.0f); break;
+    case CAT_IMAGE * 16 + 8:  STEP(g_fx.hi, 0.05f, -1.0f, 1.0f); break;
+    case CAT_IMAGE * 16 + 9:  STEP(g_fx.sh, 0.05f, -1.0f, 1.0f); break;
+    case CAT_IMAGE * 16 + 10:
+        if (!d) {
+            g_fx.ev = k_fx0.ev; g_fx.bri = k_fx0.bri; g_fx.con = k_fx0.con; g_fx.sat = k_fx0.sat;
+            g_fx.temp = k_fx0.temp; g_fx.tint = k_fx0.tint; g_fx.gamma = k_fx0.gamma;
+            g_fx.sharp = k_fx0.sharp; g_fx.hi = k_fx0.hi; g_fx.sh = k_fx0.sh;
+        }
+        break;
+    case CAT_EFFECTS * 16 + 0: if (fx_dof_possible()) g_fx.dof ^= 1; break;
+    case CAT_EFFECTS * 16 + 1: STEP(g_fx.focus, 0.05f, 0.25f, 3.0f); break;
+    case CAT_EFFECTS * 16 + 2: STEP(g_fx.aperture, 0.25f, 0.5f, 6.0f); break;
+    case CAT_EFFECTS * 16 + 3: STEP(g_fx.bloom, 0.05f, 0.0f, 1.0f); break;
+    case CAT_EFFECTS * 16 + 4: STEP(g_fx.vig, 0.05f, 0.0f, 1.0f); break;
+    case CAT_EFFECTS * 16 + 5: STEP(g_fx.ca, 0.05f, 0.0f, 1.0f); break;
+    case CAT_EFFECTS * 16 + 6: STEP(g_fx.grain, 0.05f, 0.0f, 1.0f); break;
+    case CAT_EFFECTS * 16 + 7: g_fx.filter = (g_fx.filter + (d < 0 ? FILTERS - 1 : 1)) % FILTERS; break;
+    case CAT_EFFECTS * 16 + 8:
+        if (!d) {
+            int keep = g_fx.dof;
+            g_fx.vig = k_fx0.vig; g_fx.grain = k_fx0.grain; g_fx.ca = k_fx0.ca; g_fx.bloom = k_fx0.bloom;
+            g_fx.focus = k_fx0.focus; g_fx.aperture = k_fx0.aperture; g_fx.filter = 0;
+            g_fx.dof = 0;
+            (void)keep;
+        }
+        break;
+#undef STEP
     case CAT_SCENE * 16 + 0:  g_show_hud ^= 1; break;
     case CAT_SCENE * 16 + 1:  g_grid ^= 1; break;
     case CAT_CAPTURE * 16 + 0: if (!d) take_photo(); break;
@@ -662,9 +764,9 @@ void photo_tick(const PLAT_PAD *pad, unsigned pad_mask, int (*key)(int))
         if (btn || wheel)
             g_pad_last = 0;
         if (left && !(mouse_was & 1) && over_panel) {
-            if (py < p.y + p.tab_h) {
-                int c = (int)((px - p.x) / (p.w / (float)CAT_N));
-                if (c >= 0 && c < CAT_N) { g_cat = c; g_row = 0; }
+            if (py < p.y + p.tab_h) {   /* the strip: its left half back, its right half on */
+                g_cat = (g_cat + (px < p.x + p.w * 0.5f ? CAT_N - 1 : 1)) % CAT_N;
+                g_row = 0;
             } else if (py >= p.y + p.tab_h + p.hdr) {
                 int r = (int)((py - (p.y + p.tab_h + p.hdr)) / p.row_h);
                 if (r >= 0 && r < ROWS(g_cat)) {
@@ -791,6 +893,51 @@ void photo_free_tick(const PLAT_PAD *pad, int (*key)(int))
     cam_limit();
 }
 
+/* --------------------------------------------------- IMAGE and EFFECTS */
+
+/* the depth of field needs the scene's distance: OpenGL's depth buffer, or
+ * Vulkan's and Direct3D 12's depth pass, which comes with ENHANCED LIGHTING */
+static int fx_dof_possible(void)
+{
+    return rgl_post_available() && (rgl_renderer == RGL_OPENGL || rgl_shadows);
+}
+
+static int fx_any(void)
+{
+    FX a = g_fx, b = k_fx0;
+    a.focus = b.focus;                  /* the focus and the aperture alone change nothing */
+    a.aperture = b.aperture;
+    return memcmp(&a, &b, sizeof a) != 0;
+}
+
+/* GameCode.c RenderGameView: the scene's projection, for OpenGL's depth */
+void photo_note_scene(void)
+{
+    if ((photo_on() || photo_free_on()) && g_fx.dof)
+        rgl_post_scene();
+}
+
+/* GameCode.c Task_GameMain_frame, before the panel: the pass, when a
+ * setting is not at rest -- the photo's frame included */
+void photo_post(void)
+{
+    float prm[RGL_POST_PARAMS];
+
+    rgl_post_want_depth = 0;
+    if (!(photo_on() || photo_free_on()) || !fx_any() || !rgl_post_available())
+        return;
+    rgl_post_want_depth = g_fx.dof && fx_dof_possible();
+    memset(prm, 0, sizeof prm);
+    prm[0] = g_fx.ev;    prm[1] = g_fx.bri;   prm[2] = g_fx.con;   prm[3] = g_fx.sat;
+    prm[4] = g_fx.temp;  prm[5] = g_fx.tint;  prm[6] = g_fx.gamma; prm[7] = g_fx.sharp;
+    prm[8] = g_fx.hi;    prm[9] = g_fx.sh;    prm[10] = g_fx.vig;  prm[11] = g_fx.grain;
+    prm[12] = g_fx.ca;   prm[13] = g_fx.bloom; prm[14] = (float)g_fx.filter; prm[15] = 0.37f;
+    prm[16] = rgl_post_want_depth ? 1.0f : 0.0f;
+    prm[17] = g_fx.focus;
+    prm[18] = g_fx.aperture;
+    g_fx_depth = rgl_post_apply(prm);
+}
+
 /* ------------------------------------------------------------ drawing */
 
 static const float C_BONE[3]   = { 0.93f, 0.90f, 0.85f };
@@ -897,22 +1044,26 @@ void photo_draw(void)
         limeFillRect(p.x + 2.0f * s, p.y + h - 4.0f * s, 2.0f * s, 2.0f * s, 0.50f, 0.44f, 0.36f, 1.0f);
         limeFillRect(p.x + p.w - 4.0f * s, p.y + h - 4.0f * s, 2.0f * s, 2.0f * s, 0.50f, 0.44f, 0.36f, 1.0f);
 
-        /* the categories */
-        for (c = 0; c < CAT_N; c++) {
-            float x = p.x + tw * (float)c;
-            if (c == g_cat) {
-                limeFillRect(x, p.y, tw, p.tab_h, 0.85f, 0.60f, 0.29f, 0.16f);
-                limeFillRect(x + 3.0f * s, p.y + p.tab_h - 1.5f * s, tw - 6.0f * s, 1.5f * s,
-                             0.85f, 0.60f, 0.29f, 1.0f);
-            }
-            text(cat_name(c), x + tw * 0.5f, p.y + 3.5f * s, 1, 0.21f,
-                 c == g_cat ? C_BRONZE : C_ASH);
-        }
+        /* the categories: the one shown between two arrows, a pip each
+         * (five no longer fit side by side in the compact panel) */
+        (void)tw;
+        limeFillRect(p.x, p.y, p.w, p.tab_h, 0.85f, 0.60f, 0.29f, 0.10f);
+        text("<", p.x + 7.0f * s, p.y + 3.0f * s, 1, 0.24f, C_BRONZE);
+        text(">", p.x + p.w - 7.0f * s, p.y + 3.0f * s, 1, 0.24f, C_BRONZE);
+        text(cat_name(g_cat), p.x + p.w * 0.5f, p.y + 2.5f * s, 1, 0.22f, C_BRONZE);
+        for (c = 0; c < CAT_N; c++)
+            limeFillRect(p.x + p.w * 0.5f + ((float)c - 2.0f) * 5.0f * s - 1.0f * s,
+                         p.y + p.tab_h - 3.0f * s, 2.0f * s, 1.5f * s,
+                         c == g_cat ? 0.85f : 0.40f, c == g_cat ? 0.60f : 0.36f,
+                         c == g_cat ? 0.29f : 0.30f, 1.0f);
         limeFillRect(p.x, p.y + p.tab_h, p.w, 1.0f * s, 0.23f, 0.20f, 0.16f, 1.0f);
 
-        /* the heading */
+        /* the heading; IMAGE and EFFECTS say when what draws cannot */
         y = p.y + p.tab_h;
         text(cat_name(g_cat), p.x + 6.0f * s, y + 3.5f * s, 0, 0.27f, C_BONE);
+        if ((g_cat == CAT_IMAGE || g_cat == CAT_EFFECTS) && !rgl_post_available())
+            text(tx("NO DISPONIBLE CON ESTE RENDERIZADOR", "NOT AVAILABLE WITH THIS RENDERER"),
+                 p.x + p.w - 6.0f * s, y + 4.5f * s, 2, 0.15f, C_ASH);
         y += p.hdr;
 
         /* the rows */

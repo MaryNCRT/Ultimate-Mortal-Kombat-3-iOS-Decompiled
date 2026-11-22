@@ -45,6 +45,11 @@ float photo_proj_scale(void);
 int   photo_hide_hud(void);
 /* GameCode.c Task_GameMain_frame, last: the panel, the hints, the grid */
 void  photo_draw(void);
+/* IMAGE and EFFECTS (phase 2): the pass over the picture, before the
+ * panel (GameCode.c Task_GameMain_frame), and the scene's projection for
+ * OpenGL's depth (RenderGameView) */
+void  photo_post(void);
+void  photo_note_scene(void);
 
 /* game_main.c, once the frame is on the window and before it is shown: a
  * capture asked for reads it there (the game's area: vx, vy, vw, vh) and a

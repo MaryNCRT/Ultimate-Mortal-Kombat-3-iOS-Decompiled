@@ -36,6 +36,7 @@ function(umk3_target_link_platform target_name is_full_game)
             src/runtime/platform/ui_alert.c
             src/runtime/render/rgl_front.c
             src/runtime/render/rgl_ff.c
+            src/runtime/render/rgl_post.c
             src/runtime/render/rgl_vk.c
             src/runtime/render/rgl_d3d12.c)
         target_include_directories(${target_name} PRIVATE src/runtime/platform/vulkan-include)
@@ -51,6 +52,7 @@ function(umk3_target_link_platform target_name is_full_game)
             src/runtime/platform/ui_alert.c
             src/runtime/render/rgl_front.c
             src/runtime/render/rgl_ff.c
+            src/runtime/render/rgl_post.c
             src/runtime/render/rgl_vk.c)
         target_include_directories(${target_name} PRIVATE src/runtime/platform/vulkan-include)
         target_include_directories(${target_name} PRIVATE ${SDL2_INCLUDE_DIRS})

@@ -8,6 +8,21 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased
+
+- **PHOTO MODE, phase 2: IMAGE and EFFECTS.** Two new pages in its panel
+  (the categories now shown one at a time between arrows): exposure,
+  brightness, contrast, saturation, temperature, tint, gamma, sharpness,
+  highlights, shadows; depth of field (focus distance, aperture), bloom,
+  vignette, chromatic aberration, film grain and nine filters (black and
+  white, sepia, cold, warm, blood, Outworld, noir, vintage). One pass over
+  the picture in shaders -- GLSL of its own with OpenGL, the backends' own
+  with Vulkan and Direct3D 12 -- the same result in the three (checked side
+  by side), in the photos too, and nothing drawn while every setting is at
+  rest. The depth of field needs the scene's distance: OpenGL always,
+  Vulkan and Direct3D 12 with ENHANCED LIGHTING (its depth pass); the row
+  says so where it cannot. The effects stay on in a replay's FREE CAMERA.
+
 ## 0.5.9 beta (2026-11-21)
 
 Spectators, PHOTO MODE, REPLAYS and MODS inside the game, and the replay

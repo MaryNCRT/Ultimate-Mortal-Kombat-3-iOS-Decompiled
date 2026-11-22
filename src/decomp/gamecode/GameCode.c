@@ -1588,6 +1588,10 @@ void RenderGameView(void)
     }
     LIMEDS_Set3dMode();
     PortProjScale = 1.0f;
+    {
+        void photo_note_scene(void);        /* port: OpenGL's depth, for the depth of field */
+        photo_note_scene();
+    }
     PortScreenShiftY = 0.0f;
 
     eye[0] = Camera[0] + ShakeOffset[0];
@@ -12810,6 +12814,8 @@ int  photo_hide_hud(void);              /* port: runtime/photo_mode.c */
  * button, TAB, CINEMA) */
 int  PortReplayHideMoves;
 void photo_draw(void);
+void photo_post(void);
+void photo_note_scene(void);
 
 static void Task_GameMain_frame(void)
 {
@@ -12999,6 +13005,7 @@ static void Task_GameMain_frame(void)
 
     ShowDebugInfo();
     UpdateInGamePauseMenu();
+    photo_post();                       /* port: PHOTO MODE's IMAGE and EFFECTS */
     photo_draw();                       /* port: PHOTO MODE's panel, over all */
 }
 

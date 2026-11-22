@@ -1373,7 +1373,9 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     /* t1: the shadow map for a draw that receives, white (nothing nearer
      * the light) for the rest */
     shadow_res = g_tex[g_white].r.res;
-    if ((f->shadow & 15) == RGL_SHADOW_RECEIVE && g_shadow > 0 && g_shadow < g_ntg && g_tg[g_shadow].used
+    /* PHOTO MODE's effects read it too: the scene's distance (rgl_ff_post) */
+    if (((f->shadow & 15) == RGL_SHADOW_RECEIVE || (f->shadow & 15) == RGL_POST)
+        && g_shadow > 0 && g_shadow < g_ntg && g_tg[g_shadow].used
         && g_shadow != t) {
         to_state(&g_tg[g_shadow].color, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         shadow_res = g_tg[g_shadow].color.res;

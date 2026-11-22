@@ -289,6 +289,7 @@ async function compileGame({
     sources.push(
         path.join(rootDir, 'src/runtime/render/rgl_front.c'),
         path.join(rootDir, 'src/runtime/render/rgl_ff.c'),
+        path.join(rootDir, 'src/runtime/render/rgl_post.c'),
         path.join(rootDir, 'src/runtime/render/rgl_vk.c')
     );
 

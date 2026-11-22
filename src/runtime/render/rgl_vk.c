@@ -1972,7 +1972,9 @@ static void vk_draw(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_sam
     /* a draw that receives samples the shadow map, readable: its layout
      * changes outside a render pass, once a frame */
     shadow = VK_NULL_HANDLE;
-    if ((f->shadow & 15) == RGL_SHADOW_RECEIVE && g_shadow > 0 && g_shadow < g_ntg && g_tg[g_shadow].used
+    /* PHOTO MODE's effects read it too: the scene's distance (rgl_ff_post) */
+    if (((f->shadow & 15) == RGL_SHADOW_RECEIVE || (f->shadow & 15) == RGL_POST)
+        && g_shadow > 0 && g_shadow < g_ntg && g_tg[g_shadow].used
         && g_shadow != g_cur_target) {
         vk_image *im = &g_tg[g_shadow].color;
         if (im->layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
