@@ -411,6 +411,7 @@ static SDL_Scancode g_scancode[PK_COUNT] = {
     [PK_PH_ROLL_L] = SDL_SCANCODE_Z, [PK_PH_ROLL_R] = SDL_SCANCODE_C,
     [PK_PH_RESET] = SDL_SCANCODE_R, [PK_PH_HIDE] = SDL_SCANCODE_H,
     [PK_PH_SHOT] = SDL_SCANCODE_SPACE, [PK_PH_TAB] = SDL_SCANCODE_TAB,
+    [PK_PH_PLAY] = SDL_SCANCODE_F,
 };
 
 void plat_key_label(int code, char *out, int n)

@@ -13990,12 +13990,16 @@ static void PauseClick(void)
 void PortFERightEdgeSet(int on);
 static void UpdateInGamePauseMenu_(void);
 
+extern float PortOptionHitBelow;        /* port: FrontEnd.c DrawOptionAsButton */
+
 void UpdateInGamePauseMenu(void)
 {
     if (GamePaused == 3)                /* port: PHOTO MODE has the screen */
         return;
     PortFERightEdgeSet(1);
+    PortOptionHitBelow = 20.0f;         /* port: the rows ~33 apart, one a press */
     UpdateInGamePauseMenu_();
+    PortOptionHitBelow = 30.0f;
     PortFERightEdgeSet(0);
 }
 

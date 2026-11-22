@@ -1208,6 +1208,99 @@ static int rl_pick(int i)
     return 1;
 }
 
+/* ------------------------------------------- EXTRAS > REPLAYS (port)
+ *
+ * The list the launcher's REPLAYS shows, inside the game (FrontEnd.c
+ * FE_Task_Replays, Mary): the last fights, then the kept ones, newest
+ * first, and one of them played without leaving the game. REPLAYS records
+ * every fight (g_auto); while one plays from the menu it is not recorded
+ * over, and when it is left the recording of the fights after it goes on. */
+static int g_menu_play, g_menu_auto;
+
+int rp_menu_list(char rel[][RB_NAME + 16], char label[][48], int max, int *n_recent)
+{
+    int i;
+
+    rl_scan();
+    for (i = 0; i < g_rl_n && i < max; i++) {
+        memcpy(rel[i], g_rl_rel[i], sizeof g_rl_rel[0]);
+        memcpy(label[i], g_rl_label[i], sizeof g_rl_label[0]);
+    }
+    *n_recent = g_rl_recent < max ? g_rl_recent : max;
+    return i;
+}
+
+/* `rel` ("replays/recent/x.umkr") to play next: its fighters and stage
+ * for the fight that starts it; 0 when it is not a replay */
+int rp_menu_play(const char *rel, int32_t *c1, int32_t *c2, int32_t *lv)
+{
+    read_switches();
+    if (g_active)
+        replay_finish("a replay from the menu");
+    snprintf(g_play_rel, sizeof g_play_rel, "%s", rel);
+    if (!rb_replay_peek(c1, c2, lv) || *c1 < 0 || *c1 >= 26 || *c2 < 0 || *c2 >= 26
+        || !in_exe_dir(g_play_rel, g_file, sizeof g_file)) {
+        printf("replay: %s is not a replay\n", rel);
+        g_play_rel[0] = 0;
+        return 0;
+    }
+    if (!g_menu_play)
+        g_menu_auto = g_auto;
+    g_menu_play = 1;
+    g_auto = 0;
+    g_mode = 2;
+    g_done = 0;
+    if (g_rp_snap == 1)
+        st_rb_end();
+    g_rp_snap = 0;
+    g_rp_target = RP_NONE;
+    g_rp_paused = g_rp_step = g_rp_sub = 0;
+    g_rp_speed = 2;
+    g_rl_open = 0;
+    memset(g_bad, 0, sizeof g_bad);
+    memset(g_first, 0, sizeof g_first);
+    g_bad_ticks = 0;
+    printf("replay: from the menu, %s\n", g_play_rel);
+    return 1;
+}
+
+/* the replay that plays came from the menu */
+int rp_menu(void)
+{
+    return g_menu_play;
+}
+
+/* out of it: the fights after it are recorded again as before */
+void rp_menu_stop(void)
+{
+    if (!g_menu_play)
+        return;
+    if (g_active)
+        replay_finish("left for the menu");
+    if (g_rp_snap == 1)
+        st_rb_end();
+    g_rp_snap = 0;
+    g_menu_play = 0;
+    g_play_rel[0] = 0;
+    g_auto = g_menu_auto;
+    g_mode = g_auto ? 1 : 0;
+    g_done = 0;
+    g_rl_open = 0;
+    printf("replay: back to the menu%s\n", g_auto ? ", REPLAYS records again" : "");
+}
+
+/* PHOTO MODE (photo_mode.c): the replay held still, and as it was after */
+int rp_paused(void)
+{
+    return g_rp_paused;
+}
+
+void rp_set_paused(int on)
+{
+    g_rp_paused = on != 0;
+    g_rp_step = 0;
+}
+
 /* The playing replay's label without its date, for the status line. */
 const char *rp_title(void)
 {

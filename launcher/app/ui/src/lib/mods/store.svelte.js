@@ -12,6 +12,8 @@ export const ms = $state({
     tab: 'mgr',
     /* MOD MANAGER */
     list: [], dir: '', busy: false, open: null, filter: 'all',
+    /* the MOD MANAGER's two pages: MODS, and TEXTURE PACKS (Mary) */
+    packs: false,
     /* the game's files */
     files: null, cat: null, noGame: false,
     /* the viewer: kind of thing, the chosen one, its settings */
@@ -89,6 +91,7 @@ export async function saveOrder() {
 export async function moveMod(i, d) {
     const j = i + d;
     if (j < 0 || j >= ms.list.length) return;
+    if (ms.list[i].essential || ms.list[j].essential) return;   /* ESSENTIAL stays put */
     const l = ms.list.slice();
     [l[i], l[j]] = [l[j], l[i]];
     ms.list = l;
@@ -96,6 +99,7 @@ export async function moveMod(i, d) {
 }
 
 export async function toggleMod(i) {
+    if (ms.list[i].essential) return;   /* ESSENTIAL: always on (Mary) */
     ms.list[i].on = !ms.list[i].on;
     await saveOrder();
 }

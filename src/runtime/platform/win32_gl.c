@@ -712,7 +712,7 @@ static int g_vk[PK_COUNT] = {
     [PK_PH_RISE] = 'E', [PK_PH_SINK] = 'Q',
     [PK_PH_ROLL_L] = 'Z', [PK_PH_ROLL_R] = 'C',
     [PK_PH_RESET] = 'R', [PK_PH_HIDE] = 'H',
-    [PK_PH_SHOT] = VK_SPACE, [PK_PH_TAB] = VK_TAB,
+    [PK_PH_SHOT] = VK_SPACE, [PK_PH_TAB] = VK_TAB, [PK_PH_PLAY] = 'F',
 };
 
 void plat_key_label(int code, char *out, int n)

@@ -63,6 +63,9 @@ extern const char *CharacterNames[26];
 extern float PortMouseX, PortMouseY;    /* game_main.c: the mouse in these units, -1 off */
 extern int   PortFTSkipping;            /* game_main.c: the trainer's unseen run-up */
 int  rp_playing(void);                  /* rollback_probe.c: a replay */
+int  rp_switching(void);
+int  rp_paused(void);
+void rp_set_paused(int on);
 
 /* GameCode.c, for this file */
 void PortPhotoSceneCam(float eye[3], float at[3]);
@@ -81,6 +84,10 @@ static const char *tx(const char *s_es, const char *s_en) { return es() ? s_es :
 /* ------------------------------------------------------------ the state */
 
 static int   g_on, g_from_menu;
+/* a replay (rollback_probe.c): it is held while the mode opens, and LIVE
+ * plays it on under this camera (Mary: the free camera in the replays) */
+static int   g_replay, g_rp_was_paused;
+static int   g_free;                    /* a replay's FREE CAMERA is on */
 static umk3_long g_prev_paused;
 
 static float g_eye0[3], g_at0[3];       /* the shot it opened on */
@@ -106,7 +113,8 @@ static long  g_ticks;                   /* photo_tick's calls, for the log */
 static int   g_via_key;                 /* photo_open: from the shortcut */
 
 enum { CAT_CAMERA, CAT_SCENE, CAT_CAPTURE, CAT_N };
-static const int g_rows[CAT_N] = { 7, 2, 3 };
+static const int g_rows_base[CAT_N] = { 7, 2, 3 };
+#define ROWS(c) (g_rows_base[c])
 
 #define DEG(r) ((r) * (float)(180.0 / M_PI))
 #define RAD(d) ((d) * (float)(M_PI / 180.0))
@@ -192,7 +200,7 @@ static void cam_reset(void)
 
 int photo_camera(float eye[3], float at[3], float up[3])
 {
-    if (!photo_on())
+    if (!photo_on() && !photo_free_on())
         return 0;
     cam_basis(eye, up);
     memcpy(at, g_tgt, 3 * sizeof(float));
@@ -201,7 +209,7 @@ int photo_camera(float eye[3], float at[3], float up[3])
 
 float photo_proj_scale(void)
 {
-    return photo_on() ? g_zoom : 1.0f;
+    return photo_on() || photo_free_on() ? g_zoom : 1.0f;
 }
 
 int photo_hide_hud(void)
@@ -213,21 +221,26 @@ int photo_hide_hud(void)
 
 int photo_on(void)
 {
-    return g_on && GamePaused == PHOTO_PAUSED && CurrentTask == 6;
+    return g_on && CurrentTask == 6 && GamePaused == PHOTO_PAUSED;
+}
+
+int photo_free_on(void)
+{
+    return g_free && CurrentTask == 6 && rp_playing();
 }
 
 int photo_allowed(void)
 {
-    return CurrentTask == 6 && GameMode != 1 && !rb_active() && !rb_watching()
-           && !rp_playing() && !DoIntro && FE_FadeAdd == 0.0f && !PortFTSkipping;
+    return CurrentTask == 6 && (GameMode != 1 || rp_playing()) && !rb_active()
+           && !rb_watching() && !(rp_playing() && rp_switching()) && !DoIntro
+           && FE_FadeAdd == 0.0f && !PortFTSkipping;
 }
 
-void photo_open(int from_menu)
+/* the camera on the shot the fight's camera drew last */
+static void cam_from_scene(void)
 {
-    float d[3], a, b;
+    float d[3];
 
-    if (g_on || !photo_allowed() || (GamePaused != 0 && GamePaused != 1))
-        return;
     PortPhotoSceneCam(g_eye0, g_at0);
     d[0] = g_eye0[0] - g_at0[0];
     d[1] = g_eye0[1] - g_at0[1];
@@ -250,8 +263,21 @@ void photo_open(int from_menu)
             }
     }
     cam_reset();
+}
+
+void photo_open(int from_menu)
+{
+    if (g_on || !photo_allowed() || (GamePaused != 0 && GamePaused != 1))
+        return;
+    if (!photo_free_on())               /* from the FREE CAMERA: its shot kept */
+        cam_from_scene();
     g_prev_paused = GamePaused;
     g_from_menu = from_menu;
+    g_replay = rp_playing();
+    if (g_replay) {                     /* a replay is held under the photo */
+        g_rp_was_paused = rp_paused();
+        rp_set_paused(1);
+    }
     GamePaused = PHOTO_PAUSED;
     g_on = 1;
     g_shot = g_shot_drawn = 0;
@@ -262,6 +288,18 @@ void photo_open(int from_menu)
            g_eye0[0], g_eye0[1], g_eye0[2], g_at0[0], g_at0[1], g_at0[2]);
 }
 
+/* a replay's FREE CAMERA (Mary): the fight goes on, seen from where the
+ * player puts the camera, with the replay's own panel under it */
+void photo_free_toggle(void)
+{
+    if (!rp_playing() || CurrentTask != 6 || g_on)
+        return;
+    g_free = !g_free;
+    if (g_free)
+        cam_from_scene();
+    printf("photo: FREE CAMERA %s at tick %ld\n", g_free ? "on" : "off", g_ticks);
+}
+
 void photo_close(void)
 {
     if (!g_on)
@@ -269,8 +307,13 @@ void photo_close(void)
     g_on = 0;
     if (GamePaused == PHOTO_PAUSED)
         GamePaused = g_from_menu ? 1 : (g_prev_paused == 1 ? 1 : 0);
+    if (g_replay) {
+        rp_set_paused(g_rp_was_paused);
+        GamePaused = 0;                 /* a replay has no pause menu */
+    }
+    g_replay = 0;
     printf("photo: off at tick %ld, back to %s\n", g_ticks,
-           GamePaused ? "the pause menu" : "the fight");
+           g_free ? "the FREE CAMERA" : GamePaused ? "the pause menu" : "the fight");
 }
 
 /* ------------------------------------------------------------ the panel */
@@ -439,7 +482,7 @@ static PANEL panel_geom(void)
 
 static float panel_h(const PANEL *p)
 {
-    return p->tab_h + p->hdr + (float)g_rows[g_cat] * p->row_h + 5.0f * FE_HeightScale;
+    return p->tab_h + p->hdr + (float)ROWS(g_cat) * p->row_h + 5.0f * FE_HeightScale;
 }
 
 /* ------------------------------------------------------------- the input */
@@ -476,6 +519,7 @@ static float dead(float v)
 
 void photo_tick(const PLAT_PAD *pad, unsigned pad_mask, int (*key)(int))
 {
+    static KEY k_live;
     static KEY k_open, k_pad_open, k_pause, k_tab, k_hide, k_shot, k_reset,
                k_up, k_dn, k_lt, k_rt, k_ok, k_l1, k_r1, k_a, k_b, k_x, k_y, k_r3, k_start;
     static int mouse_was, mx0, my0, drag;           /* drag: 1 turn, 2 move */
@@ -500,6 +544,12 @@ void photo_tick(const PLAT_PAD *pad, unsigned pad_mask, int (*key)(int))
             photo_open(GamePaused == 1);
             g_via_key = 0;
         }
+        /* a replay: its FREE CAMERA on or off, F or the pad's Y */
+        if (!rp_playing() || CurrentTask != 6)
+            g_free = 0;
+        if ((key_edge(&k_live, key(PK_PH_PLAY)) | key_edge(&k_y, (pb & (1u << PB_NORTH)) != 0))
+            && rp_playing() && !g_on)
+            photo_free_toggle();
         /* keep the edges current while it is shut */
         key_edge(&k_pause, key(PK_PAUSE));
         key_edge(&k_start, (pb & (1u << PB_START)) != 0);
@@ -543,10 +593,12 @@ void photo_tick(const PLAT_PAD *pad, unsigned pad_mask, int (*key)(int))
             g_cat = (g_cat + CAT_N - 1) % CAT_N;
             g_row = 0;
         }
+        if (g_row >= ROWS(g_cat))
+            g_row = 0;
         if (key_repeat(&k_up, key(PK_PH_NAV_UP) || pad_up))
-            g_row = (g_row + g_rows[g_cat] - 1) % g_rows[g_cat];
+            g_row = (g_row + ROWS(g_cat) - 1) % ROWS(g_cat);
         if (key_repeat(&k_dn, key(PK_PH_NAV_DOWN) || pad_dn))
-            g_row = (g_row + 1) % g_rows[g_cat];
+            g_row = (g_row + 1) % ROWS(g_cat);
         if (key_repeat(&k_lt, key(PK_PH_NAV_LEFT) || pad_lt))
             row_act(-1);
         if (key_repeat(&k_rt, key(PK_PH_NAV_RIGHT) || pad_rt))
@@ -554,6 +606,7 @@ void photo_tick(const PLAT_PAD *pad, unsigned pad_mask, int (*key)(int))
         if (key_edge(&k_ok, key(PK_OK)) || key_edge(&k_a, (pb & (1u << PB_SOUTH)) != 0))
             row_act(0);
     }
+    key_edge(&k_live, key(PK_PH_PLAY));
     if (key_edge(&k_hide, key(PK_PH_HIDE)) || key_edge(&k_y, (pb & (1u << PB_NORTH)) != 0))
         g_panel_hidden ^= 1;
     if (key_edge(&k_shot, key(PK_PH_SHOT)) || key_edge(&k_x, (pb & (1u << PB_WEST)) != 0))
@@ -614,7 +667,7 @@ void photo_tick(const PLAT_PAD *pad, unsigned pad_mask, int (*key)(int))
                 if (c >= 0 && c < CAT_N) { g_cat = c; g_row = 0; }
             } else if (py >= p.y + p.tab_h + p.hdr) {
                 int r = (int)((py - (p.y + p.tab_h + p.hdr)) / p.row_h);
-                if (r >= 0 && r < g_rows[g_cat]) {
+                if (r >= 0 && r < ROWS(g_cat)) {
                     char lb[64], va[64];
                     g_row = r;
                     row_text(g_cat, r, lb, va, sizeof lb);
@@ -643,6 +696,90 @@ void photo_tick(const PLAT_PAD *pad, unsigned pad_mask, int (*key)(int))
                 g_tgt[1] -= ry * dx * k;
                 g_tgt[2] += dy * k;
                 g_focus = 0;
+            }
+            mx0 = mx;
+            my0 = my;
+        }
+        if (wheel)
+            g_dist *= powf(0.9f, (float)wheel);
+        mouse_was = btn;
+    }
+    cam_limit();
+}
+
+/* A replay's FREE CAMERA, every tick while it is on (game_main.c, with the
+ * replay's own keys): the arrows move it along the ground, Q / E up and
+ * down, the right mouse button turns it, the middle one moves it, the wheel
+ * brings it in or out, R puts it back; the pad's left stick moves it, the
+ * right one turns it, LT / RT the distance, R3 back. The replay's panel and
+ * keys go on as they were (A / D and the d-pad seek, Space / A play). */
+void photo_free_tick(const PLAT_PAD *pad, int (*key)(int))
+{
+    static KEY k_reset, k_r3;
+    static int mouse_was, mx0, my0, drag;
+    const float dt = 1.0f / 60.0f;
+    unsigned pb = pad && pad->connected ? pad->buttons : 0;
+    float fwd = 0.0f, side = 0.0f, rise = 0.0f, turn = 0.0f, tilt = 0.0f, dolly = 0.0f;
+    float speed;
+
+    if (!photo_free_on())
+        return;
+    if (pad && pad->connected) {
+        g_pad_kind = pad->kind;
+        if (pb || fabsf(pad->ax[0]) > 0.3f || fabsf(pad->ax[1]) > 0.3f
+            || fabsf(pad->ax[2]) > 0.3f || fabsf(pad->ax[3]) > 0.3f)
+            g_pad_last = 1;
+    }
+    if (key_edge(&k_reset, key(PK_PH_RESET)) | key_edge(&k_r3, (pb & (1u << PB_R3)) != 0))
+        cam_from_scene();
+    speed = g_dist * 0.9f * dt;
+    if (key(PK_PH_NAV_UP))    fwd += 1.0f;
+    if (key(PK_PH_NAV_DOWN))  fwd -= 1.0f;
+    if (key(PK_PH_NAV_RIGHT)) side += 1.0f;
+    if (key(PK_PH_NAV_LEFT))  side -= 1.0f;
+    if (key(PK_PH_RISE)) rise += 1.0f;
+    if (key(PK_PH_SINK)) rise -= 1.0f;
+    if (fwd != 0.0f || side != 0.0f || rise != 0.0f)
+        g_pad_last = 0;
+    if (pad && pad->connected) {
+        fwd  += dead(pad->ax[1]);
+        side += dead(pad->ax[0]);
+        turn += dead(pad->ax[2]);
+        tilt += dead(pad->ax[3]);
+        if (pb & (1u << PB_R2)) dolly -= 1.0f;
+        if (pb & (1u << PB_L2)) dolly += 1.0f;
+    }
+    if (fwd != 0.0f || side != 0.0f || rise != 0.0f) {
+        float fx = -cosf(g_yaw), fy = -sinf(g_yaw);
+        g_tgt[0] += (fx * fwd + fy * side) * speed;
+        g_tgt[1] += (fy * fwd - fx * side) * speed;
+        g_tgt[2] += rise * speed;
+    }
+    g_yaw   -= turn * RAD(100.0f) * dt;
+    g_pitch -= tilt * RAD(70.0f) * dt;
+    g_dist  *= powf(1.8f, dolly * dt);
+    {
+        int mx, my, btn = plat_mouse_buttons(), wheel = plat_mouse_wheel();
+        plat_mouse(&mx, &my);
+        if ((btn & 6) || wheel)
+            g_pad_last = 0;
+        if (!(mouse_was & 6) && (btn & 6)) {    /* the left button is the panel's */
+            drag = (btn & 2) ? 1 : 2;
+            mx0 = mx;
+            my0 = my;
+        }
+        if (!(btn & 6))
+            drag = 0;
+        if (drag && (mx != mx0 || my != my0)) {
+            float dx = (float)(mx - mx0), dy = (float)(my - my0);
+            if (drag == 1) {
+                g_yaw   -= RAD(0.3f) * dx;
+                g_pitch += RAD(0.3f) * dy;
+            } else {
+                float k = g_dist * 0.0015f, rx = -sinf(g_yaw), ry = cosf(g_yaw);
+                g_tgt[0] -= rx * dx * k;
+                g_tgt[1] -= ry * dx * k;
+                g_tgt[2] += dy * k;
             }
             mx0 = mx;
             my0 = my;
@@ -701,8 +838,28 @@ void photo_draw(void)
     PANEL p = panel_geom();
     int c, r;
 
-    if (!photo_on())
+    if (!photo_on()) {
+        if (photo_free_on()) {          /* the FREE CAMERA's mark and keys, top centre */
+            int ps = g_pad_kind == 2 || g_pad_kind == 4;
+            const char *keys = g_pad_last
+                ? (ps ? tx("STICK DER. GIRAR   STICK IZQ. MOVER   L2/R2 DISTANCIA   R3 CENTRAR   TRIANGULO SALIR",
+                           "R STICK ORBIT   L STICK MOVE   L2/R2 DISTANCE   R3 RESET   TRIANGLE EXIT")
+                      : tx("STICK DER. GIRAR   STICK IZQ. MOVER   LT/RT DISTANCIA   R3 CENTRAR   Y SALIR",
+                           "RS ORBIT   LS MOVE   LT/RT DISTANCE   R3 RESET   Y EXIT"))
+                : tx("RATON DER. GIRAR   CENTRAL MOVER   RUEDA DISTANCIA   FLECHAS / Q / E MOVER   R CENTRAR   F SALIR",
+                     "RIGHT MOUSE ORBIT   MIDDLE MOVE   WHEEL DISTANCE   ARROWS / Q / E MOVE   R RESET   F EXIT");
+            float bw = 260.0f * s, bx = W * 0.5f - bw * 0.5f, by = 30.0f * s;
+            limeEnableAlphaBlending_Basic();
+            limeSet2DDrawing();
+            limeDisableDepthTest();
+            limeFillRect(bx, by, bw, 20.0f * s, 0.055f, 0.05f, 0.045f, 0.72f);
+            limeFillRect(bx, by, bw, 1.0f * s, 0.85f, 0.60f, 0.29f, 1.0f);
+            limeFillRect(W * 0.5f - 34.0f * s, by + 3.5f * s, 4.0f * s, 4.0f * s, 0.35f, 0.80f, 0.40f, 1.0f);
+            text(tx("CAMARA LIBRE", "FREE CAMERA"), W * 0.5f - 27.0f * s, by + 2.5f * s, 0, 0.24f, C_BRONZE);
+            text(keys, W * 0.5f, by + 11.5f * s, 1, 0.17f, C_BONE);
+        }
         return;
+    }
     if (g_shot) {                       /* the photo's frame: nothing over it */
         g_shot_drawn = 1;
         return;
@@ -759,7 +916,7 @@ void photo_draw(void)
         y += p.hdr;
 
         /* the rows */
-        for (r = 0; r < g_rows[g_cat]; r++, y += p.row_h) {
+        for (r = 0; r < ROWS(g_cat); r++, y += p.row_h) {
             char lb[64], va[64];
             row_text(g_cat, r, lb, va, sizeof lb);
             if (r == g_row) {

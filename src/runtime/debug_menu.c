@@ -1986,7 +1986,8 @@ static float rp_scale(void)
 
 static const char *const k_rp_tip[RPB_COUNT] = {
     "TO THE START", "BACK 5 SECONDS", "BACK ONE FRAME", "PLAY / PAUSE",
-    "ON ONE FRAME", "ON 5 SECONDS", "SLOWER", "FASTER", "SETTINGS (ESC)"
+    "ON ONE FRAME", "ON 5 SECONDS", "SLOWER", "FASTER", "SETTINGS (ESC)",
+    "FREE CAMERA (F / Y)"
 };
 static const char *const k_rp_speed[5] = { "X1/4", "X1/2", "X1", "X2", "X4" };
 
@@ -2009,6 +2010,7 @@ static void rp_layout(float w, float x[RPB_COUNT], float bw[RPB_COUNT])
     x[RPB_SLOWER] = x0;
     x[RPB_FASTER] = x0 + RPP_SMALL + RPP_SPEED;
     x[RPB_SETTINGS] = w * 0.96f - RPP_BTN_W;
+    x[RPB_CAMERA] = x[RPB_SETTINGS] - RPP_GAP - RPP_BTN_W;   /* port: FREE CAMERA */
 }
 
 /* The top corners: the REPLAYS button on the left, the X on the right;
@@ -2212,6 +2214,14 @@ static void rp_icon(int id, float cx, float cy, int paused)
         rect(cx - 6, cy - 5, 12, 2);
         rect(cx - 6, cy - 1, 12, 2);
         rect(cx - 6, cy + 3, 12, 2);
+        break;
+    case RPB_CAMERA:                    /* FREE CAMERA: a camera, its lens a ring */
+        rect(cx - 3, cy - 6, 6, 2);
+        rect(cx - 7, cy - 4, 14, 2);
+        rect(cx - 7, cy + 3, 14, 2);
+        rect(cx - 7, cy - 4, 2, 9);
+        rect(cx + 5, cy - 4, 2, 9);
+        rect(cx - 2, cy - 1, 4, 3);
         break;
     }
 }

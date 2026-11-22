@@ -101,6 +101,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "rollback.h"
 #include "online_rules.h"
 
@@ -204,7 +205,7 @@ static int scripted_key(int code)
         { "phrolll", PK_PH_ROLL_L }, { "phrollr", PK_PH_ROLL_R },
         { "phup", PK_PH_NAV_UP }, { "phdown", PK_PH_NAV_DOWN },
         { "phleft", PK_PH_NAV_LEFT }, { "phright", PK_PH_NAV_RIGHT },
-        { "pause", PK_PAUSE },
+        { "pause", PK_PAUSE }, { "phplay", PK_PH_PLAY },
     };
     const char *q = getenv("UMK3_KEYS");
 
@@ -2298,6 +2299,12 @@ static int parse_screen(const char *s)
         return 52;                      /* the FATALITY TRAINER's (FrontEnd.c) */
     if (_stricmp(s, "trainer") == 0)
         return 52;
+    if (_stricmp(s, "mods") == 0)       /* EXTRAS' pages (FrontEnd.c, port) */
+        return 53;
+    if (_stricmp(s, "packs") == 0)
+        return 54;
+    if (_stricmp(s, "replays") == 0)
+        return 55;
     for (i = 0; i < DBG_SCREENS; i++)   /* "treasure" -> FE_Task_Treasure */
         if (_stricmp(FETaskNames[i] + 8, s) == 0
             || _stricmp(FETaskNames[i], s) == 0)
@@ -2831,6 +2838,34 @@ static void ft_leave(void)
 
     printf("debug: screen %d FE_Task_FatalTrainer\n", FT_SCREEN);
     leave_fight(FT_SCREEN);
+    FE_CurrentTaskStack[0] = 0;         /* FE_Task_Main_Menu */
+    FE_CurrentTaskStack[1] = 6;         /* FE_Task_Extras */
+    FE_TaskStackPointer = 2;
+}
+
+/* EXTRAS > REPLAYS (FrontEnd.c FE_Task_Replays, port): a replay played
+ * from the menu, started as --replay starts one, and its X back to that
+ * page -- the main menu and EXTRAS under it, as the trainer's way out */
+#define REPLAYS_SCREEN 55
+void PortReplayGo(const char *rel)
+{
+    int32_t c1, c2, lv;
+
+    if (CurrentTask != 3 || !rp_menu_play(rel, &c1, &c2, &lv))
+        return;
+    g_fight_p1 = c1;
+    g_fight_p2 = c2;
+    g_fight_stage = lv >= 0 && lv <= 15 ? lv : 0;
+}
+
+static void replay_leave(void)
+{
+    extern int FE_CurrentTaskStack[];
+    extern int FE_TaskStackPointer;
+
+    rp_menu_stop();
+    printf("debug: screen %d FE_Task_Replays\n", REPLAYS_SCREEN);
+    leave_fight(REPLAYS_SCREEN);
     FE_CurrentTaskStack[0] = 0;         /* FE_Task_Main_Menu */
     FE_CurrentTaskStack[1] = 6;         /* FE_Task_Extras */
     FE_TaskStackPointer = 2;
@@ -4022,7 +4057,7 @@ int main(int argc, char **argv)
                     was = now;
                 }
             }
-            else if (rp_playing() && !dbg_menu_is_open()) {     /* the replay's panel */
+            else if (rp_playing() && !dbg_menu_is_open() && !photo_on()) {  /* the replay's panel */
                 const char *labels[16];
                 float at;
                 int nr, cur, n = rp_list(labels, 16, &nr, &cur), r;
@@ -4038,6 +4073,10 @@ int main(int argc, char **argv)
                     set_menu_save();    /* umk3.ini replay_scale */
                 } else if (r == RPB_SETTINGS)
                     set_menu_toggle();
+                else if (r == RPB_CAMERA)   /* FREE CAMERA (port: PHOTO MODE's) */
+                    photo_free_toggle();
+                else if (r == RPB_CLOSE && rp_menu())  /* the X: back to EXTRAS > REPLAYS */
+                    replay_leave();
                 else if (r == RPB_CLOSE)    /* the X */
                     g_quit_now = 1;
                 else if (r == RPB_SWITCH) { /* another replay: its fight, here */
@@ -4378,10 +4417,35 @@ int main(int argc, char **argv)
             keyboard_buttons();
             if (rp_switching())
                 ;               /* on the way to another replay: no keys */
-            else if (rp_playing())  /* a replay: the player's keys, no pause menu */
-                rp_keys(plat_key(PK_OK) || plat_key(PK_PAUSE),
-                        plat_key(PK_LEFT), plat_key(PK_RIGHT),
-                        plat_key(PK_UP), plat_key(PK_DOWN), plat_key(PK_MOVES));
+            else if (rp_playing()) {    /* a replay: the player's keys, no pause menu */
+                /* PHOTO MODE over the replay (Mary): while it is up the
+                 * keys are its own */
+                int photo_was = photo_on();
+                /* the pad too (Mary): A or START play / pause, left and
+                 * right back and on, L1 / R1 slower and faster, SELECT
+                 * from the start, Y the FREE CAMERA (photo_tick), B out of
+                 * a replay played from EXTRAS */
+                unsigned pb = g_pad.connected ? g_pad.buttons : 0;
+                static int was_b;
+                int b = (pb & (1u << PB_EAST)) != 0;
+                photo_tick(&g_pad, g_pad_photo, game_key);
+                if (!photo_was && !photo_on()) {
+                    /* the FREE CAMERA's left stick is its own: the d-pad
+                     * seeks then */
+                    int stick = photo_free_on() && fabsf(g_pad.ax[0]) > 0.3f;
+                    photo_free_tick(&g_pad, game_key);
+                    rp_keys(plat_key(PK_OK) || plat_key(PK_PAUSE)
+                                || (pb & ((1u << PB_SOUTH) | (1u << PB_START))),
+                            plat_key(PK_LEFT) || (g_pad.connected && g_pad.left && !stick),
+                            plat_key(PK_RIGHT) || (g_pad.connected && g_pad.right && !stick),
+                            plat_key(PK_UP) || (pb & (1u << PB_R1)),
+                            plat_key(PK_DOWN) || (pb & (1u << PB_L1)),
+                            plat_key(PK_MOVES) || (pb & (1u << PB_SELECT)));
+                    if (b && !was_b && rp_menu())
+                        replay_leave();
+                }
+                was_b = b;
+            }
             else {
                 hud_keys();
                 photo_tick(&g_pad, g_pad_photo, game_key);  /* PHOTO MODE */
@@ -4556,7 +4620,7 @@ int main(int argc, char **argv)
                 if (g_rp_hint > 0)
                     g_rp_hint--;
                 dbg_replay_hidden(g_rp_hint > 60 ? 1.0f : (float)g_rp_hint / 60.0f);
-            } else if (rp_playing() && !set_menu_is_open()) {  /* REPLAYS: the player's panel */
+            } else if (rp_playing() && !set_menu_is_open() && !photo_on()) {  /* REPLAYS: the player's panel */
                 char clock[48];
                 int state;
                 float at = rp_info(clock, sizeof clock, &state);

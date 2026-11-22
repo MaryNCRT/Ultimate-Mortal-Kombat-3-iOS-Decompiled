@@ -244,6 +244,7 @@ enum {
     PK_PH_NAV_UP, PK_PH_NAV_DOWN, PK_PH_NAV_LEFT, PK_PH_NAV_RIGHT,
     PK_PH_RISE, PK_PH_SINK, PK_PH_ROLL_L, PK_PH_ROLL_R,
     PK_PH_RESET, PK_PH_HIDE, PK_PH_SHOT, PK_PH_TAB,
+    PK_PH_PLAY,                         /* a replay: on under the camera, or held */
     PK_COUNT
 };
 

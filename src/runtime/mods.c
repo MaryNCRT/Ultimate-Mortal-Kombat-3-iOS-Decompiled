@@ -684,6 +684,215 @@ static int skin_find(const char *name, int tex, char *out, size_t n)
     return 1;
 }
 
+/* ------------------------------------------- EXTRAS > MODS (port)
+ *
+ * What a mod's mod.ini says of it, for the game's own pages (FrontEnd.c
+ * FE_Task_Mods): its name, whether it is a TEXTURE PACK (category=textures:
+ * Mary, the HD characters are a pack, not a mod) and whether it is
+ * ESSENTIAL (essential=1: always on, never moved or turned off -- the
+ * game's working needs it). */
+static char g_root[PATH_MAX_];          /* <game>/mods */
+static int  g_changed;                  /* mods.ini written since the start */
+
+static void mod_ini(const char *dir, char *name, size_t nn, int *pack, int *essential, int *skin);
+
+/* the card's words: author, version, category, description */
+static void mod_card(const char *dir, MODS_ITEM *m)
+{
+    char path[PATH_MAX_], line[512];
+    FILE *f;
+
+    m->author[0] = m->version[0] = m->category[0] = m->desc[0] = 0;
+    snprintf(path, sizeof(path), "%s/mod.ini", dir);
+    f = fopen(path, "r");
+    if (!f)
+        return;
+    while (fgets(line, sizeof(line), f)) {
+        char *v = strchr(line, '=');
+        line[strcspn(line, "\r\n")] = 0;
+        if (!v)
+            continue;
+        *v++ = 0;
+        while (*v == ' ')
+            v++;
+        lower(line);
+        if (strcmp(line, "author") == 0)
+            snprintf(m->author, sizeof(m->author), "%s", v);
+        else if (strcmp(line, "version") == 0)
+            snprintf(m->version, sizeof(m->version), "%s", v);
+        else if (strcmp(line, "category") == 0) {
+            snprintf(m->category, sizeof(m->category), "%s", v);
+            lower(m->category);
+        } else if (strcmp(line, "description") == 0)
+            snprintf(m->desc, sizeof(m->desc), "%s", v);
+    }
+    fclose(f);
+}
+
+static void mod_ini(const char *dir, char *name, size_t nn, int *pack, int *essential, int *skin)
+{
+    char path[PATH_MAX_], line[512];
+    FILE *f;
+
+    if (name && nn)
+        name[0] = 0;
+    *pack = *essential = *skin = 0;
+    snprintf(path, sizeof(path), "%s/mod.ini", dir);
+    f = fopen(path, "r");
+    if (!f)
+        return;
+    while (fgets(line, sizeof(line), f)) {
+        char *v = strchr(line, '=');
+        line[strcspn(line, "\r\n")] = 0;
+        if (!v)
+            continue;
+        *v++ = 0;
+        while (*v == ' ')
+            v++;
+        lower(line);
+        if (strcmp(line, "name") == 0 && name && nn)
+            snprintf(name, nn, "%s", v);
+        else if (strcmp(line, "category") == 0) {
+            lower(v);
+            *pack = strcmp(v, "textures") == 0;
+        } else if (strcmp(line, "essential") == 0)
+            *essential = atoi(v) != 0;
+        else if (strcmp(line, "type") == 0) {
+            lower(v);
+            *skin = strcmp(v, "skin") == 0;
+        }
+    }
+    fclose(f);
+    if (*skin)
+        *pack = 0;
+}
+
+static int mod_essential(const char *root, const char *folder)
+{
+    char dir[PATH_MAX_];
+    int pack, ess, skin;
+    snprintf(dir, sizeof(dir), "%s/%s", root, folder);
+    mod_ini(dir, NULL, 0, &pack, &ess, &skin);
+    return ess;
+}
+
+/* the order mods.ini gives, then the folders it does not name (on) */
+static int mods_order(char names[][NAME_MAX_], int *on, int max)
+{
+    static char dirs[MOD_MAX][NAME_MAX_];
+    char path[PATH_MAX_], line[512];
+    int n = 0, nd, i, j;
+    FILE *f;
+
+    if (!g_root[0])
+        return 0;
+    snprintf(path, sizeof(path), "%s/mods.ini", g_root);
+    f = fopen(path, "r");
+    if (f) {
+        while (fgets(line, sizeof(line), f) && n < max) {
+            char *v, *end;
+            int o;
+            line[strcspn(line, "\r\n")] = 0;
+            if (strncmp(line, "on=", 3) == 0)
+                o = 1, v = line + 3;
+            else if (strncmp(line, "off=", 4) == 0)
+                o = 0, v = line + 4;
+            else
+                continue;
+            end = v + strlen(v);
+            while (end > v && end[-1] == ' ')
+                *--end = 0;
+            if (!*v || strlen(v) >= NAME_MAX_ - 1 || strstr(v, "..") || strchr(v, '/') || strchr(v, '\\'))
+                continue;
+            strcpy(names[n], v);
+            on[n++] = o;
+        }
+        fclose(f);
+    }
+    nd = list_dirs(g_root, dirs, MOD_MAX);
+    for (i = 0; i < nd && n < max; i++) {
+        int known = 0;
+        for (j = 0; j < n && !known; j++)
+            known = strcmp(names[j], dirs[i]) == 0;
+        if (!known) {
+            strcpy(names[n], dirs[i]);
+            on[n++] = 1;
+        }
+    }
+    /* a folder named in mods.ini but gone: left out */
+    for (i = j = 0; i < n; i++) {
+        char d[PATH_MAX_];
+        int k, there = 0;
+        snprintf(d, sizeof(d), "%s", names[i]);
+        for (k = 0; k < nd && !there; k++)
+            there = strcmp(dirs[k], d) == 0;
+        if (there) {
+            if (j != i) {
+                strcpy(names[j], names[i]);
+                on[j] = on[i];
+            }
+            j++;
+        }
+    }
+    return j;
+}
+
+int mods_list(MODS_ITEM *out, int max)
+{
+    static char names[MOD_MAX][NAME_MAX_];
+    static int on[MOD_MAX];
+    int n = mods_order(names, on, MOD_MAX), i, k = 0;
+
+    for (i = 0; i < n && k < max; i++) {
+        char dir[PATH_MAX_];
+        MODS_ITEM *m = &out[k++];
+        snprintf(dir, sizeof(dir), "%s/%s", g_root, names[i]);
+        snprintf(m->folder, sizeof(m->folder), "%s", names[i]);
+        mod_ini(dir, m->name, sizeof(m->name), &m->pack, &m->essential, &m->skin);
+        mod_card(dir, m);
+        if (m->skin)
+            snprintf(m->category, sizeof(m->category), "skin");
+        if (!m->name[0])
+            snprintf(m->name, sizeof(m->name), "%s", names[i]);
+        m->on = on[i] || m->essential;
+    }
+    return k;
+}
+
+int mods_set(const char *folder, int on_now)
+{
+    static char names[MOD_MAX][NAME_MAX_];
+    static int on[MOD_MAX];
+    char path[PATH_MAX_];
+    int n = mods_order(names, on, MOD_MAX), i, hit = -1;
+    FILE *f;
+
+    for (i = 0; i < n; i++)
+        if (strcmp(names[i], folder) == 0)
+            hit = i;
+    if (hit < 0 || mod_essential(g_root, folder))
+        return 0;                       /* ESSENTIAL: never off (Mary) */
+    on[hit] = on_now != 0;
+    snprintf(path, sizeof(path), "%s/mods.ini", g_root);
+    f = fopen(path, "w");
+    if (!f)
+        return 0;
+    fputs("; The MOD MANAGER's list (UMK3 launcher). Highest priority first: when two\n"
+          "; mods have a file of the same name, the higher one wins. on= is used, off= is not.\n", f);
+    for (i = 0; i < n; i++)
+        fprintf(f, "%s=%s\n", on[i] || mod_essential(g_root, names[i]) ? "on" : "off", names[i]);
+    fclose(f);
+    g_changed = 1;
+    printf("mods: %s %s (the game's EXTRAS > MODS); from the next start\n",
+           folder, on_now ? "on" : "off");
+    return 1;
+}
+
+int mods_changed(void)
+{
+    return g_changed;
+}
+
 void mods_init(const char *res_root)
 {
     static char named[MOD_MAX][NAME_MAX_];
@@ -699,6 +908,7 @@ void mods_init(const char *res_root)
     if (!res_root || !*res_root)
         return;
     snprintf(root, sizeof(root), "%s/../mods", res_root);
+    snprintf(g_root, sizeof(g_root), "%s", root);
 
     snprintf(path, sizeof(path), "%s/mods.ini", root);
     f = fopen(path, "r");
@@ -718,7 +928,10 @@ void mods_init(const char *res_root)
                 *--end = 0;
             if (!*v || strlen(v) >= NAME_MAX_ - 1 || strstr(v, "..") || strchr(v, '/') || strchr(v, '\\'))
                 continue;
-            /* the first character says on or off; the name follows */
+            /* the first character says on or off; the name follows. An
+             * ESSENTIAL mod is on whatever the file says (Mary) */
+            if (!on && mod_essential(root, v))
+                on = 1;
             named[nnamed][0] = on ? '+' : '-';
             strcpy(named[nnamed] + 1, v);
             nnamed++;

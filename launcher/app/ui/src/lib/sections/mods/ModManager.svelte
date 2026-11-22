@@ -2,7 +2,10 @@
     /* MOD MANAGER: the mods in mods\, highest priority first. Each one on or
      * off, moved up or down, its card (name, author, version, category,
      * description) and its files with what each replaces. Every change
-     * writes mods\mods.ini at once; the game reads it when it starts. */
+     * writes mods\mods.ini at once; the game reads it when it starts.
+     * Two pages (Mary): MODS, and TEXTURE PACKS -- the mods of category
+     * textures. An ESSENTIAL mod (essential=1) is locked: always on, not
+     * moved, not thrown away. */
     import { onMount } from 'svelte';
     import { tx } from '#lib/app.svelte.js';
     import { api } from '#lib/platform.js';
@@ -10,13 +13,23 @@
     import { ms, refreshMods, reloadMods, moveMod, toggleMod } from '#lib/mods/store.svelte.js';
     import { toPng } from '#lib/mods/image.js';
 
-    const CATS = ['textures', 'audio', 'music', 'models', 'mixed'];
+    const CATS_ALL = ['textures', 'audio', 'music', 'models', 'mixed'];
+    const CATS = $derived(ms.packs ? ['textures'] : CATS_ALL.filter(c => c !== 'textures'));
     let making = $state(false);
     let draft = $state({ name: '', author: '', version: '1.0', category: 'textures', description: '' });
     let err = $state('');
     let trashArmed = $state(null);
 
-    const shown = $derived(ms.list.map((m, i) => ({ m, i })).filter(({ m }) => ms.filter === 'all' || m.category === ms.filter));
+    const shown = $derived(ms.list.map((m, i) => ({ m, i }))
+        .filter(({ m }) => !!m.pack === ms.packs)
+        .filter(({ m }) => ms.packs || ms.filter === 'all' || m.category === ms.filter));
+    function page(p) {
+        selectBlip();
+        ms.packs = p;
+        ms.filter = 'all';
+        ms.open = null;
+        draft.category = p ? 'textures' : 'audio';
+    }
 
     onMount(refreshMods);
 
@@ -71,17 +84,24 @@
     const kinds = m => Object.entries(m.kinds).filter(([k]) => k !== 'other').map(([k, n]) => (tx('cats')[k] || k) + ' ' + n).join(' · ');
 </script>
 
-<p class="how">{tx('mgHow')}</p>
+<div class="pages">
+    <button class="page" class:on={!ms.packs} onpointerenter={hoverBlip} onclick={() => page(false)}>{tx('mgPageMods')}</button>
+    <button class="page" class:on={ms.packs} onpointerenter={hoverBlip} onclick={() => page(true)}>{tx('mgPagePacks')}</button>
+</div>
+<p class="how">{ms.packs ? tx('mgHowPacks') : tx('mgHow')}</p>
 <div class="bar">
     <button class="btn hot" onpointerenter={hoverBlip} onclick={() => { making = !making; err = ''; }}>{tx('mgNew')}</button>
     <button class="btn" onpointerenter={hoverBlip} onclick={() => api.modsOpen('')}>{tx('mgOpen')}</button>
     <button class="btn" onpointerenter={hoverBlip} onclick={reloadMods}>{tx('mgRefresh')}</button>
     <span class="grow"></span>
-    <label class="lbl" for="mfilter">{tx('mgFilter')}</label>
-    <select id="mfilter" class="sel narrow" bind:value={ms.filter}>
-        <option value="all">{tx('mgAll')}</option>
-        {#each CATS as c}<option value={c}>{tx('cats')[c]}</option>{/each}
-    </select>
+    {#if !ms.packs}
+        <label class="lbl" for="mfilter">{tx('mgFilter')}</label>
+        <select id="mfilter" class="sel narrow" bind:value={ms.filter}>
+            <option value="all">{tx('mgAll')}</option>
+            {#each CATS as c}<option value={c}>{tx('cats')[c]}</option>{/each}
+            <option value="skin">{tx('cats').skin || 'SKIN'}</option>
+        </select>
+    {/if}
 </div>
 
 {#if making}
@@ -104,13 +124,13 @@
     </div>
 {/if}
 
-{#if !ms.list.length}
-    <p class="empty">{tx('mgNone')}</p>
+{#if !shown.length}
+    <p class="empty">{ms.packs ? tx('mgNonePacks') : tx('mgNone')}</p>
 {/if}
 
 <ol class="mods">
     {#each shown as { m, i } (m.folder)}
-        <li class="card" class:off={!m.on} class:open={ms.open === m.folder}>
+        <li class="card" class:off={!m.on} class:open={ms.open === m.folder} class:ess={m.essential}>
             <div class="head">
                 <span class="prio" title={tx('mgPrio')}>{i + 1}</span>
                 <span class="pic">{#if m.preview}<img src={m.preview} alt="">{:else}<i class="cat {m.category}"></i>{/if}</span>
@@ -120,9 +140,13 @@
                 </button>
                 <span class="tag {m.category}">{tx('cats')[m.category]}</span>
                 <span class="count">{m.count} {tx('mgFiles')}{#if m.unknown}<em class="warn" title={tx('mgUnknown')}> ⚠ {m.unknown}</em>{/if}{#if m.lost}<em class="lost" title={tx('mgLost')}> ⇣ {m.lost}</em>{/if}</span>
-                <button class="arrow" title={tx('mgUp')} disabled={i === 0} onclick={() => { selectBlip(); moveMod(i, -1); }}>▲</button>
-                <button class="arrow" title={tx('mgDown')} disabled={i === ms.list.length - 1} onclick={() => { selectBlip(); moveMod(i, 1); }}>▼</button>
-                <button class="switch" class:on={m.on} onclick={() => { selectBlip(); toggleMod(i); }}>{m.on ? tx('mgOn') : tx('mgOff')}</button>
+                <button class="arrow" title={tx('mgUp')} disabled={i === 0 || m.essential || ms.list[i - 1]?.essential} onclick={() => { selectBlip(); moveMod(i, -1); }}>▲</button>
+                <button class="arrow" title={tx('mgDown')} disabled={i === ms.list.length - 1 || m.essential || ms.list[i + 1]?.essential} onclick={() => { selectBlip(); moveMod(i, 1); }}>▼</button>
+                {#if m.essential}
+                    <span class="switch on locked" title={tx('mgEssLock')}>{tx('mgEssential')}</span>
+                {:else}
+                    <button class="switch" class:on={m.on} onclick={() => { selectBlip(); toggleMod(i); }}>{m.on ? tx('mgOn') : tx('mgOff')}</button>
+                {/if}
             </div>
             {#if ms.open === m.folder}
                 <div class="body">
@@ -135,8 +159,8 @@
                         <div class="field"><span class="lbl">{tx('mgName')}</span>
                             <input class="edt" maxlength="60" value={m.name} onchange={e => info(m, 'name', e.currentTarget.value)}></div>
                         <div class="field"><span class="lbl">{tx('mgCat')}</span>
-                            <select class="sel" value={m.category} onchange={e => info(m, 'category', e.currentTarget.value)}>
-                                {#each CATS as c}<option value={c}>{tx('cats')[c]}</option>{/each}
+                            <select class="sel" value={m.category} disabled={m.essential} onchange={e => info(m, 'category', e.currentTarget.value)}>
+                                {#each CATS_ALL as c}<option value={c}>{tx('cats')[c]}</option>{/each}
                             </select></div>
                         <div class="field"><span class="lbl">{tx('mgAuthor')}</span>
                             <input class="edt" maxlength="60" value={m.author} onchange={e => info(m, 'author', e.currentTarget.value)}></div>
@@ -155,7 +179,9 @@
                         <button class="btn" onpointerenter={hoverBlip} onclick={() => { selectBlip(); ms.layer = m.folder; ms.tab = 'view'; }}>{tx('mgSeeIt')}</button>
                         <button class="btn" onpointerenter={hoverBlip} onclick={() => add(m)}>{tx('mgAdd')}</button>
                         <button class="btn" onpointerenter={hoverBlip} onclick={() => api.modsOpen(m.folder)}>{tx('mgOpen')}</button>
-                        <button class="btn danger" onpointerenter={hoverBlip} onclick={() => trash(m)}>{trashArmed === m.folder ? tx('mgTrashAsk') : tx('mgTrash')}</button>
+                        {#if !m.essential}
+                            <button class="btn danger" onpointerenter={hoverBlip} onclick={() => trash(m)}>{trashArmed === m.folder ? tx('mgTrashAsk') : tx('mgTrash')}</button>
+                        {/if}
                     </div>
                 </div>
             {/if}
@@ -167,6 +193,17 @@
 
 <style>
     .bar { display: flex; align-items: center; gap: calc(var(--u) * 1); margin-bottom: calc(var(--u) * 1.2); }
+    /* the two pages, MODS and TEXTURE PACKS */
+    .pages { display: flex; gap: calc(var(--u) * .6); margin-bottom: calc(var(--u) * 1); }
+    .page {
+        flex: 1; height: calc(var(--u) * 3.4); cursor: pointer; letter-spacing: .1em; font-weight: 800;
+        font-size: calc(var(--t) * 1.4); border-radius: 2px; color: var(--dim);
+        background: var(--well); border: 1px solid var(--line);
+    }
+    .page:hover { border-color: var(--hot-rim); }
+    .page.on { background: var(--grad-hot); border-color: var(--hot-rim); color: #fff; text-shadow: 0 1px 0 #000; }
+    .card.ess { border-left-color: #e6bb63; }
+    .switch.locked { display: inline-grid; place-items: center; cursor: default; }
     .grow { flex: 1; }
     .narrow { flex: 0 0 calc(var(--u) * 18); }
     .empty { color: var(--dim); text-align: center; margin: calc(var(--u) * 3) 0; }

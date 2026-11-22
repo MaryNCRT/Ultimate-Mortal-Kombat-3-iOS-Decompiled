@@ -90,7 +90,9 @@ void rb_replay_fight_over(void);
 /* The player's buttons, left to right on its panel (debug_menu.c draws
  * them), and the bar above them. */
 enum { RPB_START, RPB_BACK5, RPB_FRAME_BACK, RPB_PLAY, RPB_FRAME_FWD,
-       RPB_FWD5, RPB_SLOWER, RPB_FASTER, RPB_SETTINGS, RPB_COUNT,
+       RPB_FWD5, RPB_SLOWER, RPB_FASTER, RPB_SETTINGS,
+       RPB_CAMERA,                      /* FREE CAMERA: PHOTO MODE's, the replay on (port) */
+       RPB_COUNT,
        RPB_LIST = 20, RPB_CLOSE,        /* the top: the list, the X */
        RPB_SWITCH,                      /* a row picked: another replay */
        RPB_HIDE, RPB_SIZE,              /* the top: away, the scale */
@@ -120,5 +122,14 @@ float rp_info(char *time, int n, int *state);
 int   rp_list(const char **labels, int max, int *n_recent, int *current);
 const char *rp_title(void);
 int   rp_switching(void);
+/* EXTRAS > REPLAYS (port, FrontEnd.c): the list (rel paths and labels,
+ * the recent ones first), one played from the menu and left again */
+int   rp_menu_list(char rel[][176], char label[][48], int max, int *n_recent);
+int   rp_menu_play(const char *rel, int32_t *c1, int32_t *c2, int32_t *lv);
+int   rp_menu(void);
+void  rp_menu_stop(void);
+/* PHOTO MODE (photo_mode.c): the replay's pause */
+int   rp_paused(void);
+void  rp_set_paused(int on);
 
 #endif

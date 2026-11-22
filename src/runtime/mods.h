@@ -56,4 +56,17 @@ const char *mods_real_name(const char *name);
 void        mods_skin_key(int id, char *out, size_t n);
 int         mods_skin_by_key(const char *key);
 
+/* EXTRAS > MODS and TEXTURE PACKS (port, FrontEnd.c): every mod in the
+ * order mods.ini gives, what its mod.ini says of it, and one turned on or
+ * off (mods.ini written; the game takes it at its next start). An
+ * ESSENTIAL mod is always on and mods_set refuses it (0). */
+typedef struct {
+    char folder[128], name[64];
+    char author[48], version[16], category[16], desc[200];   /* the launcher's card */
+    int  on, essential, pack, skin;     /* pack: category=textures */
+} MODS_ITEM;
+int  mods_list(MODS_ITEM *out, int max);
+int  mods_set(const char *folder, int on);
+int  mods_changed(void);                /* 1 once mods.ini was written */
+
 #endif

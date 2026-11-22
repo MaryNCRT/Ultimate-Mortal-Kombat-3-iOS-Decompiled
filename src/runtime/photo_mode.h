@@ -22,6 +22,12 @@ int   photo_allowed(void);
 /* in (from the pause menu: 1, back to it on the way out) and out */
 void  photo_open(int from_menu);
 void  photo_close(void);
+/* a replay's FREE CAMERA (its panel's button, F, the pad's Y): the camera
+ * moved freely while the replay plays on with its own panel; its input,
+ * every tick of a replay (game_main.c) */
+void  photo_free_toggle(void);
+int   photo_free_on(void);
+void  photo_free_tick(const PLAT_PAD *pad, int (*key)(int));
 
 /* game_main.c, every tick of the game: the shortcut (key_photo=, F3, and
  * the pad's pad_photo= combination, L3+R3 by default) and, while up, the
