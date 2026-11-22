@@ -1574,6 +1574,7 @@ int PortKD_HoldRound(void)
  * drawn while the camera is still set. NULL unless they are on.
  */
 void (*PortAfterScene)(void);
+extern float PortProjScale;                 /* port: decomp/lime/LIMEDS_Misc.c */
 
 void RenderGameView(void)
 {
@@ -1581,7 +1582,12 @@ void RenderGameView(void)
 
     PortKD_Update();                        /* port: Shao Kahn's death */
     PortScreenShiftY = PortKD.shift;
+    {
+        float photo_proj_scale(void);       /* port: PHOTO MODE's zoom */
+        PortProjScale = photo_proj_scale();
+    }
     LIMEDS_Set3dMode();
+    PortProjScale = 1.0f;
     PortScreenShiftY = 0.0f;
 
     eye[0] = Camera[0] + ShakeOffset[0];
@@ -4867,9 +4873,29 @@ void SetToUseCamera(const float *arg)
     LastEye[0] = eye[0];  LastEye[1] = eye[1];  LastEye[2] = eye[2];
     LastAt[0]  = at[0];   LastAt[1]  = at[1];   LastAt[2]  = at[2];
 
+    /* Port, not in the binary: PHOTO MODE's camera (runtime/photo_mode.c)
+     * draws the scene instead; the fight's, above, is kept as it was */
+    {
+        int photo_camera(float eye[3], float at[3], float up[3]);
+        float pe[3], pa[3], pu[3];
+        if (photo_camera(pe, pa, pu)) {
+            LIMEDS_SetCameraOrientation(pe[0], pe[1], pe[2], pa[0], pa[1], pa[2],
+                                        pu[0], pu[1], pu[2]);
+            return;
+        }
+    }
+
     LIMEDS_SetCameraOrientation(eye[0], eye[1], eye[2],
                                 at[0],  at[1],  at[2],
                                 up[0],  up[1],  up[2]);
+}
+
+/* Port, PHOTO MODE (runtime/photo_mode.c): the shot the fight's camera
+ * last drew, smoothing and shake included */
+void PortPhotoSceneCam(float eye[3], float at[3])
+{
+    eye[0] = LastEye[0]; eye[1] = LastEye[1]; eye[2] = LastEye[2];
+    at[0]  = LastAt[0];  at[1]  = LastAt[1];  at[2]  = LastAt[2];
 }
 
 
@@ -12779,6 +12805,9 @@ void Task_GameMain(void)
     rb_frame(Task_GameMain_frame);      /* Port: the frame itself below */
 }
 
+int  photo_hide_hud(void);              /* port: runtime/photo_mode.c */
+void photo_draw(void);
+
 static void Task_GameMain_frame(void)
 {
     long joy[2];
@@ -12802,8 +12831,12 @@ static void Task_GameMain_frame(void)
         joy[1] = GAMEMAIN_JOY_BLOCK;
     }
 
-    FrameCount  += 1.0f / limeFPSScaleFactor;
-    GameCounter += 1.0f / limeFPSScaleFactor;
+    /* port: not while PHOTO MODE holds the fight (runtime/photo_mode.c),
+     * so it carries on from the very frame it was frozen on */
+    if (GamePaused != 3) {
+        FrameCount  += 1.0f / limeFPSScaleFactor;
+        GameCounter += 1.0f / limeFPSScaleFactor;
+    }
 
     limeEnableAlphaBlending_Basic();
     limeSetColourMask(1, 1, 1, 0);
@@ -12873,12 +12906,16 @@ static void Task_GameMain_frame(void)
     if (DoSmokesEarthFatal != 0.0f)
         SmokeEarthFatalCutaway();
 
+    /* port: PHOTO MODE leaves the HUD and the port's windows out of the
+     * picture (runtime/photo_mode.c); its SCENE page puts the HUD back */
+    if (!photo_hide_hud()) {
     PortKD_BeforeHUD();                 /* port: Shao Kahn's death */
     DrawHUD();
     PortKD_AfterHUD();
     PortKD_Lines();
     if (GameMode == 1 && rb_watching())
         PortWatchBar();                 /* port: a spectator's bar and its way out */
+    }
     if (GameMode == 6 && PortPractice && GamePaused == 0) {
         extern int PortFTSkipping;      /* game_main.c */
         if (PortFT && PortFTSkipping) {
@@ -12910,8 +12947,9 @@ static void Task_GameMain_frame(void)
         G->healthBar2 = 100;
     }
 
-    /* ---- the stage-fatal camera pull, computed in double ---- */
-    if (DoingStageFatal) {
+    /* ---- the stage-fatal camera pull, computed in double (port: held
+     * while PHOTO MODE is up) ---- */
+    if (DoingStageFatal && GamePaused != 3) {
         DoingStageFatalBringForward =
             (float)((double)DoingStageFatalBringForward
                     + -0.05 / (double)limeFPSScaleFactor);
@@ -12958,6 +12996,7 @@ static void Task_GameMain_frame(void)
 
     ShowDebugInfo();
     UpdateInGamePauseMenu();
+    photo_draw();                       /* port: PHOTO MODE's panel, over all */
 }
 
 
@@ -13185,6 +13224,29 @@ void  LIME_TriggerEventsFromSceneOffsetIfFollowing(long slot, long follow,
 /* The six GL calls the transform is made of, emitted in two places. `out` is
  * where the model matrix is read back to -- f588 the first time, f548 the
  * second -- and that is the only difference between them. The caller pops. */
+/* Port, PHOTO MODE (runtime/photo_mode.c): where fighter `i` (0, 1)
+ * stands in the world -- the translation RenderLevelPlayers draws it at
+ * (ArcadePosTo3dPos into +0x5c8) -- and its text drawn in the game's font */
+int PortPhotoFighter(int i, float out[3])
+{
+    const float *pf;
+
+    if (i < 0 || i > 1 || GameObjects == 0 || CurrentTask != 6)
+        return 0;
+    pf = (const float *)RLP_PLAYER(i);
+    out[0] = pf[0x5c8 / 4];
+    out[1] = pf[0x5cc / 4];
+    out[2] = pf[0x5d0 / 4];
+    return out[0] == out[0] && out[1] == out[1] && out[2] == out[2];   /* not NaN */
+}
+
+void PortPhotoText(const char *s, float x, float y, int align, float scale,
+                   const float rgb[3])
+{
+    float c[4] = { rgb[0], rgb[1], rgb[2], 1.0f };
+    limeDrawFONT(&GameFont, s, x, y, align, scale * FE_WidthScale, c);
+}
+
 static void RenderLevelPlayers_Pose(const long *w, long chr, float s,
                                     int withOffset, float *out)
 {
@@ -13802,12 +13864,43 @@ void RenderLevelPlayers(void)
  */
 
 #define PAUSE_X              384.0f
-#define PAUSE_SCALE          1.25f
-#define PAUSE_WIDTH          186.0f
+/* port (Mary): the words smaller and on one line each -- at 1.25 and 186
+ * wide, training's rows ran into each other two lines apiece */
+#define PAUSE_SCALE          ((GameMode == 6 && PortPractice) ? 0.8f : 0.9f)
+#define PAUSE_WIDTH          226.0f
 #define PAUSE_ROW0           6.0f
 /* port: training has two rows more (its window and its input column),
  * so its eight are 40 apart */
-#define PAUSE_ROW_PITCH      ((GameMode == 6 && PortPractice) ? 40.0f : 56.0f)
+/* port: one row more, PHOTO MODE's (runtime/photo_mode.c), where it may
+ * open */
+static int PortPhotoRow;
+
+/* port (Mary: "organizalos mejor"): where each row goes. The rows keep
+ * their numbers and what they do -- 0 RESUME, 1 EXIT, 2 the moves list,
+ * 3 the buttons, 4 audio, 5 video, 6 and 7 training's, 8 PHOTO MODE -- and
+ * are laid out in the order a player reads them: going on first, what the
+ * fight shows next, the settings, and EXIT last, a little apart. */
+static float PortPauseRowY(int n)
+{
+    static const int practice[9] = { 0, 2, 6, 7, 8, 3, 4, 5, 1 };
+    static const int normal[7]   = { 0, 2, 8, 3, 4, 5, 1 };
+    const int tr = GameMode == 6 && PortPractice;
+    const int *ord = tr ? practice : normal;
+    int cnt = tr ? 9 : 7, slot = 0, total = 0, i;
+    float pitch;
+
+    for (i = 0; i < cnt; i++) {
+        if (ord[i] == 8 && !PortPhotoRow)
+            continue;
+        if (ord[i] == n)
+            slot = total;
+        total++;
+    }
+    pitch = total > 1 ? (276.0f - 10.0f) / (float)(total - 1) : 0.0f;
+    if (pitch > 48.0f)
+        pitch = 48.0f;
+    return PAUSE_ROW0 + (float)slot * pitch + (n == 1 ? 10.0f : 0.0f);
+}
 #define PAUSE_CONFIRM_LABEL  48.0f
 #define PAUSE_CONFIRM_YES    176.0f
 #define PAUSE_CONFIRM_NO     240.0f
@@ -13899,6 +13992,8 @@ static void UpdateInGamePauseMenu_(void);
 
 void UpdateInGamePauseMenu(void)
 {
+    if (GamePaused == 3)                /* port: PHOTO MODE has the screen */
+        return;
     PortFERightEdgeSet(1);
     UpdateInGamePauseMenu_();
     PortFERightEdgeSet(0);
@@ -14015,6 +14110,10 @@ static void UpdateInGamePauseMenu_(void)
 
     /* ---- GamePaused == 1: the menu ---- */
     sel = GameMode;
+    {
+        int photo_allowed(void);        /* port: runtime/photo_mode.c */
+        PortPhotoRow = photo_allowed();
+    }
 
     if (GameMode == 1 && otherPlayerPaused != 0) {
         if (PauseMenuAreYouSure != 0) {
@@ -14111,7 +14210,7 @@ static void UpdateInGamePauseMenu_(void)
         /* ---- row 1: the heading, and it is a button ---- */
         LastTouch_Pause1 = Touch_Pause1;
         Touch_Pause1 = DrawOptionAsButton(GameText(TXT_PAUSE_TITLE),
-                                          PAUSE_X, PAUSE_ROW0, PAUSE_SCALE,
+                                          PAUSE_X, PortPauseRowY(0), PAUSE_SCALE,
                                           PAUSE_COL(LastTouch_Pause1),
                                           FE_W(PAUSE_WIDTH));
         sel = PAUSE_RELEASED(LastTouch_Pause1, Touch_Pause1) ? 1 : 0;
@@ -14120,7 +14219,7 @@ static void UpdateInGamePauseMenu_(void)
         LastTouch_Pause2 = Touch_Pause2;
         Touch_Pause2 = DrawOptionAsButton(GameText(TXT_EXIT),
                                           PAUSE_X,
-                                          PAUSE_ROW0 + PAUSE_ROW_PITCH,
+                                          PortPauseRowY(1),
                                           PAUSE_SCALE,
                                           PAUSE_COL(LastTouch_Pause2),
                                           FE_W(PAUSE_WIDTH));
@@ -14148,7 +14247,7 @@ static void UpdateInGamePauseMenu_(void)
                      GameTextNoHeader(TXT_LAYOUT_A),
                      Menu_GamePaused_Options + 0xc0);
         Touch_Pause3 = DrawOptionAsButton(limeUC(text), PAUSE_X,
-                                          PAUSE_ROW0 + 2 * PAUSE_ROW_PITCH,
+                                          PortPauseRowY(2),
                                           PAUSE_SCALE,
                                           PAUSE_COL(LastTouch_Pause3),
                                           FE_W(PAUSE_WIDTH));
@@ -14179,7 +14278,7 @@ static void UpdateInGamePauseMenu_(void)
                      GameTextNoHeader(TXT_LAYOUT_B),
                      Menu_GamePaused_Options + 0x100);
         Touch_Pause4 = DrawOptionAsButton(limeUC(text), PAUSE_X,
-                                          PAUSE_ROW0 + 3 * PAUSE_ROW_PITCH,
+                                          PortPauseRowY(3),
                                           PAUSE_SCALE,
                                           PAUSE_COL(LastTouch_Pause4),
                                           FE_W(PAUSE_WIDTH));
@@ -14213,7 +14312,7 @@ static void UpdateInGamePauseMenu_(void)
                           Menu_GamePaused_Options + 0x100); break;
         }
         Touch_Pause5 = DrawOptionAsButton(limeUC(text), PAUSE_X,
-                                          PAUSE_ROW0 + 4 * PAUSE_ROW_PITCH,
+                                          PortPauseRowY(4),
                                           PAUSE_SCALE,
                                           PAUSE_COL(LastTouch_Pause5),
                                           FE_W(PAUSE_WIDTH));
@@ -14247,7 +14346,7 @@ static void UpdateInGamePauseMenu_(void)
                           Menu_GamePaused_Options + 0x100); break;
         }
         Touch_Pause6 = DrawOptionAsButton(limeUC(text), PAUSE_X,
-                                          PAUSE_ROW0 + 5 * PAUSE_ROW_PITCH,
+                                          PortPauseRowY(5),
                                           PAUSE_SCALE,
                                           PAUSE_COL(LastTouch_Pause6),
                                           FE_W(PAUSE_WIDTH));
@@ -14286,7 +14385,7 @@ static void UpdateInGamePauseMenu_(void)
             usprintf(text, UC(a));
             LastTouch_Pause7 = Touch_Pause7;
             Touch_Pause7 = DrawOptionAsButton(limeUC(text), PAUSE_X,
-                                              PAUSE_ROW0 + 6 * PAUSE_ROW_PITCH,
+                                              PortPauseRowY(6),
                                               PAUSE_SCALE,
                                               PAUSE_COL(LastTouch_Pause7),
                                               FE_W(PAUSE_WIDTH));
@@ -14301,7 +14400,7 @@ static void UpdateInGamePauseMenu_(void)
             usprintf(text, UC(a));
             LastTouch_Pause8 = Touch_Pause8;
             Touch_Pause8 = DrawOptionAsButton(limeUC(text), PAUSE_X,
-                                              PAUSE_ROW0 + 7 * PAUSE_ROW_PITCH,
+                                              PortPauseRowY(7),
                                               PAUSE_SCALE,
                                               PAUSE_COL(LastTouch_Pause8),
                                               FE_W(PAUSE_WIDTH));
@@ -14309,6 +14408,26 @@ static void UpdateInGamePauseMenu_(void)
                 PauseClick();
                 PortTrainInputs ^= 1;
                 PortTrainSave();
+                return;
+            }
+        }
+
+        /* ---- port, not in the binary: PHOTO MODE, the last row ---- */
+        if (PortPhotoRow) {
+            static long Touch_Pause9, LastTouch_Pause9;
+            void photo_open(int from_menu);
+
+            usprintf(text, UC(Language[0] == 'E' && Language[1] == 'S'
+                              ? "MODO FOTO" : "PHOTO MODE"));
+            LastTouch_Pause9 = Touch_Pause9;
+            Touch_Pause9 = DrawOptionAsButton(limeUC(text), PAUSE_X,
+                                              PortPauseRowY(8),
+                                              PAUSE_SCALE,
+                                              PAUSE_COL(LastTouch_Pause9),
+                                              FE_W(PAUSE_WIDTH));
+            if (PAUSE_RELEASED(LastTouch_Pause9, Touch_Pause9)) {
+                PauseClick();
+                photo_open(1);
                 return;
             }
         }

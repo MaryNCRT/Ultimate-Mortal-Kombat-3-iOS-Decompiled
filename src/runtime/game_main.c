@@ -117,6 +117,7 @@ void mayhem_set_dir(const char *ini_path);     /* gamecode_stubs.c */
 #include "render/rgl.h"
 #include "smooth_models.h"
 #include "fatal_trainer.h"
+#include "photo_mode.h"
 #if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
 #include <unistd.h>                 /* readlink, setenv */
 #endif
@@ -196,6 +197,14 @@ static int scripted_key(int code)
         { "p", PK_5_P }, { "b", PK_5_B }, { "k", PK_5_K }, { "r", PK_5_R },
         { "esc", PK_SETTINGS }, { "ok", PK_OK },
         { "tab", PK_DBG_PAGE_NEXT },
+        /* PHOTO MODE (photo_mode.c) */
+        { "photo", PK_PHOTO }, { "shot", PK_PH_SHOT }, { "phtab", PK_PH_TAB },
+        { "phhide", PK_PH_HIDE }, { "phreset", PK_PH_RESET },
+        { "phrise", PK_PH_RISE }, { "phsink", PK_PH_SINK },
+        { "phrolll", PK_PH_ROLL_L }, { "phrollr", PK_PH_ROLL_R },
+        { "phup", PK_PH_NAV_UP }, { "phdown", PK_PH_NAV_DOWN },
+        { "phleft", PK_PH_NAV_LEFT }, { "phright", PK_PH_NAV_RIGHT },
+        { "pause", PK_PAUSE },
     };
     const char *q = getenv("UMK3_KEYS");
 
@@ -395,6 +404,8 @@ static unsigned g_p2pad_settings = 1u << PB_HOME;
 static unsigned g_pad_moves = 1u << PB_SELECT;
 /* port: the pad's VERSUS RULES (pad_rules=, SELECT unless bound) */
 static unsigned g_pad_rules = 1u << PB_SELECT;
+/* PHOTO MODE in and out (pad_photo=, photo_mode.c): both sticks pressed */
+static unsigned g_pad_photo = (1u << PB_L3) | (1u << PB_R3);
 static unsigned g_p2pad_rules = 1u << PB_SELECT;
 
 /* Player two's pad, the same actions and defaults: the launcher's GAMEPAD
@@ -1298,6 +1309,8 @@ static void read_config(const char *dir)
                 g_pad_settings = pad_combo(v);
             else if (strcmp(line + 4, "rules") == 0)
                 g_pad_rules = pad_combo(v);
+            else if (strcmp(line + 4, "photo") == 0)
+                g_pad_photo = pad_combo(v);
         }
         else if (strcmp(line, "pad") == 0) {  /* auto, off, xinput, vvvv:pppp */
             plat_pad_select(v);
@@ -1351,6 +1364,8 @@ static void read_config(const char *dir)
                 plat_bind_key(PK_COLOR, atoi(v));
             else if (strcmp(line + 4, "special") == 0)
                 plat_bind_key(PK_SPECIAL, atoi(v));
+            else if (strcmp(line + 4, "photo") == 0)
+                plat_bind_key(PK_PHOTO, atoi(v));
             else {
                 /* debug mode's keys, from the launcher's CONTROLS section */
                 static const struct { const char *n; int code; } dbg[] = {
@@ -2109,6 +2124,19 @@ static void render_present(void)
               g_rs_vx, g_rs_vy, g_rs_vx + g_rs_vw, g_rs_vy + g_rs_vh,
               GL_COLOR_BUFFER_BIT, GL_LINEAR);
     g_rs_bind_fb(RS_FRAMEBUFFER, 0);
+}
+
+/* PHOTO MODE (photo_mode.c): a photo is read from the render buffer, at
+ * the 3D resolution, when the game draws into one; else from the game's
+ * area on the window. Once the frame is presented there, before the swap. */
+static void photo_capture(int vx, int vy, int vw, int vh)
+{
+    if (g_rs_on && g_rs_fbo) {
+        g_rs_bind_fb(RS_READ_FRAMEBUFFER, g_rs_fbo);
+        photo_after_present(0, 0, g_rs_w, g_rs_h);
+        g_rs_bind_fb(RS_FRAMEBUFFER, 0);
+    } else
+        photo_after_present(vx, vy, vw, vh);
 }
 
 /* plat_ask draws its box on the window over the frame so far: put the
@@ -4194,6 +4222,8 @@ int main(int argc, char **argv)
                                                   == g_p2pad_settings);
                 if (esc && !was_esc && g_rp_hidden && rp_playing())
                     g_rp_hidden = 0;    /* HIDE: Esc has the player back */
+                else if (esc && !was_esc && photo_on())
+                    photo_close();      /* PHOTO MODE: Esc goes back */
                 else if (esc && !was_esc && !set_menu_is_open()
                     && !dbg_menu_is_open())
                     set_menu_toggle();
@@ -4295,11 +4325,16 @@ int main(int argc, char **argv)
                 static int was_f2, was_f3;
                 /* the pad's combination (pad_dbg_menu=, L3+R3 unless the
                  * launcher set another) opens and closes the menu too */
+                /* in a fight PHOTO MODE comes first where its shortcut is
+                 * the same key or combination (F3, L3+R3 by default) */
+                int photo_too = CurrentTask == 6 && (photo_allowed() || photo_on());
                 int f2 = plat_key(PK_TEST)
                          || (g_pad_dbg_mask
                              && (g_pad.buttons & g_pad_dbg_mask)
-                                == g_pad_dbg_mask),
-                    f3 = plat_key(PK_BACK);
+                                == g_pad_dbg_mask
+                             && !(photo_too && g_pad_dbg_mask == g_pad_photo)),
+                    f3 = plat_key(PK_BACK)
+                         && !(photo_too && plat_key_bound(PK_BACK) == plat_key_bound(PK_PHOTO));
                 if (f2 && !was_f2)
                     dbg_menu_toggle();
                 if (f3 && !was_f3 && dbg_keys_on())
@@ -4347,8 +4382,10 @@ int main(int argc, char **argv)
                 rp_keys(plat_key(PK_OK) || plat_key(PK_PAUSE),
                         plat_key(PK_LEFT), plat_key(PK_RIGHT),
                         plat_key(PK_UP), plat_key(PK_DOWN), plat_key(PK_MOVES));
-            else
+            else {
                 hud_keys();
+                photo_tick(&g_pad, g_pad_photo, game_key);  /* PHOTO MODE */
+            }
             pad_skip();
             if (g_cfg_debug_keys && dbg_keys_on()
                 && !(GameMode == 1 && (CurrentTask == 6 || CurrentTask == 9))) {
@@ -4371,7 +4408,8 @@ int main(int argc, char **argv)
             }
             /* the pad drives the front end and the pause menu (pad_nav.c) */
             pad_nav_begin(!set_menu_is_open() && !dbg_menu_is_open()
-                          && (CurrentTask == 3 || (CurrentTask == 6 && GamePaused)));
+                          && (CurrentTask == 3 || (CurrentTask == 6 && GamePaused
+                                                   && !photo_on())));
             /* the pad's highlight lights its button as a resting finger
              * does: the touch held there for this frame, neither a press
              * (the last place is the same) nor a release, and lifted again
@@ -4837,6 +4875,7 @@ int main(int argc, char **argv)
         plat_input_used();      /* the taps this frame's ticks have seen */
         plat_audio_update();
         render_present();
+        photo_capture(vx, vy, vw, vh);  /* PHOTO MODE: a photo asked for */
 
         if (getenv("UMK3_SHOTS")) {
             static long done_upto = -1;

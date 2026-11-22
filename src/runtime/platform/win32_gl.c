@@ -29,6 +29,7 @@ static HGLRC     g_rc;
 static bool      g_quit;
 static LARGE_INTEGER g_freq, g_start;
 static bool      g_mouse_down;
+static int       g_mouse_btn;           /* bit 0 left, 1 right, 2 middle */
 static bool      g_focused = true;
 static int       g_mouse_x, g_mouse_y;
 static int       g_wheel;               /* WHEEL_DELTA units not yet taken */
@@ -63,13 +64,30 @@ static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
      * from silently leaving the button down. */
     case WM_LBUTTONDOWN:
         g_mouse_down = true;
+        g_mouse_btn |= 1;
         SetCapture(h);
         g_mouse_x = (short)LOWORD(lp);
         g_mouse_y = (short)HIWORD(lp);
         return 0;
     case WM_LBUTTONUP:
         g_mouse_down = false;
-        ReleaseCapture();
+        g_mouse_btn &= ~1;
+        if (!g_mouse_btn)
+            ReleaseCapture();
+        return 0;
+    /* the right and middle buttons: PHOTO MODE's camera (port) */
+    case WM_RBUTTONDOWN:
+    case WM_MBUTTONDOWN:
+        g_mouse_btn |= msg == WM_RBUTTONDOWN ? 2 : 4;
+        SetCapture(h);
+        g_mouse_x = (short)LOWORD(lp);
+        g_mouse_y = (short)HIWORD(lp);
+        return 0;
+    case WM_RBUTTONUP:
+    case WM_MBUTTONUP:
+        g_mouse_btn &= ~(msg == WM_RBUTTONUP ? 2 : 4);
+        if (!g_mouse_btn)
+            ReleaseCapture();
         return 0;
     case WM_MOUSEMOVE:
         g_mouse_x = (short)LOWORD(lp);
@@ -95,6 +113,7 @@ static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         if (!g_focused) {               /* no key stays held across a focus loss */
             memset(g_key, 0, sizeof g_key);
             g_mouse_down = false;
+            g_mouse_btn = 0;
         }
         return 0;
     case WM_SIZE: {
@@ -641,6 +660,11 @@ int plat_mouse(int *x, int *y)
     return g_mouse_down ? 1 : 0;
 }
 
+int plat_mouse_buttons(void)
+{
+    return g_mouse_btn;
+}
+
 int plat_mouse_wheel(void)
 {
     int n = g_wheel / 120;
@@ -681,6 +705,14 @@ static int g_vk[PK_COUNT] = {
     VK_DIVIDE, VK_MULTIPLY, VK_NUMPAD1, /* P2: pause, moves list, accept */
     'R',                                /* the versus rules */
     'T', 'C',                           /* the select screen: OUTFIT, COLOR */
+    /* PHOTO MODE (port, photo_mode.c) */
+    [PK_PHOTO] = VK_F3,
+    [PK_PH_NAV_UP] = VK_UP, [PK_PH_NAV_DOWN] = VK_DOWN,
+    [PK_PH_NAV_LEFT] = VK_LEFT, [PK_PH_NAV_RIGHT] = VK_RIGHT,
+    [PK_PH_RISE] = 'E', [PK_PH_SINK] = 'Q',
+    [PK_PH_ROLL_L] = 'Z', [PK_PH_ROLL_R] = 'C',
+    [PK_PH_RESET] = 'R', [PK_PH_HIDE] = 'H',
+    [PK_PH_SHOT] = VK_SPACE, [PK_PH_TAB] = VK_TAB,
 };
 
 void plat_key_label(int code, char *out, int n)
@@ -1313,6 +1345,10 @@ static int pad_winmm(PAD_SLOT *ps, PLAT_PAD *out)
     {
         DWORD x = axis_norm(ps, 0, j.dwXpos), y = axis_norm(ps, 1, j.dwYpos);
 
+        /* as they are, too (port: PHOTO MODE); up is positive */
+        if (ps->live[0]) out->ax[0] = ((float)x - 32767.5f) / 32767.5f;
+        if (ps->live[1]) out->ax[1] = (32767.5f - (float)y) / 32767.5f;
+        if (ps->live[3]) out->ax[3] = (32767.5f - (float)axis_norm(ps, 3, j.dwRpos)) / 32767.5f;
         if (ps->live[1] && y < 20000) out->up = 1;
         if (ps->live[1] && y > 45535) out->down = 1;
         if (ps->live[0] && x < 20000) out->left = 1;
@@ -1324,10 +1360,12 @@ static int pad_winmm(PAD_SLOT *ps, PLAT_PAD *out)
         DWORD r = axis_norm(ps, w, w == 0 ? j.dwXpos : w == 1 ? j.dwYpos : w == 2 ? j.dwZpos
                                        : w == 3 ? j.dwRpos : w == 4 ? j.dwUpos : j.dwVpos);
         out->rx = !ps->live[w] ? 0 : r < 12000 ? -1 : r > 53535 ? 1 : 0;
+        if (ps->live[w]) out->ax[2] = ((float)r - 32767.5f) / 32767.5f;
     } else {   /* the right stick across: Z on a Sony or 8BitDo pad, U elsewhere */
         int z = (ps->vidpid & 0xffff) == 0x054c || (ps->vidpid & 0xffff) == 0x2dc8;
         DWORD r = z ? axis_norm(ps, 2, j.dwZpos) : axis_norm(ps, 4, j.dwUpos);
         out->rx = !ps->live[z ? 2 : 4] ? 0 : r < 12000 ? -1 : r > 53535 ? 1 : 0;
+        if (ps->live[z ? 2 : 4]) out->ax[2] = ((float)r - 32767.5f) / 32767.5f;
     }
     snprintf(out->name, sizeof out->name, "%s", ps->name);
     out->kind = (ps->vidpid & 0xffff) == 0x054c                 /* Sony */
@@ -1374,6 +1412,10 @@ static int pad_xinput(PAD_SLOT *ps, PLAT_PAD *out)
     out->left  = (s.buttons & XI_DLEFT)  || s.lx < -10000;
     out->right = (s.buttons & XI_DRIGHT) || s.lx >  10000;
     out->rx = s.rx < -20000 ? -1 : s.rx > 20000 ? 1 : 0;
+    out->ax[0] = s.lx / 32767.0f;       /* the sticks as they are (port: PHOTO MODE) */
+    out->ax[1] = s.ly / 32767.0f;
+    out->ax[2] = s.rx / 32767.0f;
+    out->ax[3] = s.ry / 32767.0f;
     snprintf(out->name, sizeof out->name, "XInput pad %lu", i + 1);
     out->kind = 1;
     return out->connected = 1;
