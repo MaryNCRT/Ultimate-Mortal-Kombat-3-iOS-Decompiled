@@ -161,6 +161,151 @@ cbuffer Lights : register(b1) { float4 lb_eye; float4 lb_sky; float4 lb_ground;
 // shadow himself (self).
 Texture2D patlas : register(t2);
 
+#ifdef UMK3_RT
+// RTX (graphics phase 3; built with dxc, shader model 6.5, rgl_d3d12.c): the
+// scene's triangles in an acceleration structure (rgl_ff.c rt_commit), one
+// instance a caster -- 0 the stage, a fighter from 1 -- traced inline from
+// the pixel: the sun's shadows in place of the map's, every ENHANCED
+// LIGHTING light's shadows, the ambient light's occlusion, and the lights'
+// colour bounced once off what is near. A fighter's own body is passed
+// over (its pose there is a frame old and its coarse mesh, as the map's).
+RaytracingAccelerationStructure rt_scene : register(t4);
+
+float3 rt_sun() { return asfloat(lb_count.yzw); }   // toward the sun; 0: no RTX
+bool rt_on() { float3 L = rt_sun(); return dot(L, L) > 0.5; }
+
+// the nearest hit's instance (-1 none) and its distance
+int rt_trace(float3 O, float3 D, float tmax, int self, out float t)
+{
+    RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
+    RayDesc r;
+    r.Origin = O;
+    r.Direction = D;
+    r.TMin = 0.005;
+    r.TMax = tmax;
+    q.TraceRayInline(rt_scene, RAY_FLAG_NONE, 0xFF, r);
+    while (q.Proceed()) {
+        int id = (int)q.CandidateInstanceID();
+        if (self == 0 || id != self)
+            q.CommitNonOpaqueTriangleHit();
+    }
+    t = tmax;
+    if (q.CommittedStatus() != COMMITTED_TRIANGLE_HIT)
+        return -1;
+    t = q.CommittedRayT();
+    return (int)q.CommittedInstanceID();
+}
+
+// anything between: 0 or 1, the first hit ends the search
+float rt_clear(float3 O, float3 D, float tmax, int self)
+{
+    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
+    RayDesc r;
+    r.Origin = O;
+    r.Direction = D;
+    r.TMin = 0.005;
+    r.TMax = tmax;
+    q.TraceRayInline(rt_scene, RAY_FLAG_NONE, 0xFF, r);
+    while (q.Proceed()) {
+        int id = (int)q.CandidateInstanceID();
+        if (self == 0 || id != self)
+            q.CommitNonOpaqueTriangleHit();
+    }
+    return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.0 : 1.0;
+}
+
+float rt_noise(float2 px) { return frac(52.9829189 * frac(dot(px, float2(0.06711056, 0.00583715)))); }
+
+// a frame of reference about a direction
+void rt_basis(float3 N, out float3 T, out float3 B)
+{
+    T = normalize(abs(N.z) < 0.9 ? cross(N, float3(0.0, 0.0, 1.0)) : cross(N, float3(1.0, 0.0, 0.0)));
+    B = cross(N, T);
+}
+
+// the sun: RT_RAYS rays in a small cone around it, a soft edge as the map's
+// nine texels give (a Vogel disc turned for each pixel by interleaved
+// gradient noise -- Jimenez, Call of Duty: Advanced Warfare, 2014); the
+// shade as the map's, 0.45 under a fighter, 0.65 under the stage
+#define RT_RAYS 2
+#define RT_CONE 0.03
+float rt_light(float3 P, float3 N, int self, float2 px)
+{
+    float3 L = rt_sun(), T, B, O;
+    float turn, sum = 0.0, t;
+    int k;
+    if (!rt_on())
+        return -1.0;
+    if (dot(N, L) < 0.0)
+        N = -N;
+    rt_basis(L, T, B);
+    O = P + N * 0.02;
+    turn = 6.2831853 * rt_noise(px);
+    [loop] for (k = 0; k < RT_RAYS; k++) {
+        float a = k * 2.3999632 + turn, rr = sqrt((k + 0.5) / RT_RAYS) * RT_CONE;
+        int id = rt_trace(O, normalize(L + (T * cos(a) + B * sin(a)) * rr), 1000.0, self, t);
+        sum += id < 0 ? 1.0 : id != 0 ? 0.45 : 0.65;
+    }
+    return sum / RT_RAYS;
+}
+
+// the lights' light where a ray stopped, as dynamic() gives it, shadows aside
+float3 rt_lights_at(float3 P, float3 N)
+{
+    float3 sum = float3(0.0, 0.0, 0.0);
+    int n = min(lb_count.x, 16);
+    [loop] for (int i = 0; i < n; i++) {
+        Light L = lb_l[i];
+        int type = int(L.dir.w + 0.5);
+        float3 Ld;
+        float att = 1.0;
+        if (type == 2)
+            Ld = -normalize(L.dir.xyz);
+        else {
+            float3 d = L.pos.xyz - P;
+            float dist = length(d), x = dist / max(L.pos.w, 1e-4);
+            if (x >= 1.0)
+                continue;
+            Ld = d / max(dist, 1e-4);
+            float w = saturate(1.0 - x * x * x * x);
+            att = w * w / (1.0 + 4.0 * x * x);
+        }
+        sum += L.col.rgb * L.col.w * att * max(dot(N, Ld), 0.25);
+    }
+    return sum;
+}
+
+// the ambient light: RT_GI rays over the hemisphere (cosine weighted), what
+// is near within RT_AO_FAR occluding it, and what they meet giving back the
+// lights' colour on it -- the stage's albedo taken as RT_ALBEDO, a fighter's
+// a little less. occ: the ambient left, 0..1
+#define RT_GI 3
+#define RT_AO_FAR 0.9
+#define RT_GI_FAR 2.5
+#define RT_ALBEDO 0.55
+float3 rt_ambient(float3 P, float3 N, int self, float2 px, out float occ)
+{
+    float3 T, B, O = P + N * 0.02, gi = float3(0.0, 0.0, 0.0);
+    float turn = 6.2831853 * rt_noise(px + 17.0), vis = 0.0, t;
+    int k;
+    rt_basis(N, T, B);
+    [loop] for (k = 0; k < RT_GI; k++) {
+        float u = (k + rt_noise(px + k * 5.0)) / RT_GI, a = k * 2.3999632 + turn;
+        float rr = sqrt(u), z = sqrt(1.0 - u);
+        float3 D = normalize(T * (cos(a) * rr) + B * (sin(a) * rr) + N * z);
+        int id = rt_trace(O, D, RT_GI_FAR, self, t);
+        if (id < 0 || t > RT_AO_FAR)
+            vis += id < 0 ? 1.0 : saturate((t - RT_AO_FAR) / RT_AO_FAR + 0.5);
+        if (id >= 0) {
+            float3 H = O + D * t;
+            gi += rt_lights_at(H, -D) * (id != 0 ? RT_ALBEDO * 0.8 : RT_ALBEDO) / (1.0 + t * t);
+        }
+    }
+    occ = vis / RT_GI;
+    return gi / RT_GI;
+}
+#endif
+
 float point_shadow(int slot, float3 D, float far, int self)
 {
     float3 ad = abs(D), F, U;
@@ -228,6 +373,11 @@ float3 dynamic(float3 P, float3 N, float3 albedo, float smap, bool fighter, int 
             att = w * w / (1.0 + 4.0 * x * x);   // softer: reaches the fighters as they near it (Mary)
             if (type == 1)
                 att *= smoothstep(L.cone.y, L.cone.x, dot(-Ld, normalize(L.dir.xyz)));
+#ifdef UMK3_RT
+            if (rt_on())                // RTX: every light's shadows, traced
+                att *= att > 0.02 ? rt_clear(P + Ld * 0.03, Ld, max(dist - 0.06, 0.01), self) : 1.0;
+            else
+#endif
             if (L.cone.z > 0.5)         // a light with shadows (point_shadows)
                 att *= point_shadow(int(L.cone.z + 0.5) - 1, P - L.pos.xyz, L.pos.w, self);
         }
@@ -410,6 +560,7 @@ float ao_at(float2 fc, bool fighter)
     float ws = wt.x + wt.y + wt.z + wt.w;
     return ws > 1e-4 ? dot(wt, float4(a00.r, a10.r, a01.r, a11.r)) / ws : 1.0;
 }
+
 
 // CONTACT SHADOWS: as ff.frag's contact_at
 float contact_at(float2 fc, bool fighter)
@@ -618,7 +769,15 @@ float4 ps(PSIn i) : SV_Target
         return pack_depth(i.pos.w / lb_aoproj.z, (shadow >> 4) != 0 ? 255.0 : 0.0);
     if (sm == 1)
     {
-        float lt = light_at(p, qx, qy, shadow >> 4);
+        float lt = -1.0;
+#ifdef UMK3_RT
+        {
+            float3 Nr = dot(i.n, i.n) > 0.25 ? normalize(i.n) : (dot(fn, fn) > 1e-20 ? normalize(fn) : float3(0.0, 0.0, 1.0));
+            lt = rt_light(i.p, Nr, shadow >> 4, i.pos.xy);
+        }
+#endif
+        if (lt < 0.0)
+            lt = light_at(p, qx, qy, shadow >> 4);
         bool fighter = (shadow >> 4) != 0;
         lt = min(lt, contact_at(i.pos.xy, fighter));   // CONTACT SHADOWS
         // in linear light (gamma 2.2), as the walkthrough's: the relief and
@@ -654,6 +813,14 @@ float4 ps(PSIn i) : SV_Target
                 lin += dynamic(i.p, N, al, sm2, fighter, shadow >> 4);
                 // AMBIENT OCCLUSION over everything, last (as ff.frag)
                 float ao = max(lerp(1.0, ao_at(i.pos.xy, fighter), fighter ? lb_aoparm2.y : 1.0), lb_aoparm.z);
+#ifdef UMK3_RT
+                if (rt_on()) {          // RTX: traced in its place, and the lights' colour bounced
+                    float occ;
+                    float3 gi = rt_ambient(i.p, N, shadow >> 4, i.pos.xy, occ);
+                    ao = max(lerp(1.0, occ, fighter ? 0.6 : 0.85), lb_aoparm.z);
+                    lin += al * gi;
+                }
+#endif
                 lin *= ao;
                 if (lb_aodbg.x > 0.5 && lb_aoparm2.w > 0.5)    // a debug view: that, alone
                     return float4(ao_debug_view(i.pos.xy, ao), 1.0);

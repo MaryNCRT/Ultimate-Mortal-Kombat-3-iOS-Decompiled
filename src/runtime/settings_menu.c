@@ -134,6 +134,7 @@ enum {
     R_AUDIODEV, R_GPU,                  /* SOUND OUTPUT, GRAPHICS CARD: at the next start */
     R_GQ,                               /* GRAPHICS QUALITY's preset (gfx_preset.c) */
     R_CONTACT, R_BLOOM, R_TONEMAP,      /* and three of the switches it sets */
+    R_RTX,                              /* RTX: the sun's shadows ray traced (next start) */
     R_DLSS5,                            /* DLSS 5 at the next start (neural_mod.c) */
     R_DLSS5_STAGE, R_DLSS5_FIGHT,       /* its layers: the stage, the fighters */
     R_DLSS5_PRESET,                     /* its preset: the model and strengths */
@@ -811,6 +812,15 @@ static void build(void)
         add(R_CONTACT, 0, tx("SOMBRAS DE CONTACTO", "CONTACT SHADOWS"), "< %s >",
             rgl_contact_shadows ? tx("ACTIVADAS", "ON") : tx("DESACTIVADAS", "OFF"));
         g_rows[g_n - 1].en = rgl_shadows && rgl_ao;
+        /* RTX (render/rgl.h rgl_rt): the sun's shadows ray traced, Direct3D
+         * 12 with DXR 1.1; at the next start, the shaders differ */
+        add(R_RTX, 0, tx("RTX: SOMBRAS CON RAY TRACING", "RTX: RAY-TRACED SHADOWS"), "< %s >",
+            !rgl_rt ? tx("DESACTIVADAS", "OFF")
+            : rgl_rt_live ? tx("ACTIVADAS", "ON")
+            : rgl_renderer != RGL_D3D12 ? tx("ACTIVADAS (SOLO DIRECT3D 12)", "ON (DIRECT3D 12 ONLY)")
+            : rgl_rt_tier < 0xb ? tx("ACTIVADAS (ESTA GPU NO TIENE DXR 1.1)", "ON (THIS GPU HAS NO DXR 1.1)")
+            : tx("ACTIVADAS (AL REINICIAR)", "ON (AT THE NEXT START)"));
+        g_rows[g_n - 1].en = rgl_shadows != 0;
         /* its debug views are in the debug menu (debug_menu.c ROW_AODBG) */
         add(R_HEAD, 0, rgl_renderer == RGL_OPENGL
                            ? tx("  SOLO CON VULKAN O DIRECT3D 12", "  ONLY WITH VULKAN OR DIRECT3D 12")
@@ -1021,7 +1031,7 @@ static int has_value(int kind)
     switch (kind) {
     case R_DISPLAY: case R_MONITOR: case R_RES: case R_RRES: case R_AA: case R_TEXQ:
     case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_SMOOTH: case R_SMODEL: case R_VSYNC: case R_LOWLAT: case R_NOOB: case R_CORNER: case R_CLICKS: case R_SLIDE: case R_AUDIODEV: case R_GPU: case R_PLAYER: case R_LAYOUT:
-    case R_GQ: case R_CONTACT: case R_BLOOM: case R_TONEMAP: case R_DLSS5: case R_DLSS5_STAGE: case R_DLSS5_FIGHT: case R_DLSS5_PRESET: case R_DLSS5_NR:
+    case R_GQ: case R_CONTACT: case R_RTX: case R_BLOOM: case R_TONEMAP: case R_DLSS5: case R_DLSS5_STAGE: case R_DLSS5_FIGHT: case R_DLSS5_PRESET: case R_DLSS5_NR:
     case R_RTSHADOW: case R_AO: case R_AODBG: case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE: case R_PCOLOR2:
     case R_PICONS:
         return 1;
@@ -1371,6 +1381,10 @@ static void change(int kind, int d)
         rgl_contact_shadows = !rgl_contact_shadows;
         g_dirty = 1;
         return;
+    case R_RTX:                         /* umk3.ini, for the next start */
+        rgl_rt = !rgl_rt;
+        g_dirty = 1;
+        return;
     case R_BLOOM:
         gfx_bloom = k_bloom[wrap(bloom_index() + d, 4)];
         g_dirty = 1;
@@ -1622,6 +1636,12 @@ static int drop_fill(int kind)
         snprintf(L[1], 48, "%s", tx("ACTIVADAS", "ON"));
         n = 2;
         g_drop_cur = rgl_contact_shadows ? 1 : 0;
+        break;
+    case R_RTX:
+        snprintf(L[0], 48, "%s", tx("DESACTIVADAS", "OFF"));
+        snprintf(L[1], 48, "%s", tx("ACTIVADAS", "ON"));
+        n = 2;
+        g_drop_cur = rgl_rt ? 1 : 0;
         break;
     case R_DLSS5:
         snprintf(L[0], 48, "%s", tx("DESACTIVADO", "OFF"));
@@ -2626,6 +2646,7 @@ static void save_ini(void)
     put("rt_shadows", "%d", rgl_shadows);
     put("ao", "%d", rgl_ao);
     put("contact_shadows", "%d", rgl_contact_shadows);
+    put("rt", "%d", rgl_rt);
     put("bloom", "%d", gfx_bloom);
     put("tonemap", "%d", gfx_tonemap);
     put("graphics_preset", "%s", gfx_preset_key(gfx_preset()));

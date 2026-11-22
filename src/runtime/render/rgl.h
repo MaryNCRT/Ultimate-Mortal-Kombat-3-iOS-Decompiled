@@ -199,6 +199,11 @@ typedef struct rgl_backend {
     void (*draw_indexed)(const rgl_pipe *p, const rgl_frag *f, int tex, const rgl_samp *s,
                          const rgl_rect *viewport, const rgl_rect *scissor,
                          const rgl_vtx *v, int nv, const unsigned *idx, int ni);
+    /* RTX: this frame's casting triangles in the world, `ngeo` groups (0 the
+     * stage, a fighter from 1; xyz[g] ntris[g] triangles of 3 vertices of 3
+     * floats), made the acceleration structure the next frame's draws trace
+     * against. NULL: no ray tracing */
+    void (*rt_scene)(const float *const *xyz, const int *ntris, int ngeo);
 } rgl_backend;
 
 /* DYNAMIC LIGHTS (ENHANCED LIGHTING, rgl_ff.c): point, spot and directional
@@ -272,6 +277,12 @@ extern int rgl_layers;
 /* RTX (graphics phase 3): the device DXR tier, read when Direct3D 12 opens
  * (rgl_d3d12.c; 0x0b is DXR 1.1, what inline ray queries need); 0 elsewhere */
 extern int rgl_rt_tier;
+/* RTX (umk3.ini rt=1, GRAPHICS > RTX; with ENHANCED LIGHTING, Direct3D 12
+ * and DXR 1.1): the sun's shadows traced against the scene's triangles in
+ * place of the shadow map. rgl_rt_on() says whether this run traces. */
+extern int rgl_rt;
+extern int rgl_rt_live;                    /* the backend traces this run (rgl_d3d12.c) */
+int rgl_rt_on(void);
 /* 1 while a fight is on (game_main.c, every frame): outside one -- the menus,
  * the select screen -- every draw is layer 0, whatever its camera */
 extern int rgl_in_fight;

@@ -136,6 +136,15 @@ built and checked in Direct3D 12 only; see the log entry below. Phase 3
 
 ## Detailed log (newest first)
 
+### 2026-11-22 -- RTX phase 3: ray-traced lighting (D3D12, DXR 1.1 inline ray queries)
+
+- `rt=1` (GRAPHICS > RTX: RAY-TRACED SHADOWS, next start; needs ENHANCED LIGHTING, Direct3D 12, DXR 1.1). The casters the shadow map already gathers (rgl_ff.c, stage group 0, fighters 1..15) are committed each frame to `rt_scene` (rgl_d3d12.c): one BLAS per group + a TLAS, two sets alternating, built at the end of the frame's list; bound as root SRV t4.
+- Shaders: ff.hlsl `UMK3_RT` variant compiled with dxc (vs/ps 6.5, DXIL, both stages since a PSO cannot mix DXBC/DXIL); `shaders/build.py` takes dxc as a third argument. Sun direction rides in the light block's spare words (`lb_count.yzw`), 0 = RTX off -> falls back to the shadow map.
+- What it traces: the sun's shadows (2 rays, soft cone), every ENHANCED LIGHTING light's shadows, ambient occlusion (3 hemisphere rays, replaces HBAO when on) and one bounce of the lights' colour off what the rays hit (constant albedo; no material lookup yet). A fighter's own body is skipped (coarse proxy mesh, a frame old).
+- Measured RTX 5070, 1080p, Kano vs Sonya: GPU 5.3 ms vs 3.7 ms without; frame time 23.4 vs 22.5 ms. Note: ~23 ms a frame (~43 fps) **without RTX too** -- the general lag Mary reports predates RTX; still to investigate, with long loading screens.
+- Mary (2026-11-22): first version "no se ve un cambio" -- with a near-overhead sun only small contact shadows change. Lights/occlusion/bounce added; her reference captures (Pit stage, street stage) need **wet reflective floors** (reflections of lamps/glow/fighters), stronger coloured light and bloom -- next step: reflections. Not yet seen by Mary in game.
+- Deployed to WORK\release-0.1.12\Test with rt=1.
+
 ### 2026-11-22 (afternoon) -- DLSS 5: the interface a layer over everything
 
 Mary saw no neural effect with the ControlMask layers. AIO's lab notes say

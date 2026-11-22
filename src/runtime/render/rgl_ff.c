@@ -279,6 +279,7 @@ void rgl_ff_stop(void)
  * drawn, and the next frame's scene starts with no caster */
 static int g_had_scene;                 /* UMK3_LOG_SHADOW: a lit scene this frame */
 static unsigned g_frames_n;             /* frames presented, for the map's last place */
+static void rt_commit(void);
 void rgl_ff_frame(void)
 {
     g_frames_n++;
@@ -290,6 +291,7 @@ void rgl_ff_frame(void)
         g_had_scene = 0;
     }
     scene_flush();
+    rt_commit();                        /* RTX: the next frame traces this one's */
     SH_end_frame();
 }
 
@@ -1314,6 +1316,63 @@ static int invert(const mat4 *a, mat4 *out)
 
 int rgl_layers;                         /* rgl.h */
 int rgl_rt_tier;                        /* rgl.h: the DXR tier (rgl_d3d12.c) */
+int rgl_rt;                             /* rgl.h: umk3.ini rt= */
+int rgl_rt_live;                        /* rgl.h */
+
+int rgl_rt_on(void)
+{
+    return rgl_rt_live && rgl_shadows && B && B->rt_scene;
+}
+
+/* RTX: this frame's casting triangles, a group per caster (0 the stage, a
+ * fighter from 1), committed to the backend at the frame's end */
+#define RT_GEOS 16
+#define RT_MAX_TRIS 600000
+static float *g_rt_xyz[RT_GEOS];
+static int g_rt_n[RT_GEOS], g_rt_cap[RT_GEOS], g_rt_total;
+
+static void rt_add_tri(int g, const rgl_vtx *a, const rgl_vtx *b, const rgl_vtx *c)
+{
+    float *o;
+    if (g_rt_total >= RT_MAX_TRIS)
+        return;
+    if (g_rt_n[g] >= g_rt_cap[g]) {
+        int cap = g_rt_cap[g] ? g_rt_cap[g] * 2 : 4096;
+        float *n = (float *)realloc(g_rt_xyz[g], (size_t)cap * 9 * sizeof(float));
+        if (!n)
+            return;
+        g_rt_xyz[g] = n;
+        g_rt_cap[g] = cap;
+    }
+    o = g_rt_xyz[g] + (size_t)g_rt_n[g] * 9;
+    memcpy(o, a->p, 3 * sizeof(float));
+    memcpy(o + 3, b->p, 3 * sizeof(float));
+    memcpy(o + 6, c->p, 3 * sizeof(float));
+    g_rt_n[g]++;
+    g_rt_total++;
+}
+
+static void rt_add(const rgl_vtx *v, int n, const unsigned *idx, int ni, int id)
+{
+    int g = id < 0 ? 0 : id >= RT_GEOS ? RT_GEOS - 1 : id, i;
+    if (idx) {
+        for (i = 0; i + 2 < ni; i += 3)
+            rt_add_tri(g, &v[idx[i]], &v[idx[i + 1]], &v[idx[i + 2]]);
+    } else {
+        for (i = 0; i + 2 < n; i += 3)
+            rt_add_tri(g, &v[i], &v[i + 1], &v[i + 2]);
+    }
+}
+
+static void rt_commit(void)
+{
+    int g;
+    if (rgl_rt_on() && g_rt_total)
+        B->rt_scene((const float *const *)g_rt_xyz, g_rt_n, RT_GEOS);
+    for (g = 0; g < RT_GEOS; g++)
+        g_rt_n[g] = 0;
+    g_rt_total = 0;
+}
 int rgl_in_fight = 1;                   /* rgl.h: a fight is on (game_main.c sets it) */
 static int g_scene_cam;                 /* the 3D scene's camera is on (rgl_layers) */
 
@@ -2616,6 +2675,14 @@ static void ao_block(rgl_light_block *b)
      * space as the shaders' view_at has it (x right, y up, z ahead), so the
      * scene can march towards it through the occlusion's distances; 0 off */
     b->aodbg[1] = b->aodbg[2] = b->aodbg[3] = 0.0f;
+    {
+        /* RTX: the sun, toward it in the world, in the light block's spare
+         * words (the shader reads asfloat(lb_count.yzw)); 0 without RTX */
+        float sun[3] = { 0.0f, 0.0f, 0.0f };
+        if (rgl_rt_on())
+            memcpy(sun, SH.sun, sizeof sun);
+        memcpy(b->pad, sun, sizeof sun);
+    }
     if (rgl_contact_shadows && SH.valid && b->aoparm2[3] > 0.5f) {
         mat4 view;
         if (invert(&SH.inv_view, &view)) {
@@ -3223,6 +3290,8 @@ static void submit(int topo, rgl_vtx *v, int n)
         p.mask |= 0x10;                 /* the backend's layered blend */
     }
     if (g_sh_on == 2 && topo == RGL_TRIS) {
+        if (rgl_rt_on())                /* RTX: the same casters, traced */
+            rt_add(v, n, g_sub_idx, g_sub_ni, SH.caster);
         if (g_sub_idx)
             shadow_cast_idx(v, g_sub_idx, g_sub_ni, SH.caster);
         else
