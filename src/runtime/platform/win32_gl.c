@@ -16,6 +16,7 @@
 #include "ui_alert.h"
 #include "../render/rgl.h"
 #include "../neural_mod.h"
+static int borderless_row(void);        /* below: borderless's extra row */
 
 #include <stdint.h>
 #include <stdio.h>
@@ -338,7 +339,7 @@ bool plat_open(const char *title, int width, int height)
         m = mi.rcMonitor;
         g_wnd = CreateWindowA("LimeWindow", title, WS_POPUP,
                               m.left, m.top, m.right - m.left,
-                              m.bottom - m.top + 1, NULL, NULL, inst, NULL);
+                              m.bottom - m.top + borderless_row(), NULL, NULL, inst, NULL);
     } else {
         /* centred on the chosen monitor; Windows' own place without one */
         int x = CW_USEDEFAULT, y = CW_USEDEFAULT;
@@ -402,6 +403,15 @@ int plat_open_borderless;
  * then every Alt+Tab switches modes and the screen flickers; one row more
  * keeps it an ordinary window the desktop composes. Exclusive fullscreen
  * (g_mode set) wants the exact size. */
+/* Port: not with DLSS 5 (neural_mod.c) on Direct3D 12 -- its add-on takes
+ * a picture taller than the monitor for more than the screen can show and
+ * never starts; Direct3D 12's flip model composes an exact-size borderless
+ * window without the exclusive mode the row was for. */
+static int borderless_row(void)
+{
+    return neural_dlss5 && rgl_renderer == RGL_D3D12 ? 0 : 1;
+}
+
 void plat_fullscreen(void)
 {
     MONITORINFO mi;
@@ -412,7 +422,7 @@ void plat_fullscreen(void)
     SetWindowLongA(g_wnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
     SetWindowPos(g_wnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top,
                  mi.rcMonitor.right - mi.rcMonitor.left,
-                 mi.rcMonitor.bottom - mi.rcMonitor.top + (g_mode.dmSize ? 0 : 1),
+                 mi.rcMonitor.bottom - mi.rcMonitor.top + (g_mode.dmSize ? 0 : borderless_row()),
                  SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 }
 

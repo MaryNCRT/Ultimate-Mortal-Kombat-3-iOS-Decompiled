@@ -3,7 +3,7 @@
 // ENHANCED LIGHTING's relief (bump) as ff.frag's.
 struct VSIn { float4 pos : POSITION; float4 col : COLOR; float2 uv : TEXCOORD0; float4 sh : TEXCOORD1; float3 n : TEXCOORD2; float3 p : TEXCOORD3; };
 struct PSIn { float4 pos : SV_Position; float4 col : COLOR; float2 uv : TEXCOORD0; float4 sh : TEXCOORD1; float3 n : TEXCOORD2; float3 p : TEXCOORD3; };
-cbuffer PC : register(b0) { int mode; int afunc; float aref; int shadow; int lit; float bump; };
+cbuffer PC : register(b0) { int mode; int afunc; float aref; int shadow; int lit; float bump; float layer; };
 Texture2D tex : register(t0);
 Texture2D smap : register(t1);
 SamplerState smp : register(s0);
@@ -651,5 +651,7 @@ float4 ps(PSIn i) : SV_Target
         }
         c.rgb = pow(lin, 1.0 / 2.2);
     }
+    if (layer >= 3.0)                   // DLSS 5's layers: an opaque draw covers its pixels whole
+        c.a = 1.0;
     return c;
 }

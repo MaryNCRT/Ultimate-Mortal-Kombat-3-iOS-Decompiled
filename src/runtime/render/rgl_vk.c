@@ -1737,7 +1737,7 @@ static VkPipeline get_pipe(const rgl_pipe *k, int pass)
     ba.srcColorBlendFactor = ba.srcAlphaBlendFactor = vk_bf(k->src);
     ba.dstColorBlendFactor = ba.dstAlphaBlendFactor = vk_bf(k->dst);
     ba.colorBlendOp = ba.alphaBlendOp = VK_BLEND_OP_ADD;
-    ba.colorWriteMask = k->mask;
+    ba.colorWriteMask = k->mask & 15;   /* bit 4: D3D12's layers (rgl.h) */
     memset(&cb, 0, sizeof cb);
     cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     cb.attachmentCount = 1;

@@ -1199,7 +1199,20 @@ static ID3D12PipelineState *get_pso(const rgl_pipe *k, int samples, int depth)
     d.BlendState.RenderTarget[0].DestBlendAlpha = dx_bfa(k->dst);
     d.BlendState.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
     d.BlendState.RenderTarget[0].LogicOp = D3D12_LOGIC_OP_NOOP;
-    d.BlendState.RenderTarget[0].RenderTargetWriteMask = k->mask;
+    d.BlendState.RenderTarget[0].RenderTargetWriteMask = k->mask & 15;
+    if (k->mask & 0x10) {
+        /* DLSS 5's layers (rgl.h rgl_layers): the colour as the game blends
+         * it; the alpha the layer's code (the blend factor, set per draw in
+         * put) by the draw's coverage over what was there */
+        d.BlendState.RenderTarget[0].BlendEnable = TRUE;
+        if (!k->blend) {
+            d.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
+            d.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ZERO;
+        }
+        d.BlendState.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_BLEND_FACTOR;
+        d.BlendState.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
+        d.BlendState.RenderTarget[0].RenderTargetWriteMask = (UINT8)((k->mask & 7) | 8);
+    }
     d.SampleMask = 0xffffffffu;
     d.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
     d.RasterizerState.CullMode = k->cull == RGL_CULL_FRONT ? D3D12_CULL_MODE_FRONT
@@ -1433,6 +1446,11 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     ID3D12GraphicsCommandList_RSSetViewports(g_list, 1, vp);
     ID3D12GraphicsCommandList_RSSetScissorRects(g_list, 1, sc);
     ID3D12GraphicsCommandList_SetGraphicsRoot32BitConstants(g_list, 0, sizeof *f / 4, f, 0);
+    if (f->layer > 0.0f) {              /* DLSS 5's layers: the code this draw leaves in alpha */
+        float v = f->layer >= 3.0f ? f->layer - 3.0f : f->layer - 1.0f, bf[4];
+        bf[0] = bf[1] = bf[2] = bf[3] = v;
+        ID3D12GraphicsCommandList_OMSetBlendFactor(g_list, bf);
+    }
     ID3D12GraphicsCommandList_SetGraphicsRootDescriptorTable(g_list, 1, gpu(g_srv_heap, g_srv_inc, g_srv_next));
     ID3D12GraphicsCommandList_SetGraphicsRootDescriptorTable(g_list, 2, gpu(g_samp_heap, g_samp_inc, ss));
     ID3D12GraphicsCommandList_SetGraphicsRootConstantBufferView(g_list, 3, g_laddr);
