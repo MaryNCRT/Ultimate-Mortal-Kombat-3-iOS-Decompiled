@@ -10,6 +10,13 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
+- **DLSS 5 mod, in the game:** our own build of ReShade 6.8.0
+  (`tools/neural/build_reshade.py`, no banner) loads DLSS5-Feeder 2.0.0 from
+  the mod's folder. The feeder gets the game's colour and depth and starts
+  NVIDIA's NGX on the game's Direct3D 12 device. While the mod is loaded the
+  game draws without MSAA, which ReShade cannot read. The neural pass itself
+  waits on NVIDIA's DLLs, which were not on the test machine.
+
 - PHOTO MODE's HIDE MENU / MENU button shows the key's picture (or the pad's
   north button while a pad is in use) instead of "(H)" (Mary). Compiled; not
   yet seen in the game.

@@ -116,6 +116,43 @@ built and checked in Direct3D 12 only; see the log entry below. Phase 3
 
 ## Detailed log (newest first)
 
+### 2026-11-22 (morning) -- the DLSS 5 mod in the game: our ReShade, the feed
+
+Route A, as Mary chose: ReShade 6.8.0 built here from its source
+(`tools/neural/build_reshade.py`: the v6.8.0 tag with its submodules, MSBuild
+Release|64-bit = RESHADE_ADDON=2, the banner never drawn), and the
+DLSS5-Feeder 2.0.0 that Mary put in `D:\MK3 PROJECT\DLSS5`. ReShade.fxh comes
+from crosire/reshade-shaders' slim branch (CC0). Mary's source zip of ReShade
+6.8.0 matched the tag's `source/` exactly (diff -rq).
+
+Run in `WORK\dlss5-test` (muted, D3D12, RTX 5070, driver 621.24,
+`UMK3_DLSS5_PROBE=1`). ReShade registered its hooks, installed the delayed
+d3d12 hooks when rgl_d3d12.c loaded d3d12.dll, redirected D3D12CreateDevice,
+loaded the add-on from the mod's folder ("Registered add-on DLSS 5 Feed
+2.0.0 ... API version 20") and made its runtime from the mod's ReShade.ini.
+DLSS5_Feed.fx compiled in 9.7 s the first time, 24.7 s after a definition
+changed, and 0.07 s from the cache. The feeder found its technique and
+textures, opened a same-device D3D12 session on the game's device and
+initialised NGX (NVSDK_NGX_D3D12_Init Success). It looked for
+nvngx_dlss.dll / nvngx_dlssnr.dll **in the mod's folder** (so
+SetDllDirectory is not even needed for it), and stopped there because they
+are absent. The picture is unchanged, which is what Mary saw.
+
+Fixed from what the run showed:
+- The game's 8x MSAA depth could not be read ("Generic Depth ... cannot read
+  multisampled depth"). game_main.c render_init / render_reconfig now draw
+  single-sample while the mod is loaded, and umk3.ini keeps the player's
+  value. Then: "1 sample(s) ... the right size".
+- The feeder took the depth as reversed (ReShade.fxh's default). The mod's
+  ReShade.ini now sets RESHADE_DEPTH_INPUT_IS_REVERSED=0, and the log says
+  "depth reversed=0".
+- ReShade's keys are unbound in the written ReShade.ini, with no clock or FPS.
+- `dlss5-feed-helper.addon64` (32-bit mode) in the folder is refused, because
+  ReShade loads every .addon64 it finds.
+
+**Not done:** the DLSS and neural pass, which needs NVIDIA's two DLLs and a
+consumer add-on. The HUD is still processed with the scene.
+
 ### 2026-11-22 (later) -- graphics overhaul, phase 2: GRAPHICS QUALITY
 
 What was built (all port code):

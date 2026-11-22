@@ -34,6 +34,7 @@
 #include "neural_mod.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 int neural_mod_enabled = 1;             /* umk3.ini dlss5_mod= */
@@ -239,10 +240,24 @@ static const char k_reshade_ini[] =
     "EffectSearchPaths=.\\reshade-shaders\\Shaders\\**\n"
     "TextureSearchPaths=.\\reshade-shaders\\Textures\\**\n"
     "PresetPath=.\\DLSS5-preset.ini\n"
-    "PreprocessorDefinitions=DLSS5_MV_PROVIDER=5\n"
+    /* the game's depth runs 0 near to 1 far (rgl_d3d12.c, OpenGL's
+     * convention halved), not reversed as ReShade.fxh assumes */
+    "PreprocessorDefinitions=DLSS5_MV_PROVIDER=5,RESHADE_DEPTH_INPUT_IS_REVERSED=0\n"
+    "\n"
+    "[INPUT]\n"
+    "KeyOverlay=0,0,0,0\n"
+    "KeyScreenshot=0,0,0,0\n"
+    "KeyEffects=0,0,0,0\n"
+    "KeyReload=0,0,0,0\n"
+    "KeyNextPreset=0,0,0,0\n"
+    "KeyPreviousPreset=0,0,0,0\n"
+    "KeyFPS=0,0,0,0\n"
     "\n"
     "[OVERLAY]\n"
-    "TutorialProgress=4\n";
+    "TutorialProgress=4\n"
+    "ShowClock=0\n"
+    "ShowFPS=0\n"
+    "ShowScreenshotMessage=0\n";
 
 static const char k_preset_ini[] =
     "Techniques=DLSS5_Feed@DLSS5_Feed.fx\n"
@@ -305,15 +320,25 @@ int neural_mod_load(const char *game_dir, int renderer_is_d3d12)
         SAY("reshade-shaders\\Shaders\\ReShade.fxh is missing (ReShade's shaders)");
         ok = 0;
     }
-    if (match(dir, "renodx-dlss5*.addon64", consumer, sizeof consumer)
-        || match(dir, "deep-fried-chicken*.addon64", consumer, sizeof consumer))
-        SAY("neural consumer: %s", consumer);
-    else {
-        SAY("no neural consumer add-on (renodx-dlss5*.addon64 or deep-fried-chicken.addon64)");
-        ok = 0;
+    {
+        /* UMK3_DLSS5_PROBE=1 (port diagnostic): ReShade and the feeder load
+         * without the neural part, to check the hooks and the feed alone */
+        int probe = getenv("UMK3_DLSS5_PROBE") && atoi(getenv("UMK3_DLSS5_PROBE"));
+        int part = 1;
+        if (match(dir, "renodx-dlss5*.addon64", consumer, sizeof consumer)
+            || match(dir, "deep-fried-chicken*.addon64", consumer, sizeof consumer))
+            SAY("neural consumer: %s", consumer);
+        else {
+            SAY("no neural consumer add-on (renodx-dlss5*.addon64 or deep-fried-chicken.addon64)");
+            part = 0;
+        }
+        part &= nvidia_dll(dir, "nvngx_dlss.dll");
+        part &= nvidia_dll(dir, "nvngx_dlssnr.dll");
+        if (!part && probe)
+            SAY("UMK3_DLSS5_PROBE: loading without the neural part (no DLSS, the feed alone)");
+        else
+            ok &= part;
     }
-    ok &= nvidia_dll(dir, "nvngx_dlss.dll");
-    ok &= nvidia_dll(dir, "nvngx_dlssnr.dll");
     if (!ok) {
         snprintf(g_state, sizeof g_state, "files missing or refused (see the log)");
         return 0;

@@ -117,6 +117,7 @@ void mayhem_set_dir(const char *ini_path);     /* gamecode_stubs.c */
 #include "pad_nav.h"
 #include "render/rgl.h"
 #include "smooth_models.h"
+#include "neural_mod.h"
 #include "fatal_trainer.h"
 #include "photo_mode.h"
 #include "gfx_preset.h"
@@ -2052,6 +2053,13 @@ static void render_init(void)
         if (g_rs_samples < 2)
             g_rs_samples = 0;
     }
+    if (g_rs_samples && neural_mod_loaded()) {
+        /* port: the DLSS 5 mod reads the scene's depth, which a
+         * multisampled buffer hides from it; DLSS antialiases instead.
+         * umk3.ini keeps the player's antialiasing for when it is off */
+        printf("antialiasing: off while the DLSS 5 mod is loaded (DLSS antialiases)\n");
+        g_rs_samples = 0;
+    }
     printf("antialiasing x%d (asked x%d, the card allows x%d)\n",
            g_rs_samples, g_cfg_aa, (int)max);
     g_rs_on = 1;
@@ -3483,6 +3491,8 @@ static void render_reconfig(void)
         if (g_rs_samples < 2)
             g_rs_samples = 0;
     }
+    if (neural_mod_loaded())
+        g_rs_samples = 0;               /* port: as render_init, the DLSS 5 mod */
     g_rs_on = 1;
     g_rs_w = 0;                         /* remade at the next clear_frame */
 }
