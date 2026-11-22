@@ -108,6 +108,67 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+### 2026-11-21 (later) -- 0.5.9 beta: PHOTO MODE, EXTRAS > REPLAYS and MODS, the replay player redone
+
+All port, nothing of the binary changed in what it does. Checked by scripted
+runs in the test folder (muted; screenshots of every page and state), and by
+Mary trying each piece while it was built.
+
+- **PHOTO MODE** (`src/runtime/photo_mode.c`, docs/PHOTO-MODE.md). The
+  freeze is the game's own pause: Task_GameMain_frame skips
+  UpdateArcadeCode while GamePaused is not 0 and still draws the scene;
+  AnimateBG and LIME_UpdateEvents are inside UpdateArcadeCode and the
+  particles read GamePaused (Particles.c). PHOTO MODE is GamePaused 3; the
+  frame's FrameCount / GameCounter and the stage fatality's camera pull are
+  held while it is up, so the fight goes on from the same frame. The camera:
+  SetToUseCamera computes the fight's as before (LastEye/LastAt kept) and
+  hands LIMEDS_SetCameraOrientation PHOTO MODE's instead; the zoom scales the
+  projection's x and y (LIMEDS_Set3dMode, `PortProjScale`, set only around
+  RenderGameView). The HUD and the port's windows are left out
+  (`photo_hide_hud`); the panel is drawn last in the fight frame. A photo is
+  the next frame drawn clean, read once presented (the render buffer when
+  there is one, else the window; glReadPixels, Vulkan / D3D12 through
+  rgl_ff.c) and written as PNG by a thread (RGB, per-row filters, deflate
+  with fixed codes and a hash-chain LZ77 -- the repository only read PNGs).
+  Inputs: PK_PHOTO and PK_PH_* (platform.h; F3 by default), pad_photo=
+  (L3+R3), the sticks as they are (PLAT_PAD.ax, XInput / WinMM / SDL), the
+  right and middle mouse buttons (plat_mouse_buttons). In a fight with debug
+  keys PHOTO MODE comes first where the shortcut is the same.
+- **The pause menu** (GameCode.c): PAUSE_SCALE 0.8 / 0.9, width 226, rows
+  laid out by `PortPauseRowY` in reading order (RESUME, moves list,
+  training's rows, PHOTO MODE, settings, EXIT apart); `PortOptionHitBelow`
+  (FrontEnd.c DrawOptionAsButton) makes a press take one row where rows are
+  closer than 40.
+- **EXTRAS > REPLAYS** (FE task 55): rollback_probe.c `rp_menu_list`,
+  `rp_menu_play` (REPLAYS' recording off while it plays, back on after),
+  `rp_menu_stop`; game_main.c `PortReplayGo` starts it as --replay does,
+  `replay_leave` goes back with the main menu and EXTRAS under it.
+- **EXTRAS > MODS** (FE tasks 53, 54 the second page): mods.c `mods_list`
+  (mods.ini's order, then the folders it does not name; each mod.ini's name,
+  author, version, category, description, essential, type) and `mods_set`
+  (mods.ini written as the launcher writes it; an essential=1 mod refused);
+  mods_init turns an essential mod on whatever mods.ini says. The cards'
+  pictures: draw_gl.c `lime_load_mod_picture` (cover.png / preview.png).
+- **The launcher** (lib/mods.js, ModManager.svelte, store.svelte.js): MODS
+  and TEXTURE PACKS pages (category textures), essential mods locked (on,
+  not moved, not trashed, its category fixed); save() writes an essential
+  mod on.
+- **The replay player** (debug_menu.c `dbg_replay_draw`, `rp_layout`): the
+  same player, redrawn -- the line of the fighters, the clock and the state,
+  a finer timeline, the speed's pips, three groups, RPB_CAMERA / RPB_MOVES /
+  RPB_CINEMA (rollback.h), bilingual tips, the keys' hints, all faded by
+  `dbg_replay_alpha` (CINEMA, game_main.c: three seconds of nothing while it
+  plays). The moves panel hidden: GameCode.c `PortReplayHideMoves` around
+  PortTrainDraw. FREE CAMERA: photo_mode.c `photo_free_toggle` /
+  `photo_free_tick`, the camera overridden while the replay plays on; the
+  replay's keys, the pad's too, go on as they were.
+- **VS Sounds**: byte for byte the Skversus.mp3 Essentials has; moved out of
+  the test folder's mods (to mods_removed/), Essentials keeps the sound.
+
+Not done: PHOTO MODE's effects (phase 2), its pose and character tools
+(phase 3), 1440p/4K capture and saved settings (phase 4). The launcher's
+REPLAYS page itself is as it was (its viewer is the game's player above).
+
 ### 2026-11-20 (later) -- 0.5.6 beta: the icon's FileNotFound, VERIFY, REPAIR only what is damaged
 
 A player's REPAIR on 0.5.5 stopped with `icon: error: FileNotFound`. 0.5.5's

@@ -364,6 +364,14 @@ int plat_mouse(int *x, int *y)
     return (buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;
 }
 
+int plat_mouse_buttons(void)
+{
+    Uint32 b = SDL_GetMouseState(NULL, NULL);
+    return ((b & SDL_BUTTON(SDL_BUTTON_LEFT)) ? 1 : 0)
+         | ((b & SDL_BUTTON(SDL_BUTTON_RIGHT)) ? 2 : 0)
+         | ((b & SDL_BUTTON(SDL_BUTTON_MIDDLE)) ? 4 : 0);
+}
+
 int plat_mouse_wheel(void)
 {
     int n = g_wheel;
@@ -395,6 +403,15 @@ static SDL_Scancode g_scancode[PK_COUNT] = {
     [PK_RULES] = SDL_SCANCODE_R,
     [PK_OUTFIT] = SDL_SCANCODE_T,
     [PK_COLOR] = SDL_SCANCODE_C,
+    /* PHOTO MODE (port, photo_mode.c) */
+    [PK_PHOTO] = SDL_SCANCODE_F3,
+    [PK_PH_NAV_UP] = SDL_SCANCODE_UP, [PK_PH_NAV_DOWN] = SDL_SCANCODE_DOWN,
+    [PK_PH_NAV_LEFT] = SDL_SCANCODE_LEFT, [PK_PH_NAV_RIGHT] = SDL_SCANCODE_RIGHT,
+    [PK_PH_RISE] = SDL_SCANCODE_E, [PK_PH_SINK] = SDL_SCANCODE_Q,
+    [PK_PH_ROLL_L] = SDL_SCANCODE_Z, [PK_PH_ROLL_R] = SDL_SCANCODE_C,
+    [PK_PH_RESET] = SDL_SCANCODE_R, [PK_PH_HIDE] = SDL_SCANCODE_H,
+    [PK_PH_SHOT] = SDL_SCANCODE_SPACE, [PK_PH_TAB] = SDL_SCANCODE_TAB,
+    [PK_PH_PLAY] = SDL_SCANCODE_F,
 };
 
 void plat_key_label(int code, char *out, int n)
@@ -826,6 +843,11 @@ static int pad_fill(SDL_GameController *pad, PLAT_PAD *out)
     out->right = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT) || x > 10000;
     i = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_RIGHTX);
     out->rx = i < -20000 ? -1 : i > 20000 ? 1 : 0;
+    /* the sticks as they are, up positive (port: PHOTO MODE) */
+    out->ax[0] = x / 32767.0f;
+    out->ax[1] = -y / 32767.0f;
+    out->ax[2] = i / 32767.0f;
+    out->ax[3] = -SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_RIGHTY) / 32767.0f;
     snprintf(out->name, sizeof out->name, "%s",
              SDL_GameControllerName(pad) ? SDL_GameControllerName(pad) : "pad");
     v = SDL_GameControllerGetVendor(pad);       /* the pictures to show */

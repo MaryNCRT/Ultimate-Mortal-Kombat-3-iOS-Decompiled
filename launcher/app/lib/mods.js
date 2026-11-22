@@ -10,6 +10,11 @@
  *     version=1.0
  *     category=textures          textures, audio, music, models, mixed
  *     description=...
+ *     essential=1                the game needs it: always on, never moved,
+ *                                turned off or thrown away (Mary)
+ *
+ * A mod of category=textures is a TEXTURE PACK: the MOD MANAGER shows the
+ * packs on a page of their own (the HD characters are one).
  *
  * cover.png (or .jpg; preview.* from before), optional, is its picture in
  * the list, and data.ini the numbers it changes in the fight engine (the
@@ -336,8 +341,10 @@ function list(root) {
             }
         }
         const sk = skinOf(base);
+        const essential = String(info.essential || '') === '1';
         return {
-            folder: o.folder, on: o.on,
+            folder: o.folder, on: o.on || essential, essential,
+            pack: category === 'textures',
             skin: sk ? { title: sk.title, character: sk.character, colors: sk.colors } : null,
             name: info.name || o.folder, author: info.author || '', version: info.version || '',
             description: info.description || '', category, kinds,
@@ -349,7 +356,13 @@ function list(root) {
 
 function save(root, order) {
     if (!Array.isArray(order)) return false;
-    writeOrder(root, order.map(o => ({ folder: String(o.folder), on: !!o.on })));
+    /* an ESSENTIAL mod is on whatever is asked (mod.ini essential=1) */
+    const dir = modsDir(root);
+    const essential = f => {
+        const n = safeName(f);
+        return !!n && String(readIni(path.join(dir, n, 'mod.ini')).essential || '') === '1';
+    };
+    writeOrder(root, order.map(o => ({ folder: String(o.folder), on: !!o.on || essential(String(o.folder)) })));
     return true;
 }
 

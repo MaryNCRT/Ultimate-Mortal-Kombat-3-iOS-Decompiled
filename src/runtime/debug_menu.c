@@ -1948,17 +1948,21 @@ static void skin_end(void)
  * buttons -- speed on the left, the transport in the middle, the settings
  * on the right. */
 
-#define RPP_TOP    248.0f               /* the panel */
-#define RPP_TEXT   254.0f               /* the status line */
-#define RPP_BAR_Y  268.0f
-#define RPP_BAR_H  6.0f
+/* 0.5.9 (Mary): the panel slimmer and in three groups -- the speed on
+ * the left, the transport in the middle, the tools on the right (FREE
+ * CAMERA, the moves panel, CINEMA, the settings) -- under a line of the
+ * fighters, the clock and the state, and a finer timeline */
+#define RPP_TOP    250.0f               /* the panel */
+#define RPP_TEXT   256.0f               /* the line over the timeline */
+#define RPP_BAR_Y  272.0f
+#define RPP_BAR_H  5.0f
 #define RPP_BTN_Y  284.0f
-#define RPP_BTN_H  26.0f
-#define RPP_BTN_W  32.0f
-#define RPP_PLAY_W 44.0f
-#define RPP_SMALL  26.0f                /* slower, faster */
-#define RPP_SPEED  40.0f                /* the speed between them */
-#define RPP_GAP    5.0f
+#define RPP_BTN_H  24.0f
+#define RPP_BTN_W  28.0f
+#define RPP_PLAY_W 40.0f
+#define RPP_SMALL  24.0f                /* slower, faster */
+#define RPP_SPEED  38.0f                /* the speed between them */
+#define RPP_GAP    4.0f
 
 static float g_rp_w = 480.0f;           /* the space's width, last drawn */
 static float g_rp_h = 320.0f;           /* and its height: 320 at 100% */
@@ -1984,16 +1988,28 @@ static float rp_scale(void)
     return (float)p / 100.0f;
 }
 
-static const char *const k_rp_tip[RPB_COUNT] = {
-    "TO THE START", "BACK 5 SECONDS", "BACK ONE FRAME", "PLAY / PAUSE",
-    "ON ONE FRAME", "ON 5 SECONDS", "SLOWER", "FASTER", "SETTINGS (ESC)"
+static const char *const k_rp_tip_en[RPB_COUNT] = {
+    "TO THE START (M)", "BACK 5 SECONDS (A)", "BACK ONE FRAME (A)", "PLAY / PAUSE (SPACE)",
+    "ON ONE FRAME (D)", "ON 5 SECONDS (D)", "SLOWER (S)", "FASTER (W)", "SETTINGS (ESC)",
+    "FREE CAMERA (F)", "MOVES PANEL (TAB)", "CINEMA: THE PLAYER FADES (H)"
+};
+static const char *const k_rp_tip_es[RPB_COUNT] = {
+    "AL INICIO (M)", "ATRAS 5 SEGUNDOS (A)", "ATRAS UN CUADRO (A)", "REPRODUCIR / PAUSA (ESPACIO)",
+    "ADELANTE UN CUADRO (D)", "ADELANTE 5 SEGUNDOS (D)", "MAS LENTO (S)", "MAS RAPIDO (W)", "AJUSTES (ESC)",
+    "CAMARA LIBRE (F)", "PANEL DE MOVIMIENTOS (TAB)", "MODO CINE: EL PANEL SE OCULTA (H)"
 };
 static const char *const k_rp_speed[5] = { "X1/4", "X1/2", "X1", "X2", "X4" };
 
-/* Where each button is, in a space `w` wide. */
+/* game_main.c sets these: the panel's fade (CINEMA), the pad used last
+ * (the hints), the moves panel hidden, CINEMA on */
+float dbg_replay_alpha = 1.0f;
+int   dbg_replay_pad, dbg_replay_moves_hidden, dbg_replay_cine;
+
+/* Where each button is, in a space `w` wide: the speed on the left, the
+ * transport centred, the tools on the right */
 static void rp_layout(float w, float x[RPB_COUNT], float bw[RPB_COUNT])
 {
-    float x0 = w * 0.04f, at;
+    float x0 = w * 0.04f, x1 = w * 0.96f, at;
     int i;
 
     for (i = 0; i < RPB_COUNT; i++)
@@ -2008,7 +2024,10 @@ static void rp_layout(float w, float x[RPB_COUNT], float bw[RPB_COUNT])
     }
     x[RPB_SLOWER] = x0;
     x[RPB_FASTER] = x0 + RPP_SMALL + RPP_SPEED;
-    x[RPB_SETTINGS] = w * 0.96f - RPP_BTN_W;
+    x[RPB_SETTINGS] = x1 - RPP_BTN_W;
+    x[RPB_CINEMA] = x[RPB_SETTINGS] - RPP_GAP - RPP_BTN_W;
+    x[RPB_MOVES] = x[RPB_CINEMA] - RPP_GAP - RPP_BTN_W;
+    x[RPB_CAMERA] = x[RPB_MOVES] - RPP_GAP - RPP_BTN_W;
 }
 
 /* The top corners: the REPLAYS button on the left, the X on the right;
@@ -2213,8 +2232,30 @@ static void rp_icon(int id, float cx, float cy, int paused)
         rect(cx - 6, cy - 1, 12, 2);
         rect(cx - 6, cy + 3, 12, 2);
         break;
+    case RPB_MOVES:                     /* the moves panel: a portrait and its lines */
+        rect(cx - 7, cy - 6, 4, 4);
+        rect(cx - 1, cy - 5, 8, 2);
+        rect(cx - 7, cy - 1, 14, 2);
+        rect(cx - 7, cy + 3, 10, 2);
+        break;
+    case RPB_CINEMA:                    /* CINEMA: a frame's four corners */
+        rect(cx - 7, cy - 6, 5, 2); rect(cx - 7, cy - 6, 2, 5);
+        rect(cx + 2, cy - 6, 5, 2); rect(cx + 5, cy - 6, 2, 5);
+        rect(cx - 7, cy + 4, 5, 2); rect(cx - 7, cy + 1, 2, 5);
+        rect(cx + 2, cy + 4, 5, 2); rect(cx + 5, cy + 1, 2, 5);
+        break;
+    case RPB_CAMERA:                    /* FREE CAMERA: a camera, its lens a ring */
+        rect(cx - 3, cy - 6, 6, 2);
+        rect(cx - 7, cy - 4, 14, 2);
+        rect(cx - 7, cy + 3, 14, 2);
+        rect(cx - 7, cy - 4, 2, 9);
+        rect(cx + 5, cy - 4, 2, 9);
+        rect(cx - 2, cy - 1, 4, 3);
+        break;
     }
 }
+
+int photo_free_on(void);                /* photo_mode.c: a replay's FREE CAMERA */
 
 /* `at` how far the fight is, 0..1; `time` its clock; `state` rp_info's;
  * `hover` the button under the mouse, -1 none; `title` the replay's name;
@@ -2224,18 +2265,24 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
                      const char *title, const char *const *labels, int list_n,
                      int n_recent, int current)
 {
-    /* Mary (0.4.2): the ONLINE screen's materials -- a stone panel under a
-     * gold bar, the steel plates (PLAY the red one) lit under the mouse, a
-     * well with the fight played in blood and a gold knob, the game's font.
-     * Where everything is (rp_layout, RPT_*) is as it was: the mouse's
-     * boxes are the same. */
-    static const float pl0[4] = { 0.95f, 0.30f, 0.16f, 1.0f }, pl1[4] = { 0.45f, 0.05f, 0.02f, 1.0f };
+    /* Mary (0.4.2, 0.5.9): the ONLINE screen's materials -- a stone panel
+     * under a gold rule, the steel plates (PLAY the red one) lit under the
+     * mouse, a well with the fight played in blood and a gold knob, the
+     * game's font. 0.5.9: three groups, a line of the fighters, the clock
+     * and the state over a finer timeline, the speed shown as five pips,
+     * the tools' states lit, the keys' hints, and all of it faded together
+     * (dbg_replay_alpha: CINEMA). rp_layout and RPT_* say where everything
+     * is, for the mouse as for the drawing. */
     static float lit[RPB_COUNT + 4];
-    float x[RPB_COUNT], bw[RPB_COUNT], w, b0, b1, f;
+    float x[RPB_COUNT], bw[RPB_COUNT], w, b0, b1, f, A = dbg_replay_alpha;
     const char *what;
     char sp[8];
-    int i, paused = (state & (RPS_PAUSED | RPS_END)) != 0;
+    int i, paused = (state & (RPS_PAUSED | RPS_END)) != 0, spd = (state & RPS_SPEED) % 5;
+    int es = Language[0] == 'E' && Language[1] == 'S';
+    int camera_on = photo_free_on();
 
+    if (A <= 0.01f)
+        return;
     begin_2d();
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
     w = g_rp_w = g_ow / rp_scale();
@@ -2252,45 +2299,102 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
     for (i = 0; i < RPB_COUNT; i++)
         lit[i] += ((hover == i ? 1.0f : 0.0f) - lit[i]) * 0.3f;
 
+    /* a shade rising from under the panel, so it sits in the picture */
+    glBegin(GL_QUADS);
+    {
+        const float s0[4] = { 0.0f, 0.0f, 0.0f, 0.0f }, s1[4] = { 0.0f, 0.0f, 0.0f, 0.55f * A };
+        vgrad(0, RPP_TOP - 26, w, 26, s0, s1);
+    }
+    glEnd();
+
     PortSkinBegin();
-    PortSkinPanel(3, RPP_TOP + 2, w - 6, 320.0f - RPP_TOP - 4, 1.0f, 1);
+    PortSkinPanel(3, RPP_TOP + 2, w - 6, 320.0f - RPP_TOP - 4, A, 1);
+    /* the groups' wells: sunk iron behind each */
+    PortSkinShadow(x[RPB_SLOWER] - 3, RPP_BTN_Y - 3, x[RPB_FASTER] + RPP_SMALL - x[RPB_SLOWER] + 6, RPP_BTN_H + 6, 0.8f * A);
+    PortSkinShadow(x[RPB_START] - 4, RPP_BTN_Y - 3, x[RPB_FWD5] + RPP_BTN_W - x[RPB_START] + 8, RPP_BTN_H + 6, 0.8f * A);
+    PortSkinShadow(x[RPB_CAMERA] - 3, RPP_BTN_Y - 3, x[RPB_SETTINGS] + RPP_BTN_W - x[RPB_CAMERA] + 6, RPP_BTN_H + 6, 0.8f * A);
+    PortSkinFrame(x[RPB_START] - 4, RPP_BTN_Y - 3, x[RPB_FWD5] + RPP_BTN_W - x[RPB_START] + 8, RPP_BTN_H + 6, 0.8f, 1, 0.75f * A);
 
-    /* the status line: the replay's name and the clock on the left, what it
-     * is doing on the right, a warning before it when it differs */
-    if (!title || !*title)
-        title = "REPLAY";
-    PortSkinText(title, b0, RPP_TEXT - 3, 0, 0.42f, (b1 - b0) * 0.45f, 0, 1.0f);
-    PortSkinText(time, b0 + (b1 - b0) * 0.47f, RPP_TEXT - 3, 2, 0.42f, 80, 1, 1.0f);
-    what = state & RPS_SEEKING ? "SEEKING" : state & RPS_END ? "END"
-         : state & RPS_PAUSED ? "PAUSED" : "PLAYING";
-    PortSkinText(what, b1, RPP_TEXT - 3, 2, 0.42f, 100, 2, 1.0f);
+    /* the line: the fighters on the left (gold), the clock in the middle,
+     * the state on the right as a lamp and a word */
+    {
+        char up[64];
+        size_t k;
+        if (!title || !*title)
+            title = es ? "REPETICION" : "REPLAY";
+        for (k = 0; title[k] && k < sizeof up - 1; k++)  /* upper case, as the cards are */
+            up[k] = title[k] >= 'a' && title[k] <= 'z' ? (char)(title[k] - 32) : title[k];
+        up[k] = 0;
+        PortSkinText(up, b0, RPP_TEXT - 3, 0, 0.44f, (b1 - b0) * 0.34f, 1, A);
+    }
+    PortSkinText(time, w * 0.5f, RPP_TEXT - 4, 1, 0.52f, 120, 0, A);
+    what = state & RPS_SEEKING ? (es ? "BUSCANDO" : "SEEKING")
+         : state & RPS_END ? (es ? "FIN" : "END")
+         : state & RPS_PAUSED ? (es ? "EN PAUSA" : "PAUSED")
+         : (es ? "REPRODUCIENDO" : "PLAYING");
+    PortSkinText(what, b1, RPP_TEXT - 3, 2, 0.42f, 110, paused ? 1 : 0, A);
     if (state & RPS_DIFFERS)
-        PortSkinText("DIFFERS - SEE THE LOG", b1 - 70, RPP_TEXT - 3, 2, 0.40f, 140, 3, 1.0f);
+        PortSkinText(es ? "DIFIERE - VER EL REGISTRO" : "DIFFERS - SEE THE LOG", b1 - 92, RPP_TEXT - 3, 2,
+                     0.38f, 150, 3, A);
 
-    /* the buttons: the ONLINE plates; their pictures in bone white */
-    for (i = 0; i < RPB_COUNT; i++)
+    /* the buttons: the ONLINE plates, a tool that is on lit as chosen */
+    for (i = 0; i < RPB_COUNT; i++) {
+        int on = (i == RPB_CAMERA && camera_on) || (i == RPB_MOVES && !dbg_replay_moves_hidden)
+                 || (i == RPB_CINEMA && dbg_replay_cine);
         PortSkinButton("", x[i], RPP_BTN_Y, bw[i], RPP_BTN_H, i == RPB_PLAY,
-                       hover == i ? 1 : 0, lit[i], 1.0f);
-    snprintf(sp, sizeof sp, "%s", k_rp_speed[(state & RPS_SPEED) % 5]);
-    PortSkinText(sp, x[RPB_SLOWER] + RPP_SMALL + RPP_SPEED / 2, RPP_BTN_Y + RPP_BTN_H / 2 - 6,
-                 1, 0.48f, RPP_SPEED - 4, 1, 1.0f);
+                       hover == i ? 1 : on ? 2 : 0, lit[i], A);
+    }
+    snprintf(sp, sizeof sp, "%s", k_rp_speed[spd]);
+    PortSkinText(sp, x[RPB_SLOWER] + RPP_SMALL + RPP_SPEED / 2, RPP_BTN_Y + 3, 1, 0.46f, RPP_SPEED - 4, 1, A);
+    /* the keys, under it all: the pad's or the keyboard's */
+    PortSkinText(dbg_replay_pad
+                 ? (es ? "A PAUSA   CRUCETA BUSCAR   LB/RB VELOCIDAD   Y CAMARA LIBRE   ARRIBA MOVIMIENTOS   ABAJO CINE   L3+R3 FOTO   B SALIR"
+                       : "A PAUSE   D-PAD SEEK   LB/RB SPEED   Y FREE CAMERA   UP MOVES   DOWN CINEMA   L3+R3 PHOTO   B EXIT")
+                 : (es ? "ESPACIO PAUSA   A/D BUSCAR   W/S VELOCIDAD   F CAMARA LIBRE   TAB MOVIMIENTOS   H CINE   F3 FOTO"
+                       : "SPACE PAUSE   A/D SEEK   W/S SPEED   F FREE CAMERA   TAB MOVES   H CINEMA   F3 PHOTO"),
+                 w * 0.5f, 311.0f, 1, 0.26f, w - 20, 2, 0.85f * A);
     skin_end();
 
     glBegin(GL_QUADS);
-    /* the bar: a sunk well, the fight played in blood, a gold knob */
-    glColor4f(0.0f, 0.0f, 0.0f, 0.85f);
-    rect(b0 - 1, RPP_BAR_Y - 1, b1 - b0 + 2, RPP_BAR_H + 2);
-    vgrad(b0, RPP_BAR_Y, (b1 - b0) * f, RPP_BAR_H, pl0, pl1);
-    glColor4f(1.0f, 0.9f, 0.7f, 0.25f);
-    rect(b0, RPP_BAR_Y, (b1 - b0) * f, 1);
-    glColor4f(0.0f, 0.0f, 0.0f, 0.8f);
-    rect(b0 + (b1 - b0) * f - 4, RPP_BAR_Y - 4, 8, RPP_BAR_H + 8);
-    glColor4f(1.0f, 0.78f, 0.38f, 1.0f);
-    rect(b0 + (b1 - b0) * f - 3, RPP_BAR_Y - 3, 6, RPP_BAR_H + 6);
-    glColor4f(1.0f, 0.95f, 0.8f, 1.0f);
-    rect(b0 + (b1 - b0) * f - 3, RPP_BAR_Y - 3, 6, 1.5f);
+    /* the speed's five pips under its word */
+    for (i = 0; i < 5; i++) {
+        float px = x[RPB_SLOWER] + RPP_SMALL + RPP_SPEED / 2 - 12 + i * 6;
+        if (i == spd)
+            glColor4f(1.0f, 0.70f, 0.30f, A);
+        else
+            glColor4f(0.45f, 0.42f, 0.38f, 0.8f * A);
+        rect(px - 1.5f, RPP_BTN_Y + RPP_BTN_H - 6, 3, 3);
+    }
+    /* the timeline: a sunk well with a mark every tenth, the fight played
+     * in blood, a gold diamond on where it is (thicker under the mouse) */
+    {
+        float bh = hover == RPB_BAR ? RPP_BAR_H + 2 : RPP_BAR_H, by = RPP_BAR_Y - (bh - RPP_BAR_H) * 0.5f;
+        float kx = b0 + (b1 - b0) * f, ky = by + bh * 0.5f;
+        float p0[4] = { 0.95f, 0.30f, 0.16f, A }, p1[4] = { 0.45f, 0.05f, 0.02f, A };
+
+        glColor4f(0.0f, 0.0f, 0.0f, 0.85f * A);
+        rect(b0 - 1, by - 1, b1 - b0 + 2, bh + 2);
+        glColor4f(0.16f, 0.15f, 0.14f, 0.9f * A);
+        rect(b0, by, b1 - b0, bh);
+        vgrad(b0, by, (b1 - b0) * f, bh, p0, p1);
+        glColor4f(1.0f, 0.9f, 0.7f, 0.25f * A);
+        rect(b0, by, (b1 - b0) * f, 1);
+        for (i = 1; i < 10; i++) {
+            glColor4f(0.0f, 0.0f, 0.0f, 0.55f * A);
+            rect(b0 + (b1 - b0) * i / 10.0f - 0.5f, by, 1, bh);
+        }
+        /* the knob: a diamond, its shadow under it */
+        glColor4f(0.0f, 0.0f, 0.0f, 0.8f * A);
+        tri(kx - 6, ky - 6, kx, ky + 6, -1);
+        tri(kx, ky - 6, kx + 6, ky + 6, 1);
+        glColor4f(1.0f, 0.78f, 0.38f, A);
+        tri(kx - 5, ky - 5, kx, ky + 5, -1);
+        tri(kx, ky - 5, kx + 5, ky + 5, 1);
+        glColor4f(1.0f, 0.95f, 0.8f, A);
+        rect(kx - 1, ky - 3, 2, 2);
+    }
     for (i = 0; i < RPB_COUNT; i++) {
-        glColor4f(0.0f, 0.0f, 0.0f, 0.7f);              /* the pictures, cut in */
+        glColor4f(0.0f, 0.0f, 0.0f, 0.7f * A);          /* the pictures, cut in */
         glEnd();
         glPushMatrix();
         glTranslatef(0.6f, 0.8f, 0.0f);
@@ -2300,22 +2404,29 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
         glPopMatrix();
         glBegin(GL_QUADS);
         if (hover == i)
-            glColor4f(1.0f, 0.88f, 0.62f, 1.0f);
+            glColor4f(1.0f, 0.88f, 0.62f, A);
         else
-            glColor4f(0.94f, 0.91f, 0.83f, 1.0f);
+            glColor4f(0.94f, 0.91f, 0.83f, A);
         rp_icon(i, x[i] + bw[i] / 2, RPP_BTN_Y + RPP_BTN_H / 2, paused);
     }
     glEnd();
 
-    /* the hovered button's name, on a plate above it */
+    /* the hovered button's name, on a plate above it -- a tool's says
+     * whether it is on */
     if (hover >= 0 && hover < RPB_COUNT) {
-        const char *tip = k_rp_tip[hover];
-        float tw = (float)strlen(tip) * 6.4f + 16, tx = x[hover] + bw[hover] / 2 - tw / 2;
+        char tip[96];
+        float tw, tx;
+        int on = (hover == RPB_CAMERA && camera_on) || (hover == RPB_MOVES && !dbg_replay_moves_hidden)
+                 || (hover == RPB_CINEMA && dbg_replay_cine);
 
+        snprintf(tip, sizeof tip, "%s%s", es ? k_rp_tip_es[hover] : k_rp_tip_en[hover],
+                 hover >= RPB_CAMERA ? (on ? (es ? ": SI" : ": ON") : (es ? ": NO" : ": OFF")) : "");
+        tw = (float)strlen(tip) * 6.0f + 16;
+        tx = x[hover] + bw[hover] / 2 - tw / 2;
         if (tx < 2) tx = 2;
         if (tx + tw > w - 2) tx = w - 2 - tw;
         PortSkinBegin();
-        PortSkinButton(tip, tx, RPP_TOP - 21, tw, 15, 0, 0, 0.0f, 1.0f);
+        PortSkinButton(tip, tx, RPP_TOP - 21, tw, 15, 0, 0, 0.0f, A);
         skin_end();
     }
 
@@ -2335,19 +2446,20 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
         PortSkinBegin();
         /* REPLAYS red while its list is open; the X red under the mouse */
         PortSkinButton("", bx, RPT_BTN_Y, bwid, RPT_BTN_H, (!i && list_n >= 0) || (i == 1 && hover == id),
-                       hover == id ? 1 : 0, *l, 1.0f);
+                       hover == id ? 1 : 0, *l, A);
         if (i == 3) {                   /* SIZE: the scale, as text */
             char pc[8];
 
             snprintf(pc, sizeof pc, "%d%%", dbg_replay_pct);
-            PortSkinText(pc, bx + bwid / 2, RPT_BTN_Y + RPT_BTN_H / 2 - 5.5f, 1, 0.42f, bwid - 4, on ? 1 : 0, 1.0f);
+            PortSkinText(pc, bx + bwid / 2, RPT_BTN_Y + RPT_BTN_H / 2 - 5.5f, 1, 0.42f, bwid - 4, on ? 1 : 0, A);
         } else if (!i)
-            PortSkinText("REPLAYS", bx + 24, RPT_BTN_Y + RPT_BTN_H / 2 - 5.5f, 0, 0.42f, bwid - 28, on ? 1 : 0, 1.0f);
+            PortSkinText(es ? "REPETICIONES" : "REPLAYS", bx + 24, RPT_BTN_Y + RPT_BTN_H / 2 - 5.5f, 0, 0.42f,
+                         bwid - 28, on ? 1 : 0, A);
         skin_end();
         if (i == 3)
             continue;
         glBegin(GL_QUADS);
-        glColor4f(0.94f, 0.91f, 0.83f, 1.0f);
+        glColor4f(0.94f, 0.91f, 0.83f, A);
         rp_icon(id, i ? bx + bwid / 2 : bx + 12, RPT_BTN_Y + RPT_BTN_H / 2, 0);
         glEnd();
     }

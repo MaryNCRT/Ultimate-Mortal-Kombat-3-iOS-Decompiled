@@ -101,6 +101,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "rollback.h"
 #include "online_rules.h"
 
@@ -117,6 +118,7 @@ void mayhem_set_dir(const char *ini_path);     /* gamecode_stubs.c */
 #include "render/rgl.h"
 #include "smooth_models.h"
 #include "fatal_trainer.h"
+#include "photo_mode.h"
 #if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
 #include <unistd.h>                 /* readlink, setenv */
 #endif
@@ -196,6 +198,14 @@ static int scripted_key(int code)
         { "p", PK_5_P }, { "b", PK_5_B }, { "k", PK_5_K }, { "r", PK_5_R },
         { "esc", PK_SETTINGS }, { "ok", PK_OK },
         { "tab", PK_DBG_PAGE_NEXT },
+        /* PHOTO MODE (photo_mode.c) */
+        { "photo", PK_PHOTO }, { "shot", PK_PH_SHOT }, { "phtab", PK_PH_TAB },
+        { "phhide", PK_PH_HIDE }, { "phreset", PK_PH_RESET },
+        { "phrise", PK_PH_RISE }, { "phsink", PK_PH_SINK },
+        { "phrolll", PK_PH_ROLL_L }, { "phrollr", PK_PH_ROLL_R },
+        { "phup", PK_PH_NAV_UP }, { "phdown", PK_PH_NAV_DOWN },
+        { "phleft", PK_PH_NAV_LEFT }, { "phright", PK_PH_NAV_RIGHT },
+        { "pause", PK_PAUSE }, { "phplay", PK_PH_PLAY },
     };
     const char *q = getenv("UMK3_KEYS");
 
@@ -395,6 +405,8 @@ static unsigned g_p2pad_settings = 1u << PB_HOME;
 static unsigned g_pad_moves = 1u << PB_SELECT;
 /* port: the pad's VERSUS RULES (pad_rules=, SELECT unless bound) */
 static unsigned g_pad_rules = 1u << PB_SELECT;
+/* PHOTO MODE in and out (pad_photo=, photo_mode.c): both sticks pressed */
+static unsigned g_pad_photo = (1u << PB_L3) | (1u << PB_R3);
 static unsigned g_p2pad_rules = 1u << PB_SELECT;
 
 /* Player two's pad, the same actions and defaults: the launcher's GAMEPAD
@@ -1298,6 +1310,8 @@ static void read_config(const char *dir)
                 g_pad_settings = pad_combo(v);
             else if (strcmp(line + 4, "rules") == 0)
                 g_pad_rules = pad_combo(v);
+            else if (strcmp(line + 4, "photo") == 0)
+                g_pad_photo = pad_combo(v);
         }
         else if (strcmp(line, "pad") == 0) {  /* auto, off, xinput, vvvv:pppp */
             plat_pad_select(v);
@@ -1351,6 +1365,8 @@ static void read_config(const char *dir)
                 plat_bind_key(PK_COLOR, atoi(v));
             else if (strcmp(line + 4, "special") == 0)
                 plat_bind_key(PK_SPECIAL, atoi(v));
+            else if (strcmp(line + 4, "photo") == 0)
+                plat_bind_key(PK_PHOTO, atoi(v));
             else {
                 /* debug mode's keys, from the launcher's CONTROLS section */
                 static const struct { const char *n; int code; } dbg[] = {
@@ -2111,6 +2127,19 @@ static void render_present(void)
     g_rs_bind_fb(RS_FRAMEBUFFER, 0);
 }
 
+/* PHOTO MODE (photo_mode.c): a photo is read from the render buffer, at
+ * the 3D resolution, when the game draws into one; else from the game's
+ * area on the window. Once the frame is presented there, before the swap. */
+static void photo_capture(int vx, int vy, int vw, int vh)
+{
+    if (g_rs_on && g_rs_fbo) {
+        g_rs_bind_fb(RS_READ_FRAMEBUFFER, g_rs_fbo);
+        photo_after_present(0, 0, g_rs_w, g_rs_h);
+        g_rs_bind_fb(RS_FRAMEBUFFER, 0);
+    } else
+        photo_after_present(vx, vy, vw, vh);
+}
+
 /* plat_ask draws its box on the window over the frame so far: put the
  * frame there first, and draw into the buffer again after. */
 static void render_ask_hook(int begin)
@@ -2270,6 +2299,12 @@ static int parse_screen(const char *s)
         return 52;                      /* the FATALITY TRAINER's (FrontEnd.c) */
     if (_stricmp(s, "trainer") == 0)
         return 52;
+    if (_stricmp(s, "mods") == 0)       /* EXTRAS' pages (FrontEnd.c, port) */
+        return 53;
+    if (_stricmp(s, "packs") == 0)
+        return 54;
+    if (_stricmp(s, "replays") == 0)
+        return 55;
     for (i = 0; i < DBG_SCREENS; i++)   /* "treasure" -> FE_Task_Treasure */
         if (_stricmp(FETaskNames[i] + 8, s) == 0
             || _stricmp(FETaskNames[i], s) == 0)
@@ -2803,6 +2838,34 @@ static void ft_leave(void)
 
     printf("debug: screen %d FE_Task_FatalTrainer\n", FT_SCREEN);
     leave_fight(FT_SCREEN);
+    FE_CurrentTaskStack[0] = 0;         /* FE_Task_Main_Menu */
+    FE_CurrentTaskStack[1] = 6;         /* FE_Task_Extras */
+    FE_TaskStackPointer = 2;
+}
+
+/* EXTRAS > REPLAYS (FrontEnd.c FE_Task_Replays, port): a replay played
+ * from the menu, started as --replay starts one, and its X back to that
+ * page -- the main menu and EXTRAS under it, as the trainer's way out */
+#define REPLAYS_SCREEN 55
+void PortReplayGo(const char *rel)
+{
+    int32_t c1, c2, lv;
+
+    if (CurrentTask != 3 || !rp_menu_play(rel, &c1, &c2, &lv))
+        return;
+    g_fight_p1 = c1;
+    g_fight_p2 = c2;
+    g_fight_stage = lv >= 0 && lv <= 15 ? lv : 0;
+}
+
+static void replay_leave(void)
+{
+    extern int FE_CurrentTaskStack[];
+    extern int FE_TaskStackPointer;
+
+    rp_menu_stop();
+    printf("debug: screen %d FE_Task_Replays\n", REPLAYS_SCREEN);
+    leave_fight(REPLAYS_SCREEN);
     FE_CurrentTaskStack[0] = 0;         /* FE_Task_Main_Menu */
     FE_CurrentTaskStack[1] = 6;         /* FE_Task_Extras */
     FE_TaskStackPointer = 2;
@@ -3994,13 +4057,16 @@ int main(int argc, char **argv)
                     was = now;
                 }
             }
-            else if (rp_playing() && !dbg_menu_is_open()) {     /* the replay's panel */
+            else if (rp_playing() && !dbg_menu_is_open() && !photo_on()) {  /* the replay's panel */
                 const char *labels[16];
                 float at;
                 int nr, cur, n = rp_list(labels, 16, &nr, &cur), r;
+                int click = plat_mouse(&mx, &my) && g_ntaps == 0;
 
-                g_rp_hover = dbg_replay_hit(tx / g_virt_w, ty / g_virt_h, &at, n, nr);
-                r = rp_ui(g_rp_hover, at, plat_mouse(&mx, &my) && g_ntaps == 0);
+                /* CINEMA: while it has faded a click only brings it back */
+                g_rp_hover = dbg_replay_alpha > 0.5f
+                             ? dbg_replay_hit(tx / g_virt_w, ty / g_virt_h, &at, n, nr) : -1;
+                r = rp_ui(g_rp_hover, at, click && dbg_replay_alpha > 0.5f);
                 if (r == RPB_HIDE) {
                     g_rp_hidden = 1;
                     g_rp_hide_wait = 1;
@@ -4010,6 +4076,14 @@ int main(int argc, char **argv)
                     set_menu_save();    /* umk3.ini replay_scale */
                 } else if (r == RPB_SETTINGS)
                     set_menu_toggle();
+                else if (r == RPB_CAMERA)   /* FREE CAMERA (port: PHOTO MODE's) */
+                    photo_free_toggle();
+                else if (r == RPB_MOVES)    /* the moves panel (port) */
+                    dbg_replay_moves_hidden ^= 1;
+                else if (r == RPB_CINEMA)   /* CINEMA (port) */
+                    dbg_replay_cine ^= 1;
+                else if (r == RPB_CLOSE && rp_menu())  /* the X: back to EXTRAS > REPLAYS */
+                    replay_leave();
                 else if (r == RPB_CLOSE)    /* the X */
                     g_quit_now = 1;
                 else if (r == RPB_SWITCH) { /* another replay: its fight, here */
@@ -4194,6 +4268,8 @@ int main(int argc, char **argv)
                                                   == g_p2pad_settings);
                 if (esc && !was_esc && g_rp_hidden && rp_playing())
                     g_rp_hidden = 0;    /* HIDE: Esc has the player back */
+                else if (esc && !was_esc && photo_on())
+                    photo_close();      /* PHOTO MODE: Esc goes back */
                 else if (esc && !was_esc && !set_menu_is_open()
                     && !dbg_menu_is_open())
                     set_menu_toggle();
@@ -4295,11 +4371,16 @@ int main(int argc, char **argv)
                 static int was_f2, was_f3;
                 /* the pad's combination (pad_dbg_menu=, L3+R3 unless the
                  * launcher set another) opens and closes the menu too */
+                /* in a fight PHOTO MODE comes first where its shortcut is
+                 * the same key or combination (F3, L3+R3 by default) */
+                int photo_too = CurrentTask == 6 && (photo_allowed() || photo_on());
                 int f2 = plat_key(PK_TEST)
                          || (g_pad_dbg_mask
                              && (g_pad.buttons & g_pad_dbg_mask)
-                                == g_pad_dbg_mask),
-                    f3 = plat_key(PK_BACK);
+                                == g_pad_dbg_mask
+                             && !(photo_too && g_pad_dbg_mask == g_pad_photo)),
+                    f3 = plat_key(PK_BACK)
+                         && !(photo_too && plat_key_bound(PK_BACK) == plat_key_bound(PK_PHOTO));
                 if (f2 && !was_f2)
                     dbg_menu_toggle();
                 if (f3 && !was_f3 && dbg_keys_on())
@@ -4343,12 +4424,82 @@ int main(int argc, char **argv)
             keyboard_buttons();
             if (rp_switching())
                 ;               /* on the way to another replay: no keys */
-            else if (rp_playing())  /* a replay: the player's keys, no pause menu */
-                rp_keys(plat_key(PK_OK) || plat_key(PK_PAUSE),
-                        plat_key(PK_LEFT), plat_key(PK_RIGHT),
-                        plat_key(PK_UP), plat_key(PK_DOWN), plat_key(PK_MOVES));
-            else
+            else if (rp_playing()) {    /* a replay: the player's keys, no pause menu */
+                /* PHOTO MODE over the replay (Mary): while it is up the
+                 * keys are its own */
+                int photo_was = photo_on();
+                /* the pad too (Mary): A or START play / pause, left and
+                 * right back and on, L1 / R1 slower and faster, SELECT
+                 * from the start, Y the FREE CAMERA (photo_tick), B out of
+                 * a replay played from EXTRAS */
+                unsigned pb = g_pad.connected ? g_pad.buttons : 0;
+                static int was_b;
+                int b = (pb & (1u << PB_EAST)) != 0;
+                photo_tick(&g_pad, g_pad_photo, game_key);
+                {
+                    /* the moves panel (TAB, the d-pad's up) and CINEMA (H,
+                     * the d-pad's down); CINEMA fades the player after
+                     * three seconds of nothing while it plays, and anything
+                     * -- the mouse moved, a key, the pad -- has it back */
+                    static int was_tab, was_h, was_up, was_dn, idle, lmx, lmy;
+                    static unsigned lpb;
+                    int tab = plat_key(PK_PH_TAB), h = plat_key(PK_PH_HIDE);
+                    int up = g_pad.connected && g_pad.up && fabsf(g_pad.ax[1]) < 0.3f;
+                    int dn = g_pad.connected && g_pad.down && fabsf(g_pad.ax[1]) < 0.3f;
+                    int cmx, cmy, cst;
+                    float want;
+
+                    if (!photo_on()) {
+                        if (tab && !was_tab) dbg_replay_moves_hidden ^= 1;
+                        if (h && !was_h) dbg_replay_cine ^= 1;
+                        if (up && !was_up) dbg_replay_moves_hidden ^= 1;
+                        if (dn && !was_dn) dbg_replay_cine ^= 1;
+                    }
+                    was_tab = tab; was_h = h; was_up = up; was_dn = dn;
+                    plat_mouse(&cmx, &cmy);
+                    if (pb != lpb || cmx != lmx || cmy != lmy || plat_key_any() || plat_mouse_buttons()
+                        || fabsf(g_pad.ax[0]) > 0.3f || fabsf(g_pad.ax[1]) > 0.3f
+                        || fabsf(g_pad.ax[2]) > 0.3f || fabsf(g_pad.ax[3]) > 0.3f)
+                        idle = 0;
+                    else
+                        idle++;
+                    if (pb != lpb && pb)
+                        dbg_replay_pad = 1;
+                    else if (cmx != lmx || cmy != lmy || plat_key_any())
+                        dbg_replay_pad = 0;
+                    lpb = pb; lmx = cmx; lmy = cmy;
+                    rp_info(NULL, 0, &cst);
+                    want = dbg_replay_cine && idle > 180 && !(cst & (RPS_PAUSED | RPS_END)) ? 0.0f : 1.0f;
+                    dbg_replay_alpha += (want - dbg_replay_alpha) * (want > dbg_replay_alpha ? 0.25f : 0.06f);
+                    if (fabsf(want - dbg_replay_alpha) < 0.01f)
+                        dbg_replay_alpha = want;
+                    {
+                        extern int PortReplayHideMoves;     /* GameCode.c */
+                        PortReplayHideMoves = dbg_replay_moves_hidden
+                                              || (dbg_replay_cine && dbg_replay_alpha < 0.5f);
+                    }
+                }
+                if (!photo_was && !photo_on()) {
+                    /* the FREE CAMERA's left stick is its own: the d-pad
+                     * seeks then */
+                    int stick = photo_free_on() && fabsf(g_pad.ax[0]) > 0.3f;
+                    photo_free_tick(&g_pad, game_key);
+                    rp_keys(plat_key(PK_OK) || plat_key(PK_PAUSE)
+                                || (pb & ((1u << PB_SOUTH) | (1u << PB_START))),
+                            plat_key(PK_LEFT) || (g_pad.connected && g_pad.left && !stick),
+                            plat_key(PK_RIGHT) || (g_pad.connected && g_pad.right && !stick),
+                            plat_key(PK_UP) || (pb & (1u << PB_R1)),
+                            plat_key(PK_DOWN) || (pb & (1u << PB_L1)),
+                            plat_key(PK_MOVES) || (pb & (1u << PB_SELECT)));
+                    if (b && !was_b && rp_menu())
+                        replay_leave();
+                }
+                was_b = b;
+            }
+            else {
                 hud_keys();
+                photo_tick(&g_pad, g_pad_photo, game_key);  /* PHOTO MODE */
+            }
             pad_skip();
             if (g_cfg_debug_keys && dbg_keys_on()
                 && !(GameMode == 1 && (CurrentTask == 6 || CurrentTask == 9))) {
@@ -4371,7 +4522,8 @@ int main(int argc, char **argv)
             }
             /* the pad drives the front end and the pause menu (pad_nav.c) */
             pad_nav_begin(!set_menu_is_open() && !dbg_menu_is_open()
-                          && (CurrentTask == 3 || (CurrentTask == 6 && GamePaused)));
+                          && (CurrentTask == 3 || (CurrentTask == 6 && GamePaused
+                                                   && !photo_on())));
             /* the pad's highlight lights its button as a resting finger
              * does: the touch held there for this frame, neither a press
              * (the last place is the same) nor a release, and lifted again
@@ -4518,7 +4670,7 @@ int main(int argc, char **argv)
                 if (g_rp_hint > 0)
                     g_rp_hint--;
                 dbg_replay_hidden(g_rp_hint > 60 ? 1.0f : (float)g_rp_hint / 60.0f);
-            } else if (rp_playing() && !set_menu_is_open()) {  /* REPLAYS: the player's panel */
+            } else if (rp_playing() && !set_menu_is_open() && !photo_on()) {  /* REPLAYS: the player's panel */
                 char clock[48];
                 int state;
                 float at = rp_info(clock, sizeof clock, &state);
@@ -4837,6 +4989,7 @@ int main(int argc, char **argv)
         plat_input_used();      /* the taps this frame's ticks have seen */
         plat_audio_update();
         render_present();
+        photo_capture(vx, vy, vw, vh);  /* PHOTO MODE: a photo asked for */
 
         if (getenv("UMK3_SHOTS")) {
             static long done_upto = -1;

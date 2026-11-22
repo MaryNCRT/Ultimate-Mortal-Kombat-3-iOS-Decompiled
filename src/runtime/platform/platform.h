@@ -109,6 +109,10 @@ int plat_mouse(int *x, int *y);
  * (port: the in-game menus scroll with it). */
 int plat_mouse_wheel(void);
 
+/* Which mouse buttons are down now: bit 0 the left, 1 the right, 2 the
+ * middle (port: PHOTO MODE's camera, photo_mode.c). */
+int plat_mouse_buttons(void);
+
 /* Seconds since plat_open, monotonic. */
 double plat_time(void);
 
@@ -233,6 +237,14 @@ enum {
     PK_RULES,
     /* the select screen's OUTFIT and COLOR lists (port, FrontEnd.c) */
     PK_OUTFIT, PK_COLOR,
+    /* PHOTO MODE (port, photo_mode.c): in and out (key_photo=), then its
+     * panel's arrows, the camera up and down, its roll, the camera back
+     * where it was, the panel hidden, the photo, the next category */
+    PK_PHOTO,
+    PK_PH_NAV_UP, PK_PH_NAV_DOWN, PK_PH_NAV_LEFT, PK_PH_NAV_RIGHT,
+    PK_PH_RISE, PK_PH_SINK, PK_PH_ROLL_L, PK_PH_ROLL_R,
+    PK_PH_RESET, PK_PH_HIDE, PK_PH_SHOT, PK_PH_TAB,
+    PK_PH_PLAY,                         /* a replay: on under the camera, or held */
     PK_COUNT
 };
 
@@ -285,6 +297,10 @@ typedef struct {
     int      up, down, left, right;
     unsigned buttons;                   /* 1 << PB_* */
     int      rx;                        /* the right stick across: -1 0 1 */
+    float    ax[4];                     /* the sticks as they are, -1..1
+                                         * past a dead zone: left across,
+                                         * left up, right across, right up
+                                         * (port: PHOTO MODE's camera) */
     char     name[64];                  /* as the system names the pad */
     int      kind;                      /* 1 Xbox (XInput), 2 PlayStation 5,
                                            3 Nintendo, 4 PlayStation 4,

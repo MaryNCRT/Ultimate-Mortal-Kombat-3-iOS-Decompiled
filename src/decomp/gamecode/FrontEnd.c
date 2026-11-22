@@ -19,6 +19,8 @@
 #include "mp_net.h"     /* port: ONLINE */
 #include "mp_eos.h"     /* port: ONLINE, LOBBIES */
 #include "online_rules.h"
+#include "../../runtime/mods.h"        /* port: EXTRAS > MODS, TEXTURE PACKS */
+#include "../../runtime/rollback.h"    /* port: EXTRAS > REPLAYS */
 #include "lobby_queue.h"   /* port: a lobby's line */
 #include "profiles.h"
 
@@ -1837,7 +1839,9 @@ void dumpStack(void)
     puts("STACK:");
 
     /* port: 51 is the ONLINE screen, past the end of FETaskNames */
-#define PORT_TASK_NAME(t) ((t) == 51 ? "FE_Task_Online" : (t) == 52 ? "FE_Task_FatalTrainer" : FETaskNames[t])
+#define PORT_TASK_NAME(t) ((t) == 51 ? "FE_Task_Online" : (t) == 52 ? "FE_Task_FatalTrainer" \
+                           : (t) == 53 ? "FE_Task_Mods" : (t) == 54 ? "FE_Task_Packs" \
+                           : (t) == 55 ? "FE_Task_Replays" : FETaskNames[t])
     for (i = 0; i < FE_TaskStackPointer; i++)
         printf("#%d:%s(%d)\n", i,
                PORT_TASK_NAME(FE_CurrentTaskStack[i]), FE_CurrentTaskStack[i]);
@@ -4013,6 +4017,11 @@ extern char ButtonSplitText[];          /* 0x00184730, 256 bytes a line */
  * its centre sits a quarter of it further right; those screens set this to
  * PortFEExtraX / 4 while drawing their options. 0 everywhere else. */
 static float PortOptionShift;
+/* Port, not in the binary: how far below its line an option's button
+ * reaches -- 30 as the binary has it; a page with its rows closer than 40
+ * sets it smaller for itself, or one press took two rows (Mary: REPLAYS
+ * and MODS answered as one). Put back to 30 after. */
+float PortOptionHitBelow = 30.0f;
 
 long DrawOptionAsButton(const char *text, float x, float y, float scale,
                         const float *colour, float maxWidth)
@@ -4049,7 +4058,7 @@ long DrawOptionAsButton(const char *text, float x, float y, float scale,
         float l = FE_X(x - 8.0f) + PortOptionShift + widest * -0.5f;
         float r = FE_X(x + 8.0f) + PortOptionShift + widest * 0.5f;
         float t = FE_Y(y - 10.0f - (float)(lines * 10 - 10));
-        float bt = FE_Y(y) + FE_H(30.0f) + FE_H((float)(lines * 10 - 10));
+        float bt = FE_Y(y) + FE_H(PortOptionHitBelow) + FE_H((float)(lines * 10 - 10));
         PortNavTarget(l, t, r - l, bt - t, 0);
     }
 
@@ -4072,7 +4081,7 @@ long DrawOptionAsButton(const char *text, float x, float y, float scale,
     if (ty < edge)
         return 0;
 
-    edge = FE_Y(y) + FE_H(30.0f) + FE_H((float)(lines * 10 - 10));
+    edge = FE_Y(y) + FE_H(PortOptionHitBelow) + FE_H((float)(lines * 10 - 10));
 
     return (ty <= edge) ? 1 : 0;
 }
@@ -7594,6 +7603,9 @@ extern float  averageScaleFactorOutput; /* 0x001017b8 -- written, never read */
 extern void (*const FETaskFunctionList[])(void);   /* 0x0017d51c */
 void FE_Task_Online(void);              /* port */
 void FE_Task_FatalTrainer(void);        /* port: EXTRAS > FATALITY TRAINER */
+void FE_Task_Mods(void);                /* port: EXTRAS > MODS */
+void FE_Task_Packs(void);               /* port: EXTRAS > TEXTURE PACKS */
+void FE_Task_Replays(void);             /* port: EXTRAS > REPLAYS */
 void PortMainBanner(void);              /* port, with FE_Task_Online */
 
 void limeSetColourMask(long r, long g, long b, long a);
@@ -7651,6 +7663,9 @@ void Task_FEMain(void)
     /* port: the ONLINE screen, after the binary's 51 (FE_Task_Online) */
     fn = FE_CurrentTask == 51 ? FE_Task_Online
        : FE_CurrentTask == 52 ? FE_Task_FatalTrainer   /* port */
+       : FE_CurrentTask == 53 ? FE_Task_Mods           /* port */
+       : FE_CurrentTask == 54 ? FE_Task_Packs          /* port */
+       : FE_CurrentTask == 55 ? FE_Task_Replays        /* port */
        : FETaskFunctionList[FE_CurrentTask];
     hideTicker = (fn == FE_Task_Main_Menu) ? 0 : 1;
     (*fn)();                            /* the table entry, not a named call */
@@ -9469,10 +9484,12 @@ void FE_Task_About(void)
 #define EXTRAS_SLIDE_SPAN    240.0f
 #define EXTRAS_PANEL_X       272.0f
 #define EXTRAS_OPTION_X      384.0f
-#define EXTRAS_OPTION_SCALE  1.25f
+#define EXTRAS_OPTION_SCALE  0.95f      /* 1.25 in the binary: port, nine options (Mary) */
 #define EXTRAS_OPTION_WIDTH  186.0f
 #define EXTRAS_ROW0          8.0f
-#define EXTRAS_ROW_PITCH     46.0f      /* 56 in the binary: port, seven options */
+/* 56 in the binary: port, nine options -- a little closer on the wide
+ * screens, where the pad's hints sit higher (PortWideLift) */
+#define EXTRAS_ROW_PITCH     (PortWideLift() > 0.0f ? 31.0f : 33.0f)
 #define EXTRAS_ENDINGS       23         /* EndingsText / EndingsGained entries */
 #define EXTRAS_ALL_ENDINGS   22         /* the > test that grants the treasure */
 #define EXTRAS_TASK_LEADERS  0x31
@@ -9490,6 +9507,9 @@ extern long LastTouch_Extras4, LastTouch_Extras5, LastTouch_Extras6;
 static long Touch_Extras7, LastTouch_Extras7;   /* port: FATALITY TRAINER */
 static char *PortUC(const char *s);     /* below, with the ONLINE screen */
 #define EXTRAS_TASK_TRAINER  52         /* port: FE_Task_FatalTrainer */
+#define EXTRAS_TASK_MODS     53         /* port: FE_Task_Mods */
+#define EXTRAS_TASK_PACKS    54         /* port: FE_Task_Packs */
+#define EXTRAS_TASK_REPLAYS  55         /* port: FE_Task_Replays */
 extern long  *EndingsText;              /* pointer slot -> 0x001010e4 */
 extern float *endingsOffsetY;           /* pointer slot -> 0x0018dd58 */
 
@@ -9557,6 +9577,7 @@ void FE_Task_Extras(void)
                    FE_H(384.0f),
                    0.5f, 0.0f, 0.5f, 0.75f, col);
 
+    PortOptionHitBelow = EXTRAS_ROW_PITCH - 12.0f;  /* port: one row a press */
     LastTouch_Extras1 = Touch_Extras1;
     Touch_Extras1 = DrawOptionAsButton(GameText(0xcb),
                                        FESlideOffset * EXTRAS_SLIDE_SPAN
@@ -9649,15 +9670,38 @@ void FE_Task_Extras(void)
                                               : "FATALITY TRAINER"),
                                        FESlideOffset * EXTRAS_SLIDE_SPAN
                                            + EXTRAS_OPTION_X,
-                                       EXTRAS_ROW0 + 6 * EXTRAS_ROW_PITCH
-                                           - PortWideLift(),
-                                       1.0f,
+                                       EXTRAS_ROW0 + 6 * EXTRAS_ROW_PITCH,
+                                       EXTRAS_OPTION_SCALE,
                                        &mmfontcol[(LastTouch_Extras7 + 1) * 4],
                                        FE_W(EXTRAS_OPTION_WIDTH));
     if (LastTouch_Extras7 != 0 && Touch_Extras7 == 0
         && limeTouchScreenX[0] == -1.0f)
         sel = 12;
 
+    /* Port, not in the binary (Mary): REPLAYS and MODS (its two pages,
+     * MODS and TEXTURE PACKS) -- the launcher's, inside the game
+     */
+    {
+        static long t8, l8, t9, l9;
+        const int es = Language[0] == 'E' && Language[1] == 'S';
+        l8 = t8;
+        t8 = DrawOptionAsButton(PortUC(es ? "REPETICIONES" : "REPLAYS"),
+                                FESlideOffset * EXTRAS_SLIDE_SPAN + EXTRAS_OPTION_X,
+                                EXTRAS_ROW0 + 7 * EXTRAS_ROW_PITCH, EXTRAS_OPTION_SCALE,
+                                &mmfontcol[(l8 + 1) * 4], FE_W(EXTRAS_OPTION_WIDTH));
+        if (l8 != 0 && t8 == 0 && limeTouchScreenX[0] == -1.0f)
+            sel = 13;
+        l9 = t9;
+        t9 = DrawOptionAsButton(PortUC("MODS"),
+                                FESlideOffset * EXTRAS_SLIDE_SPAN + EXTRAS_OPTION_X,
+                                EXTRAS_ROW0 + 8 * EXTRAS_ROW_PITCH,
+                                EXTRAS_OPTION_SCALE,
+                                &mmfontcol[(l9 + 1) * 4], FE_W(EXTRAS_OPTION_WIDTH));
+        if (l9 != 0 && t9 == 0 && limeTouchScreenX[0] == -1.0f)
+            sel = 14;
+    }
+
+    PortOptionHitBelow = 30.0f;
     MaintainFESlide();
 
     /* mid-slide the selection is forced rather than the dispatch skipped */
@@ -9683,6 +9727,10 @@ void FE_Task_Extras(void)
             EASDK_LogEvent(0xc35e, 15, "EXTRAS", 15, "BIOS");
         } else if (sel == 12) {
             PushFETaskDeferred(EXTRAS_TASK_TRAINER);    /* port */
+        } else if (sel == 13) {
+            PushFETaskDeferred(EXTRAS_TASK_REPLAYS);    /* port */
+        } else if (sel == 14) {
+            PushFETaskDeferred(EXTRAS_TASK_MODS);       /* port */
         }
     }
 
@@ -12622,7 +12670,9 @@ enum { OB_TAB0, OB_SUB0 = OB_TAB0 + OS_N, OB_COPY = OB_SUB0 + PS_N, OB_BOX, OB_F
        OB_LCARD_END = OB_LCARD0 + 8, OB_LVOTE, OB_LPUT, OB_LACCEPT, OB_LREJECT, OB_LPASS, OB_LCEDE, OB_LNOCEDE,
        OB_CARD0, OB_ACT0 = OB_CARD0 + PORT_ROWS, OB_ACT2 = OB_ACT0 + PORT_ROWS,
        OB_FT0 = OB_ACT2 + PORT_ROWS, OB_FTPICK0 = OB_FT0 + 16, OB_OSK0 = OB_FTPICK0 + 56,
-       OB_N = OB_OSK0 + 40 };
+       OB_XP0 = OB_OSK0 + 40, OB_XPUP = OB_XP0 + 12, OB_XPDN,  /* EXTRAS' pages */
+       OB_XPTAB0, OB_XPTAB_END = OB_XPTAB0 + 2,
+       OB_N };
 static long  PortOnlineWas[OB_N];
 static float PortOnlineLit[OB_N];       /* each button's light, eased */
 
@@ -22036,3 +22086,257 @@ void FE_Task_FatalTrainer(void)
     DrawTicker();
 }
 
+/* ----------------------------------- FE_Task_Mods / FE_Task_Replays
+ *
+ * Port, not in the binary (Mary): three pages of EXTRAS.
+ *
+ *   MODS            53   the mods in mods/, each on or off -- mods.ini, as
+ *                        the launcher's MOD MANAGER writes it (runtime/mods.c
+ *                        mods_set). ESSENTIAL ones (essential=1) are always on
+ *                        and cannot be touched: the game's working needs them.
+ *   TEXTURE PACKS   54   the same for the mods of category=textures (the HD
+ *                        characters among them), a section of their own.
+ *   REPLAYS         55   the fights REPLAYS kept (replays/recent, /saved), as
+ *                        the launcher lists them, played without leaving the
+ *                        game (game_main.c PortReplayGo); the player's X goes
+ *                        back here. PHOTO MODE (F3) works in them.
+ *
+ * The ONLINE screen's pieces, as the FATALITY TRAINER's page. A mod turned
+ * on or off counts from the game's next start, and the page says so. */
+int plat_mouse_wheel(void);           /* platform.h */
+#define XP_ROWS 9                       /* the rows a page shows at once */
+static int xp_top[3];                   /* each list's first row shown */
+
+static void xp_frame(const char *title, float *x, float *w)
+{
+    float vw = OnVW();
+
+    PortOnlineT += (1.0f / 60.0f) / limeFPSScaleFactor;
+    limeEnableAlphaBlending_Basic();
+    limeSet2DDrawing();
+    limeDrawSprite((TEXTURE *)MainMenuBGTexture, 0.0f, 0.0f,
+                   (float)limeScreenWidth, (float)limeScreenHeight,
+                   0.0f, 0.0f, 1.0f, 0.75f, col);
+    DrawVortex3D();
+    limeEnableAlphaBlending_Basic();
+    limeSet2DDrawing();
+    OnFill(0.0f, 0.0f, vw, 320.0f, 0.0f, 0.0f, 0.0f, 0.45f);
+    *w = 330.0f;
+    *x = (vw - *w) * 0.5f;
+    OnPanel(*x - 14.0f, 30.0f, *w + 28.0f, 252.0f, 1.0f, 1);
+    OnText(title, vw * 0.5f, 6.0f, 1, 0.95f, vw - 40.0f, OnGold, 1.0f);
+}
+
+/* the arrows of a list longer than the page, and the wheel; the top row */
+static void xp_scroll(int which, int n, float x, float w, int id_up, int id_dn)
+{
+    int wheel = plat_mouse_wheel();
+    int top = xp_top[which], most = n > XP_ROWS ? n - XP_ROWS : 0;
+
+    if (n > XP_ROWS) {
+        if (OnButton(id_up, "\xe2\x96\xb2", x + w + 2.0f, 40.0f, 14.0f, 40.0f, top > 0 ? BT_NORMAL : BT_OFF, 1.0f))
+            top--;
+        if (OnButton(id_dn, "\xe2\x96\xbc", x + w + 2.0f, 228.0f, 14.0f, 40.0f, top < most ? BT_NORMAL : BT_OFF, 1.0f))
+            top++;
+        top -= wheel;
+    }
+    xp_top[which] = top < 0 ? 0 : top > most ? most : top;
+}
+
+static void xp_back(void)
+{
+    long back = DrawButtonNew(&BUTTON_BACK, 0x1a7, 0x130, 1);
+    limeDrawFONT(&GameFont, GameText(7),
+                 FE_X(423.0f), FE_Y(296.0f), 1, FE_WidthScale, fontcol);
+    if (back)
+        PopFETaskDeferred();
+    DrawTicker();
+}
+
+/* MODS: two pages, MODS and TEXTURE PACKS (Mary: the same section, pages
+ * apart), each mod a card as the launcher's MOD MANAGER draws it -- its
+ * picture, name, version, author, category and description, and its
+ * switch. ESSENTIAL ones: the switch locked on. */
+TEXTURE *lime_load_mod_picture(const char *folder);   /* draw_gl.c */
+#define XP_CARDS 4                      /* the cards a page shows at once */
+static int xp_tab;                      /* 0 MODS, 1 TEXTURE PACKS */
+
+static const char *xp_cat(const char *c, int es)
+{
+    static const char *const k[] = { "textures", "audio", "music", "models", "mixed", "skin" };
+    static const char *const v_es[] = { "TEXTURAS", "AUDIO", "MUSICA", "MODELOS", "MIXTO", "TRAJE" };
+    static const char *const v_en[] = { "TEXTURES", "AUDIO", "MUSIC", "MODELS", "MIXED", "OUTFIT" };
+    int i;
+    for (i = 0; i < 6; i++)
+        if (strcmp(c, k[i]) == 0)
+            return es ? v_es[i] : v_en[i];
+    return es ? "MIXTO" : "MIXED";
+}
+
+static void xp_cat_rgb(const char *c, float *r, float *g, float *b)
+{
+    /* the launcher's metals: textures blood, audio verdigris, music
+     * oxblood-violet, models bronze, mixed steel */
+    *r = 0.64f; *g = 0.13f; *b = 0.10f;
+    if (strcmp(c, "audio") == 0)       { *r = 0.18f; *g = 0.48f; *b = 0.45f; }
+    else if (strcmp(c, "music") == 0)  { *r = 0.43f; *g = 0.16f; *b = 0.33f; }
+    else if (strcmp(c, "models") == 0 || strcmp(c, "skin") == 0) { *r = 0.66f; *g = 0.45f; *b = 0.16f; }
+    else if (strcmp(c, "mixed") == 0)  { *r = 0.36f; *g = 0.43f; *b = 0.53f; }
+}
+
+static void FE_Task_ModsPage(int packs)
+{
+    static MODS_ITEM list[96];
+    static TEXTURE *pic[96];
+    static char pic_of[96][128];
+    static int n_all, age, tab_set;
+    int es = Language[0] == 'E' && Language[1] == 'S';
+    int idx[96], n = 0, i, slot;
+    float x, w, y;
+
+    if (!tab_set) {                     /* --screen packs: the second page */
+        xp_tab = packs;
+        tab_set = 1;
+    }
+    if (age-- <= 0) {                   /* the folders read twice a second */
+        n_all = mods_list(list, 96);
+        for (i = 0; i < n_all; i++)
+            if (strcmp(pic_of[i], list[i].folder)) {
+                snprintf(pic_of[i], sizeof pic_of[i], "%s", list[i].folder);
+                pic[i] = lime_load_mod_picture(list[i].folder);
+            }
+        age = 30;
+    }
+    for (i = 0; i < n_all; i++)
+        if (list[i].pack == xp_tab)
+            idx[n++] = i;
+    xp_frame("MODS", &x, &w);
+
+    /* the two pages */
+    if (OnButton(OB_XPTAB0, "MODS", x, 36.0f, w * 0.5f - 2.0f, 16.0f,
+                 xp_tab == 0 ? BT_MAIN : BT_NORMAL, 1.0f))
+        xp_tab = 0;
+    if (OnButton(OB_XPTAB0 + 1, "TEXTURE PACKS", x + w * 0.5f + 2.0f, 36.0f, w * 0.5f - 2.0f, 16.0f,
+                 xp_tab == 1 ? BT_MAIN : BT_NORMAL, 1.0f))
+        xp_tab = 1;
+
+    /* the list, a card each */
+    {
+        int top = xp_top[xp_tab], most = n > XP_CARDS ? n - XP_CARDS : 0, wheel = plat_mouse_wheel();
+        if (n > XP_CARDS) {
+            if (OnButton(OB_XPUP, "\xe2\x96\xb2", x + w + 2.0f, 58.0f, 14.0f, 40.0f, top > 0 ? BT_NORMAL : BT_OFF, 1.0f))
+                top--;
+            if (OnButton(OB_XPDN, "\xe2\x96\xbc", x + w + 2.0f, 196.0f, 14.0f, 40.0f, top < most ? BT_NORMAL : BT_OFF, 1.0f))
+                top++;
+            top -= wheel;
+        }
+        xp_top[xp_tab] = top < 0 ? 0 : top > most ? most : top;
+    }
+    if (!n)
+        OnText(xp_tab ? (es ? "NO HAY TEXTURE PACKS EN LA CARPETA MODS." : "NO TEXTURE PACKS IN THE MODS FOLDER.")
+                      : (es ? "NO HAY MODS EN LA CARPETA MODS." : "NO MODS IN THE MODS FOLDER."),
+               x + w * 0.5f, 120.0f, 1, 0.5f, w, OnDim, 1.0f);
+    y = 58.0f;
+    for (slot = 0, i = xp_top[xp_tab]; i < n && slot < XP_CARDS; i++, slot++, y += 46.0f) {
+        MODS_ITEM *m = &list[idx[i]];
+        TEXTURE *t = pic[idx[i]];
+        float h = 43.0f, ix = x + 3.0f, iy = y + 3.0f, isz = h - 6.0f, tx0 = ix + isz + 6.0f;
+        float cr, cg, cb;
+        char line[160], desc[96];
+
+        /* the plate */
+        OnFill(x, y, w, h, 0.05f, 0.05f, 0.06f, m->on ? 0.82f : 0.6f);
+        OnFrame(x, y, w, h, 0.8f, m->essential ? 0.85f : 0.36f, m->essential ? 0.66f : 0.33f,
+                m->essential ? 0.34f : 0.30f, 0.9f);
+        xp_cat_rgb(m->category, &cr, &cg, &cb);
+        OnFill(x, y, 1.6f, h, cr, cg, cb, 1.0f);
+        /* its picture, or its kind's metal with its first letter */
+        if (t) {
+            float c[4] = { 1.0f, 1.0f, 1.0f, m->on ? 1.0f : 0.55f };
+            limeDrawSprite(t, OnX(ix), OnY(iy), OnW(isz), OnH(isz), 0.0f, 0.0f, 1.0f, 1.0f, c);
+        } else {
+            char l[2] = { m->name[0] >= 'a' && m->name[0] <= 'z' ? (char)(m->name[0] - 32) : m->name[0], 0 };
+            OnFill(ix, iy, isz, isz, cr, cg, cb, 0.9f);
+            OnText(l, ix + isz * 0.5f, iy + isz * 0.5f - 9.0f, 1, 0.8f, 0.0f, OnWhite, 1.0f);
+        }
+        OnFrame(ix, iy, isz, isz, 0.6f, 0.0f, 0.0f, 0.0f, 0.8f);
+        /* the words */
+        OnText(OnName(m->name), tx0, y + 3.0f, 0, 0.56f, w - (tx0 - x) - 84.0f, m->on ? OnWhite : OnDim, 1.0f);
+        snprintf(line, sizeof line, "%s%s%s%s", m->version[0] ? "V" : "", m->version,
+                 m->author[0] && m->version[0] ? "  -  " : "", OnName(m->author));
+        snprintf(line + strlen(line), sizeof line - strlen(line), "%s%s", line[0] ? "  -  " : "",
+                 xp_cat(m->category, es));
+        OnText(line, tx0, y + 17.0f, 0, 0.36f, w - (tx0 - x) - 84.0f, OnAmber, 1.0f);
+        {
+            /* the description, upper case as the cards are, to its 72nd
+             * letter (OnName keeps 39) */
+            size_t k;
+            for (k = 0; m->desc[k] && k < sizeof desc - 1; k++)
+                desc[k] = m->desc[k] >= 'a' && m->desc[k] <= 'z' ? (char)(m->desc[k] - 32) : m->desc[k];
+            desc[k] = 0;
+            if (k > 72)
+                memcpy(desc + 69, "...", 4);
+        }
+        OnText(desc, tx0, y + 29.0f, 0, 0.32f, w - (tx0 - x) - 6.0f, OnDim, 1.0f);
+        /* the switch */
+        if (OnButton(OB_XP0 + slot, m->essential ? (es ? "ESENCIAL" : "ESSENTIAL")
+                                                 : m->on ? (es ? "ACTIVADO" : "ON") : (es ? "DESACTIVADO" : "OFF"),
+                     x + w - 78.0f, y + 4.0f, 74.0f, 15.0f,
+                     m->essential ? BT_OFF : m->on ? BT_MAIN : BT_NORMAL, 1.0f)
+            && !m->essential && mods_set(m->folder, !m->on)) {
+            m->on = !m->on;
+            age = 0;
+        }
+    }
+    OnRule(x, 245.0f, w, 1.0f);
+    if (mods_changed())
+        OnText(es ? "LOS CAMBIOS SE APLICAN AL REINICIAR EL JUEGO" : "THE CHANGES TAKE EFFECT WHEN THE GAME RESTARTS",
+               x + w * 0.5f, 252.0f, 1, 0.42f, w, OnGold, 1.0f);
+    else
+        OnText(xp_tab ? (es ? "CADA PACK CAMBIA TEXTURAS DEL JUEGO. SE APLICA AL REINICIAR."
+                            : "EACH PACK CHANGES THE GAME'S TEXTURES. IT APPLIES ON A RESTART.")
+                      : (es ? "ACTIVA O DESACTIVA CADA MOD. ESSENTIALS SIEMPRE ESTA ACTIVO."
+                            : "TURN EACH MOD ON OR OFF. ESSENTIALS IS ALWAYS ON."),
+               x + w * 0.5f, 252.0f, 1, 0.40f, w, OnDim, 1.0f);
+    xp_back();
+}
+
+void FE_Task_Mods(void)  { FE_Task_ModsPage(0); }
+void FE_Task_Packs(void) { FE_Task_ModsPage(1); }
+
+/* REPLAYS */
+void PortReplayGo(const char *rel);     /* game_main.c */
+
+void FE_Task_Replays(void)
+{
+    static char rel[16][176], label[16][48];
+    static int n, recent, age;
+    int es = Language[0] == 'E' && Language[1] == 'S';
+    int i;
+    float x, w, y = 40.0f;
+
+    if (age-- <= 0) {
+        n = rp_menu_list(rel, label, 16, &recent);
+        age = 60;
+    }
+    xp_frame(es ? "REPETICIONES" : "REPLAYS", &x, &w);
+    xp_scroll(2, n, x, w, OB_XPUP, OB_XPDN);
+    if (!n)
+        OnText(es ? "AUN NO HAY REPETICIONES: CADA PELEA SE GUARDA SOLA AL TERMINAR."
+                  : "NO REPLAYS YET: EVERY FIGHT IS KEPT WHEN IT ENDS.",
+               x + w * 0.5f, 120.0f, 1, 0.46f, w, OnDim, 1.0f);
+    for (i = xp_top[2]; i < n && i < xp_top[2] + XP_ROWS; i++, y += 22.0f) {
+        char line[96];
+        snprintf(line, sizeof line, "%s%s", i < recent ? "" : (es ? "GUARDADA: " : "KEPT: "),
+                 OnName(label[i]));
+        if (OnButton(OB_XP0 + (i - xp_top[2]), line, x, y, w, 19.0f, BT_NORMAL, 1.0f)) {
+            printf("replays: %s from EXTRAS\n", rel[i]);
+            PortReplayGo(rel[i]);
+        }
+    }
+    OnRule(x, 245.0f, w, 1.0f);
+    OnText(es ? "ESPACIO / A: PAUSA    F / Y: CAMARA LIBRE    F3 / L3+R3: MODO FOTO    B: VOLVER"
+              : "SPACE / A: PAUSE    F / Y: FREE CAMERA    F3 / L3+R3: PHOTO MODE    B: BACK",
+           x + w * 0.5f, 252.0f, 1, 0.36f, w, OnDim, 1.0f);
+    xp_back();
+}

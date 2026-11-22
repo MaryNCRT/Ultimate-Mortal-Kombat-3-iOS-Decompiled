@@ -374,6 +374,10 @@ extern int   limeScreenHeight;
 
 void limePortDisplayRotation(void);
 extern float PortScreenShiftY;              /* port: GameCode.c PortKD */
+/* port only: PHOTO MODE's zoom (runtime/photo_mode.c, set by GameCode.c
+ * RenderGameView around this call): the projection's x and y scaled, which
+ * for a symmetric frustum is a narrower or wider field of view. 1 elsewhere. */
+float PortProjScale = 1.0f;
 
 void LIMEDS_Set3dMode(void)
 {
@@ -390,6 +394,8 @@ void LIMEDS_Set3dMode(void)
      * frame, the same for the stage and the fighters. 0 everywhere else. */
     if (PortScreenShiftY != 0.0f)
         glTranslatef(0.0f, PortScreenShiftY, 0.0f);
+    if (PortProjScale != 1.0f)
+        glScalef(PortProjScale, PortProjScale, 1.0f);
     limePortDisplayRotation();          /* port only -- not in the binary */
 
     {

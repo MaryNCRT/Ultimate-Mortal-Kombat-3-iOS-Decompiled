@@ -1136,6 +1136,26 @@ TEXTURE *lime_load_res_picture(const char *file)
     return load_picture(file, "Textures/");
 }
 
+/* Port, EXTRAS > MODS (FrontEnd.c): a mod's picture, as the launcher's
+ * card shows it -- cover.png in its folder (preview.png before), NULL
+ * when it has none */
+TEXTURE *lime_load_mod_picture(const char *folder)
+{
+    static const char *const names[] = { "cover.png", "preview.png" };
+    char dir[300];
+    int i;
+
+    if (!folder || strstr(folder, "..") || strchr(folder, '/') || strchr(folder, '\\'))
+        return NULL;
+    snprintf(dir, sizeof dir, "../mods/%s/", folder);
+    for (i = 0; i < 2; i++) {
+        TEXTURE *t = load_picture(names[i], dir);
+        if (t)
+            return t;
+    }
+    return NULL;
+}
+
 /* A texture lime_load_extra_texture gave: its picture's size. */
 void lime_extra_texture_size(const TEXTURE *t, int *w, int *h)
 {
