@@ -66,7 +66,7 @@ Todos se pueden cambiar en el launcher (CONTROLES) o en el juego (`Esc`).
 **El juego, como en el dispositivo.** Todos los modos del juego de iOS (torre arcade, VS, entrenamiento, supervivencia, karnage, tesoros, kodes), sus menús, HUD, remates, sonidos y música, desde el código decompilado. En 4:3 se usa la disposición de la versión de iPad.
 
 **Añadido por el port:**
-- **Renderizadores:** OpenGL, Vulkan y Direct3D 12 (`src/runtime/render/`), texturas HD, antialiasing, ILUMINACIÓN MEJORADA (sombras en tiempo real, relieve y especular en todas las texturas, mipmaps, cada brillo una luz de su color, cada escenario iluminado por su cielo, archivos de iluminación por escenario, oclusión ambiental), VSYNC, BAJA LATENCIA (como mucho un fotograma en cola entre los controles y la pantalla), cachés de pipelines compiladas antes de jugar.
+- **Renderizadores:** OpenGL, Vulkan y Direct3D 12 (`src/runtime/render/`), texturas HD, antialiasing, ILUMINACIÓN MEJORADA (sombras en tiempo real, relieve y especular en todas las texturas, mipmaps, cada brillo una luz de su color, cada escenario iluminado por su cielo, archivos de iluminación por escenario, oclusión ambiental, sombras de contacto), presets de CALIDAD GRÁFICA (ORIGINAL / MEJORADA) con bloom y mapeo de tonos sobre el combate que no tocan el HUD, VSYNC, BAJA LATENCIA (como mucho un fotograma en cola entre los controles y la pantalla), cachés de pipelines compiladas antes de jugar.
 - **Pantallas:** 3:2, 4:3, 16:9 y 21:9; menús y paneles adaptados a cada una.
 - **ANIMACIONES SUAVES** (cuadros entre los cuadros del juego) y **SUAVIZAR MODELOS** (el weld y la subdivisión Catmull-Clark de Blender, con control de bordes afilados).
 - **Música dinámica de escenario** (del port; `dynamic_music=0` en umk3.ini la quita): con FINISH HIM la música salta a un tramo crítico, al anunciar al ganador suena un tramo final, y un uppercut que atraviesa el techo hacia otro escenario cambia a la música de ese escenario.
@@ -104,7 +104,8 @@ Todos se pueden cambiar en el launcher (CONTROLES) o en el juego (`Esc`).
 - Al unirse en línea, el glifo X del mando apareció una vez sobre START (Mary); sin reproducir aún.
 - Algunos escenarios todavía se pausan hasta ~1,3 s en sus primeros cuadros (THE STREET) mientras cargan sus eventos.
 - Con ILUMINACIÓN MEJORADA, los primeros cuadros pueden congelarse un segundo o más mientras el driver termina el shader (Direct3D 12).
-- ILUMINACIÓN MEJORADA y OCLUSIÓN AMBIENTAL son solo Vulkan y DirectX 12; OpenGL dibuja como antes.
+- ILUMINACIÓN MEJORADA, OCLUSIÓN AMBIENTAL y SOMBRAS DE CONTACTO son solo Vulkan y DirectX 12; con OpenGL el preset de CALIDAD GRÁFICA solo aporta BLOOM y MAPEO DE TONOS.
+- CALIDAD GRÁFICA (sin publicar): comprobada solo en Direct3D 12; Vulkan y OpenGL aún sin capturas, tiempos por frame aún sin medir. Los presets RTX están planificados, no hechos.
 - En Linux la música del escenario todavía se decodifica en el hilo del juego (Windows lo hace en un hilo propio).
 - MOD HUB: las descargas de los mods vienen de las releases de GitHub; una red que las bloquee no puede descargar mods.
 - Mod de DLSS 5: la parte del juego está probada (detecta, comprueba y rechaza el mod como debe), pero todavía no se ha confirmado una partida con todos los componentes presentes. El HUD se procesa junto con la escena.

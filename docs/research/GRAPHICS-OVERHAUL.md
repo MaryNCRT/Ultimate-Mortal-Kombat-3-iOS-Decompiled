@@ -1,11 +1,12 @@
 # Graphics overhaul: audit, findings and architecture (phase 1)
 
-**Status (2026-11-22):** phase 1 only -- an audit of what exists and a
-proposed architecture. **No code was changed for it.** Nothing below is
-implemented unless the "what exists" section says so with a file name.
-Asked for by Mary: four presets (ORIGINAL, ENHANCED GRAPHICS, RTX,
-RTX + DLSS 5), a character / environment split, HUD protection, launcher
-management of optional components, in-game settings.
+**Status (2026-11-22):** phase 1, the audit and architecture below, is
+done. Phase 2 (GRAPHICS QUALITY: ORIGINAL / ENHANCED presets, play-time
+bloom and tonemap before the HUD, contact shadows on the stage) is built
+in `src/runtime/gfx_preset.c` and the shaders, and checked in Direct3D 12
+only (PROGRESS.md, 2026-11-22). Phases 3-10 have not started. The DLSS 5
+path landed separately as a mod (`docs/DLSS5-MOD.md`), not as the
+integrated layer of section 4.5.
 
 Everything here is port work (`Port, not in the binary`). It does not touch
 `src/decomp/` logic: the fight engine, input, timing, rollback and the
