@@ -609,6 +609,7 @@ static char g_gpu[200];                 /* GL_RENDERER / GL_VERSION, read at sta
 
 #ifdef _WIN32
 #include <windows.h>
+#include <process.h>                   /* _cexit (the exit with DLSS 5) */
 #else
 #include <sys/utsname.h>
 #endif
@@ -1129,6 +1130,52 @@ static void read_config_p2(const char *n, const char *v)
         else if (strcmp(n + 4, "ok") == 0)
             plat_bind_key(PK_P2_OK, atoi(v));
     }
+}
+
+/* Port: DLSS 5's one-time preparation. The AIO add-on waits 15 s for a
+ * stable picture, then makes NVIDIA's neural model inside a Present: 3-4 s
+ * in which the screen cannot change (measured 3.7 s). It cannot be made
+ * shorter from here; it can be said. From 11 s after the first frame a line
+ * at the foot of the screen says it, so the frame the screen holds carries
+ * it; it goes when a frame has taken over a second (the preparation done),
+ * or after 45 s. 2D, so the neural pass never touches it. */
+static void dlss5_notice(void)
+{
+    extern int limeScreenWidth, limeScreenHeight;
+    void limeEnableAlphaBlending_Basic(void);
+    void limeSet2DDrawing(void);
+    void limeFillRect(float x, float y, float w, float h, float r, float g, float b, float a);
+    void PortPhotoText(const char *s, float x, float y, int align, float scale, const float rgb[3]);
+    static double first, last;
+    static int done;
+    static const float white[3] = { 0.93f, 0.90f, 0.85f };
+    double now = plat_time(), t;
+    float W = (float)limeScreenWidth, H = (float)limeScreenHeight;
+    int es = Language[0] == 'E' && Language[1] == 'S';
+
+    if (!neural_mod_loaded() || done)
+        return;
+    if (first == 0.0)
+        first = now;
+    t = now - first;
+    if (last != 0.0 && now - last > 1.0 && t > 8.0) {
+        done = 1;                       /* the long Present: the model is made */
+        printf("dlss5: the neural model was prepared (%.1f s without a frame, %.0f s after start)\n",
+               now - last, t);
+        return;
+    }
+    last = now;
+    if (t < 11.0 || t > 45.0) {
+        if (t > 45.0)
+            done = 1;
+        return;
+    }
+    limeEnableAlphaBlending_Basic();
+    limeSet2DDrawing();
+    limeFillRect(0.0f, H - 22.0f, W, 22.0f, 0.0f, 0.0f, 0.0f, 0.65f);
+    PortPhotoText(es ? "DLSS 5: PREPARANDO EL MODELO NEURONAL DE NVIDIA (UNOS SEGUNDOS)..."
+                     : "DLSS 5: PREPARING NVIDIA'S NEURAL MODEL (A FEW SECONDS)...",
+                  W * 0.5f, H - 17.0f, 1, 0.45f, white);
 }
 
 static void read_config(const char *dir)
@@ -4735,6 +4782,7 @@ int main(int argc, char **argv)
              * frames and hints above too (FrontEnd.c PortFadeOnTop) */
             if (CurrentTask == 3 && FE_Fade < 1.0f)
                 ui_fade_layer(1.0f - FE_Fade);
+            dlss5_notice();             /* port: DLSS 5's one-time preparation, said */
             render_resolve();
             if (rp_playing() && g_rp_hidden) {          /* HIDE: the fight alone */
                 if (g_rp_hint > 0)
@@ -5114,6 +5162,10 @@ int main(int argc, char **argv)
         pace_work_end();
         port_smooth_frame();
         fflush(stdout);         /* the session log, once a frame */
+        {
+            extern long InGame;         /* GameCode.c */
+            rgl_in_fight = InGame != 0; /* DLSS 5's layers: menus are never the scene */
+        }
         if (!plat_swap())
             break;
         pace_frame();
@@ -5122,9 +5174,30 @@ int main(int argc, char **argv)
     {
         void discord_presence_shutdown(void);
         void mplobby_leave_now(void);   /* mp_eos.c: out of a lobby, so its place empties at once */
+        double t0 = plat_time();
+        printf("exit: the loop left\n");
         mplobby_leave_now();
+        printf("exit: lobby left, %.0f ms\n", (plat_time() - t0) * 1000.0);
         discord_presence_shutdown();
+        printf("exit: discord, %.0f ms\n", (plat_time() - t0) * 1000.0);
+        fflush(stdout);
+#ifdef _WIN32
+        if (neural_mod_loaded()) {
+            /* port: with DLSS 5 loaded the Direct3D 12 device's release, with
+             * the AIO add-on hooked into it, took 17 s, and the add-on's
+             * unloading 5 s more: the closed game froze (Mary). The game's
+             * own exit work is done by here (plat_close only releases the
+             * renderer and the window); the atexit handlers (a replay being
+             * written) and the files are finished by _cexit, and the process
+             * ends without the release and the DLLs' unloading. */
+            printf("exit: DLSS 5 loaded -- leaving without releasing the renderer\n");
+            fflush(stdout);
+            _cexit();
+            TerminateProcess(GetCurrentProcess(), 0);
+        }
+#endif
+        plat_close();
+        printf("exit: window and renderer closed, %.0f ms\n", (plat_time() - t0) * 1000.0);
     }
-    plat_close();
     return 0;
 }

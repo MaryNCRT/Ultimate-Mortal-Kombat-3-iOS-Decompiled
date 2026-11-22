@@ -265,6 +265,9 @@ extern int rgl_shadows;
  * presented picture to tell the neural pass what to touch and how much.
  * The colour is never changed by it. */
 extern int rgl_layers;
+/* 1 while a fight is on (game_main.c, every frame): outside one -- the menus,
+ * the select screen -- every draw is layer 0, whatever its camera */
+extern int rgl_in_fight;
 /* AMBIENT OCCLUSION (umk3.ini, rgl_ff.c; with ENHANCED LIGHTING, Vulkan and
  * Direct3D 12): rgl_ao 0 off, 1 Crytek SSAO, 2 HBAO, 3 Alchemy AO */
 extern int   rgl_ao, rgl_ao_samples, rgl_ao_blur;

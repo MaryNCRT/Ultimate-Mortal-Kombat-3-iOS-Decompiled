@@ -127,6 +127,38 @@ built and checked in Direct3D 12 only; see the log entry below. Phase 3
 ---
 
 
+## Detailed log (newest first)
+
+### 2026-11-22 (midday) -- DLSS 5: menus left out, the 17 s exit, the preparation said
+
+- Mary: "everything that is a menu must stay out of DLSS 5". The layers are
+  on by default again (`dlss5_layers=1`). Outside a fight (`InGame` 0,
+  passed to the renderer as `rgl_in_fight` from the frame loop) every draw
+  is layer 0, the select screen's 3D fighters included. Measured with
+  `UMK3_LAYER_PROBE`: menus 100 % layer 0; a fight 91 % stage, 4 % fighters,
+  5 % HUD.
+- Mary saw no neural effect with the layers. Two leads were followed. AIO's
+  lab notes say a supplied ControlMask overrides NVIDIA's automatic mask.
+  More concretely: in the guide path the neural pass got ReShade's depth,
+  which with the game's MSAA is a wrong, nearly empty buffer, while without
+  guides it gets AIO's fallback (flat, 1.0). Our DLSS5_AIO_Feed.fx now
+  gives the same flat depth and no depth edges, so the mask is the only
+  difference left. Not yet confirmed by Mary.
+- The game froze about 17 s when closed with DLSS 5. Timed: `plat_close` took
+  17,179 ms (the D3D12 device released with the AIO add-on hooked), against
+  139 ms without DLSS 5, and the add-on's own unloading 5 s more. With DLSS 5
+  loaded, main now ends after its own shutdown work, with `_cexit` (atexit:
+  the replay being written) and then `TerminateProcess`, without
+  `plat_close`. Closing now takes 0.33 s, and the replay is still saved.
+- The other freeze: about 15 s after start, AIO makes NVIDIA's model inside
+  a Present, 3.6-4.3 s with no new frame (`d3d12 slow present`). It cannot
+  be shortened from the game. `dlss5_notice` (game_main.c) shows "DLSS 5:
+  PREPARING NVIDIA'S NEURAL MODEL" from 11 s, so the held frame says so, and
+  takes it down once a frame has taken over a second (logged: "the neural
+  model was prepared (3.8 s without a frame, 19 s after start)").
+- Seen, not understood: a run with no arguments, nobody at the keys, opened
+  and closed the settings menu by itself and the game then closed.
+
 ### 2026-11-22 (late morning) -- DLSS 5 on AIO: the neural pass in the game, layers, presets
 
 Mary chose AIO (DLSS5 ReShade AIO 2.2.4, Apache-2.0) as the shipped chain.
