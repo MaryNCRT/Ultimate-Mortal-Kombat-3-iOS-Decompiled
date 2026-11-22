@@ -156,6 +156,7 @@ void dbg_replay_size(void);
 /* the panel faded (CINEMA, 0..1), the pad used last (its hints), the moves
  * panel hidden, CINEMA on -- game_main.c keeps them (port, 0.5.9) */
 extern float dbg_replay_alpha;
+float dbg_replay_hint_y(void);          /* the keys' line, a fraction of the height */
 extern int   dbg_replay_pad, dbg_replay_moves_hidden, dbg_replay_cine;
 int  dbg_fps_on(void);                 /* TOOLS: FRAMES PER SECOND */
 int  dbg_net_on(void);                 /* TOOLS: ONLINE NUMBERS */

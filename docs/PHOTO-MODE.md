@@ -73,6 +73,13 @@ shaders' comment).
    contrast, saturation, temperature, tint, gamma, sharpness, highlights,
    shadows; depth of field, bloom, vignette, chromatic aberration, grain,
    nine filters. See "The effects" below.
-3. A fighter turned or moved for the picture, poses if the animation frames
-   allow it (expressions are not possible: the models have no face rig).
-4. 1440p / 4K and supersampling, presets, settings saved.
+3. **Done (0.6.0):** a fighter turned, moved or hidden (GameCode.c: the
+   body's matrix +0x548 and the pose's +0x588, both), the stage and the
+   effects hidden, the fight stepped a frame at a time with the frozen frame
+   put back from a save state (`st_photo_*`). No poses or expressions: a
+   pose is a frame of the fight's own animation (stepping shows them), and
+   the models have no face rig.
+4. **Done (0.6.0):** 1440p, 4K and supersampling (the photo's frame alone
+   drawn in a buffer that size, at most 4 samples; game_main.c clear_frame),
+   eight presets, the settings in `photo_mode.ini`, a HIDE MENU button, the
+   mouse (hover, arrows, wheel), the keys' and the pad's pictures.

@@ -1575,6 +1575,7 @@ int PortKD_HoldRound(void)
  */
 void (*PortAfterScene)(void);
 extern float PortProjScale;                 /* port: decomp/lime/LIMEDS_Misc.c */
+int photo_hide_effects(void);               /* port: PHOTO MODE's SCENE page */
 
 void RenderGameView(void)
 {
@@ -1616,8 +1617,13 @@ void RenderGameView(void)
         return;
     }
 
-    RenderLevelBG();
-    LIME_RenderEvents(0);                   /* opaque pass */
+    {
+        int photo_hide_stage(void);         /* port: PHOTO MODE's SCENE page */
+        if (!photo_hide_stage())
+            RenderLevelBG();
+    }
+    if (!photo_hide_effects())
+        LIME_RenderEvents(0);               /* opaque pass */
     if (PortKD.stage                        /* port: another stage behind */
         && stage_picture_full(PortKD.stage,
                               -PortKD.shift * 0.5f * 320.0f))
@@ -1634,8 +1640,10 @@ void RenderGameView(void)
     if (ClearedZBuffer != 0 && *LevelSelectPtr == 2)
         limeClearDepthBuffer();
 
-    LIME_RenderEvents(1);                   /* translucent pass */
-    MaintainParticles();
+    if (!photo_hide_effects()) {
+        LIME_RenderEvents(1);               /* translucent pass */
+        MaintainParticles();
+    }
     KillIllegalWhirlwinds();
     RenderExtras();
     if (PortKD.cover                        /* port: the empty city, over all */
@@ -13267,6 +13275,17 @@ static void RenderLevelPlayers_Pose(const long *w, long chr, float s,
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
     glTranslatef(pf[0x5c8 / 4], pf[0x5cc / 4], pf[0x5d0 / 4]);
+    {
+        /* port: PHOTO MODE's CHARACTER page -- the fighter moved and turned
+         * about his own spot for the picture, his state as it was */
+        int photo_fighter_adjust(int slot, float a[4]);
+        float a[4];
+        int who = w == RLP_PLAYER(0) ? 0 : w == RLP_PLAYER(1) ? 1 : -1;
+        if (who >= 0 && photo_fighter_adjust(who, a)) {
+            glTranslatef(a[0], a[1], a[2]);
+            glRotatef(a[3], 0.0f, 0.0f, 1.0f);
+        }
+    }
     glScalef(s, s, s);
 
     if (withOffset)
@@ -13359,7 +13378,10 @@ void RenderLevelPlayers(void)
             }
 
             ArcadePosTo3dPos(obj, &pf[0x5c8 / 4], &os[GOBJ_CHR]);
-            PortSkipFighter = PortKD_HideSide(side);    /* port: PortKD */
+            {
+                int photo_hide_side(long side); /* port: PHOTO MODE, a fighter hidden */
+                PortSkipFighter = PortKD_HideSide(side) || photo_hide_side(side);    /* port: PortKD */
+            }
             /* Port, not in the binary: a babality's baby stood on the floor.
              * t_turn_into_a_baby (mkstat.c) puts it at the floor less its
              * frame's box height, the arcade sprite's -- 44 for Sub-Zero,
@@ -13546,6 +13568,25 @@ void RenderLevelPlayers(void)
                 mtx[14] = pf[0x5d0 / 4];
 
                 limeScaleMatrixXYZ(mtx, w[0x540 / 4] ? -s : s, s, s);
+                {
+                    /* port: PHOTO MODE's CHARACTER page -- turned about the
+                     * up axis after the scale (rows times Rz, the lime's
+                     * row vectors) and moved; drawn so, his state as it was */
+                    int photo_fighter_adjust(int slot, float a[4]);
+                    float a[4];
+                    if (slot <= 1 && photo_fighter_adjust((int)slot, a)) {
+                        float c = cosf(a[3] * 0.017453293f), sn = sinf(a[3] * 0.017453293f);
+                        int r;
+                        for (r = 0; r < 3; r++) {
+                            float x = mtx[r * 4], y = mtx[r * 4 + 1];
+                            mtx[r * 4]     = x * c - y * sn;
+                            mtx[r * 4 + 1] = x * sn + y * c;
+                        }
+                        mtx[12] += a[0];
+                        mtx[13] += a[1];
+                        mtx[14] += a[2];
+                    }
+                }
                 limeMatrixMult(M_Rot90, mtx, &pf[0x548 / 4]);
 
                 RenderLevelPlayers_Pose(w, chr, s,
