@@ -36,3 +36,18 @@ rep('    for (const char *name : {"Color", "DLSSNR.Color"}) g_ngx_params->Set(na
     '    }\n')
 open(p, 'w', encoding='utf-8', newline='').write(s)
 print('patched')
+
+# 4. the final composition (the proxy compositor, after NR and DLSS/DLAA):
+#    where the game's alpha says interface, the original pixel goes on top --
+#    the HUD, texts and menus a layer over everything, never processed
+rep('"Texture2D<float3> Neural:register(t0); Texture2D<float3> Original:register(t1);',
+    '"Texture2D<float3> Neural:register(t0); Texture2D<float4> Original:register(t1);')
+rep('float3 original=Original.Load(int3(op,0));',
+    'float4 originalA=Original.Load(int3(op,0)); float3 original=originalA.rgb;')
+rep('else if(Mode==1)result=neural;',
+    'else if(Mode==1)result=(NoticePadding.x!=0u&&originalA.a>0.5)?original:neural;')
+rep('    constants.mode = g_composite_reshade_output && composite_post ?\n',
+    '    constants.notice_padding[0] = g_umk3_ui_protect ? 1u : 0u;   // UMK3 PC: the interface on top\n'
+    '    constants.mode = g_composite_reshade_output && composite_post ?\n')
+open(p, 'w', encoding='utf-8', newline='').write(s)
+print('patched (compositor)')
