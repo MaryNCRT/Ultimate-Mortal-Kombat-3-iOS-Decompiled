@@ -10,6 +10,13 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
+- **DLSS 5, the interface left alone:** the HUD, texts and every menu (the
+  front end, the select screen, the Esc menu) are kept out of the neural
+  pass, which works on the fight's stage and fighters only (`dlss5_layers=1`,
+  the default again). **Closing the game no longer freezes** (17 s -> 0.3 s).
+  The one-time preparation of NVIDIA's model, about 15 s after start (3-4 s
+  in which the screen holds still), now says so at the foot of the screen.
+
 - **DLSS 5 on DLSS5 ReShade AIO** (experimental): the neural pass runs in the game.
   Seen by Mary on an RTX 5070 with HD texture mods. The package brings AIO 2.2.4
   (Apache-2.0) instead of DLSS5-Feeder, and the player adds only NVIDIA's two DLLs.

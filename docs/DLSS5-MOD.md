@@ -23,7 +23,9 @@ to copy by hand.
 > `CreateFeature(feature=18) = Success`, NR and DLAA on every frame, 60 fps,
 > borderless 1920x1080.
 >
-> **The layers are experimental and off** (`dlss5_layers=1` turns them on).
+> **The layers are on by default** (`dlss5_layers=0` turns them off): the HUD,
+> texts and every menu are left out, and outside a fight nothing is processed.
+> Earlier the same day they were off, because Mary saw no effect with them.
 > With them on, the logs had the mask bound on every frame
 > (`NR-control-mask=BOUND`), and screen captures showed the neural pass on
 > the stage with the HUD left clean. Mary, though, saw no effect and asked
@@ -50,7 +52,7 @@ to copy by hand.
    is missing, if anything. With `nvngx_dlss.dll` alone, DLSS (DLAA) runs
    without the neural pass.
 
-## The layers: what is and isn't touched (experimental, `dlss5_layers=1`)
+## The layers: what is and isn't touched (`dlss5_layers=1`, the default)
 
 With the layers on, every Direct3D 12 draw also writes a code into the
 picture's alpha. The colour is never changed (`rgl_layers`). Their mask

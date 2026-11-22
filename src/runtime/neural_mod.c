@@ -48,7 +48,7 @@
 int neural_mod_enabled = 1;             /* umk3.ini dlss5_mod= */
 int neural_dlss5;                       /* umk3.ini dlss5= (GRAPHICS > DLSS 5) */
 float neural_stage = 1.0f, neural_fighters = 1.0f;   /* umk3.ini dlss5_stage= / dlss5_fighters= */
-int neural_layers;                      /* umk3.ini dlss5_layers= (experimental, off) */
+int neural_layers = 1;                  /* umk3.ini dlss5_layers= (menus and HUD left out) */
 
 /* GRAPHICS > DLSS 5 > PRESET (umk3.ini dlss5_preset=): the neural model --
  * NVIDIA's three networks, DLSSNR.Style 0..2, AIO's Model 1..3 -- and its

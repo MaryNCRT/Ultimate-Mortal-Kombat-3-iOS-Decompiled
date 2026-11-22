@@ -1313,6 +1313,7 @@ static int invert(const mat4 *a, mat4 *out)
 }
 
 int rgl_layers;                         /* rgl.h */
+int rgl_in_fight = 1;                   /* rgl.h: a fight is on (game_main.c sets it) */
 static int g_scene_cam;                 /* the 3D scene's camera is on (rgl_layers) */
 
 void rgl_shadow_camera(int on)
@@ -3151,7 +3152,10 @@ static void submit(int topo, rgl_vtx *v, int n)
     if (rgl_layers) {
         /* DLSS 5's layers (rgl.h): the 3D scene's camera is the stage, or a
          * fighter while one is drawn; anything else (the HUD, menus, 2D) 0 */
-        float v = !g_scene_cam ? 0.0f : SH.caster ? 0.5f : 1.0f;
+        /* outside a fight (the menus, the select screen's turning
+         * fighters, the Esc menu) nothing is the scene: menus are never
+         * touched (Mary) */
+        float v = !g_scene_cam || !rgl_in_fight ? 0.0f : SH.caster ? 0.5f : 1.0f;
         f.layer = (p.blend ? 1.0f : 3.0f) + v;
         p.mask |= 0x10;                 /* the backend's layered blend */
     }

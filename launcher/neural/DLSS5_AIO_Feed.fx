@@ -113,16 +113,20 @@ void DLSS5_AIO_CaptureGuides(float4 position : SV_Position, float2 texcoord : TE
     // direction but expects pixels rather than normalized UV units.
     float2 motion_uv = tex2Dlod(sMotVectTexVort, float4(texcoord, 0.0, 0.0)).xy;
     motion = motion_uv * float2(BUFFER_WIDTH, BUFFER_HEIGHT);
-    depth = tex2Dlod(sDLSS5_AIO_GameDepth, float4(texcoord, 0.0, 0.0)).x;
+    // UMK3 PC: the depth the neural pass gets is the addon's own fallback,
+    // flat and far (1.0, not reversed) -- what it is given without these
+    // guides, where Mary saw the effect. ReShade's depth here is the wrong
+    // buffer while the game antialiases (it cannot read a multisampled one),
+    // and with it the 3D-guided pass all but vanished.
+    float game_depth = tex2Dlod(sDLSS5_AIO_GameDepth, float4(texcoord, 0.0, 0.0)).x;
+    depth = 1.0;
 
     float2 previous_uv = texcoord + motion_uv;
     float outside = any(previous_uv < 0.0) || any(previous_uv > 1.0) ? 1.0 : 0.0;
     float extreme_flow = smoothstep(48.0, 160.0, length(motion));
     float2 pixel = 1.0 / float2(BUFFER_WIDTH, BUFFER_HEIGHT);
-    float depth_dx = abs(depth - tex2Dlod(sDLSS5_AIO_GameDepth, float4(texcoord + float2(pixel.x, 0.0), 0.0, 0.0)).x);
-    float depth_dy = abs(depth - tex2Dlod(sDLSS5_AIO_GameDepth, float4(texcoord + float2(0.0, pixel.y), 0.0, 0.0)).x);
-    float relative_depth_edge = max(depth_dx, depth_dy) / max(abs(depth), 1e-4);
-    float depth_edge = smoothstep(0.015, 0.08, relative_depth_edge);
+    // UMK3 PC: no depth edges either (the same untrustworthy buffer)
+    float depth_edge = 0.0 * game_depth * pixel.x;
     mask = saturate(max(outside, max(extreme_flow, depth_edge)));
 
     // UMK3 PC: the game's layer code. Edges of a fighter over the stage come
