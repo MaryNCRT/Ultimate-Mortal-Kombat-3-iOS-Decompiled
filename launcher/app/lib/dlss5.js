@@ -62,7 +62,7 @@ function present(root) {
     try { names = fs.readdirSync(dir); } catch { /* none yet */ }
     const low = names.map(n => n.toLowerCase());
     return {
-        installed: low.includes('reshade64.dll') && low.includes('dlss5-feed.addon64'),
+        installed: low.includes('reshade64.dll') && low.includes('standalone-dlssnr.addon64'),
         dlss: low.includes('nvngx_dlss.dll'),
         dlssnr: low.includes('nvngx_dlssnr.dll'),
         consumer: names.find(n => classify(n) === 'consumer') || '',

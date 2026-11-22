@@ -1210,6 +1210,15 @@ static void read_config(const char *dir)
             neural_mod_enabled = atoi(v) != 0;
         else if (strcmp(line, "dlss5") == 0)           /* neural_mod.c: GRAPHICS > DLSS 5 */
             neural_dlss5 = atoi(v) != 0;
+        else if (strcmp(line, "dlss5_layers") == 0)    /* neural_mod.c: experimental */
+            neural_layers = atoi(v) != 0;
+        else if (strcmp(line, "dlss5_preset") == 0)    /* neural_mod.c: GRAPHICS > DLSS 5 > PRESET */
+            neural_preset_index = neural_preset_parse(v);
+        else if (strcmp(line, "dlss5_stage") == 0 || strcmp(line, "dlss5_fighters") == 0) {
+            float f = (float)atof(v);                   /* neural_mod.c: the layers */
+            f = f < 0.0f ? 0.0f : f > 1.0f ? 1.0f : f;
+            if (line[6] == 's') neural_stage = f; else neural_fighters = f;
+        }
         else if (strcmp(line, "rt_shadows") == 0)      /* render/rgl.h */
             rgl_shadows = atoi(v) == 1, own = 1;
         /* GRAPHICS QUALITY (gfx_preset.c): the preset, and the switches of

@@ -97,19 +97,23 @@ function cleanBroken(buildDir, onData) {
                               : 'Repair: no broken build files' });
 }
 
-/* A folder's files copied where they are missing (or of another size),
- * the rest left alone */
-function copyMissing(from, to) {
+/* A folder's files copied where they are missing (or of another size; with
+ * `newer`, also where the source is newer -- DLSS 5's DLLs change without
+ * changing size), the rest left alone */
+function copyMissing(from, to, newer = false) {
     let n = 0;
     let list;
     try { list = fs.readdirSync(from, { withFileTypes: true }); } catch (_) { return 0; }
     for (const e of list) {
         const a = path.join(from, e.name), b = path.join(to, e.name);
         if (e.isDirectory())
-            n += copyMissing(a, b);
+            n += copyMissing(a, b, newer);
         else {
             let same = false;
-            try { same = fs.statSync(a).size === fs.statSync(b).size; } catch (_) { /* missing */ }
+            try {
+                const sa = fs.statSync(a), sb = fs.statSync(b);
+                same = sa.size === sb.size && (!newer || sa.mtimeMs <= sb.mtimeMs);
+            } catch (_) { /* missing */ }
             if (!same) {
                 fs.mkdirSync(to, { recursive: true });
                 fs.copyFileSync(a, b);
@@ -320,7 +324,7 @@ async function build(root, ipa, arch = 'x64', onDataIn = () => {}, opts = {}) {
          * graphics/dlss5. Only copied over, never deleted: NVIDIA's files and
          * the consumer the player added there stay through every update */
         {
-            const n = copyMissing(path.join(srcRoot, 'launcher', 'dlss5'), path.join(root, 'graphics', 'dlss5'));
+            const n = copyMissing(path.join(srcRoot, 'launcher', 'dlss5'), path.join(root, 'graphics', 'dlss5'), true);
             if (n)
                 onData({ text: `DLSS 5: ${n} files put in graphics\\dlss5` });
         }

@@ -1113,8 +1113,16 @@ void ff_glClear(GLbitfield m)
                    S.clear, (m & E_DEPTH_BUFFER_BIT) && S.depth_mask))
         return;
     scene_flush();
-    B->clear(sc ? &r : NULL, (m & E_COLOR_BUFFER_BIT) && (S.mask[0] | S.mask[1] | S.mask[2] | S.mask[3]),
-             S.clear, (m & E_DEPTH_BUFFER_BIT) && S.depth_mask, 1.0f);
+    {
+        /* DLSS 5's layers: a cleared picture is no layer (alpha 0) until
+         * the scene draws over it */
+        float c[4];
+        memcpy(c, S.clear, sizeof c);
+        if (rgl_layers)
+            c[3] = 0.0f;
+        B->clear(sc ? &r : NULL, (m & E_COLOR_BUFFER_BIT) && (S.mask[0] | S.mask[1] | S.mask[2] | S.mask[3]),
+                 c, (m & E_DEPTH_BUFFER_BIT) && S.depth_mask, 1.0f);
+    }
 }
 
 /* ---------------------------------------------------------------- draws */
@@ -1304,9 +1312,14 @@ static int invert(const mat4 *a, mat4 *out)
     return 1;
 }
 
+int rgl_layers;                         /* rgl.h */
+static int g_scene_cam;                 /* the 3D scene's camera is on (rgl_layers) */
+
 void rgl_shadow_camera(int on)
 {
     mat4 inv;
+
+    g_scene_cam = on;
 
     if (on && B && rgl_shadows && B->shadow_map && invert(&g_mv.s[g_mv.top], &inv)) {
         /* another camera (the character select draws each fighter with
@@ -3135,6 +3148,13 @@ static void submit(int topo, rgl_vtx *v, int n)
     f.tex_mode = !handle ? RGL_TEX_NONE : S.env == E_REPLACE ? RGL_TEX_REPLACE : RGL_TEX_MODULATE;
     f.alpha_func = S.alpha_test ? (int)S.alpha_func : 0;
     f.alpha_ref = S.alpha_ref;
+    if (rgl_layers) {
+        /* DLSS 5's layers (rgl.h): the 3D scene's camera is the stage, or a
+         * fighter while one is drawn; anything else (the HUD, menus, 2D) 0 */
+        float v = !g_scene_cam ? 0.0f : SH.caster ? 0.5f : 1.0f;
+        f.layer = (p.blend ? 1.0f : 3.0f) + v;
+        p.mask |= 0x10;                 /* the backend's layered blend */
+    }
     if (g_sh_on == 2 && topo == RGL_TRIS) {
         if (g_sub_idx)
             shadow_cast_idx(v, g_sub_idx, g_sub_ni, SH.caster);

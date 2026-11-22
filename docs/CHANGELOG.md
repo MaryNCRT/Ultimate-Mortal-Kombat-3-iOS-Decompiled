@@ -10,6 +10,16 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
+- **DLSS 5 on DLSS5 ReShade AIO** (experimental): the neural pass runs in the game.
+  Seen by Mary on an RTX 5070 with HD texture mods. The package brings AIO 2.2.4
+  (Apache-2.0) instead of DLSS5-Feeder, and the player adds only NVIDIA's two DLLs.
+  GRAPHICS > DLSS 5 > PRESET has REALISTIC, CINEMATIC, VIVID and SUBTLE (NVIDIA's three
+  networks with their strengths; the names are provisional). Borderless no longer
+  adds its extra row while DLSS 5 is on (AIO would not start), and the first
+  builds' feeder files are set aside on their own. The layers (HUD and menus left
+  untouched, the fighters and the stage each with their own strength) are in, but
+  experimental and off (`dlss5_layers=1`): Mary did not see their effect.
+
 - **DLSS 5 built in** (experimental): the package brings our ReShade 6.8.0
   build and DLSS5-Feeder 2.0.0 (`launcher\dlss5`, copied to
   `graphics\dlss5` at every compile without touching what the player added).

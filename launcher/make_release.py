@@ -105,14 +105,17 @@ def eos_dir():
 
 
 def copy_dlss5(out):
-    """DLSS 5 (src/runtime/neural_mod.c): our ReShade build and DLSS5-Feeder,
+    """DLSS 5 (src/runtime/neural_mod.c): our ReShade build and DLSS5 ReShade AIO,
     staged by tools/neural/stage_dlss5.py into launcher/dlss5, to
     launcher/dlss5 in the release; the compile copies them to graphics/dlss5
     (launcher/app/lib/build.js). Never NVIDIA's files. Refuses without them
     (UMK3_NO_DLSS5=1 makes such a package on purpose)."""
     src = os.path.join(ROOT, "launcher", "dlss5")
-    need = ["ReShade64.dll", "ReShade-LICENSE.md", "dlss5-feed.addon64", "DLSS5-Feeder-LICENSE.txt",
-            os.path.join("reshade-shaders", "Shaders", "DLSS5_Feed.fx"),
+    need = ["ReShade64.dll", "ReShade-LICENSE.md", "standalone-dlssnr.addon64", "nvngx.dll",
+            os.path.join("licenses", "DLSS5-ReShade-AIO-LICENSE.txt"),
+            os.path.join("reshade-shaders", "Shaders", "DLSS5_AIO_Feed.fx"),
+            os.path.join("reshade-shaders", "Shaders", "StandaloneBoundary.fx"),
+            os.path.join("reshade-shaders", "Shaders", "vort_Motion.fx"),
             os.path.join("reshade-shaders", "Shaders", "ReShade.fxh")]
     missing = [n for n in need if not os.path.exists(os.path.join(src, n))]
     if missing:
@@ -126,7 +129,7 @@ def copy_dlss5(out):
         if os.path.exists(os.path.join(src, bad)):
             raise SystemExit("launcher/dlss5 holds %s: NVIDIA's files may not be shipped" % bad)
     shutil.copytree(src, os.path.join(out, "launcher", "dlss5"))
-    print("DLSS 5: ReShade and DLSS5-Feeder from launcher/dlss5")
+    print("DLSS 5: ReShade and DLSS5 ReShade AIO from launcher/dlss5")
 
 
 def find_eos_ini():

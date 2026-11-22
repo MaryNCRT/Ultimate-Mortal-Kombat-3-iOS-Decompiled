@@ -123,6 +123,14 @@ typedef struct {
                                             * steep the texture's own Sobel
                                             * slopes are made (0 none; only
                                             * with shadow RECEIVE; rgl_ff.c) */
+    float layer;                           /* DLSS 5's layers (rgl_layers): 0
+                                            * off; else the alpha this draw
+                                            * leaves in the target -- 1+v a
+                                            * blended draw (v by its own
+                                            * coverage), 3+v an opaque one
+                                            * (v outright); v 0 the HUD and
+                                            * menus, 0.5 a fighter, 1 the
+                                            * stage. Direct3D 12 only */
 } rgl_frag;
 
 /* A texture's sampling, packed: filter and wrap as GL has them. */
@@ -250,6 +258,13 @@ extern int (*rgl_vk_make_surface)(void *window, void *instance, void *surface);
  *   rgl_shadow_active()   1 while shadows are on and drawn: the flattened
  *                         shadow under a fighter is left out */
 extern int rgl_shadows;
+/* DLSS 5's layers (runtime/neural_mod.c sets it when the neural layer is
+ * loaded; rgl_ff.c, Direct3D 12): every draw writes, besides its colour, a
+ * code into the target's alpha -- 0 the HUD, menus and 2D, 0.5 a fighter,
+ * 1 the stage -- which the layer shader (DLSS5_AIO_Feed.fx) reads from the
+ * presented picture to tell the neural pass what to touch and how much.
+ * The colour is never changed by it. */
+extern int rgl_layers;
 /* AMBIENT OCCLUSION (umk3.ini, rgl_ff.c; with ENHANCED LIGHTING, Vulkan and
  * Direct3D 12): rgl_ao 0 off, 1 Crytek SSAO, 2 HBAO, 3 Alchemy AO */
 extern int   rgl_ao, rgl_ao_samples, rgl_ao_blur;

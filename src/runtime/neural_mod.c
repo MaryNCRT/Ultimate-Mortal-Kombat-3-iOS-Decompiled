@@ -3,34 +3,41 @@
  * not in the binary. docs/DLSS5-MOD.md is the player's side of it.
  *
  * The chain: ReShade (our own build, tools/neural/build_reshade.py), the
- * DLSS5-Feeder add-on and its shader, a neural consumer add-on, and NVIDIA's
- * two runtimes. The game ships the first two in graphics\dlss5\
- * (launcher/make_release.py, tools/neural/stage_dlss5.py); the player
- * supplies the consumer and NVIDIA's files (the launcher's VIDEO > DLSS 5
- * imports them), which nobody here may redistribute. GRAPHICS > DLSS 5
- * (umk3.ini dlss5=1) turns it on; a mod whose mod.ini says type=dlss5, the
- * way it began, still works when the setting is off.
+ * DLSS5 ReShade AIO add-on (standalone-dlssnr, Apache-2.0: NVIDIA's neural
+ * rendering and DLSS in one, with its caller bridge nvngx.dll) and its guide
+ * shader DLSS5_AIO_Feed.fx -- ours, made from its own (launcher/neural/) to
+ * read the game's layers -- and NVIDIA's two runtimes. The game ships all
+ * but NVIDIA's in graphics\dlss5\ (launcher/make_release.py,
+ * tools/neural/stage_dlss5.py); the player adds nvngx_dlss.dll and
+ * nvngx_dlssnr.dll (the launcher's VIDEO > GRAPHICS > DLSS 5 imports them),
+ * which nobody here may redistribute. GRAPHICS > DLSS 5 (umk3.ini dlss5=1)
+ * turns it on; a mod whose mod.ini says type=dlss5, the way it began, still
+ * works when the setting is off.
+ *
+ * The layers: with the chain loaded, rgl_layers (render/rgl.h) makes every
+ * Direct3D 12 draw leave a code in the picture's alpha -- 0 the HUD, menus
+ * and 2D, 0.5 a fighter, 1 the stage -- and DLSS5_AIO_Feed.fx turns it into
+ * the neural pass's control mask: the HUD and menus bypass it, the fighters
+ * and the stage get dlss5_fighters= and dlss5_stage= of it (umk3.ini).
  *
  * When it is on and the game draws with Direct3D 12 on an NVIDIA card,
  * ReShade is loaded from that folder before the device is made, so it hooks
  * the device the game makes next. Nothing is copied beside the exe:
  *
  *   - RESHADE_BASE_PATH_OVERRIDE points ReShade at the folder: its
- *     ReShade.ini, its log, its add-ons (AddonPath .\), its shaders and the
- *     feeder's log are there, and a player's other ReShade add-ons are never
- *     picked up;
- *   - the folder is on the DLL search path; the feeder's NGX session looks
- *     for nvngx_dlss.dll and nvngx_dlssnr.dll in it;
+ *     ReShade.ini, its log, its add-ons (AddonPath .\) and shaders are
+ *     there, and a player's other ReShade add-ons are never picked up;
+ *   - the folder is on the DLL search path; the AIO add-on looks for
+ *     nvngx_dlss.dll and nvngx_dlssnr.dll beside itself;
  *   - those two are loaded only with a valid Authenticode signature and
  *     NVIDIA as their company (version resource);
  *   - a ReShade of the player's own beside the exe (dxgi.dll, d3d12.dll or
  *     ReShade.ini there) is a conflict: nothing is loaded, the log says why.
  *
- * ReShade.ini and the preset are written when missing and never overwritten.
- * The whole frame is processed, the HUD included (the feeder's behaviour) --
- * a HUD drawn after the neural pass is later work
- * (docs/research/GRAPHICS-OVERHAUL.md section 4.5). The game's data, rules
- * and online sync are not touched: this is drawing only.
+ * ReShade.ini and the preset are written when missing; afterwards the game
+ * sets only two lines of it (set_key). The DLSS5-Feeder chain of the first
+ * builds is set aside when found (migrate). The game's data, rules and
+ * online sync are not touched: this is drawing only.
  */
 #include "neural_mod.h"
 
@@ -40,6 +47,30 @@
 
 int neural_mod_enabled = 1;             /* umk3.ini dlss5_mod= */
 int neural_dlss5;                       /* umk3.ini dlss5= (GRAPHICS > DLSS 5) */
+float neural_stage = 1.0f, neural_fighters = 1.0f;   /* umk3.ini dlss5_stage= / dlss5_fighters= */
+int neural_layers;                      /* umk3.ini dlss5_layers= (experimental, off) */
+
+/* GRAPHICS > DLSS 5 > PRESET (umk3.ini dlss5_preset=): the neural model --
+ * NVIDIA's three networks, DLSSNR.Style 0..2, AIO's Model 1..3 -- and its
+ * intensity, local tone and local structure (AIO's 0..2, 1 neutral). The
+ * names say what each aims at; which network looks how is Mary's to judge
+ * in the game. */
+const neural_preset neural_presets[NEURAL_PRESETS] = {
+    { "realistic", "REALISTA",        "REALISTIC",  1, 1.00f, 1.00f, 1.00f },
+    { "cinematic", "CINEMATOGRAFICO", "CINEMATIC",  2, 1.00f, 1.25f, 0.85f },
+    { "vivid",     "INTENSO",         "VIVID",      3, 1.20f, 1.10f, 1.25f },
+    { "subtle",    "SUAVE",           "SUBTLE",     1, 0.60f, 0.90f, 0.80f },
+};
+int neural_preset_index;
+
+int neural_preset_parse(const char *v)
+{
+    int i;
+    for (i = 0; i < NEURAL_PRESETS; i++)
+        if (strcmp(v, neural_presets[i].key) == 0)
+            return i;
+    return 0;
+}
 static int g_loaded;
 static char g_state[160] = "off";
 
@@ -87,6 +118,7 @@ int neural_dlss5_status(const char *game_dir, int renderer_is_d3d12)
 #include <dxgi.h>
 
 #include "mods.h"
+#include "render/rgl.h"
 
 /* IID_IDXGIFactory1, kept here so this file defines no GUIDs of its own
  * that rgl_d3d12.c (INITGUID) defines too */
@@ -253,22 +285,26 @@ static void write_if_missing(const char *dir, const char *name, const char *text
     }
 }
 
+/* ReShade.ini for the DLSS5 ReShade AIO chain. The game writes it when
+ * missing (or when it is the DLSS5-Feeder era's), and afterwards keeps only
+ * two of its lines up to date (set_key, neural_mod_load): the neural pass on
+ * or off as nvngx_dlssnr.dll is there, and the layers' strengths. */
 static const char k_reshade_ini[] =
-    "; Written by UMK3 PC for DLSS 5 (neural_mod.c). Edit freely: the game\n"
-    "; never overwrites this file. Paths are relative to this folder.\n"
+    "; Written by UMK3 PC for DLSS 5 (neural_mod.c). Edit freely, except\n"
+    "; [Standalone.DLSSNR] NeuralRendering and [GENERAL] PreprocessorDefinitions,\n"
+    "; which the game sets at every start. Paths are relative to this folder.\n"
     "[INSTALL]\n"
     "Logging=1\n"
     "\n"
     "[ADDON]\n"
     "AddonPath=.\\\n"
+    "DisabledAddons=DLSS 5 Feed 2.0.0@dlss5-feed.addon64\n"
     "\n"
     "[GENERAL]\n"
     "EffectSearchPaths=.\\reshade-shaders\\Shaders\\**\n"
     "TextureSearchPaths=.\\reshade-shaders\\Textures\\**\n"
     "PresetPath=.\\DLSS5-preset.ini\n"
-    /* the game's depth runs 0 near to 1 far (rgl_d3d12.c, OpenGL's
-     * convention halved), not reversed as ReShade.fxh assumes */
-    "PreprocessorDefinitions=DLSS5_MV_PROVIDER=5,RESHADE_DEPTH_INPUT_IS_REVERSED=0\n"
+    "PreprocessorDefinitions=RESHADE_DEPTH_INPUT_IS_REVERSED=0,UMK3_NR_STAGE=1.0,UMK3_NR_FIGHTER=1.0\n"
     "\n"
     "[INPUT]\n"
     "KeyOverlay=0,0,0,0\n"
@@ -283,11 +319,29 @@ static const char k_reshade_ini[] =
     "TutorialProgress=4\n"
     "ShowClock=0\n"
     "ShowFPS=0\n"
-    "ShowScreenshotMessage=0\n";
+    "ShowScreenshotMessage=0\n"
+    "\n"
+    /* the AIO addon (standalone-dlssnr): its guide pass -- VORT's motion
+     * (vort_Motion.fx) and our DLSS5_AIO_Feed.fx with the game's layers --
+     * runs only with VortGuides, and the layers' mask only with
+     * NrRejectionMask; no frame generation and no counters on the picture.
+     * The game sets these at every start (managed, neural_mod_load). */
+    "[Standalone.DLSSNR]\n"
+    "Enabled=1\n"
+    "NeuralRendering=1\n"
+    "NrRejectionMask=1\n"
+    "NrRejectionStrength=1.0\n"
+    "VortGuides=1\n"
+    "NvidiaOpticalFlowMotion=0\n"
+    "NvidiaOpticalFlowDepth=0\n"
+    "FrameGeneration=0\n"
+    "ShowProxyFps=0\n"
+    "PerformanceTelemetry=0\n";
 
+/* the addon runs DLSS5_AIO_Feed itself at Present: nothing on in the list */
 static const char k_preset_ini[] =
-    "Techniques=DLSS5_Feed@DLSS5_Feed.fx\n"
-    "TechniqueSorting=DLSS5_Feed@DLSS5_Feed.fx\n";
+    "Techniques=\n"
+    "TechniqueSorting=DLSS5_AIO_Feed@DLSS5_AIO_Feed.fx\n";
 
 static void slashes(char *s)
 {
@@ -296,11 +350,102 @@ static void slashes(char *s)
             *s = '\\';
 }
 
+/* one key of an ini file set: replaced in its section, else added to it,
+ * else the section added at the end */
+static void set_key(const char *path, const char *section, const char *key, const char *value)
+{
+    static char text[65536], out[65536 + 512];
+    char head[96];
+    FILE *f = fopen(path, "rb");
+    size_t n = f ? fread(text, 1, sizeof text - 1, f) : 0, kl = strlen(key), o = 0;
+    char *line, *next;
+    int in = 0, done = 0;
+
+    if (f)
+        fclose(f);
+    text[n] = 0;
+    snprintf(head, sizeof head, "[%s]", section);
+    for (line = text; *line; line = next) {
+        size_t len;
+        next = strchr(line, '\n');
+        next = next ? next + 1 : line + strlen(line);
+        len = (size_t)(next - line);
+        if (line[0] == '[') {
+            if (in && !done) {
+                o += (size_t)snprintf(out + o, sizeof out - o, "%s=%s\n", key, value);
+                done = 1;
+            }
+            in = strncmp(line, head, strlen(head)) == 0;
+        } else if (in && !done && strncmp(line, key, kl) == 0 && line[kl] == '=') {
+            o += (size_t)snprintf(out + o, sizeof out - o, "%s=%s\n", key, value);
+            done = 1;
+            continue;
+        }
+        if (o + len < sizeof out) {
+            memcpy(out + o, line, len);
+            o += len;
+        }
+    }
+    if (!done) {
+        if (!in)
+            o += (size_t)snprintf(out + o, sizeof out - o, "%s%s\n", o && out[o - 1] != '\n' ? "\n" : "", head);
+        o += (size_t)snprintf(out + o, sizeof out - o, "%s=%s\n", key, value);
+    }
+    if ((f = fopen(path, "wb")) != NULL) {
+        fwrite(out, 1, o, f);
+        fclose(f);
+    }
+}
+
+/* the DLSS5-Feeder era's files (before AIO), set aside: its add-on and its
+ * shader (which ReShade would load and compile, 25 s, for nothing), and its
+ * ReShade.ini and preset, which say nothing of AIO */
+static void migrate(const char *dir)
+{
+    static const char *const old[] = { "dlss5-feed.addon64", "reshade-shaders\\Shaders\\DLSS5_Feed.fx" };
+    char a[1200], b[1200], line[256];
+    FILE *f;
+    int i, aio = 0;
+
+    for (i = 0; i < 2; i++) {
+        snprintf(a, sizeof a, "%s\\%s", dir, old[i]);
+        snprintf(b, sizeof b, "%s.off", a);
+        if (GetFileAttributesA(a) != INVALID_FILE_ATTRIBUTES && MoveFileExA(a, b, MOVEFILE_REPLACE_EXISTING))
+            SAY("set aside %s (the DLSS5-Feeder chain; AIO replaces it)", old[i]);
+    }
+    snprintf(a, sizeof a, "%s\\ReShade.ini", dir);
+    if ((f = fopen(a, "r")) == NULL)
+        return;
+    while (fgets(line, sizeof line, f))
+        if (strncmp(line, "[Standalone.DLSSNR]", 19) == 0)
+            aio = 1;
+    fclose(f);
+    if (!aio) {
+        static const char *const ini[] = { "ReShade.ini", "DLSS5-preset.ini" };
+        for (i = 0; i < 2; i++) {
+            snprintf(a, sizeof a, "%s\\%s", dir, ini[i]);
+            snprintf(b, sizeof b, "%s.old", a);
+            MoveFileExA(a, b, MOVEFILE_REPLACE_EXISTING);
+        }
+        SAY("the DLSS5-Feeder era's ReShade.ini and preset kept as .old; written again for AIO");
+    }
+}
+
 /* what stands in the way, without loading anything: NEURAL_* */
 static int check(const char *game_dir, const char *dir, int renderer_is_d3d12)
 {
-    char gpu[128], consumer[260];
-    int ours = 1, theirs = 1;
+    static const char *const ours[] = {
+        "ReShade64.dll",                                    /* ReShade, our build */
+        "standalone-dlssnr.addon64",                        /* DLSS5 ReShade AIO */
+        "nvngx.dll",                                        /* its caller bridge (not NVIDIA's) */
+        "reshade-shaders\\Shaders\\DLSS5_AIO_Feed.fx",      /* its guides, ours (the layers) */
+        "reshade-shaders\\Shaders\\StandaloneBoundary.fx",
+        "reshade-shaders\\Shaders\\vort_Motion.fx",     /* VORT's motion (MIT) */
+        "reshade-shaders\\Shaders\\Includes\\vort_MotionVectors.fxh",
+        "reshade-shaders\\Shaders\\ReShade.fxh",
+    };
+    char gpu[128];
+    int ok = 1, i;
     int probe = getenv("UMK3_DLSS5_PROBE") && atoi(getenv("UMK3_DLSS5_PROBE"));
 
     if (!renderer_is_d3d12) {
@@ -318,55 +463,25 @@ static int check(const char *game_dir, const char *dir, int renderer_is_d3d12)
             "remove it to use DLSS 5; not loaded");
         return NEURAL_CONFLICT;
     }
-
-    /* what the game ships */
-    if (!exists(dir, "ReShade64.dll")) {
-        SAY("ReShade64.dll is missing from %s", dir);
-        ours = 0;
-    }
-    if (!exists(dir, "dlss5-feed.addon64")) {
-        SAY("dlss5-feed.addon64 is missing (DLSS5-Feeder)");
-        ours = 0;
-    }
-    if (exists(dir, "dlss5-feed-helper.addon64")) {
-        /* ReShade loads every .addon64 in the folder: the helper (32-bit
-         * games' mode) beside the add-on would be two feeders at once */
-        SAY("dlss5-feed-helper.addon64 is for 32-bit games: take it out of %s", dir);
-        ours = 0;
-    }
-    if (!exists(dir, "reshade-shaders\\Shaders\\DLSS5_Feed.fx")) {
-        SAY("reshade-shaders\\Shaders\\DLSS5_Feed.fx is missing (DLSS5-Feeder)");
-        ours = 0;
-    }
-    if (!exists(dir, "reshade-shaders\\Shaders\\ReShade.fxh")) {
-        SAY("reshade-shaders\\Shaders\\ReShade.fxh is missing (ReShade's shaders)");
-        ours = 0;
-    }
-    if (!ours)
+    for (i = 0; i < (int)(sizeof ours / sizeof ours[0]); i++)
+        if (!exists(dir, ours[i])) {
+            SAY("%s is missing from %s (the launcher's compile puts it there)", ours[i], dir);
+            ok = 0;
+        }
+    if (!ok)
         return NEURAL_NOT_INSTALLED;
 
-    /* what the player supplies: nvngx_dlss.dll is DLSS itself (the feeder's
-     * DLAA, which runs alone when it is the only one there); the neural
-     * pass needs nvngx_dlssnr.dll and a consumer add-on as well */
+    /* what the player supplies: nvngx_dlss.dll is DLSS (DLAA alone without
+     * the neural model); nvngx_dlssnr.dll the neural rendering */
     if (!nvidia_dll(dir, "nvngx_dlss.dll")) {
         if (probe) {
-            /* UMK3_DLSS5_PROBE=1 (port diagnostic): ReShade and the feeder
-             * without DLSS, to check the hooks and the feed alone */
-            SAY("UMK3_DLSS5_PROBE: loading without DLSS (the feed alone)");
+            SAY("UMK3_DLSS5_PROBE: loading without NVIDIA's files (the hooks alone)");
             return NEURAL_READY;
         }
         return NEURAL_NEED_FILES;
     }
-    if (match(dir, "renodx-dlss5*.addon64", consumer, sizeof consumer)
-        || match(dir, "deep-fried-chicken*.addon64", consumer, sizeof consumer))
-        SAY("neural consumer: %s", consumer);
-    else {
-        SAY("no neural consumer add-on (renodx-dlss5*.addon64 or deep-fried-chicken.addon64)");
-        theirs = 0;
-    }
-    theirs &= nvidia_dll(dir, "nvngx_dlssnr.dll");
-    if (!theirs) {
-        SAY("DLSS (DLAA) alone: the neural rendering needs nvngx_dlssnr.dll and a consumer add-on");
+    if (!nvidia_dll(dir, "nvngx_dlssnr.dll")) {
+        SAY("DLSS (DLAA) alone: the neural rendering needs nvngx_dlssnr.dll");
         return NEURAL_READY_DLAA;
     }
     return NEURAL_READY;
@@ -389,7 +504,7 @@ int neural_dlss5_status(const char *game_dir, int renderer_is_d3d12)
 
 int neural_mod_load(const char *game_dir, int renderer_is_d3d12)
 {
-    char dir[1100], p[1200];
+    char dir[1100], p[1200], v[160];
     WCHAR wdir[1100], wdll[1200];
     HMODULE rs;
     int is_mod = 0, st;
@@ -405,6 +520,7 @@ int neural_mod_load(const char *game_dir, int renderer_is_d3d12)
     slashes(dir);
     SAY("%s, from %s", is_mod ? "the DLSS 5 mod" : "DLSS 5 on (GRAPHICS > DLSS 5)", dir);
     snprintf(g_state, sizeof g_state, "not loaded (see the log)");
+    migrate(dir);
     st = check(game_dir, dir, renderer_is_d3d12);
     if (st != NEURAL_READY && st != NEURAL_READY_DLAA) {
         snprintf(g_state, sizeof g_state, "%s", neural_status_name(st));
@@ -413,6 +529,49 @@ int neural_mod_load(const char *game_dir, int renderer_is_d3d12)
 
     write_if_missing(dir, "ReShade.ini", k_reshade_ini);
     write_if_missing(dir, "DLSS5-preset.ini", k_preset_ini);
+    snprintf(p, sizeof p, "%s\\ReShade.ini", dir);
+    {
+        /* what the game owns of AIO's settings: the pipeline the layers need,
+         * and GRAPHICS > DLSS 5's preset (umk3.ini dlss5_preset=): the
+         * neural model (DLSSNR.Style 0..2 is AIO's Model 1..3) and its
+         * strengths */
+        /* the layers (dlss5_layers=1, experimental): VORT's motion and the
+         * layers' mask. Off (the default, what Mary saw working): AIO's own
+         * NVIDIA optical flow, no mask -- the whole picture processed. With
+         * the layers on, Mary saw no neural effect on 2026-11-22 although
+         * the logs had the mask bound; kept as an option to come back to */
+        static const char *const fixed[][2] = {
+            { "Enabled", "1" }, { "FrameGeneration", "0" }, { "ShowProxyFps", "0" },
+            { "NrRejectionStrength", "1.0" }, { "NvidiaOpticalFlowDepth", "0" },
+        };
+        set_key(p, "Standalone.DLSSNR", "VortGuides", neural_layers ? "1" : "0");
+        set_key(p, "Standalone.DLSSNR", "NrRejectionMask", neural_layers ? "1" : "0");
+        set_key(p, "Standalone.DLSSNR", "NvidiaOpticalFlowMotion", neural_layers ? "0" : "1");
+        const neural_preset *np = &neural_presets[neural_preset_index];
+        char num[16];
+        int k;
+        for (k = 0; k < (int)(sizeof fixed / sizeof fixed[0]); k++)
+            set_key(p, "Standalone.DLSSNR", fixed[k][0], fixed[k][1]);
+        set_key(p, "Standalone.DLSSNR", "NeuralRendering", st == NEURAL_READY ? "1" : "0");
+        snprintf(num, sizeof num, "%d", np->model);
+        set_key(p, "Standalone.DLSSNR", "Model", num);
+        snprintf(num, sizeof num, "%.2f", np->intensity);
+        set_key(p, "Standalone.DLSSNR", "Intensity", num);
+        snprintf(num, sizeof num, "%.2f", np->tone);
+        set_key(p, "Standalone.DLSSNR", "LocalTone", num);
+        snprintf(num, sizeof num, "%.2f", np->structure);
+        set_key(p, "Standalone.DLSSNR", "LocalStructure", num);
+        SAY("preset %s: model %d, intensity %.2f, local tone %.2f, local structure %.2f",
+            np->key, np->model, np->intensity, np->tone, np->structure);
+    }
+    snprintf(v, sizeof v, "RESHADE_DEPTH_INPUT_IS_REVERSED=0,UMK3_NR_STAGE=%.2f,UMK3_NR_FIGHTER=%.2f",
+             neural_stage, neural_fighters);
+    set_key(p, "GENERAL", "PreprocessorDefinitions", v);
+    if (neural_layers)
+        SAY("layers (experimental): the stage %.2f, the fighters %.2f, the HUD and menus untouched",
+            neural_stage, neural_fighters);
+    else
+        SAY("layers off: the whole picture processed (dlss5_layers=1 tries them)");
 
     /* ReShade's folder is this one; the runtimes are found in it */
     MultiByteToWideChar(CP_ACP, 0, dir, -1, wdir, 1100);
@@ -429,8 +588,9 @@ int neural_mod_load(const char *game_dir, int renderer_is_d3d12)
         return 0;
     }
     g_loaded = 1;
+    rgl_layers = neural_layers;         /* the layer codes in the picture's alpha (render/rgl.h) */
     snprintf(g_state, sizeof g_state, "loaded");
-    SAY("ReShade loaded; logs: %s\\ReShade.log and %s\\dlss5-feed.log", dir, dir);
+    SAY("ReShade loaded; logs: %s\\ReShade.log and LOCALAPPDATA\\RHI\\Logs\\standalone-dlssnr.log", dir);
     return 1;
 }
 

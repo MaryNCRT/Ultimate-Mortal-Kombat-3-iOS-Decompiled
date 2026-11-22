@@ -22,11 +22,32 @@ import sys
 TAG = 'v6.8.0'
 REPO = 'https://github.com/crosire/reshade'
 
-# the one change: runtime_gui.cpp's splash (banner) window is never shown
-OLD = '\tconst bool show_splash_window = _show_splash && '
-NEW = ('\t// UMK3 PC (the DLSS 5 mod): ReShade runs inside the game as a component, so its\r\n'
-       '\t// banner is never drawn; errors still go to ReShade.log.\r\n'
-       '\tconst bool show_splash_window = false && _show_splash && ')
+# the changes, (file, the text, what it becomes):
+#  1. runtime_gui.cpp: the splash (banner) window is never shown
+#  2. runtime.cpp: reshade_reloaded_effects is sent again once the effects
+#     have loaded. ReShade sends it at the start of a reload, before any
+#     effect exists, and its effects compile on worker threads afterwards: an
+#     add-on that looks its techniques and textures up in that event (the
+#     DLSS5 ReShade AIO addon's guide pass) found nothing and never looked
+#     again, so the game's layers never reached the neural pass.
+PATCHES = [
+    ('runtime_gui.cpp',
+     '\tconst bool show_splash_window = _show_splash && ',
+     '\t// UMK3 PC (the DLSS 5 mod): ReShade runs inside the game as a component, so its\r\n'
+     '\t// banner is never drawn; errors still go to ReShade.log.\r\n'
+     '\tconst bool show_splash_window = false && _show_splash && '),
+    ('runtime.cpp',
+     '\t\t_last_reload_time = std::chrono::high_resolution_clock::now();\r\n'
+     '\t\t_reload_remaining_effects = std::numeric_limits<size_t>::max();\r\n',
+     '\t\t_last_reload_time = std::chrono::high_resolution_clock::now();\r\n'
+     '\t\t_reload_remaining_effects = std::numeric_limits<size_t>::max();\r\n'
+     '#if RESHADE_ADDON\r\n'
+     '\t\t// UMK3 PC: the effects exist now, and is_loading() is false, so the add-ons\r\n'
+     '\t\t// can find them -- tell them again (the event at the start of a reload\r\n'
+     '\t\t// comes before any of them has loaded)\r\n'
+     '\t\tinvoke_addon_event<addon_event::reshade_reloaded_effects>(this);\r\n'
+     '#endif\r\n'),
+]
 
 
 def run(*a, cwd=None):
@@ -54,15 +75,16 @@ def main():
     if not os.path.isdir(src):
         run('git', 'clone', '--branch', TAG, '--depth', '1', '--recurse-submodules',
             '--shallow-submodules', REPO, src)
-    gui = os.path.join(src, 'source', 'runtime_gui.cpp')
-    with open(gui, encoding='utf-8', newline='') as f:
-        text = f.read()
-    if NEW not in text:
-        if text.count(OLD) != 1:
-            sys.exit('runtime_gui.cpp does not have the line this script changes: another ReShade version?')
-        text = text.replace(OLD, NEW, 1)
-        with open(gui, 'w', encoding='utf-8', newline='') as f:
-            f.write(text)
+    for name, old, new in PATCHES:
+        path = os.path.join(src, 'source', name)
+        with open(path, encoding='utf-8', newline='') as f:
+            text = f.read()
+        if new in text:
+            continue
+        if text.count(old) != 1:
+            sys.exit('%s does not have the text this script changes: another ReShade version?' % name)
+        with open(path, 'w', encoding='utf-8', newline='') as f:
+            f.write(text.replace(old, new, 1))
     run(msbuild(), os.path.join(src, 'ReShade.sln'), '/t:ReShade', '/p:Configuration=Release',
         '/p:Platform=64-bit', '/m', '/v:minimal', '/nologo')
     os.makedirs(dest, exist_ok=True)

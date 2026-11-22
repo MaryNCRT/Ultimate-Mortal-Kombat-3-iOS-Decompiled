@@ -126,7 +126,40 @@ built and checked in Direct3D 12 only; see the log entry below. Phase 3
 
 ---
 
-## Detailed log (newest first)
+
+### 2026-11-22 (late morning) -- DLSS 5 on AIO: the neural pass in the game, layers, presets
+
+Mary chose AIO (DLSS5 ReShade AIO 2.2.4, Apache-2.0) as the shipped chain.
+- Staging: AIO's official 64-bit zip (SHA-256 as published), our
+  `launcher/neural/DLSS5_AIO_Feed.fx`, VORT (vort_Shaders b410b9f, MIT, with
+  its Textures/), ReShade.fxh. The script stages aside and swaps the folder
+  in only at the end; a network timeout had emptied launcher/dlss5 halfway.
+- `neural_mod.c`: AIO's files are checked, the feeder era's are set aside
+  (migrate), and the AIO settings the game owns are set at every start
+  (set_key). There are presets (`dlss5_preset=`: Model 1..3 = DLSSNR.Style
+  0..2, intensity, local tone and structure) and layers (`dlss5_layers=`,
+  experimental, off; `dlss5_stage=` / `dlss5_fighters=`).
+- Borderless no longer adds its extra row with DLSS 5 on D3D12
+  (win32_gl.c borderless_row): 1920x1081 on a 1080 monitor made AIO refuse
+  ("render resolution exceeds native output"). After the change: "contract
+  ready", NR and DLAA at 1920x1080.
+- Layers: rgl.h `rgl_frag.layer` / `rgl_layers`; rgl_ff.c submit; rgl_d3d12.c
+  writes the alpha through the blend factor; ff.hlsl gives opaque draws
+  alpha 1. Measured with `UMK3_LAYER_PROBE=1` in a fight: HUD 5 %, fighters
+  5 %, stage 90 %.
+- Our ReShade sends `reshade_reloaded_effects` again once the effects have
+  loaded, after `is_loading()` is false. Before that, AIO resolved its
+  handles too early and they stayed MISSING. After: "VORT=found ...
+  nr_mask=found", `NR-control-mask=BOUND`.
+- `lib/build.js`: DLSS 5's copy also takes newer files of the same size,
+  since the patched ReShade64.dll is byte-for-byte the same size as before.
+- Mary saw no neural effect with the layers on, and asked to return to the
+  whole-picture setup, which is now the default. Screen captures taken here
+  (DLSS 5 off / whole picture / layers) showed the pass on the stage with
+  the HUD clean in the layers capture. That is to settle with her.
+- Seen and not yet understood: two runs with no arguments closed by
+  themselves after the settings menu opened and closed (once in each of the
+  two folders); not a crash ("clean process shutdown").
 
 ### 2026-11-22 (later) -- DLSS 5 built in, not a mod
 

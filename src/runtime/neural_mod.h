@@ -9,6 +9,24 @@ extern int neural_dlss5;
 /* umk3.ini dlss5_mod= (1, the default): a mod with type=dlss5 that is on
  * loads when dlss5= is off */
 extern int neural_mod_enabled;
+/* umk3.ini dlss5_stage= / dlss5_fighters= (0..1, 1 the default): how much
+ * of the neural pass the stage and the fighters get (the HUD none) */
+extern float neural_stage, neural_fighters;
+/* umk3.ini dlss5_layers= (0, the default): the layers above at all --
+ * experimental, see neural_mod.c */
+extern int neural_layers;
+
+/* GRAPHICS > DLSS 5 > PRESET (umk3.ini dlss5_preset=): the neural model and
+ * its strengths, written to AIO's settings at the next start */
+#define NEURAL_PRESETS 4
+typedef struct {
+    const char *key, *es, *en;          /* umk3.ini value; the menu's words */
+    int   model;                        /* AIO's Model 1..3 (DLSSNR.Style 0..2) */
+    float intensity, tone, structure;   /* AIO's Intensity, LocalTone, LocalStructure */
+} neural_preset;
+extern const neural_preset neural_presets[NEURAL_PRESETS];
+extern int neural_preset_index;
+int neural_preset_parse(const char *v);
 
 enum {
     NEURAL_ACTIVE,                      /* loaded in this run */
