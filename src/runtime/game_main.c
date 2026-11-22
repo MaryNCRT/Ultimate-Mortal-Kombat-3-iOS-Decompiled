@@ -1257,6 +1257,8 @@ static void read_config(const char *dir)
             neural_mod_enabled = atoi(v) != 0;
         else if (strcmp(line, "dlss5") == 0)           /* neural_mod.c: GRAPHICS > DLSS 5 */
             neural_dlss5 = atoi(v) != 0;
+        else if (strcmp(line, "dlss5_neural") == 0)    /* neural_mod.c: the neural rendering on/off */
+            neural_nr = atoi(v) != 0;
         else if (strcmp(line, "dlss5_layers") == 0)    /* neural_mod.c: experimental */
             neural_layers = atoi(v) != 0;
         else if (strcmp(line, "dlss5_preset") == 0)    /* neural_mod.c: GRAPHICS > DLSS 5 > PRESET */

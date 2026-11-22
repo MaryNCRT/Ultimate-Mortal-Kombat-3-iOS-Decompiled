@@ -15,6 +15,9 @@ extern float neural_stage, neural_fighters;
 /* umk3.ini dlss5_layers= (0, the default): the layers above at all --
  * experimental, see neural_mod.c */
 extern int neural_layers;
+/* umk3.ini dlss5_neural= (1, the default): the neural rendering itself; 0
+ * keeps DLSS 5's DLSS/DLAA alone (GRAPHICS > DLSS 5 > NEURAL RENDERING) */
+extern int neural_nr;
 
 /* GRAPHICS > DLSS 5 > PRESET (umk3.ini dlss5_preset=): the neural model and
  * its strengths, written to AIO's settings at the next start */
