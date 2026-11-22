@@ -21358,6 +21358,18 @@ void PortNavDrawLineC(const char *s, float y, float scale)
     rich_draw(s, x, y, k * 16.0f, 0.7f * k, fontcol);
 }
 
+/* the same centred on cx, in a colour of its own: a button's label with
+ * its key's or pad button's picture (PHOTO MODE's HIDE MENU). Port. */
+void PortNavDrawLineAt(const char *s, float cx, float y, float scale, const float rgb[3])
+{
+    float k = FE_HeightScale * (8.0f / 9.0f) * scale;
+    float c[4] = { rgb[0], rgb[1], rgb[2], 1.0f };
+
+    limeSet2DDrawing();
+    limeEnableAlphaBlending_Basic();
+    rich_draw(s, cx - rich_width(s, k * 16.0f, 0.7f * k) * 0.5f, y, k * 16.0f, 0.7f * k, c);
+}
+
 void PortNavDrawLine(const char *s, int right)
 {
     float k = FE_HeightScale * (8.0f / 9.0f);
