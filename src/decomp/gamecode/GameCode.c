@@ -12806,6 +12806,9 @@ void Task_GameMain(void)
 }
 
 int  photo_hide_hud(void);              /* port: runtime/photo_mode.c */
+/* port: a replay's moves panel hidden (runtime/game_main.c, its MOVES
+ * button, TAB, CINEMA) */
+int  PortReplayHideMoves;
 void photo_draw(void);
 
 static void Task_GameMain_frame(void)
@@ -12933,8 +12936,8 @@ static void Task_GameMain_frame(void)
                 if (PortFTInput)
                     PortTrainDrawInputs();
             }
-        } else
-            PortTrainDraw();            /* Port: training's window */
+        } else if (!PortReplayHideMoves)
+            PortTrainDraw();            /* Port: training's window (a replay may hide it) */
     }
 
     /* ---- karnage: top the bars up and bank what was taken off them ---- */

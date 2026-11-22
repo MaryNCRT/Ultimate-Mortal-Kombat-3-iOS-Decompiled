@@ -4061,9 +4061,12 @@ int main(int argc, char **argv)
                 const char *labels[16];
                 float at;
                 int nr, cur, n = rp_list(labels, 16, &nr, &cur), r;
+                int click = plat_mouse(&mx, &my) && g_ntaps == 0;
 
-                g_rp_hover = dbg_replay_hit(tx / g_virt_w, ty / g_virt_h, &at, n, nr);
-                r = rp_ui(g_rp_hover, at, plat_mouse(&mx, &my) && g_ntaps == 0);
+                /* CINEMA: while it has faded a click only brings it back */
+                g_rp_hover = dbg_replay_alpha > 0.5f
+                             ? dbg_replay_hit(tx / g_virt_w, ty / g_virt_h, &at, n, nr) : -1;
+                r = rp_ui(g_rp_hover, at, click && dbg_replay_alpha > 0.5f);
                 if (r == RPB_HIDE) {
                     g_rp_hidden = 1;
                     g_rp_hide_wait = 1;
@@ -4075,6 +4078,10 @@ int main(int argc, char **argv)
                     set_menu_toggle();
                 else if (r == RPB_CAMERA)   /* FREE CAMERA (port: PHOTO MODE's) */
                     photo_free_toggle();
+                else if (r == RPB_MOVES)    /* the moves panel (port) */
+                    dbg_replay_moves_hidden ^= 1;
+                else if (r == RPB_CINEMA)   /* CINEMA (port) */
+                    dbg_replay_cine ^= 1;
                 else if (r == RPB_CLOSE && rp_menu())  /* the X: back to EXTRAS > REPLAYS */
                     replay_leave();
                 else if (r == RPB_CLOSE)    /* the X */
@@ -4429,6 +4436,49 @@ int main(int argc, char **argv)
                 static int was_b;
                 int b = (pb & (1u << PB_EAST)) != 0;
                 photo_tick(&g_pad, g_pad_photo, game_key);
+                {
+                    /* the moves panel (TAB, the d-pad's up) and CINEMA (H,
+                     * the d-pad's down); CINEMA fades the player after
+                     * three seconds of nothing while it plays, and anything
+                     * -- the mouse moved, a key, the pad -- has it back */
+                    static int was_tab, was_h, was_up, was_dn, idle, lmx, lmy;
+                    static unsigned lpb;
+                    int tab = plat_key(PK_PH_TAB), h = plat_key(PK_PH_HIDE);
+                    int up = g_pad.connected && g_pad.up && fabsf(g_pad.ax[1]) < 0.3f;
+                    int dn = g_pad.connected && g_pad.down && fabsf(g_pad.ax[1]) < 0.3f;
+                    int cmx, cmy, cst;
+                    float want;
+
+                    if (!photo_on()) {
+                        if (tab && !was_tab) dbg_replay_moves_hidden ^= 1;
+                        if (h && !was_h) dbg_replay_cine ^= 1;
+                        if (up && !was_up) dbg_replay_moves_hidden ^= 1;
+                        if (dn && !was_dn) dbg_replay_cine ^= 1;
+                    }
+                    was_tab = tab; was_h = h; was_up = up; was_dn = dn;
+                    plat_mouse(&cmx, &cmy);
+                    if (pb != lpb || cmx != lmx || cmy != lmy || plat_key_any() || plat_mouse_buttons()
+                        || fabsf(g_pad.ax[0]) > 0.3f || fabsf(g_pad.ax[1]) > 0.3f
+                        || fabsf(g_pad.ax[2]) > 0.3f || fabsf(g_pad.ax[3]) > 0.3f)
+                        idle = 0;
+                    else
+                        idle++;
+                    if (pb != lpb && pb)
+                        dbg_replay_pad = 1;
+                    else if (cmx != lmx || cmy != lmy || plat_key_any())
+                        dbg_replay_pad = 0;
+                    lpb = pb; lmx = cmx; lmy = cmy;
+                    rp_info(NULL, 0, &cst);
+                    want = dbg_replay_cine && idle > 180 && !(cst & (RPS_PAUSED | RPS_END)) ? 0.0f : 1.0f;
+                    dbg_replay_alpha += (want - dbg_replay_alpha) * (want > dbg_replay_alpha ? 0.25f : 0.06f);
+                    if (fabsf(want - dbg_replay_alpha) < 0.01f)
+                        dbg_replay_alpha = want;
+                    {
+                        extern int PortReplayHideMoves;     /* GameCode.c */
+                        PortReplayHideMoves = dbg_replay_moves_hidden
+                                              || (dbg_replay_cine && dbg_replay_alpha < 0.5f);
+                    }
+                }
                 if (!photo_was && !photo_on()) {
                     /* the FREE CAMERA's left stick is its own: the d-pad
                      * seeks then */

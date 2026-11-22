@@ -92,6 +92,8 @@ void rb_replay_fight_over(void);
 enum { RPB_START, RPB_BACK5, RPB_FRAME_BACK, RPB_PLAY, RPB_FRAME_FWD,
        RPB_FWD5, RPB_SLOWER, RPB_FASTER, RPB_SETTINGS,
        RPB_CAMERA,                      /* FREE CAMERA: PHOTO MODE's, the replay on (port) */
+       RPB_MOVES,                       /* the moves panel shown or hidden (port) */
+       RPB_CINEMA,                      /* CINEMA: the player fades while it plays (port) */
        RPB_COUNT,
        RPB_LIST = 20, RPB_CLOSE,        /* the top: the list, the X */
        RPB_SWITCH,                      /* a row picked: another replay */

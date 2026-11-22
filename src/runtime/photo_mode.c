@@ -848,7 +848,7 @@ void photo_draw(void)
                            "RS ORBIT   LS MOVE   LT/RT DISTANCE   R3 RESET   Y EXIT"))
                 : tx("RATON DER. GIRAR   CENTRAL MOVER   RUEDA DISTANCIA   FLECHAS / Q / E MOVER   R CENTRAR   F SALIR",
                      "RIGHT MOUSE ORBIT   MIDDLE MOVE   WHEEL DISTANCE   ARROWS / Q / E MOVE   R RESET   F EXIT");
-            float bw = 260.0f * s, bx = W * 0.5f - bw * 0.5f, by = 30.0f * s;
+            float bw = 260.0f * s, bx = W * 0.5f - bw * 0.5f, by = 58.0f * s;   /* under the bars and the clock */
             limeEnableAlphaBlending_Basic();
             limeSet2DDrawing();
             limeDisableDepthTest();
