@@ -28,7 +28,7 @@ const STATUS = ['active', 'ready', 'need_d3d12', 'need_nvidia_gpu', 'conflict', 
 /* what a picked file is, by its name: 'nvngx' (signed NVIDIA DLL),
  * 'consumer' (a neural consumer add-on), or null (refused) */
 function classify(file) {
-    const n = path.basename(file).toLowerCase();
+    const n = String(file).split(/[\\/]/).pop().toLowerCase();   /* either separator, on any OS */
     if (n === 'nvngx_dlss.dll' || n === 'nvngx_dlssnr.dll')
         return 'nvngx';
     if (/^renodx-dlss5.*\.addon64$/.test(n) || /^deep-fried-chicken.*\.addon64$/.test(n))
