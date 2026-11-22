@@ -114,6 +114,37 @@ and wait on Mary.
 
 ## Detailed log (newest first)
 
+### 2026-11-22 (night) -- the DLSS 5 mod (game side)
+
+Asked by Mary: DLSS 5 usable as a mod. `src/runtime/neural_mod.c` (new)
+and `mods.c`: a mod with `type=dlss5` is not indexed as game files.
+`mods_find_typed` finds the first such mod that is on, before mods_init.
+Before the Direct3D 12 device is made (`platform/win32_gl.c`, just before
+`rgl_open`), the game checks Direct3D 12, an NVIDIA adapter (DXGI vendor
+0x10DE), that no ReShade of the player's own is beside the exe, and that
+these files exist in the mod's folder: ReShade64.dll, dlss5-feed.addon64,
+DLSS5_Feed.fx, ReShade.fxh, a consumer add-on, nvngx_dlss.dll and
+nvngx_dlssnr.dll. The two NVIDIA DLLs must say NVIDIA as their company and
+pass WinVerifyTrust (wintrust.dll and version.dll are loaded at run time, so
+nothing new is linked). Only then does it set RESHADE_BASE_PATH_OVERRIDE and
+SetDllDirectory to the mod's folder and LoadLibrary ReShade64.dll from it.
+ReShade.ini and DLSS5-preset.ini are written only when missing. umk3.ini
+`dlss5_mod=0` turns it off. These choices come from reading ReShade's
+dll_main.cpp / hook_manager.cpp / addon_manager.cpp: a ReShade loaded under
+its own name hooks the system d3d12/dxgi exports, and its base path comes
+from that environment variable.
+
+Checked with scripted runs in a separate folder (`WORK\dlss5-test`, muted,
+D3D12, RTX 5070, driver 621.24): no mod (nothing logged); an empty mod (each
+missing file named, the game runs); a Microsoft DLL named nvngx_dlssnr.dll
+(refused: "not NVIDIA's") and nvapi64.dll as nvngx_dlss.dll (accepted as
+signed NVIDIA, which tests only the check itself); `off=` in mods.ini
+(nothing); renderer=opengl ("needs Direct3D 12"); dlss5_mod=0 (nothing).
+**Not done:** a run with the real ReShade, feeder, consumer and NVIDIA DLLs.
+None are on this machine. Whether the feeder and consumer find NVIDIA's DLLs
+through SetDllDirectory, rather than looking only beside the exe, is
+unverified. The HUD is processed with the scene.
+
 ### 2026-11-22 (later) -- graphics overhaul, phase 1: audit and architecture
 
 Research only, nothing in `src/` changed. Audited the three renderers,

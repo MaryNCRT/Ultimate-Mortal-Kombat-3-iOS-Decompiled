@@ -8,6 +8,19 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
+## Unreleased
+
+- **DLSS 5 as a mod** (experimental): a folder in `mods\` whose mod.ini
+  says `type=dlss5` holds ReShade, DLSS5-Feeder, a neural consumer and
+  NVIDIA's two runtimes, which the player supplies. With RENDERER Direct3D 12
+  and an NVIDIA card, the game checks every file (NVIDIA's DLLs must be
+  signed and say NVIDIA), then loads ReShade from that folder before the
+  device is made. Nothing is copied beside the exe. Every refusal is named
+  in the log; `dlss5_mod=0` turns it off. The game side was checked with
+  scripted runs (no mod, an incomplete mod, a non-NVIDIA DLL, the mod off,
+  OpenGL). A run with the real components has not been confirmed, and Mary
+  has not played it yet. [docs/DLSS5-MOD.md](DLSS5-MOD.md).
+
 ## 0.6.0 beta (2026-11-22)
 
 PHOTO MODE complete, its four phases. Checked by scripted runs in the test
