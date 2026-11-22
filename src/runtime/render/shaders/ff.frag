@@ -398,6 +398,58 @@ float ao_at(vec2 fc, bool fighter)
 }
 
 
+// CONTACT SHADOWS (rgl_ff.c ao_block, docs/research/CONTACT-SHADOWS.md): the
+// small sharp shadows the 4096 map is too coarse for -- a foot on the floor,
+// an arm on the torso. From this pixel's place in the camera's space, a
+// march of 12 steps towards the map's light (aodbg.yzw) through the
+// occlusion's distances (G, B of the blurred screen map); a step behind a
+// surface nearer the camera, within a thickness, is in shadow, fading with
+// how far along it was. The stage receives them, the fighters do not:
+// marched over a fighter's own curved surface in the half-size map they
+// came out as a stipple on the arms and the chest (Mary, 2026-11-22) --
+// their shading is the shadow map's and the occlusion's. No per-pixel
+// jitter (it was the stipple's pattern), the map's own texels about the
+// start skipped, the bias a hundredth of the distance. Multiplied into the
+// map's light only, never the dynamic lights. 1 lit.
+float contact_at(vec2 fc, bool fighter)
+{
+    vec3 L = lb.aodbg.yzw;
+    if (fighter || dot(L, L) < 0.5 || lb.aoparm2.w < 0.5)
+        return 1.0;
+    vec2 uv = (fc - lb.aovp.xy) / lb.aovp.zw;
+    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0)
+        return 1.0;
+    float far = lb.aoproj.z;
+    vec2 sz = vec2(textureSize(scr, 0));
+    vec4 c0 = textureLod(scr, uv, 0.0);
+    float d = (c0.g + c0.b / 255.0) * far;
+    if (d > far * 0.98 || d < 1e-3)
+        return 1.0;
+    vec2 ndc = vec2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
+    vec3 P = vec3(ndc.x * d / lb.aoproj.x, ndc.y * d / lb.aoproj.y, d);
+    float R = lb.aoproj.w;
+    float len = R * 0.5, thick = R * 0.35 + 0.004 * d;
+    P += L * (0.05 * R + 0.004 * d);
+    for (int i = 0; i < 12; i++) {
+        float t = (float(i) + 0.5) / 12.0;
+        vec3 S = P + L * (len * t);
+        if (S.z < 1e-2)
+            break;
+        vec2 su = vec2(S.x * lb.aoproj.x / S.z * 0.5 + 0.5, 0.5 - S.y * lb.aoproj.y / S.z * 0.5);
+        if (su.x < 0.0 || su.y < 0.0 || su.x > 1.0 || su.y > 1.0)
+            break;
+        if (length((su - uv) * sz) < 2.0)
+            continue;                   // its own texels: the map is coarser than the screen
+        vec4 c = textureLod(scr, su, 0.0);
+        if (fighter && c.a < 0.5)
+            continue;
+        float dz = S.z - (c.g + c.b / 255.0) * far;
+        if (dz > 0.01 * S.z + 0.1 && dz < thick)
+            return 1.0 - 0.5 * (1.0 - t * t);
+    }
+    return 1.0;
+}
+
 // AMBIENT OCCLUSION's debug views (rgl_ff.c rgl_ao_debug): the screen map
 // at this pixel as grey, or the depth's normals as colour
 vec3 ao_debug_view(vec2 fc, float contrib)
@@ -430,7 +482,8 @@ vec3 ao_debug_view(vec2 fc, float contrib)
 //   l0.col   temperature, tint, gamma, sharpness
 //   l0.dir   highlights, shadows, vignette, grain
 //   l0.cone  chromatic aberration, bloom, filter, time (the grain's seed)
-//   l1.pos   depth of field on, focus (x the centre's distance), aperture
+//   l1.pos   depth of field on, focus (x the centre's distance), aperture,
+//            tonemap strength (GRAPHICS QUALITY, runtime/gfx_preset.c)
 vec3 post_c(vec2 uv)
 {
     return textureLod(scr, clamp(uv, vec2(0.0), vec2(1.0)), 0.0).rgb;
@@ -439,6 +492,25 @@ vec3 post_c(vec2 uv)
 float post_d(vec2 uv)
 {
     return unpack_depth(textureLod(smap, clamp(uv, vec2(0.0), vec2(1.0)), 0.0)) * lb.aoproj.z;
+}
+
+// GRAPHICS QUALITY's tonemap (l1.pos w, 0..1; runtime/gfx_preset.c): a
+// shoulder on the picture's brightness in linear light. Below 0.6 nothing
+// changes -- the game's dark stages keep every shade (an ACES curve with a
+// toe crushed them to black) -- and from there to 1.4 the brightness eases
+// into 1 (a quadratic whose slope meets 1 at the knee), so what the bloom
+// pushed past white rolls off instead of clipping, and white itself comes
+// down to 0.9. The colour is scaled by it, its hue kept. Mixed by strength.
+vec3 tonemap(vec3 c, float s)
+{
+    vec3 lin = pow(max(c, vec3(0.0)), vec3(2.2));
+    float L = dot(lin, vec3(0.2126, 0.7152, 0.0722));
+    if (L <= 0.6)
+        return c;
+    float e = min((L - 0.6) / 0.8, 1.0);
+    float L2 = 0.6 + 0.4 * e * (2.0 - e);
+    vec3 t = pow(min(lin * (L2 / L), vec3(1.0)), vec3(1.0 / 2.2));
+    return mix(c, t, s);
 }
 
 vec4 post_fx(vec2 fc)
@@ -476,6 +548,7 @@ vec4 post_fx(vec2 fc)
         c += (c * 4.0 - n) * (P1.w * 0.25);
     }
     c *= exp2(P0.x);
+    if (P4.w > 0.0) c = tonemap(c, P4.w);
     c *= vec3(1.0 + 0.25 * P1.x, 1.0 - 0.15 * P1.y, 1.0 - 0.25 * P1.x);
     float l = dot(c, Y);
     c += P2.y * 0.35 * (1.0 - smoothstep(0.0, 0.5, l));
@@ -553,6 +626,7 @@ void main()
     {
         float lt = light_at(p, qx, qy, pc.shadow >> 4);
         bool fighter = (pc.shadow >> 4) != 0;
+        lt = min(lt, contact_at(gl_FragCoord.xy, fighter));   // CONTACT SHADOWS
         // in linear light (gamma 2.2), as the walkthrough's: the relief and
         // the highlight are light added and taken away, and only there do
         // they add up as light does; the map's shadow, a shade as it was

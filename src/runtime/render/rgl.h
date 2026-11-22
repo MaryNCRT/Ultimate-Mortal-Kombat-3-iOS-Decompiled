@@ -253,6 +253,11 @@ extern int rgl_shadows;
 /* AMBIENT OCCLUSION (umk3.ini, rgl_ff.c; with ENHANCED LIGHTING, Vulkan and
  * Direct3D 12): rgl_ao 0 off, 1 Crytek SSAO, 2 HBAO, 3 Alchemy AO */
 extern int   rgl_ao, rgl_ao_samples, rgl_ao_blur;
+/* CONTACT SHADOWS (umk3.ini contact_shadows=0/1, rgl_ff.c ao_block, the
+ * shaders' contact_at): short sharp shadows towards the shadow map's light,
+ * marched through the occlusion's distances -- so only with ENHANCED
+ * LIGHTING and AMBIENT OCCLUSION on, Vulkan and Direct3D 12 */
+extern int   rgl_contact_shadows;
 /* AMBIENT OCCLUSION's debug views (umk3.ini ao_debug=, the settings menu):
  * every lit 3D surface drawn as a grey image of one stage of it -- 1 the
  * occlusion after the blur, 2 before it, 3 the depth pass, 4 the normals

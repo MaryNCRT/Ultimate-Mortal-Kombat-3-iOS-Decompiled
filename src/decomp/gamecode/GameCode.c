@@ -12823,6 +12823,7 @@ int  photo_hide_hud(void);              /* port: runtime/photo_mode.c */
 int  PortReplayHideMoves;
 void photo_draw(void);
 void photo_post(void);
+void gfx_scene_post(void);              /* port: runtime/gfx_preset.c */
 void photo_note_scene(void);
 
 static void Task_GameMain_frame(void)
@@ -12922,6 +12923,8 @@ static void Task_GameMain_frame(void)
 
     if (DoSmokesEarthFatal != 0.0f)
         SmokeEarthFatalCutaway();
+
+    gfx_scene_post();                   /* port: GRAPHICS QUALITY's bloom and tonemap, the HUD left out */
 
     /* port: PHOTO MODE leaves the HUD and the port's windows out of the
      * picture (runtime/photo_mode.c); its SCENE page puts the HUD back */

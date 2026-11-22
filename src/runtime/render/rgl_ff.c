@@ -1226,6 +1226,7 @@ static struct {
     int lit;                            /* light is one drawn with, to cull the stage by */
     mat4 inv_view;                      /* world from eye */
     mat4 light;                         /* light clip from world, the map's */
+    float sun[3];                       /* towards the map's light, world (CONTACT SHADOWS) */
     float *w;                           /* the casters' triangles, world xyz and id */
     int nw, cw;
 } SH;
@@ -2343,6 +2344,8 @@ static void shadow_build(void)
     ortho.m[10] = -2.0f / (6.0f * r);
     ortho.m[14] = -1.0f;
     SH.light = mul(&ortho, &view);
+    for (k = 0; k < 3; k++)
+        SH.sun[k] = -dir[k];
 
     if (!SH.target) {
         SH.target = B->target_new(SHADOW_SIZE, SHADOW_SIZE, 1, 1);
@@ -2504,6 +2507,7 @@ static int hold_clear(const rgl_rect *sc, int color, const float rgba[4], int de
  * 3D draw. Off (ao=0, or without ENHANCED LIGHTING): no pass at all. */
 int   rgl_ao = 2, rgl_ao_samples = 16, rgl_ao_blur = 1;
 float rgl_ao_radius = 0.6f, rgl_ao_intensity = 1.5f, rgl_ao_bias = 0.03f;   /* radius: world units */
+int   rgl_contact_shadows;             /* CONTACT SHADOWS (rgl.h), 0 off */
 float rgl_ao_floor = 0.40f, rgl_ao_scale = 0.5f;   /* Mary: a drop in fps, and hardly seen */
 int   rgl_ao_debug;                     /* the debug views (rgl.h) */
 
@@ -2593,6 +2597,27 @@ static void ao_block(rgl_light_block *b)
     b->aoparm2[2] = (float)rgl_ao_blur;
     b->aoparm2[3] = AO.have && rgl_ao && rgl_shadows && B && B->screen_map ? 1.0f : 0.0f;
     b->aodbg[0] = (float)rgl_ao_debug;
+    /* CONTACT SHADOWS: the way to the shadow map's light in the camera's
+     * space as the shaders' view_at has it (x right, y up, z ahead), so the
+     * scene can march towards it through the occlusion's distances; 0 off */
+    b->aodbg[1] = b->aodbg[2] = b->aodbg[3] = 0.0f;
+    if (rgl_contact_shadows && SH.valid && b->aoparm2[3] > 0.5f) {
+        mat4 view;
+        if (invert(&SH.inv_view, &view)) {
+            float e[3], l;
+            int i;
+            for (i = 0; i < 3; i++)
+                e[i] = view.m[0 * 4 + i] * SH.sun[0] + view.m[1 * 4 + i] * SH.sun[1]
+                     + view.m[2 * 4 + i] * SH.sun[2];
+            e[2] = -e[2];               /* GL's eye looks down -z */
+            l = sqrtf(e[0] * e[0] + e[1] * e[1] + e[2] * e[2]);
+            if (l > 1e-6f) {
+                b->aodbg[1] = e[0] / l;
+                b->aodbg[2] = e[1] / l;
+                b->aodbg[3] = e[2] / l;
+            }
+        }
+    }
 }
 
 /* a full-screen draw into the current target, the fragment mode given */

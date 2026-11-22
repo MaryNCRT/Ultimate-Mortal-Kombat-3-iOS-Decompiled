@@ -411,6 +411,48 @@ float ao_at(float2 fc, bool fighter)
     return ws > 1e-4 ? dot(wt, float4(a00.r, a10.r, a01.r, a11.r)) / ws : 1.0;
 }
 
+// CONTACT SHADOWS: as ff.frag's contact_at
+float contact_at(float2 fc, bool fighter)
+{
+    float3 L = lb_aodbg.yzw;
+    if (fighter || dot(L, L) < 0.5 || lb_aoparm2.w < 0.5)
+        return 1.0;
+    float2 uv = (fc - lb_aovp.xy) / lb_aovp.zw;
+    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0)
+        return 1.0;
+    float far = lb_aoproj.z;
+    float sw_, sh_, sl_;
+    scr.GetDimensions(0, sw_, sh_, sl_);
+    float2 sz = float2(sw_, sh_);
+    float4 c0 = scr.SampleLevel(spt, uv, 0);
+    float d = (c0.g + c0.b / 255.0) * far;
+    if (d > far * 0.98 || d < 1e-3)
+        return 1.0;
+    float2 ndc = float2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
+    float3 P = float3(ndc.x * d / lb_aoproj.x, ndc.y * d / lb_aoproj.y, d);
+    float R = lb_aoproj.w;
+    float len = R * 0.5, thick = R * 0.35 + 0.004 * d;
+    P += L * (0.05 * R + 0.004 * d);
+    [loop] for (int i = 0; i < 12; i++) {
+        float t = (float(i) + 0.5) / 12.0;
+        float3 S = P + L * (len * t);
+        if (S.z < 1e-2)
+            break;
+        float2 su = float2(S.x * lb_aoproj.x / S.z * 0.5 + 0.5, 0.5 - S.y * lb_aoproj.y / S.z * 0.5);
+        if (su.x < 0.0 || su.y < 0.0 || su.x > 1.0 || su.y > 1.0)
+            break;
+        if (length((su - uv) * sz) < 2.0)
+            continue;
+        float4 c = scr.SampleLevel(spt, su, 0);
+        if (fighter && c.a < 0.5)
+            continue;
+        float dz = S.z - (c.g + c.b / 255.0) * far;
+        if (dz > 0.01 * S.z + 0.1 && dz < thick)
+            return 1.0 - 0.5 * (1.0 - t * t);
+    }
+    return 1.0;
+}
+
 
 // AMBIENT OCCLUSION's debug views (rgl_ff.c rgl_ao_debug): the screen map
 // at this pixel as grey, or the depth's normals as colour
@@ -446,6 +488,19 @@ float3 post_c(float2 uv)
 float post_d(float2 uv)
 {
     return unpack_depth(smap.SampleLevel(spt, saturate(uv), 0)) * lb_aoproj.z;
+}
+
+// GRAPHICS QUALITY's tonemap: as ff.frag's (l1.pos w)
+float3 tonemap(float3 c, float s)
+{
+    float3 lin = pow(max(c, 0.0), 2.2);
+    float L = dot(lin, float3(0.2126, 0.7152, 0.0722));
+    if (L <= 0.6)
+        return c;
+    float e = min((L - 0.6) / 0.8, 1.0);
+    float L2 = 0.6 + 0.4 * e * (2.0 - e);
+    float3 t = pow(min(lin * (L2 / L), 1.0), 1.0 / 2.2);
+    return lerp(c, t, s);
 }
 
 float4 post_fx(float2 fc)
@@ -484,6 +539,7 @@ float4 post_fx(float2 fc)
         c += (c * 4.0 - n) * (P1.w * 0.25);
     }
     c *= exp2(P0.x);
+    if (P4.w > 0.0) c = tonemap(c, P4.w);
     c *= float3(1.0 + 0.25 * P1.x, 1.0 - 0.15 * P1.y, 1.0 - 0.25 * P1.x);
     float l = dot(c, Y);
     c += P2.y * 0.35 * (1.0 - smoothstep(0.0, 0.5, l));
@@ -554,6 +610,7 @@ float4 ps(PSIn i) : SV_Target
     {
         float lt = light_at(p, qx, qy, shadow >> 4);
         bool fighter = (shadow >> 4) != 0;
+        lt = min(lt, contact_at(i.pos.xy, fighter));   // CONTACT SHADOWS
         // in linear light (gamma 2.2), as the walkthrough's: the relief and
         // the highlight are light added and taken away, and only there do
         // they add up as light does; the map's shadow, a shade as it was

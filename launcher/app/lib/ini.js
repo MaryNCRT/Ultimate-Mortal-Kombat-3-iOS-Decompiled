@@ -13,6 +13,10 @@
  *     rt_shadows=1      (ENHANCED LIGHTING: real-time shadows and texture relief, experimental: a shadow map from a
  *       light over the stage, Vulkan and Direct3D 12; the flattened shadow
  *       under a fighter goes; src/runtime/render/rgl.h)
+ *     graphics_preset=original|enhanced|custom   (GRAPHICS QUALITY, what the switches
+ *       below match: src/runtime/gfx_preset.c; written, the game reads the switches)
+ *     contact_shadows=1  bloom=30  tonemap=1   (CONTACT SHADOWS, with ENHANCED LIGHTING
+ *       and AMBIENT OCCLUSION; BLOOM percent and TONEMAP over the fight, the HUD left out)
  *     texture_quality=iphone|ipad|max
  *     arch=x86|x64   (the launcher's own: which game it builds and plays,
  *       umk3-game.exe, 32 bits, or umk3-game64.exe, 64 bits)
@@ -181,6 +185,9 @@ function defaultConfig() {
         sharpStrength: SHARP_STRENGTH,   /* sharp_edge_strength=: percent, 0..100 */
         rtShadows: false,            /* rt_shadows=1: ENHANCED LIGHTING (experimental) */
         ao: 2,                       /* ao=: AMBIENT OCCLUSION, 0 off, 1 Crytek SSAO, 2 HBAO, 3 Alchemy AO */
+        contactShadows: false,       /* contact_shadows=1: CONTACT SHADOWS */
+        bloom: 0,                    /* bloom=: percent, 0..100 */
+        tonemap: false,              /* tonemap=1 */
         noobSaibot: false,           /* noob_saibot=1: Noob Saibot on the select grid (offline only) */
         komboSlide: true,            /* kombo_slide=0: no push apart mid-kombo (offline only) */
         language: 0,                 /* "" = follow Windows */
@@ -265,6 +272,9 @@ function load(p) {
         else if (key === 'sharp_edge_strength') cfg.sharpStrength = clampInt(num, 0, 100, SHARP_STRENGTH);
         else if (key === 'rt_shadows') cfg.rtShadows = num === 1;
         else if (key === 'ao') cfg.ao = num >= 0 && num <= 3 ? num : 2;
+        else if (key === 'contact_shadows') cfg.contactShadows = num === 1;
+        else if (key === 'bloom') cfg.bloom = clampInt(num, 0, 100, 0);
+        else if (key === 'tonemap') cfg.tonemap = num === 1;
         else if (key === 'noob_saibot') cfg.noobSaibot = num === 1;
         else if (key === 'kombo_slide') cfg.komboSlide = num !== 0;
         else if (key === 'language') {
@@ -386,6 +396,10 @@ function save(p, cfg) {
         'sharp_edge_strength=' + clampInt(cfg.sharpStrength, 0, 100, SHARP_STRENGTH),
         'rt_shadows=' + (cfg.rtShadows ? 1 : 0),
         'ao=' + (cfg.ao >= 0 && cfg.ao <= 3 ? cfg.ao : 2),
+        'contact_shadows=' + (cfg.contactShadows ? 1 : 0),
+        'bloom=' + clampInt(cfg.bloom, 0, 100, 0),
+        'tonemap=' + (cfg.tonemap ? 1 : 0),
+        'graphics_preset=' + graphicsPreset(cfg),
         'noob_saibot=' + (cfg.noobSaibot ? 1 : 0),
         'kombo_slide=' + (cfg.komboSlide === false ? 0 : 1),
         'buttons=' + (cfg.buttons === 6 ? 6 : 5),
@@ -491,6 +505,25 @@ function fitScreen(cfg, screen) {
  *             controls, ENHANCED LIGHTING (with a renderer that has it:
  *             Direct3D 12 on Windows, Vulkan elsewhere) and the full textures
  *   kept      the settings already there, untouched */
+/* GRAPHICS QUALITY, as src/runtime/gfx_preset.c has it: the preset is the
+ * one the switches match (custom when none); setting one sets them. The
+ * occlusion and contact shadows draw nothing without ENHANCED LIGHTING. */
+const ENH_BLOOM = 30;
+function graphicsPreset(cfg) {
+    if (!cfg.rtShadows && !cfg.bloom && !cfg.tonemap)
+        return 'original';
+    if (cfg.rtShadows && cfg.ao && cfg.contactShadows && cfg.bloom === ENH_BLOOM && cfg.tonemap)
+        return 'enhanced';
+    return 'custom';
+}
+function setGraphicsPreset(cfg, name) {
+    if (name === 'original')
+        Object.assign(cfg, { rtShadows: false, ao: 0, contactShadows: false, bloom: 0, tonemap: false });
+    else if (name === 'enhanced')
+        Object.assign(cfg, { rtShadows: true, ao: 2, contactShadows: true, bloom: ENH_BLOOM, tonemap: true });
+    return cfg;
+}
+
 function applyPreset(cfg, name, screen, platform) {
     if (name === 'original') {
         cfg.res = 1;
@@ -498,7 +531,7 @@ function applyPreset(cfg, name, screen, platform) {
         cfg.fullscreen = false;
         cfg.borderless = false;
         cfg.hideControls = false;
-        cfg.rtShadows = false;
+        setGraphicsPreset(cfg, 'original');
         cfg.textureQuality = 'iphone';
     } else if (name === 'enhanced') {
         fitScreen(cfg, screen);
@@ -509,7 +542,7 @@ function applyPreset(cfg, name, screen, platform) {
         cfg.widescreen = true;
         cfg.padIcons = 'auto';
         cfg.p2PadIcons = 'auto';
-        cfg.rtShadows = true;
+        setGraphicsPreset(cfg, 'enhanced');
         if (cfg.renderer === 'opengl' || !cfg.renderer)
             cfg.renderer = (platform || process.platform) === 'win32' ? 'd3d12' : 'vulkan';
         cfg.textureQuality = 'max';
@@ -547,7 +580,7 @@ function gameReady(root, arch) {
     return hasExe && fs.existsSync(plist);
 }
 
-module.exports = { SHARP_ANGLE, SHARP_STRENGTH, RES, LANGS, KEY_NAMES, KEY_DEFAULTS, KEY5_NAMES, KEY5_DEFAULTS,
+module.exports = { graphicsPreset, setGraphicsPreset, SHARP_ANGLE, SHARP_STRENGTH, RES, LANGS, KEY_NAMES, KEY_DEFAULTS, KEY5_NAMES, KEY5_DEFAULTS,
                    PAD_NAMES, PAD_DEFAULTS, PAD5_NAMES, PAD5_DEFAULTS,
                    P2_KEY_NAMES, P2_KEY_DEFAULTS, P2_KEY5_DEFAULTS, defaultConfig,
                    load, save, gameExe, gameReady, gameBuiltAt,

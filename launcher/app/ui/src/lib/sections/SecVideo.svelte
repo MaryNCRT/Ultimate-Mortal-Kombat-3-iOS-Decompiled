@@ -35,6 +35,17 @@
     const gpus = $derived(named(app.gpus, c.gpu, tx('gpuAuto')));
     const audios = $derived(named(app.audios, c.audioDevice, tx('audioAuto')));
 
+    /* GRAPHICS QUALITY, as lib/ini.js graphicsPreset / setGraphicsPreset
+     * (and the game's gfx_preset.c): the preset is what the switches match */
+    const BLOOMS = [0, 15, 30, 50];
+    const GQ = {
+        original: { rtShadows: false, ao: 0, contactShadows: false, bloom: 0, tonemap: false },
+        enhanced: { rtShadows: true, ao: 2, contactShadows: true, bloom: 30, tonemap: true },
+    };
+    const gq = $derived(!c.rtShadows && !c.bloom && !c.tonemap ? 'original'
+        : c.rtShadows && c.ao && c.contactShadows && c.bloom === 30 && c.tonemap ? 'enhanced' : 'custom');
+    const bloomIdx = $derived(BLOOMS.reduce((b, v, i) => Math.abs(v - (c.bloom || 0)) < Math.abs(BLOOMS[b] - (c.bloom || 0)) ? i : b, 0));
+
     async function frame() {
         const p = await api.browseFrame();
         if (p) await save({ marco: p });
@@ -108,6 +119,22 @@
                 </select>
             </div>
             <div class="field">
+                <label class="lbl" for="gq">{tx('gq')}</label>
+                <select id="gq" class="sel" value={gq}
+                        onchange={e => { selectBlip(); const v = e.currentTarget.value; if (GQ[v]) save(GQ[v]); }}>
+                    <option value="original">{tx('gqs')[0]}</option>
+                    <option value="enhanced">{tx('gqs')[1]}</option>
+                    {#if gq === 'custom'}<option value="custom" disabled>{tx('gqs')[2]}</option>{/if}
+                </select>
+            </div>
+            <div class="field">
+                <label class="lbl" for="bloom">{tx('bloom')}</label>
+                <select id="bloom" class="sel" value={bloomIdx}
+                        onchange={e => save({ bloom: BLOOMS[e.currentTarget.selectedIndex] })}>
+                    {#each tx('blooms') as b, i}<option value={i}>{b}</option>{/each}
+                </select>
+            </div>
+            <div class="field">
                 <label class="lbl" for="aa">{tx('aa')}</label>
                 <select id="aa" class="sel" value={idx(AA, c.antialiasing, 0)}
                         onchange={e => save({ antialiasing: AA[e.currentTarget.selectedIndex] })}>
@@ -134,6 +161,10 @@
                 onchange={e => save({ rtShadows: e.currentTarget.checked })}><span>{tx('rtshadow')}</span></label>
             <label class="chk wide"><input type="checkbox" checked={(c.ao ?? 2) !== 0} disabled={!c.rtShadows}
                 onchange={e => save({ ao: e.currentTarget.checked ? 2 : 0 })}><span>{tx('ao')}</span></label>
+            <label class="chk wide"><input type="checkbox" checked={!!c.contactShadows} disabled={!c.rtShadows || !(c.ao ?? 2)}
+                onchange={e => save({ contactShadows: e.currentTarget.checked })}><span>{tx('contact')}</span></label>
+            <label class="chk wide"><input type="checkbox" checked={!!c.tonemap}
+                onchange={e => save({ tonemap: e.currentTarget.checked })}><span>{tx('tonemap')}</span></label>
             <div class="field wide">
                 <span class="lbl">{tx('frame')}</span>
                 <div class="row">
