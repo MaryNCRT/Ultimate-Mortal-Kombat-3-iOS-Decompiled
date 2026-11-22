@@ -291,6 +291,12 @@ int neural_mod_load(const char *game_dir, int renderer_is_d3d12)
         SAY("dlss5-feed.addon64 is missing (DLSS5-Feeder)");
         ok = 0;
     }
+    if (exists(dir, "dlss5-feed-helper.addon64")) {
+        /* ReShade loads every .addon64 in the folder: the helper (32-bit
+         * games' mode) beside the add-on would be two feeders at once */
+        SAY("dlss5-feed-helper.addon64 is for 32-bit games: take it out of the mod's folder");
+        ok = 0;
+    }
     if (!exists(dir, "reshade-shaders\\Shaders\\DLSS5_Feed.fx")) {
         SAY("reshade-shaders\\Shaders\\DLSS5_Feed.fx is missing (DLSS5-Feeder)");
         ok = 0;
