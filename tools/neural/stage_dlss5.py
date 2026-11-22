@@ -1,4 +1,4 @@
-﻿"""Stages what a release ships for DLSS 5 into launcher/dlss5/ (git-ignored),
+"""Stages what a release ships for DLSS 5 into launcher/dlss5/ (git-ignored),
 which launcher/make_release.py packs and the launcher's compile copies to
 graphics/dlss5 beside the game (launcher/app/lib/build.js). Port tooling.
 src/runtime/neural_mod.c and docs/DLSS5-MOD.md describe the feature.
