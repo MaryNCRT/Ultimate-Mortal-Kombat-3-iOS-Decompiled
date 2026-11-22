@@ -2,6 +2,22 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.6.0",
+      "date": "2026-11-22",
+      "ES": [
+        "MODO FOTO completo: IMAGEN (exposición, contraste, saturación, temperatura...) y EFECTOS (profundidad de campo, bloom, viñeta, aberración cromática, grano y nueve filtros), igual en OpenGL, Vulkan y Direct3D 12.",
+        "PERSONAJE y ESCENA: gira, mueve u oculta a cada luchador, oculta el escenario o los efectos, y avanza la pelea cuadro a cuadro (al salir vuelve al cuadro congelado).",
+        "Fotos en 1440p, 4K o con supermuestreo, ocho preajustes cinematográficos y la configuración guardada.",
+        "El panel del modo foto, más grande y cómodo con el ratón, con botón para ocultar el menú. Las ayudas muestran los iconos de las teclas y del mando."
+      ],
+      "EN": [
+        "PHOTO MODE complete: IMAGE (exposure, contrast, saturation, temperature...) and EFFECTS (depth of field, bloom, vignette, chromatic aberration, grain and nine filters), the same in OpenGL, Vulkan and Direct3D 12.",
+        "CHARACTER and SCENE: turn, move or hide each fighter, hide the stage or the effects, and step the fight a frame at a time (leaving goes back to the frozen frame).",
+        "Photos at 1440p, 4K or supersampled, eight cinematic presets, and the settings kept.",
+        "PHOTO MODE's panel larger and comfortable with the mouse, with a button to hide the menu. The hints show the keys' and the pad's icons."
+      ]
+    },
+    {
       "version": "0.5.9",
       "date": "2026-11-21",
       "ES": [

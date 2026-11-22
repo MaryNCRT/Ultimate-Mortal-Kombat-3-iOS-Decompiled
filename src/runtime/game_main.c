@@ -2175,11 +2175,31 @@ static void clear_frame(int ww, int wh, int vx, int vy, int vw, int vh)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glDisable(GL_SCISSOR_TEST);
     }
+    if (!g_rs_on) {
+        int cw, ch;                     /* PHOTO MODE: no buffer to draw larger in */
+        if (photo_capture_size(vw, vh, &cw, &ch))
+            photo_capture_ready(0);
+    }
     if (g_rs_on) {
-        int bw = vw, bh = vh, x, y;
+        int bw = vw, bh = vh, x, y, cw, ch;
 
         if (g_cfg_rw > 0 && g_cfg_rh > 0)
             fit_view(g_cfg_rw, g_cfg_rh, &x, &y, &bw, &bh);
+        /* PHOTO MODE (photo_mode.c): the photo's frame drawn at 1440p, 4K
+         * or twice the size, at once and with at most 4 samples, for that
+         * frame; the game's size again a quarter of a second after */
+        if (photo_capture_size(bw, bh, &cw, &ch)) {
+            if (cw != g_rs_w || ch != g_rs_h || !g_rs_fbo) {
+                int keep = g_rs_samples;
+                if (g_rs_samples > 4)
+                    g_rs_samples = 4;
+                render_alloc(cw, ch);
+                g_rs_samples = keep;
+            }
+            photo_capture_ready(g_rs_fbo != 0);
+            bw = g_rs_w;
+            bh = g_rs_h;
+        }
         /* While the window is being resized its size changes every frame,
          * and so did the buffers -- multisampled, window-sized, made and
          * dropped sixty times a second (Mary: resizing the window a few

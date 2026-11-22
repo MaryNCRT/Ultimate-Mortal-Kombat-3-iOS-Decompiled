@@ -8,8 +8,25 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased
+## 0.6.0 beta (2026-11-22)
 
+PHOTO MODE complete, its four phases. Checked by scripted runs in the test
+folder (muted) in the three renderers; Mary tried it as it was built.
+
+- **PHOTO MODE, phase 3: CHARACTER and SCENE.** Each fighter turned, moved
+  (sideways, in depth, up) or hidden for the picture, his state as it was;
+  the stage and the effects and blood hidden (a fighter alone on black for a
+  portrait); the fight stepped a frame at a time, and the frame it froze on
+  put back when the mode leaves (a save state).
+- **PHOTO MODE, phase 4:** photos at 1440p, 4K or supersampled (drawn twice
+  the size and brought down), the photo's frame alone drawn at that size;
+  eight cinematic presets (cinema, noir, blood, Outworld, retro, dramatic,
+  cold); the settings kept in `photo_mode.ini` beside the game.
+- **The panel:** larger words, comfortable with the mouse (the row under it
+  chosen, arrows each side of a value, the wheel turns it, the categories'
+  arrows), a HIDE MENU button and a MENU tab to bring it back.
+- **The keys' and the pad's pictures** in PHOTO MODE's, the FREE CAMERA's
+  and the replay player's hints (Mary: the buttons' icons).
 - **PHOTO MODE, phase 2: IMAGE and EFFECTS.** Two new pages in its panel
   (the categories now shown one at a time between arrows): exposure,
   brightness, contrast, saturation, temperature, tint, gamma, sharpness,

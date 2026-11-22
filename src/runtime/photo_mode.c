@@ -113,7 +113,14 @@ static long  g_ticks;                   /* photo_tick's calls, for the log */
 static int   g_via_key;                 /* photo_open: from the shortcut */
 
 enum { CAT_CAMERA, CAT_IMAGE, CAT_EFFECTS, CAT_CHAR, CAT_SCENE, CAT_CAPTURE, CAT_N };
-static const int g_rows_base[CAT_N] = { 7, 11, 9, 7, 6, 3 };
+static const int g_rows_base[CAT_N] = { 7, 11, 10, 7, 6, 4 };
+
+/* phase 4: the photo's resolution (0 the game's, 1 1440p, 2 4K, 3 the
+ * game's twice over, brought down: supersampling), the frame drawn so in a
+ * buffer of that size (game_main.c photo_capture_size); the cinematic
+ * presets; the settings kept in photo_mode.ini beside the game */
+static int g_res, g_shot_ready, g_shot_ss, g_preset, g_loaded;
+#define PRESETS 8
 
 /* CHARACTER (phase 3): each fighter moved and turned for the picture, or
  * hidden -- drawn so, his state as it was (GameCode.c
@@ -139,6 +146,9 @@ static FX  g_fx = { 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
 static int g_fx_depth;                  /* the last pass had the scene's depth */
 #define FILTERS 9
 static int fx_dof_possible(void);
+static void fx_preset(int k);
+static void prefs_load(void);
+static void prefs_save(void);
 #define ROWS(c) (g_rows_base[c])
 
 #define DEG(r) ((r) * (float)(180.0 / M_PI))
@@ -322,6 +332,8 @@ void photo_open(int from_menu)
 {
     if (g_on || !photo_allowed() || (GamePaused != 0 && GamePaused != 1))
         return;
+    if (!g_loaded)
+        prefs_load();
     if (!photo_free_on())               /* from the FREE CAMERA: its shot kept */
         cam_from_scene();
     g_prev_paused = GamePaused;
@@ -364,6 +376,7 @@ void photo_close(void)
         }
     }
     st_photo_forget();
+    prefs_save();
     g_stepping = g_stepped = g_step_saved = 0;
     memset(g_fig, 0, sizeof g_fig);
     g_hide_stage = g_hide_fx = 0;
@@ -536,13 +549,29 @@ static void row_text(int c, int r, char *label, char *value, int n)
     case CAT_CAPTURE * 16 + 0:
         snprintf(label, n, "%s", tx("HACER FOTO", "TAKE PHOTO"));
         break;
-    case CAT_CAPTURE * 16 + 1:
+    case CAT_CAPTURE * 16 + 1: {
+        static const char *const r_es[4] = { "NATIVA", "1440P", "4K", "SUPERMUESTREO 2X" };
+        static const char *const r_en[4] = { "NATIVE", "1440P", "4K", "SUPERSAMPLING 2X" };
         snprintf(label, n, "%s", tx("RESOLUCION", "RESOLUTION"));
-        snprintf(value, n, "%s", tx("NATIVA", "NATIVE"));
+        snprintf(value, n, "%s", es() ? r_es[g_res] : r_en[g_res]);
         break;
+    }
     case CAT_CAPTURE * 16 + 2:
+        snprintf(label, n, "%s", tx("FORMATO", "FORMAT"));
+        snprintf(value, n, "%s", tx("PNG SIN PERDIDA", "LOSSLESS PNG"));
+        break;
+    case CAT_CAPTURE * 16 + 3:
         snprintf(label, n, "%s", tx("ABRIR CARPETA", "OPEN FOLDER"));
         break;
+    case CAT_EFFECTS * 16 + 9: {
+        static const char *const p_es[PRESETS] = { "NINGUNO", "CINE", "NOIR", "SANGRE", "OUTWORLD",
+                                                   "RETRO", "DRAMATICO", "FRIO" };
+        static const char *const p_en[PRESETS] = { "NONE", "CINEMA", "NOIR", "BLOOD", "OUTWORLD",
+                                                   "RETRO", "DRAMATIC", "COLD" };
+        snprintf(label, n, "%s", tx("PREAJUSTE", "PRESET"));
+        snprintf(value, n, "%s", es() ? p_es[g_preset] : p_en[g_preset]);
+        break;
+    }
     default:
         label[0] = 0;
     }
@@ -591,7 +620,40 @@ static void take_photo(void)
     if (!g_shot) {
         g_shot = 1;
         g_shot_drawn = 0;
+        g_shot_ready = 0;
     }
+}
+
+/* game_main.c clear_frame, at a tick's start: the size the photo's frame
+ * is drawn at when it is not the game's -- 1 and *w, *h while a photo waits
+ * for one; the game's area is nw x nh */
+int photo_capture_size(int nw, int nh, int *w, int *h)
+{
+    float a = nh > 0 ? (float)nw / (float)nh : 1.5f;
+    int max = 8192;
+
+    if (!g_on || !g_shot || g_shot_drawn || g_res == 0 || nw <= 0 || nh <= 0)
+        return 0;
+    if (g_res == 3) {
+        *w = nw * 2;
+        *h = nh * 2;
+    } else {
+        *h = g_res == 1 ? 1440 : 2160;
+        *w = (int)((float)*h * a + 0.5f) & ~1;
+    }
+    if (*w > max) { *h = *h * max / *w; *w = max; }
+    if (*h > max) { *w = *w * max / *h; *h = max; }
+    return 1;
+}
+
+/* ...and whether the buffer was made that size (0: no buffer of the game's
+ * own -- the photo at the game's size) */
+void photo_capture_ready(int ok)
+{
+    g_shot_ready = 1;
+    g_shot_ss = ok && g_res == 3;
+    if (!ok)
+        printf("photo: no render buffer to draw a larger photo in; the game's size\n");
 }
 
 /* a row acted on: `d` -1 / +1 a step left or right, 0 the row's action */
@@ -678,7 +740,12 @@ static void row_act(int d)
     case CAT_CHAR * 16 + 5:   g_fig[g_fig_sel].hidden ^= 1; break;
     case CAT_CHAR * 16 + 6:   if (!d) memset(&g_fig[g_fig_sel], 0, sizeof g_fig[0]); break;
     case CAT_CAPTURE * 16 + 0: if (!d) take_photo(); break;
-    case CAT_CAPTURE * 16 + 2: if (!d) open_folder(); break;
+    case CAT_CAPTURE * 16 + 1: g_res = (g_res + (d < 0 ? 3 : 1)) % 4; break;
+    case CAT_CAPTURE * 16 + 3: if (!d) open_folder(); break;
+    case CAT_EFFECTS * 16 + 9:
+        g_preset = (g_preset + (d < 0 ? PRESETS - 1 : 1)) % PRESETS;
+        fx_preset(g_preset);
+        break;
     default: break;
     }
     if (g_cat == CAT_CAMERA && g_row >= 1 && g_row <= 5 && d)
@@ -1078,6 +1145,95 @@ void photo_free_tick(const PLAT_PAD *pad, int (*key)(int))
 
 /* --------------------------------------------------- IMAGE and EFFECTS */
 
+/* the cinematic presets: a set of IMAGE and EFFECTS at once */
+static void fx_preset(int k)
+{
+    FX f = k_fx0;
+    switch (k) {
+    case 1: f.con = 1.15f; f.sat = 0.9f; f.vig = 0.35f; f.bloom = 0.25f; f.temp = 0.1f; f.grain = 0.1f; break;
+    case 2: f.filter = 7; f.con = 1.3f; f.vig = 0.5f; f.grain = 0.3f; break;
+    case 3: f.filter = 5; f.con = 1.2f; f.vig = 0.4f; f.bloom = 0.2f; break;
+    case 4: f.filter = 6; f.sat = 1.2f; f.bloom = 0.4f; f.vig = 0.3f; break;
+    case 5: f.filter = 8; f.grain = 0.4f; f.ca = 0.3f; f.vig = 0.3f; break;
+    case 6: f.ev = -0.3f; f.con = 1.4f; f.sh = -0.2f; f.hi = 0.2f; f.vig = 0.45f; f.sat = 0.85f; break;
+    case 7: f.filter = 3; f.con = 1.1f; f.vig = 0.25f; break;
+    default: break;
+    }
+    f.dof = g_fx.dof;                   /* the depth of field and its focus stay the player's */
+    f.focus = g_fx.focus;
+    f.aperture = g_fx.aperture;
+    g_fx = f;
+}
+
+/* photo_mode.ini beside the game: IMAGE, EFFECTS, the HUD, the grid, the
+ * resolution, kept from one session to the next */
+static void prefs_path(char *out, int n)
+{
+    snprintf(out, (size_t)n, "%sphoto_mode.ini", rgl_dir);
+}
+
+static void prefs_save(void)
+{
+    char path[1100];
+    FILE *f;
+    prefs_path(path, sizeof path);
+    f = fopen(path, "w");
+    if (!f)
+        return;
+    fprintf(f, "; PHOTO MODE's settings (photo_mode.c), kept by the game\n");
+    fprintf(f, "ev=%g\nbri=%g\ncon=%g\nsat=%g\ntemp=%g\ntint=%g\ngamma=%g\nsharp=%g\nhi=%g\nsh=%g\n",
+            g_fx.ev, g_fx.bri, g_fx.con, g_fx.sat, g_fx.temp, g_fx.tint, g_fx.gamma, g_fx.sharp, g_fx.hi, g_fx.sh);
+    fprintf(f, "vig=%g\ngrain=%g\nca=%g\nbloom=%g\nfocus=%g\naperture=%g\nfilter=%d\ndof=%d\n",
+            g_fx.vig, g_fx.grain, g_fx.ca, g_fx.bloom, g_fx.focus, g_fx.aperture, g_fx.filter, g_fx.dof);
+    fprintf(f, "preset=%d\nhud=%d\ngrid=%d\nres=%d\n", g_preset, g_show_hud, g_grid, g_res);
+    fclose(f);
+}
+
+static void prefs_load(void)
+{
+    char path[1100], line[128];
+    FILE *f;
+    g_loaded = 1;
+    prefs_path(path, sizeof path);
+    f = fopen(path, "r");
+    if (!f)
+        return;
+    while (fgets(line, sizeof line, f)) {
+        char *v = strchr(line, '=');
+        float x;
+        if (!v || line[0] == ';')
+            continue;
+        *v++ = 0;
+        x = (float)atof(v);
+#define K(name, field, lo, hi) if (strcmp(line, name) == 0) field = clampf(x, lo, hi)
+        K("ev", g_fx.ev, -2.0f, 2.0f);
+        K("bri", g_fx.bri, -0.3f, 0.3f);
+        K("con", g_fx.con, 0.5f, 1.8f);
+        K("sat", g_fx.sat, 0.0f, 2.0f);
+        K("temp", g_fx.temp, -1.0f, 1.0f);
+        K("tint", g_fx.tint, -1.0f, 1.0f);
+        K("gamma", g_fx.gamma, 0.6f, 1.6f);
+        K("sharp", g_fx.sharp, 0.0f, 2.0f);
+        K("hi", g_fx.hi, -1.0f, 1.0f);
+        K("sh", g_fx.sh, -1.0f, 1.0f);
+        K("vig", g_fx.vig, 0.0f, 1.0f);
+        K("grain", g_fx.grain, 0.0f, 1.0f);
+        K("ca", g_fx.ca, 0.0f, 1.0f);
+        K("bloom", g_fx.bloom, 0.0f, 1.0f);
+        K("focus", g_fx.focus, 0.25f, 3.0f);
+        K("aperture", g_fx.aperture, 0.5f, 6.0f);
+#undef K
+        if (strcmp(line, "filter") == 0) g_fx.filter = atoi(v) >= 0 && atoi(v) < FILTERS ? atoi(v) : 0;
+        if (strcmp(line, "dof") == 0) g_fx.dof = atoi(v) != 0;
+        if (strcmp(line, "preset") == 0) g_preset = atoi(v) >= 0 && atoi(v) < PRESETS ? atoi(v) : 0;
+        if (strcmp(line, "hud") == 0) g_show_hud = atoi(v) != 0;
+        if (strcmp(line, "grid") == 0) g_grid = atoi(v) != 0;
+        if (strcmp(line, "res") == 0) g_res = atoi(v) >= 0 && atoi(v) < 4 ? atoi(v) : 0;
+    }
+    fclose(f);
+    printf("photo: settings from %s\n", path);
+}
+
 /* the depth of field needs the scene's distance: OpenGL's depth buffer, or
  * Vulkan's and Direct3D 12's depth pass, which comes with ENHANCED LIGHTING */
 static int fx_dof_possible(void)
@@ -1261,7 +1417,8 @@ void photo_draw(void)
         return;
     }
     if (g_shot) {                       /* the photo's frame: nothing over it */
-        g_shot_drawn = 1;
+        if (g_res == 0 || g_shot_ready)
+            g_shot_drawn = 1;
         return;
     }
     limeEnableAlphaBlending_Basic();
@@ -1633,7 +1790,22 @@ out:
 
 /* ------------------------------------------------------------ the capture */
 
-typedef struct { char path[1200]; int w, h; unsigned char *rgb; } JOB;
+typedef struct { char path[1200]; int w, h, ss; unsigned char *rgb; } JOB;
+
+/* supersampling: each 2x2 of the picture averaged into one pixel */
+static void half_down(JOB *j)
+{
+    int w = j->w / 2, h = j->h / 2, x, y, c;
+    for (y = 0; y < h; y++)
+        for (x = 0; x < w; x++)
+            for (c = 0; c < 3; c++) {
+                const unsigned char *s0 = j->rgb + ((size_t)(y * 2) * j->w + x * 2) * 3 + c;
+                const unsigned char *s1 = s0 + (size_t)j->w * 3;
+                j->rgb[((size_t)y * w + x) * 3 + c] = (unsigned char)((s0[0] + s0[3] + s1[0] + s1[3] + 2) / 4);
+            }
+    j->w = w;
+    j->h = h;
+}
 
 static volatile int g_writing;
 
@@ -1646,6 +1818,8 @@ static void *write_job(void *arg)
     JOB *j = (JOB *)arg;
     void st_heap_this_thread(void);
     st_heap_this_thread();              /* the pixels are no state (savestate.c) */
+    if (j->ss)
+        half_down(j);
     if (png_write(j->path, j->rgb, j->w, j->h))
         printf("photo: wrote %s (%dx%d)\n", j->path, j->w, j->h);
     else
@@ -1712,6 +1886,8 @@ void photo_after_present(int vx, int vy, int vw, int vh)
     free(px);
     j->w = vw;
     j->h = vh;
+    j->ss = g_shot_ss;
+    g_shot_ss = g_shot_ready = 0;
 
     photo_folder(dir, sizeof dir);
 #ifdef _WIN32

@@ -108,6 +108,31 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+### 2026-11-22 -- 0.6.0 beta: PHOTO MODE phases 3 and 4
+
+Port. CHARACTER: the fighter's adjustment applied where his matrices are
+made -- the body's (+0x548, built from the lime matrix in RenderLevelPlayers:
+rows times Rz after the scale, then the offset) and the pose's (+0x588,
+RenderLevelPlayers_Pose: glTranslatef / glRotatef after his place); the
+first try turned only the pose's, which draws the events, not the body.
+Hidden: PortSkipFighter for his side. SCENE: RenderLevelBG and the events and
+particles left out; AVANZAR UN CUADRO lets one tick of the fight run
+(GamePaused 0 for it, `photo_on` still true), the first step keeping the
+frozen frame in a save slot of its own (savestate.c `st_photo_save`), put
+back on the way out. Phase 4: `photo_capture_size` asks clear_frame for a
+buffer of 1440p, 4K or twice the size for the photo's frame alone (at most
+4 samples), the photo read from it, supersampling brought down 2x2 in the
+writer's thread; presets; `photo_mode.ini`. The hints with the keys' and
+the pad's pictures (FrontEnd.c PortNavDrawLineC; the glyph rings made 16
+deep after a line of ten keys showed the wrong ones).
+
+Checked by scripted runs in the test folder (muted, Direct3D 12): a fighter
+turned 105 degrees, the other hidden, the stage hidden, three frames stepped
+and the frame put back ("the fight put back on the frame it was frozen
+on"); a 4K photo (3844x2160) and a supersampled one (3840x2158 to
+1920x1079); the settings written and read back. Mary reported the camera
+after the intros as fixed before it was looked into; nothing changed there.
+
 ### 2026-11-21 (night) -- PHOTO MODE phase 2: IMAGE and EFFECTS in the three renderers
 
 Port. The effects are one pass over the picture (docs/PHOTO-MODE.md, "The

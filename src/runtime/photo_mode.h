@@ -57,5 +57,9 @@ void  photo_note_scene(void);
  * capture asked for reads it there (the game's area: vx, vy, vw, vh) and a
  * thread writes the PNG */
 void  photo_after_present(int vx, int vy, int vw, int vh);
+/* phase 4: the size the photo's frame is drawn at, when not the game's
+ * (game_main.c clear_frame), and whether the buffer was made so */
+int   photo_capture_size(int nw, int nh, int *w, int *h);
+void  photo_capture_ready(int ok);
 
 #endif
