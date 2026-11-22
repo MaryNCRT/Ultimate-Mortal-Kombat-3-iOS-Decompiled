@@ -2,12 +2,30 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.5.9",
+      "date": "2026-11-21",
+      "ES": [
+        "MODO FOTO: F3, los dos sticks (L3+R3) o la opción del menú de pausa congelan la pelea con una cámara libre: girar, inclinar, acercar, zoom, centrar en un luchador, ocultar el HUD y guardar fotos PNG en la carpeta photos. Funciona en peleas, entrenamiento, práctica de fatality, remates y repeticiones.",
+        "EXTRAS: REPETICIONES (las ves sin salir del juego) y MODS, con sus páginas MODS y TEXTURE PACKS y cada mod con su icono y sus datos. Essentials siempre está activo.",
+        "El reproductor de repeticiones renovado: línea de tiempo, estado, velocidades, CÁMARA LIBRE con la pelea en marcha, panel de movimientos ocultable, MODO CINE y control con mando.",
+        "MODO ESPECTADOR en línea: en una sala puedes VER LA PELEA en directo y entrar en cualquier momento.",
+        "El menú de pausa, más pequeño y ordenado. Los remates que a veces no salían (una pulsación de S perdida) ya salen siempre."
+      ],
+      "EN": [
+        "PHOTO MODE: F3, both sticks (L3+R3) or the pause menu freeze the fight with a free camera: orbit, tilt, distance, zoom, focus a fighter, hide the HUD and save PNG photos into the photos folder. In fights, training, the fatality trainer, finishers and replays.",
+        "EXTRAS: REPLAYS (watched without leaving the game) and MODS, with its MODS and TEXTURE PACKS pages and every mod with its picture and details. Essentials is always on.",
+        "The replay player redone: timeline, state, speeds, FREE CAMERA with the fight playing, a moves panel that hides, CINEMA mode and pad controls.",
+        "ONLINE SPECTATORS: in a room you can WATCH THE FIGHT live and join at any moment.",
+        "The pause menu smaller and in order. Finishers that now and then did not happen (a lost S press) always do now."
+      ]
+    },
+    {
       "version": "0.5.8",
       "date": "2026-11-20",
       "ES": [
         "KOMBO SLIDE desactivado ya no es tan agresivo: en el aire los golpes empujan como en el original (se acabaron los malabares infinitos) y en el suelo empujan la mitad en vez de nada.",
-        "La ILUMINACI\u00d3N MEJORADA ya no se apaga en los remates que dibujan a los luchadores de otra forma (como el fuego de Scorpion).",
-        "PR\u00c1CTICA DE FATALITY: no se oye el \"round one, fight\" mientras prepara el FINISH HIM, se ve el letrero FATALITY (o ANIMALITY, BABALITY...) antes de salir, y vuelves directo a la pr\u00e1ctica, sin pasar por el men\u00fa principal."
+        "La ILUMINACIÓN MEJORADA ya no se apaga en los remates que dibujan a los luchadores de otra forma (como el fuego de Scorpion).",
+        "PRÁCTICA DE FATALITY: no se oye el \"round one, fight\" mientras prepara el FINISH HIM, se ve el letrero FATALITY (o ANIMALITY, BABALITY...) antes de salir, y vuelves directo a la práctica, sin pasar por el menú principal."
       ],
       "EN": [
         "KOMBO SLIDE off is no longer so aggressive: hits in the air push as in the original (no more infinite juggles) and hits on the ground push half as far instead of not at all.",
@@ -19,11 +37,11 @@
       "version": "0.5.7",
       "date": "2026-11-20",
       "ES": [
-        "Nuevo en EXTRAS: PR\u00c1CTICA DE FATALITY. Empieza directo en el FINISH HIM, con tiempo ilimitado, el comando del remate arriba y un recuadro en el suelo que marca exactamente d\u00f3nde funciona. Incluye todos los remates de cada luchador y una lista de remates hechos por luchador, que se guarda.",
-        "En la pr\u00e1ctica, la ANIMALITY va en dos pasos: primero el MERCY y luego la animality. Si haces otro remate o fallas, vuelves al FINISH HIM.",
-        "Mandos DualSense (PS5): L2 y R2 ya no est\u00e1n cambiados, y con Steam Input el mismo mando ya no se detecta dos veces.",
-        "En l\u00ednea: buscar por c\u00f3digo reintenta durante 20 segundos en vez de rendirse a la primera, y acepta el c\u00f3digo con espacios o con \"umk3:\" delante.",
-        "Los men\u00fas EN L\u00cdNEA y PR\u00c1CTICA DE FATALITY se usan bien con el mando: un teclado en pantalla para escribir el c\u00f3digo (solo si eliges la casilla con el mando), y al cerrar una ventana vuelves a la opci\u00f3n que la abri\u00f3."
+        "Nuevo en EXTRAS: PRÁCTICA DE FATALITY. Empieza directo en el FINISH HIM, con tiempo ilimitado, el comando del remate arriba y un recuadro en el suelo que marca exactamente dónde funciona. Incluye todos los remates de cada luchador y una lista de remates hechos por luchador, que se guarda.",
+        "En la práctica, la ANIMALITY va en dos pasos: primero el MERCY y luego la animality. Si haces otro remate o fallas, vuelves al FINISH HIM.",
+        "Mandos DualSense (PS5): L2 y R2 ya no están cambiados, y con Steam Input el mismo mando ya no se detecta dos veces.",
+        "En línea: buscar por código reintenta durante 20 segundos en vez de rendirse a la primera, y acepta el código con espacios o con \"umk3:\" delante.",
+        "Los menús EN LÍNEA y PRÁCTICA DE FATALITY se usan bien con el mando: un teclado en pantalla para escribir el código (solo si eliges la casilla con el mando), y al cerrar una ventana vuelves a la opción que la abrió."
       ],
       "EN": [
         "New in EXTRAS: FATALITY TRAINER. It starts right at FINISH HIM, with unlimited time, the finisher's command on top and a frame on the floor showing exactly where it works. Every finisher of every fighter, and a checklist per fighter that is saved.",

@@ -8,8 +8,48 @@ Newest first. Each release says what was added or fixed and whether the
 tester (Mary) has played it yet. The technical detail of every change -- the
 binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
-## Unreleased
+## 0.5.9 beta (2026-11-21)
 
+Spectators, PHOTO MODE, REPLAYS and MODS inside the game, and the replay
+player redone. Checked by scripted runs in the test folder (muted); Mary
+tried the photo mode, the EXTRAS pages and the replays as they were built.
+
+- **PHOTO MODE (phase 1):** F3 or both sticks (L3+R3), or PHOTO MODE in
+  the pause menu, freezes the fight (the game's own pause, one value more)
+  and gives a camera of its own: orbit, tilt, distance, zoom, roll, the
+  point moved or put on a fighter, a reset. The HUD hidden, a grid of
+  thirds, and PNG photos into `photos/` beside the game (written by a
+  thread of their own). Works in fights, training, the FATALITY TRAINER,
+  finishers and replays; not online. Leaving it, the fight goes on from the
+  very frame. Its panel is compact (Mary: the first one covered too much).
+  The effects (exposure, contrast, depth of field...) are the next phase,
+  as shaders in each renderer.
+- **The pause menu:** smaller words, one line each, in reading order --
+  RESUME, the moves list, training's rows, PHOTO MODE, the settings, EXIT
+  last; one row a press.
+- **EXTRAS > REPLAYS:** the launcher's list inside the game; a replay plays
+  without leaving it, and its X (or B) comes back to the page.
+- **EXTRAS > MODS:** two pages, MODS and TEXTURE PACKS, each mod a card as
+  the launcher's (its picture, name, version, author, kind, description)
+  with its switch; it applies on the next start. **Essentials** is always
+  on and cannot be touched, in the game and in the launcher.
+- **The launcher's MOD MANAGER:** the same two pages; a mod of category
+  textures is a texture pack (the HD characters are one). Essentials
+  locked. VS Sounds was the same file Essentials already has (byte for
+  byte): it goes, Essentials keeps the VS sound.
+- **REPLAYS, the player redone** (the same player and its files): the
+  fighters, the clock and the state over a finer timeline with marks and a
+  gold knob; the speed with five pips; the transport, and the tools in
+  groups -- FREE CAMERA, the moves panel shown or hidden, CINEMA (the panel
+  fades while the fight plays and comes back at a touch), the settings;
+  the keys' hints for the keyboard or the pad. The launcher's replays are
+  the same player.
+- **FREE CAMERA in replays:** its button, F or the pad's Y; the fight plays
+  on with its panel while the camera moves (right mouse turns, middle
+  moves, the wheel the distance, the arrows and Q/E, the sticks, LT/RT).
+- **Replays with a pad:** A or START play/pause, the d-pad seeks, LB/RB the
+  speed, SELECT the start, the d-pad's up the moves panel, down CINEMA, B
+  out.
 - **Spectators (ONLINE):** in a lobby's room, those not fighting can WATCH
   THE FIGHT live, joining at any moment; LEAVE (or B / Esc) goes back to
   the room, as the fight's end does.
