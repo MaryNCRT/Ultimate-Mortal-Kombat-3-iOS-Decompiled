@@ -104,9 +104,33 @@ The [HANDOFF](HANDOFF.md) lists how to build, test, verify and release.
 New work comes from Mary's reports (GitHub issues and her logs); each is
 traced to the binary's own mechanism before anything is changed.
 
+**Graphics overhaul (asked 2026-11-22):** phase 1, the audit and the
+architecture, is in [research/GRAPHICS-OVERHAUL.md](research/GRAPHICS-OVERHAUL.md).
+No code changed yet. Two licence questions block phases 3-5 as asked (NVIDIA
+SDKs inside a GPL program; NVIDIA's neural model is not redistributable)
+and wait on Mary.
+
 ---
 
 ## Detailed log (newest first)
+
+### 2026-11-22 (later) -- graphics overhaul, phase 1: audit and architecture
+
+Research only, nothing in `src/` changed. Audited the three renderers,
+ENHANCED LIGHTING, AO, the photo-mode post pass, the config, the launcher's
+GPU listing and VERIFY / REPAIR, photo mode and replay seeking; read
+Melee Unlocked, DLSS5-Feeder (+ fork, AutoBuilder), LumeniteFX, vort,
+ReShade and NVIDIA's Streamline / DLSS / RTXGI / RTXDI / NRD / RTXPT /
+RTX-Kit. Findings and the plan: `docs/research/GRAPHICS-OVERHAUL.md`.
+The main points: the renderer already tags the scene camera, the HUD's
+start, each fighter (caster id) and each stage mesh by name, so the
+character / environment / HUD split can use real data; the D3D12 backend
+(not GL interop) is the route for the neural layer; LumeniteFX's licence
+forbids bundling it, and real motion vectors from `rgl_ff` make it
+unnecessary; the NVIDIA RTX SDKs licence (§4(e)) conflicts with linking
+into this GPL-2.0-or-later tree, so RT is planned in-house with inline ray
+queries; `nvngx_dlssnr.dll` must be supplied by the player, never shipped
+or fetched.
 
 ### 2026-11-22 -- 0.6.0 beta: PHOTO MODE phases 3 and 4
 
