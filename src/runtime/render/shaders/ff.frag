@@ -421,8 +421,93 @@ vec3 ao_debug_view(vec2 fc, float contrib)
     return vec3(ao_at(fc, false));             // 1 after the blur, 2 before it
 }
 
+// PHOTO MODE's effects (runtime/photo_mode.c, rgl_ff.c rgl_ff_post): a pass
+// over the picture once the scene is drawn. scr is the picture, smap the
+// scene's distance packed (the depth pass, when there is one: aoparm2.w),
+// aovp where the game's area is in the target (x, y from the top, w, h),
+// aoproj.z the distance the pack is in. The settings in l[0] and l[1]:
+//   l0.pos   exposure (EV), brightness, contrast, saturation
+//   l0.col   temperature, tint, gamma, sharpness
+//   l0.dir   highlights, shadows, vignette, grain
+//   l0.cone  chromatic aberration, bloom, filter, time (the grain's seed)
+//   l1.pos   depth of field on, focus (x the centre's distance), aperture
+vec3 post_c(vec2 uv)
+{
+    return textureLod(scr, clamp(uv, vec2(0.0), vec2(1.0)), 0.0).rgb;
+}
+
+float post_d(vec2 uv)
+{
+    return unpack_depth(textureLod(smap, clamp(uv, vec2(0.0), vec2(1.0)), 0.0)) * lb.aoproj.z;
+}
+
+vec4 post_fx(vec2 fc)
+{
+    vec4 P0 = lb.l[0].pos, P1 = lb.l[0].col, P2 = lb.l[0].dir, P3 = lb.l[0].cone, P4 = lb.l[1].pos;
+    vec2 uv = (fc - lb.aovp.xy) / lb.aovp.zw;
+    vec2 px = 1.0 / lb.aovp.zw;
+    const vec3 Y = vec3(0.299, 0.587, 0.114);
+    vec2 dc = (uv - 0.5) * P3.x * 0.012;
+    vec3 c = vec3(post_c(uv + dc).r, post_c(uv).g, post_c(uv - dc).b);
+    if (P4.x > 0.5 && lb.aoparm2.w > 0.5) {      // depth of field
+        float df = (post_d(vec2(0.5)) + post_d(vec2(0.47, 0.5)) + post_d(vec2(0.53, 0.5))
+                  + post_d(vec2(0.5, 0.46)) + post_d(vec2(0.5, 0.54))) * 0.2 * P4.y;
+        float coc = clamp(abs(post_d(uv) - df) / max(df, 1e-4) * P4.z, 0.0, 1.0) * 10.0;
+        if (coc > 0.5) {
+            vec3 acc = c;
+            for (int i = 0; i < 24; i++) {
+                float a = float(i) * 2.39996, r = sqrt((float(i) + 0.5) / 24.0) * coc;
+                acc += post_c(uv + vec2(cos(a), sin(a)) * r * px);
+            }
+            c = acc / 25.0;
+        }
+    }
+    if (P3.y > 0.0) {                            // bloom: the bright parts spread
+        vec3 b = vec3(0.0);
+        for (int i = 0; i < 16; i++) {
+            float a = float(i) * 2.39996, r = (4.0 + float(i)) * 1.2;
+            b += max(post_c(uv + vec2(cos(a), sin(a)) * r * px) - 0.6, 0.0);
+        }
+        c += b * (P3.y * 0.25);
+    }
+    if (P1.w > 0.0) {                            // sharpness: an unsharp mask
+        vec3 n = post_c(uv + vec2(px.x, 0.0)) + post_c(uv - vec2(px.x, 0.0))
+               + post_c(uv + vec2(0.0, px.y)) + post_c(uv - vec2(0.0, px.y));
+        c += (c * 4.0 - n) * (P1.w * 0.25);
+    }
+    c *= exp2(P0.x);
+    c *= vec3(1.0 + 0.25 * P1.x, 1.0 - 0.15 * P1.y, 1.0 - 0.25 * P1.x);
+    float l = dot(c, Y);
+    c += P2.y * 0.35 * (1.0 - smoothstep(0.0, 0.5, l));
+    c += P2.x * 0.35 * smoothstep(0.5, 1.0, l);
+    c += P0.y;
+    c = (c - 0.5) * P0.z + 0.5;
+    l = dot(c, Y);
+    c = mix(vec3(l), c, P0.w);
+    int fl = int(P3.z + 0.5);
+    if (fl == 1) c = vec3(l);
+    else if (fl == 2) c = vec3(l) * vec3(1.07, 0.86, 0.62) + vec3(0.06, 0.03, 0.0);
+    else if (fl == 3) c *= vec3(0.85, 0.97, 1.15);
+    else if (fl == 4) c *= vec3(1.15, 1.0, 0.82);
+    else if (fl == 5) c = mix(c, vec3(c.r * 1.2, c.g * 0.55, c.b * 0.5), 0.85);
+    else if (fl == 6) c = mix(c, vec3(c.r * 0.9 + 0.05, c.g * 0.75, c.b * 1.2 + 0.05), 0.8);
+    else if (fl == 7) c = vec3(smoothstep(0.12, 0.88, l));
+    else if (fl == 8) c = mix(c, vec3(l), 0.35) * vec3(1.05, 1.0, 0.88) + 0.04;
+    c = pow(max(c, vec3(0.0)), vec3(1.0 / max(P1.z, 0.1)));
+    {
+        vec2 q = (uv - 0.5) * vec2(1.0, lb.aovp.w / lb.aovp.z) * 1.6;
+        c *= mix(1.0, smoothstep(1.05, 0.25, length(q)), P2.z);
+    }
+    c += (fract(sin(dot(fc + P3.w * 61.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * P2.w * 0.2;
+    return vec4(clamp(c, 0.0, 1.0), 1.0);
+}
+
 void main()
 {
+    if ((pc.shadow & 15) == 6) {        // PHOTO MODE's effects
+        o = post_fx(gl_FragCoord.xy);
+        return;
+    }
     if ((pc.shadow & 15) == 4) {        // AMBIENT OCCLUSION's passes (rgl_ff.c)
         o = ao_pass(gl_FragCoord.xy);
         return;

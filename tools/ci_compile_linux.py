@@ -27,7 +27,7 @@ RUNTIME = ["game_main.c", "debug_menu.c", "settings_menu.c", "adaptive_music.c",
            "lime_platform.c", "lime_app.c", "wav.c", "fight_runtime.c", "savestate.c",
            "rollback_probe.c", "rollback.c", "smooth_models.c", "skin_mats.c",
            "platform/sdl_gl.c", "platform/sdl_audio.c", "platform/ui_alert.c",
-           "render/rgl_front.c", "render/rgl_ff.c", "render/rgl_vk.c"]
+           "render/rgl_front.c", "render/rgl_ff.c", "render/rgl_post.c", "render/rgl_vk.c"]
 DIRS = ["src/decomp/gamecode", "src/decomp/lime", "src/runtime/lime", "src/decomp/gamecode/logic",
         "src/thirdparty/blender"]
 BLENDER = os.path.join(ROOT, "src", "thirdparty", "blender")

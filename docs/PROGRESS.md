@@ -108,6 +108,27 @@ traced to the binary's own mechanism before anything is changed.
 
 ## Detailed log (newest first)
 
+### 2026-11-21 (night) -- PHOTO MODE phase 2: IMAGE and EFFECTS in the three renderers
+
+Port. The effects are one pass over the picture (docs/PHOTO-MODE.md, "The
+effects"): `RGL_POST` in ff.frag / ff.hlsl (`post_fx`, shaders rebuilt with
+build.py), `rgl_ff_post` for Vulkan and Direct3D 12, `render/rgl_post.c`
+(GLSL 1.20, its own framebuffer) for OpenGL, `photo_post` calling it before
+the panel. The depth of field: AMBIENT OCCLUSION's depth pass made to run
+for it too (`rgl_post_want_depth`, ao_note / ao_passes) and its target
+copied, bound as the shadow map -- the backends bound the shadow map only
+for a receiver, so the first try blurred nothing (the depth read white);
+rgl_vk.c and rgl_d3d12.c bind it for `RGL_POST` as well. OpenGL blits the
+depth beside the colour.
+
+Checked by scripted runs in the test folder (muted): EXPOSURE, vignette,
+chromatic aberration and SEPIA in Direct3D 12 with a photo written (the
+PNG has the effects); the depth of field focused on player one, an A/B
+against no effects (the wall behind him blurred, he sharp); the same keys in
+Vulkan and OpenGL, the two pictures side by side alike. The test folder's
+renderer put back to d3d12 after. Not checked: a machine whose OpenGL has no
+GLSL (the panel says NOT AVAILABLE there), Linux.
+
 ### 2026-11-21 (later) -- 0.5.9 beta: PHOTO MODE, EXTRAS > REPLAYS and MODS, the replay player redone
 
 All port, nothing of the binary changed in what it does. Checked by scripted

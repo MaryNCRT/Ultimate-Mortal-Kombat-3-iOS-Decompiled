@@ -437,8 +437,83 @@ float3 ao_debug_view(float2 fc, float contrib)
     return ao_at(fc, false).xxx;                 // 1 after the blur, 2 before it
 }
 
+// PHOTO MODE's effects: as ff.frag's post_fx (the settings in lb_l[0], [1])
+float3 post_c(float2 uv)
+{
+    return scr.SampleLevel(spt, saturate(uv), 0).rgb;
+}
+
+float post_d(float2 uv)
+{
+    return unpack_depth(smap.SampleLevel(spt, saturate(uv), 0)) * lb_aoproj.z;
+}
+
+float4 post_fx(float2 fc)
+{
+    float4 P0 = lb_l[0].pos, P1 = lb_l[0].col, P2 = lb_l[0].dir, P3 = lb_l[0].cone, P4 = lb_l[1].pos;
+    float2 uv = (fc - lb_aovp.xy) / lb_aovp.zw;
+    float2 px = 1.0 / lb_aovp.zw;
+    const float3 Y = float3(0.299, 0.587, 0.114);
+    float2 dc = (uv - 0.5) * P3.x * 0.012;
+    float3 c = float3(post_c(uv + dc).r, post_c(uv).g, post_c(uv - dc).b);
+    int i;
+    if (P4.x > 0.5 && lb_aoparm2.w > 0.5) {
+        float df = (post_d(float2(0.5, 0.5)) + post_d(float2(0.47, 0.5)) + post_d(float2(0.53, 0.5))
+                  + post_d(float2(0.5, 0.46)) + post_d(float2(0.5, 0.54))) * 0.2 * P4.y;
+        float coc = saturate(abs(post_d(uv) - df) / max(df, 1e-4) * P4.z) * 10.0;
+        if (coc > 0.5) {
+            float3 acc = c;
+            for (i = 0; i < 24; i++) {
+                float a = (float)i * 2.39996, r = sqrt(((float)i + 0.5) / 24.0) * coc;
+                acc += post_c(uv + float2(cos(a), sin(a)) * r * px);
+            }
+            c = acc / 25.0;
+        }
+    }
+    if (P3.y > 0.0) {
+        float3 b = float3(0.0, 0.0, 0.0);
+        for (i = 0; i < 16; i++) {
+            float a = (float)i * 2.39996, r = (4.0 + (float)i) * 1.2;
+            b += max(post_c(uv + float2(cos(a), sin(a)) * r * px) - 0.6, 0.0);
+        }
+        c += b * (P3.y * 0.25);
+    }
+    if (P1.w > 0.0) {
+        float3 n = post_c(uv + float2(px.x, 0.0)) + post_c(uv - float2(px.x, 0.0))
+                 + post_c(uv + float2(0.0, px.y)) + post_c(uv - float2(0.0, px.y));
+        c += (c * 4.0 - n) * (P1.w * 0.25);
+    }
+    c *= exp2(P0.x);
+    c *= float3(1.0 + 0.25 * P1.x, 1.0 - 0.15 * P1.y, 1.0 - 0.25 * P1.x);
+    float l = dot(c, Y);
+    c += P2.y * 0.35 * (1.0 - smoothstep(0.0, 0.5, l));
+    c += P2.x * 0.35 * smoothstep(0.5, 1.0, l);
+    c += P0.y;
+    c = (c - 0.5) * P0.z + 0.5;
+    l = dot(c, Y);
+    c = lerp(float3(l, l, l), c, P0.w);
+    int fl = (int)(P3.z + 0.5);
+    if (fl == 1) c = float3(l, l, l);
+    else if (fl == 2) c = float3(l, l, l) * float3(1.07, 0.86, 0.62) + float3(0.06, 0.03, 0.0);
+    else if (fl == 3) c *= float3(0.85, 0.97, 1.15);
+    else if (fl == 4) c *= float3(1.15, 1.0, 0.82);
+    else if (fl == 5) c = lerp(c, float3(c.r * 1.2, c.g * 0.55, c.b * 0.5), 0.85);
+    else if (fl == 6) c = lerp(c, float3(c.r * 0.9 + 0.05, c.g * 0.75, c.b * 1.2 + 0.05), 0.8);
+    else if (fl == 7) { float k = smoothstep(0.12, 0.88, l); c = float3(k, k, k); }
+    else if (fl == 8) c = lerp(c, float3(l, l, l), 0.35) * float3(1.05, 1.0, 0.88) + 0.04;
+    c = pow(max(c, 0.0), 1.0 / max(P1.z, 0.1));
+    {
+        float2 q = (uv - 0.5) * float2(1.0, lb_aovp.w / lb_aovp.z) * 1.6;
+        c *= lerp(1.0, smoothstep(1.05, 0.25, length(q)), P2.z);
+    }
+    c += (frac(sin(dot(fc + P3.w * 61.0, float2(12.9898, 78.233))) * 43758.5453) - 0.5) * P2.w * 0.2;
+    return float4(saturate(c), 1.0);
+}
+
 float4 ps(PSIn i) : SV_Target
 {
+    if ((shadow & 15) == 6)             // PHOTO MODE's effects
+        return post_fx(i.pos.xy);
     if ((shadow & 15) == 4)             // AMBIENT OCCLUSION's passes (rgl_ff.c)
         return ao_pass(i.pos.xy);
     if ((shadow & 15) == 5)

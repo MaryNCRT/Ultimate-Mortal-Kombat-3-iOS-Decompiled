@@ -104,7 +104,8 @@ typedef struct {
 enum { RGL_SHADOW_NONE, RGL_SHADOW_RECEIVE, RGL_SHADOW_DEPTH,
        RGL_AO_DEPTH,                       /* AMBIENT OCCLUSION: the scene's distance, packed */
        RGL_AO_PASS,                        /* the occlusion from it (a full-screen draw) */
-       RGL_AO_BLUR };                      /* and that blurred, edges kept */
+       RGL_AO_BLUR,                        /* and that blurred, edges kept */
+       RGL_POST };                         /* PHOTO MODE's effects over the picture */
 typedef struct {
     int   tex_mode;                        /* RGL_TEX_* */
     int   alpha_func;                      /* 0 none, else the GL compare enum */
@@ -269,6 +270,29 @@ void rgl_shadow_camera(int on);
 void rgl_shadow_caster(int on);
 void rgl_shadow_proxy(int mode);
 int  rgl_shadow_active(void);
+
+/* PHOTO MODE's effects (runtime/photo_mode.c; port): one pass over the
+ * game's area once the scene is drawn -- the picture's colour and, for the
+ * depth of field, the scene's distance. RGL_POST_PARAMS floats of settings
+ * (the shaders' post_fx says which). With OpenGL a GLSL program of its own
+ * (rgl_post.c), with Vulkan and Direct3D 12 the backends' shaders (rgl_ff.c
+ * rgl_ff_post). Nothing is made or drawn while the mode is off.
+ *
+ *   rgl_post_available()   1 when what draws can draw them
+ *   rgl_post_apply(prm)    the pass, now, over the current viewport;
+ *                          returns 1 when it had the scene's depth
+ *   rgl_post_want_depth    1 asks for that depth (the depth of field on):
+ *                          Vulkan and Direct3D 12 take it from AMBIENT
+ *                          OCCLUSION's depth pass, which needs ENHANCED
+ *                          LIGHTING; OpenGL from the depth buffer
+ *   rgl_post_scene(m)      OpenGL: the scene's projection, for the depth's
+ *                          distance (GameCode.c RenderGameView) */
+#define RGL_POST_PARAMS 32
+extern int rgl_post_want_depth;
+int  rgl_post_available(void);
+int  rgl_post_apply(const float *prm);
+void rgl_post_scene(void);
+int  rgl_ff_post(const float *prm);         /* rgl_ff.c, Vulkan and Direct3D 12 */
 
 /* rgl_ff.c */
 void rgl_ff_start(const rgl_backend *b, int width, int height);

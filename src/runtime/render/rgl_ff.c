@@ -2524,6 +2524,11 @@ static struct {
 } AO;
 
 /* the first held 3D draw: its projection and viewport */
+/* PHOTO MODE's effects (rgl_ff_post, below): the picture copied, and the
+ * scene's distance kept from the depth pass (post_keep_depth) */
+int rgl_post_want_depth;
+static struct { int color, w, h, depth, dw, dh; long depth_frame; } POST;
+
 static void ao_note(const rgl_rect *vp, int fighter)
 {
     int tw, th;
@@ -2546,7 +2551,8 @@ static void ao_note(const rgl_rect *vp, int fighter)
                    vp->x, vp->y, vp->w, vp->h, AO.vp.x, AO.vp.y, AO.vp.w, AO.vp.h);
         }
     }
-    if (AO.have || !rgl_ao || !rgl_shadows)
+    /* the depth pass runs for the depth of field too (rgl_post_want_depth) */
+    if (AO.have || (!rgl_ao && !rgl_post_want_depth) || !rgl_shadows)
         return;
     AO.have = 1;
     AO.p00 = g_pr.s[g_pr.top].m[0];
@@ -2634,7 +2640,7 @@ static void ao_passes(void)
     int i, w, h;
 
     AO.valid = 0;
-    if (!AO.have || !rgl_ao || !rgl_shadows || !B->screen_map)
+    if (!AO.have || (!rgl_ao && !rgl_post_want_depth) || !rgl_shadows || !B->screen_map)
         return;
     /* a fighter's held draw is left out of the depth only when his base
      * mesh is in SH.w to stand for it: one drawn without being cast (as a
@@ -2789,6 +2795,31 @@ static void ao_passes(void)
             }
         }
     }
+    /* PHOTO MODE's depth of field: the distance kept, copied as it is (the
+     * pack is colour); without AMBIENT OCCLUSION that is all the passes do */
+    if (rgl_post_want_depth) {
+        rgl_rect a;
+        if (POST.depth && (POST.dw != w || POST.dh != h)) {
+            B->target_free(POST.depth);
+            POST.depth = 0;
+        }
+        if (!POST.depth) {
+            POST.depth = B->target_new(w, h, 1, 0);
+            POST.dw = w;
+            POST.dh = h;
+        }
+        a.x = a.y = 0;
+        a.w = w;
+        a.h = h;
+        if (POST.depth) {
+            B->blit(AO.target_d, &a, POST.depth, &a, 0);
+            POST.depth_frame = g_frames_n;
+        }
+    }
+    if (!rgl_ao) {
+        B->target_use(cur_target(g_draw_fb));
+        return;
+    }
     if (rgl_ao_debug == 3 || rgl_ao_debug == 4) {   /* the depth itself, to look at */
         B->screen_map(AO.target_d);
         B->target_use(cur_target(g_draw_fb));
@@ -2813,6 +2844,81 @@ static void ao_passes(void)
     B->screen_map(AO.target_d);
     B->target_use(cur_target(g_draw_fb));
     AO.valid = 1;
+}
+
+/* PHOTO MODE's effects (render/rgl.h): the scene drawn out, the game's area
+ * copied into a target of its own, and one full-screen draw of the shaders'
+ * post_fx over it, the settings in the light block's first two lights and
+ * the scene's distance as the shadow map when the depth pass kept it this
+ * frame. The shadow map and the screen map are put back after. */
+int rgl_ff_post(const float *prm)
+{
+    static const float q[6][2] = { { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, -1 }, { 1, 1 }, { -1, 1 } };
+    rgl_light_block b;
+    rgl_vtx v[6];
+    rgl_pipe p;
+    rgl_frag f;
+    rgl_samp sm;
+    rgl_rect vp, to;
+    int t, tw, th, i, have;
+
+    if (!B || !B->screen_map || !B->shadow_map || !B->lights || !prm)
+        return 0;
+    scene_flush();
+    t = cur_target(g_draw_fb);
+    target_size(t, &tw, &th);
+    vp.x = S.viewport[0]; vp.y = S.viewport[1]; vp.w = S.viewport[2]; vp.h = S.viewport[3];
+    if (vp.w <= 0 || vp.h <= 0)
+        return 0;
+    if (!POST.color || POST.w != vp.w || POST.h != vp.h) {
+        if (POST.color)
+            B->target_free(POST.color);
+        POST.color = B->target_new(vp.w, vp.h, 1, 0);
+        POST.w = vp.w;
+        POST.h = vp.h;
+        if (!POST.color)
+            return 0;
+    }
+    to.x = to.y = 0;
+    to.w = vp.w;
+    to.h = vp.h;
+    B->blit(t, &vp, POST.color, &to, 0);
+    B->target_use(t);
+
+    memset(&b, 0, sizeof b);
+    memcpy(&b.l[0], prm, RGL_POST_PARAMS * sizeof(float));   /* l[0] and l[1] */
+    b.aovp[0] = (float)vp.x;
+    b.aovp[1] = (float)(th - (vp.y + vp.h));
+    b.aovp[2] = (float)vp.w;
+    b.aovp[3] = (float)vp.h;
+    b.aoproj[2] = AO_FAR;
+    have = POST.depth && POST.depth_frame == g_frames_n;
+    b.aoparm2[3] = have ? 1.0f : 0.0f;
+    B->lights(&b, (int)sizeof b);
+    B->screen_map(POST.color);
+    B->shadow_map(have ? POST.depth : 0);
+
+    memset(v, 0, sizeof v);
+    for (i = 0; i < 6; i++) {
+        v[i].x = q[i][0];
+        v[i].y = q[i][1];
+        v[i].w = 1.0f;
+        v[i].rgba[0] = v[i].rgba[1] = v[i].rgba[2] = v[i].rgba[3] = 255;
+    }
+    memset(&p, 0, sizeof p);
+    p.topo = RGL_TRIS;
+    p.cull = RGL_CULL_NONE;
+    p.mask = 7;                         /* the colour; the alpha as it was */
+    memset(&f, 0, sizeof f);
+    f.tex_mode = RGL_TEX_NONE;
+    f.shadow = RGL_POST;
+    memset(&sm, 0, sizeof sm);
+    sm.aniso = 1;
+    B->draw(&p, &f, 0, &sm, &vp, NULL, v, 6);
+
+    B->screen_map(0);
+    B->shadow_map(SH.valid ? SH.target : 0);
+    return have;
 }
 
 /* the map from the casters held, then the held draws with it */
