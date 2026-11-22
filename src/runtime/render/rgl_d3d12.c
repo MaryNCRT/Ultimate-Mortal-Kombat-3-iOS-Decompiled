@@ -632,6 +632,19 @@ static int dx_open(void *window, int width, int height)
     }
     preload();
     printf("d3d12: %s, window %dx%d\n", g_adapter, g_bw, g_bh);
+    {
+        /* RTX (graphics phase 3, docs/research/GRAPHICS-OVERHAUL.md 4.4):
+         * inline ray queries need DXR 1.1 -- NVIDIA RTX 20 and later, AMD
+         * RDNA 2 and later, Intel Arc */
+        D3D12_FEATURE_DATA_D3D12_OPTIONS5 o5;
+        memset(&o5, 0, sizeof o5);
+        if (SUCCEEDED(ID3D12Device_CheckFeatureSupport(g_dev, D3D12_FEATURE_D3D12_OPTIONS5, &o5, sizeof o5)))
+            rgl_rt_tier = (int)o5.RaytracingTier;
+        printf("d3d12: ray tracing %s (tier 0x%x)\n",
+               rgl_rt_tier >= D3D12_RAYTRACING_TIER_1_1 ? "DXR 1.1, inline ray queries available"
+               : rgl_rt_tier >= D3D12_RAYTRACING_TIER_1_0 ? "DXR 1.0 only (no inline ray queries)" : "not supported",
+               rgl_rt_tier);
+    }
     return 1;
 }
 

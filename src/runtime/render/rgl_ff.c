@@ -1313,6 +1313,7 @@ static int invert(const mat4 *a, mat4 *out)
 }
 
 int rgl_layers;                         /* rgl.h */
+int rgl_rt_tier;                        /* rgl.h: the DXR tier (rgl_d3d12.c) */
 int rgl_in_fight = 1;                   /* rgl.h: a fight is on (game_main.c sets it) */
 static int g_scene_cam;                 /* the 3D scene's camera is on (rgl_layers) */
 

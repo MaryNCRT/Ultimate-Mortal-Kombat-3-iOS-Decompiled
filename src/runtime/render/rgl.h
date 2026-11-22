@@ -269,6 +269,9 @@ extern int rgl_shadows;
  * is 1 the original pixels are put back after the neural pass. The colour
  * is never changed by it. */
 extern int rgl_layers;
+/* RTX (graphics phase 3): the device DXR tier, read when Direct3D 12 opens
+ * (rgl_d3d12.c; 0x0b is DXR 1.1, what inline ray queries need); 0 elsewhere */
+extern int rgl_rt_tier;
 /* 1 while a fight is on (game_main.c, every frame): outside one -- the menus,
  * the select screen -- every draw is layer 0, whatever its camera */
 extern int rgl_in_fight;
