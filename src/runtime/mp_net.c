@@ -99,7 +99,10 @@ void endMP(void);
 #define BCAST_MAX     16
 
 enum { K_JOIN = 1, K_ACCEPT, K_BUSY, K_DATA_U, K_DATA_R, K_ACK, K_BYE, K_KEEP,
-       K_HELLO };
+       K_HELLO,
+       K_SPEC = 0x30 };                 /* spectators (rollback.c rb_spec_*), outside the session */
+
+void rb_spec_packet(const char *who, const unsigned char *b, int n);    /* rollback.c */
 
 static SOCKET   g_sock = INVALID_SOCKET;
 static int      g_port;
@@ -212,6 +215,20 @@ static void send_now(const struct paddr *a, const void *p, int n)
         mpeos_send(a->who, p, n);
     else
         send_in(&a->in, p, n);
+}
+
+/* A spectator's packet (ONLINE stage 4c), to any EOS user, the session or
+ * none: "U3" K_SPEC 0, then rollback.c's bytes. Unreliable; rollback.c
+ * resends what was not acknowledged. */
+void mpnet_spec_send(const char *who, const void *p, int n)
+{
+    unsigned char b[MAX_PACKET + 8];
+
+    if (!who || !who[0] || n < 0 || n > MAX_PACKET)
+        return;
+    b[0] = 'U'; b[1] = '3'; b[2] = K_SPEC; b[3] = 0;
+    memcpy(b + 4, p, (size_t)n);
+    mpeos_send(who, b, n + 4);
 }
 
 /* A test aid (port): a bad line, on the sending side. UMK3_NET_LOSS=<0..90>
@@ -847,6 +864,10 @@ static void on_packet(const unsigned char *b, int n, const struct paddr *a)
         if (a->eos)
             mplobby_invite_got(b, n);
         break;
+    case K_SPEC:                        /* port: spectators (rollback.c) */
+        if (a->eos)
+            rb_spec_packet(a->who, b + 4, n - 4);
+        break;
     }
 }
 
@@ -866,8 +887,23 @@ void mpnet_poll(void)
 
     lag_release();
     mpeos_tick();
-    if (!g_session)
+    if (!g_session) {
+        /* no session -- a spectator watching, a member in a room between
+         * fights: what EOS brings is read all the same, and only what
+         * needs no session is taken (on_packet's K_SPEC and invites) */
+        for (;;) {
+            struct paddr e;
+            memset(&e, 0, sizeof e);
+            e.eos = 1;
+            n = mpeos_recv(e.who, sizeof e.who, b, sizeof b);
+            if (n == 0)
+                break;
+            if (n >= 4 && b[0] == 'U' && b[1] == '3'
+                && (b[2] == K_SPEC || b[2] == MPLOBBY_INV_KIND))
+                on_packet(b, n, &e);
+        }
         return;
+    }
     memset(&a, 0, sizeof a);
     while (g_sock != INVALID_SOCKET) {
         socklen_t al = sizeof a.in;

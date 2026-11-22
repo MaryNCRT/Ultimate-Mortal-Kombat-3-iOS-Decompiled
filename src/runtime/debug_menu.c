@@ -68,6 +68,7 @@ static const char *const k_aodbg_en[6];
 #include "rollback.h"
 #include "mp_net.h"
 #include "online_rules.h"
+#include "mp_eos.h"
 
 #ifndef GL_CLAMP
 #define GL_CLAMP 0x2900
@@ -2718,7 +2719,10 @@ static int eligible(void)
      * stage is drawn then (rollback.c rb_online_gate) */
     if (GameMode == 1) {
         const online_rules *r = rules_online();
-        return isParent() && !(r && !r->host_adv) && rules_room_level() < 0;   /* nor a room's */
+        /* nor a lobby's fight: its room chose the stage before (Mary: no
+         * stage to pick after the VS screen) */
+        return isParent() && !(r && !r->host_adv) && rules_room_level() < 0
+               && mplobby_state() != MPLOBBY_IN;
     }
     return GameMode == 6 || GameMode == 2;
 }
@@ -3254,6 +3258,7 @@ void stage_menu_keys(int left, int right, int up, int down, int ok, int back,
  * left out -- STAGE SELECT picks the stage -- and so is the one-round kode
  * (0x13), which the binary only plays online. */
 #include "online_rules.h"
+#include "mp_eos.h"
 
 void set_menu_put_key(const char *k, const char *v);   /* settings_menu.c */
 const char *GameTextNoHeader(long id);                  /* the game's texts, UTF-16 */

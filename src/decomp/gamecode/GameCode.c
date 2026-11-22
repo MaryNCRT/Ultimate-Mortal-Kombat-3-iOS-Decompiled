@@ -4375,6 +4375,7 @@ void  limePlayTune(const char *file, long vol, long arg);
  * `FrameCount` still advances on the frame the sync succeeds.
  */
 int rb_ready(void);                     /* runtime/rollback.c, port */
+int rb_watching(void);                  /* runtime/rollback.c: a spectator */
 
 void Task_MultiplayerSync(void)
 {
@@ -4403,8 +4404,9 @@ void Task_MultiplayerSync(void)
     *readyToSync = 1;
 
     /* Port, not in the binary: and, with rollback, the other side's hello */
-    if (syncGame((long)FrameCount) == 1 && rb_ready()) {
-        enableHeartbeat(10);
+    if ((rb_watching() || syncGame((long)FrameCount) == 1) && rb_ready()) {
+        if (!rb_watching())             /* port: a spectator has no link to beat */
+            enableHeartbeat(10);
         CurrentTask = 6;
 
         if (LoadingTexture != 0)
@@ -5545,8 +5547,15 @@ void PortLobbyFightOver(int side);          /* port: FrontEnd.c, a lobby's room 
 static int PortRoundDrawn;                  /* port: the round just ended tied on time */
 static int PortOneRound;                    /* port: ROUNDS 1, played as kode 0x13 does */
 
+int rb_watching(void);                  /* runtime/rollback.c: a spectator */
+extern int PortWatchQuit;               /* below: the spectator's way out */
+
 void QuitAsLose(void)
 {
+    if (rb_watching()) {                /* port: a spectator has no summary to wait */
+        PortWatchQuit = 1;              /* on: back to the room (game_main.c) */
+        return;
+    }
     JustWon = 0;
     port_series_count(1);               /* port: player two took it */
 
@@ -6150,6 +6159,10 @@ static void port_series_count(int side)
 
 void QuitAsWin(void)
 {
+    if (rb_watching()) {                /* port: see QuitAsLose */
+        PortWatchQuit = 1;
+        return;
+    }
     JustWon = 1;
     port_series_count(0);               /* port: player one took the fight */
 
@@ -9745,6 +9758,35 @@ static void ft_gtext_c(const char *ucs, float x, float y, float scale, const flo
     limeDrawFONT(&GameFont, limeUC(buf), x, y, 1, scale * FE_WidthScale, c);
 }
 
+/* Port, SPECTATORS (ONLINE stage 4c): the watched fight's bar, at the
+ * bottom -- what it is, and a button out (Mary: a button on screen to
+ * leave). A click on it, or B / Esc (game_main.c), back to the room. */
+int  PortWatchQuit;                     /* game_main.c reads and clears it */
+extern float PortMouseX, PortMouseY;    /* game_main.c: the mouse, in these units */
+int  plat_mouse(int *x, int *y);
+
+static void PortWatchBar(void)
+{
+    static const float gold[3] = { 1.0f, 0.82f, 0.30f }, white[3] = { 1.0f, 1.0f, 1.0f };
+    static int was_down;
+    float W = (float)limeScreenWidth, H = (float)limeScreenHeight;
+    float s = FE_HeightScale, bw = 128.0f * s, bh = 20.0f * s;
+    float bx = W * 0.5f + 8.0f * s, by = H - bh - 8.0f * s;
+    int mx, my, down = plat_mouse(&mx, &my);
+    int over = PortMouseX >= bx && PortMouseX < bx + bw && PortMouseY >= by && PortMouseY < by + bh;
+
+    limeEnableAlphaBlending_Basic();
+    limeSet2DDrawing();
+    limeDisableDepthTest();
+    limeFillRect(W * 0.5f - 140.0f * s, by - 4.0f * s, 280.0f * s, bh + 8.0f * s, 0.0f, 0.0f, 0.0f, 0.6f);
+    ft_text_c(PortMvTx("ESPECTADOR", "WATCHING"), W * 0.5f - 66.0f * s, by + 4.0f * s, 0.5f, gold);
+    limeFillRect(bx, by, bw, bh, over ? 0.55f : 0.35f, 0.06f, 0.06f, 0.95f);
+    ft_text_c(PortMvTx("SALIR  (B / ESC)", "LEAVE  (B / ESC)"), bx + bw * 0.5f, by + 4.0f * s, 0.42f, white);
+    if (down && !was_down && over)
+        PortWatchQuit = 1;
+    was_down = down;
+}
+
 void PortFTDraw(void)
 {
     static const float gold[3] = { 1.0f, 0.78f, 0.2f }, white[3] = { 0.95f, 0.93f, 0.88f };
@@ -12835,6 +12877,8 @@ static void Task_GameMain_frame(void)
     DrawHUD();
     PortKD_AfterHUD();
     PortKD_Lines();
+    if (GameMode == 1 && rb_watching())
+        PortWatchBar();                 /* port: a spectator's bar and its way out */
     if (GameMode == 6 && PortPractice && GamePaused == 0) {
         extern int PortFTSkipping;      /* game_main.c */
         if (PortFT && PortFTSkipping) {

@@ -10,6 +10,12 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
+- **Spectators (ONLINE):** in a lobby's room, those not fighting can WATCH
+  THE FIGHT live, joining at any moment; LEAVE (or B / Esc) goes back to
+  the room, as the fight's end does.
+- **No STAGE SELECT in a room:** the stage is the room's; IN THE FIGHT is
+  drawn when the fight is called.
+
 - **Finishers that did not happen, now and then:** a press of the special
   button (S) on a frame where the engine took no step (one in fifteen) was
   lost. It is now kept for the next step (38 of 40 presses before, 40 of 40

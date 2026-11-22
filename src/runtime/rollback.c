@@ -744,6 +744,388 @@ static void hold(void (*frame)(void))
     st_rb_load(RB_SLOTS - 1);
 }
 
+/* ----------------------------------------------------------- spectators
+ *
+ * ONLINE stage 4c (docs/research/ONLINE-PHASE-PLAN.md): the others in a
+ * lobby's room watch a fight live. The machine that hosts the fight (the
+ * call's A) keeps every CONFIRMED frame -- both players' real inputs, a
+ * frame below what each side has of the other's -- and sends them to the
+ * members who ask. A spectator runs the same fight from them, as an online
+ * fight (GameMode 1, the same seed, the same buttons and rules): never a
+ * guess, so never a rollback; a frame whose inputs have not come is held
+ * (drawn, not kept). It leaves to the room at the fight's last frame, or
+ * when its player presses B / Esc (game_main.c).
+ *
+ * Packets (mp_net.c K_SPEC, over EOS, outside the fight's session), each a
+ * kind byte then words:
+ *   SP_ASK    spectator -> host   "let me watch"
+ *   SP_SETUP  host -> spectator   fight id, c1, c2, level, p1 / p2 buttons,
+ *                                 the rules text
+ *   SP_NONE   host -> spectator   no fight to watch
+ *   SP_IN     host -> spectator   fight id, first frame, count, the final
+ *                                 frame count (NONE while it goes on), then
+ *                                 the pairs (p1 | p2 << 16)
+ *   SP_ACK    spectator -> host   fight id, frames received below
+ *   SP_BYE    spectator -> host   stopped watching
+ * Unreliable both ways: the host sends from what each watcher acknowledged,
+ * the spectator asks again until a setup comes. */
+enum { SP_ASK = 1, SP_SETUP, SP_NONE, SP_IN, SP_ACK, SP_BYE };
+#define SP_FRAMES    (1u << 17)         /* 39 minutes at 55.93 Hz */
+#define SP_WATCHERS  6
+#define SP_PER_PKT   64
+#define SP_PKTS      4                  /* a frame's burst to one watcher */
+#define SP_RESEND_MS 120.0
+#define SP_LINGER_MS 15000.0            /* after the fight: the last frames out */
+#define SP_ASK_MS    500.0
+#define SP_GIVEUP_MS 60000.0           /* asking: the fight may be at its select screen */
+#define SP_CATCH_UP  90                 /* frames behind: run several a frame */
+
+/* the host's side */
+static uint32_t *g_sp_hist;             /* confirmed frames, by frame */
+static uint32_t  g_sp_upto;             /* confirmed below this */
+static uint32_t  g_sp_final = NONE;     /* the fight's frame count, once over */
+static uint32_t  g_sp_id;               /* the fight's id: a watcher's check */
+static double    g_sp_over_ms;
+static int       g_sp_live;             /* a fight to watch: on, or lingering */
+static int32_t   g_sp_btn[2];
+static struct sp_watcher {
+    char     who[40];
+    uint32_t acked, sent;
+    double   sent_ms;
+} g_sp_w[SP_WATCHERS];
+
+/* the spectator's side */
+static int       g_watch;               /* 1 asking, 2 set up (the fight starts), 3 watching */
+static char      g_watch_who[40];       /* the host */
+static double    g_watch_ask_ms, g_watch_since_ms, g_watch_heard_ms;
+static uint32_t  g_watch_id, g_watch_upto, g_watch_final = NONE;
+static int32_t   g_watch_setup[5];      /* c1, c2, level, buttons 1 and 2 */
+static char      g_watch_rules[ONLINE_RULES_TEXT];
+static uint32_t *g_watch_hist;
+static int       g_watch_none;          /* no fight came to watch */
+static int       g_watch_none_said;
+
+static void sp_put(unsigned char *p, uint32_t v) { put32(p, v); }
+
+static void sp_send_setup(const char *who)
+{
+    unsigned char b[1 + 24 + ONLINE_RULES_TEXT];
+
+    memset(b, 0, sizeof b);
+    b[0] = SP_SETUP;
+    sp_put(b + 1, g_sp_id);
+    sp_put(b + 5, (uint32_t)g_setup[0]);
+    sp_put(b + 9, (uint32_t)g_setup[1]);
+    sp_put(b + 13, (uint32_t)g_setup[2]);
+    sp_put(b + 17, (uint32_t)g_sp_btn[0]);
+    sp_put(b + 21, (uint32_t)g_sp_btn[1]);
+    memcpy(b + 25, g_my_rules, ONLINE_RULES_TEXT);
+    mpnet_spec_send(who, b, (int)sizeof b);
+}
+
+/* The host, every frame of the fight and while it lingers: the frames
+ * confirmed since, kept, and sent to each watcher from what it has. */
+static void sp_host_tick(void)
+{
+    double t = now_ms();
+    int i, k;
+
+    if (g_on && g_started && g_sp_hist) {
+        uint32_t top = g_local_upto < g_remote_upto ? g_local_upto : g_remote_upto;
+        if (top > g_frame)
+            top = g_frame;              /* run, not only known */
+        for (; g_sp_upto < top && g_sp_upto < SP_FRAMES; g_sp_upto++)
+            g_sp_hist[g_sp_upto] = (uint32_t)g_in[0][g_sp_upto % RB_RING]
+                                 | (uint32_t)g_in[1][g_sp_upto % RB_RING] << 16;
+    }
+    if (!g_sp_live)
+        return;
+    if (g_sp_final != NONE && t - g_sp_over_ms > SP_LINGER_MS) {
+        g_sp_live = 0;
+        memset(g_sp_w, 0, sizeof g_sp_w);
+        return;
+    }
+    for (i = 0; i < SP_WATCHERS; i++) {
+        struct sp_watcher *w = &g_sp_w[i];
+        if (!w->who[0])
+            continue;
+        if (w->sent > g_sp_upto || t - w->sent_ms > SP_RESEND_MS)
+            w->sent = w->acked;         /* nothing heard back: from what it has */
+        for (k = 0; k < SP_PKTS && (w->sent < g_sp_upto || (g_sp_final != NONE && k == 0)); k++) {
+            unsigned char b[1 + 16 + 4 * SP_PER_PKT];
+            uint32_t n = g_sp_upto - w->sent, j;
+            if (n > SP_PER_PKT)
+                n = SP_PER_PKT;
+            b[0] = SP_IN;
+            sp_put(b + 1, g_sp_id);
+            sp_put(b + 5, w->sent);
+            sp_put(b + 9, n);
+            sp_put(b + 13, g_sp_final);
+            for (j = 0; j < n; j++)
+                sp_put(b + 17 + 4 * j, g_sp_hist[w->sent + j]);
+            mpnet_spec_send(w->who, b, (int)(17 + 4 * n));
+            w->sent += n;
+            w->sent_ms = t;
+            if (!n)
+                break;
+        }
+    }
+    mpnet_flush();
+}
+
+/* The host's fight begins (start()): a new id, the history from frame 0;
+ * those who watched the last fight are told this one (Mary: watch the
+ * room's fights one after another). */
+static void sp_host_begin(int b1, int b2)
+{
+    int i;
+
+    if (!g_sp_hist)
+        g_sp_hist = (uint32_t *)calloc(SP_FRAMES, sizeof *g_sp_hist);
+    g_sp_upto = 0;
+    g_sp_final = NONE;
+    g_sp_id = g_seed ^ (uint32_t)(now_ms() * 1000.0);
+    g_sp_btn[0] = b1;
+    g_sp_btn[1] = b2;
+    g_sp_live = 1;
+    for (i = 0; i < SP_WATCHERS; i++)
+        if (g_sp_w[i].who[0]) {
+            g_sp_w[i].acked = g_sp_w[i].sent = 0;
+            sp_send_setup(g_sp_w[i].who);
+        }
+}
+
+/* Task_GameDestroy (rb_online_end): the count of frames the fight ran. */
+static void sp_host_end(void)
+{
+    if (!g_sp_live || g_sp_final != NONE)
+        return;
+    sp_host_tick();
+    g_sp_final = g_sp_upto;
+    g_sp_over_ms = now_ms();
+    printf("spectators: the fight is over at frame %u\n", g_sp_final);
+}
+
+/* ---- the spectator ---- */
+
+int rb_watching(void) { return g_watch >= 2; }
+int rb_watch_state(void) { return g_watch_none ? -1 : g_watch; }
+
+void rb_watch_begin(const char *host)
+{
+    if (!host || !host[0])
+        return;
+    snprintf(g_watch_who, sizeof g_watch_who, "%s", host);
+    g_watch = 1;
+    g_watch_none = 0;
+    g_watch_ask_ms = 0;
+    g_watch_since_ms = g_watch_heard_ms = now_ms();
+    g_watch_upto = 0;
+    g_watch_final = NONE;
+    g_watch_none_said = 0;
+    printf("spectators: asking %s to watch\n", host);
+    fflush(stdout);
+}
+
+void rb_watch_stop(void)
+{
+    unsigned char b[1] = { SP_BYE };
+
+    if (g_watch && g_watch_who[0])
+        mpnet_spec_send(g_watch_who, b, 1);
+    if (g_watch)
+        printf("spectators: stopped watching at frame %u of %u\n", g_frame, g_watch_upto);
+    g_watch = 0;
+    g_watch_none = 0;
+    g_watch_who[0] = 0;
+}
+
+/* game_main.c, every frame: the asking, and once set up the fight to start
+ * (1 = start the fight now: *c1, *c2, *level filled). */
+int rb_watch_poll(int *c1, int *c2, int *level)
+{
+    double t = now_ms();
+
+    if (g_watch == 1) {
+        if (t - g_watch_since_ms > SP_GIVEUP_MS) {
+            printf("spectators: no answer from the host\n");
+            g_watch = 0;
+            g_watch_none = 1;
+            return 0;
+        }
+        if (t - g_watch_ask_ms > SP_ASK_MS) {
+            unsigned char b[1] = { SP_ASK };
+            mpnet_spec_send(g_watch_who, b, 1);
+            mpnet_flush();
+            g_watch_ask_ms = t;
+        }
+        return 0;
+    }
+    if (g_watch == 2 && CurrentTask == 3) {
+        *c1 = g_watch_setup[0];
+        *c2 = g_watch_setup[1];
+        *level = g_watch_setup[2];
+        g_watch = 3;
+        return 1;
+    }
+    if (g_watch == 3 && t - g_watch_heard_ms > RB_STALL_MS)
+        return -1;                      /* the host is gone: away */
+    return 0;
+}
+
+static void sp_ack(void)
+{
+    unsigned char b[9];
+    b[0] = SP_ACK;
+    sp_put(b + 1, g_watch_id);
+    sp_put(b + 5, g_watch_upto);
+    mpnet_spec_send(g_watch_who, b, 9);
+}
+
+/* mp_net.c: a K_SPEC packet from an EOS user */
+void rb_spec_packet(const char *who, const unsigned char *b, int n)
+{
+    int i, free_i = -1;
+
+    if (n < 1)
+        return;
+    switch (b[0]) {
+    case SP_ASK:
+        if (!g_sp_live) {
+            unsigned char r[1] = { SP_NONE };
+            mpnet_spec_send(who, r, 1);
+            return;
+        }
+        for (i = 0; i < SP_WATCHERS; i++) {
+            if (!strcmp(g_sp_w[i].who, who))
+                break;
+            if (!g_sp_w[i].who[0] && free_i < 0)
+                free_i = i;
+        }
+        if (i == SP_WATCHERS) {
+            if (free_i < 0)
+                return;
+            i = free_i;
+            snprintf(g_sp_w[i].who, sizeof g_sp_w[i].who, "%s", who);
+            g_sp_w[i].acked = g_sp_w[i].sent = 0;
+            printf("spectators: %s watches (frame %u)\n", who, g_sp_upto);
+        }
+        sp_send_setup(who);
+        mpnet_flush();
+        return;
+    case SP_ACK:
+        if (n >= 9 && get32(b + 1) == g_sp_id)
+            for (i = 0; i < SP_WATCHERS; i++)
+                if (!strcmp(g_sp_w[i].who, who) && get32(b + 5) > g_sp_w[i].acked)
+                    g_sp_w[i].acked = get32(b + 5);
+        return;
+    case SP_BYE:
+        for (i = 0; i < SP_WATCHERS; i++)
+            if (!strcmp(g_sp_w[i].who, who)) {
+                printf("spectators: %s stopped watching\n", who);
+                memset(&g_sp_w[i], 0, sizeof g_sp_w[i]);
+            }
+        return;
+    case SP_NONE:
+        /* not on yet (the select screen, the loading): asked again until it
+         * is, or until SP_GIVEUP_MS (Mary: watch at any moment) */
+        if (g_watch == 1 && !strcmp(who, g_watch_who) && !g_watch_none_said) {
+            printf("spectators: the host's fight is not on yet\n");
+            g_watch_none_said = 1;
+        }
+        return;
+    case SP_SETUP:
+        if (!g_watch || strcmp(who, g_watch_who) || n < 25 + ONLINE_RULES_TEXT)
+            return;
+        g_watch_heard_ms = now_ms();
+        if (g_watch == 1 || (g_watch >= 2 && get32(b + 1) != g_watch_id && g_watch_final != NONE
+                             && g_frame + 1 >= g_watch_final)) {
+            g_watch_id = get32(b + 1);
+            for (i = 0; i < 5; i++)
+                g_watch_setup[i] = (int32_t)get32(b + 5 + 4 * i);
+            memcpy(g_watch_rules, b + 25, ONLINE_RULES_TEXT);
+            g_watch_rules[ONLINE_RULES_TEXT - 1] = 0;
+            if (!g_watch_hist)
+                g_watch_hist = (uint32_t *)calloc(SP_FRAMES, sizeof *g_watch_hist);
+            g_watch_upto = 0;
+            g_watch_final = NONE;
+            g_watch = 2;
+            printf("spectators: watching %d vs %d on %d, rules \"%s\"\n",
+                   (int)g_watch_setup[0], (int)g_watch_setup[1], (int)g_watch_setup[2],
+                   g_watch_rules);
+            fflush(stdout);
+        }
+        return;
+    case SP_IN: {
+        uint32_t first, cnt, j;
+        if (g_watch < 2 || strcmp(who, g_watch_who) || n < 17 || get32(b + 1) != g_watch_id
+            || !g_watch_hist)
+            return;
+        g_watch_heard_ms = now_ms();
+        first = get32(b + 5);
+        cnt = get32(b + 9);
+        if (get32(b + 13) != NONE)
+            g_watch_final = get32(b + 13);
+        if (cnt > SP_PER_PKT || n < (int)(17 + 4 * cnt))
+            return;
+        for (j = 0; j < cnt; j++)
+            if (first + j == g_watch_upto && g_watch_upto < SP_FRAMES)
+                g_watch_hist[g_watch_upto++] = get32(b + 17 + 4 * j);
+        sp_ack();
+        mpnet_flush();
+        return;
+    }
+    }
+}
+
+/* The spectator's frame, in rb_frame's place: the next confirmed frame,
+ * several when far behind, a hold when it has not come. 1 when the fight is
+ * over for it (the host's last frame reached): game_main leaves. */
+static int g_watch_over;
+int rb_watch_over(void) { return g_watch_over; }
+
+static void watch_run(void (*frame)(void), uint32_t f, int quiet)
+{
+    uint32_t v = g_watch_hist[f];
+
+    g_cur[0] = (uint16_t)v;
+    g_cur[1] = (uint16_t)(v >> 16);
+    g_run_frame = f;
+    g_in_run = 1;
+    g_quiet = g_nodraw = g_holding = quiet;  /* catching up: unseen, unheard */
+    frame();
+    g_quiet = g_nodraw = g_holding = 0;
+    g_in_run = 0;
+}
+
+static void watch_frame(void (*frame)(void))
+{
+    int k, runs = 1;
+
+    if (g_watch_final != NONE && g_frame + 1 >= g_watch_final) {
+        /* the fight's last frame is the host's leaving one: not run here
+         * (it would go on into the online fight's end), the room instead */
+        g_watch_over = 1;
+        hold(frame);
+        return;
+    }
+    if (g_frame >= g_watch_upto) {
+        hold(frame);
+        return;
+    }
+    if (g_watch_upto - g_frame > 600)
+        runs = 32;                      /* far behind (joined late): catch up, unseen */
+    else if (g_watch_upto - g_frame > SP_CATCH_UP)
+        runs = 8;
+    for (k = 0; k < runs && g_frame < g_watch_upto
+                && !(g_watch_final != NONE && g_frame + 1 >= g_watch_final); k++) {
+        watch_run(frame, g_frame, k + 1 < runs && g_frame + 1 < g_watch_upto);
+        if (CurrentTask != RB_FIGHT_TASK)
+            return;
+        g_frame++;
+    }
+}
+
 /* The loaded fighters: 60 MB a fight only reads, so no snapshot holds them
  * (gamecode_globals.c, 0x5f4 = PRELOAD_STRIDE). */
 extern char PreloadedCharacters[41148][0x5f4];
@@ -770,11 +1152,16 @@ static void start(void)
     st_rb_skip(PreloadedCharacters, sizeof PreloadedCharacters);
     if (st_rb_begin(RB_SLOTS) != 0)
         printf("rollback: NO SNAPSHOTS -- save states are off in this build\n");
-    rb_game_buttons(g_me ? theirs : mine, g_me ? mine : theirs);
+    if (g_watch >= 2)                   /* a spectator: the fighters' buttons */
+        rb_game_buttons(g_watch_setup[3], g_watch_setup[4]);
+    else {
+        rb_game_buttons(g_me ? theirs : mine, g_me ? mine : theirs);
+        sp_host_begin(g_me ? theirs : mine, g_me ? mine : theirs);
+    }
     printf("rollback: the fight starts, this side is player %d, delay %d, "
            "buttons %d / %d\n", g_me + 1, g_delay,
            g_me ? theirs : mine, g_me ? mine : theirs);
-    if (memcmp(g_setup, g_their_setup, sizeof g_setup))
+    if (g_watch < 2 && memcmp(g_setup, g_their_setup, sizeof g_setup))
         printf("rollback: THE SETUPS DIFFER -- here %d %d %d, there %d %d %d\n",
                (int)g_setup[0], (int)g_setup[1], (int)g_setup[2],
                (int)g_their_setup[0], (int)g_their_setup[1],
@@ -792,6 +1179,11 @@ void rb_frame(void (*frame)(void))
     }
     if (!g_started)
         start();
+    if (g_watch >= 2) {                 /* a spectator: see watch_frame */
+        if (CurrentTask == RB_FIGHT_TASK)
+            watch_frame(frame);
+        return;
+    }
 
     if (g_rollback != NONE && g_rollback < g_frame)
         roll_back(frame);
@@ -889,6 +1281,7 @@ void rb_frame(void (*frame)(void))
     if (g_dump_at >= 0 && g_frame == (uint32_t)g_dump_at)
         dump_write();
     g_frame++;
+    sp_host_tick();                     /* spectators: the frames confirmed */
     send_hash();
     if (g_frame % RB_REPORT == 0) {
         report();
@@ -994,7 +1387,7 @@ void rb_silent(int quiet, int nodraw)
     g_quiet = quiet;
     g_nodraw = nodraw;
 }
-int rb_ready(void)  { return !g_on || (g_hello && g_setup_in); }
+int rb_ready(void)  { return !g_on || g_watch >= 2 || (g_hello && g_setup_in); }
 
 /* One line of the numbers report() logs, for the debug menu's NET STATS
  * (game_main.c draws it); 0 when no rollback fight is on. */
@@ -1061,6 +1454,19 @@ static int refuse(int why)
 
 int rb_online_gate(long *c1, long *c2, long *level)
 {
+    if (g_watch >= 2) {                 /* a spectator: the host's fight as it is */
+        online_rules r;
+        *c1 = g_watch_setup[0];
+        *c2 = g_watch_setup[1];
+        *level = g_watch_setup[2];
+        if (g_watch_rules[0] && rules_decode(g_watch_rules, &r))
+            rules_set_active(&r);
+        snprintf(g_my_rules, sizeof g_my_rules, "%s", g_watch_rules);
+        rules_series_swap(0);
+        g_swap = 0;
+        g_gate = 3;
+        return 0;
+    }
     switch (g_gate) {
     case 0:
         g_swap = 0;
@@ -1194,7 +1600,8 @@ void rb_online_begin(int c1, int c2, int level)
     }
     g_on = 1;
     g_started = 0;
-    g_me = seat() ^ g_swap;             /* the draw may put the host on the right */
+    g_watch_over = 0;
+    g_me = g_watch >= 2 ? 0 : seat() ^ g_swap;  /* the draw may put the host on the right */
     g_delay = RB_DELAY;
     g_delay_fixed = e && *e >= '0' && *e <= '6';
     if (g_delay_fixed)
@@ -1234,6 +1641,10 @@ void rb_online_begin(int c1, int c2, int level)
     g_seed = seed;
     umk3_rand_seed = seed;
     rand_seed = (int32_t)(seed >> 1);
+    if (g_watch >= 2) {
+        printf("rollback: watching the fight, %d vs %d on %d\n", c1, c2, level);
+        return;
+    }
     send_setup();
     printf("rollback: online fight, player %d, %d vs %d on %d\n", g_me + 1,
            c1, c2, level);
@@ -1242,6 +1653,9 @@ void rb_online_begin(int c1, int c2, int level)
 void rb_online_end(void)
 {
     mods_online(0);
+    sp_host_end();                      /* spectators: the last frame's count */
+    if (g_watch)
+        rb_watch_stop();
     g_gate = 0;                         /* the next fight says hello again */
     g_setup_in = 0;
     g_swap = 0;
@@ -1266,6 +1680,7 @@ void rb_online_end(void)
 
 void rb_poll(void)
 {
+    sp_host_tick();                     /* spectators: what is left to send */
     if (g_linger > 0) {
         g_linger--;
         send_inputs();

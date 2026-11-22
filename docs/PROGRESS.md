@@ -135,6 +135,41 @@ Not tested: a REPAIR that downloads on another PC, VERIFY offline.
 The FATALITY TRAINER (Mary's next request) is begun on its own branch,
 `claude/fatality-trainer`, not in this release.
 
+### 2026-11-21 -- ONLINE stage 4c: spectators; no STAGE SELECT in a room
+
+- **Spectators.** In a lobby's room, a member who is not in the fight on
+  has WATCH THE FIGHT (FrontEnd.c, where WAIT YOUR TURN was). It asks the
+  fight's host (the call's A) over EOS -- mp_net.c `K_SPEC` packets, taken
+  with no session too (`mpnet_poll` reads EOS then and keeps only these
+  and invites). rollback.c's "spectators" section: each fighter keeps every
+  confirmed frame (both players' real inputs, `p1 | p2 << 16`, up to 2^17
+  frames) and streams them to its watchers from what each acknowledged
+  (`SP_IN` / `SP_ACK`, resent after 120 ms); the setup (`SP_SETUP`) carries
+  the fighters, the level, both button settings and the rules text, from
+  which the seed follows as on the fighters. The spectator starts the fight
+  through game_main.c's --fight path as an online one (GameMode 1),
+  `rb_online_gate` takes the setup, and `rb_frame` runs `watch_frame`:
+  the next frame from the stream, a hold when it has not come, 8 or 32
+  frames a frame unseen and unheard when far behind (joined late). It asks
+  for up to a minute while the fight is at its select screen. Out: the
+  bar's LEAVE button (GameCode.c `PortWatchBar`, at the bottom), B or Esc,
+  the host gone 15 s, or the fight's end (`QuitAsWin` / `QuitAsLose` return
+  at once for a spectator) -- back to the ONLINE screen and its room
+  (`watch_leave`). A spectator has no heartbeat and `disconnected()` does
+  nothing for it (the first test went to CONNECTION LOST at the round's end).
+- **No STAGE SELECT in a room** (Mary: the stage is chosen in the lobby):
+  debug_menu.c `eligible` is 0 for an online fight while in a lobby, and the
+  room's IN THE FIGHT option is drawn when the fight is called
+  (`PortRoomCallNext`), its line saying so.
+- Tested with three copies on one PC (`UMK3_LOBBY_TEST`, the new
+  `UMK3_LOBBY_WATCH=1` presses WATCH): the spectator's fight was the
+  fighters' -- the same 56 sounds in order, Sub-Zero winning flawless on
+  both -- and the stage came from the room with no STAGE SELECT. Not seen
+  in a test yet with the last fixes (the copies were disturbed): LEAVE, the
+  way back at the fight's end. Mary: "it seems to work". Palettes and
+  skins are the defaults on the spectator (not sent yet); one spectator
+  watches one fight, then WATCH again for the next.
+
 ### 2026-11-21 -- the special button lost one press in fifteen (finishers that did not happen)
 
 - Mary: a fatality typed right sometimes does not happen, at random, in a

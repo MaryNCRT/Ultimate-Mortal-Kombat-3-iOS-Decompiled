@@ -2287,6 +2287,20 @@ static void leave_fight(int task)
     FE_FadeAdd = -0.033333335f;
 }
 
+/* SPECTATORS (rollback.c rb_watch_*): out of the watched fight onto the
+ * ONLINE screen it was started from -- its stack as it was, so the room is
+ * there again, and its BACK goes where it went. */
+static int g_watch_start;               /* the next --fight is a watched one */
+static void watch_leave(const char *why)
+{
+    printf("spectators: back to the room (%s)\n", why);
+    rb_watch_stop();
+    FE_CurrentTask = 51;                /* FrontEnd.c PORT_TASK_ONLINE */
+    GamePaused = 0;
+    DontQuitAfterFade = 0;
+    FE_FadeAdd = -0.033333335f;
+}
+
 static void jump_screen(int task)
 {
     if (task < 0)
@@ -4574,6 +4588,35 @@ int main(int argc, char **argv)
             }
             ft_frame();
 
+            /* SPECTATORS: the host's setup arrived -- the fight starts as a
+             * --fight does, as an online one (below); in it, the host's
+             * last frame, the host gone, or B / Esc go back to the room */
+            {
+                int wc1, wc2, wlv, w = rb_watch_poll(&wc1, &wc2, &wlv);
+                static int was_back;
+                int back = plat_key(PK_SETTINGS) || plat_key(PK_BACK)
+                           || (g_pad.connected && (g_pad.buttons & ((1u << PB_EAST) | (1u << PB_START))));
+                if (w == 1 && CurrentTask == 3) {
+                    g_fight_p1 = wc1;
+                    g_fight_p2 = wc2;
+                    g_fight_stage = wlv;
+                    g_watch_start = 1;
+                }
+                if (CurrentTask == 6 && rb_watching()) {
+                    extern int PortWatchQuit;   /* GameCode.c: its bar's button */
+                    if (PortWatchQuit) {
+                        PortWatchQuit = 0;
+                        watch_leave("its button");
+                    } else if (rb_watch_over())
+                        watch_leave("the fight is over");
+                    else if (w == -1)
+                        watch_leave("the host is gone");
+                    else if (back && !was_back)
+                        watch_leave("B / Esc");
+                }
+                was_back = back;
+            }
+
             /* --fight: once the main menu is up, do what the select screen
              * and the tower would, and leave the front end. */
             {
@@ -4633,6 +4676,13 @@ int main(int argc, char **argv)
                 if (getenv("UMK3_VS_SCREEN") && GameMode == 6) {
                     extern int PortVsPending;
                     PortVsPending = 1;
+                }
+                if (g_watch_start) {            /* SPECTATORS: an online fight, watched */
+                    extern int PortPractice;
+                    GameMode = 1;
+                    PortPractice = 0;
+                    DbgFightActive = 0;
+                    g_watch_start = 0;
                 }
                 CurrentTask = 4;                /* Task_FEDestroy */
                 g_fight_p1 = -1;

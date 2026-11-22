@@ -43,7 +43,11 @@ stages 1-2 (audit, HOME, PROFILE) are done.
    LEADER. The phases' checklist is at the end.
 4c. **Spectators**: the others in the room watch the fight live (the
    fighters' inputs sent on, the replay player and rollback's resimulation
-   playing them). Not started.
+   playing them). In progress: rollback.c's "spectators" section (the
+   host keeps the confirmed frames and sends them over EOS, mp_net.c
+   K_SPEC; the spectator runs them as an online fight, never guessing),
+   FrontEnd.c's WATCH THE FIGHT in the room, game_main.c's start and way
+   back, GameCode.c's bar with LEAVE.
 5. **QUICK MATCH**: search a quick-match bucket by version, join the first
    open lobby, else create one and wait.
 6. **PARTY**: a private lobby of friends (invites by the friends' codes
@@ -380,7 +384,7 @@ JOINING ON REQUEST's window in play, MAX STREAK, more than three players.
 | 4 | Rules checked in HELLO, HOST ADVANTAGE OFF's draw | done (#215) |
 | 4b | The room: its page, 1 VS 1 / ROTATION, the line, the stage, joining, READY clock, DISSOLVE / MAKE LEADER | done; partly seen in play by Mary; a second fight's desyncs open |
 | 4b | Engine: a tie on time, ROUNDS 1 as kode 0x13, ROUNDS 5 at three | done; ROUNDS 1's FINISH HIM to be seen in play |
-| 4c | Spectators: the room watches the fight live (replays, rollback) | not started -- next |
+| 4c | Spectators: the room watches the fight live (replays, rollback) | in progress (2026-11-21): WATCH in the room, the host streams confirmed inputs, rollback.c runs them; tested with three copies on one PC |
 | 5 | QUICK MATCH | not started |
 | 6 | PARTY | not started |
 | 7 | Tests on two machines, every rule, desyncs 0 | partly: one PC, two and three copies |
