@@ -544,9 +544,15 @@ int neural_mod_load(const char *game_dir, int renderer_is_d3d12)
             { "Enabled", "1" }, { "FrameGeneration", "0" }, { "ShowProxyFps", "0" },
             { "NrRejectionStrength", "1.0" }, { "NvidiaOpticalFlowDepth", "0" },
         };
-        set_key(p, "Standalone.DLSSNR", "VortGuides", neural_layers ? "1" : "0");
-        set_key(p, "Standalone.DLSSNR", "NrRejectionMask", neural_layers ? "1" : "0");
-        set_key(p, "Standalone.DLSSNR", "NvidiaOpticalFlowMotion", neural_layers ? "0" : "1");
+        /* the interface kept out through NVIDIA's UI correction (our AIO
+         * build reads Umk3UiProtect): NVIDIA's automatic mask stays in
+         * charge of the scene. The ControlMask way (VortGuides +
+         * NrRejectionMask, 2026-11-22 morning) overrode that automatic mask
+         * and Mary saw no neural effect: never again */
+        set_key(p, "Standalone.DLSSNR", "VortGuides", "0");
+        set_key(p, "Standalone.DLSSNR", "NrRejectionMask", "0");
+        set_key(p, "Standalone.DLSSNR", "NvidiaOpticalFlowMotion", "1");
+        set_key(p, "Standalone.DLSSNR", "Umk3UiProtect", neural_layers ? "1" : "0");
         const neural_preset *np = &neural_presets[neural_preset_index];
         char num[16];
         int k;
@@ -568,10 +574,9 @@ int neural_mod_load(const char *game_dir, int renderer_is_d3d12)
              neural_stage, neural_fighters);
     set_key(p, "GENERAL", "PreprocessorDefinitions", v);
     if (neural_layers)
-        SAY("layers (experimental): the stage %.2f, the fighters %.2f, the HUD and menus untouched",
-            neural_stage, neural_fighters);
+        SAY("interface kept: the HUD, texts and menus restored after the neural pass (UI correction)");
     else
-        SAY("layers off: the whole picture processed (dlss5_layers=1 tries them)");
+        SAY("interface not kept: the whole picture processed (dlss5_layers=0)");
 
     /* ReShade's folder is this one; the runtimes are found in it */
     MultiByteToWideChar(CP_ACP, 0, dir, -1, wdir, 1100);

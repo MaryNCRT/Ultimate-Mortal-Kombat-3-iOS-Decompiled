@@ -128,9 +128,10 @@ typedef struct {
                                             * leaves in the target -- 1+v a
                                             * blended draw (v by its own
                                             * coverage), 3+v an opaque one
-                                            * (v outright); v 0 the HUD and
-                                            * menus, 0.5 a fighter, 1 the
-                                            * stage. Direct3D 12 only */
+                                            * (v outright); v 1 the interface
+                                            * (HUD, texts, menus: kept from
+                                            * the neural pass), 0 the fight's
+                                            * scene. Direct3D 12 only */
 } rgl_frag;
 
 /* A texture's sampling, packed: filter and wrap as GL has them. */
@@ -258,12 +259,14 @@ extern int (*rgl_vk_make_surface)(void *window, void *instance, void *surface);
  *   rgl_shadow_active()   1 while shadows are on and drawn: the flattened
  *                         shadow under a fighter is left out */
 extern int rgl_shadows;
-/* DLSS 5's layers (runtime/neural_mod.c sets it when the neural layer is
+/* DLSS 5's interface mask (runtime/neural_mod.c sets it when DLSS 5 is
  * loaded; rgl_ff.c, Direct3D 12): every draw writes, besides its colour, a
- * code into the target's alpha -- 0 the HUD, menus and 2D, 0.5 a fighter,
- * 1 the stage -- which the layer shader (DLSS5_AIO_Feed.fx) reads from the
- * presented picture to tell the neural pass what to touch and how much.
- * The colour is never changed by it. */
+ * code into the target's alpha -- 1 the interface (the HUD, texts, menus,
+ * anything 2D or outside a fight), 0 the fight's 3D scene. Our build of the
+ * DLSS5 ReShade AIO add-on hands the presented picture to NVIDIA as
+ * DLSSNR.UI and DLSSNR.Backbuffer with UI correction on: where the alpha
+ * is 1 the original pixels are put back after the neural pass. The colour
+ * is never changed by it. */
 extern int rgl_layers;
 /* 1 while a fight is on (game_main.c, every frame): outside one -- the menus,
  * the select screen -- every draw is layer 0, whatever its camera */

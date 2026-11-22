@@ -1119,7 +1119,7 @@ void ff_glClear(GLbitfield m)
         float c[4];
         memcpy(c, S.clear, sizeof c);
         if (rgl_layers)
-            c[3] = 0.0f;
+            c[3] = 1.0f;
         B->clear(sc ? &r : NULL, (m & E_COLOR_BUFFER_BIT) && (S.mask[0] | S.mask[1] | S.mask[2] | S.mask[3]),
                  c, (m & E_DEPTH_BUFFER_BIT) && S.depth_mask, 1.0f);
     }
@@ -3155,7 +3155,7 @@ static void submit(int topo, rgl_vtx *v, int n)
         /* outside a fight (the menus, the select screen's turning
          * fighters, the Esc menu) nothing is the scene: menus are never
          * touched (Mary) */
-        float v = !g_scene_cam || !rgl_in_fight ? 0.0f : SH.caster ? 0.5f : 1.0f;
+        float v = !g_scene_cam || !rgl_in_fight ? 1.0f : 0.0f;
         f.layer = (p.blend ? 1.0f : 3.0f) + v;
         p.mask |= 0x10;                 /* the backend's layered blend */
     }
