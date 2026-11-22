@@ -8,7 +8,8 @@ src/runtime/neural_mod.c and docs/DLSS5-MOD.md describe the feature.
 What it puts there, each from its own project's official source and checked:
   - ReShade64.dll + ReShade-LICENSE.md: ReShade 6.8.0 built from source by
     build_reshade.py (BSD-3-Clause), the banner left out
-  - standalone-dlssnr.addon64, nvngx.dll (its caller bridge, not NVIDIA's),
+  - standalone-dlssnr.addon64: our build (tools/neural/build_aio.py), the interface
+    kept out of DLSS 5; nvngx.dll (its caller bridge, not NVIDIA's),
     reshade-shaders/Shaders/StandaloneBoundary.fx and licenses/: from DLSS5
     ReShade AIO 2.2.4's 64-bit release zip on GitHub, its SHA-256 the one
     the release publishes (Apache-2.0)
@@ -119,6 +120,13 @@ def main():
     with zipfile.ZipFile(z) as zf:
         for src, dst in AIO_FILES.items():
             put(dst, zf.read(src))
+
+    # the add-on itself: ours (tools/neural/build_aio.py), with the interface kept
+    # out of DLSS 5 -- the official one keeps nothing out
+    aio_out = os.path.join(work, 'aio-out')
+    subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'neural', 'build_aio.py'),
+                    os.path.join(work, 'aio-work'), aio_out], check=True)
+    shutil.copy2(os.path.join(aio_out, 'standalone-dlssnr.addon64'), os.path.join(OUT, 'standalone-dlssnr.addon64'))
 
     # our guide shader (the layers), and ReShade.fxh
     with open(os.path.join(ROOT, 'launcher', 'neural', 'DLSS5_AIO_Feed.fx'), 'rb') as f:

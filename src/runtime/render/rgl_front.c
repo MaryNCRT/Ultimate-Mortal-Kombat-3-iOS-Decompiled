@@ -336,10 +336,12 @@ void rgl_present(void)
         double t0, t1;
 
         rgl_ff_frame();                 /* what the scene held back, drawn */
+        if (rgl_layers)
+            rgl_ff_layer_fix();         /* DLSS 5: the interface's soft edges kept too */
         if (rgl_layers && getenv("UMK3_LAYER_PROBE")) {
             /* port diagnostic: DLSS 5's layer codes as the picture holds
              * them (rgl.h rgl_layers), every 300 frames -- the share of
-             * pixels at HUD (alpha < 0.2), fighter (0.3..0.7), stage (> 0.8) */
+             * pixels at interface (alpha > 0.8) and scene (< 0.2) */
             static int k;
             static unsigned char *px;
             int w = 0, h = 0;
@@ -351,10 +353,10 @@ void rgl_present(void)
                     g_b->read(0, &r, px);
                     for (i = 0; i < all; i++) {
                         int a = px[i * 4 + 3];
-                        n[a < 51 ? 0 : a < 77 ? 3 : a < 179 ? 1 : a < 204 ? 3 : 2]++;
+                        n[a > 204 ? 0 : a < 51 ? 2 : 3]++;
                     }
-                    printf("layers: HUD %.1f%%, fighters %.1f%%, stage %.1f%%, between %.1f%% (%dx%d)\n",
-                           100.0 * n[0] / all, 100.0 * n[1] / all, 100.0 * n[2] / all, 100.0 * n[3] / all, w, h);
+                    printf("layers: interface %.1f%%, scene %.1f%%, between %.1f%% (%dx%d)\n",
+                           100.0 * n[0] / all, 100.0 * n[2] / all, 100.0 * n[3] / all, w, h);
                 }
             }
         }

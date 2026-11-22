@@ -10,6 +10,13 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
+- **DLSS 5 never touches the interface:** the HUD, texts, the photo mode's
+  panel and every menu are drawn on top of the neural pass and DLAA, as the
+  game drew them, while the stage and fighters get the full neural effect
+  (seen by Mary). The package's DLSS5 ReShade AIO is now our own build
+  (`tools/neural/build_aio.py`) with NVIDIA's UI correction and that final
+  composition.
+
 - **DLSS 5, the interface left alone:** the HUD, texts and every menu (the
   front end, the select screen, the Esc menu) are kept out of the neural
   pass, which works on the fight's stage and fighters only (`dlss5_layers=1`,

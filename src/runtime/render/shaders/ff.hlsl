@@ -570,6 +570,16 @@ float4 ps(PSIn i) : SV_Target
 {
     if ((shadow & 15) == 6)             // PHOTO MODE's effects
         return post_fx(i.pos.xy);
+    if ((shadow & 15) == 7) {           // DLSS 5's interface mask made whole (rgl_ff_layer_fix):
+        // any interface touch in the 3x3 about the pixel marks it whole, so
+        // the soft edges of letters are kept from the neural pass too
+        float2 px = 1.0 / lb_aovp.zw, uv = (i.pos.xy - lb_aovp.xy) * px;
+        float a = 0.0;
+        for (int y = -1; y <= 1; y++)
+            for (int x = -1; x <= 1; x++)
+                a = max(a, scr.SampleLevel(spt, uv + float2(x, y) * px, 0).a);
+        return float4(0.0, 0.0, 0.0, a > 0.03 ? 1.0 : 0.0);
+    }
     if ((shadow & 15) == 4)             // AMBIENT OCCLUSION's passes (rgl_ff.c)
         return ao_pass(i.pos.xy);
     if ((shadow & 15) == 5)

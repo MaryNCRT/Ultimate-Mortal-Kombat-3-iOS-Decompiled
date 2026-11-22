@@ -129,6 +129,34 @@ built and checked in Direct3D 12 only; see the log entry below. Phase 3
 
 ## Detailed log (newest first)
 
+### 2026-11-22 (afternoon) -- DLSS 5: the interface a layer over everything
+
+Mary saw no neural effect with the ControlMask layers. AIO's lab notes say
+a supplied ControlMask overrides NVIDIA's automatic mask, and that the right
+way to keep the interface out is NVIDIA's UI correction (DLSSNR.UI, whose
+alpha marks protected pixels, and DLSSNR.Backbuffer, the pixels put back).
+AIO leaves it off, so we build AIO ourselves.
+- `tools/neural/build_aio.py`: AIO v2.2.4 with its DLSS5-Feeder submodule,
+  NVIDIA's public DLSS SDK headers and `nvsdk_ngx_d.lib` at a fixed commit
+  (never in this repository), the Vulkan headers from ours, then
+  `tools/neural/patch_aio.py`, built through a junction (cmd.exe will not
+  run a batch file through "MK3 PROJECT"). `stage_dlss5.py` ships this
+  add-on instead of the official one.
+- patch_aio.py, with `[Standalone.DLSSNR] Umk3UiProtect=1`: UICorrection=1,
+  with the input as DLSSNR.UI and DLSSNR.Backbuffer. The proxy compositor
+  reads the original in RGBA and, in neural mode, draws the original pixel
+  where its alpha is over 0.5, after NR and DLAA. The UI correction alone
+  still left the HUD's letters damaged, by DLAA's history.
+- The game: the interface mask is inverted (rgl_ff.c: interface 1, the
+  fight's scene 0; a cleared picture 1). `rgl_ff_layer_fix` runs before each
+  present: a full-screen draw writing alpha alone, 1 wherever the interface
+  touched the 3x3 about a pixel (shader mode RGL_LAYER_FIX), so the soft
+  edges of letters are covered. Measured: interface 5-9 %, scene 91-95 %,
+  "between" 0 %. AIO's settings: no VORT guides, no ControlMask, NVIDIA
+  optical flow (the setup Mary saw working).
+- Mary, in her test folder: the neural effect on the stage and fighters,
+  the HUD, texts, photo mode panel and menus intact.
+
 ### 2026-11-22 (midday) -- DLSS 5: menus left out, the 17 s exit, the preparation said
 
 - Mary: "everything that is a menu must stay out of DLSS 5". The layers are

@@ -23,9 +23,10 @@ to copy by hand.
 > `CreateFeature(feature=18) = Success`, NR and DLAA on every frame, 60 fps,
 > borderless 1920x1080.
 >
-> **The layers are on by default** (`dlss5_layers=0` turns them off): the HUD,
-> texts and every menu are left out, and outside a fight nothing is processed.
-> Earlier the same day they were off, because Mary saw no effect with them.
+> **The interface is kept out** (`dlss5_layers=1`, the default): the HUD, texts,
+> photo mode's panel and every menu are drawn on top of the neural pass and
+> DLAA. Mary saw the neural effect on the stage and fighters, with the
+> interface intact.
 > With them on, the logs had the mask bound on every frame
 > (`NR-control-mask=BOUND`), and screen captures showed the neural pass on
 > the stage with the HUD left clean. Mary, though, saw no effect and asked
@@ -52,26 +53,28 @@ to copy by hand.
    is missing, if anything. With `nvngx_dlss.dll` alone, DLSS (DLAA) runs
    without the neural pass.
 
-## The layers: what is and isn't touched (`dlss5_layers=1`, the default)
+## The interface: a layer over everything (`dlss5_layers=1`, the default)
 
-With the layers on, every Direct3D 12 draw also writes a code into the
-picture's alpha. The colour is never changed (`rgl_layers`). Their mask
-needs AIO's VORT guide path (`VortGuides=1`, motion from VORT); with them
-off the game sets AIO back to its NVIDIA optical flow and no mask. In
-GRAPHICS, STAGE and FIGHTERS are greyed out while the layers are off.
+The neural pass and DLAA work on the fight's stage and fighters only; the
+HUD, texts, the photo mode's panel and every menu are put on top afterwards,
+as the game drew them.
 
-| Code | What | Neural pass |
-|---|---|---|
-| 0 | the HUD, the menus, everything 2D (no 3D scene camera) | none: left as drawn; DLSS also takes the current frame there, so letters keep no history |
-| 0.5 | a fighter (`rgl_shadow_caster`) | `dlss5_fighters=` |
-| 1 | the stage (the 3D scene camera, `rgl_shadow_camera`) | `dlss5_stage=` |
+1. **The game marks the interface** in the picture's alpha
+   (`rgl_layers`, render/rgl_ff.c): 1 for the interface (any 2D draw, and
+   everything outside a fight), 0 for the fight's 3D scene. Before each
+   present, `rgl_ff_layer_fix` makes the mark whole: any pixel the
+   interface touched, and the pixel round it, is 1. The colour never
+   changes.
+2. **Our AIO build** (`tools/neural/build_aio.py`, `patch_aio.py`) hands the
+   picture to NVIDIA as `DLSSNR.UI` and `DLSSNR.Backbuffer` with UI
+   correction on. NVIDIA's automatic mask stays in charge of the scene and
+   puts the marked pixels back after the neural pass.
+3. **Its final compositor** draws the original pixel wherever the mark is 1,
+   after NR and DLAA. That last step is what keeps letters clean, since
+   DLAA's history otherwise still smears them.
 
-The alpha is written with the blend factor: the layer code is weighted by
-the draw's own coverage, and an opaque draw writes it whole. Our
-`DLSS5_AIO_Feed.fx` reads that alpha from the presented picture and makes
-AIO's two masks from it: the neural pass's control mask (1 applies, 0
-bypasses) and DLSS's history mask. AIO's original shader is Apache-2.0;
-ours lives in `launcher/neural/` and is marked as modified.
+A ControlMask (AIO's VORT guide path) was tried first and dropped: it
+overrides NVIDIA's automatic mask, and Mary saw no neural effect with it.
 
 ## What ships, and where
 
@@ -85,7 +88,8 @@ the player's files survive every update.
 | File | From | Licence |
 |---|---|---|
 | `ReShade64.dll` | ReShade 6.8.0, built from source by `tools/neural/build_reshade.py`, with two changes (below) | BSD-3-Clause |
-| `standalone-dlssnr.addon64`, `nvngx.dll` (its caller bridge, not NVIDIA's), `StandaloneBoundary.fx`, `licenses/` | DLSS5 ReShade AIO 2.2.4, 64-bit release zip, SHA-256 `38493d80…d38ee` as published | Apache-2.0 |
+| `standalone-dlssnr.addon64` | our build of DLSS5 ReShade AIO 2.2.4 (`tools/neural/build_aio.py`): NVIDIA's UI correction and the interface composed on top. Built with NVIDIA's public DLSS SDK headers and import library (NVIDIA RTX SDKs licence), which never enter this repository | Apache-2.0 (the NGX library inside: NVIDIA's terms) |
+| `nvngx.dll` (AIO's caller bridge, not NVIDIA's), `StandaloneBoundary.fx`, `licenses/` | DLSS5 ReShade AIO 2.2.4, 64-bit release zip, SHA-256 `38493d80…d38ee` as published | Apache-2.0 |
 | `DLSS5_AIO_Feed.fx` | ours, from AIO's | Apache-2.0 |
 | `vort_Motion.fx`, `Includes/` | vortigern11/vort_Shaders at commit b410b9f, SHA-256 checked; motion vectors only (blur and TAA off, its defaults) | MIT |
 | `ReShade.fxh` | crosire/reshade-shaders at a fixed commit | CC0-1.0 |
