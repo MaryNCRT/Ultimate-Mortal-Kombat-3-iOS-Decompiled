@@ -279,9 +279,46 @@ void rgl_ff_stop(void)
  * drawn, and the next frame's scene starts with no caster */
 static int g_had_scene;                 /* UMK3_LOG_SHADOW: a lit scene this frame */
 static unsigned g_frames_n;             /* frames presented, for the map's last place */
+/* a cut (umk3_dlss5_cuts): into or out of a fight, the 3D scene back after
+ * frames without it, the camera turned more than 20 degrees in a frame */
+#ifdef _WIN32
+extern __declspec(dllexport) volatile long umk3_dlss5_cuts;   /* defined below */
+#else
+extern volatile long umk3_dlss5_cuts;
+#endif
+static int g_cam_frame;                 /* tentative: defined with the layers below */
+static float g_cam_fwd[3];
+
+static void cuts_frame(void)
+{
+    static int was_fight = -1, was_cam = 0;
+    const float *v = g_mv.s[0].m;       /* the view the scene was drawn with */
+    float fwd[3] = { -v[2], -v[6], -v[10] }, l = sqrtf(fwd[0] * fwd[0] + fwd[1] * fwd[1] + fwd[2] * fwd[2]);
+    int cut = 0;
+
+    if (rgl_in_fight != was_fight)
+        cut = 1;
+    if (g_cam_frame && !was_cam)
+        cut = 1;
+    if (g_cam_frame && l > 1e-6f) {
+        float d;
+        fwd[0] /= l; fwd[1] /= l; fwd[2] /= l;
+        d = fwd[0] * g_cam_fwd[0] + fwd[1] * g_cam_fwd[1] + fwd[2] * g_cam_fwd[2];
+        if (d < 0.94f)                  /* cos 20 degrees */
+            cut = 1;
+        memcpy(g_cam_fwd, fwd, sizeof fwd);
+    }
+    if (cut)
+        umk3_dlss5_cuts++;
+    was_fight = rgl_in_fight;
+    was_cam = g_cam_frame;
+    g_cam_frame = 0;
+}
+
 void rgl_ff_frame(void)
 {
     g_frames_n++;
+    cuts_frame();
     if (getenv("UMK3_LOG_SHADOW")) {
         static int last = -1;
         if (g_had_scene != last)
@@ -1313,6 +1350,17 @@ static int invert(const mat4 *a, mat4 *out)
 }
 
 int rgl_layers;                         /* rgl.h */
+/* DLSS 5: the scene's cuts, counted for our AIO build (tools/neural/
+ * patch_aio.py), which reads this from the exe by name and resets the neural
+ * pass's and DLAA's history when it changes -- else a new round, a load or a
+ * camera jump carried the last picture's light for a second or two (Mary) */
+#ifdef _WIN32
+__declspec(dllexport) volatile long umk3_dlss5_cuts;
+#else
+volatile long umk3_dlss5_cuts;
+#endif
+static int g_cam_frame;                 /* the 3D scene's camera was on this frame */
+static float g_cam_fwd[3];              /* and where it looked */
 int rgl_in_fight = 1;                   /* rgl.h: a fight is on (game_main.c sets it) */
 static int g_scene_cam;                 /* the 3D scene's camera is on (rgl_layers) */
 
@@ -1321,6 +1369,8 @@ void rgl_shadow_camera(int on)
     mat4 inv;
 
     g_scene_cam = on;
+    if (on)
+        g_cam_frame = 1;
 
     if (on && B && rgl_shadows && B->shadow_map && invert(&g_mv.s[g_mv.top], &inv)) {
         /* another camera (the character select draws each fighter with
