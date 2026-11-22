@@ -69,4 +69,9 @@ int  mods_list(MODS_ITEM *out, int max);
 int  mods_set(const char *folder, int on);
 int  mods_changed(void);                /* 1 once mods.ini was written */
 
+/* The first mod that is on whose mod.ini says type=<type> ("dlss5"), in
+ * mods.ini's order, from <game_dir>mods (game_dir ends in a slash); works
+ * before mods_init. 1 and the mod's folder in `out`. */
+int  mods_find_typed(const char *game_dir, const char *type, char *out, size_t n);
+
 #endif

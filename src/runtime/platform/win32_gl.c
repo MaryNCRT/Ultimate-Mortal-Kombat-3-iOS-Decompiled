@@ -15,6 +15,7 @@
 #include "gl.h"
 #include "ui_alert.h"
 #include "../render/rgl.h"
+#include "../neural_mod.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -360,7 +361,10 @@ bool plat_open(const char *title, int width, int height)
 
     /* Vulkan or Direct3D 12 (umk3.ini renderer=, render/rgl.h): the window
      * takes their swapchain and has no OpenGL context; one that cannot
-     * start leaves rgl_renderer OpenGL and the context is made as always */
+     * start leaves rgl_renderer OpenGL and the context is made as always.
+     * Port: the DLSS 5 mod's ReShade first, so it hooks the device made
+     * next (neural_mod.c; nothing happens without such a mod) */
+    neural_mod_load(rgl_dir, rgl_renderer == RGL_D3D12);
     if (rgl_renderer != RGL_OPENGL && rgl_open(g_wnd, width, height)) {
         ShowWindow(g_wnd, SW_SHOW);
         QueryPerformanceFrequency(&g_freq);
