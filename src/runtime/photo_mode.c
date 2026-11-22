@@ -112,8 +112,18 @@ static int   g_shots_saved;
 static long  g_ticks;                   /* photo_tick's calls, for the log */
 static int   g_via_key;                 /* photo_open: from the shortcut */
 
-enum { CAT_CAMERA, CAT_IMAGE, CAT_EFFECTS, CAT_SCENE, CAT_CAPTURE, CAT_N };
-static const int g_rows_base[CAT_N] = { 7, 11, 9, 2, 3 };
+enum { CAT_CAMERA, CAT_IMAGE, CAT_EFFECTS, CAT_CHAR, CAT_SCENE, CAT_CAPTURE, CAT_N };
+static const int g_rows_base[CAT_N] = { 7, 11, 9, 7, 6, 3 };
+
+/* CHARACTER (phase 3): each fighter moved and turned for the picture, or
+ * hidden -- drawn so, his state as it was (GameCode.c
+ * RenderLevelPlayers_Pose); all of it put back when the mode leaves */
+static struct { float dx, dy, dz, rot; int hidden; } g_fig[2];
+static int g_fig_sel;                   /* the fighter the page is about */
+/* SCENE: the stage, the effects hidden; the fight stepped a frame at a
+ * time, the frame it froze on put back on the way out (a save state) */
+static int g_hide_stage, g_hide_fx;
+static int g_stepping, g_stepped, g_step_saved;
 
 /* IMAGE and EFFECTS (phase 2): the settings of the pass over the picture
  * (render/rgl.h rgl_post_apply, the shaders' post_fx) */
@@ -236,7 +246,35 @@ int photo_hide_hud(void)
 
 int photo_on(void)
 {
-    return g_on && CurrentTask == 6 && GamePaused == PHOTO_PAUSED;
+    return g_on && CurrentTask == 6 && (GamePaused == PHOTO_PAUSED || g_stepping);
+}
+
+/* GameCode.c's questions: a fighter's adjustment, a side hidden, the stage
+ * and the effects hidden -- only while the mode (or the FREE CAMERA) is up */
+int photo_fighter_adjust(int slot, float a[4])
+{
+    if (slot < 0 || slot > 1 || !(photo_on() || photo_free_on()))
+        return 0;
+    a[0] = g_fig[slot].dx;
+    a[1] = g_fig[slot].dy;
+    a[2] = g_fig[slot].dz;
+    a[3] = g_fig[slot].rot;
+    return a[0] != 0.0f || a[1] != 0.0f || a[2] != 0.0f || a[3] != 0.0f;
+}
+
+int photo_hide_side(long side)
+{
+    return (side == 0 || side == 1) && (photo_on() || photo_free_on()) && g_fig[side].hidden;
+}
+
+int photo_hide_stage(void)
+{
+    return (photo_on() || photo_free_on()) && g_hide_stage;
+}
+
+int photo_hide_effects(void)
+{
+    return (photo_on() || photo_free_on()) && g_hide_fx;
 }
 
 int photo_free_on(void)
@@ -319,6 +357,16 @@ void photo_close(void)
 {
     if (!g_on)
         return;
+    if (g_stepped && g_step_saved) {    /* the frame it froze on, as it was */
+        if (st_photo_load() == 0) {
+            plat_audio_stop_all();
+            printf("photo: the fight put back on the frame it was frozen on\n");
+        }
+    }
+    st_photo_forget();
+    g_stepping = g_stepped = g_step_saved = 0;
+    memset(g_fig, 0, sizeof g_fig);
+    g_hide_stage = g_hide_fx = 0;
     g_on = 0;
     if (GamePaused == PHOTO_PAUSED)
         GamePaused = g_from_menu ? 1 : (g_prev_paused == 1 ? 1 : 0);
@@ -335,8 +383,8 @@ void photo_close(void)
 
 static const char *cat_name(int c)
 {
-    static const char *const n_es[CAT_N] = { "CAMARA", "IMAGEN", "EFECTOS", "ESCENA", "CAPTURA" };
-    static const char *const n_en[CAT_N] = { "CAMERA", "IMAGE", "EFFECTS", "SCENE", "CAPTURE" };
+    static const char *const n_es[CAT_N] = { "CAMARA", "IMAGEN", "EFECTOS", "PERSONAJE", "ESCENA", "CAPTURA" };
+    static const char *const n_en[CAT_N] = { "CAMERA", "IMAGE", "EFFECTS", "CHARACTER", "SCENE", "CAPTURE" };
     return es() ? n_es[c] : n_en[c];
 }
 
@@ -436,6 +484,54 @@ static void row_text(int c, int r, char *label, char *value, int n)
     case CAT_SCENE * 16 + 1:
         snprintf(label, n, "%s", tx("CUADRICULA", "GRID"));
         snprintf(value, n, "%s", g_grid ? tx("SI", "ON") : tx("NO", "OFF"));
+        break;
+    case CAT_SCENE * 16 + 2:
+        snprintf(label, n, "%s", tx("ESCENARIO", "STAGE"));
+        snprintf(value, n, "%s", g_hide_stage ? tx("OCULTO", "HIDDEN") : tx("VISIBLE", "SHOWN"));
+        break;
+    case CAT_SCENE * 16 + 3:
+        snprintf(label, n, "%s", tx("EFECTOS Y SANGRE", "EFFECTS AND BLOOD"));
+        snprintf(value, n, "%s", g_hide_fx ? tx("OCULTOS", "HIDDEN") : tx("VISIBLES", "SHOWN"));
+        break;
+    case CAT_SCENE * 16 + 4:
+        snprintf(label, n, "%s", tx("AVANZAR UN CUADRO", "STEP ONE FRAME"));
+        if (g_replay)
+            snprintf(value, n, "%s", tx("USA EL PANEL", "USE THE PANEL"));
+        break;
+    case CAT_SCENE * 16 + 5:
+        snprintf(label, n, "%s", tx("VOLVER AL CUADRO", "BACK TO THE FRAME"));
+        if (!g_stepped)
+            snprintf(value, n, "%s", "-");
+        break;
+    case CAT_CHAR * 16 + 0:
+        snprintf(label, n, "%s", tx("LUCHADOR", "FIGHTER"));
+        {
+            umk3_long c = g_fig_sel ? Character2 : Character1;
+            snprintf(value, n, "%s", c >= 0 && c < 26 && CharacterNames[c] ? CharacterNames[c] : "?");
+        }
+        break;
+    case CAT_CHAR * 16 + 1:
+        snprintf(label, n, "%s", tx("GIRAR", "TURN"));
+        snprintf(value, n, "%+.0f", g_fig[g_fig_sel].rot);
+        break;
+    case CAT_CHAR * 16 + 2:
+        snprintf(label, n, "%s", tx("MOVER A LOS LADOS", "MOVE SIDEWAYS"));
+        snprintf(value, n, "%+.2f", g_fig[g_fig_sel].dx);
+        break;
+    case CAT_CHAR * 16 + 3:
+        snprintf(label, n, "%s", tx("MOVER AL FONDO", "MOVE IN DEPTH"));
+        snprintf(value, n, "%+.2f", g_fig[g_fig_sel].dy);
+        break;
+    case CAT_CHAR * 16 + 4:
+        snprintf(label, n, "%s", tx("ALTURA", "HEIGHT"));
+        snprintf(value, n, "%+.2f", g_fig[g_fig_sel].dz);
+        break;
+    case CAT_CHAR * 16 + 5:
+        snprintf(label, n, "%s", tx("VISIBLE", "SHOWN"));
+        snprintf(value, n, "%s", g_fig[g_fig_sel].hidden ? tx("NO", "NO") : tx("SI", "YES"));
+        break;
+    case CAT_CHAR * 16 + 6:
+        snprintf(label, n, "%s", tx("RESTABLECER LUCHADOR", "RESET FIGHTER"));
         break;
     case CAT_CAPTURE * 16 + 0:
         snprintf(label, n, "%s", tx("HACER FOTO", "TAKE PHOTO"));
@@ -555,6 +651,32 @@ static void row_act(int d)
 #undef STEP
     case CAT_SCENE * 16 + 0:  g_show_hud ^= 1; break;
     case CAT_SCENE * 16 + 1:  g_grid ^= 1; break;
+    case CAT_SCENE * 16 + 2:  g_hide_stage ^= 1; break;
+    case CAT_SCENE * 16 + 3:  g_hide_fx ^= 1; break;
+    case CAT_SCENE * 16 + 4:
+        if (!d && !g_replay) {
+            /* the first step keeps the frame it froze on (a save state),
+             * to put it back on the way out */
+            if (!g_stepped)
+                g_step_saved = st_available() && st_photo_save() == 0;
+            g_stepping = 1;             /* photo_tick lets one tick of the fight run */
+        }
+        break;
+    case CAT_SCENE * 16 + 5:
+        if (!d && g_stepped && g_step_saved && st_photo_load() == 0) {
+            plat_audio_stop_all();
+            GamePaused = PHOTO_PAUSED;
+            g_stepped = 0;
+            printf("photo: back to the frame it was frozen on\n");
+        }
+        break;
+    case CAT_CHAR * 16 + 0:   g_fig_sel ^= 1; break;
+    case CAT_CHAR * 16 + 1:   g_fig[g_fig_sel].rot = clampf(g_fig[g_fig_sel].rot + 15.0f * (float)d, -180.0f, 180.0f); break;
+    case CAT_CHAR * 16 + 2:   g_fig[g_fig_sel].dx = clampf(g_fig[g_fig_sel].dx + 0.1f * (float)d, -3.0f, 3.0f); break;
+    case CAT_CHAR * 16 + 3:   g_fig[g_fig_sel].dy = clampf(g_fig[g_fig_sel].dy + 0.1f * (float)d, -3.0f, 3.0f); break;
+    case CAT_CHAR * 16 + 4:   g_fig[g_fig_sel].dz = clampf(g_fig[g_fig_sel].dz + 0.05f * (float)d, -1.0f, 2.0f); break;
+    case CAT_CHAR * 16 + 5:   g_fig[g_fig_sel].hidden ^= 1; break;
+    case CAT_CHAR * 16 + 6:   if (!d) memset(&g_fig[g_fig_sel], 0, sizeof g_fig[0]); break;
     case CAT_CAPTURE * 16 + 0: if (!d) take_photo(); break;
     case CAT_CAPTURE * 16 + 2: if (!d) open_folder(); break;
     default: break;
@@ -575,16 +697,36 @@ static PANEL panel_geom(void)
      * too much of the picture) */
     p.x = 6.0f * s;
     p.y = 6.0f * s;
-    p.w = 112.0f * s;
-    p.tab_h = 12.0f * s;
-    p.hdr = 13.0f * s;
-    p.row_h = 10.0f * s;
+    p.w = 136.0f * s;                   /* Mary: the words a little larger */
+    p.tab_h = 14.0f * s;
+    p.hdr = 14.0f * s;
+    p.row_h = 12.0f * s;
     return p;
 }
 
+#define HIDE_H 13.0f                    /* the HIDE MENU button under the rows */
+
 static float panel_h(const PANEL *p)
 {
-    return p->tab_h + p->hdr + (float)ROWS(g_cat) * p->row_h + 5.0f * FE_HeightScale;
+    return p->tab_h + p->hdr + (float)ROWS(g_cat) * p->row_h + (HIDE_H + 9.0f) * FE_HeightScale;
+}
+
+/* the HIDE MENU button, and with the menu hidden the small MENU tab that
+ * brings it back (Mary: a way to hide it with the mouse too) */
+static void hide_btn(const PANEL *p, float *x, float *y, float *w, float *h)
+{
+    float s = FE_HeightScale;
+    if (g_panel_hidden) {
+        *x = p->x;
+        *y = p->y;
+        *w = 58.0f * s;
+        *h = 13.0f * s;
+    } else {
+        *x = p->x + 4.0f * s;
+        *y = p->y + panel_h(p) - (HIDE_H + 4.0f) * s;
+        *w = p->w - 8.0f * s;
+        *h = HIDE_H * s;
+    }
 }
 
 /* ------------------------------------------------------------- the input */
@@ -634,6 +776,17 @@ void photo_tick(const PLAT_PAD *pad, unsigned pad_mask, int (*key)(int))
     g_ticks++;
     if (g_toast_t > 0)
         g_toast_t--;
+    /* AVANZAR UN CUADRO: one tick of the fight runs (GamePaused 0 for it),
+     * then it is frozen again */
+    if (g_on && g_stepping == 2) {
+        GamePaused = PHOTO_PAUSED;
+        g_stepping = 0;
+        g_stepped = 1;
+    } else if (g_on && g_stepping == 1 && GamePaused == PHOTO_PAUSED) {
+        GamePaused = 0;
+        g_stepping = 2;
+        return;
+    }
     if (g_on && !photo_on()) {          /* the fight left under it */
         g_on = 0;
         g_shot = 0;
@@ -760,24 +913,54 @@ void photo_tick(const PLAT_PAD *pad, unsigned pad_mask, int (*key)(int))
         int over_panel = !g_panel_hidden && px >= p.x && px < p.x + p.w
                          && py >= p.y && py < p.y + panel_h(&p);
 
+        static float lpx, lpy;
+        int hover_row = -1;
+
         plat_mouse(&mx, &my);
         if (btn || wheel)
             g_pad_last = 0;
+        /* the row under the mouse is the chosen one once the mouse moves
+         * over it (Mary: comfortable with the mouse) */
+        if (over_panel && py >= p.y + p.tab_h + p.hdr) {
+            int r = (int)((py - (p.y + p.tab_h + p.hdr)) / p.row_h);
+            if (r >= 0 && r < ROWS(g_cat)) {
+                hover_row = r;
+                if (px != lpx || py != lpy)
+                    g_row = r;
+            }
+        }
+        lpx = px;
+        lpy = py;
+        if (over_panel && wheel && hover_row >= 0) {   /* the wheel turns the value */
+            char lb[64], va[64];
+            row_text(g_cat, hover_row, lb, va, sizeof lb);
+            if (va[0])
+                row_act(wheel > 0 ? 1 : -1);
+            wheel = 0;
+        }
+        {
+            float bx, by, bw, bh;
+            hide_btn(&p, &bx, &by, &bw, &bh);
+            if (left && !(mouse_was & 1) && px >= bx && px < bx + bw && py >= by && py < by + bh) {
+                g_panel_hidden ^= 1;
+                mouse_was = btn;
+                return;
+            }
+        }
         if (left && !(mouse_was & 1) && over_panel) {
             if (py < p.y + p.tab_h) {   /* the strip: its left half back, its right half on */
                 g_cat = (g_cat + (px < p.x + p.w * 0.5f ? CAT_N - 1 : 1)) % CAT_N;
                 g_row = 0;
-            } else if (py >= p.y + p.tab_h + p.hdr) {
-                int r = (int)((py - (p.y + p.tab_h + p.hdr)) / p.row_h);
-                if (r >= 0 && r < ROWS(g_cat)) {
-                    char lb[64], va[64];
-                    g_row = r;
-                    row_text(g_cat, r, lb, va, sizeof lb);
-                    if (!va[0])
-                        row_act(0);
-                    else if (px > p.x + p.w * 0.55f)
-                        row_act(px > p.x + p.w * 0.78f ? 1 : -1);
-                }
+            } else if (hover_row >= 0) {
+                char lb[64], va[64];
+                g_row = hover_row;
+                row_text(g_cat, hover_row, lb, va, sizeof lb);
+                if (!va[0])
+                    row_act(0);
+                else if (px >= p.x + p.w * 0.50f && px < p.x + p.w * 0.64f)
+                    row_act(-1);        /* its left arrow */
+                else
+                    row_act(1);         /* its right arrow, or the row */
             }
         } else if (!(mouse_was & 7) && (btn & 7) && !over_panel) {
             drag = (right || left) ? 1 : mid ? 2 : 0;
@@ -949,34 +1132,110 @@ static void text(const char *s, float x, float y, int align, float scale, const 
     PortPhotoText(s, x, y, align, scale, rgb);
 }
 
+/* The keys' and the pad's pictures in the hints (Mary: the buttons' icons),
+ * as the menus' hints draw them: a line of "\001glyphs path\001" pictures
+ * and words (FrontEnd.c PortNavDrawLineC). The mouse has no picture: it is
+ * named. */
+void PortNavDrawLineC(const char *s, float y, float scale);    /* FrontEnd.c */
+
+static char *g_kb(int pk)               /* a key's picture, by its binding */
+{
+    static char b[16][96];
+    static int k;
+    char *o = b[k = (k + 1) & 15];
+    plat_key_glyph(pk, o, 96);
+    return o;
+}
+
+static char *g_pb(int pb)               /* a pad button's, for the pad in use */
+{
+    static char b[16][96];
+    static int k;
+    char *o = b[k = (k + 1) & 15];
+    plat_pad_glyph(plat_pad_glyph_kind(0, g_pad_kind), pb, o, 96);
+    return o;
+}
+
+/* a part of the pad with no PB_ of its own: "L_2D" "R_2D" (the sticks),
+ * "Dpad_X" "Dpad_Y" (the cross across, up and down) */
+static char *g_part(const char *part)
+{
+    static char b[4][96];
+    static int k;
+    char *o = b[k = (k + 1) & 3];
+    int kind = plat_pad_glyph_kind(0, g_pad_kind);
+    if (kind == 2)
+        snprintf(o, 96, "\001ps/T_P5_%s_Retro\001", part);
+    else if (kind == 4)
+        snprintf(o, 96, "\001p4/T_P4_%s_Stylized\001", strcmp(part, "L_2D") == 0 ? "l_2D" : part);
+    else if (kind == 3)
+        snprintf(o, 96, "\001ns/T_S_%s\001", part);
+    else
+        snprintf(o, 96, "\001xb/T_X_%s_Retro\001", part);
+    return o;
+}
+
+/* which: 0 PHOTO MODE, 1 a replay's FREE CAMERA, 2 the replay player */
+static void hints_text(int which, char *line, int n)
+{
+    int e = es();
+
+    if (g_pad_last && which == 0)
+        snprintf(line, n, e ? "%s GIRAR   %s MOVER   %s%s DISTANCIA   %s%s CATEGORIA   %s PANEL   %s FOTO   %s SALIR"
+                            : "%s ORBIT   %s MOVE   %s%s DISTANCE   %s%s CATEGORY   %s PANEL   %s PHOTO   %s EXIT",
+                 g_part("R_2D"), g_part("L_2D"), g_pb(PB_L2), g_pb(PB_R2), g_pb(PB_L1), g_pb(PB_R1),
+                 g_pb(PB_NORTH), g_pb(PB_WEST), g_pb(PB_EAST));
+    else if (which == 0)
+        snprintf(line, n, e ? "RATON DER. GIRAR   RUEDA DISTANCIA   %s%s%s%s MOVER   %s%s ALTURA   %s CATEGORIA   %s PANEL   %s FOTO   %s SALIR"
+                            : "RIGHT MOUSE ORBIT   WHEEL DISTANCE   %s%s%s%s MOVE   %s%s HEIGHT   %s CATEGORY   %s PANEL   %s PHOTO   %s EXIT",
+                 g_kb(PK_UP), g_kb(PK_LEFT), g_kb(PK_DOWN), g_kb(PK_RIGHT), g_kb(PK_PH_SINK), g_kb(PK_PH_RISE),
+                 g_kb(PK_PH_TAB), g_kb(PK_PH_HIDE), g_kb(PK_PH_SHOT), g_kb(PK_PHOTO));
+    else if (g_pad_last && which == 1)
+        snprintf(line, n, e ? "%s GIRAR   %s MOVER   %s%s DISTANCIA   %s CENTRAR   %s SALIR"
+                            : "%s ORBIT   %s MOVE   %s%s DISTANCE   %s RESET   %s EXIT",
+                 g_part("R_2D"), g_part("L_2D"), g_pb(PB_L2), g_pb(PB_R2), g_pb(PB_R3), g_pb(PB_NORTH));
+    else if (which == 1)
+        snprintf(line, n, e ? "RATON DER. GIRAR   RUEDA DISTANCIA   %s%s%s%s MOVER   %s%s ALTURA   %s CENTRAR   %s SALIR"
+                            : "RIGHT MOUSE ORBIT   WHEEL DISTANCE   %s%s%s%s MOVE   %s%s HEIGHT   %s RESET   %s EXIT",
+                 g_kb(PK_PH_NAV_UP), g_kb(PK_PH_NAV_LEFT), g_kb(PK_PH_NAV_DOWN), g_kb(PK_PH_NAV_RIGHT),
+                 g_kb(PK_PH_SINK), g_kb(PK_PH_RISE), g_kb(PK_PH_RESET), g_kb(PK_PH_PLAY));
+    else if (g_pad_last)
+        snprintf(line, n, e ? "%s PAUSA   %s BUSCAR   %s%s VELOCIDAD   %s CAMARA LIBRE   %s MOVIMIENTOS / CINE   %s%s FOTO   %s SALIR"
+                            : "%s PAUSE   %s SEEK   %s%s SPEED   %s FREE CAMERA   %s MOVES / CINEMA   %s%s PHOTO   %s EXIT",
+                 g_pb(PB_SOUTH), g_part("Dpad_X"), g_pb(PB_L1), g_pb(PB_R1), g_pb(PB_NORTH), g_part("Dpad_Y"),
+                 g_pb(PB_L3), g_pb(PB_R3), g_pb(PB_EAST));
+    else
+        snprintf(line, n, e ? "%s PAUSA   %s%s BUSCAR   %s%s VELOCIDAD   %s CAMARA LIBRE   %s MOVIMIENTOS   %s CINE   %s FOTO"
+                            : "%s PAUSE   %s%s SEEK   %s%s SPEED   %s FREE CAMERA   %s MOVES   %s CINEMA   %s PHOTO",
+                 g_kb(PK_PH_SHOT), g_kb(PK_LEFT), g_kb(PK_RIGHT), g_kb(PK_DOWN), g_kb(PK_UP),
+                 g_kb(PK_PH_PLAY), g_kb(PK_PH_TAB), g_kb(PK_PH_HIDE), g_kb(PK_PHOTO));
+}
+
 static void hint_line(float W, float H, float s)
 {
-    char line[400];
-    int ps = g_pad_kind == 2 || g_pad_kind == 4;
-    float bh = 11.0f * s, y = H - bh;
+    char line[1200];
+    float bh = 15.0f * s, y = H - bh;
     float grad[16] = { 0.04f, 0.035f, 0.03f, 0.70f,  0.04f, 0.035f, 0.03f, 0.70f,
                        0.04f, 0.035f, 0.03f, 0.95f,  0.04f, 0.035f, 0.03f, 0.95f };
 
-    if (g_pad_last)
-        snprintf(line, sizeof line, "%s",
-                 ps ? tx("STICK DER. GIRAR   STICK IZQ. MOVER   L2/R2 DISTANCIA   L1/R1 CATEGORIA   TRIANGULO PANEL   CUADRADO FOTO   CIRCULO SALIR",
-                         "R STICK ORBIT   L STICK MOVE   L2/R2 DISTANCE   L1/R1 CATEGORY   TRIANGLE PANEL   SQUARE PHOTO   CIRCLE EXIT")
-                    : tx("STICK DER. GIRAR   STICK IZQ. MOVER   LT/RT DISTANCIA   LB/RB CATEGORIA   Y PANEL   X FOTO   B SALIR",
-                         "RS ORBIT   LS MOVE   LT/RT DISTANCE   LB/RB CATEGORY   Y PANEL   X PHOTO   B EXIT"));
-    else {
-        char k_photo[16], k_shot[16], k_hide[16], k_tab[16];
-        plat_key_label(PK_PHOTO, k_photo, sizeof k_photo);
-        plat_key_label(PK_PH_SHOT, k_shot, sizeof k_shot);
-        plat_key_label(PK_PH_HIDE, k_hide, sizeof k_hide);
-        plat_key_label(PK_PH_TAB, k_tab, sizeof k_tab);
-        snprintf(line, sizeof line,
-                 es() ? "RATON DER. GIRAR   CENTRAL MOVER   RUEDA DISTANCIA   WASD/Q/E MOVER   %s CATEGORIA   %s PANEL   %s FOTO   %s SALIR"
-                      : "RIGHT MOUSE ORBIT   MIDDLE MOVE   WHEEL DISTANCE   WASD/Q/E MOVE   %s CATEGORY   %s PANEL   %s PHOTO   %s EXIT",
-                 k_tab, k_hide, k_shot, k_photo);
-    }
+    hints_text(0, line, sizeof line);
     limeFillRectGrad(0.0f, y, W, bh, grad);
     limeFillRect(0.0f, y, W, 1.0f * s, 0.23f, 0.20f, 0.16f, 1.0f);
-    text(line, W * 0.5f, y + 3.0f * s, 1, 0.20f, C_BONE);
+    PortNavDrawLineC(line, y + 2.5f * s, 0.5f);
+}
+
+/* game_main.c, over the replay player's panel: its keys with their
+ * pictures, along its bottom (`device_pad` the pad used last) */
+void photo_replay_hints(int device_pad, float y, float scale)
+{
+    char line[1200];
+    int was = g_pad_last;
+    g_pad_last = device_pad;
+    hints_text(2, line, sizeof line);
+    g_pad_last = was;
+    limeEnableAlphaBlending_Basic();
+    limeSet2DDrawing();
+    PortNavDrawLineC(line, y, scale);
 }
 
 void photo_draw(void)
@@ -987,23 +1246,17 @@ void photo_draw(void)
 
     if (!photo_on()) {
         if (photo_free_on()) {          /* the FREE CAMERA's mark and keys, top centre */
-            int ps = g_pad_kind == 2 || g_pad_kind == 4;
-            const char *keys = g_pad_last
-                ? (ps ? tx("STICK DER. GIRAR   STICK IZQ. MOVER   L2/R2 DISTANCIA   R3 CENTRAR   TRIANGULO SALIR",
-                           "R STICK ORBIT   L STICK MOVE   L2/R2 DISTANCE   R3 RESET   TRIANGLE EXIT")
-                      : tx("STICK DER. GIRAR   STICK IZQ. MOVER   LT/RT DISTANCIA   R3 CENTRAR   Y SALIR",
-                           "RS ORBIT   LS MOVE   LT/RT DISTANCE   R3 RESET   Y EXIT"))
-                : tx("RATON DER. GIRAR   CENTRAL MOVER   RUEDA DISTANCIA   FLECHAS / Q / E MOVER   R CENTRAR   F SALIR",
-                     "RIGHT MOUSE ORBIT   MIDDLE MOVE   WHEEL DISTANCE   ARROWS / Q / E MOVE   R RESET   F EXIT");
-            float bw = 260.0f * s, bx = W * 0.5f - bw * 0.5f, by = 58.0f * s;   /* under the bars and the clock */
+            char keys[1200];
+            float bw = 300.0f * s, bx = W * 0.5f - bw * 0.5f, by = 58.0f * s;   /* under the bars and the clock */
+            hints_text(1, keys, sizeof keys);
             limeEnableAlphaBlending_Basic();
             limeSet2DDrawing();
             limeDisableDepthTest();
-            limeFillRect(bx, by, bw, 20.0f * s, 0.055f, 0.05f, 0.045f, 0.72f);
+            limeFillRect(bx, by, bw, 24.0f * s, 0.055f, 0.05f, 0.045f, 0.72f);
             limeFillRect(bx, by, bw, 1.0f * s, 0.85f, 0.60f, 0.29f, 1.0f);
             limeFillRect(W * 0.5f - 34.0f * s, by + 3.5f * s, 4.0f * s, 4.0f * s, 0.35f, 0.80f, 0.40f, 1.0f);
             text(tx("CAMARA LIBRE", "FREE CAMERA"), W * 0.5f - 27.0f * s, by + 2.5f * s, 0, 0.24f, C_BRONZE);
-            text(keys, W * 0.5f, by + 11.5f * s, 1, 0.17f, C_BONE);
+            PortNavDrawLineC(keys, by + 11.0f * s, 0.55f);
         }
         return;
     }
@@ -1048,11 +1301,21 @@ void photo_draw(void)
          * (five no longer fit side by side in the compact panel) */
         (void)tw;
         limeFillRect(p.x, p.y, p.w, p.tab_h, 0.85f, 0.60f, 0.29f, 0.10f);
-        text("<", p.x + 7.0f * s, p.y + 3.0f * s, 1, 0.24f, C_BRONZE);
-        text(">", p.x + p.w - 7.0f * s, p.y + 3.0f * s, 1, 0.24f, C_BRONZE);
-        text(cat_name(g_cat), p.x + p.w * 0.5f, p.y + 2.5f * s, 1, 0.22f, C_BRONZE);
+        /* the arrows are buttons: lit under the mouse */
+        {
+            float mx = PortMouseX, my = PortMouseY;
+            int on_l = my >= p.y && my < p.y + p.tab_h && mx >= p.x && mx < p.x + 22.0f * s;
+            int on_r = my >= p.y && my < p.y + p.tab_h && mx >= p.x + p.w - 22.0f * s && mx < p.x + p.w;
+            if (on_l)
+                limeFillRect(p.x, p.y, 22.0f * s, p.tab_h, 0.85f, 0.60f, 0.29f, 0.25f);
+            if (on_r)
+                limeFillRect(p.x + p.w - 22.0f * s, p.y, 22.0f * s, p.tab_h, 0.85f, 0.60f, 0.29f, 0.25f);
+            text("<", p.x + 11.0f * s, p.y + 3.0f * s, 1, 0.30f, on_l ? C_BONE : C_BRONZE);
+            text(">", p.x + p.w - 11.0f * s, p.y + 3.0f * s, 1, 0.30f, on_r ? C_BONE : C_BRONZE);
+        }
+        text(cat_name(g_cat), p.x + p.w * 0.5f, p.y + 2.5f * s, 1, 0.27f, C_BRONZE);
         for (c = 0; c < CAT_N; c++)
-            limeFillRect(p.x + p.w * 0.5f + ((float)c - 2.0f) * 5.0f * s - 1.0f * s,
+            limeFillRect(p.x + p.w * 0.5f + ((float)c - (float)(CAT_N - 1) * 0.5f) * 5.0f * s - 1.0f * s,
                          p.y + p.tab_h - 3.0f * s, 2.0f * s, 1.5f * s,
                          c == g_cat ? 0.85f : 0.40f, c == g_cat ? 0.60f : 0.36f,
                          c == g_cat ? 0.29f : 0.30f, 1.0f);
@@ -1060,7 +1323,7 @@ void photo_draw(void)
 
         /* the heading; IMAGE and EFFECTS say when what draws cannot */
         y = p.y + p.tab_h;
-        text(cat_name(g_cat), p.x + 6.0f * s, y + 3.5f * s, 0, 0.27f, C_BONE);
+        text(cat_name(g_cat), p.x + 6.0f * s, y + 3.0f * s, 0, 0.32f, C_BONE);
         if ((g_cat == CAT_IMAGE || g_cat == CAT_EFFECTS) && !rgl_post_available())
             text(tx("NO DISPONIBLE CON ESTE RENDERIZADOR", "NOT AVAILABLE WITH THIS RENDERER"),
                  p.x + p.w - 6.0f * s, y + 4.5f * s, 2, 0.15f, C_ASH);
@@ -1076,13 +1339,29 @@ void photo_draw(void)
                 limeFillRectGrad(p.x + 2.0f * s, y, p.w - 4.0f * s, p.row_h, sel);
                 limeFillRect(p.x + 2.0f * s, y, 1.5f * s, p.row_h, 0.85f, 0.60f, 0.29f, 1.0f);
             }
-            text(lb, p.x + 6.0f * s, y + 2.7f * s, 0, 0.20f, r == g_row ? C_BONE : C_ASH);
+            text(lb, p.x + 6.0f * s, y + 3.0f * s, 0, 0.245f, r == g_row ? C_BONE : C_ASH);
             if (va[0]) {
-                char v[80];
-                snprintf(v, sizeof v, r == g_row ? "< %s >" : "%s", va);
-                text(v, p.x + p.w - 6.0f * s, y + 2.7f * s, 2, 0.20f, C_BRONZE);
+                /* the value between two arrows the mouse presses: the left
+                 * one less, the right one more (the row's own click more too) */
+                text("<", p.x + p.w * 0.56f, y + 3.0f * s, 1, 0.26f, r == g_row ? C_BRONZE : C_ASH);
+                text(">", p.x + p.w - 6.0f * s, y + 3.0f * s, 2, 0.26f, r == g_row ? C_BRONZE : C_ASH);
+                text(va, p.x + p.w * 0.78f, y + 3.0f * s, 1, 0.245f, C_BRONZE);
             }
         }
+    }
+    {
+        /* HIDE MENU, or the MENU tab while it is hidden; its key named */
+        float bx, by, bw, bh, mx = PortMouseX, my = PortMouseY;
+        int on;
+        char lb[64], key[16];
+        plat_key_label(PK_PH_HIDE, key, sizeof key);
+        hide_btn(&p, &bx, &by, &bw, &bh);
+        on = mx >= bx && mx < bx + bw && my >= by && my < by + bh;
+        limeFillRect(bx, by, bw, bh, on ? 0.30f : 0.10f, on ? 0.20f : 0.09f, on ? 0.10f : 0.08f, 0.92f);
+        limeFillRect(bx, by, bw, 1.0f * s, 0.85f, 0.60f, 0.29f, on ? 1.0f : 0.6f);
+        snprintf(lb, sizeof lb, g_panel_hidden ? tx("MENU (%s)", "MENU (%s)")
+                                               : tx("OCULTAR MENU (%s)", "HIDE MENU (%s)"), key);
+        text(lb, bx + bw * 0.5f, by + 3.0f * s, 1, 0.24f, on ? C_BONE : C_BRONZE);
     }
 
     if (g_toast_t > 0) {

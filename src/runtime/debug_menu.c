@@ -2003,6 +2003,13 @@ static const char *const k_rp_speed[5] = { "X1/4", "X1/2", "X1", "X2", "X4" };
 /* game_main.c sets these: the panel's fade (CINEMA), the pad used last
  * (the hints), the moves panel hidden, CINEMA on */
 float dbg_replay_alpha = 1.0f;
+/* where the keys' line goes on the screen, for game_main.c: its y in the
+ * game's 2D units' fraction of the height, and its size */
+float dbg_replay_hint_y(void)
+{
+    float sc = (float)dbg_replay_pct / 100.0f;
+    return 1.0f - (320.0f - 310.0f) * sc / 320.0f;
+}
 int   dbg_replay_pad, dbg_replay_moves_hidden, dbg_replay_cine;
 
 /* Where each button is, in a space `w` wide: the speed on the left, the
@@ -2346,13 +2353,8 @@ void dbg_replay_draw(float at, const char *time, int state, int hover,
     }
     snprintf(sp, sizeof sp, "%s", k_rp_speed[spd]);
     PortSkinText(sp, x[RPB_SLOWER] + RPP_SMALL + RPP_SPEED / 2, RPP_BTN_Y + 3, 1, 0.46f, RPP_SPEED - 4, 1, A);
-    /* the keys, under it all: the pad's or the keyboard's */
-    PortSkinText(dbg_replay_pad
-                 ? (es ? "A PAUSA   CRUCETA BUSCAR   LB/RB VELOCIDAD   Y CAMARA LIBRE   ARRIBA MOVIMIENTOS   ABAJO CINE   L3+R3 FOTO   B SALIR"
-                       : "A PAUSE   D-PAD SEEK   LB/RB SPEED   Y FREE CAMERA   UP MOVES   DOWN CINEMA   L3+R3 PHOTO   B EXIT")
-                 : (es ? "ESPACIO PAUSA   A/D BUSCAR   W/S VELOCIDAD   F CAMARA LIBRE   TAB MOVIMIENTOS   H CINE   F3 FOTO"
-                       : "SPACE PAUSE   A/D SEEK   W/S SPEED   F FREE CAMERA   TAB MOVES   H CINEMA   F3 PHOTO"),
-                 w * 0.5f, 311.0f, 1, 0.26f, w - 20, 2, 0.85f * A);
+    /* the keys, under it all, with their pictures: drawn after the panel by
+     * game_main.c (photo_mode.c photo_replay_hints) */
     skin_end();
 
     glBegin(GL_QUADS);

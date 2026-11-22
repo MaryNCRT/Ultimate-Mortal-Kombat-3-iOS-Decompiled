@@ -411,8 +411,9 @@ int st_arena(uint8_t **p, uint32_t *n)
 static struct {
     uint8_t *buf;
     uint32_t cap, used, arena;
-} g_slot[ST_SLOTS + ST_PROBE_SLOTS + 1];   /* + the FATALITY TRAINER's */
+} g_slot[ST_SLOTS + ST_PROBE_SLOTS + 2];   /* + the FATALITY TRAINER's, PHOTO MODE's */
 #define ST_TRAINER_SLOT (ST_SLOTS + ST_PROBE_SLOTS)
+#define ST_PHOTO_SLOT   (ST_TRAINER_SLOT + 1)
 
 /* The arena reserved now rather than at the first block: the 64-bit build
  * calls this first thing, before the graphics driver takes the low memory. */
@@ -463,6 +464,25 @@ int st_trainer_load(void)
 void st_trainer_forget(void)
 {
     g_slot[ST_TRAINER_SLOT].used = 0;
+}
+
+/* PHOTO MODE's (photo_mode.c): the frame it froze on, put back when it
+ * leaves after stepping the fight a frame or more */
+int st_photo_save(void)
+{
+    const char *why;
+    return save_slot(ST_PHOTO_SLOT, &why);
+}
+
+int st_photo_load(void)
+{
+    const char *why;
+    return load_slot(ST_PHOTO_SLOT, &why);
+}
+
+void st_photo_forget(void)
+{
+    g_slot[ST_PHOTO_SLOT].used = 0;
 }
 
 int st_save(int slot, const char **why)
@@ -956,5 +976,8 @@ unsigned long st_rb_size(void)            { return 0; }
 int   st_trainer_save(void)                { return -1; }
 int   st_trainer_load(void)                { return -1; }
 void  st_trainer_forget(void)              {}
+int   st_photo_save(void)                  { return -1; }
+int   st_photo_load(void)                  { return -1; }
+void  st_photo_forget(void)                {}
 
 #endif

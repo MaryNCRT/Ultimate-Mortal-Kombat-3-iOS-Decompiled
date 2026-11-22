@@ -4680,6 +4680,11 @@ int main(int argc, char **argv)
 
                 dbg_replay_draw(at, clock, state, g_rp_hover, rp_title(),
                                 labels, n, nr, cur);
+                if (dbg_replay_alpha > 0.5f) {  /* its keys, with their pictures */
+                    extern int limeScreenHeight;
+                    photo_replay_hints(dbg_replay_pad, dbg_replay_hint_y() * (float)limeScreenHeight,
+                                       0.42f * (float)dbg_replay_pct / 100.0f);
+                }
             } else if (rp_switching())  /* the front end, hidden on the way */
                 dbg_replay_loading(rp_title());
             if (g_cfg_debug_keys) {

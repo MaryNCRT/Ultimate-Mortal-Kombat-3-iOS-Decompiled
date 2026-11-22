@@ -139,6 +139,11 @@ unsigned long st_size(int slot);
 int  st_trainer_save(void);
 int  st_trainer_load(void);
 void st_trainer_forget(void);
+/* PHOTO MODE's slot (photo_mode.c): the frozen frame, put back after
+ * stepping */
+int  st_photo_save(void);
+int  st_photo_load(void);
+void st_photo_forget(void);
 
 /* The rollback probe's (rollback_probe.c): three slots of its own, the
  * live state's regions (0 .umkstd, 1 .umkstb, 2 the arena), the pages that

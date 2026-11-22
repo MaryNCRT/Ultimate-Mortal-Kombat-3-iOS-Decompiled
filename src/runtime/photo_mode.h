@@ -49,6 +49,8 @@ void  photo_draw(void);
  * panel (GameCode.c Task_GameMain_frame), and the scene's projection for
  * OpenGL's depth (RenderGameView) */
 void  photo_post(void);
+/* the replay player's keys with their pictures (game_main.c, over it) */
+void  photo_replay_hints(int device_pad, float y, float scale);
 void  photo_note_scene(void);
 
 /* game_main.c, once the frame is on the window and before it is shown: a
