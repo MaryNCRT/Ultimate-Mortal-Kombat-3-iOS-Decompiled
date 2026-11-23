@@ -136,6 +136,13 @@ built and checked in Direct3D 12 only; see the log entry below. Phase 3
 
 ## Detailed log (newest first)
 
+### 2026-11-22 -- the lag: frame pacing; DLSS 5 cuts fixed; RTX soft light shadows
+
+- **Lag (Mary: "bajos fps", "lag")**: steady state was already 60 fps; the stutter was the low-latency pacer (game_main.c pace_frame). It measured the frame's work from the CPU part only, so with RTX/DLSS 5 (5-13 ms GPU + Present inside the swap) it slept too long, missed the refresh, grew its margin 1 ms and decayed back: a 33 ms frame every second or so. Now the backend reports `rgl_present_work_ms` (D3D12: commands run + Present + GPU wait, not the refresh wait) and the pacer counts it; cap 14 ms. Measured DLSS 5 + RTX, 180 Hz screen: between swaps 16.7-17.0 ms steady (UMK3_LOG_PACE). Found with the sampling profiler: slow frames were the main thread parked in a wait (ntdll), not working. Profiler now names other modules and takes `UMK3_PROFILE_MS=<threshold>`.
+- **DLSS 5 off/glitching a second into a round (Mary)**: the claude/dlss5-cuts history reset (now merged here) also fired on any camera turn > 20 degrees a frame, and the round intro's sweep did that every frame. Cuts now only on a fight entered/left or the 3D scene back after >= 10 frames away, at most one per 120 frames. Not yet confirmed by Mary.
+- **RTX torch cut (Mary: the flame's shadow edge on the wall)**: light shadows traced to a sphere of a tenth of the light's reach (3 rays), stopped short of it -- soft edges, and a light is no longer cut by its own torch bowl/pool. Not yet seen by Mary.
+- Still open: DLSS 5's first model creation stalls Present ~5 s (NGX feature creation, once a run, in menus after the AIO's 15 s settle); fight load 1.4-1.5 s, menus 0.9 s. Wet-floor reflections for Mary's reference look not started.
+
 ### 2026-11-22 -- RTX phase 3: ray-traced lighting (D3D12, DXR 1.1 inline ray queries)
 
 - `rt=1` (GRAPHICS > RTX: RAY-TRACED SHADOWS, next start; needs ENHANCED LIGHTING, Direct3D 12, DXR 1.1). The casters the shadow map already gathers (rgl_ff.c, stage group 0, fighters 1..15) are committed each frame to `rt_scene` (rgl_d3d12.c): one BLAS per group + a TLAS, two sets alternating, built at the end of the frame's list; bound as root SRV t4.

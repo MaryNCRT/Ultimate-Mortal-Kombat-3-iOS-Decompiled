@@ -374,8 +374,23 @@ float3 dynamic(float3 P, float3 N, float3 albedo, float smap, bool fighter, int 
             if (type == 1)
                 att *= smoothstep(L.cone.y, L.cone.x, dot(-Ld, normalize(L.dir.xyz)));
 #ifdef UMK3_RT
-            if (rt_on())                // RTX: every light's shadows, traced
-                att *= att > 0.02 ? rt_clear(P + Ld * 0.03, Ld, max(dist - 0.06, 0.01), self) : 1.0;
+            if (rt_on()) { if (att > 0.02) {
+                // RTX: every light's shadows, traced -- to a sphere, not a
+                // point (a tenth of its reach), so the edge is soft and its
+                // own torch bowl or pool does not cut it sharp (Mary: the
+                // flame's cut on the wall); stopped short of the sphere
+                float r = L.pos.w * 0.1, vis = 0.0;
+                float3 T, B, O = P + Ld * 0.03;
+                float turn = 6.2831853 * rt_noise(P.xy * 731.0 + P.z * 113.0);
+                rt_basis(Ld, T, B);
+                [loop] for (int k = 0; k < 3; k++) {
+                    float a = k * 2.3999632 + turn, rr = sqrt((k + 0.5) / 3.0) * r;
+                    float3 Q = L.pos.xyz + (T * cos(a) + B * sin(a)) * rr - O;
+                    float lq = length(Q);
+                    vis += rt_clear(O, Q / max(lq, 1e-4), max(lq - r, 0.01), self);
+                }
+                att *= vis / 3.0;
+            } }
             else
 #endif
             if (L.cone.z > 0.5)         // a light with shadows (point_shadows)

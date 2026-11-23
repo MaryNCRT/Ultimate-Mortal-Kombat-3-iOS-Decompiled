@@ -1739,6 +1739,7 @@ static void dx_present(void)
                                     : rgl_swap_interval > 4 ? 4 : (UINT)rgl_swap_interval, 0);
     t3 = rgl_now_ms();
     wait_gpu();
+    rgl_present_work_ms = rgl_now_ms() - t0;   /* the pacing's share (rgl.h) */
     /* LOW LATENCY: one frame in DXGI's queue, and with vsync the present
      * waits here until the display has taken it -- as glFinish after the
      * swap does on OpenGL -- so the pacing in game_main.c measures from the

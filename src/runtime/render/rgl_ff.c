@@ -1258,6 +1258,7 @@ static void update_mvp(void)
  * camera is set (rgl_shadow_camera). */
 int rgl_shadows;
 double rgl_shadow_ms;
+double rgl_present_work_ms;             /* rgl.h */
 int rgl_shadow_tris;
 
 #define SHADOW_SIZE 4096                /* 64 MB: the fighters' texels as fine as at 2048 */

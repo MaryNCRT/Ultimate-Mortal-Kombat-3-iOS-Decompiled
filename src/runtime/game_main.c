@@ -3379,6 +3379,7 @@ static void fit_view(int ww, int wh, int *vx, int *vy, int *vw, int *vh)
  * work itself, and this never sleeps. UMK3_FRAME_DELAY=0 turns it off. */
 static double g_pace_vbl = -1.0, g_pace_gap, g_pace_work = 0.004;
 static double g_pace_start;
+static double g_pace_cpu;               /* this frame's work before the swap */
 
 /* Only on a screen of about 60 Hz. A faster one already shows a tick within
  * a few ms of making it: the loop spins, reading the keys, until the tick is
@@ -3422,14 +3423,27 @@ static void pace_frame(void)
         }
     }
     period = (hz >= 50 && hz <= 65) ? 1.0 / hz : 0.0;
+    {
+        /* the frame's work: before the swap, and the swap's own (the GPU's
+         * commands, the Present call with DLSS 5 in it: rgl_present_work_ms).
+         * Counted from the CPU's part alone, the wait after the swap left
+         * no room for the GPU's 5-13 ms with RTX or DLSS 5, a refresh was
+         * missed, the margin grew 1 ms and shrank again: a 33 ms frame every
+         * second or so -- the "lag" (Mary, 2026-11-22) */
+        double w = g_pace_cpu + rgl_present_work_ms * 1e-3;
+        if (w > 0.014)                  /* a load, not a frame: do not wait for long */
+            w = 0.014;
+        /* the longest lately: up at once, down over a second or so */
+        g_pace_work = w > g_pace_work ? w : g_pace_work * 0.98 + w * 0.02;
+    }
     if (g_pace_vbl >= 0.0) {
         double d = now - g_pace_vbl;
         g_pace_gap = g_pace_gap * 0.95 + d * 0.05;
         if (period > 0.0 && d > period * 1.5 && d < 0.1) {
             /* a refresh missed: the wait was too long, keep more margin */
             g_pace_work += 0.001;
-            if (g_pace_work > 0.012)
-                g_pace_work = 0.012;
+            if (g_pace_work > 0.014)
+                g_pace_work = 0.014;
         }
     }
     g_pace_vbl = now;
@@ -3467,10 +3481,7 @@ static void pace_work_end(void)
 {
     double w = plat_time() - g_pace_start;
 
-    if (w > 0.012)          /* a load, not a frame: do not wait for long */
-        w = 0.012;
-    /* the longest lately: up at once, down over a second or so */
-    g_pace_work = w > g_pace_work ? w : g_pace_work * 0.98 + w * 0.02;
+    g_pace_cpu = w;         /* pace_frame adds the swap's and keeps the estimate */
 }
 
 /* ------------------------------------------------- the settings menu's side

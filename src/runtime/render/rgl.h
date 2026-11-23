@@ -301,6 +301,11 @@ extern int   rgl_contact_shadows;
 extern int   rgl_ao_debug;
 extern float rgl_ao_radius, rgl_ao_intensity, rgl_ao_bias, rgl_ao_floor, rgl_ao_scale;
 extern double rgl_shadow_ms;           /* this frame's map and held draws, for the log */
+/* the last present's own work: the frame's commands run on the GPU, the
+ * Present call (DLSS 5's pass is in it) and the wait for the GPU -- not
+ * the wait for the refresh. game_main.c's pacing counts it as the frame's
+ * work; 0 where the backend does not measure it */
+extern double rgl_present_work_ms;
 extern double rgl_game_ms;             /* game_main.c: this frame's ticks (logic and draws), for the log */
 extern int    rgl_game_ticks;          /* and how many ran */
 extern long   rgl_smooth_tris;         /* smooth_models.c: the frame before's smoothed triangles */

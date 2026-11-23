@@ -375,7 +375,7 @@ void rgl_present(void)
             }
             memset(port_prof_ms, 0, sizeof port_prof_ms);
             if (rgl_profile_dump)               /* UMK3_PROFILE (win32_gl.c) */
-                rgl_profile_dump(t1 - last > 100.0);
+                rgl_profile_dump(t1 - last > (getenv("UMK3_PROFILE_MS") ? atof(getenv("UMK3_PROFILE_MS")) : 100.0));
             frame_ms += t1 - last;
             present_ms += t1 - t0;
             shadow_ms += rgl_shadow_ms;
