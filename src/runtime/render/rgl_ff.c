@@ -280,9 +280,44 @@ void rgl_ff_stop(void)
 static int g_had_scene;                 /* UMK3_LOG_SHADOW: a lit scene this frame */
 static unsigned g_frames_n;             /* frames presented, for the map's last place */
 static void rt_commit(void);
+
+/* a cut (umk3_dlss5_cuts), DLSS 5's history started again: into or out of
+ * a fight, or the 3D scene back after frames without it -- at most one in
+ * CUT_GAP frames. Not a camera turn: the round's intro sweeps the camera
+ * past 20 degrees a frame for a second, and a reset each frame there
+ * looked as if DLSS 5 went off (Mary, 2026-11-22) */
+#ifdef _WIN32
+extern __declspec(dllexport) volatile long umk3_dlss5_cuts;   /* defined below */
+#else
+extern volatile long umk3_dlss5_cuts;
+#endif
+static int g_cam_frame;                 /* tentative: defined with the layers below */
+#define CUT_GAP 120
+
+static void cuts_frame(void)
+{
+    static int was_fight = -1, was_cam = 0, gone = 0;
+    static unsigned last_cut;
+    int cut = 0;
+
+    if (rgl_in_fight != was_fight)
+        cut = 1;
+    if (g_cam_frame && !was_cam && gone >= 10)  /* back after a real absence */
+        cut = 1;
+    gone = g_cam_frame ? 0 : gone + 1;
+    if (cut && (last_cut == 0 || g_frames_n - last_cut >= CUT_GAP)) {
+        umk3_dlss5_cuts++;
+        last_cut = g_frames_n;
+    }
+    was_fight = rgl_in_fight;
+    was_cam = g_cam_frame;
+    g_cam_frame = 0;
+}
+
 void rgl_ff_frame(void)
 {
     g_frames_n++;
+    cuts_frame();
     if (getenv("UMK3_LOG_SHADOW")) {
         static int last = -1;
         if (g_had_scene != last)
@@ -1373,6 +1408,16 @@ static void rt_commit(void)
         g_rt_n[g] = 0;
     g_rt_total = 0;
 }
+/* DLSS 5: the scene's cuts, counted for our AIO build (tools/neural/
+ * patch_aio.py), which reads this from the exe by name and resets the neural
+ * pass's and DLAA's history when it changes -- else a new round, a load or a
+ * camera jump carried the last picture's light for a second or two (Mary) */
+#ifdef _WIN32
+__declspec(dllexport) volatile long umk3_dlss5_cuts;
+#else
+volatile long umk3_dlss5_cuts;
+#endif
+static int g_cam_frame;                 /* the 3D scene's camera was on this frame */
 int rgl_in_fight = 1;                   /* rgl.h: a fight is on (game_main.c sets it) */
 static int g_scene_cam;                 /* the 3D scene's camera is on (rgl_layers) */
 
@@ -1381,6 +1426,8 @@ void rgl_shadow_camera(int on)
     mat4 inv;
 
     g_scene_cam = on;
+    if (on)
+        g_cam_frame = 1;
 
     if (on && B && rgl_shadows && B->shadow_map && invert(&g_mv.s[g_mv.top], &inv)) {
         /* another camera (the character select draws each fighter with
