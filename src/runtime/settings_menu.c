@@ -138,7 +138,8 @@ enum {
     R_DLSS5,                            /* DLSS 5 at the next start (neural_mod.c) */
     R_DLSS5_STAGE, R_DLSS5_FIGHT,       /* its layers: the stage, the fighters */
     R_DLSS5_PRESET,                     /* its preset: the model and strengths */
-    R_DLSS5_NR                          /* its neural rendering on/off (DLSS/DLAA alone) */
+    R_DLSS5_NR,                         /* its neural rendering on/off (DLSS/DLAA alone) */
+    R_DLSS5_SCALE                       /* its scaling: DLAA, quality, balanced, performance */
 };
 
 /* BLOOM's steps, percent (gfx_preset.h gfx_bloom): ENHANCED sets the third */
@@ -857,6 +858,13 @@ static void build(void)
             add(R_DLSS5_NR, 0, tx("  DLSS 5: RENDERIZADO NEURONAL", "  DLSS 5: NEURAL RENDERING"), "< %s >",
                 neural_nr ? tx("ACTIVADO", "ON") : tx("DESACTIVADO (SOLO DLAA)", "OFF (DLAA ONLY)"));
             g_rows[g_n - 1].en = neural_dlss5;
+            {
+                static const char *const sc_es[4] = { "DLAA (NATIVO)", "CALIDAD", "EQUILIBRADO", "RENDIMIENTO" };
+                static const char *const sc_en[4] = { "DLAA (NATIVE)", "QUALITY", "BALANCED", "PERFORMANCE" };
+                add(R_DLSS5_SCALE, 0, tx("  DLSS 5: ESCALADO", "  DLSS 5: SCALING"), "< %s >",
+                    tx(sc_es[neural_scale & 3], sc_en[neural_scale & 3]));
+                g_rows[g_n - 1].en = neural_dlss5;
+            }
             add(R_DLSS5_PRESET, 0, tx("  DLSS 5: PRESET", "  DLSS 5: PRESET"), "< %s >",
                 tx(neural_presets[neural_preset_index].es, neural_presets[neural_preset_index].en));
             g_rows[g_n - 1].en = neural_dlss5;
@@ -1031,7 +1039,7 @@ static int has_value(int kind)
     switch (kind) {
     case R_DISPLAY: case R_MONITOR: case R_RES: case R_RRES: case R_AA: case R_TEXQ:
     case R_ASPECT: case R_UI: case R_HIDE: case R_LANG: case R_REND: case R_SMOOTH: case R_SMODEL: case R_VSYNC: case R_LOWLAT: case R_NOOB: case R_CORNER: case R_CLICKS: case R_SLIDE: case R_AUDIODEV: case R_GPU: case R_PLAYER: case R_LAYOUT:
-    case R_GQ: case R_CONTACT: case R_RTX: case R_BLOOM: case R_TONEMAP: case R_DLSS5: case R_DLSS5_STAGE: case R_DLSS5_FIGHT: case R_DLSS5_PRESET: case R_DLSS5_NR:
+    case R_GQ: case R_CONTACT: case R_RTX: case R_BLOOM: case R_TONEMAP: case R_DLSS5: case R_DLSS5_STAGE: case R_DLSS5_FIGHT: case R_DLSS5_PRESET: case R_DLSS5_NR: case R_DLSS5_SCALE:
     case R_RTSHADOW: case R_AO: case R_AODBG: case R_DEVICE: case R_PICON: case R_PCOLOR: case R_PSHADE: case R_PCOLOR2:
     case R_PICONS:
         return 1;
@@ -1361,6 +1369,10 @@ static void change(int kind, int d)
         neural_nr = !neural_nr;
         g_dirty = 1;
         return;
+    case R_DLSS5_SCALE:                 /* umk3.ini, for the next start */
+        neural_scale = wrap(neural_scale + d, 4);
+        g_dirty = 1;
+        return;
     case R_DLSS5_PRESET:                /* umk3.ini, for the next start */
         neural_preset_index = wrap(neural_preset_index + d, NEURAL_PRESETS);
         g_dirty = 1;
@@ -1654,6 +1666,14 @@ static int drop_fill(int kind)
         snprintf(L[1], 48, "%s", tx("ACTIVADO", "ON"));
         n = 2;
         g_drop_cur = neural_nr ? 1 : 0;
+        break;
+    case R_DLSS5_SCALE:
+        snprintf(L[0], 48, "%s", tx("DLAA (NATIVO)", "DLAA (NATIVE)"));
+        snprintf(L[1], 48, "%s", tx("CALIDAD", "QUALITY"));
+        snprintf(L[2], 48, "%s", tx("EQUILIBRADO", "BALANCED"));
+        snprintf(L[3], 48, "%s", tx("RENDIMIENTO", "PERFORMANCE"));
+        n = 4;
+        g_drop_cur = neural_scale & 3;
         break;
     case R_DLSS5_PRESET:
         for (n = 0; n < NEURAL_PRESETS; n++)
@@ -2654,6 +2674,7 @@ static void save_ini(void)
     put("dlss5_preset", "%s", neural_presets[neural_preset_index].key);
     put("dlss5_layers", "%d", neural_layers);
     put("dlss5_neural", "%d", neural_nr);
+    put("dlss5_scale", "%d", neural_scale);
     put("dlss5_stage", "%.2f", neural_stage);
     put("dlss5_fighters", "%.2f", neural_fighters);
     put("replay_scale", "%d", dbg_replay_pct);

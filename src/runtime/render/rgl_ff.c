@@ -3679,8 +3679,80 @@ static unsigned char bf(GLenum f)
 }
 
 /* the assembled primitives to the backend */
+/* The Waterfront's water (meshes water000..031): a row of quads, each the
+ * same atlas cell from u 0.01 to 0.24 -- inset from the cell's edges so
+ * the neighbour does not bleed in. Quad after quad, the picture's 0.24
+ * column met the next one's 0.01: not neighbours, a jump at every join, a
+ * line running into the distance (Mary: the water's seam). Every other
+ * quad mirrored across its cell: at each join both sides read the same
+ * column. Waves have no left or right to give it away. */
+static void water_mirror(rgl_vtx *v, int n)
+{
+    int q, i;
+    for (q = 0; q + 5 < n; q += 6) {
+        float x0 = 1e30f, x1 = -1e30f, u0 = 1e30f, u1 = -1e30f, w;
+        long idx;
+        for (i = 0; i < 6; i++) {
+            const rgl_vtx *a = &v[q + i];
+            if (a->p[0] < x0) x0 = a->p[0];
+            if (a->p[0] > x1) x1 = a->p[0];
+            if (a->u < u0) u0 = a->u;
+            if (a->u > u1) u1 = a->u;
+        }
+        w = x1 - x0;
+        if (w < 1e-3f)
+            continue;
+        idx = (long)floorf((x0 + 4096.0f) / w + 0.5f);
+        if (idx & 1)
+            for (i = 0; i < 6; i++)
+                v[q + i].u = u0 + u1 - v[q + i].u;
+    }
+}
+
+/* an atlas cell: every texture coordinate inside the texture and spanning
+ * less than half of it -- one picture of several in the texture (the
+ * Waterfront's water, 0.01..0.24 a quad, a cell of four). Mip levels blend
+ * a cell's edge with its neighbour's, so forced on such a draw they drew
+ * a line at every quad's edge (Mary: the water's seam) */
+static int atlas_cell(const rgl_vtx *v, int n)
+{
+    float u0 = 1e30f, u1 = -1e30f, v0 = 1e30f, v1 = -1e30f;
+    int i;
+    for (i = 0; i < n; i++) {
+        if (v[i].u < u0) u0 = v[i].u;
+        if (v[i].u > u1) u1 = v[i].u;
+        if (v[i].v < v0) v0 = v[i].v;
+        if (v[i].v > v1) v1 = v[i].v;
+    }
+    return u0 >= -0.001f && u1 <= 1.001f && v0 >= -0.001f && v1 <= 1.001f
+           && (u1 - u0 < 0.5f || v1 - v0 < 0.5f);
+}
+
+#define SKY_DIST 70.0f                  /* submit: the far backdrop, world units from the eye */
 static void submit(int topo, rgl_vtx *v, int n)
 {
+    int backdrop = 0;
+    if (getenv("UMK3_LOG_WATER") && g_mesh_now && strncmp(g_mesh_now, "water", 5) == 0 && n > 0) {
+        static unsigned last_frame;     /* port diagnostic: each water mesh's uv range, two frames */
+        static int frames;
+        float u0 = 1e30f, u1 = -1e30f, w0 = 1e30f, w1 = -1e30f, x0 = 1e30f, x1 = -1e30f;
+        int i;
+        for (i = 0; i < n; i++) {
+            if (v[i].u < u0) u0 = v[i].u;
+            if (v[i].u > u1) u1 = v[i].u;
+            if (v[i].v < w0) w0 = v[i].v;
+            if (v[i].v > w1) w1 = v[i].v;
+            if (v[i].p[0] < x0) x0 = v[i].p[0];
+            if (v[i].p[0] > x1) x1 = v[i].p[0];
+        }
+        if (g_frames_n != last_frame) {
+            last_frame = g_frames_n;
+            frames++;
+        }
+        if (frames > 300 && frames < 303)
+            printf("water: frame %u %s n %d x %.2f..%.2f u %.3f..%.3f v %.3f..%.3f tex %d\n", g_frames_n, g_mesh_now,
+                   n, x0, x1, u0, u1, w0, w1, S.texture);
+    }
     rgl_pipe p;
     rgl_frag f;
     rgl_samp sm;
@@ -3742,6 +3814,30 @@ static void submit(int topo, rgl_vtx *v, int n)
         f.bump = 0.0f;                  /* the stage's file: this one flat */
     else if (f.bump > 0.0f && !SH.caster && g_sky_stage)
         f.bump *= g_cfg.relief;         /* the stage's file: more or less relief */
+    if (g_sh_on && topo == RGL_TRIS && n >= 6 && !g_sub_idx && g_mesh_now
+        && strncmp(g_mesh_now, "water", 5) == 0)
+        water_mirror(v, n);             /* the Waterfront's seams */
+    /* the far backdrop -- the sky, a skyline -- as the game drew it: its
+     * texture alone, no relief, no lights, no shadow, none of RTX (Mary:
+     * relief on the sky looked wrong). Past SKY_DIST from the eye, the
+     * fight's arena being within about 30 */
+    if (g_sh_on && !SH.caster && topo == RGL_TRIS && n > 0) {
+        float c[3] = { 0.0f, 0.0f, 0.0f }, d2;
+        (void)0;
+        int i, k;
+        for (i = 0; i < n; i++)
+            for (k = 0; k < 3; k++)
+                c[k] += v[i].p[k];
+        d2 = 0.0f;
+        for (k = 0; k < 3; k++) {
+            float e = c[k] / (float)n - SH.inv_view.m[12 + k];
+            d2 += e * e;
+        }
+        if (d2 > SKY_DIST * SKY_DIST) {
+            f.bump = 0.0f;
+            backdrop = 1;               /* unlit after the lights' notes, below */
+        }
+    }
     /* DYNAMIC LIGHTS: what is lit by them, what gives them */
     if (g_sh_on && rgl_shadows && topo == RGL_TRIS) {
         if (p.blend && p.dst == RGL_BF_ONE)
@@ -3764,6 +3860,10 @@ static void submit(int topo, rgl_vtx *v, int n)
             f.shadow = RGL_SHADOW_NONE;
         }
     }
+    if (backdrop) {                     /* the far backdrop: its texture alone */
+        f.lit = 0;
+        f.shadow = RGL_SHADOW_NONE;
+    }
 
     memset(&sm, 0, sizeof sm);
     if (t) {
@@ -3780,7 +3880,7 @@ static void submit(int topo, rgl_vtx *v, int n)
          * none -- the iPhone's screen was too small to show the moire a far
          * wall makes at PC resolutions (Mary). Not a texture changed in
          * place: its levels are the old picture */
-        if (rgl_shadows && g_sh_on && t->levels > 1 && !t->subbed) {
+        if (rgl_shadows && g_sh_on && t->levels > 1 && !t->subbed && !atlas_cell(v, n)) {
             sm.min_linear = 1;
             sm.mip = 2;
             if (sm.aniso < 16)

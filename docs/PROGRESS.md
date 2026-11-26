@@ -136,6 +136,18 @@ built and checked in Direct3D 12 only; see the log entry below. Phase 3
 
 ## Detailed log (newest first)
 
+### 2026-11-26 (3) -- Mary's list: training arrows, photo presets/height/depth, DLSS 5 start, water seam, DLSS 5 scaling
+
+- **Training input column (left/right never shown)**: with 4/5 buttons the engine word goes through GetArcadeJoyBits, which turns toward/away (0x800/0x1000) into left/right and clears them; and down-forward became plain down. The column (GameCode.c PortTrainInput) now takes the directions from the stick as pressed (JoystickState, GetReal6ButtonJoyBits' ranges) made toward/away with the fighter's facing, the buttons from the engine. Verified by script (UMK3_PADS, UMK3_BUTTONS=5, UMK3_PRACTICE): right, left, down-right (one diagonal arrow), button, up-left all shown. Diagnostic: UMK3_LOG_TRAIN.
+- **Photo mode presets**: four own slots (MINE 1-4) after the eight in EFFECTS > PRESET; EFFECTS > SAVE PRESET (left/right the slot, Enter saves IMAGE+EFFECTS); kept in photo_mode.ini (user1..4=). Not tried in game.
+- **Photo mode camera height**: CAMERA > HEIGHT (the pad had none; keys E/Q existed). Not tried in game.
+- **Photo mode, fighter behind drawn over the other**: RenderLevelPlayers clears depth after the "back" fighter (the fight's order, not the turned camera's); not in photo mode now. Not tried in game.
+- **DLSS 5 start**: our AIO's start guard 15 s -> 1.5 s (patch_aio.py #6; the 30 stable frames kept): measured in Test, the model made 7-12 s after start (during start/menus) instead of 15 s + 5 s later. The 4-6 s NGX creation itself unchanged. Notice shown from 0.5 s. Loads: menus 1.6 s, fight 1.6 s.
+- **Waterfront water seam**: the water quads each map the same atlas cell u 0.01..0.24; joins showed a jump. Every other quad mirrored (rgl_ff.c water_mirror) -- gone in the capture. Also fixed on the way: relief's mip level was floored (a step where triangles stretch differently), and forced mips no longer on atlas-cell draws.
+- **Sky / backdrop**: draws more than 70 units from the eye drawn as the game did (no relief, lights, shadows, RTX); POM and RTX relief fade out 25-45 units. Parallax stripes fix actually applied this time (8-32 layers, faded edge-on) -- an earlier edit had not landed.
+- **Street seam (Mary: "la costura es de la calle")**: not visible in the current capture; may have been the parallax stripes. Open until Mary confirms.
+- **DLSS 5 scaling**: GRAPHICS > DLSS 5 > SCALING (dlss5_scale=0 DLAA, 1 quality, 2 balanced, 3 performance) via the AIO's SourceResolutionOverride (nearest size of the screen's shape to 0.667/0.58/0.5). Verified: quality -> 1280x720 -> 1920x1080, `DLSS SR quality=2`, GPU 4.0 ms vs ~6. The game still draws at full size; the neural pass is what is cheaper.
+
 ### 2026-11-26 (2) -- reflections on at full speed; dry polished floor; lamp spots; aura; parallax heights
 
 - **Reflections back on by default** (UMK3_NO_REFL=1 turns off). The HD install's 2 fps were (a) the mirror pass re-run at every `scene_flush` (~25 a frame with the HD stage) -- now once a frame, bound until the frame's end -- and (b) a `getenv()` per vertex in it. Measured in Mary's Test (HD, AA x8, DLSS 5, RTX): 56-58 fps, the pass < 1 ms.

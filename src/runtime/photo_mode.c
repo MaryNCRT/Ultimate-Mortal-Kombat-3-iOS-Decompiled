@@ -113,7 +113,7 @@ static long  g_ticks;                   /* photo_tick's calls, for the log */
 static int   g_via_key;                 /* photo_open: from the shortcut */
 
 enum { CAT_CAMERA, CAT_IMAGE, CAT_EFFECTS, CAT_CHAR, CAT_SCENE, CAT_CAPTURE, CAT_N };
-static const int g_rows_base[CAT_N] = { 7, 11, 10, 7, 6, 4 };
+static const int g_rows_base[CAT_N] = { 8, 11, 11, 7, 6, 4 };
 
 /* phase 4: the photo's resolution (0 the game's, 1 1440p, 2 4K, 3 the
  * game's twice over, brought down: supersampling), the frame drawn so in a
@@ -143,6 +143,12 @@ static const FX k_fx0 = { 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 
                           0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 0, 0 };
 static FX  g_fx = { 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
                     0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 0, 0 };
+/* the player's own presets (Mary): MINE 1..4 after the cinematic ones in
+ * PRESET, saved from EFFECTS > SAVE PRESET, kept in photo_mode.ini */
+#define USER_PRESETS 4
+static FX  g_user[USER_PRESETS];
+static int g_user_set[USER_PRESETS];
+static int g_save_slot;
 static int g_fx_depth;                  /* the last pass had the scene's depth */
 #define FILTERS 9
 static int fx_dof_possible(void);
@@ -436,7 +442,11 @@ static void row_text(int c, int r, char *label, char *value, int n)
         snprintf(label, n, "%s", tx("ALABEO", "ROLL"));
         snprintf(value, n, "%+.0f", DEG(g_roll));
         break;
-    case CAT_CAMERA * 16 + 6:
+    case CAT_CAMERA * 16 + 6:           /* the camera up and down (Mary): the pad had no way */
+        snprintf(label, n, "%s", tx("ALTURA", "HEIGHT"));
+        snprintf(value, n, "%+.0f%%", (g_tgt[2] - g_at0[2]) / g_d0 * 100.0f);
+        break;
+    case CAT_CAMERA * 16 + 7:
         snprintf(label, n, "%s", tx("RESTABLECER CAMARA", "RESET CAMERA"));
         break;
     case CAT_IMAGE * 16 + 0: snprintf(label, n, "%s", tx("EXPOSICION", "EXPOSURE"));
@@ -569,9 +579,19 @@ static void row_text(int c, int r, char *label, char *value, int n)
         static const char *const p_en[PRESETS] = { "NONE", "CINEMA", "NOIR", "BLOOD", "OUTWORLD",
                                                    "RETRO", "DRAMATIC", "COLD" };
         snprintf(label, n, "%s", tx("PREAJUSTE", "PRESET"));
-        snprintf(value, n, "%s", es() ? p_es[g_preset] : p_en[g_preset]);
+        if (g_preset >= PRESETS) {
+            int u = g_preset - PRESETS;
+            snprintf(value, n, "%s %d%s", tx("MIO", "MINE"), u + 1,
+                     g_user_set[u] ? "" : tx(" (VACIO)", " (EMPTY)"));
+        } else
+            snprintf(value, n, "%s", es() ? p_es[g_preset] : p_en[g_preset]);
         break;
     }
+    case CAT_EFFECTS * 16 + 10:
+        snprintf(label, n, "%s", tx("GUARDAR PRESET", "SAVE PRESET"));
+        snprintf(value, n, "%s %d%s", tx("MIO", "MINE"), g_save_slot + 1,
+                 g_user_set[g_save_slot] ? tx(" (SOBRESCRIBIR)", " (OVERWRITE)") : "");
+        break;
     default:
         label[0] = 0;
     }
@@ -674,7 +694,8 @@ static void row_act(int d)
     case CAT_CAMERA * 16 + 3: g_dist *= d > 0 ? 1.1f : d < 0 ? 1.0f / 1.1f : 1.0f; break;
     case CAT_CAMERA * 16 + 4: g_zoom += 0.1f * (float)d; break;
     case CAT_CAMERA * 16 + 5: g_roll += RAD(2.0f) * (float)d; break;
-    case CAT_CAMERA * 16 + 6: if (!d) cam_reset(); break;
+    case CAT_CAMERA * 16 + 6: g_tgt[2] += g_d0 * 0.05f * (float)d; g_focus = 0; break;
+    case CAT_CAMERA * 16 + 7: if (!d) cam_reset(); break;
 #define STEP(v, st, lo, hi) (v) = clampf((v) + (st) * (float)d, (lo), (hi))
     case CAT_IMAGE * 16 + 0:  STEP(g_fx.ev, 0.1f, -2.0f, 2.0f); break;
     case CAT_IMAGE * 16 + 1:  STEP(g_fx.bri, 0.02f, -0.3f, 0.3f); break;
@@ -743,8 +764,25 @@ static void row_act(int d)
     case CAT_CAPTURE * 16 + 1: g_res = (g_res + (d < 0 ? 3 : 1)) % 4; break;
     case CAT_CAPTURE * 16 + 3: if (!d) open_folder(); break;
     case CAT_EFFECTS * 16 + 9:
-        g_preset = (g_preset + (d < 0 ? PRESETS - 1 : 1)) % PRESETS;
-        fx_preset(g_preset);
+        g_preset = (g_preset + (d < 0 ? PRESETS + USER_PRESETS - 1 : 1)) % (PRESETS + USER_PRESETS);
+        if (g_preset >= PRESETS) {
+            if (g_user_set[g_preset - PRESETS])
+                g_fx = g_user[g_preset - PRESETS];
+        } else
+            fx_preset(g_preset);
+        break;
+    case CAT_EFFECTS * 16 + 10:         /* left / right the slot, Enter saves */
+        if (d)
+            g_save_slot = (g_save_slot + (d < 0 ? USER_PRESETS - 1 : 1)) % USER_PRESETS;
+        else {
+            g_user[g_save_slot] = g_fx;
+            g_user_set[g_save_slot] = 1;
+            g_preset = PRESETS + g_save_slot;
+            prefs_save();
+            snprintf(g_toast, sizeof g_toast, "%s %d", tx("PRESET GUARDADO: MIO", "PRESET SAVED: MINE"),
+                     g_save_slot + 1);
+            g_toast_t = 180;
+        }
         break;
     default: break;
     }
@@ -1186,6 +1224,16 @@ static void prefs_save(void)
     fprintf(f, "vig=%g\ngrain=%g\nca=%g\nbloom=%g\nfocus=%g\naperture=%g\nfilter=%d\ndof=%d\n",
             g_fx.vig, g_fx.grain, g_fx.ca, g_fx.bloom, g_fx.focus, g_fx.aperture, g_fx.filter, g_fx.dof);
     fprintf(f, "preset=%d\nhud=%d\ngrid=%d\nres=%d\n", g_preset, g_show_hud, g_grid, g_res);
+    {
+        int u;
+        for (u = 0; u < USER_PRESETS; u++)
+            if (g_user_set[u]) {
+                const FX *x = &g_user[u];
+                fprintf(f, "user%d=%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%d,%d\n", u + 1,
+                        x->ev, x->bri, x->con, x->sat, x->temp, x->tint, x->gamma, x->sharp, x->hi, x->sh,
+                        x->vig, x->grain, x->ca, x->bloom, x->focus, x->aperture, x->filter, x->dof);
+            }
+    }
     fclose(f);
 }
 
@@ -1225,7 +1273,19 @@ static void prefs_load(void)
 #undef K
         if (strcmp(line, "filter") == 0) g_fx.filter = atoi(v) >= 0 && atoi(v) < FILTERS ? atoi(v) : 0;
         if (strcmp(line, "dof") == 0) g_fx.dof = atoi(v) != 0;
-        if (strcmp(line, "preset") == 0) g_preset = atoi(v) >= 0 && atoi(v) < PRESETS ? atoi(v) : 0;
+        if (strcmp(line, "preset") == 0) g_preset = atoi(v) >= 0 && atoi(v) < PRESETS + USER_PRESETS ? atoi(v) : 0;
+        if (strncmp(line, "user", 4) == 0 && line[4] >= '1' && line[4] < '1' + USER_PRESETS && !line[5]) {
+            FX x = k_fx0;
+            int u = line[4] - '1';
+            if (sscanf(v, "%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%d,%d",
+                       &x.ev, &x.bri, &x.con, &x.sat, &x.temp, &x.tint, &x.gamma, &x.sharp, &x.hi, &x.sh,
+                       &x.vig, &x.grain, &x.ca, &x.bloom, &x.focus, &x.aperture, &x.filter, &x.dof) == 18) {
+                if (x.filter < 0 || x.filter >= FILTERS)
+                    x.filter = 0;
+                g_user[u] = x;
+                g_user_set[u] = 1;
+            }
+        }
         if (strcmp(line, "hud") == 0) g_show_hud = atoi(v) != 0;
         if (strcmp(line, "grid") == 0) g_grid = atoi(v) != 0;
         if (strcmp(line, "res") == 0) g_res = atoi(v) >= 0 && atoi(v) < 4 ? atoi(v) : 0;

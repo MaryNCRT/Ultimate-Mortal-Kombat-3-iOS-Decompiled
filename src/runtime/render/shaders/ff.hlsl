@@ -111,8 +111,15 @@ static float3 nb;
 // was on the whole
 float relief(float2 uv, float k)
 {
-    float lod = max(floor(tex.CalculateLevelOfDetail(smp, uv)), 0.0);
-    float2 g = (slope(uv, lod) + 0.5 * slope(uv, lod + 2.0)) * k;
+    // the level between two mips, not rounded: where a quad's two triangles
+    // stretch the texture differently (the Waterfront's water) the rounded
+    // level jumped at their diagonal and the relief with it -- the seam
+    // Mary saw, with or without DLSS 5
+    float lf = max(tex.CalculateLevelOfDetail(smp, uv), 0.0);
+    float lod = floor(lf), fr = lf - lod;
+    float2 g0 = slope(uv, lod) + 0.5 * slope(uv, lod + 2.0);
+    float2 g1 = slope(uv, lod + 1.0) + 0.5 * slope(uv, lod + 3.0);
+    float2 g = lerp(g0, g1, fr) * k;
     float3 l = normalize(RL);
     nb = normalize(float3(-g, 1.0));
     return clamp(1.0 + 1.5 * (dot(nb, l) - l.z), 0.4, 1.6);
@@ -174,6 +181,16 @@ RaytracingAccelerationStructure rt_scene : register(t4);
 Texture2D rmap : register(t5);          // REFLECTIONS: the scene mirrored under the floor
 SamplerState rsamp : register(s2);      // linear, clamped
 
+// RTX HEIGHT and RELIEF: only near the fighters -- the far backdrops (a
+// skyline, a sky) are painted pictures, and relief on them looked wrong
+// (Mary); full to RT_NEAR world units from the eye, none past RT_FAR
+#define RT_NEAR 25.0
+#define RT_FAR 45.0
+float rt_near(float3 P)
+{
+    return 1.0 - smoothstep(RT_NEAR, RT_FAR, length(P - lb_eye.xyz));
+}
+
 // RTX HEIGHT: parallax occlusion mapping on the stage's textures, the
 // texture's brightness its height map (the game has none: made per pixel,
 // Mary's "per-pixel"): the view ray marched down through it in RT_POM
@@ -205,10 +222,17 @@ float2 rt_parallax(float2 uv, float3 P, float3 fn)
     float3 gu = (c1 * dux.x + c2 * duy.x) / det;     // the uv's gradient on the surface
     float3 gv = (c1 * dux.y + c2 * duy.y) / det;
     float nv = max(dot(N, V), 0.25);
-    float2 full = -float2(dot(V, gu), dot(V, gv)) / nv * RT_POM_DEPTH;   // the deepest point's shift
-    float2 st = full / RT_POM, cuv = uv, prev = uv;
-    float layer = 1.0 / RT_POM, cur = 0.0, h = rt_depth_at(uv, dux, duy), hp = h;
-    [loop] for (int k = 0; k < RT_POM && cur < h; k++) {
+    // seen edge-on the layers showed as stripes (Mary: the road's lines): more
+    // layers the flatter the view, and the relief faded out where flattest,
+    // and far away (rt_near)
+    float depth = RT_POM_DEPTH * smoothstep(0.12, 0.45, dot(N, V)) * rt_near(P);
+    if (depth <= 0.0)
+        return uv;
+    int layers = (int)lerp(32.0, 8.0, saturate(dot(N, V)));
+    float2 full = -float2(dot(V, gu), dot(V, gv)) / nv * depth;   // the deepest point's shift
+    float2 st = full / layers, cuv = uv, prev = uv;
+    float layer = 1.0 / layers, cur = 0.0, h = rt_depth_at(uv, dux, duy), hp = h;
+    [loop] for (int k = 0; k < layers && cur < h; k++) {
         prev = cuv;
         hp = h;
         cuv += st;
@@ -1048,7 +1072,7 @@ float4 ps(PSIn i) : SV_Target
                         if (fl)
                             g_shine = 0.0;
                         float hgt = pow(saturate(dot(al, float3(0.299, 0.587, 0.114)) * 2.0), 0.6);
-                        N = rt_bump(N, i.p, hgt * (fl ? 0.06 : 0.025));
+                        N = rt_bump(N, i.p, hgt * (fl ? 0.06 : 0.025) * rt_near(i.p));
                     }
 
                 }

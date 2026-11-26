@@ -76,3 +76,13 @@ rep('    const bool pending_history_reset = resume_staged_nvof ?\n',
     '    const bool pending_history_reset = resume_staged_nvof ?\n')
 open(p, 'w', encoding='utf-8', newline='').write(s)
 print('patched (cuts)')
+
+# 6. the start sooner: the AIO waits 15 s of a stable picture before it makes
+#    NVIDIA's model (a 4-6 s Present). UMK3 PC opens its borderless window at
+#    the monitor's size from the first frame, so 1.5 s (and the 30 stable
+#    frames it still asks for) is enough -- the model is made while the game
+#    starts, not in the menus or as the first fight begins (Mary)
+rep('static constexpr ULONGLONG kInitialNativeSettleMs = 15000;\n',
+    'static constexpr ULONGLONG kInitialNativeSettleMs = 1500;   // UMK3 PC: was 15000\n')
+open(p, 'w', encoding='utf-8', newline='').write(s)
+print('patched (settle)')

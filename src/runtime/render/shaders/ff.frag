@@ -102,8 +102,12 @@ vec3 nb;
 // was on the whole
 float relief(vec2 uv, float k)
 {
-    float lod = max(floor(textureQueryLod(tex, uv).x), 0.0);
-    vec2 g = (slope(uv, lod) + 0.5 * slope(uv, lod + 2.0)) * k;
+    // between two mips, not rounded: the Waterfront's seam (ff.hlsl relief)
+    float lf = max(textureQueryLod(tex, uv).x, 0.0);
+    float lod = floor(lf), fr = lf - lod;
+    vec2 g0 = slope(uv, lod) + 0.5 * slope(uv, lod + 2.0);
+    vec2 g1 = slope(uv, lod + 1.0) + 0.5 * slope(uv, lod + 3.0);
+    vec2 g = mix(g0, g1, fr) * k;
     vec3 l = normalize(RL);
     nb = normalize(vec3(-g, 1.0));
     return clamp(1.0 + 1.5 * (dot(nb, l) - l.z), 0.4, 1.6);

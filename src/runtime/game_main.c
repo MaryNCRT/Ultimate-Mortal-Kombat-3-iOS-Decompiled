@@ -1132,13 +1132,14 @@ static void read_config_p2(const char *n, const char *v)
     }
 }
 
-/* Port: DLSS 5's one-time preparation. The AIO add-on waits 15 s for a
- * stable picture, then makes NVIDIA's neural model inside a Present: 3-4 s
- * in which the screen cannot change (measured 3.7 s). It cannot be made
- * shorter from here; it can be said. From 11 s after the first frame a line
- * at the foot of the screen says it, so the frame the screen holds carries
- * it; it goes when a frame has taken over a second (the preparation done),
- * or after 45 s. 2D, so the neural pass never touches it. */
+/* Port: DLSS 5's one-time preparation. Our AIO build waits 1.5 s for a
+ * stable picture (tools/neural/patch_aio.py #6; the stock one 15 s), then
+ * makes NVIDIA's neural model inside a Present: 4-6 s in which the screen
+ * cannot change. It cannot be made shorter from here; it can be said, and
+ * now it comes as the game starts rather than in the menus. From half a
+ * second a line at the foot of the screen says it, so the frame the screen
+ * holds carries it; it goes when a frame has taken over a second (the
+ * preparation done), or after 30 s. 2D, so the neural pass never touches it. */
 static void dlss5_notice(void)
 {
     extern int limeScreenWidth, limeScreenHeight;
@@ -1158,15 +1159,15 @@ static void dlss5_notice(void)
     if (first == 0.0)
         first = now;
     t = now - first;
-    if (last != 0.0 && now - last > 1.0 && t > 8.0) {
+    if (last != 0.0 && now - last > 1.0 && t > 1.0) {
         done = 1;                       /* the long Present: the model is made */
         printf("dlss5: the neural model was prepared (%.1f s without a frame, %.0f s after start)\n",
                now - last, t);
         return;
     }
     last = now;
-    if (t < 11.0 || t > 45.0) {
-        if (t > 45.0)
+    if (t < 0.5 || t > 30.0) {
+        if (t > 30.0)
             done = 1;
         return;
     }
@@ -1259,6 +1260,8 @@ static void read_config(const char *dir)
             neural_dlss5 = atoi(v) != 0;
         else if (strcmp(line, "dlss5_neural") == 0)    /* neural_mod.c: the neural rendering on/off */
             neural_nr = atoi(v) != 0;
+        else if (strcmp(line, "dlss5_scale") == 0)     /* neural_mod.c: DLAA, quality, balanced, performance */
+            neural_scale = atoi(v) < 0 ? 0 : atoi(v) > 3 ? 3 : atoi(v);
         else if (strcmp(line, "dlss5_layers") == 0)    /* neural_mod.c: experimental */
             neural_layers = atoi(v) != 0;
         else if (strcmp(line, "dlss5_preset") == 0)    /* neural_mod.c: GRAPHICS > DLSS 5 > PRESET */
