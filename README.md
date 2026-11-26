@@ -32,7 +32,7 @@ The only source of truth is the binary. Nothing enters the tree that is not deri
 |---|---|---|
 | **Decompilation** (`src/decomp/`) | **2,572 / 2,572 (100%)** | LIME 3D engine (109), front end & scenes (291), arcade fight engine (2,172). |
 | **Verification** (`tools/decomp/`) | **100%** | Differential tests against the `armrecomp` ARM→C oracle; 229 data tables checked at build time (`ctest`). |
-| **PC port** (`src/runtime/`) | **Playable — v0.6.0 beta** | OpenGL, Vulkan, Direct3D 12; Windows and Linux; 3:2 / 4:3 / 16:9 / 21:9; keyboard and pads (about 870 pads known through SDL_GameControllerDB); local 2 players, LAN (MULTIPLAYER, Radmin VPN too) and online with rollback; replays; mods. |
+| **PC port** (`src/runtime/`) | **Playable — v0.7.0 beta** | OpenGL, Vulkan, Direct3D 12; Windows and Linux; 3:2 / 4:3 / 16:9 / 21:9; keyboard and pads (about 870 pads known through SDL_GameControllerDB); local 2 players, LAN (MULTIPLAYER, Radmin VPN too) and online with rollback; replays; mods. |
 | **Launcher** (`launcher/`) | Windows and Linux | Compiles the game with a bundled `zig cc` (nothing to install), updates itself, MODS tools, PROFILE with ACCOUNT (optional; progress in the cloud, the game's leaderboards live) and FRIENDS, STEAM (adds the launcher to the Steam library as a non-Steam game with SteamGridDB artwork). |
 
 Every release is tested by the project's tester, Mary, before the next one builds on it; the [Changelog](docs/CHANGELOG.md) says for each change whether she has played it yet.
@@ -79,7 +79,8 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 - **Discord Rich Presence:** the mode, the fighters and the time on the player's Discord profile, with a Join button in an online lobby; through the Discord app already open, no account to link ([docs/DISCORD-PRESENCE.md](docs/DISCORD-PRESENCE.md)).
 - **REPLAYS:** every local fight recorded and played back in the game with a full player (pause, frame step, seek, speed).
 - **Mods:** a folder per mod in `mods\`, files named like the game's replace them; data overrides for the fight tables (`data.ini`).
-- **DLSS 5** (experimental, unreleased): community neural rendering built in. The game brings our own ReShade build and DLSS5-Feeder; the player adds NVIDIA's two DLLs and a consumer with the launcher's ADD NVIDIA FILES (only NVIDIA-signed DLLs are accepted) and turns on GRAPHICS > DLSS 5. Direct3D 12, NVIDIA RTX 50 ([docs/DLSS5-MOD.md](docs/DLSS5-MOD.md)).
+- **RTX** (0.7.0; GRAPHICS > RTX, Direct3D 12 on a card with DXR 1.1 -- NVIDIA RTX 20 and later, AMD RDNA 2 and later, Intel Arc): ray-traced sun and light shadows, ray-traced ambient occlusion and one bounce of the lights' colour, planar reflections on the floor (a faint polished floor, not wet), street lamps as downward spots, a glow in the air around every light, parallax relief from each texture near the fighters (the sky and far backdrops are left as they were), all in-house (DXR inline ray queries, no NVIDIA SDK in the game).
+- **DLSS 5** (0.7.0): community neural rendering built in. The game brings our own ReShade build and DLSS5 ReShade AIO build; the player adds NVIDIA's two DLLs with the launcher's ADD NVIDIA FILES (only NVIDIA-signed DLLs are accepted) and turns on GRAPHICS > DLSS 5. The HUD, texts and menus are kept out of the neural pass; NEURAL RENDERING on/off, presets (REALISTIC, CINEMATIC, VIVID, SUBTLE) and SCALING (DLAA, QUALITY, BALANCED, PERFORMANCE). Direct3D 12, NVIDIA RTX 50 ([docs/DLSS5-MOD.md](docs/DLSS5-MOD.md)).
 - **Outfits that add** (0.4.8): a mod whose `mod.ini` says `type=skin` replaces nothing: it is another outfit for one fighter, with its own model and its own COLOR 1, COLOR 2 and frozen sheets (any file names; `skin=`, `model=`, `color1=`, `color2=`, `ice=`), beside the original. On the select screen the OUTFIT list (the gi in the top corner, or triangle / Y, or T) picks it, and the preview shows it; the COLOR list is beside it. Online, the other player sees it only if they have the same outfit, else the original; the fight is the same either way.
 - **Debug menu** (`F2`): any fighter including the bosses, stage, round, hitboxes, save states.
 
@@ -92,25 +93,23 @@ All of them can be changed in the launcher (CONTROLS) or in the game (`Esc`).
 - **TEXTURES:** every texture of the game by where it belongs, replaced into a mod.
 - **EXPORT:** fighters, stages, models and textures as FBX, GLB, USD (USDA/USDC/USDZ) or OBJ with PNG textures.
 
-## Known problems (0.6.0 beta)
+## Known problems (0.7.0 beta)
 
 - Vulkan: in finishers that fill the screen with bodies (Scorpion's fatality 2) the frames still wait on the GPU (~50 ms); Direct3D 12 is smooth there.
-- A compile on another PC ended with "EXIT CODE: -1" (0.5.4, after an old version had been compiled there); the cause is not known yet. 0.5.5 names the file that fails and keeps `build\last-build.log`; 0.5.6 fixes the icon's "FileNotFound" that 0.5.5's REPAIR met, and adds VERIFY, which says what is missing or damaged (REPAIR downloads it again).
 - The SEGA DREAMCAST icons have not been seen in the game with a pad connected yet.
-
-- Online: 0.5.4's fixes (both players on one stage, no softlock at a round's end, no desync in a session's second fight) were checked with two games on one PC over a line made bad on purpose (120 ms of ping, 10% of the packets lost): no desync over a best of 3 and over two fights in a row. Not yet played between two machines. Both players need 0.5.4.
+- Online: 0.5.4's fixes were checked with two games on one PC over a line made bad on purpose (120 ms of ping, 10% of the packets lost): no desync. Not yet played between two machines.
 - Steam Deck / Linux: the 6-button fix (#171, #253), player two's pad and the choice of Steam's virtual pad were compiled and checked in the generated code, not yet run on a Deck.
-- Pads read through SDL_GameControllerDB on Windows (PlayStation, Switch, 8BitDo in D-input, arcade sticks, generic USB pads): not yet tried with such a pad here. A pad with no line in the database keeps the vendor's layout, as before.
+- Pads read through SDL_GameControllerDB on Windows (PlayStation, Switch, 8BitDo in D-input, arcade sticks, generic USB pads): not yet tried with such a pad here.
 - The VS screen's announcer says the two names; the game has no "versus" voice (a mod's `res/audio/Skversus.wav` plays between them).
-- Colours 3 to 6: the VERSUS art (the endings') of Sonya, Jax and Liu Kang keeps colour 1 or 2 -- their art is named apart from their sheets. Colours and outfits that add are not yet tried online between two PCs.
-- Joining online, a pad's X glyph showed over START once (Mary); not reproduced yet.
+- Colours 3 to 6: the VERSUS art (the endings') of Sonya, Jax and Liu Kang keeps colour 1 or 2. Colours and outfits that add are not yet tried online between two PCs.
+- Joining online, a pad's X glyph showed over START once; not reproduced yet.
 - Some stages still pause up to ~1.3 s on their first frames (THE STREET), as their events load.
-- With ENHANCED LIGHTING, the first frames after starting can stall a second or more while the driver finishes the shader (Direct3D 12).
-- ENHANCED LIGHTING, AMBIENT OCCLUSION and CONTACT SHADOWS are Vulkan and DirectX 12 only; with OpenGL the GRAPHICS QUALITY preset gives only BLOOM and TONEMAPPING.
-- GRAPHICS QUALITY (unreleased): checked in Direct3D 12 only; Vulkan and OpenGL not yet shot, frame times not yet measured. The RTX presets are planned, not built.
+- ENHANCED LIGHTING, AMBIENT OCCLUSION and CONTACT SHADOWS are Vulkan and Direct3D 12 only; with OpenGL GRAPHICS QUALITY gives only BLOOM and TONEMAPPING. GRAPHICS QUALITY has been checked in Direct3D 12 only.
+- RTX is Direct3D 12 only and was measured on one card (RTX 5070: 56-58 fps at 1080p with x8 antialiasing and DLSS 5). Its shadows come from the stage's geometry as drawn, without the parallax relief.
+- DLSS 5: the first time in a session NVIDIA makes its neural model, a pause of 4-6 s while the game starts (a notice says so). SCALING lowers what the neural pass works on; the game itself still draws at full size.
+- PHOTO MODE's saved presets, HEIGHT and the fighters' depth order are new in 0.7.0 and not yet played by the tester.
 - On Linux the stage's music is still decoded on the game's thread (Windows decodes it on a thread of its own).
 - MOD HUB: the mods' downloads come from GitHub releases; a network that blocks those cannot download mods.
-- DLSS 5: the game side is tested (our ReShade hooks Direct3D 12, the feeder starts NVIDIA's NGX), but the neural pass has not been seen yet: NVIDIA's DLLs and a consumer were not on the test machine. The HUD is processed with the scene.
 
 ## Building from source
 

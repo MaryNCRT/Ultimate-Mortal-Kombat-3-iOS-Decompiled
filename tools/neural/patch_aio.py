@@ -51,3 +51,38 @@ rep('    constants.mode = g_composite_reshade_output && composite_post ?\n',
     '    constants.mode = g_composite_reshade_output && composite_post ?\n')
 open(p, 'w', encoding='utf-8', newline='').write(s)
 print('patched (compositor)')
+
+# 5. the game's scene cuts reset the history: UMK3 PC's exe exports a counter,
+#    umk3_dlss5_cuts (render/rgl_ff.c), bumped on a new round, a load, a
+#    camera jump; when it changes, NR and DLAA start again from this frame
+rep('    const bool pending_history_reset = resume_staged_nvof ?\n',
+    '    {   // UMK3 PC: the game\'s scene cuts (umk3_dlss5_cuts, exported by the exe)\n'
+    '        static volatile long *umk3_cuts = nullptr;\n'
+    '        static bool umk3_looked = false;\n'
+    '        static long umk3_seen = 0;\n'
+    '        if (!umk3_looked)\n'
+    '        {\n'
+    '            umk3_looked = true;\n'
+    '            umk3_cuts = reinterpret_cast<volatile long *>(GetProcAddress(GetModuleHandleW(nullptr), "umk3_dlss5_cuts"));\n'
+    '            if (umk3_cuts) umk3_seen = *umk3_cuts;\n'
+    '            Log("UMK3 PC: scene cuts from the game %s", umk3_cuts ? "found" : "not found");\n'
+    '        }\n'
+    '        if (umk3_cuts && *umk3_cuts != umk3_seen)\n'
+    '        {\n'
+    '            umk3_seen = *umk3_cuts;\n'
+    '            g_need_history_reset = true;\n'
+    '        }\n'
+    '    }\n'
+    '    const bool pending_history_reset = resume_staged_nvof ?\n')
+open(p, 'w', encoding='utf-8', newline='').write(s)
+print('patched (cuts)')
+
+# 6. the start sooner: the AIO waits 15 s of a stable picture before it makes
+#    NVIDIA's model (a 4-6 s Present). UMK3 PC opens its borderless window at
+#    the monitor's size from the first frame, so 1.5 s (and the 30 stable
+#    frames it still asks for) is enough -- the model is made while the game
+#    starts, not in the menus or as the first fight begins (Mary)
+rep('static constexpr ULONGLONG kInitialNativeSettleMs = 15000;\n',
+    'static constexpr ULONGLONG kInitialNativeSettleMs = 1500;   // UMK3 PC: was 15000\n')
+open(p, 'w', encoding='utf-8', newline='').write(s)
+print('patched (settle)')

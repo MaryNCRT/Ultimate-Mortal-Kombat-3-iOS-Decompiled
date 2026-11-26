@@ -5118,7 +5118,7 @@ int PortVsCpu;
 int PortVsCpuLevel = 5;
 /* Port: training's window and input column, below MovesList */
 void PortTrainReset(void);
-void PortTrainInput(long bits);
+void PortTrainInput(long bits, int dir);
 void PortTrainDraw(void);
 void PortTrainDrawInputs(void);
 void PortFTDraw(void);
@@ -9351,10 +9351,38 @@ void PortTrainReset(void)
 
 /* One tick of player one's input: a new line when something is pressed
  * that was not down the tick before, else the top line's count goes on. */
-void PortTrainInput(long bits)
+void PortTrainInput(long bits, int dir)
 {
-    long k = bits & (0x01 | 0x02 | 0x3f0 | 0x400 | 0x800 | 0x1000);
+    long k;
     int i;
+
+    if (getenv("UMK3_LOG_TRAIN")) {     /* port diagnostic: the word each change */
+        static long last = -1;
+        if (bits != last)
+            printf("train input: 0x%04lx\n", bits);
+        last = bits;
+    }
+    /* the directions as pressed: the stick's own (GetReal6ButtonJoyBits'
+     * ranges), not the engine's word -- with five buttons GetArcadeJoyBits
+     * makes down-forward plain down, and the column showed that (Mary) */
+    bits &= ~(0x01 | 0x02 | 0x04 | 0x08 | 0x0800 | 0x1000);
+    if (dir == 8 || (unsigned)(dir - 1) <= 1) bits |= 0x01;
+    if ((unsigned)(dir - 4) <= 2)             bits |= 0x02;
+    if ((unsigned)(dir - 6) <= 2)             bits |= 0x04;
+    if ((unsigned)(dir - 2) <= 2)             bits |= 0x08;
+    /* with four or five buttons the word went through GetArcadeJoyBits,
+     * which turns toward/away back into left/right (0x04/0x08) and clears
+     * them: left and right never showed (Mary). Made toward/away again with
+     * the fighter's facing, as GetReal6ButtonJoyBits does */
+    if (!(bits & 0x1800) && (bits & 0x0c)) {
+        const unsigned short *obj = (const unsigned short *)(void *)GameObjects;
+        long facing = obj ? obj[0x0a / 2] & 0x10 : 0;
+        if (bits & 0x04)
+            bits |= facing ? 0x0800 : 0x1000;
+        if (bits & 0x08)
+            bits |= facing ? 0x1000 : 0x0800;
+    }
+    k = bits & (0x01 | 0x02 | 0x3f0 | 0x400 | 0x800 | 0x1000);
 
     /* the five-button layout: a direction and S reach the engine as S and
      * the six-button button GetArcadeJoyBits makes of them -- shown, that
@@ -12901,7 +12929,7 @@ static void Task_GameMain_frame(void)
     /* Port, not in the binary: training's input column */
     if (GameMode == 6 && PortPractice && GamePaused == 0 && LIME_Paused == 0
         && RoundSummary != 1)
-        PortTrainInput(joy[0]);
+        PortTrainInput(joy[0], (int)JoystickState);
 
     if (P2Controls != 0)
         GetReal6ButtonJoyBits((int)JoystickStateP2,
@@ -13791,7 +13819,14 @@ void RenderLevelPlayers(void)
             }
 
             if (pass == 0 && n == 0) {
-                limeClearDepthBuffer();
+                /* port: not in PHOTO MODE -- the "front" fighter is the
+                 * fight's, not the turned camera's, and drawn over a cleared
+                 * depth he showed through the one in front of him (Mary:
+                 * Sindel behind Scorpion drawn over him); the depth sorts
+                 * them there */
+                int photo_on(void);
+                if (!photo_on())
+                    limeClearDepthBuffer();
                 ClearedZBuffer = 1;
             }
             if (obj == NULL)

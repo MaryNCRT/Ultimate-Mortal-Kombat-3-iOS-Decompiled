@@ -18,6 +18,10 @@ extern int neural_layers;
 /* umk3.ini dlss5_neural= (1, the default): the neural rendering itself; 0
  * keeps DLSS 5's DLSS/DLAA alone (GRAPHICS > DLSS 5 > NEURAL RENDERING) */
 extern int neural_nr;
+/* umk3.ini dlss5_scale= (GRAPHICS > DLSS 5 > SCALING): 0 DLAA, 1 quality,
+ * 2 balanced, 3 performance -- the neural pass at a smaller size, DLSS
+ * taking it back to the screen's */
+extern int neural_scale;
 
 /* GRAPHICS > DLSS 5 > PRESET (umk3.ini dlss5_preset=): the neural model and
  * its strengths, written to AIO's settings at the next start */

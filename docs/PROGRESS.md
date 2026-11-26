@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-19 (release 0.5.4 beta: online -- one stage on both sides, no softlock at a round's end, no desync in a session's second fight, less stutter, no frozen fight; the Steam Deck's 6 buttons on Linux; pads from SDL_GameControllerDB; KOMBO SLIDE OFF with kicks) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-26 (release 0.7.0 beta: RTX -- ray-traced shadows, occlusion, a light bounce, planar reflections, lamp spots, light glow, parallax relief; DLSS 5 built in with the interface kept out, NEURAL RENDERING, presets and SCALING; the frame pacing's stutter; the training column's left/right; PHOTO MODE presets, height and depth order; the Waterfront's water seam) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -34,8 +34,18 @@ around the decompiled game:
 
 - **Renderers:** OpenGL, Vulkan, Direct3D 12 (`src/runtime/render/`; Vulkan and
   Direct3D 12 through one fixed-function layer, `rgl_ff.c`, fighters drawn
-  indexed since 0.5.5), HD textures, MSAA, real-time shadows, VSYNC, pipeline
-  caches.
+  indexed since 0.5.5), HD textures, MSAA, ENHANCED LIGHTING (real-time
+  shadows, relief, dynamic lights, ambient occlusion, contact shadows),
+  GRAPHICS QUALITY presets, VSYNC, LOW LATENCY pacing, pipeline caches.
+- **RTX** (0.7.0, Direct3D 12 with DXR 1.1, `rt=1`): the casters in an
+  acceleration structure each frame (rgl_d3d12.c `dx_rt_scene`), traced
+  inline from the pixel shader (ff.hlsl `UMK3_RT`, built with dxc):
+  shadows of the sun and the lights, occlusion and one light bounce;
+  planar reflections (rgl_ff.c `refl_pass`), parallax relief, light glow.
+  No NVIDIA SDK in the game.
+- **DLSS 5** (0.7.0, Direct3D 12, NVIDIA RTX 50): our ReShade and DLSS5
+  ReShade AIO builds (`tools/neural/`), NVIDIA's DLLs added by the player;
+  the interface kept out of the neural pass ([DLSS5-MOD.md](DLSS5-MOD.md)).
 - **Screens:** 3:2 (the iPhone's), 4:3 (the iPad build's layout), 16:9,
   21:9; the port's own menus (settings, debug, STAGE SELECT, online,
   replays) fit each.
@@ -80,42 +90,23 @@ and Scorpion's fatality without its lag.
 
 ### Open problems
 
-- **PHOTO MODE: a fighter behind the other drawn over it** (Mary, 2026-11-22, a
-  screenshot): with the free camera behind the fighters, Sindel, further
-  from the camera, shows over Scorpion. The fighters' draw order or depth
-  test, not looked at yet (GameCode.c RenderLevelPlayers).
-- **PHOTO MODE: no camera up / down** (Mary): the camera has height (Q / E)
-  but no movement straight up or down in the free camera's own frame; to check
-  what she means and add it.
-- **Training: the input column shows no sideways movement** (Mary,
-  2026-11-22, a screenshot): only the up and down arrows appear, with their
-  frame counts; left and right are not listed. Not investigated yet; the
-  column is the port's `PortTrainInput` / `PortTrainDrawInputs`.
-- **DLSS 5, the neural pass:** seen working on 2026-11-22 with the
-  DLSS5 ReShade AIO add-on (standalone-dlssnr 2.2.4, Apache-2.0) in place of
-  the feeder: "CreateFeature(feature=18) = Success", NR=Success every frame,
-  60 fps, NR 5.4 ms + DLSS SR 2.0 ms of GPU, in a 1600x900 window. It does
-  not start in the borderless 1920x1081 window (it waits "for stability"
-  forever). Mary saw it work and reports a strange flicker. Still to do:
-  the HUD and menus left untouched (only the 3D fight processed), and a
-  separate layer for the fighters.
 Closed problems are in the detailed log and the CHANGELOG, not here.
 
 | Problem | State |
 |---|---|
-| Online between two machines | 0.5.4's fixes (one stage, the round's end, the second fight, holds) checked with two games on one PC over a bad line made on purpose (`UMK3_NET_LOSS/LAG/JITTER`): 0 desyncs; **waits for a match between two PCs** |
-| Steam Deck: the fight's 5-button layout (issues #171, #253) | **fixed in 0.5.4** (Linux read `long` game globals as 8 bytes in the port's files, `umk3_long`); waits for a Deck |
-| Pads through SDL_GameControllerDB (WinMM on Windows, SDL on Linux), player two's pad on Linux | **built in 0.5.4**, `tests/pad_db_test.c` passes; waits for such a pad |
-| KOMBO SLIDE OFF not enough (issue #252) | **changed in 0.5.4** (kicks too; VS RULES no longer override OFF); checked by script in training, waits for the reporter |
-| MOD HUB never connecting on other players' PCs, no error | **fixed in 0.5.3** (time limits, other sources for the index); waits for an affected PC |
-| Dynamic stage music (critical / ending stretches; the music follows a mid-fight stage change) | **in 0.5.5** (`adaptive_music.c`); Mary saw it working in the test folder; the stretches per tune (`music.ini`) wait for her ear |
-| Scorpion's fatality lag (and finishers with many bodies) | **fixed in 0.5.5** on Direct3D 12 (indexed fighters, the scene's passes on every core): Mary saw the lag gone in the test folder. **Vulkan**: the CPU side 45 -> 14 ms, but the frames still wait ~22 ms on the GPU there; open |
-| A compile on another PC ending "EXIT CODE: -1" after omp_lite.c (an old version compiled there before) | cause not known (the failed file's error was lost among the others' lines); 0.5.5 names it, keeps `build\last-build.log`, cleans another version's objects and has REPAIR. Waits for that player's log |
-| SEGA DREAMCAST button icons | **in 0.5.5**; the game's pictures not yet seen with a pad connected (no pad on the test machine) |
-| `tests/rgl_test.c`: 5 shadow checks fail on Vulkan and Direct3D 12 | the expected values predate ENHANCED LIGHTING's shading (the same 5 fail on the code before 0.5.5); the test needs new values |
-| Screen-space contact shadows (ENHANCED LIGHTING) | research only: [research/CONTACT-SHADOWS.md](research/CONTACT-SHADOWS.md) (ambient occlusion is built) |
+| Online between two machines | 0.5.4's fixes checked with two games on one PC over a bad line made on purpose (`UMK3_NET_LOSS/LAG/JITTER`): 0 desyncs; **waits for a match between two PCs** |
+| Steam Deck: the fight's 5-button layout (issues #171, #253) | **fixed in 0.5.4**; waits for a Deck |
+| Pads through SDL_GameControllerDB, player two's pad on Linux | **built in 0.5.4**, `tests/pad_db_test.c` passes; waits for such a pad |
+| KOMBO SLIDE OFF not enough (issue #252) | **changed in 0.5.4**; waits for the reporter |
+| Scorpion's fatality lag on **Vulkan** | the CPU side 45 -> 14 ms, the frames still wait ~22 ms on the GPU there; Direct3D 12 is smooth |
+| SEGA DREAMCAST button icons | the game's pictures not yet seen with a pad connected |
+| `tests/rgl_test.c`: 5 shadow checks fail on Vulkan and Direct3D 12 | the expected values predate ENHANCED LIGHTING's shading; the test needs new values |
 | A pad's X glyph over START when joining online (Mary, once) | not reproduced |
 | THE STREET and other stages pause up to ~1.3 s on their first frames | open: their events load then |
+| DLSS 5's first model | NVIDIA makes it once a session, 4-6 s in a Present; our AIO build now does it while the game starts (1.5 s guard, was 15 s) |
+| A seam on THE STREET (Mary, 2026-11-26) | not seen in the current captures; may have been the parallax stripes fixed in 0.7.0; waits for Mary |
+| Real displacement (tessellation) of the stages (Mary's spec, 2026-11-26) | not started; D3D12 hull/domain shaders available; RTX shadows would need the displaced geometry too |
+| PHOTO MODE's presets, HEIGHT and depth order (0.7.0) | built, not yet played by Mary |
 
 ### Where to look next
 
@@ -125,16 +116,59 @@ traced to the binary's own mechanism before anything is changed.
 
 **Graphics overhaul (asked 2026-11-22):** phase 1, the audit and the
 architecture, is in [research/GRAPHICS-OVERHAUL.md](research/GRAPHICS-OVERHAUL.md).
-Two licence questions block phases 3-5 as asked (NVIDIA SDKs inside a GPL
-program; NVIDIA's neural model is not redistributable) and wait on Mary.
-Phase 2 (GRAPHICS QUALITY: presets, bloom, tonemap, contact shadows) is
-built and checked in Direct3D 12 only; see the log entry below. Phase 3
-(ray tracing) has not started.
-
+Phase 2 (GRAPHICS QUALITY) is built; RTX (phase 3) and DLSS 5 are in 0.7.0,
+done in-house so that no NVIDIA SDK is linked into the GPL game. Next
+asked by Mary: real displacement with tessellation, then a review of every
+stage with RTX on.
 ---
 
 
 ## Detailed log (newest first)
+
+### 2026-11-26 (3) -- Mary's list: training arrows, photo presets/height/depth, DLSS 5 start, water seam, DLSS 5 scaling
+
+- **Training input column (left/right never shown)**: with 4/5 buttons the engine word goes through GetArcadeJoyBits, which turns toward/away (0x800/0x1000) into left/right and clears them; and down-forward became plain down. The column (GameCode.c PortTrainInput) now takes the directions from the stick as pressed (JoystickState, GetReal6ButtonJoyBits' ranges) made toward/away with the fighter's facing, the buttons from the engine. Verified by script (UMK3_PADS, UMK3_BUTTONS=5, UMK3_PRACTICE): right, left, down-right (one diagonal arrow), button, up-left all shown. Diagnostic: UMK3_LOG_TRAIN.
+- **Photo mode presets**: four own slots (MINE 1-4) after the eight in EFFECTS > PRESET; EFFECTS > SAVE PRESET (left/right the slot, Enter saves IMAGE+EFFECTS); kept in photo_mode.ini (user1..4=). Not tried in game.
+- **Photo mode camera height**: CAMERA > HEIGHT (the pad had none; keys E/Q existed). Not tried in game.
+- **Photo mode, fighter behind drawn over the other**: RenderLevelPlayers clears depth after the "back" fighter (the fight's order, not the turned camera's); not in photo mode now. Not tried in game.
+- **DLSS 5 start**: our AIO's start guard 15 s -> 1.5 s (patch_aio.py #6; the 30 stable frames kept): measured in Test, the model made 7-12 s after start (during start/menus) instead of 15 s + 5 s later. The 4-6 s NGX creation itself unchanged. Notice shown from 0.5 s. Loads: menus 1.6 s, fight 1.6 s.
+- **Waterfront water seam**: the water quads each map the same atlas cell u 0.01..0.24; joins showed a jump. Every other quad mirrored (rgl_ff.c water_mirror) -- gone in the capture. Also fixed on the way: relief's mip level was floored (a step where triangles stretch differently), and forced mips no longer on atlas-cell draws.
+- **Sky / backdrop**: draws more than 70 units from the eye drawn as the game did (no relief, lights, shadows, RTX); POM and RTX relief fade out 25-45 units. Parallax stripes fix actually applied this time (8-32 layers, faded edge-on) -- an earlier edit had not landed.
+- **Street seam (Mary: "la costura es de la calle")**: not visible in the current capture; may have been the parallax stripes. Open until Mary confirms.
+- **DLSS 5 scaling**: GRAPHICS > DLSS 5 > SCALING (dlss5_scale=0 DLAA, 1 quality, 2 balanced, 3 performance) via the AIO's SourceResolutionOverride (nearest size of the screen's shape to 0.667/0.58/0.5). Verified: quality -> 1280x720 -> 1920x1080, `DLSS SR quality=2`, GPU 4.0 ms vs ~6. The game still draws at full size; the neural pass is what is cheaper.
+
+### 2026-11-26 (2) -- reflections on at full speed; dry polished floor; lamp spots; aura; parallax heights
+
+- **Reflections back on by default** (UMK3_NO_REFL=1 turns off). The HD install's 2 fps were (a) the mirror pass re-run at every `scene_flush` (~25 a frame with the HD stage) -- now once a frame, bound until the frame's end -- and (b) a `getenv()` per vertex in it. Measured in Mary's Test (HD, AA x8, DLSS 5, RTX): 56-58 fps, the pass < 1 ms.
+- **Floor height**: the upward stage face nearest the fighters' feet, not the commonest (the street's kerb was taken for the floor). Mirror's alpha isn't written: colour only.
+- **Look per Mary**: "too wet / too shiny" -> no puddles, no ripple/streaks, no water darkening, floor has no highlights (GGX and relief); a faint polished reflection (5-16% by Fresnel), clamped so lamps make no blobs. Debug view: UMK3_REFL_VIEW=1 (the raw mirror on the floor).
+- **Street lamps as spots ("tipo faro")**: an emissive glow taller than wide becomes a spot at its top pointing down, cone = the shaft's width (rgl_ff.c lights_build, g_spot).
+- **Aura**: closed-form single scattering of each light in thin haze (Sun et al. 2005, no extinction), spots only in their beam; only on opaque pixels (additive sprites showed as squares). The Pit's pool glows green.
+- **Heights (Mary: "mapas height de desplazamiento", per-pixel)**: parallax occlusion mapping on stage textures, brightness as height, 8-32 layers by view angle, faded out edge-on (the road showed stripes otherwise). Real tessellated displacement (Mary's spec) not started: D3D12 hull/domain shaders are available; RTX shadows would still use undisplaced geometry until the BLAS is displaced too.
+
+### 2026-11-26 -- RTX materials, cheaper RTX, CPU/GPU overlap; reflections parked
+
+- **FPS (Mary: "fps bajísimos")**: measured in Mary's own Test folder (HD pack, AA x8, DLSS 5): RTX now 17.1-17.2 ms a frame (~58 fps, ~2 late/s), the same as RTX off. Cuts: sun 1 ray, each light 1 jittered ray and only where it reaches (att > 0.06), ambient/bounce 2 rays. D3D12 present no longer waits for the GPU: the frame runs while the CPU makes the next (`settle()` before anything reuses the frame's memory: next list, upload, release, read); `UMK3_D3D12_SERIAL=1` = old way. Not separately benchmarked against serial yet.
+- **Lamp globes showing polygons (Mary)**: a light's own lamp (within 2.5x the light's sphere) never shadows it; ray offsets 0.05-0.06.
+- **Materials (Mary: specular and roughness maps)**: derived per pixel from each texture (no maps in the game): specular from brightness/greyness, roughness from grain (fwidth); GGX highlights for the ENHANCED LIGHTING lights (UE4-style); stage floor wet in a slow world-space noise + dark cracks; toned down after "brilla demasiado". Only active where the floor is known, i.e. with reflections on -- **so currently mostly inactive**; to be decoupled.
+- **Reflections (planar, rgl_ff.c refl_pass)**: mirrored scene into a quarter-res target, triangle-level floor clip (the stage draws floor and walls together: the mirrored floor hid everything), floor height = commonest height of upward stage faces near the fighters' feet. Works (target dumped with UMK3_REFL_DUMP), but costs ~25 ms a frame in Mary's HD install for only ~36 draws/15k vertices -- a wait somewhere, not found yet. **Off unless UMK3_REFL=1.** Diagnostics: UMK3_LOG_REFL, UMK3_REFL_DUMP=<frame>, UMK3_REFL_NOCULL, UMK3_REFL_FLAT.
+- Queued from Mary: floor with more relief/normal maps and a wet look; training mode left/right arrows not shown; photo mode: save created presets; photo mode camera up/down; fighter drawn over the other in photo mode.
+
+### 2026-11-22 -- the lag: frame pacing; DLSS 5 cuts fixed; RTX soft light shadows
+
+- **Lag (Mary: "bajos fps", "lag")**: steady state was already 60 fps; the stutter was the low-latency pacer (game_main.c pace_frame). It measured the frame's work from the CPU part only, so with RTX/DLSS 5 (5-13 ms GPU + Present inside the swap) it slept too long, missed the refresh, grew its margin 1 ms and decayed back: a 33 ms frame every second or so. Now the backend reports `rgl_present_work_ms` (D3D12: commands run + Present + GPU wait, not the refresh wait) and the pacer counts it; cap 14 ms. Measured DLSS 5 + RTX, 180 Hz screen: between swaps 16.7-17.0 ms steady (UMK3_LOG_PACE). Found with the sampling profiler: slow frames were the main thread parked in a wait (ntdll), not working. Profiler now names other modules and takes `UMK3_PROFILE_MS=<threshold>`.
+- **DLSS 5 off/glitching a second into a round (Mary)**: the claude/dlss5-cuts history reset (now merged here) also fired on any camera turn > 20 degrees a frame, and the round intro's sweep did that every frame. Cuts now only on a fight entered/left or the 3D scene back after >= 10 frames away, at most one per 120 frames. Not yet confirmed by Mary.
+- **RTX torch cut (Mary: the flame's shadow edge on the wall)**: light shadows traced to a sphere of a tenth of the light's reach (3 rays), stopped short of it -- soft edges, and a light is no longer cut by its own torch bowl/pool. Not yet seen by Mary.
+- Still open: DLSS 5's first model creation stalls Present ~5 s (NGX feature creation, once a run, in menus after the AIO's 15 s settle); fight load 1.4-1.5 s, menus 0.9 s. Wet-floor reflections for Mary's reference look not started.
+
+### 2026-11-22 -- RTX phase 3: ray-traced lighting (D3D12, DXR 1.1 inline ray queries)
+
+- `rt=1` (GRAPHICS > RTX: RAY-TRACED SHADOWS, next start; needs ENHANCED LIGHTING, Direct3D 12, DXR 1.1). The casters the shadow map already gathers (rgl_ff.c, stage group 0, fighters 1..15) are committed each frame to `rt_scene` (rgl_d3d12.c): one BLAS per group + a TLAS, two sets alternating, built at the end of the frame's list; bound as root SRV t4.
+- Shaders: ff.hlsl `UMK3_RT` variant compiled with dxc (vs/ps 6.5, DXIL, both stages since a PSO cannot mix DXBC/DXIL); `shaders/build.py` takes dxc as a third argument. Sun direction rides in the light block's spare words (`lb_count.yzw`), 0 = RTX off -> falls back to the shadow map.
+- What it traces: the sun's shadows (2 rays, soft cone), every ENHANCED LIGHTING light's shadows, ambient occlusion (3 hemisphere rays, replaces HBAO when on) and one bounce of the lights' colour off what the rays hit (constant albedo; no material lookup yet). A fighter's own body is skipped (coarse proxy mesh, a frame old).
+- Measured RTX 5070, 1080p, Kano vs Sonya: GPU 5.3 ms vs 3.7 ms without; frame time 23.4 vs 22.5 ms. Note: ~23 ms a frame (~43 fps) **without RTX too** -- the general lag Mary reports predates RTX; still to investigate, with long loading screens.
+- Mary (2026-11-22): first version "no se ve un cambio" -- with a near-overhead sun only small contact shadows change. Lights/occlusion/bounce added; her reference captures (Pit stage, street stage) need **wet reflective floors** (reflections of lamps/glow/fighters), stronger coloured light and bloom -- next step: reflections. Not yet seen by Mary in game.
+- Deployed to WORK\release-0.1.12\Test with rt=1.
 
 ### 2026-11-22 (afternoon) -- DLSS 5: the interface a layer over everything
 

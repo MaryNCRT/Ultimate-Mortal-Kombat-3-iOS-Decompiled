@@ -41,6 +41,7 @@
  */
 #include "neural_mod.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,6 +51,46 @@ int neural_dlss5;                       /* umk3.ini dlss5= (GRAPHICS > DLSS 5) *
 float neural_stage = 1.0f, neural_fighters = 1.0f;   /* umk3.ini dlss5_stage= / dlss5_fighters= */
 int neural_layers = 1;                  /* umk3.ini dlss5_layers= (menus and HUD left out) */
 int neural_nr = 1;                      /* umk3.ini dlss5_neural= (0: DLSS/DLAA alone) */
+int neural_scale;                       /* umk3.ini dlss5_scale= 0 DLAA, 1 quality, 2 balanced, 3 performance */
+
+/* DLSS 5's scaling (Mary: Quality / Balanced / Performance and DLAA): the
+ * AIO's "pipeline source resolution" takes the game's frame down to one of
+ * its sizes before the neural pass and DLSS takes it back up; which DLSS
+ * mode it is follows the ratio (the AIO's own: 0.62 and up quality, 0.54
+ * balanced, 0.42 performance). Its list, by index, as the AIO has it
+ * (kSourceResolutionChoices); the nearest of the screen's shape to the
+ * mode's ratio is asked for. The game still draws at its full size: the
+ * neural pass is what costs less. */
+static const struct { int w, h; } k_aio_src[] = {
+    { 0, 0 }, { 960, 540 }, { 1280, 720 }, { 1600, 900 }, { 1920, 1080 }, { 2560, 1440 }, { 3200, 1800 },
+    { 1280, 800 }, { 1440, 900 }, { 1680, 1050 }, { 1920, 1200 }, { 2560, 1600 },
+    { 1280, 540 }, { 1720, 720 }, { 1920, 800 }, { 2560, 1080 }, { 3440, 1440 },
+    { 1920, 540 }, { 2560, 720 }, { 3840, 1080 }, { 5120, 1440 },
+    { 960, 720 }, { 1280, 960 }, { 1440, 1080 }, { 1600, 1200 },
+};
+
+static int scale_choice(int sw, int sh)
+{
+    static const float want[4] = { 1.0f, 0.667f, 0.58f, 0.5f };
+    float ratio = want[neural_scale < 0 || neural_scale > 3 ? 0 : neural_scale];
+    int i, best = 0;
+    float bd = 1e9f;
+    if (neural_scale <= 0 || sw <= 0 || sh <= 0)
+        return 0;
+    for (i = 1; i < (int)(sizeof k_aio_src / sizeof k_aio_src[0]); i++) {
+        float r = (float)k_aio_src[i].w / (float)sw, d;
+        if (k_aio_src[i].w >= sw || k_aio_src[i].h >= sh)
+            continue;
+        if (fabsf((float)k_aio_src[i].w / k_aio_src[i].h - (float)sw / sh) > 0.02f)
+            continue;                   /* the screen's shape */
+        d = fabsf(r - ratio);
+        if (d < bd) {
+            bd = d;
+            best = i;
+        }
+    }
+    return best;
+}
 
 /* GRAPHICS > DLSS 5 > PRESET (umk3.ini dlss5_preset=): the neural model --
  * NVIDIA's three networks, DLSSNR.Style 0..2, AIO's Model 1..3 -- and its
@@ -560,6 +601,18 @@ int neural_mod_load(const char *game_dir, int renderer_is_d3d12)
         for (k = 0; k < (int)(sizeof fixed / sizeof fixed[0]); k++)
             set_key(p, "Standalone.DLSSNR", fixed[k][0], fixed[k][1]);
         set_key(p, "Standalone.DLSSNR", "NeuralRendering", st == NEURAL_READY && neural_nr ? "1" : "0");
+        {
+            int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
+            int c = scale_choice(sw, sh);
+            static const char *const nm[4] = { "DLAA", "quality", "balanced", "performance" };
+            snprintf(num, sizeof num, "%d", c);
+            set_key(p, "Standalone.DLSSNR", "SourceResolutionOverride", num);
+            if (c)
+                SAY("scaling %s: the neural pass at %dx%d of %dx%d", nm[neural_scale & 3],
+                    k_aio_src[c].w, k_aio_src[c].h, sw, sh);
+            else
+                SAY("scaling: DLAA (the full size)%s", neural_scale ? ", no size of the screen's shape fits" : "");
+        }
         snprintf(num, sizeof num, "%d", np->model);
         set_key(p, "Standalone.DLSSNR", "Model", num);
         snprintf(num, sizeof num, "%.2f", np->intensity);

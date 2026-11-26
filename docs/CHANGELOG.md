@@ -10,79 +10,54 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
-- **GRAPHICS > DLSS 5 > NEURAL RENDERING** on or off: off keeps DLSS 5's DLAA alone
-  (`dlss5_neural=`).
+## 0.7.0 beta (2026-11-26)
 
-- **DLSS 5 never touches the interface:** the HUD, texts, the photo mode's
-  panel and every menu are drawn on top of the neural pass and DLAA, as the
-  game drew them, while the stage and fighters get the full neural effect
-  (seen by Mary). The package's DLSS5 ReShade AIO is now our own build
-  (`tools/neural/build_aio.py`) with NVIDIA's UI correction and that final
-  composition.
+**Graphics.** Played by Mary in her test folder (HD textures, x8 antialiasing,
+DLSS 5, an RTX 5070) through the work; the final build is measured there at
+56-58 fps.
 
-- **DLSS 5, the interface left alone:** the HUD, texts and every menu (the
-  front end, the select screen, the Esc menu) are kept out of the neural
-  pass, which works on the fight's stage and fighters only (`dlss5_layers=1`,
-  the default again). **Closing the game no longer freezes** (17 s -> 0.3 s).
-  The one-time preparation of NVIDIA's model, about 15 s after start (3-4 s
-  in which the screen holds still), now says so at the foot of the screen.
+- **RTX** (GRAPHICS > RTX, `rt=1`; Direct3D 12 on a card with DXR 1.1): the
+  scene's triangles in an acceleration structure each frame, traced from
+  the pixel shader (DXR inline ray queries, no NVIDIA SDK in the game):
+  - the sun's and every ENHANCED LIGHTING light's shadows, soft (a light is
+    a small sphere; a lamp no longer shadows itself);
+  - ambient occlusion and one bounce of the lights' colour (the Pit's pool
+    lights the fighters green);
+  - planar reflections on the floor: a faint polished floor, not wet, no
+    shine (Mary);
+  - street lamps light downward as spots, from the lamp;
+  - a glow in the air around each light (the Pit's pool, torches, lamps);
+  - parallax relief made from each texture, near the fighters only; the
+    sky and the far backdrops are drawn as the game drew them.
+- **DLSS 5** built in (GRAPHICS > DLSS 5; Direct3D 12, NVIDIA RTX 50): our
+  builds of ReShade 6.8.0 and DLSS5 ReShade AIO 2.2.4 come with the game;
+  the player adds NVIDIA's two DLLs with the launcher's ADD NVIDIA FILES
+  (only NVIDIA-signed ones). The HUD, texts and every menu are kept out of
+  the neural pass and drawn on top as the game drew them. NEURAL RENDERING
+  on/off (`dlss5_neural=`), PRESET (REALISTIC, CINEMATIC, VIVID, SUBTLE),
+  SCALING (DLAA, QUALITY, BALANCED, PERFORMANCE: the neural pass at a
+  smaller size, DLSS taking it back up; `dlss5_scale=`). NVIDIA's model is
+  made once a session while the game starts (4-6 s, said on screen);
+  closing the game no longer freezes; a new round no longer carries the
+  last picture's light.
+- **GRAPHICS QUALITY** (GRAPHICS, and the launcher's GRAPHICS page):
+  ORIGINAL or ENHANCED sets the graphics switches together; CONTACT
+  SHADOWS, BLOOM and TONEMAPPING of their own, never on the HUD.
+- **Smoother frames:** the frame pacer counted only the CPU's part of a
+  frame, so with RTX or DLSS 5 it slept too long and showed a frame twice
+  every second or so; it now counts the GPU's too. On Direct3D 12 the CPU
+  makes the next frame while the GPU finishes the last.
+- **Seams:** the Waterfront's water (a line at every join of its quads)
+  and relief stepping where a quad's triangles stretch a texture
+  differently.
 
-- **DLSS 5 on DLSS5 ReShade AIO** (experimental): the neural pass runs in the game.
-  Seen by Mary on an RTX 5070 with HD texture mods. The package brings AIO 2.2.4
-  (Apache-2.0) instead of DLSS5-Feeder, and the player adds only NVIDIA's two DLLs.
-  GRAPHICS > DLSS 5 > PRESET has REALISTIC, CINEMATIC, VIVID and SUBTLE (NVIDIA's three
-  networks with their strengths; the names are provisional). Borderless no longer
-  adds its extra row while DLSS 5 is on (AIO would not start), and the first
-  builds' feeder files are set aside on their own. The layers (HUD and menus left
-  untouched, the fighters and the stage each with their own strength) are in, but
-  experimental and off (`dlss5_layers=1`): Mary did not see their effect.
-
-- **DLSS 5 built in** (experimental): the package brings our ReShade 6.8.0
-  build and DLSS5-Feeder 2.0.0 (`launcher\dlss5`, copied to
-  `graphics\dlss5` at every compile without touching what the player added).
-  GRAPHICS > DLSS 5 in the game and VIDEO > GRAPHICS > DLSS 5 in the launcher
-  turn it on for the next start, and say what is missing. The launcher's ADD
-  NVIDIA FILES imports `nvngx_dlss.dll` / `nvngx_dlssnr.dll` (only signed by
-  NVIDIA) and the consumer add-on. Antialiasing stays as set (Mary). The
-  neural pass itself is unconfirmed: NVIDIA's DLLs and a consumer were not on
-  the test machine.
-
-- **DLSS 5 mod, in the game:** our own build of ReShade 6.8.0
-  (`tools/neural/build_reshade.py`, no banner) loads DLSS5-Feeder 2.0.0 from
-  the mod's folder. The feeder gets the game's colour and depth and starts
-  NVIDIA's NGX on the game's Direct3D 12 device. While the mod is loaded the
-  game draws without MSAA, which ReShade cannot read. The neural pass itself
-  waits on NVIDIA's DLLs, which were not on the test machine.
-
-- PHOTO MODE's HIDE MENU / MENU button shows the key's picture (or the pad's
-  north button while a pad is in use) instead of "(H)" (Mary). Compiled; not
-  yet seen in the game.
-- **GRAPHICS QUALITY** (Settings > GRAPHICS, and the launcher's GRAPHICS
-  page): ORIGINAL or ENHANCED sets the graphics switches together; moving
-  one by hand shows CUSTOM. ENHANCED is ENHANCED LIGHTING, AMBIENT
-  OCCLUSION, the new CONTACT SHADOWS, BLOOM and TONEMAPPING. New switches of
-  their own: CONTACT SHADOWS (short sharp shadows on the stage, a foot on the
-  floor; Vulkan and Direct3D 12 with the lighting and the occlusion on),
-  BLOOM (off / low / medium / high) and TONEMAPPING (the bright parts roll
-  off instead of clipping). BLOOM and TONEMAPPING work in every renderer, are
-  drawn over the fight only, and never touch the HUD. umk3.ini:
-  `graphics_preset=`, `contact_shadows=`, `bloom=`, `tonemap=`. Checked in
-  scripted D3D12 fights on three stages. A first version stippled the
-  fighters' arms and chests with contact shadows (Mary); the fighters no
-  longer receive them. Vulkan and OpenGL were not shot before the tests were
-  stopped, frame times were not measured, and Mary has not played the final
-  build yet. RTX and RTX + DLSS 5 are planned, not in this build.
-
-- **DLSS 5 as a mod** (experimental): a folder in `mods\` whose mod.ini
-  says `type=dlss5` holds ReShade, DLSS5-Feeder, a neural consumer and
-  NVIDIA's two runtimes, which the player supplies. With RENDERER Direct3D 12
-  and an NVIDIA card, the game checks every file (NVIDIA's DLLs must be
-  signed and say NVIDIA), then loads ReShade from that folder before the
-  device is made. Nothing is copied beside the exe. Every refusal is named
-  in the log; `dlss5_mod=0` turns it off. The game side was checked with
-  scripted runs (no mod, an incomplete mod, a non-NVIDIA DLL, the mod off,
-  OpenGL). A run with the real components has not been confirmed, and Mary
-  has not played it yet. [docs/DLSS5-MOD.md](DLSS5-MOD.md).
+**Play.**
+- **TRAINING's input column** shows left, right and the diagonals as
+  pressed (with five buttons they were lost).
+- **PHOTO MODE:** save your own presets (EFFECTS > SAVE PRESET, MINE 1-4),
+  CAMERA > HEIGHT (the pad had no way up or down), and a fighter behind
+  the other is no longer drawn over him. Not yet played by Mary.
+- PHOTO MODE's HIDE MENU button shows the key's or the pad's picture.
 
 ## 0.6.0 beta (2026-11-22)
 

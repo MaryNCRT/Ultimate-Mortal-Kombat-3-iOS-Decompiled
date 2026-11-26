@@ -290,8 +290,16 @@ static void plat_profile_dump(int slow)
             break;
         if (pc[b] >= base && pc[b] < base + 0x10000000)
             printf(" %d@exe+0x%llx", cnt[b], (unsigned long long)(pc[b] - base));
-        else
-            printf(" %d@0x%llx", cnt[b], (unsigned long long)pc[b]);
+        else {                          /* another module: its name and offset */
+            HMODULE mod = NULL;
+            char nm[MAX_PATH], *sl;
+            if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                   (LPCSTR)(uintptr_t)pc[b], &mod) && GetModuleFileNameA(mod, nm, sizeof nm)) {
+                sl = strrchr(nm, '\\');
+                printf(" %d@%s+0x%llx", cnt[b], sl ? sl + 1 : nm, (unsigned long long)(pc[b] - (DWORD64)(uintptr_t)mod));
+            } else
+                printf(" %d@0x%llx", cnt[b], (unsigned long long)pc[b]);
+        }
         cnt[b] = 0;
     }
     printf("\n");

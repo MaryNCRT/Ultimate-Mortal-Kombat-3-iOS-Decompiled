@@ -32,7 +32,7 @@ La única fuente de verdad es el binario. Nada entra al árbol si no se deriva d
 |---|---|---|
 | **Decompilación** (`src/decomp/`) | **2.572 / 2.572 (100%)** | Motor 3D LIME (109), menús y escenas (291), motor de combate arcade (2.172). |
 | **Verificación** (`tools/decomp/`) | **100%** | Tests diferenciales contra el oráculo ARM→C `armrecomp`; 229 tablas de datos comprobadas al compilar (`ctest`). |
-| **Port a PC** (`src/runtime/`) | **Jugable — v0.5.8 beta** | OpenGL, Vulkan, Direct3D 12; Windows y Linux; 3:2 / 4:3 / 16:9 / 21:9; teclado y mandos (unos 870 mandos conocidos gracias a SDL_GameControllerDB); 2 jugadores local, LAN (MULTIJUGADOR, también Radmin VPN) y en línea con rollback; repeticiones; mods. |
+| **Port a PC** (`src/runtime/`) | **Jugable — v0.7.0 beta** | OpenGL, Vulkan, Direct3D 12; Windows y Linux; 3:2 / 4:3 / 16:9 / 21:9; teclado y mandos (unos 870 mandos conocidos gracias a SDL_GameControllerDB); 2 jugadores local, LAN (MULTIJUGADOR, también Radmin VPN) y en línea con rollback; repeticiones; mods. |
 | **Launcher** (`launcher/`) | Windows y Linux | Compila el juego con un `zig cc` incluido (nada que instalar), se actualiza solo, herramientas de MODS. |
 
 Cada versión la prueba la tester del proyecto, Mary, antes de que la siguiente se construya encima; el [registro de cambios](docs/CHANGELOG.md) dice en cada cambio si ya lo jugó.
@@ -78,7 +78,8 @@ Todos se pueden cambiar en el launcher (CONTROLES) o en el juego (`Esc`).
 - **REGLAS DEL VERSUS** (0.4.5): en la selección del versus local, SELECT abre las reglas -- rondas (1/3/5), una serie de peleas (una, al mejor de 3, al mejor de 5), tiempo (30/60/99/infinito), kodes marcados en una lista, kombo slide. Son las mismas que usarán los lobbies en línea.
 - **REPETICIONES:** cada pelea local se graba y se reproduce en el juego con un reproductor completo (pausa, cuadro a cuadro, salto, velocidad).
 - **Mods:** una carpeta por mod en `mods\`; los archivos con el nombre de uno del juego lo reemplazan; datos de las tablas de combate (`data.ini`).
-- **DLSS 5** (experimental, sin publicar): renderizado neuronal comunitario integrado. El juego trae nuestro ReShade compilado y DLSS5-Feeder; el jugador añade las dos DLL de NVIDIA y un consumidor con AÑADIR ARCHIVOS DE NVIDIA en el launcher (solo se aceptan DLL firmadas por NVIDIA) y activa GRÁFICOS > DLSS 5. Direct3D 12, NVIDIA RTX 50 ([docs/DLSS5-MOD.md](docs/DLSS5-MOD.md)).
+- **RTX** (0.7.0; GRÁFICOS > RTX, Direct3D 12 con una tarjeta con DXR 1.1 -- NVIDIA RTX 20 o posterior, AMD RDNA 2 o posterior, Intel Arc): sombras del sol y de las luces con trazado de rayos, oclusión ambiental trazada y un rebote del color de las luces, reflejos planos en el suelo (un suelo pulido y tenue, no mojado), las farolas como focos hacia abajo, un resplandor en el aire alrededor de cada luz, relieve parallax de cada textura cerca de los luchadores (el cielo y los fondos lejanos se quedan como estaban); todo propio (consultas de rayos en línea de DXR, sin SDK de NVIDIA en el juego).
+- **DLSS 5** (0.7.0): renderizado neuronal comunitario integrado. El juego trae nuestro ReShade y nuestra build de DLSS5 ReShade AIO; el jugador añade las dos DLL de NVIDIA con AÑADIR ARCHIVOS DE NVIDIA en el launcher (solo se aceptan DLL firmadas por NVIDIA) y activa GRÁFICOS > DLSS 5. El HUD, los textos y los menús quedan fuera del pase neuronal; RENDERIZADO NEURONAL sí/no, presets (REALISTA, CINEMATOGRÁFICO, VÍVIDO, SUTIL) y ESCALADO (DLAA, CALIDAD, EQUILIBRADO, RENDIMIENTO). Direct3D 12, NVIDIA RTX 50 ([docs/DLSS5-MOD.md](docs/DLSS5-MOD.md)).
 - **Trajes que se añaden** (0.4.8): un mod cuyo `mod.ini` dice `type=skin` no reemplaza nada: es otro traje para un luchador, con su propio modelo y sus propios COLOR 1, COLOR 2 y congelado (con cualquier nombre de archivo; `skin=`, `model=`, `color1=`, `color2=`, `ice=`), junto al original. En la selección se elige en la lista TRAJE (el gi de la esquina de arriba, o triángulo / Y, o T); la lista COLOR está debajo. En línea, el otro jugador lo ve solo si tiene el mismo traje; si no, ve el original.
 - **Menú de depuración** (`F2`): cualquier luchador incluidos los jefes, escenario, ronda, hitboxes, estados guardados.
 
@@ -90,25 +91,23 @@ Todos se pueden cambiar en el launcher (CONTROLES) o en el juego (`Esc`).
 - **TEXTURAS:** todas las texturas del juego según a qué pertenecen, reemplazadas en un mod.
 - **EXPORTAR:** luchadores, escenarios, modelos y texturas en FBX, GLB, USD (USDA/USDC/USDZ) u OBJ con texturas PNG.
 
-## Problemas conocidos (0.5.8 beta)
+## Problemas conocidos (0.7.0 beta)
 
 - Vulkan: en los remates que llenan la pantalla de cuerpos (el fatality 2 de Scorpion) los frames todavía esperan a la GPU (~50 ms); en Direct3D 12 van fluidos.
-- Una compilación en otro PC terminó con "EXIT CODE: -1" (0.5.4, tras haber compilado allí una versión vieja); todavía no se sabe la causa. La 0.5.5 nombra el archivo que falla y guarda `build\last-build.log`; la 0.5.6 arregla el "FileNotFound" del icono con el que se topó el REPARAR de la 0.5.5, y añade VERIFICAR, que dice qué falta o está dañado (REPARAR lo vuelve a bajar).
 - Los iconos de SEGA DREAMCAST todavía no se han visto en el juego con un mando conectado.
-
-- En línea: las correcciones de 0.5.4 (los dos jugadores en el mismo escenario, sin bloqueo al terminar un round, sin desincronización en la segunda pelea de una sesión) se comprobaron con dos juegos en un PC y una conexión mala a propósito (120 ms de ping, 10 % de paquetes perdidos): sin desincronización en un mejor de 3 ni en dos peleas seguidas. Todavía no entre dos máquinas. Los dos jugadores necesitan la 0.5.4.
+- En línea: las correcciones de 0.5.4 se comprobaron con dos juegos en un PC y una conexión mala a propósito (120 ms de ping, 10 % de paquetes perdidos): sin desincronización. Todavía no entre dos máquinas.
 - Steam Deck / Linux: la corrección de los 6 botones (#171, #253), el mando del jugador 2 y la preferencia por el mando virtual de Steam se compilaron y comprobaron en el código generado, sin probar aún en un Deck.
-- Mandos leídos con SDL_GameControllerDB en Windows (PlayStation, Switch, 8BitDo en modo D-input, sticks arcade, mandos USB genéricos): sin probar aún con uno de esos mandos. Un mando que no está en la base de datos conserva el esquema de su fabricante, como antes.
+- Mandos leídos con SDL_GameControllerDB en Windows (PlayStation, Switch, 8BitDo en modo D-input, sticks arcade, mandos USB genéricos): sin probar aún con uno de esos mandos.
 - La pantalla VS dice los dos nombres; el juego no tiene voz de "versus" (la de un mod, `res/audio/Skversus.wav`, suena entre ellos).
 - Colores 3 a 6: el arte VERSUS (el de los finales) de Sonya, Jax y Liu Kang conserva el color 1 o 2. Colores y trajes añadidos sin probar aún en línea entre dos PCs.
-- Al unirse en línea, el glifo X del mando apareció una vez sobre START (Mary); sin reproducir aún.
+- Al unirse en línea, el glifo X del mando apareció una vez sobre START; sin reproducir aún.
 - Algunos escenarios todavía se pausan hasta ~1,3 s en sus primeros cuadros (THE STREET) mientras cargan sus eventos.
-- Con ILUMINACIÓN MEJORADA, los primeros cuadros pueden congelarse un segundo o más mientras el driver termina el shader (Direct3D 12).
-- ILUMINACIÓN MEJORADA, OCLUSIÓN AMBIENTAL y SOMBRAS DE CONTACTO son solo Vulkan y DirectX 12; con OpenGL el preset de CALIDAD GRÁFICA solo aporta BLOOM y MAPEO DE TONOS.
-- CALIDAD GRÁFICA (sin publicar): comprobada solo en Direct3D 12; Vulkan y OpenGL aún sin capturas, tiempos por frame aún sin medir. Los presets RTX están planificados, no hechos.
+- ILUMINACIÓN MEJORADA, OCLUSIÓN AMBIENTAL y SOMBRAS DE CONTACTO son solo Vulkan y Direct3D 12; con OpenGL la CALIDAD GRÁFICA solo aporta BLOOM y MAPEO DE TONOS. La CALIDAD GRÁFICA solo se ha comprobado en Direct3D 12.
+- RTX es solo Direct3D 12 y se midió en una tarjeta (RTX 5070: 56-58 fps a 1080p con antialiasing x8 y DLSS 5). Sus sombras salen de la geometría del escenario tal como se dibuja, sin el relieve parallax.
+- DLSS 5: la primera vez en cada sesión NVIDIA prepara su modelo neuronal, una pausa de 4-6 s mientras el juego arranca (lo avisa un mensaje). El ESCALADO reduce lo que procesa el pase neuronal; el juego sigue dibujando a resolución completa.
+- Los presets guardados, la ALTURA y el orden de profundidad de los luchadores del MODO FOTO son nuevos en 0.7.0 y la tester aún no los ha jugado.
 - En Linux la música del escenario todavía se decodifica en el hilo del juego (Windows lo hace en un hilo propio).
 - MOD HUB: las descargas de los mods vienen de las releases de GitHub; una red que las bloquee no puede descargar mods.
-- DLSS 5: la parte del juego está probada (nuestro ReShade engancha Direct3D 12 y el feeder arranca el NGX de NVIDIA), pero el pase neuronal todavía no se ha visto: en la máquina de pruebas no estaban las DLL de NVIDIA ni un consumidor. El HUD se procesa junto con la escena.
 
 ## Compilar desde el código
 

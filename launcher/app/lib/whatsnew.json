@@ -2,6 +2,26 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.7.0",
+      "date": "2026-11-26",
+      "ES": [
+        "RTX (GRÁFICOS > RTX, Direct3D 12): sombras, oclusión y rebote de luz con trazado de rayos, reflejos suaves en el suelo, farolas como focos, resplandor alrededor de las luces y relieve en las texturas cercanas.",
+        "DLSS 5 integrado (GRÁFICOS > DLSS 5, NVIDIA RTX 50): añade las DLL de NVIDIA con AÑADIR ARCHIVOS DE NVIDIA. El HUD y los menús no se tocan. Presets, RENDERIZADO NEURONAL sí/no y ESCALADO (DLAA, CALIDAD, EQUILIBRADO, RENDIMIENTO).",
+        "Fotogramas más estables: se acabó el tirón de cada segundo con RTX o DLSS 5.",
+        "ENTRENAMIENTO: la columna de entradas marca izquierda, derecha y las diagonales.",
+        "MODO FOTO: guarda tus propios presets, mueve la cámara arriba y abajo, y el luchador de detrás ya no se dibuja encima.",
+        "Arreglada la costura del agua del muelle."
+      ],
+      "EN": [
+        "RTX (GRAPHICS > RTX, Direct3D 12): ray-traced shadows, occlusion and light bounce, soft floor reflections, street lamps as spots, a glow around lights, and relief on nearby textures.",
+        "DLSS 5 built in (GRAPHICS > DLSS 5, NVIDIA RTX 50): add NVIDIA's DLLs with ADD NVIDIA FILES. The HUD and menus are left untouched. Presets, NEURAL RENDERING on/off and SCALING (DLAA, QUALITY, BALANCED, PERFORMANCE).",
+        "Steadier frames: no more stutter every second with RTX or DLSS 5.",
+        "TRAINING: the input column shows left, right and the diagonals.",
+        "PHOTO MODE: save your own presets, move the camera up and down, and a fighter behind no longer draws over the other.",
+        "The Waterfront's water seam is fixed."
+      ]
+    },
+    {
       "version": "0.6.0",
       "date": "2026-11-22",
       "ES": [

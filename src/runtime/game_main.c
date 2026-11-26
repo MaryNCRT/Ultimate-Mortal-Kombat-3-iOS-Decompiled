@@ -1132,13 +1132,14 @@ static void read_config_p2(const char *n, const char *v)
     }
 }
 
-/* Port: DLSS 5's one-time preparation. The AIO add-on waits 15 s for a
- * stable picture, then makes NVIDIA's neural model inside a Present: 3-4 s
- * in which the screen cannot change (measured 3.7 s). It cannot be made
- * shorter from here; it can be said. From 11 s after the first frame a line
- * at the foot of the screen says it, so the frame the screen holds carries
- * it; it goes when a frame has taken over a second (the preparation done),
- * or after 45 s. 2D, so the neural pass never touches it. */
+/* Port: DLSS 5's one-time preparation. Our AIO build waits 1.5 s for a
+ * stable picture (tools/neural/patch_aio.py #6; the stock one 15 s), then
+ * makes NVIDIA's neural model inside a Present: 4-6 s in which the screen
+ * cannot change. It cannot be made shorter from here; it can be said, and
+ * now it comes as the game starts rather than in the menus. From half a
+ * second a line at the foot of the screen says it, so the frame the screen
+ * holds carries it; it goes when a frame has taken over a second (the
+ * preparation done), or after 30 s. 2D, so the neural pass never touches it. */
 static void dlss5_notice(void)
 {
     extern int limeScreenWidth, limeScreenHeight;
@@ -1158,15 +1159,15 @@ static void dlss5_notice(void)
     if (first == 0.0)
         first = now;
     t = now - first;
-    if (last != 0.0 && now - last > 1.0 && t > 8.0) {
+    if (last != 0.0 && now - last > 1.0 && t > 1.0) {
         done = 1;                       /* the long Present: the model is made */
         printf("dlss5: the neural model was prepared (%.1f s without a frame, %.0f s after start)\n",
                now - last, t);
         return;
     }
     last = now;
-    if (t < 11.0 || t > 45.0) {
-        if (t > 45.0)
+    if (t < 0.5 || t > 30.0) {
+        if (t > 30.0)
             done = 1;
         return;
     }
@@ -1259,6 +1260,8 @@ static void read_config(const char *dir)
             neural_dlss5 = atoi(v) != 0;
         else if (strcmp(line, "dlss5_neural") == 0)    /* neural_mod.c: the neural rendering on/off */
             neural_nr = atoi(v) != 0;
+        else if (strcmp(line, "dlss5_scale") == 0)     /* neural_mod.c: DLAA, quality, balanced, performance */
+            neural_scale = atoi(v) < 0 ? 0 : atoi(v) > 3 ? 3 : atoi(v);
         else if (strcmp(line, "dlss5_layers") == 0)    /* neural_mod.c: experimental */
             neural_layers = atoi(v) != 0;
         else if (strcmp(line, "dlss5_preset") == 0)    /* neural_mod.c: GRAPHICS > DLSS 5 > PRESET */
@@ -1280,6 +1283,8 @@ static void read_config(const char *dir)
             gfx_tonemap = atoi(v) != 0, own = 1;
         else if (strcmp(line, "contact_shadows") == 0)  /* render/rgl.h */
             rgl_contact_shadows = atoi(v) != 0, own = 1;
+        else if (strcmp(line, "rt") == 0)               /* render/rgl.h: RTX shadows, next start */
+            rgl_rt = atoi(v) != 0;
         /* AMBIENT OCCLUSION (render/rgl.h, research/AMBIENT-OCCLUSION.md) */
         else if (strcmp(line, "ao") == 0)              /* 0 off, 1 Crytek, 2 HBAO, 3 Alchemy */
             rgl_ao = atoi(v) < 0 ? 0 : atoi(v) > 3 ? 3 : atoi(v);
@@ -3377,6 +3382,7 @@ static void fit_view(int ww, int wh, int *vx, int *vy, int *vw, int *vh)
  * work itself, and this never sleeps. UMK3_FRAME_DELAY=0 turns it off. */
 static double g_pace_vbl = -1.0, g_pace_gap, g_pace_work = 0.004;
 static double g_pace_start;
+static double g_pace_cpu;               /* this frame's work before the swap */
 
 /* Only on a screen of about 60 Hz. A faster one already shows a tick within
  * a few ms of making it: the loop spins, reading the keys, until the tick is
@@ -3420,14 +3426,27 @@ static void pace_frame(void)
         }
     }
     period = (hz >= 50 && hz <= 65) ? 1.0 / hz : 0.0;
+    {
+        /* the frame's work: before the swap, and the swap's own (the GPU's
+         * commands, the Present call with DLSS 5 in it: rgl_present_work_ms).
+         * Counted from the CPU's part alone, the wait after the swap left
+         * no room for the GPU's 5-13 ms with RTX or DLSS 5, a refresh was
+         * missed, the margin grew 1 ms and shrank again: a 33 ms frame every
+         * second or so -- the "lag" (Mary, 2026-11-22) */
+        double w = g_pace_cpu + rgl_present_work_ms * 1e-3;
+        if (w > 0.014)                  /* a load, not a frame: do not wait for long */
+            w = 0.014;
+        /* the longest lately: up at once, down over a second or so */
+        g_pace_work = w > g_pace_work ? w : g_pace_work * 0.98 + w * 0.02;
+    }
     if (g_pace_vbl >= 0.0) {
         double d = now - g_pace_vbl;
         g_pace_gap = g_pace_gap * 0.95 + d * 0.05;
         if (period > 0.0 && d > period * 1.5 && d < 0.1) {
             /* a refresh missed: the wait was too long, keep more margin */
             g_pace_work += 0.001;
-            if (g_pace_work > 0.012)
-                g_pace_work = 0.012;
+            if (g_pace_work > 0.014)
+                g_pace_work = 0.014;
         }
     }
     g_pace_vbl = now;
@@ -3465,10 +3484,7 @@ static void pace_work_end(void)
 {
     double w = plat_time() - g_pace_start;
 
-    if (w > 0.012)          /* a load, not a frame: do not wait for long */
-        w = 0.012;
-    /* the longest lately: up at once, down over a second or so */
-    g_pace_work = w > g_pace_work ? w : g_pace_work * 0.98 + w * 0.02;
+    g_pace_cpu = w;         /* pace_frame adds the swap's and keeps the estimate */
 }
 
 /* ------------------------------------------------- the settings menu's side

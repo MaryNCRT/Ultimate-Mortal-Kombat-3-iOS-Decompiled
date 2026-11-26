@@ -120,6 +120,23 @@ static int g_white;
 static int g_shadow;                    /* the target sampled as the shadow map (t1) */
 static int g_shadow2;                   /* and the point lights' (t2) */
 static int g_screen;                    /* AMBIENT OCCLUSION's screen map (t3) */
+static int g_reflect;                   /* RTX REFLECTIONS' mirrored scene (t5) */
+
+/* RTX (rgl.h rgl_rt): the scene's triangles in acceleration structures,
+ * two sets, one traced by the draws while the other is built */
+typedef struct {
+    ID3D12Resource *up, *as, *scratch;  /* vertices and instances; the results; the builds' room */
+    UINT64 up_size, as_size, scratch_size;
+    unsigned char *up_map;
+} rt_set;
+static int g_rt;                        /* this run traces (decided as the device opens) */
+static ID3D12Device5 *g_dev5;
+static ID3D12GraphicsCommandList4 *g_list4;
+static rt_set g_rts[2];
+static int g_rt_cur = -1;               /* the set built last, which the draws trace */
+static D3D12_GPU_VIRTUAL_ADDRESS g_tlas;
+static ID3D12Resource *g_rt_old[8];     /* outgrown, released after the next wait */
+static int g_nrt_old;
 
 #define DEPTH_FMT DXGI_FORMAT_D24_UNORM_S8_UINT
 #define COLOR_FMT DXGI_FORMAT_R8G8B8A8_UNORM
@@ -195,9 +212,12 @@ static ID3D12Resource **g_ubufs;
 static int g_nubufs, g_cubufs;
 static UINT64 g_ubytes;
 static void upload_submit(void);
+static void settle(void);
 
 static void release(dx_res *r)
 {
+    if (r->res)
+        settle();                       /* the presented frame may read it */
     if (r->res && g_ulist_on)           /* a recorded upload may write it */
         upload_submit();
     if (r->res)
@@ -255,6 +275,7 @@ static void list_begin(void)
     ID3D12DescriptorHeap *hs[2];
     if (g_list_on)
         return;
+    settle();                           /* the allocator: the GPU done with it */
     ID3D12CommandAllocator_Reset(g_alloc);
     ID3D12GraphicsCommandList_Reset(g_list, g_alloc, NULL);
     hs[0] = g_srv_heap;
@@ -265,14 +286,55 @@ static void list_begin(void)
     g_bound_target = -1;
 }
 
+/* 0.6: the frame presented runs on the GPU while the CPU makes the next
+ * one (the game's ticks, the scene's held draws) -- before, each present
+ * waited for the GPU, and the CPU's ~6 ms and the GPU's ~11 ms (DLSS 5,
+ * antialiasing, RTX) added up past a refresh: a frame shown twice, several
+ * times a second (Mary, 2026-11-22). The wait is put off until something
+ * reuses what the frame used (settle): the next list, an upload, a
+ * release, a read. UMK3_D3D12_SERIAL=1: the old way. */
+static UINT64 g_inflight;               /* the presented frame's fence, 0 none */
+/* port diagnostic (UMK3_LOG_WAITS): the GPU waits a frame, where and how long */
+static double g_dw_ms[4];               /* wait_gpu, settle, flush's run */
+static int g_dw_n[4];
+static const char *g_dw_last;           /* who called the last flush */
+static void settle(void);
+
 static void wait_gpu(void)
 {
+    double t0 = rgl_now_ms();
+    settle();
     g_fval++;
     ID3D12CommandQueue_Signal(g_queue, g_fence, g_fval);
     if (ID3D12Fence_GetCompletedValue(g_fence) < g_fval) {
         ID3D12Fence_SetEventOnCompletion(g_fence, g_fval, g_event);
         WaitForSingleObject(g_event, INFINITE);
     }
+    g_dw_ms[0] += rgl_now_ms() - t0;
+    g_dw_n[0]++;
+}
+
+/* the presented frame done: waited for, and what it used free again */
+static void settle(void)
+{
+    if (!g_inflight)
+        return;
+    if (ID3D12Fence_GetCompletedValue(g_fence) < g_inflight) {
+        double t0 = rgl_now_ms();
+        ID3D12Fence_SetEventOnCompletion(g_fence, g_inflight, g_event);
+        WaitForSingleObject(g_event, INFINITE);
+        g_dw_ms[1] += rgl_now_ms() - t0;
+        g_dw_n[1]++;
+    }
+    g_inflight = 0;
+    while (g_nretired > 0)
+        ID3D12Resource_Release(g_retired[--g_nretired]);
+    while (g_nrt_old > 0)
+        ID3D12Resource_Release(g_rt_old[--g_nrt_old]);
+    g_srv_next = 0;
+    g_voff = 0;
+    g_ldirty = 1;
+    g_serial++;
 }
 
 /* what is recorded, run and waited for */
@@ -289,6 +351,8 @@ static void flush(void)
     wait_gpu();
     while (g_nretired > 0)              /* the buffers the frame outgrew */
         ID3D12Resource_Release(g_retired[--g_nretired]);
+    while (g_nrt_old > 0)
+        ID3D12Resource_Release(g_rt_old[--g_nrt_old]);
     g_srv_next = 0;
     g_voff = 0;
     g_ldirty = 1;                       /* the lights' copy is gone with it */
@@ -417,9 +481,9 @@ static D3D12_RECT gl_rect(const rgl_rect *r, int tw, int th)
 
 static int make_root(void)
 {
-    D3D12_DESCRIPTOR_RANGE rs, rsm;
-    D3D12_ROOT_PARAMETER p[4];
-    D3D12_STATIC_SAMPLER_DESC sp;
+    D3D12_DESCRIPTOR_RANGE rs, rsm, rr;
+    D3D12_ROOT_PARAMETER p[6];
+    D3D12_STATIC_SAMPLER_DESC sp[2];
     D3D12_ROOT_SIGNATURE_DESC d;
     ID3DBlob *blob = NULL, *err = NULL;
     PFN_D3D12_SERIALIZE_ROOT_SIGNATURE ser =
@@ -446,19 +510,30 @@ static int make_root(void)
     p[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;   /* b1 DYNAMIC LIGHTS */
     p[3].Descriptor.ShaderRegister = 1;
     p[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    p[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;   /* t4 RTX: the scene to trace */
+    p[4].Descriptor.ShaderRegister = 4;
+    p[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rr = rs;                            /* t5 RTX REFLECTIONS: the mirrored scene */
+    rr.NumDescriptors = 1;
+    rr.BaseShaderRegister = 5;
+    p[5] = p[1];
+    p[5].DescriptorTable.pDescriptorRanges = &rr;
     /* s1: the shadow map's, texel by texel, clamped */
-    memset(&sp, 0, sizeof sp);
-    sp.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
-    sp.AddressU = sp.AddressV = sp.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-    sp.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
-    sp.MaxLOD = D3D12_FLOAT32_MAX;
-    sp.ShaderRegister = 1;
-    sp.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    memset(sp, 0, sizeof sp);
+    sp[0].Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+    sp[0].AddressU = sp[0].AddressV = sp[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    sp[0].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+    sp[0].MaxLOD = D3D12_FLOAT32_MAX;
+    sp[0].ShaderRegister = 1;
+    sp[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    sp[1] = sp[0];                      /* s2 RTX REFLECTIONS: linear, clamped */
+    sp[1].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+    sp[1].ShaderRegister = 2;
     memset(&d, 0, sizeof d);
-    d.NumParameters = 4;
+    d.NumParameters = g_rt ? 6 : 4;
     d.pParameters = p;
-    d.NumStaticSamplers = 1;
-    d.pStaticSamplers = &sp;
+    d.NumStaticSamplers = g_rt ? 2 : 1;
+    d.pStaticSamplers = sp;
     d.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
     if (!ok(ser(&d, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &err), "SerializeRootSignature"))
         return 0;
@@ -597,6 +672,24 @@ static int dx_open(void *window, int width, int height)
         return 0;
     ID3D12GraphicsCommandList_Close(g_list);
     g_event = CreateEventA(NULL, FALSE, FALSE, NULL);
+    {
+        /* RTX (graphics phase 3, docs/research/GRAPHICS-OVERHAUL.md 4.4):
+         * inline ray queries need DXR 1.1 -- NVIDIA RTX 20 and later, AMD
+         * RDNA 2 and later, Intel Arc. Decided here, for the run: the root
+         * signature and every pipeline's shaders depend on it */
+        D3D12_FEATURE_DATA_D3D12_OPTIONS5 o5;
+        memset(&o5, 0, sizeof o5);
+        rgl_rt_tier = 0;
+        if (SUCCEEDED(ID3D12Device_CheckFeatureSupport(g_dev, D3D12_FEATURE_D3D12_OPTIONS5, &o5, sizeof o5)))
+            rgl_rt_tier = (int)o5.RaytracingTier;
+        g_rt = 0;
+        if (rgl_rt && rgl_rt_tier >= D3D12_RAYTRACING_TIER_1_1
+            && SUCCEEDED(ID3D12Device_QueryInterface(g_dev, &IID_ID3D12Device5, (void **)&g_dev5))
+            && SUCCEEDED(ID3D12GraphicsCommandList_QueryInterface(g_list, &IID_ID3D12GraphicsCommandList4,
+                                                                 (void **)&g_list4)))
+            g_rt = 1;
+        rgl_rt_live = g_rt;
+    }
     if (!make_root())
         return 0;
     g_vsize = 4u << 20;
@@ -632,6 +725,10 @@ static int dx_open(void *window, int width, int height)
     }
     preload();
     printf("d3d12: %s, window %dx%d\n", g_adapter, g_bw, g_bh);
+    printf("d3d12: ray tracing %s (tier 0x%x)%s\n",
+           rgl_rt_tier >= D3D12_RAYTRACING_TIER_1_1 ? "DXR 1.1, inline ray queries available"
+           : rgl_rt_tier >= D3D12_RAYTRACING_TIER_1_0 ? "DXR 1.0 only (no inline ray queries)" : "not supported",
+           rgl_rt_tier, g_rt ? ", RTX SHADOWS on" : rgl_rt ? ", RTX asked for but not available" : "");
     return 1;
 }
 
@@ -648,9 +745,10 @@ static UINT64          g_ring_off;
 static void dx_close(void)
 {
     int i;
-    g_shadow = g_shadow2 = g_screen = 0;
+    g_shadow = g_shadow2 = g_screen = g_reflect = 0;
     if (!g_dev)
         return;
+    settle();
     flush();
     wait_gpu();
     lib_close();
@@ -683,6 +781,21 @@ static void dx_close(void)
     while (g_nretired > 0)
         ID3D12Resource_Release(g_retired[--g_nretired]);
     if (g_vbuf) ID3D12Resource_Release(g_vbuf);
+    for (i = 0; i < 2; i++) {
+        if (g_rts[i].up) ID3D12Resource_Release(g_rts[i].up);
+        if (g_rts[i].as) ID3D12Resource_Release(g_rts[i].as);
+        if (g_rts[i].scratch) ID3D12Resource_Release(g_rts[i].scratch);
+    }
+    memset(g_rts, 0, sizeof g_rts);
+    while (g_nrt_old > 0)
+        ID3D12Resource_Release(g_rt_old[--g_nrt_old]);
+    if (g_list4) ID3D12GraphicsCommandList4_Release(g_list4);
+    if (g_dev5) ID3D12Device5_Release(g_dev5);
+    g_list4 = NULL;
+    g_dev5 = NULL;
+    g_rt = rgl_rt_live = 0;
+    g_rt_cur = -1;
+    g_tlas = 0;
     if (g_root) ID3D12RootSignature_Release(g_root);
     if (g_list) ID3D12GraphicsCommandList_Release(g_list);
     if (g_alloc) ID3D12CommandAllocator_Release(g_alloc);
@@ -764,6 +877,7 @@ static void upload_submit(void)
 
 static int upload_begin(UINT64 bytes)
 {
+    settle();
     if (g_ulist_on && g_ubytes + bytes > ((UINT64)64 << 20))
         upload_submit();
     if (!g_ualloc) {
@@ -989,6 +1103,8 @@ static void dx_target_free(int i)
         g_shadow2 = 0;
     if (g_screen == i)
         g_screen = 0;
+    if (g_reflect == i)
+        g_reflect = 0;
     release(&g_tg[i].color);
     release(&g_tg[i].dep);
     if (g_tg[i].rtv >= 0) g_rtv_used[g_tg[i].rtv] = 0;
@@ -1094,6 +1210,12 @@ static void lib_open(void)
         g_shader_hash = (g_shader_hash ^ k_dx_vs[i]) * 16777619u;
     for (i = 0; i < sizeof k_dx_ps; i++)
         g_shader_hash = (g_shader_hash ^ k_dx_ps[i]) * 16777619u;
+    if (g_rt) {                         /* RTX: other shaders, another root signature */
+        for (i = 0; i < sizeof k_dx_vs_rt; i++)
+            g_shader_hash = (g_shader_hash ^ k_dx_vs_rt[i]) * 16777619u;
+        for (i = 0; i < sizeof k_dx_ps_rt; i++)
+            g_shader_hash = (g_shader_hash ^ k_dx_ps_rt[i]) * 16777619u;
+    }
     if (FAILED(ID3D12Device_QueryInterface(g_dev, &IID_ID3D12Device1, (void **)&d1)))
         return;
     rgl_path(path, sizeof path, LIB_FILE);
@@ -1187,10 +1309,10 @@ static ID3D12PipelineState *get_pso(const rgl_pipe *k, int samples, int depth)
         il[i].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
     memset(&d, 0, sizeof d);
     d.pRootSignature = g_root;
-    d.VS.pShaderBytecode = k_dx_vs;
-    d.VS.BytecodeLength = sizeof k_dx_vs;
-    d.PS.pShaderBytecode = k_dx_ps;
-    d.PS.BytecodeLength = sizeof k_dx_ps;
+    d.VS.pShaderBytecode = g_rt ? k_dx_vs_rt : k_dx_vs;
+    d.VS.BytecodeLength = g_rt ? sizeof k_dx_vs_rt : sizeof k_dx_vs;
+    d.PS.pShaderBytecode = g_rt ? k_dx_ps_rt : k_dx_ps;
+    d.PS.BytecodeLength = g_rt ? sizeof k_dx_ps_rt : sizeof k_dx_ps;
     d.BlendState.RenderTarget[0].BlendEnable = k->blend;
     d.BlendState.RenderTarget[0].SrcBlend = dx_bf(k->src);
     d.BlendState.RenderTarget[0].DestBlend = dx_bf(k->dst);
@@ -1331,6 +1453,8 @@ static void dx_lights(const void *block, int bytes)
 static const unsigned *g_put_idx;
 static int g_put_ni;
 
+static void dx_rt_scene(const float *const *xyz, const int *ntris, int ngeo);
+
 static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, int srv_ms,
                 const rgl_samp *s, const D3D12_VIEWPORT *vp, const D3D12_RECT *sc,
                 const rgl_vtx *v, int n)
@@ -1338,6 +1462,9 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     const unsigned *idx = g_put_idx;
     const int ni = g_put_ni;
     const UINT64 ibytes = idx ? ((UINT64)ni * 4 + 255) & ~(UINT64)255 : 0;
+    settle();                           /* the vertex ring: the GPU done with it */
+    if (g_rt && !g_tlas)                /* RTX: an empty scene before the first one */
+        dx_rt_scene(NULL, NULL, 0);
     /* room for the lights' block too, whether or not it is written: a
      * flush below makes it due again; and for the indices after the
      * vertices */
@@ -1380,7 +1507,7 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
                 return;
         }
     }
-    if (g_srv_next + 4 > SRV_RING && g_list_on)
+    if (g_srv_next + 5 > SRV_RING && g_list_on)
         flush();
     bind_target();
     /* t1: the shadow map for a draw that receives, white (nothing nearer
@@ -1419,6 +1546,14 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     ID3D12Device_CreateShaderResourceView(g_dev, shadow_res, &sd, cpu(g_srv_heap, g_srv_inc, g_srv_next + 1));
     ID3D12Device_CreateShaderResourceView(g_dev, shadow2_res, &sd, cpu(g_srv_heap, g_srv_inc, g_srv_next + 2));
     ID3D12Device_CreateShaderResourceView(g_dev, screen_res, &sd, cpu(g_srv_heap, g_srv_inc, g_srv_next + 3));
+    if (g_rt) {                         /* t5 RTX REFLECTIONS */
+        ID3D12Resource *rres = g_tex[g_white].r.res;
+        if (g_reflect > 0 && g_reflect < g_ntg && g_tg[g_reflect].used && g_reflect != t) {
+            to_state(&g_tg[g_reflect].color, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            rres = g_tg[g_reflect].color.res;
+        }
+        ID3D12Device_CreateShaderResourceView(g_dev, rres, &sd, cpu(g_srv_heap, g_srv_inc, g_srv_next + 4));
+    }
     ss = get_sampler(s);
     if (g_ldirty) {
         memcpy(g_vmap + g_voff, &g_lblock, sizeof g_lblock);
@@ -1454,6 +1589,10 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     ID3D12GraphicsCommandList_SetGraphicsRootDescriptorTable(g_list, 1, gpu(g_srv_heap, g_srv_inc, g_srv_next));
     ID3D12GraphicsCommandList_SetGraphicsRootDescriptorTable(g_list, 2, gpu(g_samp_heap, g_samp_inc, ss));
     ID3D12GraphicsCommandList_SetGraphicsRootConstantBufferView(g_list, 3, g_laddr);
+    if (g_rt) {
+        ID3D12GraphicsCommandList_SetGraphicsRootShaderResourceView(g_list, 4, g_tlas);
+        ID3D12GraphicsCommandList_SetGraphicsRootDescriptorTable(g_list, 5, gpu(g_srv_heap, g_srv_inc, g_srv_next + 4));
+    }
     ID3D12GraphicsCommandList_IASetPrimitiveTopology(g_list, k->topo == RGL_LINES ? D3D_PRIMITIVE_TOPOLOGY_LINELIST
                                                                                   : D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     ID3D12GraphicsCommandList_IASetVertexBuffers(g_list, 0, 1, &vb);
@@ -1461,7 +1600,7 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
         ID3D12GraphicsCommandList_DrawIndexedInstanced(g_list, (UINT)ni, 1, 0, 0, 0);
     else
         ID3D12GraphicsCommandList_DrawInstanced(g_list, (UINT)n, 1, 0, 0);
-    g_srv_next += 4;
+    g_srv_next += g_rt ? 5 : 4;
 }
 
 static void dx_draw(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_samp *s,
@@ -1594,6 +1733,7 @@ static void dx_blit(int src, const rgl_rect *a, int dst, const rgl_rect *b, int 
 
 static void dx_read(int t, const rgl_rect *r, unsigned char *out)
 {
+    settle();
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp;
     D3D12_TEXTURE_COPY_LOCATION dst, src;
     D3D12_BOX box;
@@ -1663,12 +1803,30 @@ static void dx_present(void)
     frame_begin();
     to_state(&g_back[g_bi], D3D12_RESOURCE_STATE_PRESENT);
     t1 = rgl_now_ms();
-    flush();
+    if (getenv("UMK3_D3D12_SERIAL"))
+        flush();
+    else {                              /* run, not waited for (settle) */
+        ID3D12CommandList *l;
+        upload_submit();
+        if (g_list_on) {
+            ID3D12GraphicsCommandList_Close(g_list);
+            l = (ID3D12CommandList *)g_list;
+            ID3D12CommandQueue_ExecuteCommandLists(g_queue, 1, &l);
+            g_list_on = 0;
+        }
+    }
     t2 = rgl_now_ms();
     IDXGISwapChain3_Present(g_swap, !rgl_vsync ? 0 : rgl_swap_interval < 1 ? 1
                                     : rgl_swap_interval > 4 ? 4 : (UINT)rgl_swap_interval, 0);
     t3 = rgl_now_ms();
-    wait_gpu();
+    if (getenv("UMK3_D3D12_SERIAL"))
+        wait_gpu();
+    else {
+        g_fval++;
+        ID3D12CommandQueue_Signal(g_queue, g_fence, g_fval);
+        g_inflight = g_fval;
+    }
+    rgl_present_work_ms = rgl_now_ms() - t0;   /* the pacing's share (rgl.h) */
     /* LOW LATENCY: one frame in DXGI's queue, and with vsync the present
      * waits here until the display has taken it -- as glFinish after the
      * swap does on OpenGL -- so the pacing in game_main.c measures from the
@@ -1690,6 +1848,15 @@ static void dx_present(void)
                "waited for, %.0f ms releasing\n",
                rgl_now_ms() - t0, t1 - t0, t2 - t1, g_psos_new, t3 - t2, rgl_now_ms() - t3,
                g_diag_up_n, g_diag_up_lists, g_diag_up_bytes / 1048576.0, g_diag_up_ms, g_diag_rel_ms);
+    if (getenv("UMK3_LOG_WAITS")) {
+        static int fr;
+        if (++fr % 30 == 0) {
+            printf("d3d12 waits a frame: wait_gpu %.1f (%.1f ms), settle %.1f (%.1f ms), pipelines made %d\n",
+                   g_dw_n[0] / 30.0, g_dw_ms[0] / 30, g_dw_n[1] / 30.0, g_dw_ms[1] / 30, g_psos_new);
+            memset(g_dw_ms, 0, sizeof g_dw_ms);
+            memset(g_dw_n, 0, sizeof g_dw_n);
+        }
+    }
     g_psos_new = 0;
     g_diag_up_ms = g_diag_rel_ms = 0.0;
     g_diag_up_bytes = 0;
@@ -1699,6 +1866,11 @@ static void dx_present(void)
 }
 
 static void dx_finish(void) { }
+
+static void dx_reflect_map(int t)
+{
+    g_reflect = t > 0 && t < g_ntg && g_tg[t].used ? t : 0;
+}
 
 static void dx_screen_map(int t)
 {
@@ -1719,12 +1891,210 @@ static void dx_shadow_map(int t)
         to_state(&g_tg[g_shadow].color, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 }
 
+/* ------------------------------------------------------------- RTX */
+
+/* a buffer for the acceleration structures: in video memory, written by the
+ * builds (D3D12's "Acceleration structure memory" rules) */
+static ID3D12Resource *rt_buffer(UINT64 size, D3D12_RESOURCE_STATES state)
+{
+    D3D12_HEAP_PROPERTIES hp;
+    D3D12_RESOURCE_DESC d;
+    ID3D12Resource *r = NULL;
+
+    memset(&hp, 0, sizeof hp);
+    hp.Type = D3D12_HEAP_TYPE_DEFAULT;
+    memset(&d, 0, sizeof d);
+    d.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    d.Width = size;
+    d.Height = d.DepthOrArraySize = d.MipLevels = 1;
+    d.SampleDesc.Count = 1;
+    d.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    d.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    if (!ok(ID3D12Device_CreateCommittedResource(g_dev, &hp, D3D12_HEAP_FLAG_NONE, &d, state, NULL,
+                                                 &IID_ID3D12Resource, (void **)&r), "RTX buffer"))
+        return NULL;
+    return r;
+}
+
+static void rt_retire(ID3D12Resource *r)
+{
+    if (!r)
+        return;
+    if (g_nrt_old < 8)
+        g_rt_old[g_nrt_old++] = r;
+    else {                              /* no room: wait for the GPU first */
+        flush();
+        ID3D12Resource_Release(r);
+    }
+}
+
+/* grown to at least `need`, half as much again; 0 when it cannot be */
+static int rt_room(ID3D12Resource **r, UINT64 *have, UINT64 need, int kind)
+{
+    UINT64 size;
+    if (*r && *have >= need)
+        return 1;
+    size = need + need / 2;
+    size = (size + 65535) & ~(UINT64)65535;
+    rt_retire(*r);
+    *r = NULL;
+    *have = 0;
+    *r = kind == 0 ? buffer(size, D3D12_HEAP_TYPE_UPLOAD)
+       : rt_buffer(size, kind == 1 ? D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE
+                                   : D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    if (!*r)
+        return 0;
+    *have = size;
+    return 1;
+}
+
+#define RT_ALIGN(x) (((x) + 255) & ~(UINT64)255)
+
+/* this frame's casters (rgl.h rt_scene): a bottom-level structure for each
+ * group, an instance of it in the top level with the group as its id (the
+ * shader skips the receiver's own), built at the end of the frame's list;
+ * the next frame's draws trace it */
+static void dx_rt_scene(const float *const *xyz, const int *ntris, int ngeo)
+{
+    D3D12_RAYTRACING_GEOMETRY_DESC geo[16];
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC bd[17];
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS tin;
+    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO pi;
+    D3D12_RAYTRACING_INSTANCE_DESC *inst;
+    D3D12_RESOURCE_BARRIER b;
+    UINT64 voff[16], aoff[17], soff[17], up = 0, as = 0, sc = 0;
+    D3D12_GPU_VIRTUAL_ADDRESS upa, asa, sca;
+    int g, nb = 0, gi[16], s, i;
+    rt_set *S;
+
+    if (!g_rt || !g_list4)
+        return;
+    settle();
+    if (ngeo > 16)
+        ngeo = 16;
+    s = g_rt_cur < 0 ? 0 : g_rt_cur ^ 1;
+    S = &g_rts[s];
+
+    /* the upload: the instances first (16-byte aligned), then the vertices */
+    up = 16 * sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
+    for (g = 0; g < ngeo; g++)
+        if (ntris[g] > 0) {
+            voff[g] = up;
+            up += ((UINT64)ntris[g] * 36 + 15) & ~(UINT64)15;
+        }
+    if (!S->up || S->up_size < up) {
+        if (S->up)
+            ID3D12Resource_Unmap(S->up, 0, NULL);
+        S->up_map = NULL;
+        if (!rt_room(&S->up, &S->up_size, up, 0)
+            || FAILED(ID3D12Resource_Map(S->up, 0, NULL, (void **)&S->up_map))) {
+            g_rt = rgl_rt_live = 0;     /* out of memory: the shadow map again */
+            printf("d3d12: RTX off, no memory for the scene (%llu bytes)\n", (unsigned long long)up);
+            return;
+        }
+    }
+    upa = ID3D12Resource_GetGPUVirtualAddress(S->up);
+
+    /* the bottom levels' sizes */
+    for (g = 0; g < ngeo; g++) {
+        D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS *in;
+        if (ntris[g] <= 0)
+            continue;
+        memcpy(S->up_map + voff[g], xyz[g], (size_t)ntris[g] * 36);
+        memset(&geo[nb], 0, sizeof geo[nb]);
+        geo[nb].Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+        /* the stage opaque; a fighter not, so the shader sees its hits and
+         * can pass over the receiver's own body */
+        geo[nb].Flags = g == 0 ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
+        geo[nb].Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
+        geo[nb].Triangles.VertexCount = (UINT)ntris[g] * 3;
+        geo[nb].Triangles.VertexBuffer.StartAddress = upa + voff[g];
+        geo[nb].Triangles.VertexBuffer.StrideInBytes = 12;
+        memset(&bd[nb], 0, sizeof bd[nb]);
+        in = &bd[nb].Inputs;
+        in->Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+        in->Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD;
+        in->NumDescs = 1;
+        in->DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+        in->pGeometryDescs = &geo[nb];
+        memset(&pi, 0, sizeof pi);
+        ID3D12Device5_GetRaytracingAccelerationStructurePrebuildInfo(g_dev5, in, &pi);
+        aoff[nb] = as;
+        soff[nb] = sc;
+        as += RT_ALIGN(pi.ResultDataMaxSizeInBytes);
+        sc += RT_ALIGN(pi.ScratchDataSizeInBytes);
+        gi[nb] = g;
+        nb++;
+    }
+    /* the top level's */
+    memset(&tin, 0, sizeof tin);
+    tin.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
+    tin.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD;
+    tin.NumDescs = (UINT)nb;
+    tin.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+    tin.InstanceDescs = upa;
+    memset(&pi, 0, sizeof pi);
+    ID3D12Device5_GetRaytracingAccelerationStructurePrebuildInfo(g_dev5, &tin, &pi);
+    aoff[nb] = as;
+    soff[nb] = sc;
+    as += RT_ALIGN(pi.ResultDataMaxSizeInBytes);
+    sc += RT_ALIGN(pi.ScratchDataSizeInBytes);
+    if (!rt_room(&S->as, &S->as_size, as, 1) || !rt_room(&S->scratch, &S->scratch_size, sc, 2)) {
+        g_rt = rgl_rt_live = 0;
+        printf("d3d12: RTX off, no memory for the scene (%llu + %llu bytes)\n",
+               (unsigned long long)as, (unsigned long long)sc);
+        return;
+    }
+    asa = ID3D12Resource_GetGPUVirtualAddress(S->as);
+    sca = ID3D12Resource_GetGPUVirtualAddress(S->scratch);
+
+    /* the instances: in the world as they are, the group their id */
+    inst = (D3D12_RAYTRACING_INSTANCE_DESC *)S->up_map;
+    for (i = 0; i < nb; i++) {
+        memset(&inst[i], 0, sizeof inst[i]);
+        inst[i].Transform[0][0] = inst[i].Transform[1][1] = inst[i].Transform[2][2] = 1.0f;
+        inst[i].InstanceID = (UINT)gi[i];
+        inst[i].InstanceMask = 0xFF;
+        inst[i].Flags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE;
+        inst[i].AccelerationStructure = asa + aoff[i];
+    }
+
+    list_begin();
+    for (i = 0; i < nb; i++) {
+        bd[i].DestAccelerationStructureData = asa + aoff[i];
+        bd[i].ScratchAccelerationStructureData = sca + soff[i];
+        ID3D12GraphicsCommandList4_BuildRaytracingAccelerationStructure(g_list4, &bd[i], 0, NULL);
+    }
+    memset(&b, 0, sizeof b);
+    b.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+    b.UAV.pResource = S->as;            /* the bottom levels done before the top reads them */
+    ID3D12GraphicsCommandList_ResourceBarrier(g_list, 1, &b);
+    memset(&bd[nb], 0, sizeof bd[nb]);
+    bd[nb].Inputs = tin;
+    bd[nb].DestAccelerationStructureData = asa + aoff[nb];
+    bd[nb].ScratchAccelerationStructureData = sca + soff[nb];
+    ID3D12GraphicsCommandList4_BuildRaytracingAccelerationStructure(g_list4, &bd[nb], 0, NULL);
+    ID3D12GraphicsCommandList_ResourceBarrier(g_list, 1, &b);   /* and the top before the draws */
+    g_tlas = asa + aoff[nb];
+    g_rt_cur = s;
+    if (getenv("UMK3_LOG_RT")) {
+        static int shown;
+        if (shown++ % 300 == 0) {
+            printf("rtx: %d groups:", nb);
+            for (i = 0; i < nb; i++)
+                printf(" [%d] %d tris (%.2f %.2f %.2f)", gi[i], ntris[gi[i]], xyz[gi[i]][0], xyz[gi[i]][1], xyz[gi[i]][2]);
+            printf(", %llu KB\n", (unsigned long long)(as >> 10));
+        }
+    }
+}
+
 rgl_backend rgl_d3d12 = {
     "Direct3D 12", dx_open, dx_close, dx_device, 16384, 1,
     dx_tex_new, dx_tex_image, dx_tex_sub, dx_tex_free,
     dx_target_new, dx_target_free, dx_target_use, dx_target_size,
     dx_clear, dx_draw, dx_blit, dx_read, dx_present, dx_finish, dx_shadow_map,
-    dx_lights, dx_shadow_map2, dx_screen_map, dx_draw_indexed,
+    dx_lights, dx_shadow_map2, dx_screen_map, dx_draw_indexed, dx_rt_scene,
+    dx_reflect_map,
 };
 
 #endif

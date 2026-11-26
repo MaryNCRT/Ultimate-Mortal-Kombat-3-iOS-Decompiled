@@ -199,6 +199,14 @@ typedef struct rgl_backend {
     void (*draw_indexed)(const rgl_pipe *p, const rgl_frag *f, int tex, const rgl_samp *s,
                          const rgl_rect *viewport, const rgl_rect *scissor,
                          const rgl_vtx *v, int nv, const unsigned *idx, int ni);
+    /* RTX: this frame's casting triangles in the world, `ngeo` groups (0 the
+     * stage, a fighter from 1; xyz[g] ntris[g] triangles of 3 vertices of 3
+     * floats), made the acceleration structure the next frame's draws trace
+     * against. NULL: no ray tracing */
+    void (*rt_scene)(const float *const *xyz, const int *ntris, int ngeo);
+    /* RTX REFLECTIONS: the target holding the scene mirrored under its floor,
+     * sampled by the floor (t5); 0 none. NULL: no reflections */
+    void (*reflect_map)(int target);
 } rgl_backend;
 
 /* DYNAMIC LIGHTS (ENHANCED LIGHTING, rgl_ff.c): point, spot and directional
@@ -229,6 +237,10 @@ typedef struct {
     float aodbg[4];                        /* x: rgl_ao_debug */
     int   count, pad[3];
     rgl_light l[RGL_MAX_LIGHTS];
+    float refl[4];                         /* RTX REFLECTIONS: the floor's height
+                                            * (world z), the strength (0 off) */
+    float rvp[4];                          /* the reflection's viewport in the
+                                            * target, x, y from the top, w, h */
 } rgl_light_block;                         /* 1168 bytes */
 
 extern rgl_backend rgl_vk;
@@ -269,6 +281,15 @@ extern int rgl_shadows;
  * is 1 the original pixels are put back after the neural pass. The colour
  * is never changed by it. */
 extern int rgl_layers;
+/* RTX (graphics phase 3): the device DXR tier, read when Direct3D 12 opens
+ * (rgl_d3d12.c; 0x0b is DXR 1.1, what inline ray queries need); 0 elsewhere */
+extern int rgl_rt_tier;
+/* RTX (umk3.ini rt=1, GRAPHICS > RTX; with ENHANCED LIGHTING, Direct3D 12
+ * and DXR 1.1): the sun's shadows traced against the scene's triangles in
+ * place of the shadow map. rgl_rt_on() says whether this run traces. */
+extern int rgl_rt;
+extern int rgl_rt_live;                    /* the backend traces this run (rgl_d3d12.c) */
+int rgl_rt_on(void);
 /* 1 while a fight is on (game_main.c, every frame): outside one -- the menus,
  * the select screen -- every draw is layer 0, whatever its camera */
 extern int rgl_in_fight;
@@ -287,6 +308,11 @@ extern int   rgl_contact_shadows;
 extern int   rgl_ao_debug;
 extern float rgl_ao_radius, rgl_ao_intensity, rgl_ao_bias, rgl_ao_floor, rgl_ao_scale;
 extern double rgl_shadow_ms;           /* this frame's map and held draws, for the log */
+/* the last present's own work: the frame's commands run on the GPU, the
+ * Present call (DLSS 5's pass is in it) and the wait for the GPU -- not
+ * the wait for the refresh. game_main.c's pacing counts it as the frame's
+ * work; 0 where the backend does not measure it */
+extern double rgl_present_work_ms;
 extern double rgl_game_ms;             /* game_main.c: this frame's ticks (logic and draws), for the log */
 extern int    rgl_game_ticks;          /* and how many ran */
 extern long   rgl_smooth_tris;         /* smooth_models.c: the frame before's smoothed triangles */
