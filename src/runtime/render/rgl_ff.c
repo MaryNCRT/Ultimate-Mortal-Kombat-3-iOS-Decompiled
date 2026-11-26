@@ -1392,6 +1392,7 @@ int rgl_layers;                         /* rgl.h */
 int rgl_rt_tier;                        /* rgl.h: the DXR tier (rgl_d3d12.c) */
 int rgl_rt;                             /* rgl.h: umk3.ini rt= */
 int rgl_rt_live;                        /* rgl.h */
+int rgl_tess;                           /* rgl.h: umk3.ini tess= */
 
 int rgl_rt_on(void)
 {
@@ -2167,6 +2168,13 @@ static void cfg_lights(rgl_light_block *b)
 static struct { float d, col[3], w; } g_sky[SKY_MAX];
 static int g_nsky;
 static float g_sky_now[3] = { -1.0f, 0.0f, 0.0f };
+/* the sky's tint and the stage's brightness are measured over a stage's
+ * first SKY_SETTLE frames, a plain mean, then kept until the stage changes:
+ * followed frame by frame, they drifted for a second when the intro's
+ * camera, which sees other parts of the stage, cut to the fight's -- a
+ * sudden change of light as every fight began (Mary) */
+#define SKY_SETTLE 60
+static int g_sky_n, g_lum_n;
 static int g_sky_stage;                 /* a stage is loaded: it is fought on */
 static float g_stage_lum = -1.0f;       /* the stage's mean brightness, eased */
 
@@ -2191,6 +2199,7 @@ void rgl_sky_stage(const char *name, int loaded)
         return;
     g_sky_now[0] = -1.0f;
     g_stage_lum = -1.0f;
+    g_sky_n = g_lum_n = 0;
     g_sky_stage = loaded;
     g_sky_scale = 1.0f;
     (void)i;
@@ -2242,7 +2251,10 @@ static void sky_build(rgl_light_block *b)
     }
     if (g_sky_stage && lw > 0.0f) {     /* how dark the stage is, all of it */
         la /= lw;
-        g_stage_lum = g_stage_lum < 0.0f ? la : g_stage_lum + (la - g_stage_lum) * 0.05f;
+        if (g_lum_n < SKY_SETTLE) {     /* a mean over the first frames, then kept */
+            g_lum_n++;
+            g_stage_lum = g_stage_lum < 0.0f ? la : g_stage_lum + (la - g_stage_lum) / (float)g_lum_n;
+        }
     }
     if (g_sky_stage && g_stage_lum >= 0.0f) {
         float d = (DARK_LUM - g_stage_lum) / (DARK_LUM * 0.5f);   /* all of it at half DARK_LUM */
@@ -2271,11 +2283,14 @@ static void sky_build(rgl_light_block *b)
     if (w > 0.0f) {
         for (k = 0; k < 3; k++)
             acc[k] /= w;
-        if (g_sky_now[0] < 0.0f)        /* the first: as it is */
+        if (g_sky_now[0] < 0.0f) {      /* the first: as it is */
             memcpy(g_sky_now, acc, sizeof acc);
-        else
+            g_sky_n = 1;
+        } else if (g_sky_n < SKY_SETTLE) {  /* a mean over the first frames, then kept */
+            g_sky_n++;
             for (k = 0; k < 3; k++)
-                g_sky_now[k] += (acc[k] - g_sky_now[k]) * 0.05f;
+                g_sky_now[k] += (acc[k] - g_sky_now[k]) / (float)g_sky_n;
+        }
     }
     if (g_cfg.has_sky_col)              /* the stage's file says */
         memcpy(g_sky_now, g_cfg.sky_col, sizeof g_sky_now);
@@ -3230,6 +3245,8 @@ static int refl_want(void)
 
 /* the floor is found whenever RTX is on: the wet floor's materials need it
  * (shaders: rt_material), the mirrored scene only when reflections are */
+#define TESS_SCALE 0.06f               /* RTX DISPLACEMENT: world units from black to white */
+
 static int floor_want(void)
 {
     return rgl_rt_on() && rgl_in_fight;
@@ -3238,6 +3255,20 @@ static int floor_want(void)
 static void refl_block(rgl_light_block *b)
 {
     memset(b->refl, 0, sizeof b->refl);
+    memset(b->tess, 0, sizeof b->tess);
+    if (rgl_tess && rgl_rt_on() && RF.have) {
+        /* RTX DISPLACEMENT: the domain shader moves a vertex in the world
+         * and its clip position with it (clip = projection x view x world) */
+        mat4 view, m;
+        if (invert(&SH.inv_view, &view)) {
+            m = mul(&RF.proj, &view);
+            memcpy(b->vp, m.m, sizeof b->vp);
+            b->tess[0] = 1.0f;
+            b->tess[1] = TESS_SCALE;
+            b->tess[2] = 0.5f;          /* the mid level: no move */
+            b->tess[3] = 1.0f;          /* the mip it is read at */
+        }
+    }
     if (!floor_want() || !RF.floor_ok)
         return;
     b->refl[0] = RF.floor_z;
@@ -3887,6 +3918,11 @@ static void submit(int topo, rgl_vtx *v, int n)
                 sm.aniso = 16;
         }
     }
+    /* RTX DISPLACEMENT: the stage's solid lit draws as patches (rgl.h) --
+     * not the fighters, the far backdrop, what is blended, or the lines */
+    if (rgl_tess && rgl_rt_on() && topo == RGL_TRIS && f.lit == 1 && !SH.caster && !backdrop
+        && !p.blend && p.depth_test && (f.shadow & 15) == RGL_SHADOW_RECEIVE)
+        p.mask |= 0x20;
     vp.x = S.viewport[0]; vp.y = S.viewport[1]; vp.w = S.viewport[2]; vp.h = S.viewport[3];
     if (hold_draw(&p, &f, handle, &sm, &vp, draw_rect(&sc) ? &sc : NULL, v, n))
         return;

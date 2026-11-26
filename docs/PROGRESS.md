@@ -105,7 +105,7 @@ Closed problems are in the detailed log and the CHANGELOG, not here.
 | THE STREET and other stages pause up to ~1.3 s on their first frames | open: their events load then |
 | DLSS 5's first model | NVIDIA makes it once a session, 4-6 s in a Present; our AIO build now does it while the game starts (1.5 s guard, was 15 s) |
 | A seam on THE STREET (Mary, 2026-11-26) | not seen in the current captures; may have been the parallax stripes fixed in 0.7.0; waits for Mary |
-| Real displacement (tessellation) of the stages (Mary's spec, 2026-11-26) | not started; D3D12 hull/domain shaders available; RTX shadows would need the displaced geometry too |
+| Real displacement (tessellation) of the stages (Mary's spec, 2026-11-26) | **parked by decision with Mary** after steps 1-2 (pipeline, displacement in the domain shader): in a side-view fighting game it shows only at the floor's front edge, parallax gives nearly all of the look, and it costs ~2 ms of GPU. Kept off by default, `tess=1` (with `rt=1`) to experiment; adaptive LOD, recomputed normals and displaced shadows not done |
 | PHOTO MODE's presets, HEIGHT and depth order (0.7.0) | built, not yet played by Mary |
 
 ### Where to look next
@@ -124,6 +124,27 @@ stage with RTX on.
 
 
 ## Detailed log (newest first)
+
+### 2026-11-26 (6) -- stage review with RTX; bloom outline; light at a fight's start
+
+- **Stage review** (all 16 levels shot in Mary's Test, RTX on): fine overall. The Temple's torches and window made balls of orange glow, the lava a haze: the aura is lower (RT_AURA 0.014) and soft-capped. The Graveyard's ghostly fighter is the game's own fog. The lava stage looks the same with RTX off.
+- **Bloom outline round the fighters** (Mary, the lava stage): 16 bare taps at a hard 0.6 threshold drew a stepped edge round a dark fighter on a bright stage. Now 32 taps in a Vogel disc, Gaussian weights, a soft knee, turned per pixel -- in ff.hlsl, ff.frag and rgl_post.c's OpenGL shader alike.
+- **Light changing as a fight starts** (Mary): (1) the sky's tint and the stage's brightness (ENHANCED LIGHTING) followed what the camera saw, frame by frame, so the intro's camera cut to the fight's drifted them for a second; now a mean over a stage's first 60 frames, then kept. (2) The rest is DLSS 5 restarting its history at the cut (ghosted fighters and the light easing for ~2 s, seen in Mary's capture): our AIO build's patch #7 shows the original picture for 60 frames after a cut and fades the neural result in over 30 (the compositor's spare NoticePadding.y). Built and deployed to Test; **Mary confirmed it fixed** (2026-11-26).
+- The "black for a second" in one real-screen capture was Windows' snipping overlay, not the game; Mary's report of it stays open until she says whether it remains.
+- A transient 4 fps on every configuration (RTX on or off, DLSS 5 on or off, both folders) for a few minutes, then 60 again without any change: something else on the GPU, not the build.
+
+### 2026-11-26 (5) -- real displacement, step 2: the domain shader moves the vertices
+
+- ff.hlsl `ds`: P' = P + N (h - mid) scale, h the texture's brightness (SampleLevel, mip 1), mid 0.5, scale TESS_SCALE 0.06 world units, faded with the distance (rt_near); the clip position moved by the same vector through `lb_vp` (clip from world, column-major, filled in rgl_ff.c refl_block from the scene's projection and view). N: the vertices' own (shared: no cracks between patches); a mesh without normals takes its face's. Fixed factor 12 (the floor's quads are 16 x 96 units). The parallax is off where the geometry carries the relief. The root's SRV table, samplers and light block are visible to every stage on the RTX root signature.
+- Checked (dlss5-test, the Pit): the floor's front edge follows the stone's heights (a real silhouette); wireframe shows the moved vertices. The relief is broad -- too few vertices on the huge quads until the adaptive LOD (step 3) -- and the lighting still uses the old normal (step 4). Shadows: the shadow map and RTX still use the undisplaced geometry.
+
+### 2026-11-26 (4) -- real displacement, step 1: the tessellation pipeline, fixed factor
+
+- Mary's spec: real displacement as Unreal's (tessellation, adaptive LOD, normals, shadows), step by step. Stack: Direct3D 12, C, forward, HLSL -- D3D12 has hull/domain shaders, no compute/mesh-shader alternative needed. Limits: D3D12 with RTX only; RTX shadows trace the undisplaced geometry until the BLAS is displaced too.
+- Step 1 (this): ff.hlsl `hs` / `ds` (UMK3_RT, dxc hs_6_5 / ds_6_5, `k_dx_hs_rt` / `k_dx_ds_rt`), a fixed factor 4 (RT_TESS), every attribute interpolated by the barycentrics (the clip position is linear in the world's, so exact). Draws marked by `rgl_pipe.mask` 0x20 (the stage's solid lit draws, not fighters, far backdrop, blended or lines; the mirror pass clears it); rgl_d3d12.c PATCH topology and the stages in the PSO; `UMK3_TESS_WIRE=1` draws them as wireframe. `tess=1` in umk3.ini (with `rt=1`).
+- First try drew every tessellated surface away (Mary saw a test window: "todo invisible"): the domain's `triangle_ccw` was the wrong winding for the game's faces; `triangle_cw`.
+- Checked (dlss5-test, the Pit, level 3): picture as without tessellation, the floor and rocks subdivided in wireframe; GPU 5.3 ms vs 4.2, 59 fps both.
+- Next: step 2, displacement in the domain shader (height from the texture, along the normal, midlevel, scale, fade with distance).
 
 ### 2026-11-26 (3) -- Mary's list: training arrows, photo presets/height/depth, DLSS 5 start, water seam, DLSS 5 scaling
 

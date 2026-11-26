@@ -9,6 +9,7 @@ Texture2D smap : register(t1);
 SamplerState smp : register(s0);
 SamplerState spt : register(s1);
 
+
 PSIn vs(VSIn i)
 {
     PSIn o;
@@ -158,7 +159,8 @@ float specular(float3 col, bool fighter)
 struct Light { float4 pos; float4 col; float4 dir; float4 cone; };
 cbuffer Lights : register(b1) { float4 lb_eye; float4 lb_sky; float4 lb_ground;
     float4 lb_aoproj; float4 lb_aoparm; float4 lb_aovp; float4 lb_aoparm2; float4 lb_aodbg; int4 lb_count; Light lb_l[16];
-    float4 lb_refl; float4 lb_rvp; };   // RTX REFLECTIONS (rgl_ff.c refl_block)
+    float4 lb_refl; float4 lb_rvp;      // RTX REFLECTIONS (rgl_ff.c refl_block)
+    float4x4 lb_vp; float4 lb_tess; };  // RTX DISPLACEMENT: clip from world; on, scale, mid, mip
 
 // DYNAMIC LIGHTS' shadows (rgl_ff.c point_shadows): a point light's six
 // cube faces, each a tile of patlas -- three across, two rows a light --
@@ -251,7 +253,7 @@ float2 rt_parallax(float2 uv, float3 P, float3 fn)
 // Single Scattering Model for Real Time Rendering", 2005, simplified to no
 // extinction). The Pit's pool becomes a green glow over it (Mary), the
 // torches and lamps halos
-#define RT_AURA 0.025
+#define RT_AURA 0.014
 float3 rt_aura(float3 P)
 {
     float3 E = lb_eye.xyz, D = P - E;
@@ -279,7 +281,9 @@ float3 rt_aura(float3 P)
         }
         sum += L.col.rgb * L.col.w * a * fade * fade;
     }
-    return sum * RT_AURA;
+    // capped: a strong warm light (the Temple's torches) made a ball of fire
+    sum *= RT_AURA;
+    return sum / (1.0 + dot(sum, float3(0.3, 0.6, 0.1)) * 2.0);
 }
 
 // RTX MATERIALS: a specular map and a roughness map read from each texture
@@ -915,12 +919,22 @@ float4 post_fx(float2 fc)
         }
     }
     if (P3.y > 0.0) {
+        // a soft glow: 32 taps over a disc (a Vogel spiral turned for each
+        // pixel), weighted by a Gaussian, the bright part taken with a soft
+        // knee -- 16 bare taps at a hard 0.6 drew a stepped outline round a
+        // dark fighter on a bright stage (Mary: the lava's)
         float3 b = float3(0.0, 0.0, 0.0);
-        for (i = 0; i < 16; i++) {
-            float a = (float)i * 2.39996, r = (4.0 + (float)i) * 1.2;
-            b += max(post_c(uv + float2(cos(a), sin(a)) * r * px) - 0.6, 0.0);
+        float wsum = 0.0;
+        float turn = 6.2831853 * frac(52.9829189 * frac(dot(fc, float2(0.06711056, 0.00583715))));
+        for (i = 0; i < 32; i++) {
+            float a = (float)i * 2.39996 + turn, t = sqrt(((float)i + 0.5) / 32.0), r = t * 28.0;
+            float w = exp(-t * t * 3.0);
+            float3 s = post_c(uv + float2(cos(a), sin(a)) * r * px);
+            float k = smoothstep(0.5, 0.95, dot(s, Y));
+            b += s * k * w;
+            wsum += w;
         }
-        c += b * (P3.y * 0.25);
+        c += b / wsum * (P3.y * 2.2);
     }
     if (P1.w > 0.0) {
         float3 n = post_c(uv + float2(px.x, 0.0)) + post_c(uv - float2(px.x, 0.0))
@@ -984,8 +998,8 @@ float4 ps(PSIn i) : SV_Target
     float4 tc = float4(1.0, 1.0, 1.0, 1.0);
     float2 uvp = i.uv;
 #ifdef UMK3_RT
-    if (sm == 1 && lit != 0 && (shadow >> 4) == 0 && mode != 0 && rt_on())
-        uvp = rt_parallax(i.uv, i.p, fn);   // RTX HEIGHT: the stage's relief
+    if (sm == 1 && lit != 0 && (shadow >> 4) == 0 && mode != 0 && rt_on() && lb_tess.x < 0.5)
+        uvp = rt_parallax(i.uv, i.p, fn);   // RTX HEIGHT: the stage's relief (not with real displacement)
 #endif
     if (mode == 1) {
         tc = tex.SampleGrad(smp, uvp, ddx(i.uv), ddy(i.uv));
@@ -1110,3 +1124,68 @@ float4 ps(PSIn i) : SV_Target
         c.a = 1.0;
     return c;
 }
+
+#ifdef UMK3_RT
+// RTX DISPLACEMENT, step 1 (Mary's spec, 2026-11-26): the stage's draws as
+// patches of three control points, subdivided on the GPU -- the hull shader
+// (here a fixed factor, RT_TESS on every edge and inside) and the domain
+// shader, which puts each new vertex where the triangle has it: every
+// attribute by its barycentric weights. The clip position is a linear
+// function of the world position (clip = projection x view x world), so
+// interpolating it is exact; the picture is the untessellated one, only
+// made of more triangles. Displacement comes in step 2.
+#define RT_TESS 12.0
+struct HSConst { float e[3] : SV_TessFactor; float in_ : SV_InsideTessFactor; };
+
+HSConst hs_const(InputPatch<PSIn, 3> p)
+{
+    HSConst o;
+    o.e[0] = o.e[1] = o.e[2] = RT_TESS;
+    o.in_ = RT_TESS;
+    return o;
+}
+
+[domain("tri")]
+[partitioning("fractional_odd")]
+[outputtopology("triangle_cw")]     // the tessellator's domain winds the other way to the game's faces: ccw culled them all
+[outputcontrolpoints(3)]
+[patchconstantfunc("hs_const")]
+PSIn hs(InputPatch<PSIn, 3> p, uint i : SV_OutputControlPointID)
+{
+    return p[i];
+}
+
+[domain("tri")]
+PSIn ds(HSConst c, float3 b : SV_DomainLocation, const OutputPatch<PSIn, 3> p)
+{
+    PSIn o;
+    o.pos = p[0].pos * b.x + p[1].pos * b.y + p[2].pos * b.z;
+    o.col = p[0].col * b.x + p[1].col * b.y + p[2].col * b.z;
+    o.uv  = p[0].uv  * b.x + p[1].uv  * b.y + p[2].uv  * b.z;
+    o.sh  = p[0].sh  * b.x + p[1].sh  * b.y + p[2].sh  * b.z;
+    o.n   = p[0].n   * b.x + p[1].n   * b.y + p[2].n   * b.z;
+    o.p   = p[0].p   * b.x + p[1].p   * b.y + p[2].p   * b.z;
+    if (lb_tess.x > 0.5) {
+        // step 2: the height (the texture's brightness, as the parallax read
+        // it) moves the vertex along its normal -- P + N (h - mid) scale --
+        // and its clip position by the same move through the view and the
+        // projection; faded out with the distance (no popping, no relief on
+        // the far stage). The vertices' own normals, shared by neighbouring
+        // patches, so a shared edge moves the same way on both: no cracks.
+        // A mesh without normals takes its face's.
+        float3 N = o.n;
+        if (dot(N, N) < 0.25) {
+            N = cross(p[1].p - p[0].p, p[2].p - p[0].p);
+            if (dot(N, lb_eye.xyz - o.p) < 0.0)
+                N = -N;
+        }
+        N = normalize(N);
+        float h = dot(tex.SampleLevel(smp, o.uv, lb_tess.w).rgb, float3(0.299, 0.587, 0.114));
+        float d = (saturate(h * 1.6) - lb_tess.z) * lb_tess.y * rt_near(o.p);
+        float3 m = N * d;
+        o.p += m;
+        o.pos += mul(lb_vp, float4(m, 0.0));
+    }
+    return o;
+}
+#endif

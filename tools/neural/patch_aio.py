@@ -86,3 +86,26 @@ rep('static constexpr ULONGLONG kInitialNativeSettleMs = 15000;\n',
     'static constexpr ULONGLONG kInitialNativeSettleMs = 1500;   // UMK3 PC: was 15000\n')
 open(p, 'w', encoding='utf-8', newline='').write(s)
 print('patched (settle)')
+
+# 7. after a scene cut, the picture as the game drew it while NR and DLAA
+#    build their history again, then the neural result faded in: restarted,
+#    they showed the fighters ghosted and the light easing for a second or
+#    two as every fight began (Mary). 60 frames of the original, 30 of fade
+#    (the compositor's spare constant, NoticePadding.y: 0 the original,
+#    1000 the neural result); the interface stays the original throughout
+rep('static bool g_umk3_ui_protect = false;\n',
+    'static bool g_umk3_ui_protect = false;\n'
+    'static unsigned g_umk3_since_cut = 100000u;   // UMK3 PC: frames since the game\'s last scene cut\n')
+rep('else if(Mode==1)result=(NoticePadding.x!=0u&&originalA.a>0.5)?original:neural;',
+    'else if(Mode==1)result=(NoticePadding.x!=0u&&originalA.a>0.5)?original:lerp(original,neural,NoticePadding.y/1000.0);')
+rep('    constants.notice_padding[0] = g_umk3_ui_protect ? 1u : 0u;   // UMK3 PC: the interface on top\n',
+    '    constants.notice_padding[0] = g_umk3_ui_protect ? 1u : 0u;   // UMK3 PC: the interface on top\n'
+    '    {   // UMK3 PC: the original while the history refills after a cut, then faded in\n'
+    '        const unsigned f = g_umk3_since_cut < 100000u ? g_umk3_since_cut++ : g_umk3_since_cut;\n'
+    '        constants.notice_padding[1] = f < 60u ? 0u : f < 90u ? (f - 60u) * 1000u / 30u : 1000u;\n'
+    '    }\n')
+rep('            umk3_seen = *umk3_cuts;\n            g_need_history_reset = true;\n',
+    '            umk3_seen = *umk3_cuts;\n            g_need_history_reset = true;\n'
+    '            g_umk3_since_cut = 0;\n')
+open(p, 'w', encoding='utf-8', newline='').write(s)
+print('patched (cut fade)')
