@@ -9,6 +9,50 @@ Texture2D smap : register(t1);
 SamplerState smp : register(s0);
 SamplerState spt : register(s1);
 
+#ifdef UMK3_RT
+// RTX DISPLACEMENT, step 1 (Mary's spec, 2026-11-26): the stage's draws as
+// patches of three control points, subdivided on the GPU -- the hull shader
+// (here a fixed factor, RT_TESS on every edge and inside) and the domain
+// shader, which puts each new vertex where the triangle has it: every
+// attribute by its barycentric weights. The clip position is a linear
+// function of the world position (clip = projection x view x world), so
+// interpolating it is exact; the picture is the untessellated one, only
+// made of more triangles. Displacement comes in step 2.
+#define RT_TESS 4.0
+struct HSConst { float e[3] : SV_TessFactor; float in_ : SV_InsideTessFactor; };
+
+HSConst hs_const(InputPatch<PSIn, 3> p)
+{
+    HSConst o;
+    o.e[0] = o.e[1] = o.e[2] = RT_TESS;
+    o.in_ = RT_TESS;
+    return o;
+}
+
+[domain("tri")]
+[partitioning("fractional_odd")]
+[outputtopology("triangle_cw")]     // the tessellator's domain winds the other way to the game's faces: ccw culled them all
+[outputcontrolpoints(3)]
+[patchconstantfunc("hs_const")]
+PSIn hs(InputPatch<PSIn, 3> p, uint i : SV_OutputControlPointID)
+{
+    return p[i];
+}
+
+[domain("tri")]
+PSIn ds(HSConst c, float3 b : SV_DomainLocation, const OutputPatch<PSIn, 3> p)
+{
+    PSIn o;
+    o.pos = p[0].pos * b.x + p[1].pos * b.y + p[2].pos * b.z;
+    o.col = p[0].col * b.x + p[1].col * b.y + p[2].col * b.z;
+    o.uv  = p[0].uv  * b.x + p[1].uv  * b.y + p[2].uv  * b.z;
+    o.sh  = p[0].sh  * b.x + p[1].sh  * b.y + p[2].sh  * b.z;
+    o.n   = p[0].n   * b.x + p[1].n   * b.y + p[2].n   * b.z;
+    o.p   = p[0].p   * b.x + p[1].p   * b.y + p[2].p   * b.z;
+    return o;
+}
+#endif
+
 PSIn vs(VSIn i)
 {
     PSIn o;

@@ -130,6 +130,7 @@ typedef struct {
     unsigned char *up_map;
 } rt_set;
 static int g_rt;                        /* this run traces (decided as the device opens) */
+static int g_tess_wire;                 /* UMK3_TESS_WIRE=1: the patches drawn as wireframe */
 static ID3D12Device5 *g_dev5;
 static ID3D12GraphicsCommandList4 *g_list4;
 static rt_set g_rts[2];
@@ -1215,6 +1216,12 @@ static void lib_open(void)
             g_shader_hash = (g_shader_hash ^ k_dx_vs_rt[i]) * 16777619u;
         for (i = 0; i < sizeof k_dx_ps_rt; i++)
             g_shader_hash = (g_shader_hash ^ k_dx_ps_rt[i]) * 16777619u;
+        for (i = 0; i < sizeof k_dx_hs_rt; i++)
+            g_shader_hash = (g_shader_hash ^ k_dx_hs_rt[i]) * 16777619u;
+        for (i = 0; i < sizeof k_dx_ds_rt; i++)
+            g_shader_hash = (g_shader_hash ^ k_dx_ds_rt[i]) * 16777619u;
+        g_tess_wire = getenv("UMK3_TESS_WIRE") != NULL;
+        g_shader_hash = (g_shader_hash ^ (unsigned)g_tess_wire) * 16777619u;
     }
     if (FAILED(ID3D12Device_QueryInterface(g_dev, &IID_ID3D12Device1, (void **)&d1)))
         return;
@@ -1309,6 +1316,12 @@ static ID3D12PipelineState *get_pso(const rgl_pipe *k, int samples, int depth)
         il[i].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
     memset(&d, 0, sizeof d);
     d.pRootSignature = g_root;
+    if (g_rt && (k->mask & 0x20)) {     /* RTX DISPLACEMENT: the patches' stages */
+        d.HS.pShaderBytecode = k_dx_hs_rt;
+        d.HS.BytecodeLength = sizeof k_dx_hs_rt;
+        d.DS.pShaderBytecode = k_dx_ds_rt;
+        d.DS.BytecodeLength = sizeof k_dx_ds_rt;
+    }
     d.VS.pShaderBytecode = g_rt ? k_dx_vs_rt : k_dx_vs;
     d.VS.BytecodeLength = g_rt ? sizeof k_dx_vs_rt : sizeof k_dx_vs;
     d.PS.pShaderBytecode = g_rt ? k_dx_ps_rt : k_dx_ps;
@@ -1336,7 +1349,8 @@ static ID3D12PipelineState *get_pso(const rgl_pipe *k, int samples, int depth)
         d.BlendState.RenderTarget[0].RenderTargetWriteMask = (UINT8)((k->mask & 7) | 8);
     }
     d.SampleMask = 0xffffffffu;
-    d.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+    d.RasterizerState.FillMode = g_rt && (k->mask & 0x20) && g_tess_wire ? D3D12_FILL_MODE_WIREFRAME
+                                                                       : D3D12_FILL_MODE_SOLID;
     d.RasterizerState.CullMode = k->cull == RGL_CULL_FRONT ? D3D12_CULL_MODE_FRONT
                                : k->cull == RGL_CULL_BACK ? D3D12_CULL_MODE_BACK : D3D12_CULL_MODE_NONE;
     d.RasterizerState.FrontCounterClockwise = TRUE;
@@ -1347,7 +1361,9 @@ static ID3D12PipelineState *get_pso(const rgl_pipe *k, int samples, int depth)
     d.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
     d.InputLayout.pInputElementDescs = il;
     d.InputLayout.NumElements = 6;
-    d.PrimitiveTopologyType = k->topo == RGL_LINES ? D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE : D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    d.PrimitiveTopologyType = k->topo == RGL_LINES ? D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE
+                            : g_rt && (k->mask & 0x20) ? D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH
+                            : D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     d.NumRenderTargets = 1;
     d.RTVFormats[0] = COLOR_FMT;
     d.DSVFormat = depth ? DEPTH_FMT : DXGI_FORMAT_UNKNOWN;
@@ -1594,6 +1610,7 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
         ID3D12GraphicsCommandList_SetGraphicsRootDescriptorTable(g_list, 5, gpu(g_srv_heap, g_srv_inc, g_srv_next + 4));
     }
     ID3D12GraphicsCommandList_IASetPrimitiveTopology(g_list, k->topo == RGL_LINES ? D3D_PRIMITIVE_TOPOLOGY_LINELIST
+                                                   : g_rt && (k->mask & 0x20) ? D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST
                                                                                   : D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     ID3D12GraphicsCommandList_IASetVertexBuffers(g_list, 0, 1, &vb);
     if (idx)

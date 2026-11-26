@@ -1392,6 +1392,7 @@ int rgl_layers;                         /* rgl.h */
 int rgl_rt_tier;                        /* rgl.h: the DXR tier (rgl_d3d12.c) */
 int rgl_rt;                             /* rgl.h: umk3.ini rt= */
 int rgl_rt_live;                        /* rgl.h */
+int rgl_tess;                           /* rgl.h: umk3.ini tess= */
 
 int rgl_rt_on(void)
 {
@@ -3887,6 +3888,11 @@ static void submit(int topo, rgl_vtx *v, int n)
                 sm.aniso = 16;
         }
     }
+    /* RTX DISPLACEMENT: the stage's solid lit draws as patches (rgl.h) --
+     * not the fighters, the far backdrop, what is blended, or the lines */
+    if (rgl_tess && rgl_rt_on() && topo == RGL_TRIS && f.lit == 1 && !SH.caster && !backdrop
+        && !p.blend && p.depth_test && (f.shadow & 15) == RGL_SHADOW_RECEIVE)
+        p.mask |= 0x20;
     vp.x = S.viewport[0]; vp.y = S.viewport[1]; vp.w = S.viewport[2]; vp.h = S.viewport[3];
     if (hold_draw(&p, &f, handle, &sm, &vp, draw_rect(&sc) ? &sc : NULL, v, n))
         return;

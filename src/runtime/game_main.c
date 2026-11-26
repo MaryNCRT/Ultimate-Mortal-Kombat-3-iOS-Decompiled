@@ -1285,6 +1285,8 @@ static void read_config(const char *dir)
             rgl_contact_shadows = atoi(v) != 0, own = 1;
         else if (strcmp(line, "rt") == 0)               /* render/rgl.h: RTX shadows, next start */
             rgl_rt = atoi(v) != 0;
+        else if (strcmp(line, "tess") == 0)             /* render/rgl.h: RTX DISPLACEMENT (in progress) */
+            rgl_tess = atoi(v) != 0;
         /* AMBIENT OCCLUSION (render/rgl.h, research/AMBIENT-OCCLUSION.md) */
         else if (strcmp(line, "ao") == 0)              /* 0 off, 1 Crytek, 2 HBAO, 3 Alchemy */
             rgl_ao = atoi(v) < 0 ? 0 : atoi(v) > 3 ? 3 : atoi(v);

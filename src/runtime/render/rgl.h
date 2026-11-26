@@ -97,7 +97,9 @@ typedef struct {
     unsigned char blend, src, dst;         /* blend on, RGL_BF_* */
     unsigned char depth_test, depth_write;
     unsigned char cull;                    /* RGL_CULL_* (front = CCW) */
-    unsigned char mask;                    /* colour mask, bit 0 red .. 3 alpha */
+    unsigned char mask;                    /* colour mask, bit 0 red .. 3 alpha;
+                                            * 0x10 DLSS 5's layered blend, 0x20
+                                            * RTX DISPLACEMENT's patches (D3D12) */
 } rgl_pipe;
 
 /* What the fragment shader is told per draw. */
@@ -289,6 +291,9 @@ extern int rgl_rt_tier;
  * place of the shadow map. rgl_rt_on() says whether this run traces. */
 extern int rgl_rt;
 extern int rgl_rt_live;                    /* the backend traces this run (rgl_d3d12.c) */
+/* RTX DISPLACEMENT (umk3.ini tess=1, with RTX): the stage's lit draws as
+ * patches the GPU subdivides (rgl_pipe.mask 0x20) */
+extern int rgl_tess;
 int rgl_rt_on(void);
 /* 1 while a fight is on (game_main.c, every frame): outside one -- the menus,
  * the select screen -- every draw is layer 0, whatever its camera */

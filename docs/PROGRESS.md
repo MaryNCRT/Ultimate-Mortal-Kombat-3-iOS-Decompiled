@@ -125,6 +125,14 @@ stage with RTX on.
 
 ## Detailed log (newest first)
 
+### 2026-11-26 (4) -- real displacement, step 1: the tessellation pipeline, fixed factor
+
+- Mary's spec: real displacement as Unreal's (tessellation, adaptive LOD, normals, shadows), step by step. Stack: Direct3D 12, C, forward, HLSL -- D3D12 has hull/domain shaders, no compute/mesh-shader alternative needed. Limits: D3D12 with RTX only; RTX shadows trace the undisplaced geometry until the BLAS is displaced too.
+- Step 1 (this): ff.hlsl `hs` / `ds` (UMK3_RT, dxc hs_6_5 / ds_6_5, `k_dx_hs_rt` / `k_dx_ds_rt`), a fixed factor 4 (RT_TESS), every attribute interpolated by the barycentrics (the clip position is linear in the world's, so exact). Draws marked by `rgl_pipe.mask` 0x20 (the stage's solid lit draws, not fighters, far backdrop, blended or lines; the mirror pass clears it); rgl_d3d12.c PATCH topology and the stages in the PSO; `UMK3_TESS_WIRE=1` draws them as wireframe. `tess=1` in umk3.ini (with `rt=1`).
+- First try drew every tessellated surface away (Mary saw a test window: "todo invisible"): the domain's `triangle_ccw` was the wrong winding for the game's faces; `triangle_cw`.
+- Checked (dlss5-test, the Pit, level 3): picture as without tessellation, the floor and rocks subdivided in wireframe; GPU 5.3 ms vs 4.2, 59 fps both.
+- Next: step 2, displacement in the domain shader (height from the texture, along the normal, midlevel, scale, fade with distance).
+
 ### 2026-11-26 (3) -- Mary's list: training arrows, photo presets/height/depth, DLSS 5 start, water seam, DLSS 5 scaling
 
 - **Training input column (left/right never shown)**: with 4/5 buttons the engine word goes through GetArcadeJoyBits, which turns toward/away (0x800/0x1000) into left/right and clears them; and down-forward became plain down. The column (GameCode.c PortTrainInput) now takes the directions from the stick as pressed (JoystickState, GetReal6ButtonJoyBits' ranges) made toward/away with the fighter's facing, the buttons from the engine. Verified by script (UMK3_PADS, UMK3_BUTTONS=5, UMK3_PRACTICE): right, left, down-right (one diagonal arrow), button, up-left all shown. Diagnostic: UMK3_LOG_TRAIN.
