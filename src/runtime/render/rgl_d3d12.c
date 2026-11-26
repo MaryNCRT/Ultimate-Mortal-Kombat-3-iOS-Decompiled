@@ -294,10 +294,15 @@ static void list_begin(void)
  * reuses what the frame used (settle): the next list, an upload, a
  * release, a read. UMK3_D3D12_SERIAL=1: the old way. */
 static UINT64 g_inflight;               /* the presented frame's fence, 0 none */
+/* port diagnostic (UMK3_LOG_WAITS): the GPU waits a frame, where and how long */
+static double g_dw_ms[4];               /* wait_gpu, settle, flush's run */
+static int g_dw_n[4];
+static const char *g_dw_last;           /* who called the last flush */
 static void settle(void);
 
 static void wait_gpu(void)
 {
+    double t0 = rgl_now_ms();
     settle();
     g_fval++;
     ID3D12CommandQueue_Signal(g_queue, g_fence, g_fval);
@@ -305,6 +310,8 @@ static void wait_gpu(void)
         ID3D12Fence_SetEventOnCompletion(g_fence, g_fval, g_event);
         WaitForSingleObject(g_event, INFINITE);
     }
+    g_dw_ms[0] += rgl_now_ms() - t0;
+    g_dw_n[0]++;
 }
 
 /* the presented frame done: waited for, and what it used free again */
@@ -313,8 +320,11 @@ static void settle(void)
     if (!g_inflight)
         return;
     if (ID3D12Fence_GetCompletedValue(g_fence) < g_inflight) {
+        double t0 = rgl_now_ms();
         ID3D12Fence_SetEventOnCompletion(g_fence, g_inflight, g_event);
         WaitForSingleObject(g_event, INFINITE);
+        g_dw_ms[1] += rgl_now_ms() - t0;
+        g_dw_n[1]++;
     }
     g_inflight = 0;
     while (g_nretired > 0)
@@ -1838,6 +1848,15 @@ static void dx_present(void)
                "waited for, %.0f ms releasing\n",
                rgl_now_ms() - t0, t1 - t0, t2 - t1, g_psos_new, t3 - t2, rgl_now_ms() - t3,
                g_diag_up_n, g_diag_up_lists, g_diag_up_bytes / 1048576.0, g_diag_up_ms, g_diag_rel_ms);
+    if (getenv("UMK3_LOG_WAITS")) {
+        static int fr;
+        if (++fr % 30 == 0) {
+            printf("d3d12 waits a frame: wait_gpu %.1f (%.1f ms), settle %.1f (%.1f ms), pipelines made %d\n",
+                   g_dw_n[0] / 30.0, g_dw_ms[0] / 30, g_dw_n[1] / 30.0, g_dw_ms[1] / 30, g_psos_new);
+            memset(g_dw_ms, 0, sizeof g_dw_ms);
+            memset(g_dw_n, 0, sizeof g_dw_n);
+        }
+    }
     g_psos_new = 0;
     g_diag_up_ms = g_diag_rel_ms = 0.0;
     g_diag_up_bytes = 0;

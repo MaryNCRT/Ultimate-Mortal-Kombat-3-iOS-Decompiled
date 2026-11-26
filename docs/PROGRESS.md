@@ -136,6 +136,15 @@ built and checked in Direct3D 12 only; see the log entry below. Phase 3
 
 ## Detailed log (newest first)
 
+### 2026-11-26 (2) -- reflections on at full speed; dry polished floor; lamp spots; aura; parallax heights
+
+- **Reflections back on by default** (UMK3_NO_REFL=1 turns off). The HD install's 2 fps were (a) the mirror pass re-run at every `scene_flush` (~25 a frame with the HD stage) -- now once a frame, bound until the frame's end -- and (b) a `getenv()` per vertex in it. Measured in Mary's Test (HD, AA x8, DLSS 5, RTX): 56-58 fps, the pass < 1 ms.
+- **Floor height**: the upward stage face nearest the fighters' feet, not the commonest (the street's kerb was taken for the floor). Mirror's alpha isn't written: colour only.
+- **Look per Mary**: "too wet / too shiny" -> no puddles, no ripple/streaks, no water darkening, floor has no highlights (GGX and relief); a faint polished reflection (5-16% by Fresnel), clamped so lamps make no blobs. Debug view: UMK3_REFL_VIEW=1 (the raw mirror on the floor).
+- **Street lamps as spots ("tipo faro")**: an emissive glow taller than wide becomes a spot at its top pointing down, cone = the shaft's width (rgl_ff.c lights_build, g_spot).
+- **Aura**: closed-form single scattering of each light in thin haze (Sun et al. 2005, no extinction), spots only in their beam; only on opaque pixels (additive sprites showed as squares). The Pit's pool glows green.
+- **Heights (Mary: "mapas height de desplazamiento", per-pixel)**: parallax occlusion mapping on stage textures, brightness as height, 8-32 layers by view angle, faded out edge-on (the road showed stripes otherwise). Real tessellated displacement (Mary's spec) not started: D3D12 hull/domain shaders are available; RTX shadows would still use undisplaced geometry until the BLAS is displaced too.
+
 ### 2026-11-26 -- RTX materials, cheaper RTX, CPU/GPU overlap; reflections parked
 
 - **FPS (Mary: "fps bajísimos")**: measured in Mary's own Test folder (HD pack, AA x8, DLSS 5): RTX now 17.1-17.2 ms a frame (~58 fps, ~2 late/s), the same as RTX off. Cuts: sun 1 ray, each light 1 jittered ray and only where it reaches (att > 0.06), ambient/bounce 2 rays. D3D12 present no longer waits for the GPU: the frame runs while the CPU makes the next (`settle()` before anything reuses the frame's memory: next list, upload, release, read); `UMK3_D3D12_SERIAL=1` = old way. Not separately benchmarked against serial yet.

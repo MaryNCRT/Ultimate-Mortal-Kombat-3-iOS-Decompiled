@@ -174,6 +174,90 @@ RaytracingAccelerationStructure rt_scene : register(t4);
 Texture2D rmap : register(t5);          // REFLECTIONS: the scene mirrored under the floor
 SamplerState rsamp : register(s2);      // linear, clamped
 
+// RTX HEIGHT: parallax occlusion mapping on the stage's textures, the
+// texture's brightness its height map (the game has none: made per pixel,
+// Mary's "per-pixel"): the view ray marched down through it in RT_POM
+// layers and the texture read where it meets the height -- Tatarchuk,
+// "Practical Parallax Occlusion Mapping", ShaderX5 (2006). The uv's slopes
+// across the surface from the screen derivatives, no tangents (the
+// cotangent frame, Schueler, ShaderX5); the relief's depth RT_POM_DEPTH in
+// world units, bricks' and flagstones' joints sunk
+#define RT_POM 12
+#define RT_POM_DEPTH 0.035
+float rt_depth_at(float2 uv, float2 dx, float2 dy)
+{
+    float3 t = tex.SampleGrad(smp, uv, dx, dy).rgb;
+    return 1.0 - saturate(dot(t, float3(0.299, 0.587, 0.114)) * 1.6);
+}
+float2 rt_parallax(float2 uv, float3 P, float3 fn)
+{
+    if (dot(fn, fn) < 1e-20)
+        return uv;
+    float3 N = normalize(fn), V = normalize(lb_eye.xyz - P);
+    if (dot(N, V) < 0.0)
+        N = -N;
+    float3 dpx = ddx(P), dpy = ddy(P);
+    float2 dux = ddx(uv), duy = ddy(uv);
+    float3 c1 = cross(dpy, N), c2 = cross(N, dpx);
+    float det = dot(dpx, c1);
+    if (abs(det) < 1e-14)
+        return uv;
+    float3 gu = (c1 * dux.x + c2 * duy.x) / det;     // the uv's gradient on the surface
+    float3 gv = (c1 * dux.y + c2 * duy.y) / det;
+    float nv = max(dot(N, V), 0.25);
+    float2 full = -float2(dot(V, gu), dot(V, gv)) / nv * RT_POM_DEPTH;   // the deepest point's shift
+    float2 st = full / RT_POM, cuv = uv, prev = uv;
+    float layer = 1.0 / RT_POM, cur = 0.0, h = rt_depth_at(uv, dux, duy), hp = h;
+    [loop] for (int k = 0; k < RT_POM && cur < h; k++) {
+        prev = cuv;
+        hp = h;
+        cuv += st;
+        cur += layer;
+        h = rt_depth_at(cuv, dux, duy);
+    }
+    float after = h - cur, before = hp - (cur - layer);
+    float w = abs(after - before) > 1e-5 ? after / (after - before) : 0.0;
+    return lerp(cuv, prev, saturate(w));
+}
+
+// RTX AURA: each light lights the air a little between the eye and what is
+// seen, the in-scattering of a point light in thin, even haze, integrated
+// in closed form along the view ray (the 1/r^2 falloff's integral is an
+// arctangent -- Sun, Ramamoorthi, Narasimhan, Nayar, "A Practical Analytic
+// Single Scattering Model for Real Time Rendering", 2005, simplified to no
+// extinction). The Pit's pool becomes a green glow over it (Mary), the
+// torches and lamps halos
+#define RT_AURA 0.025
+float3 rt_aura(float3 P)
+{
+    float3 E = lb_eye.xyz, D = P - E;
+    float len = length(D);
+    float3 sum = float3(0.0, 0.0, 0.0);
+    int n = min(lb_count.x, 16);
+    if (len < 1e-3)
+        return sum;
+    D /= len;
+    [loop] for (int i = 0; i < n; i++) {
+        Light L = lb_l[i];
+        if (int(L.dir.w + 0.5) == 2)
+            continue;                   // the sun is not a haze's glow
+        float3 toL = L.pos.xyz - E;
+        float t0 = dot(toL, D);                         // the ray's nearest point to the light
+        float h2 = max(dot(toL, toL) - t0 * t0, 1e-4);  // and its distance, squared
+        float h = sqrt(h2);
+        if (h > L.pos.w)                                // the ray passes beyond its reach
+            continue;
+        float a = (atan((len - t0) / h) - atan(-t0 / h)) / h;
+        float fade = saturate(1.0 - h / L.pos.w);
+        if (int(L.dir.w + 0.5) == 1) {  // a lamp's spot: the haze lit in its beam only
+            float3 X = E + D * clamp(t0, 0.0, len);
+            fade *= smoothstep(L.cone.y, L.cone.x, dot(normalize(X - L.pos.xyz), normalize(L.dir.xyz)));
+        }
+        sum += L.col.rgb * L.col.w * a * fade * fade;
+    }
+    return sum * RT_AURA;
+}
+
 // RTX MATERIALS: a specular map and a roughness map read from each texture
 // as it is drawn (the game has none): the specular from how bright and how
 // grey the colour is (stone and metal catch light, saturated cloth less),
@@ -189,6 +273,23 @@ float rt_vnoise(float2 p)
     return lerp(lerp(rt_hash(i), rt_hash(i + float2(1, 0)), f.x),
                 lerp(rt_hash(i + float2(0, 1)), rt_hash(i + float2(1, 1)), f.x), f.y);
 }
+// RTX RELIEF: a bump from the texture's brightness as a height, with no
+// tangents -- Mikkelsen, "Bump Mapping Unparametrized Surfaces on the GPU"
+// (2010): the height's screen derivatives against the position's give the
+// surface gradient. The floor's stone the most (Mary: more relief), walls
+// some, the fighters none
+float3 rt_bump(float3 N, float3 P, float h)
+{
+    float3 dpx = ddx(P), dpy = ddy(P);
+    float hx = ddx(h), hy = ddy(h);
+    float3 r1 = cross(dpy, N), r2 = cross(N, dpx);
+    float det = dot(dpx, r1);
+    if (abs(det) < 1e-12)
+        return N;
+    float3 g = sign(det) * (hx * r1 + hy * r2);
+    return normalize(abs(det) * N - g);
+}
+
 void rt_material(float3 al, float3 P, float3 N, bool fighter, out float spec, out float rough, out float wet)
 {
     float lum = dot(al, float3(0.299, 0.587, 0.114));
@@ -198,16 +299,13 @@ void rt_material(float3 al, float3 P, float3 N, bool fighter, out float spec, ou
     rough = fighter ? lerp(0.35, 0.6, saturate(sat * 2.0)) : saturate(0.55 + grain * 0.35 - lum * 0.2);
     wet = 0.0;
     if (!fighter) {
-        bool floor_ = lb_refl.y > 0.0 && N.z > 0.75 && abs(P.z - lb_refl.x) < 0.25;
+        bool floor_ = lb_refl.z > 0.5 && N.z > 0.75 && abs(P.z - lb_refl.x) < 0.25;
         if (floor_) {
-            float n = rt_vnoise(P.xy * 0.7) * 0.65 + rt_vnoise(P.xy * 2.3) * 0.35;
-            float puddle = smoothstep(0.38, 0.6, n);
-            float crack = smoothstep(0.12, 0.03, lum);
-            wet = saturate(max(0.25, max(puddle * 0.8, crack * 0.6)));
+            // reflections only, not wet (Mary): no puddles, the stone as dry
+            wet = 1.0;
         } else
-            wet = 0.08 * saturate(N.z * 0.5 + 0.5);     // walls barely damp
-        rough = lerp(rough, 0.12, wet);
-        spec = lerp(spec, 0.06, wet);
+            wet = 0.0;
+        // the stone keeps its own roughness and specular: no water sheen
     }
 }
 
@@ -228,16 +326,22 @@ float3 rt_wet(float3 lin, float3 P, float3 N, float2 px, float3 al, float rough,
     float fres = 0.04 + 0.96 * pow(1.0 - saturate(dot(V, N)), 5.0);
     float lum = dot(al, float3(0.299, 0.587, 0.114));
     // the stone's grain ripples it; its cracks (dark) hold less water
-    float2 rip = float2(ddx(lum), ddy(lum)) * 6.0 + (lum - 0.25) * float2(0.004, 0.0);
+    float2 rip = float2(0.0, 0.0);      // no ripple: not wet (Mary)
     float4 r = float4(0.0, 0.0, 0.0, 0.0);
     [unroll] for (int k = -3; k <= 3; k++) {    // streaks along the view, longer when rough
-        float2 q = uv + rip * (0.3 + rough) + float2(0.0, k * (0.002 + 0.02 * rough));
+        float2 q = uv + rip * (0.3 + rough) + float2(0.0, k * 0.0012);
         r += rmap.SampleLevel(rsamp, saturate(q), 0.0) * (4.0 - abs(k));
     }
     r /= 16.0;
-    float wet = lb_refl.y * wetness * saturate(0.35 + fres) * (1.0 - 0.6 * rough);
-    float3 rl = pow(max(r.rgb, float3(0.0, 0.0, 0.0)), 2.2) * 1.35;
-    return lin * (1.0 - 0.3 * wet) + rl * wet * r.a;
+    // a polished floor's faint reflection, more at grazing angles (Mary: less, not wet)
+    float wet = lb_refl.y * wetness * lerp(0.05, 0.16, fres);
+    float3 rl = pow(max(r.rgb, float3(0.0, 0.0, 0.0)), 2.2) * 0.8;
+    if (lb_refl.w > 0.5)                // UMK3_REFL_VIEW: the reflection alone, magenta where it reads nothing
+        return rl;
+    // no bright spots: the reflection at most a little brighter than the
+    // stone under it -- a lamp's blob in the floor read as water (Mary)
+    rl = min(rl, lin * 1.4 + 0.01);
+    return lin * (1.0 - wet) + max(lin, rl) * wet;
 }
 
 float3 rt_sun() { return asfloat(lb_count.yzw); }   // toward the sun; 0: no RTX
@@ -338,6 +442,8 @@ float3 rt_lights_at(float3 P, float3 N)
             Ld = d / max(dist, 1e-4);
             float w = saturate(1.0 - x * x * x * x);
             att = w * w / (1.0 + 4.0 * x * x);
+            if (type == 1)
+                att *= smoothstep(L.cone.y, L.cone.x, dot(-Ld, normalize(L.dir.xyz)));
         }
         sum += L.col.rgb * L.col.w * att * max(dot(N, Ld), 0.25);
     }
@@ -422,6 +528,7 @@ float point_shadow(int slot, float3 D, float far, int self)
 // by dynamic() for a GGX highlight; < 0 keeps the Blinn-Phong one
 static float g_rough = -1.0;
 static float g_spec = 0.0;
+static float g_shine = 1.0;             // 0: no highlight (the floor: Mary, "se ve mojado")
 
 float3 dynamic(float3 P, float3 N, float3 albedo, float smap, bool fighter, int self)
 {
@@ -488,7 +595,7 @@ float3 dynamic(float3 P, float3 N, float3 albedo, float smap, bool fighter, int 
             float k = a * 0.5;
             float vis = 0.25 / ((nv * (1.0 - k) + k) * (ndl * (1.0 - k) + k));
             float F = g_spec + (1.0 - g_spec) * pow(1.0 - saturate(dot(V, H)), 5.0);
-            spc += c * min(D * vis * F, 6.0) * ndl * 0.5;   // tamed: it shone too much (Mary)
+            spc += c * min(D * vis * F, 4.0) * ndl * 0.25 * g_shine;  // tamed twice: it shone too much (Mary)
         } else
             spc += c * pow(max(dot(N, H), 0.0), sh) * (sh + 8.0) / 25.13 * ndl;
     }
@@ -851,11 +958,16 @@ float4 ps(PSIn i) : SV_Target
     float rl = sm == 1 && bump > 0.0 ? relief(i.uv, bump) : 1.0;
     float3 fn = cross(ddx(i.p), ddy(i.p));
     float4 tc = float4(1.0, 1.0, 1.0, 1.0);
+    float2 uvp = i.uv;
+#ifdef UMK3_RT
+    if (sm == 1 && lit != 0 && (shadow >> 4) == 0 && mode != 0 && rt_on())
+        uvp = rt_parallax(i.uv, i.p, fn);   // RTX HEIGHT: the stage's relief
+#endif
     if (mode == 1) {
-        tc = tex.Sample(smp, i.uv);
+        tc = tex.SampleGrad(smp, uvp, ddx(i.uv), ddy(i.uv));
         c *= tc;
     } else if (mode == 2) {
-        tc = tex.Sample(smp, i.uv);
+        tc = tex.SampleGrad(smp, uvp, ddx(i.uv), ddy(i.uv));
         c = tc;
     }
     if (afunc != 0) {
@@ -894,6 +1006,13 @@ float4 ps(PSIn i) : SV_Target
         float3 lin = pow(max(c.rgb, float3(0.0, 0.0, 0.0)), 2.2);
         if (bump > 0.0) {
             float sp = specular(lin, fighter);
+#ifdef UMK3_RT
+            {   // RTX: the floor without its relief's highlight (not wet)
+                float3 fz = dot(fn, fn) > 1e-20 ? normalize(fn) : float3(0.0, 0.0, 0.0);
+                if (rt_on() && lb_refl.z > 0.5 && abs(fz.z) > 0.75 && abs(i.p.z - lb_refl.x) < 0.25)
+                    sp = 0.0;
+            }
+#endif
             lin = lin * rl + sp * smoothstep(0.75, 1.0, lt);
         }
         lin *= pow(lt, 2.2);
@@ -924,7 +1043,14 @@ float4 ps(PSIn i) : SV_Target
                     rt_material(al, i.p, N, fighter, ms, mr, g_wet);
                     g_spec = ms;
                     g_rough = mr;
-                    lin *= 1.0 - 0.2 * g_wet;       // wet stone is darker
+                    if (!fighter) {     // the stone's relief: the floor deep, walls some
+                        bool fl = lb_refl.z > 0.5 && N.z > 0.75 && abs(i.p.z - lb_refl.x) < 0.25;
+                        if (fl)
+                            g_shine = 0.0;
+                        float hgt = pow(saturate(dot(al, float3(0.299, 0.587, 0.114)) * 2.0), 0.6);
+                        N = rt_bump(N, i.p, hgt * (fl ? 0.06 : 0.025));
+                    }
+
                 }
 #endif
                 lin += dynamic(i.p, N, al, sm2, fighter, shadow >> 4);
@@ -950,6 +1076,10 @@ float4 ps(PSIn i) : SV_Target
                     return float4(ao_debug_view(i.pos.xy, ao), 1.0);
             }
         }
+#ifdef UMK3_RT
+        if (rt_on() && c.a > 0.98)      // the haze's glow over what is solid (once: not again on a lamp's light shaft)
+            lin += rt_aura(i.p);
+#endif
         c.rgb = pow(lin, 1.0 / 2.2);
     }
     if (layer >= 3.0)                   // DLSS 5's layers: an opaque draw covers its pixels whole

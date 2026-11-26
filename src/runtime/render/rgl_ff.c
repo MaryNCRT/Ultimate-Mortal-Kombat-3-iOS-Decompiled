@@ -268,6 +268,7 @@ static void ao_note(const rgl_rect *vp, int fighter);
 static void ao_block(rgl_light_block *b);
 static void refl_block(rgl_light_block *b);
 static void refl_forget(void);
+static void refl_frame_end(void);
 static void shadow_forget(void);
 
 void rgl_ff_stop(void)
@@ -329,6 +330,7 @@ void rgl_ff_frame(void)
         g_had_scene = 0;
     }
     scene_flush();
+    refl_frame_end();                   /* RTX REFLECTIONS: done with it for the frame */
     rt_commit();                        /* RTX: the next frame traces this one's */
     SH_end_frame();
 }
@@ -1307,8 +1309,17 @@ static struct {
     float floor_z, cand;
     unsigned seen;                      /* the frame it was last seen in */
     int on;                             /* drawn this frame: the floor reads it */
+    unsigned done;                      /* the frame it was drawn in, +1 */
 } RF;
 static rgl_light_block g_lb_last;       /* lights_build's, for the mirror pass */
+
+static void refl_frame_end(void)
+{
+    if (RF.on && B) {
+        B->reflect_map(0);
+        RF.on = 0;
+    }
+}
 
 static double g_refl_ms[4];             /* port diagnostic (UMK3_LOG_REFL): the floor, the pass, draws, vertices */
 static int g_nheld_last;
@@ -1641,9 +1652,10 @@ static void shadow_drop(void)
 #define EMIT_RMAX 12.0f
 #define EMIT_POWER 2.5f
 
-static struct { float p[3], ext, col[3], w; } g_emit[EMIT_MAX];
+static struct { float p[3], ext, col[3], w, top, tall, half; } g_emit[EMIT_MAX];
 static int g_nemit;
 static long g_lights_log;
+static int g_spot[RGL_MAX_LIGHTS];      /* lights_build: this light is a lamp's spot */
 
 /* an additive draw of the scene, n vertices with their world places */
 static void emit_note(const ff_tex *t, const rgl_vtx *v, int n)
@@ -1675,6 +1687,16 @@ static void emit_note(const ff_tex *t, const rgl_vtx *v, int n)
     }
     g_emit[g_nemit].ext = e * 0.5f;
     g_emit[g_nemit].w = vc[3];
+    {
+        /* RTX: a glow taller than wide -- a street lamp's light shaft -- is
+         * a spot at its top pointing down, as the lamp it hangs from (Mary:
+         * "tipo faro"), not a point at its middle lighting sideways */
+        float hx = hi[0] - lo[0], hy = hi[1] - lo[1], hz = hi[2] - lo[2];
+        float hw = (hx > hy ? hx : hy) * 0.5f;
+        g_emit[g_nemit].top = hi[2];
+        g_emit[g_nemit].half = hw;
+        g_emit[g_nemit].tall = hz > 1.5f * 2.0f * hw ? hz : 0.0f;
+    }
     g_nemit++;
 }
 
@@ -2302,7 +2324,7 @@ static void lights_build(void)
         rgl_light *l = NULL;
         if (r < EMIT_RMIN) r = EMIT_RMIN;
         if (r > EMIT_RMAX) r = EMIT_RMAX;
-        for (j = nfile; j < b.count; j++) { /* close to one already: merged */
+        for (j = nfile; j < b.count && !(g_emit[i].tall > 0.0f && rgl_rt_on()); j++) { /* close to one already: merged (a lamp's spot never) */
             float d = 0.0f;
             for (k = 0; k < 3; k++)
                 d += (b.l[j].pos[k] - g_emit[i].p[k]) * (b.l[j].pos[k] - g_emit[i].p[k]);
@@ -2330,9 +2352,22 @@ static void lights_build(void)
         }
         l->pos[3] = r;
         l->dir[0] = g_emit[i].w;        /* its weight while merging */
+        if (g_emit[i].tall > 0.0f && rgl_rt_on() && b.count - 1 < RGL_MAX_LIGHTS) {
+            /* the lamp's spot: at the shaft's top, reaching its foot and a
+             * little past, its cone the shaft's width (cone[2]: marked for
+             * the pass below, which makes the emissive lights points) */
+            float h = g_emit[i].tall, c = h / sqrtf(h * h + g_emit[i].half * g_emit[i].half * 1.6f);
+            l->pos[2] = g_emit[i].top - 0.05f;
+            l->pos[3] = h * 1.35f;
+            l->cone[0] = c + (1.0f - c) * 0.5f;     /* inner */
+            l->cone[1] = c;                         /* outer */
+            g_spot[b.count - 1] = 1;
+        }
         (void)mx;
     }
     for (j = 0; j < b.count; j++) {     /* the colour made a hue, its brightness the power */
+        int spot = g_spot[j];
+        g_spot[j] = 0;
         rgl_light *l = &b.l[j];
         if (l->cone[3] != 0.0f || l->dir[3] != 0.0f || l->col[3] != 0.0f)
             continue;                   /* the file's: already made */
@@ -2344,6 +2379,11 @@ static void lights_build(void)
         l->col[3] = EMIT_POWER * (m > 1.0f ? 1.0f : sqrtf(m)) * (g_sky_stage ? g_cfg.glow_power : 1.0f);
         l->dir[0] = l->dir[1] = l->dir[2] = 0.0f;
         l->dir[3] = (float)RGL_LIGHT_POINT;
+        if (spot) {                     /* a lamp: down, a beam */
+            l->dir[2] = -1.0f;
+            l->dir[3] = (float)RGL_LIGHT_SPOT;
+            l->col[3] *= 1.6f;          /* its light in a cone, not all round */
+        }
     }
     sky_build(&b);
     if (b.count && (g_lights_log++ % 600) == 0)
@@ -3185,18 +3225,27 @@ int rgl_ff_post(const float *prm)
  * the view-projection's z column. */
 static int refl_want(void)
 {
-    /* off until it is cheap: ~25 ms a frame with Mary's HD stage, cause not
-     * found yet (docs/PROGRESS.md); UMK3_REFL=1 turns it on to work on it */
-    return rgl_rt_on() && B->reflect_map && rgl_in_fight && getenv("UMK3_REFL");
+    return rgl_rt_on() && B->reflect_map && rgl_in_fight && !getenv("UMK3_NO_REFL");
+}
+
+/* the floor is found whenever RTX is on: the wet floor's materials need it
+ * (shaders: rt_material), the mirrored scene only when reflections are */
+static int floor_want(void)
+{
+    return rgl_rt_on() && rgl_in_fight;
 }
 
 static void refl_block(rgl_light_block *b)
 {
     memset(b->refl, 0, sizeof b->refl);
-    if (!refl_want() || !RF.have || !RF.floor_ok || !RF.target)
+    if (!floor_want() || !RF.floor_ok)
         return;
     b->refl[0] = RF.floor_z;
+    b->refl[2] = 1.0f;                  /* the floor known */
+    if (!refl_want() || !RF.have || !RF.target)
+        return;
     b->refl[1] = 1.0f;
+    b->refl[3] = getenv("UMK3_REFL_VIEW") ? 1.0f : 0.0f;
     b->rvp[0] = (float)RF.vp.x;
     b->rvp[1] = (float)(RF.scene_h - (RF.vp.y + RF.vp.h));
     b->rvp[2] = (float)RF.vp.w;
@@ -3241,9 +3290,16 @@ static void refl_floor(void)
                 if (v[k].n[2] > 0.9f && v[k].p[2] > lo - 0.4f && v[k].p[2] < lo + 0.4f)
                     bins[(int)((v[k].p[2] - (lo - 0.4f)) * 100.0f) % 80]++;
         }
-        for (b = 0; b < 80; b++)
-            if (bins[b] > 0 && (best < 0 || bins[b] > bins[best]))
-                best = b;
+        /* the upward face nearest the feet (a little above their lowest
+         * point: they sink in), not the commonest -- the street's road is
+         * a few big quads, its kerbs many small ones, and the kerb was
+         * taken for the floor (Mary's street: no reflection on the road) */
+        {
+            int want = (int)((0.4f + 0.02f) * 100.0f);
+            for (b = 0; b < 80; b++)
+                if (bins[b] > 0 && (best < 0 || abs(b - want) < abs(best - want)))
+                    best = b;
+        }
         if (best >= 0)
             lo = lo - 0.4f + (best + 0.5f) * 0.01f;
     }
@@ -3259,9 +3315,13 @@ static void refl_pass(void)
     mat4 view, m;
     float C[4], z0, black[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
     rgl_rect r;
-    int i, k, w, h;
+    int i, k, w, h, flat, nocull;
     rgl_light_block b;
 
+    /* once a frame: the scene is let go many times a frame with the HD
+     * stage (~25), and a pass each time was 0.5 s a frame (Mary: 2 fps) */
+    if (RF.done == g_frames_n + 1)
+        return;
     RF.on = 0;
     if (getenv("UMK3_LOG_REFL")) {
         static int n;
@@ -3320,6 +3380,8 @@ static void refl_pass(void)
             }
         n++;
     }
+    flat = getenv("UMK3_REFL_FLAT") != NULL;   /* read once: per vertex it cost 25 ms a frame */
+    nocull = getenv("UMK3_REFL_NOCULL") != NULL;
     B->reflect_map(0);                  /* not read while drawn into */
     B->target_use(RF.target);
     B->clear(NULL, 1, black, 1, 1.0f);
@@ -3351,7 +3413,7 @@ static void refl_pass(void)
             cmv = hd->n * 2;
         }
         for (k = 0; k < hd->n; k++) {
-            float d = getenv("UMK3_REFL_FLAT") ? 0.0f : 2.0f * (z0 - v[k].p[2]);
+            float d = flat ? 0.0f : 2.0f * (z0 - v[k].p[2]);
             mv[k] = v[k];
             mv[k].x += d * C[0];
             mv[k].y += d * C[1];
@@ -3360,7 +3422,7 @@ static void refl_pass(void)
         }
         p = hd->p;
         f = hd->f;
-        p.cull = getenv("UMK3_REFL_NOCULL") ? RGL_CULL_NONE : p.cull == RGL_CULL_FRONT ? RGL_CULL_BACK : p.cull == RGL_CULL_BACK ? RGL_CULL_FRONT : p.cull;
+        p.cull = nocull ? RGL_CULL_NONE : p.cull == RGL_CULL_FRONT ? RGL_CULL_BACK : p.cull == RGL_CULL_BACK ? RGL_CULL_FRONT : p.cull;
         p.mask &= 15;                   /* no DLSS 5 layers here */
         f.layer = 0.0f;
         f.shadow = RGL_SHADOW_NONE;     /* unlit: blurred in the floor anyway, a tenth of the cost */
@@ -3430,6 +3492,7 @@ static void refl_pass(void)
     B->lights(&g_lb_last, (int)sizeof g_lb_last);
     B->reflect_map(RF.target);
     RF.on = 1;
+    RF.done = g_frames_n + 1;
 }
 
 static void scene_flush(void)
@@ -3444,7 +3507,7 @@ static void scene_flush(void)
     }
     t0 = rgl_now_ms();
     rgl_shadow_tris = SH.nw / 12;
-    if (refl_want()) {
+    if (floor_want()) {
         double tf = rgl_now_ms();
         refl_floor();                   /* RTX REFLECTIONS: before the lights' block */
         g_refl_ms[0] += rgl_now_ms() - tf;
@@ -3510,10 +3573,6 @@ static void scene_flush(void)
     g_nheld_last = g_nheld;
     g_nheld = g_nhv = g_nhi = 0;
     RF.have = 0;
-    if (RF.on) {                        /* RTX REFLECTIONS: done with it */
-        B->reflect_map(0);
-        RF.on = 0;
-    }
     if (AO.valid)                       /* AMBIENT OCCLUSION: done with it */
         B->screen_map(0);
     AO.valid = AO.have = AO.fighter_own = 0;
