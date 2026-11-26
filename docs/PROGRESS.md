@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-26 (release 0.7.0 beta: RTX -- ray-traced shadows, occlusion, a light bounce, planar reflections, lamp spots, light glow, parallax relief; DLSS 5 built in with the interface kept out, NEURAL RENDERING, presets and SCALING; the frame pacing's stutter; the training column's left/right; PHOTO MODE presets, height and depth order; the Waterfront's water seam) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-26 (release 0.7.1 beta: the light steady as a fight starts -- the stage light measured once, DLSS 5 faded in after a cut; soft bloom; RTX glow capped; tessellated displacement in, off. Before that, release 0.7.0 beta: RTX -- ray-traced shadows, occlusion, a light bounce, planar reflections, lamp spots, light glow, parallax relief; DLSS 5 built in with the interface kept out, NEURAL RENDERING, presets and SCALING; the frame pacing's stutter; the training column's left/right; PHOTO MODE presets, height and depth order; the Waterfront's water seam) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is

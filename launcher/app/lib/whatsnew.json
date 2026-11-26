@@ -2,6 +2,20 @@
   "_comment": "WHAT'S NEW, shown once per launcher version (main.js whatsnew:get). Newest first. Each entry: version without -beta, ES and EN lines for players, short. Add one with every release.",
   "entries": [
     {
+      "version": "0.7.1",
+      "date": "2026-11-26",
+      "ES": [
+        "Se acabaron los cambios de brillo y las estelas al empezar cada pelea.",
+        "Bloom suave, sin el borde raro alrededor de los luchadores.",
+        "RTX: el resplandor de antorchas y lava es más suave."
+      ],
+      "EN": [
+        "No more light changes or ghosting as each fight starts.",
+        "Soft bloom, without the odd outline round the fighters.",
+        "RTX: the glow round torches and lava is softer."
+      ]
+    },
+    {
       "version": "0.7.0",
       "date": "2026-11-26",
       "ES": [

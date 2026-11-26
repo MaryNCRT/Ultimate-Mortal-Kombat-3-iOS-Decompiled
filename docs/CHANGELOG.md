@@ -10,6 +10,22 @@ binary addresses, the checks run -- is in [PROGRESS.md](PROGRESS.md).
 
 ## Unreleased
 
+## 0.7.1 beta (2026-11-26)
+
+- **The light no longer changes as a fight starts** (seen fixed by Mary):
+  the stage's sky tint and brightness are measured once over a stage's
+  first frames instead of following the camera, and DLSS 5 shows the
+  picture as the game drew it for a second after a cut while it rebuilds
+  its history, then fades the neural result in (no ghosted fighters, no
+  light easing).
+- **Bloom without an outline round the fighters:** a soft Gaussian glow
+  (every renderer) instead of a few taps with a hard threshold.
+- **RTX:** the glow round lights is softer and capped (the Temple's torches,
+  the lava); the review of every stage found nothing else to change.
+- Real displacement with tessellation (Direct3D 12 with RTX) is in, off by
+  default: `tess=1` (with `rt=1`) to try it. Parked: in a side-view fighting
+  game it shows little for its cost.
+
 ## 0.7.0 beta (2026-11-26)
 
 **Graphics.** Played by Mary in her test folder (HD textures, x8 antialiasing,
