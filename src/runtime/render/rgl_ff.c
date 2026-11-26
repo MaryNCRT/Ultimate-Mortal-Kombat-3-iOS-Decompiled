@@ -3231,6 +3231,8 @@ static int refl_want(void)
 
 /* the floor is found whenever RTX is on: the wet floor's materials need it
  * (shaders: rt_material), the mirrored scene only when reflections are */
+#define TESS_SCALE 0.06f               /* RTX DISPLACEMENT: world units from black to white */
+
 static int floor_want(void)
 {
     return rgl_rt_on() && rgl_in_fight;
@@ -3239,6 +3241,20 @@ static int floor_want(void)
 static void refl_block(rgl_light_block *b)
 {
     memset(b->refl, 0, sizeof b->refl);
+    memset(b->tess, 0, sizeof b->tess);
+    if (rgl_tess && rgl_rt_on() && RF.have) {
+        /* RTX DISPLACEMENT: the domain shader moves a vertex in the world
+         * and its clip position with it (clip = projection x view x world) */
+        mat4 view, m;
+        if (invert(&SH.inv_view, &view)) {
+            m = mul(&RF.proj, &view);
+            memcpy(b->vp, m.m, sizeof b->vp);
+            b->tess[0] = 1.0f;
+            b->tess[1] = TESS_SCALE;
+            b->tess[2] = 0.5f;          /* the mid level: no move */
+            b->tess[3] = 1.0f;          /* the mip it is read at */
+        }
+    }
     if (!floor_want() || !RF.floor_ok)
         return;
     b->refl[0] = RF.floor_z;

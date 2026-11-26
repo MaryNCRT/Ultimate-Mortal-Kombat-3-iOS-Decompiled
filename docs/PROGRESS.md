@@ -125,6 +125,11 @@ stage with RTX on.
 
 ## Detailed log (newest first)
 
+### 2026-11-26 (5) -- real displacement, step 2: the domain shader moves the vertices
+
+- ff.hlsl `ds`: P' = P + N (h - mid) scale, h the texture's brightness (SampleLevel, mip 1), mid 0.5, scale TESS_SCALE 0.06 world units, faded with the distance (rt_near); the clip position moved by the same vector through `lb_vp` (clip from world, column-major, filled in rgl_ff.c refl_block from the scene's projection and view). N: the vertices' own (shared: no cracks between patches); a mesh without normals takes its face's. Fixed factor 12 (the floor's quads are 16 x 96 units). The parallax is off where the geometry carries the relief. The root's SRV table, samplers and light block are visible to every stage on the RTX root signature.
+- Checked (dlss5-test, the Pit): the floor's front edge follows the stone's heights (a real silhouette); wireframe shows the moved vertices. The relief is broad -- too few vertices on the huge quads until the adaptive LOD (step 3) -- and the lighting still uses the old normal (step 4). Shadows: the shadow map and RTX still use the undisplaced geometry.
+
 ### 2026-11-26 (4) -- real displacement, step 1: the tessellation pipeline, fixed factor
 
 - Mary's spec: real displacement as Unreal's (tessellation, adaptive LOD, normals, shadows), step by step. Stack: Direct3D 12, C, forward, HLSL -- D3D12 has hull/domain shaders, no compute/mesh-shader alternative needed. Limits: D3D12 with RTX only; RTX shadows trace the undisplaced geometry until the BLAS is displaced too.

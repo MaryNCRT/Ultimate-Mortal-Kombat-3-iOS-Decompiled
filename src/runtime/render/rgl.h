@@ -243,6 +243,10 @@ typedef struct {
                                             * (world z), the strength (0 off) */
     float rvp[4];                          /* the reflection's viewport in the
                                             * target, x, y from the top, w, h */
+    float vp[16];                          /* RTX DISPLACEMENT: the scene's clip
+                                            * from world (column-major) */
+    float tess[4];                         /* on, the height's scale, its mid
+                                            * level, the mip it is read at */
 } rgl_light_block;                         /* 1168 bytes */
 
 extern rgl_backend rgl_vk;

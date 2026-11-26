@@ -519,6 +519,12 @@ static int make_root(void)
     rr.BaseShaderRegister = 5;
     p[5] = p[1];
     p[5].DescriptorTable.pDescriptorRanges = &rr;
+    if (g_rt) {                         /* RTX DISPLACEMENT: the domain shader reads the
+                                         * texture, its sampler and the light block */
+        p[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+        p[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+        p[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    }
     /* s1: the shadow map's, texel by texel, clamped */
     memset(sp, 0, sizeof sp);
     sp[0].Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
