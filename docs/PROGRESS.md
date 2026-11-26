@@ -105,7 +105,7 @@ Closed problems are in the detailed log and the CHANGELOG, not here.
 | THE STREET and other stages pause up to ~1.3 s on their first frames | open: their events load then |
 | DLSS 5's first model | NVIDIA makes it once a session, 4-6 s in a Present; our AIO build now does it while the game starts (1.5 s guard, was 15 s) |
 | A seam on THE STREET (Mary, 2026-11-26) | not seen in the current captures; may have been the parallax stripes fixed in 0.7.0; waits for Mary |
-| Real displacement (tessellation) of the stages (Mary's spec, 2026-11-26) | not started; D3D12 hull/domain shaders available; RTX shadows would need the displaced geometry too |
+| Real displacement (tessellation) of the stages (Mary's spec, 2026-11-26) | **parked by decision with Mary** after steps 1-2 (pipeline, displacement in the domain shader): in a side-view fighting game it shows only at the floor's front edge, parallax gives nearly all of the look, and it costs ~2 ms of GPU. Kept off by default, `tess=1` (with `rt=1`) to experiment; adaptive LOD, recomputed normals and displaced shadows not done |
 | PHOTO MODE's presets, HEIGHT and depth order (0.7.0) | built, not yet played by Mary |
 
 ### Where to look next
