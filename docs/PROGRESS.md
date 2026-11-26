@@ -125,6 +125,14 @@ stage with RTX on.
 
 ## Detailed log (newest first)
 
+### 2026-11-26 (6) -- stage review with RTX; bloom outline; light at a fight's start
+
+- **Stage review** (all 16 levels shot in Mary's Test, RTX on): fine overall. The Temple's torches and window made balls of orange glow, the lava a haze: the aura is lower (RT_AURA 0.014) and soft-capped. The Graveyard's ghostly fighter is the game's own fog. The lava stage looks the same with RTX off.
+- **Bloom outline round the fighters** (Mary, the lava stage): 16 bare taps at a hard 0.6 threshold drew a stepped edge round a dark fighter on a bright stage. Now 32 taps in a Vogel disc, Gaussian weights, a soft knee, turned per pixel -- in ff.hlsl, ff.frag and rgl_post.c's OpenGL shader alike.
+- **Light changing as a fight starts** (Mary): (1) the sky's tint and the stage's brightness (ENHANCED LIGHTING) followed what the camera saw, frame by frame, so the intro's camera cut to the fight's drifted them for a second; now a mean over a stage's first 60 frames, then kept. (2) The rest is DLSS 5 restarting its history at the cut (ghosted fighters and the light easing for ~2 s, seen in Mary's capture): our AIO build's patch #7 shows the original picture for 60 frames after a cut and fades the neural result in over 30 (the compositor's spare NoticePadding.y). Built and deployed to Test; **not yet seen by Mary** -- the real screen can't be checked from here (the game's own shots are taken before DLSS 5).
+- The "black for a second" in one real-screen capture was Windows' snipping overlay, not the game; Mary's report of it stays open until she says whether it remains.
+- A transient 4 fps on every configuration (RTX on or off, DLSS 5 on or off, both folders) for a few minutes, then 60 again without any change: something else on the GPU, not the build.
+
 ### 2026-11-26 (5) -- real displacement, step 2: the domain shader moves the vertices
 
 - ff.hlsl `ds`: P' = P + N (h - mid) scale, h the texture's brightness (SampleLevel, mip 1), mid 0.5, scale TESS_SCALE 0.06 world units, faded with the distance (rt_near); the clip position moved by the same vector through `lb_vp` (clip from world, column-major, filled in rgl_ff.c refl_block from the scene's projection and view). N: the vertices' own (shared: no cracks between patches); a mesh without normals takes its face's. Fixed factor 12 (the floor's quads are 16 x 96 units). The parallax is off where the geometry carries the relief. The root's SRV table, samplers and light block are visible to every stage on the RTX root signature.

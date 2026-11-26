@@ -253,7 +253,7 @@ float2 rt_parallax(float2 uv, float3 P, float3 fn)
 // Single Scattering Model for Real Time Rendering", 2005, simplified to no
 // extinction). The Pit's pool becomes a green glow over it (Mary), the
 // torches and lamps halos
-#define RT_AURA 0.025
+#define RT_AURA 0.014
 float3 rt_aura(float3 P)
 {
     float3 E = lb_eye.xyz, D = P - E;
@@ -281,7 +281,9 @@ float3 rt_aura(float3 P)
         }
         sum += L.col.rgb * L.col.w * a * fade * fade;
     }
-    return sum * RT_AURA;
+    // capped: a strong warm light (the Temple's torches) made a ball of fire
+    sum *= RT_AURA;
+    return sum / (1.0 + dot(sum, float3(0.3, 0.6, 0.1)) * 2.0);
 }
 
 // RTX MATERIALS: a specular map and a roughness map read from each texture
@@ -917,12 +919,22 @@ float4 post_fx(float2 fc)
         }
     }
     if (P3.y > 0.0) {
+        // a soft glow: 32 taps over a disc (a Vogel spiral turned for each
+        // pixel), weighted by a Gaussian, the bright part taken with a soft
+        // knee -- 16 bare taps at a hard 0.6 drew a stepped outline round a
+        // dark fighter on a bright stage (Mary: the lava's)
         float3 b = float3(0.0, 0.0, 0.0);
-        for (i = 0; i < 16; i++) {
-            float a = (float)i * 2.39996, r = (4.0 + (float)i) * 1.2;
-            b += max(post_c(uv + float2(cos(a), sin(a)) * r * px) - 0.6, 0.0);
+        float wsum = 0.0;
+        float turn = 6.2831853 * frac(52.9829189 * frac(dot(fc, float2(0.06711056, 0.00583715))));
+        for (i = 0; i < 32; i++) {
+            float a = (float)i * 2.39996 + turn, t = sqrt(((float)i + 0.5) / 32.0), r = t * 28.0;
+            float w = exp(-t * t * 3.0);
+            float3 s = post_c(uv + float2(cos(a), sin(a)) * r * px);
+            float k = smoothstep(0.5, 0.95, dot(s, Y));
+            b += s * k * w;
+            wsum += w;
         }
-        c += b * (P3.y * 0.25);
+        c += b / wsum * (P3.y * 2.2);
     }
     if (P1.w > 0.0) {
         float3 n = post_c(uv + float2(px.x, 0.0)) + post_c(uv - float2(px.x, 0.0))

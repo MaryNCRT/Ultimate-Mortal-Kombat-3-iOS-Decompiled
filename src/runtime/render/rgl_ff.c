@@ -2168,6 +2168,13 @@ static void cfg_lights(rgl_light_block *b)
 static struct { float d, col[3], w; } g_sky[SKY_MAX];
 static int g_nsky;
 static float g_sky_now[3] = { -1.0f, 0.0f, 0.0f };
+/* the sky's tint and the stage's brightness are measured over a stage's
+ * first SKY_SETTLE frames, a plain mean, then kept until the stage changes:
+ * followed frame by frame, they drifted for a second when the intro's
+ * camera, which sees other parts of the stage, cut to the fight's -- a
+ * sudden change of light as every fight began (Mary) */
+#define SKY_SETTLE 60
+static int g_sky_n, g_lum_n;
 static int g_sky_stage;                 /* a stage is loaded: it is fought on */
 static float g_stage_lum = -1.0f;       /* the stage's mean brightness, eased */
 
@@ -2192,6 +2199,7 @@ void rgl_sky_stage(const char *name, int loaded)
         return;
     g_sky_now[0] = -1.0f;
     g_stage_lum = -1.0f;
+    g_sky_n = g_lum_n = 0;
     g_sky_stage = loaded;
     g_sky_scale = 1.0f;
     (void)i;
@@ -2243,7 +2251,10 @@ static void sky_build(rgl_light_block *b)
     }
     if (g_sky_stage && lw > 0.0f) {     /* how dark the stage is, all of it */
         la /= lw;
-        g_stage_lum = g_stage_lum < 0.0f ? la : g_stage_lum + (la - g_stage_lum) * 0.05f;
+        if (g_lum_n < SKY_SETTLE) {     /* a mean over the first frames, then kept */
+            g_lum_n++;
+            g_stage_lum = g_stage_lum < 0.0f ? la : g_stage_lum + (la - g_stage_lum) / (float)g_lum_n;
+        }
     }
     if (g_sky_stage && g_stage_lum >= 0.0f) {
         float d = (DARK_LUM - g_stage_lum) / (DARK_LUM * 0.5f);   /* all of it at half DARK_LUM */
@@ -2272,11 +2283,14 @@ static void sky_build(rgl_light_block *b)
     if (w > 0.0f) {
         for (k = 0; k < 3; k++)
             acc[k] /= w;
-        if (g_sky_now[0] < 0.0f)        /* the first: as it is */
+        if (g_sky_now[0] < 0.0f) {      /* the first: as it is */
             memcpy(g_sky_now, acc, sizeof acc);
-        else
+            g_sky_n = 1;
+        } else if (g_sky_n < SKY_SETTLE) {  /* a mean over the first frames, then kept */
+            g_sky_n++;
             for (k = 0; k < 3; k++)
-                g_sky_now[k] += (acc[k] - g_sky_now[k]) * 0.05f;
+                g_sky_now[k] += (acc[k] - g_sky_now[k]) / (float)g_sky_n;
+        }
     }
     if (g_cfg.has_sky_col)              /* the stage's file says */
         memcpy(g_sky_now, g_cfg.sky_col, sizeof g_sky_now);

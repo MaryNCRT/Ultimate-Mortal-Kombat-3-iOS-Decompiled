@@ -539,12 +539,18 @@ vec4 post_fx(vec2 fc)
         }
     }
     if (P3.y > 0.0) {                            // bloom: the bright parts spread
+        // 32 taps, Gaussian, a soft knee, turned per pixel (ff.hlsl post_fx)
         vec3 b = vec3(0.0);
-        for (int i = 0; i < 16; i++) {
-            float a = float(i) * 2.39996, r = (4.0 + float(i)) * 1.2;
-            b += max(post_c(uv + vec2(cos(a), sin(a)) * r * px) - 0.6, 0.0);
+        float wsum = 0.0;
+        float turn = 6.2831853 * fract(52.9829189 * fract(dot(fc, vec2(0.06711056, 0.00583715))));
+        for (int i = 0; i < 32; i++) {
+            float a = float(i) * 2.39996 + turn, t = sqrt((float(i) + 0.5) / 32.0), r = t * 28.0;
+            float w = exp(-t * t * 3.0);
+            vec3 s = post_c(uv + vec2(cos(a), sin(a)) * r * px);
+            b += s * smoothstep(0.5, 0.95, dot(s, Y)) * w;
+            wsum += w;
         }
-        c += b * (P3.y * 0.25);
+        c += b / wsum * (P3.y * 2.2);
     }
     if (P1.w > 0.0) {                            // sharpness: an unsharp mask
         vec3 n = post_c(uv + vec2(px.x, 0.0)) + post_c(uv - vec2(px.x, 0.0))
