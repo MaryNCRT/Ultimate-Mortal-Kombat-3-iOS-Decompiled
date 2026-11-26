@@ -150,7 +150,8 @@ float specular(float3 col, bool fighter)
 // face's from the screen derivatives, turned to the camera.
 struct Light { float4 pos; float4 col; float4 dir; float4 cone; };
 cbuffer Lights : register(b1) { float4 lb_eye; float4 lb_sky; float4 lb_ground;
-    float4 lb_aoproj; float4 lb_aoparm; float4 lb_aovp; float4 lb_aoparm2; float4 lb_aodbg; int4 lb_count; Light lb_l[16]; };
+    float4 lb_aoproj; float4 lb_aoparm; float4 lb_aovp; float4 lb_aoparm2; float4 lb_aodbg; int4 lb_count; Light lb_l[16];
+    float4 lb_refl; float4 lb_rvp; };   // RTX REFLECTIONS (rgl_ff.c refl_block)
 
 // DYNAMIC LIGHTS' shadows (rgl_ff.c point_shadows): a point light's six
 // cube faces, each a tile of patlas -- three across, two rows a light --
@@ -170,6 +171,74 @@ Texture2D patlas : register(t2);
 // colour bounced once off what is near. A fighter's own body is passed
 // over (its pose there is a frame old and its coarse mesh, as the map's).
 RaytracingAccelerationStructure rt_scene : register(t4);
+Texture2D rmap : register(t5);          // REFLECTIONS: the scene mirrored under the floor
+SamplerState rsamp : register(s2);      // linear, clamped
+
+// RTX MATERIALS: a specular map and a roughness map read from each texture
+// as it is drawn (the game has none): the specular from how bright and how
+// grey the colour is (stone and metal catch light, saturated cloth less),
+// the roughness from its grain (fwidth of the brightness: busy texels are
+// rough) -- and the stage's floor wet, as Mary's reference captures: puddles
+// in a slow noise over the world, the dark cracks holding water, mirror
+// smooth there. wet: 0 dry .. 1 a puddle
+float rt_hash(float2 p) { return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
+float rt_vnoise(float2 p)
+{
+    float2 i = floor(p), f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return lerp(lerp(rt_hash(i), rt_hash(i + float2(1, 0)), f.x),
+                lerp(rt_hash(i + float2(0, 1)), rt_hash(i + float2(1, 1)), f.x), f.y);
+}
+void rt_material(float3 al, float3 P, float3 N, bool fighter, out float spec, out float rough, out float wet)
+{
+    float lum = dot(al, float3(0.299, 0.587, 0.114));
+    float sat = max(al.r, max(al.g, al.b)) - min(al.r, min(al.g, al.b));
+    float grain = saturate(fwidth(lum) * 12.0);
+    spec = lerp(0.02, 0.08, saturate(lum * 2.5)) * (1.0 - 0.6 * saturate(sat * 2.0));
+    rough = fighter ? lerp(0.35, 0.6, saturate(sat * 2.0)) : saturate(0.55 + grain * 0.35 - lum * 0.2);
+    wet = 0.0;
+    if (!fighter) {
+        bool floor_ = lb_refl.y > 0.0 && N.z > 0.75 && abs(P.z - lb_refl.x) < 0.25;
+        if (floor_) {
+            float n = rt_vnoise(P.xy * 0.7) * 0.65 + rt_vnoise(P.xy * 2.3) * 0.35;
+            float puddle = smoothstep(0.38, 0.6, n);
+            float crack = smoothstep(0.12, 0.03, lum);
+            wet = saturate(max(0.25, max(puddle * 0.8, crack * 0.6)));
+        } else
+            wet = 0.08 * saturate(N.z * 0.5 + 0.5);     // walls barely damp
+        rough = lerp(rough, 0.12, wet);
+        spec = lerp(spec, 0.06, wet);
+    }
+}
+
+// REFLECTIONS (rgl_ff.c refl_pass): a wet floor. The scene drawn mirrored
+// under the floor's plane, at half size, read where this pixel is, rippled
+// by the floor's own texture and drawn out in streaks along the view, as a
+// wet stone floor shows lights; Schlick's Fresnel, and a floor at least
+// half a mirror (Mary's reference captures: the lights and the fighters in
+// the floor). lin: this pixel's light, linear; returns it, wet
+float3 rt_wet(float3 lin, float3 P, float3 N, float2 px, float3 al, float rough, float wetness)
+{
+    if (lb_refl.y <= 0.0 || N.z < 0.75 || abs(P.z - lb_refl.x) > 0.25)
+        return lin;
+    float2 uv = (px - lb_rvp.xy) / lb_rvp.zw;
+    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0)
+        return lin;
+    float3 V = normalize(lb_eye.xyz - P);
+    float fres = 0.04 + 0.96 * pow(1.0 - saturate(dot(V, N)), 5.0);
+    float lum = dot(al, float3(0.299, 0.587, 0.114));
+    // the stone's grain ripples it; its cracks (dark) hold less water
+    float2 rip = float2(ddx(lum), ddy(lum)) * 6.0 + (lum - 0.25) * float2(0.004, 0.0);
+    float4 r = float4(0.0, 0.0, 0.0, 0.0);
+    [unroll] for (int k = -3; k <= 3; k++) {    // streaks along the view, longer when rough
+        float2 q = uv + rip * (0.3 + rough) + float2(0.0, k * (0.002 + 0.02 * rough));
+        r += rmap.SampleLevel(rsamp, saturate(q), 0.0) * (4.0 - abs(k));
+    }
+    r /= 16.0;
+    float wet = lb_refl.y * wetness * saturate(0.35 + fres) * (1.0 - 0.6 * rough);
+    float3 rl = pow(max(r.rgb, float3(0.0, 0.0, 0.0)), 2.2) * 1.35;
+    return lin * (1.0 - 0.3 * wet) + rl * wet * r.a;
+}
 
 float3 rt_sun() { return asfloat(lb_count.yzw); }   // toward the sun; 0: no RTX
 bool rt_on() { float3 L = rt_sun(); return dot(L, L) > 0.5; }
@@ -227,7 +296,7 @@ void rt_basis(float3 N, out float3 T, out float3 B)
 // nine texels give (a Vogel disc turned for each pixel by interleaved
 // gradient noise -- Jimenez, Call of Duty: Advanced Warfare, 2014); the
 // shade as the map's, 0.45 under a fighter, 0.65 under the stage
-#define RT_RAYS 2
+#define RT_RAYS 1
 #define RT_CONE 0.03
 float rt_light(float3 P, float3 N, int self, float2 px)
 {
@@ -239,7 +308,7 @@ float rt_light(float3 P, float3 N, int self, float2 px)
     if (dot(N, L) < 0.0)
         N = -N;
     rt_basis(L, T, B);
-    O = P + N * 0.02;
+    O = P + N * 0.05;
     turn = 6.2831853 * rt_noise(px);
     [loop] for (k = 0; k < RT_RAYS; k++) {
         float a = k * 2.3999632 + turn, rr = sqrt((k + 0.5) / RT_RAYS) * RT_CONE;
@@ -279,7 +348,7 @@ float3 rt_lights_at(float3 P, float3 N)
 // is near within RT_AO_FAR occluding it, and what they meet giving back the
 // lights' colour on it -- the stage's albedo taken as RT_ALBEDO, a fighter's
 // a little less. occ: the ambient left, 0..1
-#define RT_GI 3
+#define RT_GI 2
 #define RT_AO_FAR 0.9
 #define RT_GI_FAR 2.5
 #define RT_ALBEDO 0.55
@@ -349,6 +418,11 @@ float point_shadow(int slot, float3 D, float far, int self)
     return 1.0 - occ / 9.0;
 }
 
+// RTX MATERIALS (rt_material): this pixel's roughness and specular, read
+// by dynamic() for a GGX highlight; < 0 keeps the Blinn-Phong one
+static float g_rough = -1.0;
+static float g_spec = 0.0;
+
 float3 dynamic(float3 P, float3 N, float3 albedo, float smap, bool fighter, int self)
 {
     float3 V = normalize(lb_eye.xyz - P);
@@ -374,22 +448,26 @@ float3 dynamic(float3 P, float3 N, float3 albedo, float smap, bool fighter, int 
             if (type == 1)
                 att *= smoothstep(L.cone.y, L.cone.x, dot(-Ld, normalize(L.dir.xyz)));
 #ifdef UMK3_RT
-            if (rt_on()) { if (att > 0.02) {
+            if (rt_on()) { if (att > 0.06) {
                 // RTX: every light's shadows, traced -- to a sphere, not a
                 // point (a tenth of its reach), so the edge is soft and its
                 // own torch bowl or pool does not cut it sharp (Mary: the
                 // flame's cut on the wall); stopped short of the sphere
-                float r = L.pos.w * 0.1, vis = 0.0;
-                float3 T, B, O = P + Ld * 0.03;
+                float r = L.pos.w * 0.1, vis = 1.0;
+                // inside the light's own lamp (a globe, a torch bowl): never its own shadow -- the
+                // globe's facets shadowed each other (Mary: the polygons showed)
+                if (dist > r * 2.5) { vis = 0.0;
+                float3 T, B, O = P + Ld * 0.06;
                 float turn = 6.2831853 * rt_noise(P.xy * 731.0 + P.z * 113.0);
                 rt_basis(Ld, T, B);
-                [loop] for (int k = 0; k < 3; k++) {
-                    float a = k * 2.3999632 + turn, rr = sqrt((k + 0.5) / 3.0) * r;
+                [loop] for (int k = 0; k < 1; k++) {
+                    float a = k * 2.3999632 + turn, rr = sqrt(rt_noise(P.yz * 517.0)) * r;
                     float3 Q = L.pos.xyz + (T * cos(a) + B * sin(a)) * rr - O;
                     float lq = length(Q);
                     vis += rt_clear(O, Q / max(lq, 1e-4), max(lq - r, 0.01), self);
                 }
-                att *= vis / 3.0;
+                }
+                att *= vis;
             } }
             else
 #endif
@@ -400,8 +478,22 @@ float3 dynamic(float3 P, float3 N, float3 albedo, float smap, bool fighter, int 
         float3 c = L.col.rgb * L.col.w * att;
         dif += c * ndl;
         float3 H = normalize(Ld + V);
-        spc += c * pow(max(dot(N, H), 0.0), sh) * (sh + 8.0) / 25.13 * ndl;
+        if (g_rough >= 0.0) {
+            // GGX (Walter et al. 2007) with Schlick's Fresnel and the
+            // Smith-Schlick visibility, as UE4's (Karis, SIGGRAPH 2013)
+            float a = max(g_rough * g_rough, 0.002), a2 = a * a;
+            float nh = max(dot(N, H), 0.0), nv = max(dot(N, V), 1e-3);
+            float dd = nh * nh * (a2 - 1.0) + 1.0;
+            float D = a2 / (3.14159 * dd * dd);
+            float k = a * 0.5;
+            float vis = 0.25 / ((nv * (1.0 - k) + k) * (ndl * (1.0 - k) + k));
+            float F = g_spec + (1.0 - g_spec) * pow(1.0 - saturate(dot(V, H)), 5.0);
+            spc += c * min(D * vis * F, 6.0) * ndl * 0.5;   // tamed: it shone too much (Mary)
+        } else
+            spc += c * pow(max(dot(N, H), 0.0), sh) * (sh + 8.0) / 25.13 * ndl;
     }
+    if (g_rough >= 0.0)
+        return albedo * dif * (fighter ? 0.9 : 1.0) * (1.0 - g_spec) + spc;
     return albedo * dif * (fighter ? 0.9 : 1.0) + spc * smap * (fighter ? 0.15 : 0.5);
 }
 
@@ -825,18 +917,35 @@ float4 ps(PSIn i) : SV_Target
                 // a dark stage's slight light on its fighters (rgl_ff.c FIGHTER_LIFT)
                 if (fighter)
                     lin += al * lb_eye.w;
+#ifdef UMK3_RT
+                float g_wet = 0.0;
+                if (rt_on()) {          // RTX MATERIALS for the lights' highlights and the floor
+                    float ms, mr;
+                    rt_material(al, i.p, N, fighter, ms, mr, g_wet);
+                    g_spec = ms;
+                    g_rough = mr;
+                    lin *= 1.0 - 0.2 * g_wet;       // wet stone is darker
+                }
+#endif
                 lin += dynamic(i.p, N, al, sm2, fighter, shadow >> 4);
                 // AMBIENT OCCLUSION over everything, last (as ff.frag)
                 float ao = max(lerp(1.0, ao_at(i.pos.xy, fighter), fighter ? lb_aoparm2.y : 1.0), lb_aoparm.z);
+                int refl_on = 0;
 #ifdef UMK3_RT
                 if (rt_on()) {          // RTX: traced in its place, and the lights' colour bounced
                     float occ;
                     float3 gi = rt_ambient(i.p, N, shadow >> 4, i.pos.xy, occ);
                     ao = max(lerp(1.0, occ, fighter ? 0.6 : 0.85), lb_aoparm.z);
                     lin += al * gi;
+                    if (!fighter)       // the wet floor's reflection, after the occlusion
+                        refl_on = 1;
                 }
 #endif
                 lin *= ao;
+#ifdef UMK3_RT
+                if (refl_on)
+                    lin = rt_wet(lin, i.p, N, i.pos.xy, al, g_rough, g_wet);
+#endif
                 if (lb_aodbg.x > 0.5 && lb_aoparm2.w > 0.5)    // a debug view: that, alone
                     return float4(ao_debug_view(i.pos.xy, ao), 1.0);
             }

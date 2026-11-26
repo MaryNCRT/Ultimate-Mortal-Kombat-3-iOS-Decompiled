@@ -266,6 +266,8 @@ static void SH_end_frame(void);
 static int hold_clear(const rgl_rect *sc, int color, const float rgba[4], int depth);
 static void ao_note(const rgl_rect *vp, int fighter);
 static void ao_block(rgl_light_block *b);
+static void refl_block(rgl_light_block *b);
+static void refl_forget(void);
 static void shadow_forget(void);
 
 void rgl_ff_stop(void)
@@ -273,6 +275,7 @@ void rgl_ff_stop(void)
     scene_flush();
     B = NULL;
     shadow_forget();                    /* its target went with the backend */
+    refl_forget();                      /* and the reflection's */
 }
 
 /* the end of a frame, before it is presented: what the scene held back
@@ -1291,6 +1294,30 @@ typedef struct {
 } held;
 static held *g_held;
 static int g_nheld, g_cheld;
+
+/* RTX REFLECTIONS: the scene's camera as its first lit draw had it, and the
+ * floor the fighters stand on */
+static struct {
+    int have;                           /* this frame's camera taken */
+    mat4 proj;
+    rgl_rect vp;                        /* the 3D viewport, GL's lower left */
+    int scene_h;                        /* its target's height */
+    int target, w, h;                   /* the mirrored scene */
+    int floor_ok;
+    float floor_z, cand;
+    unsigned seen;                      /* the frame it was last seen in */
+    int on;                             /* drawn this frame: the floor reads it */
+} RF;
+static rgl_light_block g_lb_last;       /* lights_build's, for the mirror pass */
+
+static double g_refl_ms[4];             /* port diagnostic (UMK3_LOG_REFL): the floor, the pass, draws, vertices */
+static int g_nheld_last;
+
+static void refl_forget(void)
+{
+    RF.target = 0;
+    RF.on = 0;
+}
 static rgl_vtx *g_hv;                   /* their vertices, s in world space */
 static int g_nhv, g_chv;
 static unsigned *g_hi;                  /* the indexed ones' indices */
@@ -2269,6 +2296,7 @@ static void lights_build(void)
         cfg_lights(&b);
     nfile = b.count;                    /* the glows merge among themselves only */
     ao_block(&b);                       /* AMBIENT OCCLUSION's numbers */
+    refl_block(&b);                     /* RTX REFLECTIONS' */
     for (i = 0; i < g_nemit; i++) {
         float r = g_emit[i].ext * EMIT_RADIUS, mx = 0.0f;
         rgl_light *l = NULL;
@@ -2332,6 +2360,7 @@ static void lights_build(void)
     }
     g_nemit = 0;
     point_shadows(&b);
+    g_lb_last = b;                      /* RTX REFLECTIONS: the mirror pass changes it */
     B->lights(&b, (int)sizeof b);
 }
 
@@ -2576,6 +2605,14 @@ static int hold_draw(const rgl_pipe *p, const rgl_frag *f, int tex, const rgl_sa
     g_nhv += n;
     if ((f->shadow & 15) == RGL_SHADOW_RECEIVE && p->depth_test)
         ao_note(vp, (f->shadow >> 4) != 0);     /* AMBIENT OCCLUSION: the 3D camera */
+    if ((f->shadow & 15) == RGL_SHADOW_RECEIVE && p->depth_test && !RF.have) {
+        int tw, th;                     /* RTX REFLECTIONS: the same */
+        RF.have = 1;
+        RF.proj = g_pr.s[g_pr.top];
+        RF.vp = *vp;
+        target_size(cur_target(g_draw_fb), &tw, &th);
+        RF.scene_h = th;
+    }
     return 1;
 }
 
@@ -3139,6 +3176,262 @@ int rgl_ff_post(const float *prm)
 }
 
 /* the map from the casters held, then the held draws with it */
+/* RTX REFLECTIONS (with RTX, Direct3D 12): a wet floor. The floor is where
+ * the fighters' feet are, the lowest seen this fight; each frame the
+ * scene's held draws -- what is above that floor and was drawn lit, so with
+ * its place in the world -- are drawn again mirrored under it, at half size,
+ * into a target the floor reads (shaders: rt_wet). A vertex mirrored is
+ * the camera's view of it moved down twice its height: clip + (2f - 2z) *
+ * the view-projection's z column. */
+static int refl_want(void)
+{
+    /* off until it is cheap: ~25 ms a frame with Mary's HD stage, cause not
+     * found yet (docs/PROGRESS.md); UMK3_REFL=1 turns it on to work on it */
+    return rgl_rt_on() && B->reflect_map && rgl_in_fight && getenv("UMK3_REFL");
+}
+
+static void refl_block(rgl_light_block *b)
+{
+    memset(b->refl, 0, sizeof b->refl);
+    if (!refl_want() || !RF.have || !RF.floor_ok || !RF.target)
+        return;
+    b->refl[0] = RF.floor_z;
+    b->refl[1] = 1.0f;
+    b->rvp[0] = (float)RF.vp.x;
+    b->rvp[1] = (float)(RF.scene_h - (RF.vp.y + RF.vp.h));
+    b->rvp[2] = (float)RF.vp.w;
+    b->rvp[3] = (float)RF.vp.h;
+}
+
+/* the floor: the lowest of the fighters' lit vertices this frame, kept as
+ * the lowest this fight (a jump lifts them, never the floor) */
+static void refl_floor(void)
+{
+    int i, k, any = 0;
+    float lo = 1e30f;
+    if (g_frames_n - RF.seen > 30)
+        RF.floor_ok = 0;                /* a scene of its own: found again */
+    RF.seen = g_frames_n;
+    for (i = 0; i < g_nheld; i++) {
+        const held *h = &g_held[i];
+        const rgl_vtx *v = g_hv + h->first;
+        if (h->clear || (h->f.shadow & 15) != RGL_SHADOW_RECEIVE || (h->f.shadow >> 4) == 0)
+            continue;
+        for (k = 0; k < h->n; k++)
+            if (v[k].p[2] < lo)
+                lo = v[k].p[2];
+        any = 1;
+    }
+    if (!any)
+        return;
+    {
+        /* the floor itself: the commonest height of the stage's upward
+         * faces within 0.4 of the fighters' lowest point (their feet sink
+         * into it a little: their lowest point mirrored the floor just
+         * under itself, which hid every reflection) */
+        static int bins[80];
+        int b, best = -1;
+        memset(bins, 0, sizeof bins);
+        for (i = 0; i < g_nheld; i++) {
+            const held *h = &g_held[i];
+            const rgl_vtx *v = g_hv + h->first;
+            if (h->clear || (h->f.shadow & 15) != RGL_SHADOW_RECEIVE || (h->f.shadow >> 4) != 0)
+                continue;
+            for (k = 0; k < h->n; k++)
+                if (v[k].n[2] > 0.9f && v[k].p[2] > lo - 0.4f && v[k].p[2] < lo + 0.4f)
+                    bins[(int)((v[k].p[2] - (lo - 0.4f)) * 100.0f) % 80]++;
+        }
+        for (b = 0; b < 80; b++)
+            if (bins[b] > 0 && (best < 0 || bins[b] > bins[best]))
+                best = b;
+        if (best >= 0)
+            lo = lo - 0.4f + (best + 0.5f) * 0.01f;
+    }
+    if (!RF.floor_ok || fabsf(lo - RF.floor_z) > 0.02f)
+        RF.floor_z = lo;
+    RF.floor_ok = 1;
+}
+
+static void refl_pass(void)
+{
+    static rgl_vtx *mv;
+    static int cmv;
+    mat4 view, m;
+    float C[4], z0, black[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    rgl_rect r;
+    int i, k, w, h;
+    rgl_light_block b;
+
+    RF.on = 0;
+    if (getenv("UMK3_LOG_REFL")) {
+        static int n;
+        if (n++ % 300 == 0)
+            printf("reflections: want %d camera %d floor %d (z %.3f) target %d %dx%d, viewport %d %d %d %d\n", refl_want(), RF.have,
+                   RF.floor_ok, RF.floor_z, RF.target, RF.w, RF.h, RF.vp.x, RF.vp.y, RF.vp.w, RF.vp.h);
+    }
+    if (!refl_want() || !RF.have || !RF.floor_ok || !invert(&SH.inv_view, &view))
+        return;
+    m = mul(&RF.proj, &view);
+    for (k = 0; k < 4; k++)
+        C[k] = m.m[2 * 4 + k];          /* world z's column */
+    w = RF.vp.w / 4;                    /* a quarter: it is blurred */
+    h = RF.vp.h / 4;
+    if (w < 16 || h < 16)
+        return;
+    if (!RF.target || RF.w != w || RF.h != h) {
+        B->reflect_map(0);
+        if (RF.target)
+            B->target_free(RF.target);
+        RF.target = B->target_new(w, h, 1, 1);
+        RF.w = w;
+        RF.h = h;
+        if (!RF.target)
+            return;
+    }
+    z0 = RF.floor_z;
+    if (getenv("UMK3_LOG_REFL")) {     /* port diagnostic: the camera's matrix against a held vertex */
+        static int n;
+        for (i = 0; i < g_nheld && n % 300 == 0; i++)
+            if (!g_held[i].clear && (g_held[i].f.shadow & 15) == RGL_SHADOW_RECEIVE) {
+                const rgl_vtx *q = g_hv + g_held[i].first;
+                float c[4];
+                for (k = 0; k < 4; k++)
+                    c[k] = m.m[k] * q->p[0] + m.m[4 + k] * q->p[1] + m.m[8 + k] * q->p[2] + m.m[12 + k];
+                printf("reflections: held clip %.3f %.3f %.3f %.3f, from the world %.3f %.3f %.3f %.3f (p %.2f %.2f %.2f)\n",
+                       q->x, q->y, q->z, q->w, c[0], c[1], c[2], c[3], q->p[0], q->p[1], q->p[2]);
+                {
+                    int j, b = 0, hh;
+                    for (hh = 0; hh < g_nheld; hh++)    /* the highest lit vertex of all */
+                        if (!g_held[hh].clear && (g_held[hh].f.shadow & 15) == RGL_SHADOW_RECEIVE
+                            && g_held[hh].n > 0 && (g_hv + g_held[hh].first)->p[2] > q[b].p[2]) {
+                            q = g_hv + g_held[hh].first;
+                            b = 0;
+                            for (j = 1; j < g_held[hh].n; j++)
+                                if (q[j].p[2] > q[b].p[2])
+                                    b = j;
+                        }
+                    float d = 2.0f * (z0 - q[b].p[2]);
+                    printf("reflections: highest p %.2f %.2f %.2f clip %.2f %.2f %.2f %.2f -> mirrored %.2f %.2f %.2f %.2f; C %.3f %.3f %.3f %.3f; eye %.2f %.2f %.2f\n",
+                           q[b].p[0], q[b].p[1], q[b].p[2], q[b].x, q[b].y, q[b].z, q[b].w,
+                           q[b].x + d * C[0], q[b].y + d * C[1], q[b].z + d * C[2], q[b].w + d * C[3],
+                           C[0], C[1], C[2], C[3], SH.inv_view.m[12], SH.inv_view.m[13], SH.inv_view.m[14]);
+                }
+                break;
+            }
+        n++;
+    }
+    B->reflect_map(0);                  /* not read while drawn into */
+    B->target_use(RF.target);
+    B->clear(NULL, 1, black, 1, 1.0f);
+    b = g_lb_last;                      /* the floor reads no reflection here */
+    b.refl[1] = 0.0f;
+    memset(b.pad, 0, sizeof b.pad);    /* nor traces: the shadow map and HBAO, at a quarter of the cost */
+    B->lights(&b, (int)sizeof b);
+    r.x = r.y = 0;
+    r.w = w;
+    r.h = h;
+    for (i = 0; i < g_nheld; i++) {
+        held *hd = &g_held[i];
+        const rgl_vtx *v = g_hv + hd->first;
+        rgl_pipe p;
+        rgl_frag f;
+        float hi = -1e30f;
+        if (hd->clear || (hd->f.shadow & 15) != RGL_SHADOW_RECEIVE || !hd->p.depth_test)
+            continue;
+        for (k = 0; k < hd->n; k++)
+            if (v[k].p[2] > hi)
+                hi = v[k].p[2];
+        if (hi <= z0 + 0.05f)           /* the floor itself, and under it */
+            continue;
+        if (hd->n > cmv) {
+            rgl_vtx *a = (rgl_vtx *)realloc(mv, (size_t)hd->n * 2 * sizeof *a);
+            if (!a)
+                break;
+            mv = a;
+            cmv = hd->n * 2;
+        }
+        for (k = 0; k < hd->n; k++) {
+            float d = getenv("UMK3_REFL_FLAT") ? 0.0f : 2.0f * (z0 - v[k].p[2]);
+            mv[k] = v[k];
+            mv[k].x += d * C[0];
+            mv[k].y += d * C[1];
+            mv[k].z += d * C[2];
+            mv[k].w += d * C[3];
+        }
+        p = hd->p;
+        f = hd->f;
+        p.cull = getenv("UMK3_REFL_NOCULL") ? RGL_CULL_NONE : p.cull == RGL_CULL_FRONT ? RGL_CULL_BACK : p.cull == RGL_CULL_BACK ? RGL_CULL_FRONT : p.cull;
+        p.mask &= 15;                   /* no DLSS 5 layers here */
+        f.layer = 0.0f;
+        f.shadow = RGL_SHADOW_NONE;     /* unlit: blurred in the floor anyway, a tenth of the cost */
+        f.lit = 0;
+        f.bump = 0.0f;
+        {
+            /* triangle by triangle: only what stands above the floor -- the
+             * stage draws its floor and walls together, and the floor
+             * mirrored onto itself hid every reflection under it */
+            static unsigned *ix;
+            static int cix;
+            int nt = hd->ni ? hd->ni / 3 : hd->n / 3, t, nk = 0;
+            const unsigned *src = hd->ni ? g_hi + hd->ifirst : NULL;
+            if (p.topo != RGL_TRIS)
+                continue;
+            if (nt * 3 > cix) {
+                unsigned *a = (unsigned *)realloc(ix, (size_t)nt * 3 * sizeof *a);
+                if (!a)
+                    continue;
+                ix = a;
+                cix = nt * 3;
+            }
+            for (t = 0; t < nt; t++) {
+                unsigned a0 = src ? src[t * 3] : (unsigned)(t * 3);
+                unsigned a1 = src ? src[t * 3 + 1] : (unsigned)(t * 3 + 1);
+                unsigned a2 = src ? src[t * 3 + 2] : (unsigned)(t * 3 + 2);
+                float top = v[a0].p[2];
+                if (v[a1].p[2] > top) top = v[a1].p[2];
+                if (v[a2].p[2] > top) top = v[a2].p[2];
+                if (top <= z0 + 0.05f)
+                    continue;
+                /* what the floor can show: not far above it, nor behind the
+                 * camera once mirrored (a triangle across the eye's plane
+                 * covered the target many times over: 0.5 s a frame with
+                 * the HD stage) */
+                if (v[a0].p[2] > z0 + 4.0f && v[a1].p[2] > z0 + 4.0f && v[a2].p[2] > z0 + 4.0f)
+                    continue;
+                if (mv[a0].w <= 0.05f || mv[a1].w <= 0.05f || mv[a2].w <= 0.05f)
+                    continue;
+                ix[nk++] = a0;
+                ix[nk++] = a1;
+                ix[nk++] = a2;
+            }
+            if (nk) {
+                B->draw_indexed(&p, &f, hd->tex, &hd->sm, &r, NULL, mv, hd->n, ix, nk);
+                g_refl_ms[2] += 1.0;
+                g_refl_ms[3] += hd->n;
+            }
+        }
+    }
+    if (getenv("UMK3_REFL_DUMP") && B->read) {   /* port diagnostic: the mirrored scene, once */
+        static int n;
+        if (++n == atoi(getenv("UMK3_REFL_DUMP"))) {
+            unsigned char *px = (unsigned char *)malloc((size_t)w * h * 4);
+            FILE *fo = px ? fopen("umk3-refl.ppm", "wb") : NULL;
+            if (fo) {
+                B->read(RF.target, &r, px);
+                fprintf(fo, "P6 %d %d 255\n", w, h);
+                for (k = 0; k < w * h; k++)
+                    fwrite(px + k * 4, 1, 3, fo);
+                fclose(fo);
+            }
+            free(px);
+        }
+    }
+    B->target_use(cur_target(g_draw_fb));
+    B->lights(&g_lb_last, (int)sizeof g_lb_last);
+    B->reflect_map(RF.target);
+    RF.on = 1;
+}
+
 static void scene_flush(void)
 {
     int i, k;
@@ -3151,6 +3444,11 @@ static void scene_flush(void)
     }
     t0 = rgl_now_ms();
     rgl_shadow_tris = SH.nw / 12;
+    if (refl_want()) {
+        double tf = rgl_now_ms();
+        refl_floor();                   /* RTX REFLECTIONS: before the lights' block */
+        g_refl_ms[0] += rgl_now_ms() - tf;
+    }
     if (rgl_shadows)
         lights_build();
     else
@@ -3172,6 +3470,29 @@ static void scene_flush(void)
     ao_passes();                        /* AMBIENT OCCLUSION: before the draws (and
                                          * while the casters' triangles are held) */
     SH.nw = 0;
+    for (i = 0; i < g_nheld; i++) {     /* each receiver put in the map's light */
+        held *h = &g_held[i];
+        rgl_vtx *v = g_hv + h->first;
+        if (h->clear || (h->f.shadow & 15) != RGL_SHADOW_RECEIVE)
+            continue;
+        if (SH.valid) {
+            const float *m = SH.light.m;
+#pragma omp parallel for if (h->n > 8192)
+            for (k = 0; k < h->n; k++) {
+                const float x = v[k].s[0], y = v[k].s[1], z = v[k].s[2], w = v[k].s[3];
+                v[k].s[0] = m[0] * x + m[4] * y + m[8] * z + m[12] * w;
+                v[k].s[1] = m[1] * x + m[5] * y + m[9] * z + m[13] * w;
+                v[k].s[2] = m[2] * x + m[6] * y + m[10] * z + m[14] * w;
+                v[k].s[3] = m[3] * x + m[7] * y + m[11] * z + m[15] * w;
+            }
+        } else
+            h->f.shadow = RGL_SHADOW_NONE;
+    }
+    {
+        double tr = rgl_now_ms();
+        refl_pass();                    /* RTX REFLECTIONS: the mirrored scene first */
+        g_refl_ms[1] += rgl_now_ms() - tr;
+    }
     for (i = 0; i < g_nheld; i++) {
         held *h = &g_held[i];
         rgl_vtx *v = g_hv + h->first;
@@ -3180,31 +3501,31 @@ static void scene_flush(void)
             B->clear(h->has_sc ? &h->sc : NULL, h->color, h->rgba, h->depth, 1.0f);
             continue;
         }
-        if ((h->f.shadow & 15) == RGL_SHADOW_RECEIVE) {
-            if (SH.valid) {
-                const float *m = SH.light.m;
-#pragma omp parallel for if (h->n > 8192)
-                for (k = 0; k < h->n; k++) {
-                    const float x = v[k].s[0], y = v[k].s[1], z = v[k].s[2], w = v[k].s[3];
-                    v[k].s[0] = m[0] * x + m[4] * y + m[8] * z + m[12] * w;
-                    v[k].s[1] = m[1] * x + m[5] * y + m[9] * z + m[13] * w;
-                    v[k].s[2] = m[2] * x + m[6] * y + m[10] * z + m[14] * w;
-                    v[k].s[3] = m[3] * x + m[7] * y + m[11] * z + m[15] * w;
-                }
-            } else
-                h->f.shadow = RGL_SHADOW_NONE;
-        }
         if (h->ni)
             B->draw_indexed(&h->p, &h->f, h->tex, &h->sm, &h->vp, h->has_sc ? &h->sc : NULL,
                             v, h->n, g_hi + h->ifirst, h->ni);
         else
             B->draw(&h->p, &h->f, h->tex, &h->sm, &h->vp, h->has_sc ? &h->sc : NULL, v, h->n);
     }
+    g_nheld_last = g_nheld;
     g_nheld = g_nhv = g_nhi = 0;
+    RF.have = 0;
+    if (RF.on) {                        /* RTX REFLECTIONS: done with it */
+        B->reflect_map(0);
+        RF.on = 0;
+    }
     if (AO.valid)                       /* AMBIENT OCCLUSION: done with it */
         B->screen_map(0);
     AO.valid = AO.have = AO.fighter_own = 0;
     rgl_shadow_ms += rgl_now_ms() - t0;
+    if (getenv("UMK3_LOG_REFL")) {
+        static int fr;
+        if (++fr % 120 == 0) {
+            printf("reflections: per frame %.1f ms the floor, %.1f ms the pass, %.0f draws, %.0f vertices; held %d draws\n",
+                   g_refl_ms[0] / 120, g_refl_ms[1] / 120, g_refl_ms[2] / 120, g_refl_ms[3] / 120, g_nheld_last);
+            memset(g_refl_ms, 0, sizeof g_refl_ms);
+        }
+    }
 }
 
 /* one vertex out: position transformed, colour and texture coordinate */

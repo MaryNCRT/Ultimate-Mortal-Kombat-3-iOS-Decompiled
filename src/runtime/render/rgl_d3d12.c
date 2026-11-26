@@ -120,6 +120,7 @@ static int g_white;
 static int g_shadow;                    /* the target sampled as the shadow map (t1) */
 static int g_shadow2;                   /* and the point lights' (t2) */
 static int g_screen;                    /* AMBIENT OCCLUSION's screen map (t3) */
+static int g_reflect;                   /* RTX REFLECTIONS' mirrored scene (t5) */
 
 /* RTX (rgl.h rgl_rt): the scene's triangles in acceleration structures,
  * two sets, one traced by the draws while the other is built */
@@ -211,9 +212,12 @@ static ID3D12Resource **g_ubufs;
 static int g_nubufs, g_cubufs;
 static UINT64 g_ubytes;
 static void upload_submit(void);
+static void settle(void);
 
 static void release(dx_res *r)
 {
+    if (r->res)
+        settle();                       /* the presented frame may read it */
     if (r->res && g_ulist_on)           /* a recorded upload may write it */
         upload_submit();
     if (r->res)
@@ -271,6 +275,7 @@ static void list_begin(void)
     ID3D12DescriptorHeap *hs[2];
     if (g_list_on)
         return;
+    settle();                           /* the allocator: the GPU done with it */
     ID3D12CommandAllocator_Reset(g_alloc);
     ID3D12GraphicsCommandList_Reset(g_list, g_alloc, NULL);
     hs[0] = g_srv_heap;
@@ -281,14 +286,45 @@ static void list_begin(void)
     g_bound_target = -1;
 }
 
+/* 0.6: the frame presented runs on the GPU while the CPU makes the next
+ * one (the game's ticks, the scene's held draws) -- before, each present
+ * waited for the GPU, and the CPU's ~6 ms and the GPU's ~11 ms (DLSS 5,
+ * antialiasing, RTX) added up past a refresh: a frame shown twice, several
+ * times a second (Mary, 2026-11-22). The wait is put off until something
+ * reuses what the frame used (settle): the next list, an upload, a
+ * release, a read. UMK3_D3D12_SERIAL=1: the old way. */
+static UINT64 g_inflight;               /* the presented frame's fence, 0 none */
+static void settle(void);
+
 static void wait_gpu(void)
 {
+    settle();
     g_fval++;
     ID3D12CommandQueue_Signal(g_queue, g_fence, g_fval);
     if (ID3D12Fence_GetCompletedValue(g_fence) < g_fval) {
         ID3D12Fence_SetEventOnCompletion(g_fence, g_fval, g_event);
         WaitForSingleObject(g_event, INFINITE);
     }
+}
+
+/* the presented frame done: waited for, and what it used free again */
+static void settle(void)
+{
+    if (!g_inflight)
+        return;
+    if (ID3D12Fence_GetCompletedValue(g_fence) < g_inflight) {
+        ID3D12Fence_SetEventOnCompletion(g_fence, g_inflight, g_event);
+        WaitForSingleObject(g_event, INFINITE);
+    }
+    g_inflight = 0;
+    while (g_nretired > 0)
+        ID3D12Resource_Release(g_retired[--g_nretired]);
+    while (g_nrt_old > 0)
+        ID3D12Resource_Release(g_rt_old[--g_nrt_old]);
+    g_srv_next = 0;
+    g_voff = 0;
+    g_ldirty = 1;
+    g_serial++;
 }
 
 /* what is recorded, run and waited for */
@@ -435,9 +471,9 @@ static D3D12_RECT gl_rect(const rgl_rect *r, int tw, int th)
 
 static int make_root(void)
 {
-    D3D12_DESCRIPTOR_RANGE rs, rsm;
-    D3D12_ROOT_PARAMETER p[5];
-    D3D12_STATIC_SAMPLER_DESC sp;
+    D3D12_DESCRIPTOR_RANGE rs, rsm, rr;
+    D3D12_ROOT_PARAMETER p[6];
+    D3D12_STATIC_SAMPLER_DESC sp[2];
     D3D12_ROOT_SIGNATURE_DESC d;
     ID3DBlob *blob = NULL, *err = NULL;
     PFN_D3D12_SERIALIZE_ROOT_SIGNATURE ser =
@@ -467,19 +503,27 @@ static int make_root(void)
     p[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;   /* t4 RTX: the scene to trace */
     p[4].Descriptor.ShaderRegister = 4;
     p[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rr = rs;                            /* t5 RTX REFLECTIONS: the mirrored scene */
+    rr.NumDescriptors = 1;
+    rr.BaseShaderRegister = 5;
+    p[5] = p[1];
+    p[5].DescriptorTable.pDescriptorRanges = &rr;
     /* s1: the shadow map's, texel by texel, clamped */
-    memset(&sp, 0, sizeof sp);
-    sp.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
-    sp.AddressU = sp.AddressV = sp.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-    sp.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
-    sp.MaxLOD = D3D12_FLOAT32_MAX;
-    sp.ShaderRegister = 1;
-    sp.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    memset(sp, 0, sizeof sp);
+    sp[0].Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+    sp[0].AddressU = sp[0].AddressV = sp[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    sp[0].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+    sp[0].MaxLOD = D3D12_FLOAT32_MAX;
+    sp[0].ShaderRegister = 1;
+    sp[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    sp[1] = sp[0];                      /* s2 RTX REFLECTIONS: linear, clamped */
+    sp[1].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+    sp[1].ShaderRegister = 2;
     memset(&d, 0, sizeof d);
-    d.NumParameters = g_rt ? 5 : 4;
+    d.NumParameters = g_rt ? 6 : 4;
     d.pParameters = p;
-    d.NumStaticSamplers = 1;
-    d.pStaticSamplers = &sp;
+    d.NumStaticSamplers = g_rt ? 2 : 1;
+    d.pStaticSamplers = sp;
     d.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
     if (!ok(ser(&d, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &err), "SerializeRootSignature"))
         return 0;
@@ -691,9 +735,10 @@ static UINT64          g_ring_off;
 static void dx_close(void)
 {
     int i;
-    g_shadow = g_shadow2 = g_screen = 0;
+    g_shadow = g_shadow2 = g_screen = g_reflect = 0;
     if (!g_dev)
         return;
+    settle();
     flush();
     wait_gpu();
     lib_close();
@@ -822,6 +867,7 @@ static void upload_submit(void)
 
 static int upload_begin(UINT64 bytes)
 {
+    settle();
     if (g_ulist_on && g_ubytes + bytes > ((UINT64)64 << 20))
         upload_submit();
     if (!g_ualloc) {
@@ -1047,6 +1093,8 @@ static void dx_target_free(int i)
         g_shadow2 = 0;
     if (g_screen == i)
         g_screen = 0;
+    if (g_reflect == i)
+        g_reflect = 0;
     release(&g_tg[i].color);
     release(&g_tg[i].dep);
     if (g_tg[i].rtv >= 0) g_rtv_used[g_tg[i].rtv] = 0;
@@ -1404,6 +1452,7 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     const unsigned *idx = g_put_idx;
     const int ni = g_put_ni;
     const UINT64 ibytes = idx ? ((UINT64)ni * 4 + 255) & ~(UINT64)255 : 0;
+    settle();                           /* the vertex ring: the GPU done with it */
     if (g_rt && !g_tlas)                /* RTX: an empty scene before the first one */
         dx_rt_scene(NULL, NULL, 0);
     /* room for the lights' block too, whether or not it is written: a
@@ -1448,7 +1497,7 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
                 return;
         }
     }
-    if (g_srv_next + 4 > SRV_RING && g_list_on)
+    if (g_srv_next + 5 > SRV_RING && g_list_on)
         flush();
     bind_target();
     /* t1: the shadow map for a draw that receives, white (nothing nearer
@@ -1487,6 +1536,14 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     ID3D12Device_CreateShaderResourceView(g_dev, shadow_res, &sd, cpu(g_srv_heap, g_srv_inc, g_srv_next + 1));
     ID3D12Device_CreateShaderResourceView(g_dev, shadow2_res, &sd, cpu(g_srv_heap, g_srv_inc, g_srv_next + 2));
     ID3D12Device_CreateShaderResourceView(g_dev, screen_res, &sd, cpu(g_srv_heap, g_srv_inc, g_srv_next + 3));
+    if (g_rt) {                         /* t5 RTX REFLECTIONS */
+        ID3D12Resource *rres = g_tex[g_white].r.res;
+        if (g_reflect > 0 && g_reflect < g_ntg && g_tg[g_reflect].used && g_reflect != t) {
+            to_state(&g_tg[g_reflect].color, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            rres = g_tg[g_reflect].color.res;
+        }
+        ID3D12Device_CreateShaderResourceView(g_dev, rres, &sd, cpu(g_srv_heap, g_srv_inc, g_srv_next + 4));
+    }
     ss = get_sampler(s);
     if (g_ldirty) {
         memcpy(g_vmap + g_voff, &g_lblock, sizeof g_lblock);
@@ -1522,8 +1579,10 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
     ID3D12GraphicsCommandList_SetGraphicsRootDescriptorTable(g_list, 1, gpu(g_srv_heap, g_srv_inc, g_srv_next));
     ID3D12GraphicsCommandList_SetGraphicsRootDescriptorTable(g_list, 2, gpu(g_samp_heap, g_samp_inc, ss));
     ID3D12GraphicsCommandList_SetGraphicsRootConstantBufferView(g_list, 3, g_laddr);
-    if (g_rt)
+    if (g_rt) {
         ID3D12GraphicsCommandList_SetGraphicsRootShaderResourceView(g_list, 4, g_tlas);
+        ID3D12GraphicsCommandList_SetGraphicsRootDescriptorTable(g_list, 5, gpu(g_srv_heap, g_srv_inc, g_srv_next + 4));
+    }
     ID3D12GraphicsCommandList_IASetPrimitiveTopology(g_list, k->topo == RGL_LINES ? D3D_PRIMITIVE_TOPOLOGY_LINELIST
                                                                                   : D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     ID3D12GraphicsCommandList_IASetVertexBuffers(g_list, 0, 1, &vb);
@@ -1531,7 +1590,7 @@ static void put(const rgl_pipe *k, const rgl_frag *f, ID3D12Resource *srv_res, i
         ID3D12GraphicsCommandList_DrawIndexedInstanced(g_list, (UINT)ni, 1, 0, 0, 0);
     else
         ID3D12GraphicsCommandList_DrawInstanced(g_list, (UINT)n, 1, 0, 0);
-    g_srv_next += 4;
+    g_srv_next += g_rt ? 5 : 4;
 }
 
 static void dx_draw(const rgl_pipe *k, const rgl_frag *f, int tex, const rgl_samp *s,
@@ -1664,6 +1723,7 @@ static void dx_blit(int src, const rgl_rect *a, int dst, const rgl_rect *b, int 
 
 static void dx_read(int t, const rgl_rect *r, unsigned char *out)
 {
+    settle();
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp;
     D3D12_TEXTURE_COPY_LOCATION dst, src;
     D3D12_BOX box;
@@ -1733,12 +1793,29 @@ static void dx_present(void)
     frame_begin();
     to_state(&g_back[g_bi], D3D12_RESOURCE_STATE_PRESENT);
     t1 = rgl_now_ms();
-    flush();
+    if (getenv("UMK3_D3D12_SERIAL"))
+        flush();
+    else {                              /* run, not waited for (settle) */
+        ID3D12CommandList *l;
+        upload_submit();
+        if (g_list_on) {
+            ID3D12GraphicsCommandList_Close(g_list);
+            l = (ID3D12CommandList *)g_list;
+            ID3D12CommandQueue_ExecuteCommandLists(g_queue, 1, &l);
+            g_list_on = 0;
+        }
+    }
     t2 = rgl_now_ms();
     IDXGISwapChain3_Present(g_swap, !rgl_vsync ? 0 : rgl_swap_interval < 1 ? 1
                                     : rgl_swap_interval > 4 ? 4 : (UINT)rgl_swap_interval, 0);
     t3 = rgl_now_ms();
-    wait_gpu();
+    if (getenv("UMK3_D3D12_SERIAL"))
+        wait_gpu();
+    else {
+        g_fval++;
+        ID3D12CommandQueue_Signal(g_queue, g_fence, g_fval);
+        g_inflight = g_fval;
+    }
     rgl_present_work_ms = rgl_now_ms() - t0;   /* the pacing's share (rgl.h) */
     /* LOW LATENCY: one frame in DXGI's queue, and with vsync the present
      * waits here until the display has taken it -- as glFinish after the
@@ -1770,6 +1847,11 @@ static void dx_present(void)
 }
 
 static void dx_finish(void) { }
+
+static void dx_reflect_map(int t)
+{
+    g_reflect = t > 0 && t < g_ntg && g_tg[t].used ? t : 0;
+}
 
 static void dx_screen_map(int t)
 {
@@ -1868,6 +1950,7 @@ static void dx_rt_scene(const float *const *xyz, const int *ntris, int ngeo)
 
     if (!g_rt || !g_list4)
         return;
+    settle();
     if (ngeo > 16)
         ngeo = 16;
     s = g_rt_cur < 0 ? 0 : g_rt_cur ^ 1;
@@ -1992,6 +2075,7 @@ rgl_backend rgl_d3d12 = {
     dx_target_new, dx_target_free, dx_target_use, dx_target_size,
     dx_clear, dx_draw, dx_blit, dx_read, dx_present, dx_finish, dx_shadow_map,
     dx_lights, dx_shadow_map2, dx_screen_map, dx_draw_indexed, dx_rt_scene,
+    dx_reflect_map,
 };
 
 #endif

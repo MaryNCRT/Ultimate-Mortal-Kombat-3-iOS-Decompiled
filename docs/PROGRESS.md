@@ -136,6 +136,14 @@ built and checked in Direct3D 12 only; see the log entry below. Phase 3
 
 ## Detailed log (newest first)
 
+### 2026-11-26 -- RTX materials, cheaper RTX, CPU/GPU overlap; reflections parked
+
+- **FPS (Mary: "fps bajísimos")**: measured in Mary's own Test folder (HD pack, AA x8, DLSS 5): RTX now 17.1-17.2 ms a frame (~58 fps, ~2 late/s), the same as RTX off. Cuts: sun 1 ray, each light 1 jittered ray and only where it reaches (att > 0.06), ambient/bounce 2 rays. D3D12 present no longer waits for the GPU: the frame runs while the CPU makes the next (`settle()` before anything reuses the frame's memory: next list, upload, release, read); `UMK3_D3D12_SERIAL=1` = old way. Not separately benchmarked against serial yet.
+- **Lamp globes showing polygons (Mary)**: a light's own lamp (within 2.5x the light's sphere) never shadows it; ray offsets 0.05-0.06.
+- **Materials (Mary: specular and roughness maps)**: derived per pixel from each texture (no maps in the game): specular from brightness/greyness, roughness from grain (fwidth); GGX highlights for the ENHANCED LIGHTING lights (UE4-style); stage floor wet in a slow world-space noise + dark cracks; toned down after "brilla demasiado". Only active where the floor is known, i.e. with reflections on -- **so currently mostly inactive**; to be decoupled.
+- **Reflections (planar, rgl_ff.c refl_pass)**: mirrored scene into a quarter-res target, triangle-level floor clip (the stage draws floor and walls together: the mirrored floor hid everything), floor height = commonest height of upward stage faces near the fighters' feet. Works (target dumped with UMK3_REFL_DUMP), but costs ~25 ms a frame in Mary's HD install for only ~36 draws/15k vertices -- a wait somewhere, not found yet. **Off unless UMK3_REFL=1.** Diagnostics: UMK3_LOG_REFL, UMK3_REFL_DUMP=<frame>, UMK3_REFL_NOCULL, UMK3_REFL_FLAT.
+- Queued from Mary: floor with more relief/normal maps and a wet look; training mode left/right arrows not shown; photo mode: save created presets; photo mode camera up/down; fighter drawn over the other in photo mode.
+
 ### 2026-11-22 -- the lag: frame pacing; DLSS 5 cuts fixed; RTX soft light shadows
 
 - **Lag (Mary: "bajos fps", "lag")**: steady state was already 60 fps; the stutter was the low-latency pacer (game_main.c pace_frame). It measured the frame's work from the CPU part only, so with RTX/DLSS 5 (5-13 ms GPU + Present inside the swap) it slept too long, missed the refresh, grew its margin 1 ms and decayed back: a 33 ms frame every second or so. Now the backend reports `rgl_present_work_ms` (D3D12: commands run + Present + GPU wait, not the refresh wait) and the pacer counts it; cap 14 ms. Measured DLSS 5 + RTX, 180 Hz screen: between swaps 16.7-17.0 ms steady (UMK3_LOG_PACE). Found with the sampling profiler: slow frames were the main thread parked in a wait (ntdll), not working. Profiler now names other modules and takes `UMK3_PROFILE_MS=<threshold>`.

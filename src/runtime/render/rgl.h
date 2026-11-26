@@ -204,6 +204,9 @@ typedef struct rgl_backend {
      * floats), made the acceleration structure the next frame's draws trace
      * against. NULL: no ray tracing */
     void (*rt_scene)(const float *const *xyz, const int *ntris, int ngeo);
+    /* RTX REFLECTIONS: the target holding the scene mirrored under its floor,
+     * sampled by the floor (t5); 0 none. NULL: no reflections */
+    void (*reflect_map)(int target);
 } rgl_backend;
 
 /* DYNAMIC LIGHTS (ENHANCED LIGHTING, rgl_ff.c): point, spot and directional
@@ -234,6 +237,10 @@ typedef struct {
     float aodbg[4];                        /* x: rgl_ao_debug */
     int   count, pad[3];
     rgl_light l[RGL_MAX_LIGHTS];
+    float refl[4];                         /* RTX REFLECTIONS: the floor's height
+                                            * (world z), the strength (0 off) */
+    float rvp[4];                          /* the reflection's viewport in the
+                                            * target, x, y from the top, w, h */
 } rgl_light_block;                         /* 1168 bytes */
 
 extern rgl_backend rgl_vk;
