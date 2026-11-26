@@ -1,6 +1,6 @@
 # Project Status & Progress
 
-**Last updated:** 2026-11-19 (release 0.5.4 beta: online -- one stage on both sides, no softlock at a round's end, no desync in a session's second fight, less stutter, no frozen fight; the Steam Deck's 6 buttons on Linux; pads from SDL_GameControllerDB; KOMBO SLIDE OFF with kicks) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
+**Last updated:** 2026-11-26 (release 0.7.0 beta: RTX -- ray-traced shadows, occlusion, a light bounce, planar reflections, lamp spots, light glow, parallax relief; DLSS 5 built in with the interface kept out, NEURAL RENDERING, presets and SCALING; the frame pacing's stutter; the training column's left/right; PHOTO MODE presets, height and depth order; the Waterfront's water seam) · Release history: [CHANGELOG.md](CHANGELOG.md) · How to pick up the work: [HANDOFF.md](HANDOFF.md) · How the game is built: [HOW-THE-GAME-WORKS.md](HOW-THE-GAME-WORKS.md)
 
 This file has two parts. **Current state** says where everything stands
 today, for someone who knows nothing of the project. **Detailed log** is
@@ -34,8 +34,18 @@ around the decompiled game:
 
 - **Renderers:** OpenGL, Vulkan, Direct3D 12 (`src/runtime/render/`; Vulkan and
   Direct3D 12 through one fixed-function layer, `rgl_ff.c`, fighters drawn
-  indexed since 0.5.5), HD textures, MSAA, real-time shadows, VSYNC, pipeline
-  caches.
+  indexed since 0.5.5), HD textures, MSAA, ENHANCED LIGHTING (real-time
+  shadows, relief, dynamic lights, ambient occlusion, contact shadows),
+  GRAPHICS QUALITY presets, VSYNC, LOW LATENCY pacing, pipeline caches.
+- **RTX** (0.7.0, Direct3D 12 with DXR 1.1, `rt=1`): the casters in an
+  acceleration structure each frame (rgl_d3d12.c `dx_rt_scene`), traced
+  inline from the pixel shader (ff.hlsl `UMK3_RT`, built with dxc):
+  shadows of the sun and the lights, occlusion and one light bounce;
+  planar reflections (rgl_ff.c `refl_pass`), parallax relief, light glow.
+  No NVIDIA SDK in the game.
+- **DLSS 5** (0.7.0, Direct3D 12, NVIDIA RTX 50): our ReShade and DLSS5
+  ReShade AIO builds (`tools/neural/`), NVIDIA's DLLs added by the player;
+  the interface kept out of the neural pass ([DLSS5-MOD.md](DLSS5-MOD.md)).
 - **Screens:** 3:2 (the iPhone's), 4:3 (the iPad build's layout), 16:9,
   21:9; the port's own menus (settings, debug, STAGE SELECT, online,
   replays) fit each.
@@ -80,42 +90,23 @@ and Scorpion's fatality without its lag.
 
 ### Open problems
 
-- **PHOTO MODE: a fighter behind the other drawn over it** (Mary, 2026-11-22, a
-  screenshot): with the free camera behind the fighters, Sindel, further
-  from the camera, shows over Scorpion. The fighters' draw order or depth
-  test, not looked at yet (GameCode.c RenderLevelPlayers).
-- **PHOTO MODE: no camera up / down** (Mary): the camera has height (Q / E)
-  but no movement straight up or down in the free camera's own frame; to check
-  what she means and add it.
-- **Training: the input column shows no sideways movement** (Mary,
-  2026-11-22, a screenshot): only the up and down arrows appear, with their
-  frame counts; left and right are not listed. Not investigated yet; the
-  column is the port's `PortTrainInput` / `PortTrainDrawInputs`.
-- **DLSS 5, the neural pass:** seen working on 2026-11-22 with the
-  DLSS5 ReShade AIO add-on (standalone-dlssnr 2.2.4, Apache-2.0) in place of
-  the feeder: "CreateFeature(feature=18) = Success", NR=Success every frame,
-  60 fps, NR 5.4 ms + DLSS SR 2.0 ms of GPU, in a 1600x900 window. It does
-  not start in the borderless 1920x1081 window (it waits "for stability"
-  forever). Mary saw it work and reports a strange flicker. Still to do:
-  the HUD and menus left untouched (only the 3D fight processed), and a
-  separate layer for the fighters.
 Closed problems are in the detailed log and the CHANGELOG, not here.
 
 | Problem | State |
 |---|---|
-| Online between two machines | 0.5.4's fixes (one stage, the round's end, the second fight, holds) checked with two games on one PC over a bad line made on purpose (`UMK3_NET_LOSS/LAG/JITTER`): 0 desyncs; **waits for a match between two PCs** |
-| Steam Deck: the fight's 5-button layout (issues #171, #253) | **fixed in 0.5.4** (Linux read `long` game globals as 8 bytes in the port's files, `umk3_long`); waits for a Deck |
-| Pads through SDL_GameControllerDB (WinMM on Windows, SDL on Linux), player two's pad on Linux | **built in 0.5.4**, `tests/pad_db_test.c` passes; waits for such a pad |
-| KOMBO SLIDE OFF not enough (issue #252) | **changed in 0.5.4** (kicks too; VS RULES no longer override OFF); checked by script in training, waits for the reporter |
-| MOD HUB never connecting on other players' PCs, no error | **fixed in 0.5.3** (time limits, other sources for the index); waits for an affected PC |
-| Dynamic stage music (critical / ending stretches; the music follows a mid-fight stage change) | **in 0.5.5** (`adaptive_music.c`); Mary saw it working in the test folder; the stretches per tune (`music.ini`) wait for her ear |
-| Scorpion's fatality lag (and finishers with many bodies) | **fixed in 0.5.5** on Direct3D 12 (indexed fighters, the scene's passes on every core): Mary saw the lag gone in the test folder. **Vulkan**: the CPU side 45 -> 14 ms, but the frames still wait ~22 ms on the GPU there; open |
-| A compile on another PC ending "EXIT CODE: -1" after omp_lite.c (an old version compiled there before) | cause not known (the failed file's error was lost among the others' lines); 0.5.5 names it, keeps `build\last-build.log`, cleans another version's objects and has REPAIR. Waits for that player's log |
-| SEGA DREAMCAST button icons | **in 0.5.5**; the game's pictures not yet seen with a pad connected (no pad on the test machine) |
-| `tests/rgl_test.c`: 5 shadow checks fail on Vulkan and Direct3D 12 | the expected values predate ENHANCED LIGHTING's shading (the same 5 fail on the code before 0.5.5); the test needs new values |
-| Screen-space contact shadows (ENHANCED LIGHTING) | research only: [research/CONTACT-SHADOWS.md](research/CONTACT-SHADOWS.md) (ambient occlusion is built) |
+| Online between two machines | 0.5.4's fixes checked with two games on one PC over a bad line made on purpose (`UMK3_NET_LOSS/LAG/JITTER`): 0 desyncs; **waits for a match between two PCs** |
+| Steam Deck: the fight's 5-button layout (issues #171, #253) | **fixed in 0.5.4**; waits for a Deck |
+| Pads through SDL_GameControllerDB, player two's pad on Linux | **built in 0.5.4**, `tests/pad_db_test.c` passes; waits for such a pad |
+| KOMBO SLIDE OFF not enough (issue #252) | **changed in 0.5.4**; waits for the reporter |
+| Scorpion's fatality lag on **Vulkan** | the CPU side 45 -> 14 ms, the frames still wait ~22 ms on the GPU there; Direct3D 12 is smooth |
+| SEGA DREAMCAST button icons | the game's pictures not yet seen with a pad connected |
+| `tests/rgl_test.c`: 5 shadow checks fail on Vulkan and Direct3D 12 | the expected values predate ENHANCED LIGHTING's shading; the test needs new values |
 | A pad's X glyph over START when joining online (Mary, once) | not reproduced |
 | THE STREET and other stages pause up to ~1.3 s on their first frames | open: their events load then |
+| DLSS 5's first model | NVIDIA makes it once a session, 4-6 s in a Present; our AIO build now does it while the game starts (1.5 s guard, was 15 s) |
+| A seam on THE STREET (Mary, 2026-11-26) | not seen in the current captures; may have been the parallax stripes fixed in 0.7.0; waits for Mary |
+| Real displacement (tessellation) of the stages (Mary's spec, 2026-11-26) | not started; D3D12 hull/domain shaders available; RTX shadows would need the displaced geometry too |
+| PHOTO MODE's presets, HEIGHT and depth order (0.7.0) | built, not yet played by Mary |
 
 ### Where to look next
 
@@ -125,12 +116,10 @@ traced to the binary's own mechanism before anything is changed.
 
 **Graphics overhaul (asked 2026-11-22):** phase 1, the audit and the
 architecture, is in [research/GRAPHICS-OVERHAUL.md](research/GRAPHICS-OVERHAUL.md).
-Two licence questions block phases 3-5 as asked (NVIDIA SDKs inside a GPL
-program; NVIDIA's neural model is not redistributable) and wait on Mary.
-Phase 2 (GRAPHICS QUALITY: presets, bloom, tonemap, contact shadows) is
-built and checked in Direct3D 12 only; see the log entry below. Phase 3
-(ray tracing) has not started.
-
+Phase 2 (GRAPHICS QUALITY) is built; RTX (phase 3) and DLSS 5 are in 0.7.0,
+done in-house so that no NVIDIA SDK is linked into the GPL game. Next
+asked by Mary: real displacement with tessellation, then a review of every
+stage with RTX on.
 ---
 
 
