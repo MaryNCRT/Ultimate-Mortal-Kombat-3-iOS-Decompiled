@@ -2,7 +2,8 @@ name: linux
 
 # What can be checked without the player's .ipa: the launcher's tests, and
 # every source of the Linux game compiled with only the headers the game
-# ships (no SDL2 or OpenGL -dev package installed). The link needs the data
+# ships (no SDL2 or OpenGL -dev package installed), and every GL call they make
+# defined in the tree (the game links no GL library). The link needs the data
 # tables generated from the .ipa, which cannot be in CI.
 
 on:
@@ -28,5 +29,5 @@ jobs:
         run: |
           sudo apt-get remove -y libsdl2-dev libgl-dev libgl1-mesa-dev mesa-common-dev || true
           test ! -e /usr/include/SDL2/SDL.h
-      - name: Every game source compiles for Linux
+      - name: Every game source compiles for Linux, every GL call defined
         run: python3 tools/ci_compile_linux.py clang
