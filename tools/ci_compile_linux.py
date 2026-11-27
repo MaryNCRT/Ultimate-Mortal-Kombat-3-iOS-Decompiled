@@ -10,9 +10,19 @@ vulkan-include): no SDL2 or OpenGL -dev package.
 What it cannot do is link: the data tables (logic_tables.c, level_info.c,
 seq_data.c, gamecode_globals64.c) are generated from the player's own .ipa,
 which is not in the repository and cannot be in CI. So this stops one step
-short of an executable, and says so. Exit code 1 if any source fails.
+short of an executable, and says so.
+
+What it can check of the link is the GL calls: the game links against no GL
+library (render/rgl_front.c defines every gl* function and fetches the
+driver's own by name, and its GLV/GLR macros want an ff_gl* twin in
+render/rgl_ff.c for Vulkan). So every gl* or ff_gl* a compiled object calls
+must be defined by one of them; a call with no wrapper is the "undefined
+symbol: glCopyTexSubImage2D" a player's link would otherwise stop on.
+
+Exit code 1 if any source fails or a GL call has no definition.
 """
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -68,6 +78,26 @@ def state_file(src):
             or ("/src/runtime/" in n and os.path.basename(n) in STATE_RUNTIME))
 
 
+def nm(args, objs):
+    r = subprocess.run(["nm"] + args + objs, capture_output=True, text=True)
+    out = set()
+    for line in r.stdout.splitlines():
+        parts = line.split()              # posix: name type [value size]
+        if len(parts) >= 2 and not parts[0].endswith(":"):
+            out.add(parts[0])
+    return out
+
+
+GL_NAME = re.compile(r"^(ff_)?gl[A-Z]")
+
+
+def gl_undefined(objs):
+    """the gl* / ff_gl* symbols called by some object and defined by none"""
+    called = {n for n in nm(["-u", "--format=posix"], objs) if GL_NAME.match(n)}
+    defined = nm(["--defined-only", "--format=posix"], objs)
+    return sorted(called - defined)
+
+
 def main():
     srcs = sources()
     fl = flags()
@@ -80,19 +110,27 @@ def main():
                 extra = extra + ["-DUMK3_STATE_FILE"]
             if os.path.basename(src) == "text.c":      # compile.js: its own long
                 extra = extra + ["-DUMK3_NO_LONG_REMAP"]
-            r = subprocess.run(CC + fl + extra + ["-c", src, "-o", os.path.join(tmp, "%d.o" % i)],
+            obj = os.path.join(tmp, "%d.o" % i)
+            r = subprocess.run(CC + fl + extra + ["-c", src, "-o", obj],
                                capture_output=True, text=True)
-            return src, r.returncode, r.stderr
+            return src, obj, r.returncode, r.stderr
         with ThreadPoolExecutor(os.cpu_count() or 2) as ex:
             results = list(ex.map(one, enumerate(srcs)))
-    bad = [(s, e) for s, rc, e in results if rc != 0]
-    for s, e in bad:
-        print("FAILED %s\n%s" % (os.path.relpath(s, ROOT), e[-3000:]))
-    print("%d of %d sources compiled for Linux with the bundled headers only"
-          % (len(srcs) - len(bad), len(srcs)))
+        bad = [(s, e) for s, _, rc, e in results if rc != 0]
+        for s, e in bad:
+            print("FAILED %s\n%s" % (os.path.relpath(s, ROOT), e[-3000:]))
+        print("%d of %d sources compiled for Linux with the bundled headers only"
+              % (len(srcs) - len(bad), len(srcs)))
+        missing = []
+        if not bad:
+            missing = gl_undefined([o for _, o, _, _ in results])
+            for n in missing:
+                print("UNDEFINED %s: called, but no wrapper defines it (render/rgl_front.c GLV/GLR"
+                      " for gl*, render/rgl_ff.c for ff_gl*)" % n)
+            print("GL calls: %s" % ("%d with no definition" % len(missing) if missing
+                                    else "every one defined in the tree"))
     print("not linked: the data tables come from the player's .ipa, which CI does not have")
-    sys.exit(1 if bad else 0)
-
+    sys.exit(1 if bad or missing else 0)
 
 if __name__ == "__main__":
     main()

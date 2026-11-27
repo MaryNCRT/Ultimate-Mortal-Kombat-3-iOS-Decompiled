@@ -125,6 +125,11 @@ stage with RTX on.
 
 ## Detailed log (newest first)
 
+### 2026-11-27 -- the Linux link: glCopyTexSubImage2D had no wrapper; CI checks the GL calls
+
+- **Linux build stopped at the link** (a player, 0.7.1 beta): `ld.lld: error: undefined symbol: glCopyTexSubImage2D`, from rgl_post.c:321 (the window's depth copied when the blit cannot). The game links against no GL library: every gl* call needs a GLV/GLR in rgl_front.c, and the macro an `ff_` twin in rgl_ff.c. Added `GLV(glCopyTexSubImage2D, ...)` and `ff_glCopyTexSubImage2D`, a no-op on Vulkan (nothing to copy; the depth effect is skipped there). The player's build linked and ran.
+- **CI**: tools/ci_compile_linux.py compiled every source but could not link (the data tables come from the .ipa), so this got through. It now reads the objects' symbols (`nm`) and fails on any gl* / ff_gl* that is called and defined by none. Checked with the launcher's zig cc: reports glCopyTexSubImage2D before the fix, passes after.
+
 ### 2026-11-26 (6) -- stage review with RTX; bloom outline; light at a fight's start
 
 - **Stage review** (all 16 levels shot in Mary's Test, RTX on): fine overall. The Temple's torches and window made balls of orange glow, the lava a haze: the aura is lower (RT_AURA 0.014) and soft-capped. The Graveyard's ghostly fighter is the game's own fog. The lava stage looks the same with RTX off.
