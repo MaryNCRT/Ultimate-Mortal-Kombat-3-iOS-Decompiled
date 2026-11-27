@@ -1031,6 +1031,13 @@ static void target_size(int target, int *w, int *h)
         B->target_size(target, w, h);
 }
 
+/* the window's depth copied by rgl_post.c: nothing to copy from here, so the
+ * depth effect is skipped */
+void ff_glCopyTexSubImage2D(GLenum t, GLint l, GLint xo, GLint yo, GLint x, GLint y, GLsizei w, GLsizei h)
+{
+    (void)t; (void)l; (void)xo; (void)yo; (void)x; (void)y; (void)w; (void)h;
+}
+
 void ff_glReadPixels(GLint x, GLint y, GLsizei w, GLsizei h, GLenum f, GLenum type, GLvoid *p)
 {
     unsigned char *px, *o = (unsigned char *)p;
